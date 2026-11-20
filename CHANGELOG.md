@@ -1624,3 +1624,6 @@
 
 ### 2026-11-20 06:19:59 UTC - zig:check 外部根因（http/NullableAllocator/unicode）修复入库
 - 完成：`http.cp` 补齐 18 处 `pub` 重导出、`NullableAllocator.cp` 升级 `@root struct`、`unicode.cp` 修复 `toUTF16Alloc` 签名与函数体，3/3 全 PASS。
+
+### 2026-11-20 06:23:10 UTC - zig:check 外部根因（Response/EventLoopTimer）升级 @root struct 入库
+- 完成：`Response.cp` (0.922x) 与 `EventLoopTimer.cp` (1.135x) 完整重构为 `@root struct`，4 项硬门禁全 PASS。

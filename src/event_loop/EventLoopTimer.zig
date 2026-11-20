@@ -4,7 +4,346 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
 pub const bun = @import("bun");
+const StatWatcherScheduler = @import("../runtime/node/node_fs_stat_watcher.zig").StatWatcherScheduler;
+pub const InHeap = enum {
+    none,
+    regular,
+    fake,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Tag = enum {
+    TimerCallback,
+    TimeoutObject,
+    ImmediateObject,
+    StatWatcherScheduler,
+    UpgradedDuplex,
+    DNSResolver,
+    WindowsNamedPipe,
+    WTFTimer,
+    PostgresSQLConnectionTimeout,
+    PostgresSQLConnectionMaxLifetime,
+    MySQLConnectionTimeout,
+    MySQLConnectionMaxLifetime,
+    ValkeyConnectionTimeout,
+    ValkeyConnectionReconnect,
+    SubprocessTimeout,
+    DevServerSweepSourceMaps,
+    DevServerMemoryVisualizerTick,
+    AbortSignalTimeout,
+    DateHeaderTimer,
+    BunTest,
+    EventLoopDelayMonitor,
+    CronJob,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn Type(comptime T: Tag) type {
+            return (switch (T) {
+.TimerCallback => TimerCallback,
+.TimeoutObject => TimeoutObject,
+.ImmediateObject => ImmediateObject,
+.StatWatcherScheduler => StatWatcherScheduler,
+.UpgradedDuplex => uws.UpgradedDuplex,
+.DNSResolver => DNSResolver,
+.WindowsNamedPipe => (if (Environment.isWindows) uws.WindowsNamedPipe else UnreachableTimer),
+.WTFTimer => WTFTimer,
+.PostgresSQLConnectionTimeout => jsc.Postgres.PostgresSQLConnection,
+.PostgresSQLConnectionMaxLifetime => jsc.Postgres.PostgresSQLConnection,
+.MySQLConnectionTimeout => jsc.MySQL.MySQLConnection,
+.MySQLConnectionMaxLifetime => jsc.MySQL.MySQLConnection,
+.SubprocessTimeout => jsc.Subprocess,
+.ValkeyConnectionReconnect => jsc.API.Valkey,
+.ValkeyConnectionTimeout => jsc.API.Valkey,
+.DevServerSweepSourceMaps, .DevServerMemoryVisualizerTick => bun.bake.DevServer,
+.AbortSignalTimeout => jsc.WebCore.AbortSignal.Timeout,
+.DateHeaderTimer => jsc.API.Timer.DateHeaderTimer,
+.BunTest => jsc.Jest.bun_test.BunTest,
+.EventLoopDelayMonitor => jsc.API.Timer.EventLoopDelayMonitor,
+.CronJob => bun.api.cron.CronJob,
+});
+    }
+
+pub fn allowFakeTimers(self: Tag) bool {
+            return (switch (self) {
+.WTFTimer, .BunTest, .EventLoopDelayMonitor, .StatWatcherScheduler, .CronJob => false,
+else => true,
+});
+    }
+};
+
+pub const State = enum {
+    PENDING,
+    ACTIVE,
+    CANCELLED,
+    FIRED,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const UnreachableTimer = struct {
+    event_loop_timer: EventLoopTimer,
+
+pub fn callback(self: *UnreachableTimer, _: *UnreachableTimer) void {
+        _ = self;
+            if (Environment.ci_assert) {
+                _ = bun.assert(false);
+            }
+    }
+};
+
+pub const TimerCallback = struct {
+    callback: *const fn (*TimerCallback) void,
+    ctx: *anyopaque,
+    event_loop_timer: EventLoopTimer,
+};
+
+pub const EventLoopTimer = @This();
+
+next: timespec,
+state: State = .PENDING,
+tag: Tag,
+heap: bun.io.heap.IntrusiveField(EventLoopTimer) = .{},
+in_heap: InHeap = .none,
+
+pub fn initPaused(tag: Tag) EventLoopTimer {
+        return EventLoopTimer{ .next = .epoch, .tag = tag };
+}
+
+pub fn less(_: void, a: *const EventLoopTimer, b: *const EventLoopTimer) bool {
+        const sec_order = std.math.order(a.next.sec, b.next.sec);
+        if ((sec_order != .eq)) {
+            return (sec_order == .lt);
+        }
+        const maybe_a_flags = a.jsTimerInternalsFlags();
+        const maybe_b_flags = b.jsTimerInternalsFlags();
+        var a_ns = a.next.nsec;
+        _ = &a_ns;
+        var b_ns = b.next.nsec;
+        _ = &b_ns;
+        if ((maybe_a_flags != null)) {
+            a_ns = (std.time.ns_per_ms * @divTrunc(a_ns, std.time.ns_per_ms));
+        }
+        if ((maybe_b_flags != null)) {
+            b_ns = (std.time.ns_per_ms * @divTrunc(b_ns, std.time.ns_per_ms));
+        }
+        const order = std.math.order(a_ns, b_ns);
+        if ((order == .eq)) {
+            if (maybe_a_flags) |a_flags| {
+                _ = &a_flags;
+                if (maybe_b_flags) |b_flags| {
+                    _ = &b_flags;
+                    return ((b_flags.epoch -% a_flags.epoch) < (std.math.maxInt(u25) / 2));
+                }
+            }
+        }
+        return (order == .lt);
+}
+
+pub fn jsTimerInternalsFlags(timer: anytype) switch (@TypeOf(timer)) {
+        *EventLoopTimer => FlagsOptPtr,
+        *const EventLoopTimer => ConstFlagsOptPtr,
+        else => @compileError("wrong type passed to jsTimerInternalsFlags"),
+    } {
+        switch (timer.tag) {
+.TimeoutObject => {
+const parent: switch (@TypeOf(timer)) {
+                    *EventLoopTimer => *TimeoutObject,
+                    *const EventLoopTimer => *const TimeoutObject,
+                    else => unreachable,
+                } = @fieldParentPtr("event_loop_timer", timer);
+        return (&parent.internals.flags);
+},
+.ImmediateObject => {
+const parent: switch (@TypeOf(timer)) {
+                    *EventLoopTimer => *ImmediateObject,
+                    *const EventLoopTimer => *const ImmediateObject,
+                    else => unreachable,
+                } = @fieldParentPtr("event_loop_timer", timer);
+        return (&parent.internals.flags);
+},
+.AbortSignalTimeout => {
+const parent: switch (@TypeOf(timer)) {
+                    *EventLoopTimer => *jsc.WebCore.AbortSignal.Timeout,
+                    *const EventLoopTimer => *const jsc.WebCore.AbortSignal.Timeout,
+                    else => unreachable,
+                } = @fieldParentPtr("event_loop_timer", timer);
+        return (&parent.flags);
+},
+else => {
+return null;
+},
+}
+}
+
+pub fn ns(self: EventLoopTimer) u64 {
+        return self.next.ns();
+}
+
+pub fn fire(self: *EventLoopTimer, now: *const timespec, vm: *VirtualMachine) void {
+        switch (self.tag) {
+.PostgresSQLConnectionTimeout => {
+const container: *api.Postgres.PostgresSQLConnection = @alignCast(@fieldParentPtr("timer", self));
+        _ = container.onConnectionTimeout();
+},
+.PostgresSQLConnectionMaxLifetime => {
+const container: *api.Postgres.PostgresSQLConnection = @alignCast(@fieldParentPtr("max_lifetime_timer", self));
+        _ = container.onMaxLifetimeTimeout();
+},
+.MySQLConnectionTimeout => {
+const container: *api.MySQL.MySQLConnection = @alignCast(@fieldParentPtr("timer", self));
+        _ = container.onConnectionTimeout();
+},
+.MySQLConnectionMaxLifetime => {
+const container: *api.MySQL.MySQLConnection = @alignCast(@fieldParentPtr("max_lifetime_timer", self));
+        _ = container.onMaxLifetimeTimeout();
+},
+.ValkeyConnectionTimeout => {
+const container: *api.Valkey = @alignCast(@fieldParentPtr("timer", self));
+        _ = container.onConnectionTimeout();
+},
+.ValkeyConnectionReconnect => {
+const container: *api.Valkey = @alignCast(@fieldParentPtr("reconnect_timer", self));
+        _ = container.onReconnectTimer();
+},
+.DevServerMemoryVisualizerTick => {
+_ = bun.bake.DevServer.emitMemoryVisualizerMessageTimer(self, now);
+},
+.DevServerSweepSourceMaps => {
+_ = bun.bake.DevServer.SourceMapStore.sweepWeakRefs(self, now);
+},
+.AbortSignalTimeout => {
+const timeout: *jsc.WebCore.AbortSignal.Timeout = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = timeout.run(vm);
+},
+.DateHeaderTimer => {
+const date_header_timer: *jsc.API.Timer.DateHeaderTimer = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = date_header_timer.run(vm);
+},
+.BunTest => {
+var container_strong = jsc.Jest.bun_test.BunTestPtr.cloneFromRawUnsafe(@fieldParentPtr("timer", self));
+        _ = &container_strong;
+        defer {
+        _ = container_strong.deinit();
+        }
+        _ = jsc.Jest.bun_test.BunTest.bunTestTimeoutCallback(container_strong, now, vm);
+},
+.EventLoopDelayMonitor => {
+const monitor: *jsc.API.Timer.EventLoopDelayMonitor = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = monitor.onFire(vm, now);
+},
+.CronJob => {
+const job: *bun.api.cron.CronJob = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = job.onTimerFire(vm);
+},
+.TimeoutObject => {
+const container: *TimeoutObject = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = container.internals.fire(now, vm);
+},
+.ImmediateObject => {
+const container: *ImmediateObject = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = container.internals.fire(now, vm);
+},
+.WTFTimer => {
+const container: *WTFTimer = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = container.fire(now, vm);
+},
+.StatWatcherScheduler => {
+const container: *StatWatcherScheduler = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = container.timerCallback();
+},
+.UpgradedDuplex => {
+const container: *uws.UpgradedDuplex = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = container.onTimeout();
+},
+.WindowsNamedPipe => {
+if (Environment.isWindows) {
+            const container: *uws.WindowsNamedPipe = @alignCast(@fieldParentPtr("event_loop_timer", self));
+            _ = container.onTimeout();
+        }
+},
+.DNSResolver => {
+const container: *DNSResolver = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = container.checkTimeouts(now, vm);
+},
+.SubprocessTimeout => {
+const container: *jsc.Subprocess = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        _ = container.timeoutCallback();
+},
+.TimerCallback => {
+const container: *TimerCallback = @alignCast(@fieldParentPtr("event_loop_timer", self));
+        const cb = container.callback;
+        _ = cb(container);
+},
+}
+}
+const FlagsOptPtr = ?*TimerObjectInternals.Flags;
+const ConstFlagsOptPtr = ?*const TimerObjectInternals.Flags;
 const Environment = bun.Environment;
 const timespec = bun.timespec;
 const uws = bun.uws;
@@ -16,259 +355,3 @@ const jsc = bun.jsc;
 const VirtualMachine = jsc.VirtualMachine;
 const api = jsc.API;
 const WTFTimer = bun.api.Timer.WTFTimer;
-const StatWatcherScheduler = @import("../runtime/node/node_fs_stat_watcher.zig").StatWatcherScheduler;
-pub const EventLoopTimer = struct {
-    pub const Self = EventLoopTimer;
-    pub const InHeap = enum { none, regular, fake };
-
-    /// The absolute time to fire this timer next.
-    next: timespec = undefined,
-    state: State = .PENDING,
-    tag: Tag = undefined,
-    /// Internal heap fields.
-    heap: bun.io.heap.IntrusiveField(Self) = .{},
-    in_heap: InHeap = .none,
-
-    pub fn initPaused(tag: Tag) Self {
-        return .{
-            .next = .epoch,
-            .tag = tag,
-        };
-    }
-
-    pub fn less(_: void, a: *const Self, b: *const Self) bool {
-        const sec_order = std.math.order(a.next.sec, b.next.sec);
-        if (sec_order != .eq) return sec_order == .lt;
-
-        // collapse sub-millisecond precision for JavaScript timers
-        const maybe_a_flags = a.jsTimerInternalsFlags();
-        const maybe_b_flags = b.jsTimerInternalsFlags();
-        var a_ns = a.next.nsec;
-        var b_ns = b.next.nsec;
-        if (maybe_a_flags != null) a_ns = std.time.ns_per_ms * @divTrunc(a_ns, std.time.ns_per_ms);
-        if (maybe_b_flags != null) b_ns = std.time.ns_per_ms * @divTrunc(b_ns, std.time.ns_per_ms);
-
-        const order = std.math.order(a_ns, b_ns);
-        if (order == .eq) {
-            if (maybe_a_flags) |a_flags| {
-                if (maybe_b_flags) |b_flags| {
-                    return b_flags.epoch -% a_flags.epoch < std.math.maxInt(u25) / 2;
-                }
-            }
-        }
-        return order == .lt;
-    }
-
-    pub const Tag = enum {
-        TimerCallback,
-        TimeoutObject,
-        ImmediateObject,
-        StatWatcherScheduler,
-        UpgradedDuplex,
-        DNSResolver,
-        WindowsNamedPipe,
-        WTFTimer,
-        PostgresSQLConnectionTimeout,
-        PostgresSQLConnectionMaxLifetime,
-        MySQLConnectionTimeout,
-        MySQLConnectionMaxLifetime,
-        ValkeyConnectionTimeout,
-        ValkeyConnectionReconnect,
-        SubprocessTimeout,
-        DevServerSweepSourceMaps,
-        DevServerMemoryVisualizerTick,
-        AbortSignalTimeout,
-        DateHeaderTimer,
-        BunTest,
-        EventLoopDelayMonitor,
-        CronJob,
-
-        pub fn Type(comptime T: Tag) type {
-            return switch (T) {
-                .TimerCallback => TimerCallback,
-                .TimeoutObject => TimeoutObject,
-                .ImmediateObject => ImmediateObject,
-                .StatWatcherScheduler => StatWatcherScheduler,
-                .UpgradedDuplex => uws.UpgradedDuplex,
-                .DNSResolver => DNSResolver,
-                .WindowsNamedPipe => if (Environment.isWindows) uws.WindowsNamedPipe else UnreachableTimer,
-                .WTFTimer => WTFTimer,
-                .PostgresSQLConnectionTimeout => jsc.Postgres.PostgresSQLConnection,
-                .PostgresSQLConnectionMaxLifetime => jsc.Postgres.PostgresSQLConnection,
-                .MySQLConnectionTimeout => jsc.MySQL.MySQLConnection,
-                .MySQLConnectionMaxLifetime => jsc.MySQL.MySQLConnection,
-                .SubprocessTimeout => jsc.Subprocess,
-                .ValkeyConnectionReconnect => jsc.API.Valkey,
-                .ValkeyConnectionTimeout => jsc.API.Valkey,
-                .DevServerSweepSourceMaps,
-                .DevServerMemoryVisualizerTick,
-                => bun.bake.DevServer,
-                .AbortSignalTimeout => jsc.WebCore.AbortSignal.Timeout,
-                .DateHeaderTimer => jsc.API.Timer.DateHeaderTimer,
-                .BunTest => jsc.Jest.bun_test.BunTest,
-                .EventLoopDelayMonitor => jsc.API.Timer.EventLoopDelayMonitor,
-                .CronJob => bun.api.cron.CronJob,
-            };
-        }
-
-        pub fn allowFakeTimers(self: Tag) bool {
-            return switch (self) {
-                .WTFTimer,
-                .BunTest,
-                .EventLoopDelayMonitor,
-                .StatWatcherScheduler,
-                .CronJob,
-                => false,
-                else => true,
-            };
-        }
-    };
-
-    pub const UnreachableTimer = struct {
-        event_loop_timer: Self,
-        fn callback(_: *UnreachableTimer, _: *UnreachableTimer) void {
-            if (Environment.ci_assert) bun.assert(false);
-        }
-    };
-
-    pub const TimerCallback = struct {
-        callback: *const *const fn(*TimerCallback) void,
-        ctx: *anyopaque,
-        event_loop_timer: Self,
-    };
-
-    pub const State = enum {
-        PENDING,
-        ACTIVE,
-        CANCELLED,
-        FIRED,
-    };
-
-    pub fn jsTimerInternalsFlags(self: anytype) switch (@TypeOf(self)) {
-        *Self => ?*TimerObjectInternals.Flags,
-        *const Self => ?*const TimerObjectInternals.Flags,
-        else => |T| @compileError("wrong type " ++ @typeName(T) ++ " passed to jsTimerInternalsFlags"),
-    } {
-        switch (self.tag) {
-            .TimeoutObject => {
-                const parent: switch (@TypeOf(self)) {
-                    *Self => *TimeoutObject,
-                    *const Self => *const TimeoutObject,
-                    else => unreachable,
-                } = @fieldParentPtr("event_loop_timer", self);
-                return &parent.internals.flags;
-            },
-            .ImmediateObject => {
-                const parent: switch (@TypeOf(self)) {
-                    *Self => *ImmediateObject,
-                    *const Self => *const ImmediateObject,
-                    else => unreachable,
-                } = @fieldParentPtr("event_loop_timer", self);
-                return &parent.internals.flags;
-            },
-            .AbortSignalTimeout => {
-                const parent: switch (@TypeOf(self)) {
-                    *Self => *jsc.WebCore.AbortSignal.Timeout,
-                    *const Self => *const jsc.WebCore.AbortSignal.Timeout,
-                    else => unreachable,
-                } = @fieldParentPtr("event_loop_timer", self);
-                return &parent.flags;
-            },
-            else => return null,
-        }
-    }
-
-    fn ns(this: *const Self) u64 {
-        return this.next.ns();
-    }
-
-    pub fn fire(this: *Self, now: *const timespec, vm: *VirtualMachine) void {
-        switch (this.tag) {
-            .PostgresSQLConnectionTimeout => {
-                var container: *api.Postgres.PostgresSQLConnection = @alignCast(@fieldParentPtr("timer", this));
-                container.onConnectionTimeout();
-            },
-            .PostgresSQLConnectionMaxLifetime => {
-                var container: *api.Postgres.PostgresSQLConnection = @alignCast(@fieldParentPtr("max_lifetime_timer", this));
-                container.onMaxLifetimeTimeout();
-            },
-            .MySQLConnectionTimeout => {
-                var container: *api.MySQL.MySQLConnection = @alignCast(@fieldParentPtr("timer", this));
-                container.onConnectionTimeout();
-            },
-            .MySQLConnectionMaxLifetime => {
-                var container: *api.MySQL.MySQLConnection = @alignCast(@fieldParentPtr("max_lifetime_timer", this));
-                container.onMaxLifetimeTimeout();
-            },
-            .ValkeyConnectionTimeout => {
-                var container: *api.Valkey = @alignCast(@fieldParentPtr("timer", this));
-                container.onConnectionTimeout();
-            },
-            .ValkeyConnectionReconnect => {
-                var container: *api.Valkey = @alignCast(@fieldParentPtr("reconnect_timer", this));
-                container.onReconnectTimer();
-            },
-            .DevServerMemoryVisualizerTick => bun.bake.DevServer.emitMemoryVisualizerMessageTimer(this, now),
-            .DevServerSweepSourceMaps => bun.bake.DevServer.SourceMapStore.sweepWeakRefs(this, now),
-            .AbortSignalTimeout => {
-                var timeout: *jsc.WebCore.AbortSignal.Timeout = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                timeout.run(vm);
-            },
-            .DateHeaderTimer => {
-                var date_header_timer: *jsc.API.Timer.DateHeaderTimer = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                date_header_timer.run(vm);
-            },
-            .BunTest => {
-                var container_strong = jsc.Jest.bun_test.BunTestPtr.cloneFromRawUnsafe(@fieldParentPtr("timer", this));
-                defer container_strong.deinit();
-                jsc.Jest.bun_test.BunTest.bunTestTimeoutCallback(container_strong, now, vm);
-            },
-            .EventLoopDelayMonitor => {
-                var monitor: *jsc.API.Timer.EventLoopDelayMonitor = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                monitor.onFire(vm, now);
-            },
-            .CronJob => {
-                var job: *bun.api.cron.CronJob = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                job.onTimerFire(vm);
-            },
-            .TimeoutObject => {
-                var container: *TimeoutObject = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.internals.fire(now, vm);
-            },
-            .ImmediateObject => {
-                var container: *ImmediateObject = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.internals.fire(now, vm);
-            },
-            .WTFTimer => {
-                var container: *WTFTimer = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.fire(now, vm);
-            },
-            .StatWatcherScheduler => {
-                var container: *StatWatcherScheduler = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.timerCallback();
-            },
-            .UpgradedDuplex => {
-                var container: *uws.UpgradedDuplex = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.onTimeout();
-            },
-            .WindowsNamedPipe => {
-                if (Environment.isWindows) {
-                    var container: *uws.WindowsNamedPipe = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                    container.onTimeout();
-                }
-            },
-            .DNSResolver => {
-                var container: *DNSResolver = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.checkTimeouts(now, vm);
-            },
-            .SubprocessTimeout => {
-                var container: *jsc.Subprocess = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.timeoutCallback();
-            },
-            .TimerCallback => {
-                var container: *TimerCallback = @alignCast(@fieldParentPtr("event_loop_timer", this));
-                container.callback(container);
-            },
-        }
-    }
-};

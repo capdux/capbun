@@ -1,99 +1,95 @@
 import bun from "bun";
-const Output = bun.Output;
-const default_allocator = bun.default_allocator;
-const S3 = bun.S3;
-const webcore = bun.webcore;
-const http = bun.http;
-const jsc = bun.jsc;
-const String = bun.String;
-const ptr = bun.ptr;
-const sys = bun.sys;
-const JSError = bun.JSError;
-const FormData = bun.FormData;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const CallFrame = jsc.CallFrame;
-const ZigString = jsc.ZigString;
-const JSRef = jsc.JSRef;
-const Codegen = jsc.Codegen;
-const FetchHeaders = webcore.FetchHeaders;
-const Blob = webcore.Blob;
-const Body = webcore.Body;
 import { Method } from "../../http_types/Method.zig";
 
+const Output = bun.Output;
+const default_allocator = bun.default_allocator;
+const s3 = bun.S3;
+const FetchHeaders = bun.webcore.FetchHeaders;
+
+const http = bun.http;
+const MimeType = bun.http.MimeType;
+
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const ZigString = jsc.ZigString;
+const Request = jsc.WebCore.Request;
+
+const Blob = jsc.WebCore.Blob;
+const InternalBlob = jsc.WebCore.Blob.Internal;
+
+const Body = jsc.WebCore.Body;
+const BodyMixin = jsc.WebCore.Body.Mixin;
+
+// C++ helper functions for AsyncLocalStorage integration
 extern fn Response__getAsyncLocalStorageStore(global: *JSGlobalObject, als: JSValue): JSValue;
 extern fn Response__mergeAsyncLocalStorageOptions(global: *JSGlobalObject, alsStore: JSValue, initOptions: JSValue);
 
-pub const js = Codegen.JSResponse;
-pub const fromJS = js.fromJS;
-pub const fromJSDirect = js.fromJSDirect;
+pub struct Props {}
 
-export class Init {
-    headers: (*FetchHeaders)? = null;
-    status_code: u16 = 200;
-    status_text: String = String.empty;
-    method: Method = Method.GET;
+pub struct Init {
+    headers: (*FetchHeaders)? = null,
+    status_code: u16,
+    status_text: bun.String = bun.String.empty,
+    method: Method = Method.GET,
 
-    pub fn clone(_: Init, ctx: *JSGlobalObject): JSError!Init {
-        let cloned_headers: (*FetchHeaders)? = null;
-        if (head := this.headers) {
-            cloned_headers = try head.cloneThis(ctx);
+    fn clone(ctx: *JSGlobalObject): Init ! bun.JSError {
+        let that = _;
+        const headers = _.headers;
+        if (head := headers) {
+            that.headers = head.cloneThis(ctx)?;
         }
-        return Init {
-            .headers = cloned_headers,
-            .status_code = this.status_code,
-            .status_text = this.status_text.clone(),
-            .method = this.method,
-        };
+        that.status_text = _.status_text.clone();
+        return that;
     }
 
-    pub fn init(globalThis: *JSGlobalObject, response_init: JSValue): JSError!Init? {
-        let result = Init { .status_code = 200 };
-        defer {
-            // cleanup if error
+    static fn init(globalThis: *JSGlobalObject, response_init: jsc.JSValue): Init? ! bun.JSError {
+        let result = Init{ status_code: 200 };
+        errdefer {
+            result.deinit(bun.default_allocator);
         }
 
         if (!response_init.isCell()) return null;
 
-        let js_type = response_init.jsType();
+        const js_type = response_init.jsType();
         if (!js_type.isObject()) return null;
 
         if (js_type == .DOMWrapper) {
-            if (req := response_init.asDirect(webcore.Request)) {
+            if (req := response_init.asDirect(Request)) {
                 if (headers := req.getFetchHeadersUnlessEmpty()) {
-                    result.headers = try headers.cloneThis(globalThis);
+                    result.headers = headers.cloneThis(globalThis)?;
                 }
                 result.method = req.method;
                 return result;
             }
 
             if (resp := response_init.asDirect(Response)) {
-                return try resp.init_opts.clone(globalThis);
+                return resp.#init.clone(globalThis)?;
             }
         }
 
         if (globalThis.hasException()) return error.JSError;
 
-        if (headers := try response_init.fastGet(globalThis, .headers)) {
+        if (headers := response_init.fastGet(globalThis, .headers)?) {
             if (orig := headers.as(FetchHeaders)) {
                 if (!orig.isEmpty()) {
-                    result.headers = try orig.cloneThis(globalThis);
+                    result.headers = orig.cloneThis(globalThis)?;
                 }
             } else {
-                result.headers = try FetchHeaders.createFromJS(globalThis, headers);
+                result.headers = FetchHeaders.createFromJS(globalThis, headers)?;
             }
         }
 
         if (globalThis.hasException()) return error.JSError;
 
-        if (status_value := try response_init.fastGet(globalThis, .status)) {
-            let number = try status_value.coerceToInt64(globalThis);
-            if ((200 <= number and number < 600) or number == 101) {
+        if (status_value := response_init.fastGet(globalThis, .status)?) {
+            const number = status_value.coerceToInt64(globalThis)?;
+            if ((200 <= number && number < 600) || number == 101) {
                 result.status_code = @as(u16, @truncate(@as(u32, @intCast(number))));
             } else {
                 if (!globalThis.hasException()) {
-                    let err = globalThis.createRangeErrorInstance("The status provided ({d}) must be 101 or in the range of [200, 599]", .{number});
-                    return globalThis.throwValue(err);
+                    const e_val = globalThis.createRangeErrorInstance("The status provided ({d}) must be 101 or in the range of [200, 599]", .{number});
+                    return globalThis.throwValue(e_val);
                 }
                 return error.JSError;
             }
@@ -101,12 +97,12 @@ export class Init {
 
         if (globalThis.hasException()) return error.JSError;
 
-        if (status_text := try response_init.getTruthy(globalThis, "statusText")) {
-            result.status_text = try String.fromJS(status_text, globalThis);
+        if (status_text := response_init.getTruthy(globalThis, "statusText")?) {
+            result.status_text = bun.String.fromJS(status_text, globalThis)?;
         }
 
-        if (method_value := try response_init.getTruthy(globalThis, "method")) {
-            if (m := try Method.fromJS(globalThis, method_value)) {
+        if (method_value := response_init.getTruthy(globalThis, "method")?) {
+            if (m := Method.fromJS(globalThis, method_value)?) {
                 result.method = m;
             }
         }
@@ -114,169 +110,241 @@ export class Init {
         return result;
     }
 
-    pub fn release(*_) {
-        if (headers := this.headers) {
-            this.headers = null;
+    fn deinit(*_, _: std.mem.Allocator) {
+        if (headers := _.headers) {
+            _.headers = null;
             headers.deref();
         }
-        this.status_text.deref();
-        this.status_text = String.empty;
-    }
-
-    pub fn deinit(*_: *Init, _: sys.Allocator) {
-        this.release();
+        _.status_text.deref();
+        _.status_text = bun.String.empty;
     }
 }
 
-export class Response {
-    body: Body;
-    init_opts: Init;
-    url: String = String.empty;
-    redirected: bool = false;
-    ref_count: u32 = 1;
-    weak_ptr_data: WeakRef.Data = .empty;
-    js_ref: JSRef = .empty();
-    reported_estimated_size: usize = 0;
+@callconv(jsc.conv)
+pub export fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
+    const arguments = callframe.arguments_old(1);
+    const this_value = unsafe { arguments.ptr[0] };
+    if (this_value.isEmptyOrUndefinedOrNull()) {
+        return .false;
+    }
 
-    pub const WeakRef = ptr.WeakPtr(Response, "weak_ptr_data");
+    if (response := this_value.as(Response)) {
+        return jsc.JSValue.jsBoolean(!response.#body.value.isDefinitelyEmpty());
+    } else if (request := this_value.as(Request)) {
+        return jsc.JSValue.jsBoolean(!request.getBodyValue().isDefinitelyEmpty());
+    }
 
-    pub fn init(response_init: Init, body: Body, url: String, redirected: bool): Response {
-        return Response {
-            .init_opts = response_init,
-            .body = body,
-            .url = url,
-            .redirected = redirected,
+    return .false;
+}
+
+@callconv(jsc.conv)
+pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
+    const arguments = callframe.arguments_old(1);
+    const this_value = unsafe { arguments.ptr[0] };
+    if (this_value.isEmptyOrUndefinedOrNull()) {
+        return .js_undefined;
+    }
+
+    let body_opt: (*Body.Value)? = null;
+    if (response := this_value.as(Response)) {
+        body_opt = &response.#body.value;
+    } else if (request := this_value.as(Request)) {
+        body_opt = request.getBodyValue();
+    } else {
+        return .js_undefined;
+    }
+    const body = body_opt.?;
+
+    // Get the body if it's available synchronously.
+    switch (body.*) {
+        .Used, .Empty, .Null => return .js_undefined,
+        .Blob => {
+            const blob = &body.Blob;
+            if (blob.isBunFile()) {
+                return .js_undefined;
+            }
+            defer body.* = .{ .Used = {} };
+            return blob.toArrayBuffer(globalObject, .transfer) catch return .zero;
+        },
+        .WTFStringImpl, .InternalBlob => {
+            let any_blob = body.useAsAnyBlob();
+            return any_blob.toArrayBufferTransfer(globalObject) catch return .zero;
+        },
+        .Error, .Locked => return .js_undefined,
+    }
+}
+
+@root struct Response {
+    #body: Body,
+    #init: Init,
+    #url: bun.String = bun.String.empty,
+    #redirected: bool = false,
+    ref_count: u32 = 1,
+    weak_ptr_data: WeakRef.Data = .empty,
+    #js_ref: jsc.JSRef = .empty(),
+    #reported_estimated_size: usize = 0,
+
+    const ResponseMixin = BodyMixin(Response);
+    pub const js = jsc.Codegen.JSResponse;
+    pub const fromJS = js.fromJS;
+    pub const fromJSDirect = js.fromJSDirect;
+
+    pub const WeakRef = bun.ptr.WeakPtr(Response, "weak_ptr_data");
+
+    pub const getText = ResponseMixin.getText;
+    pub const getBody = ResponseMixin.getBody;
+    pub const getBytes = ResponseMixin.getBytes;
+    pub const getBodyUsed = ResponseMixin.getBodyUsed;
+    pub const getJSON = ResponseMixin.getJSON;
+    pub const getArrayBuffer = ResponseMixin.getArrayBuffer;
+    pub const getBlob = ResponseMixin.getBlob;
+    pub const getBlobWithoutCallFrame = ResponseMixin.getBlobWithoutCallFrame;
+    pub const getFormData = ResponseMixin.getFormData;
+
+    static fn init(response_init: Init, body: Body, url: bun.String, redirected: bool): Response {
+        return Response{
+            #init: response_init,
+            #body: body,
+            #url: url,
+            #redirected: redirected,
         };
     }
 
-    pub fn setInit(*_: *Response, method: Method, status_code: u16, status_text: String) {
-        this.init_opts.method = method;
-        this.init_opts.status_code = status_code;
-        this.init_opts.status_text.deref();
-        this.init_opts.status_text = status_text;
+    fn setInit(*_, method: Method, status_code: u16, status_text: bun.String) {
+        _.#init.method = method;
+        _.#init.status_code = status_code;
+        _.#init.status_text.deref();
+        _.#init.status_text = status_text;
     }
 
-    pub fn setInitHeaders(*_: *Response, headers: (*FetchHeaders)?) {
-        if (_headers := this.init_opts.headers) {
+    fn setInitHeaders(*_, headers: (*FetchHeaders)?) {
+        if (_headers := _.#init.headers) {
             _headers.deref();
         }
-        this.init_opts.headers = headers;
+        _.#init.headers = headers;
     }
 
-    pub fn getInitStatusCode(_: &Response): u16 {
-        return this.init_opts.status_code;
+    fn getInitStatusCode(*_): u16 {
+        return _.#init.status_code;
     }
 
-    pub fn getInitStatusText(_: &Response): String {
-        return this.init_opts.status_text;
+    fn getInitStatusText(*_): bun.String {
+        return _.#init.status_text;
     }
 
-    pub fn setUrl(*_: *Response, url: String) {
-        this.url.deref();
-        this.url = url;
+    fn setUrl(*_, url: bun.String) {
+        _.#url.deref();
+        _.#url = url;
     }
 
-    pub fn getUTF8Url(*_: *Response, allocator: sys.Allocator): ZigString.Slice {
-        return this.url.toUTF8(allocator);
+    fn getUTF8Url(*_, allocator: std.mem.Allocator): ZigString.Slice {
+        return _.#url.toUTF8(allocator);
     }
 
-    pub fn getUrl(_: &Response): String {
-        return this.url;
+    fn getUrl(*_): bun.String {
+        return _.#url;
     }
 
-    pub fn getInitHeaders(_: &Response): (*FetchHeaders)? {
-        return this.init_opts.headers;
+    fn getInitHeaders(*_): (*FetchHeaders)? {
+        return _.#init.headers;
     }
 
-    pub fn swapInitHeaders(*_: *Response): (*FetchHeaders)? {
-        if (headers := this.init_opts.headers) {
-            this.init_opts.headers = null;
+    fn swapInitHeaders(*_): (*FetchHeaders)? {
+        if (headers := _.#init.headers) {
+            _.#init.headers = null;
             return headers;
         }
         return null;
     }
 
-    pub fn getBodyLen(_: &Response): usize {
-        return this.body.len();
+    fn getBodyLen(*_): usize {
+        return _.#body.len();
     }
 
-    pub fn getMethod(_: &Response): Method {
-        return this.init_opts.method;
+    fn getMethod(*_): Method {
+        return _.#init.method;
     }
 
-    pub fn getFormDataEncoding(*_: *Response): JSError!(*FormData.AsyncFormData)? {
-        let content_type_slice: ZigString.Slice = (try this.getContentType()) orelse return null;
-        defer content_type_slice.deinit();
-        let encoding = FormData.Encoding.get(content_type_slice.slice()) orelse return null;
-        return sys.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
+    fn getFormDataEncoding(*_): (*bun.FormData.AsyncFormData)? ! bun.JSError {
+        const content_type_opt = _.getContentType()?;
+        if (content_type_slice := content_type_opt) {
+            let ct = content_type_slice;
+            defer ct.deinit();
+            if (encoding := bun.FormData.Encoding.get(ct.slice())) {
+                return bun.handleOom(bun.FormData.AsyncFormData.init(bun.default_allocator, encoding));
+            }
+            return null;
+        }
+        return null;
     }
 
-    @c pub fn estimatedSize(*_: *Response): usize {
-        return this.reported_estimated_size;
+    @c
+    fn estimatedSize(*_): usize {
+        return _.#reported_estimated_size;
     }
 
-    pub fn calculateEstimatedByteSize(*_: *Response) {
-        this.reported_estimated_size = this.body.value.estimatedSize() +
-            this.url.byteSlice().len +
-            this.init_opts.status_text.byteSlice().len +
+    fn calculateEstimatedByteSize(*_) {
+        _.#reported_estimated_size = _.#body.value.estimatedSize() +
+            _.#url.byteSlice().len +
+            _.#init.status_text.byteSlice().len +
             @sizeOf(Response);
     }
 
-    fn checkBodyStreamRef(*_: *Response, globalObject: *JSGlobalObject) {
-        if (js_value := this.js_ref.tryGet()) {
-            if (this.body.value == .Locked) {
-                if (stream := this.body.value.Locked.readable.get(globalObject)) {
+    fn checkBodyStreamRef(*_, globalObject: *JSGlobalObject) {
+        if (js_value := _.#js_ref.tryGet()) {
+            if (_.#body.value == .Locked) {
+                if (stream := _.#body.value.Locked.readable.get(globalObject)) {
                     stream.value.ensureStillAlive();
                     js.gc.stream.set(js_value, globalObject, stream.value);
-                    this.body.value.Locked.readable.deinit();
-                    this.body.value.Locked.readable = .{};
+                    _.#body.value.Locked.readable.deinit();
+                    _.#body.value.Locked.readable = .{};
                 }
             }
         }
     }
 
-    pub fn toJS(*_: *Response, globalObject: *JSGlobalObject): JSValue {
-        this.calculateEstimatedByteSize();
-        let js_value = js.toJSUnchecked(globalObject, this);
-        this.js_ref = .initWeak(js_value);
-        this.checkBodyStreamRef(globalObject);
+    fn toJS(*_, globalObject: *JSGlobalObject): JSValue {
+        _.calculateEstimatedByteSize();
+        const js_value = js.toJSUnchecked(globalObject, _);
+        _.#js_ref = .initWeak(js_value);
+        _.checkBodyStreamRef(globalObject);
         return js_value;
     }
 
-    pub fn getBodyValue(*_: *Response): *Body.Value {
-        return &this.body.value;
+    fn getBodyValue(*_): *Body.Value {
+        return &_.#body.value;
     }
 
-    pub fn getBodyReadableStream(*_: *Response, globalObject: *JSGlobalObject): webcore.ReadableStream? {
-        if (js_r := this.js_ref.tryGet()) {
+    fn getBodyReadableStream(*_, globalObject: *JSGlobalObject): jsc.WebCore.ReadableStream? {
+        if (js_r := _.#js_ref.tryGet()) {
             if (stream := js.gc.stream.get(js_r)) {
-                return webcore.ReadableStream.fromJS(stream, globalObject) catch |e| {
+                return jsc.WebCore.ReadableStream.fromJS(stream, globalObject) catch |e| {
                     * = globalObject.takeException(e);
                     return null;
                 };
             }
         }
-        if (this.body.value == .Locked) {
-            return this.body.value.Locked.readable.get(globalObject);
+        if (_.#body.value == .Locked) {
+            return _.#body.value.Locked.readable.get(globalObject);
         }
         return null;
     }
 
-    pub fn detachReadableStream(*_: *Response, globalObject: *JSGlobalObject) {
-        if (js_r := this.js_ref.tryGet()) {
+    fn detachReadableStream(*_, globalObject: *jsc.JSGlobalObject) {
+        if (js_r := _.#js_ref.tryGet()) {
             js.gc.stream.clear(js_r, globalObject);
         }
-        if (this.body.value == .Locked) {
-            let old = this.body.value.Locked.readable;
+        if (_.#body.value == .Locked) {
+            let old = _.#body.value.Locked.readable;
             old.deinit();
-            this.body.value.Locked.readable = .{};
+            _.#body.value.Locked.readable = .{};
         }
     }
 
-    pub fn setSizeHint(*_: *Response, size_hint: Blob.SizeType) {
-        if (this.body.value == .Locked) {
-            this.body.value.Locked.size_hint = size_hint;
-            if (readable := this.body.value.Locked.readable.get(this.body.value.Locked.global)) {
+    fn setSizeHint(*_, size_hint: Blob.SizeType) {
+        if (_.#body.value == .Locked) {
+            _.#body.value.Locked.size_hint = size_hint;
+            if (readable := _.#body.value.Locked.readable.get(_.#body.value.Locked.global)) {
                 if (readable.ptr == .Bytes) {
                     readable.ptr.Bytes.size_hint = size_hint;
                 }
@@ -284,74 +352,133 @@ export class Response {
         }
     }
 
-    pub fn getFetchHeaders(_: &Response): (*FetchHeaders)? {
-        return this.init_opts.headers;
+    fn getFetchHeaders(*_): (*FetchHeaders)? {
+        return _.#init.headers;
     }
 
-    pub fn statusCode(_: &Response): u16 {
-        return this.init_opts.status_code;
+    fn statusCode(): u16 {
+        return _.#init.status_code;
     }
 
-    pub fn redirectLocation(_: &Response): ([]const u8)? {
-        return this.header(.Location);
+    fn redirectLocation(): ([]const u8)? {
+        return _.header(.Location);
     }
 
-    pub fn header(_: &Response, name: FetchHeaders.HTTPHeaderName): ([]const u8)? {
-        const headers = this.init_opts.headers orelse return null;
-        if (str := headers.fastGet(name) catch null) {
-            return str.slice();
+    fn header(name: bun.webcore.FetchHeaders.HTTPHeaderName): ([]const u8)? {
+        if (headers := _.#init.headers) {
+            if (str := headers.fastGet(name)) {
+                return str.slice();
+            }
         }
         return null;
     }
 
-    pub fn isOK(_: &Response): bool {
-        return this.init_opts.status_code >= 200 and this.init_opts.status_code <= 299;
+    fn writeFormat(*_, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool)! {
+        const Writer = @TypeOf(writer);
+        writer.print("Response ({f}) {{\n", .{bun.fmt.size(_.#body.len(), .{})})?;
+
+        {
+            formatter.indent += 1;
+            defer {
+                if (formatter.indent > 0) formatter.indent -= 1;
+            }
+
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(comptime Output.prettyFmt("<r>ok<d>:<r> ", enable_ansi_colors))?;
+            formatter.printAs(.Boolean, Writer, writer, jsc.JSValue.jsBoolean(_.isOK()), .BooleanObject, enable_ansi_colors)?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
+
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(comptime Output.prettyFmt("<r>url<d>:<r> \"", enable_ansi_colors))?;
+            writer.print(comptime Output.prettyFmt("<r><b>{f}<r>", enable_ansi_colors), .{_.#url})?;
+            writer.writeAll("\"")?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
+
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(comptime Output.prettyFmt("<r>status<d>:<r> ", enable_ansi_colors))?;
+            formatter.printAs(.Double, Writer, writer, jsc.JSValue.jsNumber(_.#init.status_code), .NumberObject, enable_ansi_colors)?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
+
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(comptime Output.prettyFmt("<r>statusText<d>:<r> ", enable_ansi_colors))?;
+            writer.print(comptime Output.prettyFmt("<r>\"<b>{f}<r>\"", enable_ansi_colors), .{_.#init.status_text})?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
+
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(comptime Output.prettyFmt("<r>headers<d>:<r> ", enable_ansi_colors))?;
+            formatter.printAs(.Private, Writer, writer, _.getHeaders(formatter.globalThis)?, .DOMWrapper, enable_ansi_colors)?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
+
+            formatter.writeIndent(Writer, writer)?;
+            writer.writeAll(comptime Output.prettyFmt("<r>redirected<d>:<r> ", enable_ansi_colors))?;
+            formatter.printAs(.Boolean, Writer, writer, jsc.JSValue.jsBoolean(_.#redirected), .BooleanObject, enable_ansi_colors)?;
+            formatter.printComma(Writer, writer, enable_ansi_colors)?;
+            writer.writeAll("\n")?;
+
+            formatter.resetLine();
+            _.#body.writeFormat(Formatter, formatter, writer, enable_ansi_colors)?;
+        }
+        writer.writeAll("\n")?;
+        formatter.writeIndent(Writer, writer)?;
+        writer.writeAll("}")?;
+        formatter.resetLine();
     }
 
-    pub fn getURL(*_: *Response, globalThis: *JSGlobalObject): JSError!JSValue {
-        return this.url.toJS(globalThis);
+    fn isOK(): bool {
+        return _.#init.status_code >= 200 && _.#init.status_code <= 299;
     }
 
-    pub fn getResponseType(*_: *Response, globalThis: *JSGlobalObject): JSError!JSValue {
-        if (this.init_opts.status_code < 200) {
+    fn getURL(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+        return _.#url.toJS(globalThis);
+    }
+
+    fn getResponseType(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+        if (_.#init.status_code < 200) {
             return globalThis.commonStrings().@"error"();
         }
         return globalThis.commonStrings().default();
     }
 
-    pub fn getStatusText(*_: *Response, globalThis: *JSGlobalObject): JSError!JSValue {
-        return this.init_opts.status_text.toJS(globalThis);
+    fn getStatusText(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+        return _.#init.status_text.toJS(globalThis);
     }
 
-    pub fn getRedirected(_: &Response, _: *JSGlobalObject): JSValue {
-        return JSValue.jsBoolean(this.redirected);
+    fn getRedirected(*_, _: *jsc.JSGlobalObject): jsc.JSValue {
+        return JSValue.jsBoolean(_.#redirected);
     }
 
-    pub fn getOK(_: &Response, _: *JSGlobalObject): JSValue {
-        return JSValue.jsBoolean(this.isOK());
+    fn getOK(*_, _: *jsc.JSGlobalObject): jsc.JSValue {
+        return JSValue.jsBoolean(_.isOK());
     }
 
-    pub fn getOrCreateHeaders(*_: *Response, globalThis: *JSGlobalObject): JSError!*FetchHeaders {
-        if (this.init_opts.headers == null) {
-            this.init_opts.headers = FetchHeaders.createEmpty();
-            if (this.body.value == .Blob) {
-                let content_type = this.body.value.Blob.content_type;
+    fn getOrCreateHeaders(*_, globalThis: *jsc.JSGlobalObject): *FetchHeaders ! bun.JSError {
+        if (_.#init.headers == null) {
+            _.#init.headers = FetchHeaders.createEmpty();
+
+            if (_.#body.value == .Blob) {
+                const content_type = _.#body.value.Blob.content_type;
                 if (content_type.len > 0) {
-                    try this.init_opts.headers.?.put(.ContentType, content_type, globalThis);
+                    _.#init.headers.?.put(.ContentType, content_type, globalThis)?;
                 }
             }
         }
-        return this.init_opts.headers.?;
+        return _.#init.headers.?;
     }
 
-    pub fn getHeaders(*_: *Response, globalThis: *JSGlobalObject): JSError!JSValue {
-        return (try this.getOrCreateHeaders(globalThis)).toJS(globalThis);
+    fn getHeaders(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+        const hdrs = _.getOrCreateHeaders(globalThis)?;
+        return hdrs.toJS(globalThis);
     }
 
-    pub fn doClone(*_: *Response, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
-        let this_value = callframe.this();
-        let cloned = try this.clone(globalThis);
-        let js_wrapper = Response.makeMaybePooled(globalThis, cloned);
+    fn doClone(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+        const this_value = callframe.this();
+        const cloned = _.clone(globalThis)?;
+        const js_wrapper = Response.makeMaybePooled(globalThis, cloned);
 
         if (js_wrapper != .zero) {
             if (cloned_stream := js.gc.stream.get(js_wrapper)) {
@@ -359,151 +486,378 @@ export class Response {
             }
         }
 
-        if (this.body.value == .Locked) {
-            if (readable := this.body.value.Locked.readable.get(globalThis)) {
+        if (_.#body.value == .Locked) {
+            if (readable := _.#body.value.Locked.readable.get(globalThis)) {
                 js.bodySetCached(this_value, globalThis, readable.value);
             }
         }
 
-        this.checkBodyStreamRef(globalThis);
+        _.checkBodyStreamRef(globalThis);
         return js_wrapper;
     }
 
-    pub static fn makeMaybePooled(globalObject: *JSGlobalObject, response: *Response): JSValue {
-        return response.toJS(globalObject);
+    static fn makeMaybePooled(globalObject: *jsc.JSGlobalObject, resp_ptr: *Response): JSValue {
+        return resp_ptr.toJS(globalObject);
     }
 
-    pub fn cloneValue(*_: *Response, globalThis: *JSGlobalObject): JSError!Response {
-        let body: Body.Value = undefined;
-        if (js_r := this.js_ref.tryGet()) {
+    fn cloneValue(*_, globalThis: *JSGlobalObject): Response ! bun.JSError {
+        let body: Body = undefined;
+        let cloned_from_stream = false;
+        if (js_r := _.#js_ref.tryGet()) {
             if (stream := js.gc.stream.get(js_r)) {
-                let readable = try webcore.ReadableStream.fromJS(stream, globalThis);
+                let readable = jsc.WebCore.ReadableStream.fromJS(stream, globalThis)?;
                 if (readable != null) {
-                    body = try this.body.cloneWithReadableStream(globalThis, &readable.?);
-                } else {
-                    body = try this.body.clone(globalThis);
+                    body = _.#body.cloneWithReadableStream(globalThis, &readable.?)?;
+                    cloned_from_stream = true;
                 }
-            } else {
-                body = try this.body.clone(globalThis);
             }
-        } else {
-            body = try this.body.clone(globalThis);
         }
+        if (!cloned_from_stream) {
+            body = _.#body.clone(globalThis)?;
+        }
+        errdefer body.deinit(bun.default_allocator);
 
-        let _init = try this.init_opts.clone(globalThis);
-        return Response {
-            .body = body,
-            .init_opts = _init,
-            .url = this.url.clone(),
-            .redirected = this.redirected,
+        let _init = _.#init.clone(globalThis)?;
+        errdefer _init.deinit(bun.default_allocator);
+        return Response{
+            #body: body,
+            #init: _init,
+            #url: _.#url.clone(),
+            #redirected: _.#redirected,
         };
     }
 
-    pub fn clone(*_: *Response, globalThis: *JSGlobalObject): JSError!*Response {
-        return sys.new(Response, try this.cloneValue(globalThis));
+    fn clone(*_, globalThis: *JSGlobalObject): *Response ! bun.JSError {
+        return bun.new(Response, _.cloneValue(globalThis)?);
     }
 
-    pub fn getStatus(_: &Response, _: *JSGlobalObject): JSValue {
-        return JSValue.jsNumber(this.init_opts.status_code);
+    fn getStatus(*_, _: *jsc.JSGlobalObject): jsc.JSValue {
+        return JSValue.jsNumber(_.#init.status_code);
     }
 
-    fn destroy(*_: *Response) {
-        this.init_opts.deinit(default_allocator);
-        this.body.deinit(default_allocator);
-        this.url.deref();
-        this.js_ref.deinit();
+    fn destroy(*_) {
+        _.#init.deinit(bun.default_allocator);
+        _.#body.deinit(bun.default_allocator);
+        _.#url.deref();
+        _.#js_ref.deinit();
 
-        if (this.weak_ptr_data.onFinalize()) {
-            sys.destroy(this);
+        if (_.weak_ptr_data.onFinalize()) {
+            bun.destroy(_);
         }
     }
 
-    pub fn ref(*_: *Response): *Response {
-        this.ref_count += 1;
-        return this;
+    fn ref(*_): *Response {
+        _.ref_count += 1;
+        return _;
     }
 
-    pub fn unref(*_: *Response) {
-        sys.assert(this.ref_count > 0);
-        this.ref_count -= 1;
-        if (this.ref_count == 0) {
-            this.destroy();
+    fn unref(*_) {
+        bun.assert(_.ref_count > 0);
+        _.ref_count -= 1;
+        if (_.ref_count == 0) {
+            _.destroy();
         }
     }
 
-    @c pub fn finalize(*_: *Response) {
-        this.js_ref.finalize();
-        this.unref();
+    @c
+    fn finalize(*_) {
+        _.#js_ref.finalize();
+        _.unref();
     }
 
-    pub fn getContentType(*_: *Response): JSError!ZigString.Slice? {
-        if (headers := this.init_opts.headers) {
+    fn getContentType(*_): ZigString.Slice? ! bun.JSError {
+        if (headers := _.#init.headers) {
             if (value := headers.fastGet(.ContentType)) {
-                return value.toSlice(default_allocator);
+                return value.toSlice(bun.default_allocator);
             }
         }
-        if (this.body.value == .Blob) {
-            if (this.body.value.Blob.content_type.len > 0) {
-                return ZigString.Slice.fromUTF8NeverFree(this.body.value.Blob.content_type);
+
+        if (_.#body.value == .Blob) {
+            if (_.#body.value.Blob.content_type.len > 0) {
+                return ZigString.Slice.fromUTF8NeverFree(_.#body.value.Blob.content_type);
             }
         }
+
         return null;
     }
 
-    pub static fn @"404"(globalThis: *JSGlobalObject): Response {
+    static fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+        const args_list = callframe.arguments_old(2);
+        let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), unsafe { args_list.ptr[0..args_list.len] });
+
+        let response = Response{
+            #body: Body{
+                value: .{ .Empty = {} },
+            },
+            #init: Init{
+                status_code: 200,
+            },
+            #url: bun.String.empty,
+        };
+        let did_succeed = false;
+        defer {
+            if (!did_succeed) {
+                response.#body.deinit(bun.default_allocator);
+                response.#init.deinit(bun.default_allocator);
+            }
+        }
+        const json_value = args.nextEat() ?? jsc.JSValue.zero;
+
+        if (@intFromEnum(json_value) != 0) {
+            if (json_value.isUndefined() || json_value.isSymbol() || json_value.jsType() == .JSFunction) {
+                const e_val = globalThis.createTypeErrorInstance("Value is not JSON serializable", .{});
+                return globalThis.throwValue(e_val);
+            }
+
+            if (json_value.isBigInt()) {
+                const e_val = globalThis.createTypeErrorInstance("Do not know how to serialize a BigInt", .{});
+                return globalThis.throwValue(e_val);
+            }
+
+            let str = bun.String.empty;
+            json_value.jsonStringifyFast(globalThis, &str)?;
+
+            if (globalThis.hasException()) {
+                return .zero;
+            }
+
+            if (!str.isEmpty()) {
+                if (bytes := str.value.WTFStringImpl.toUTF8IfNeeded(bun.default_allocator)) {
+                    defer str.deref();
+                    response.#body.value = .{
+                        .InternalBlob = InternalBlob{
+                            bytes: std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, @constCast(bytes.slice())),
+                            was_string: true,
+                        },
+                    };
+                } else {
+                    response.#body.value = Body.Value{
+                        .WTFStringImpl = str.value.WTFStringImpl,
+                    };
+                }
+            }
+        }
+
+        if (arg_init := args.nextEat()) {
+            if (arg_init.isUndefinedOrNull()) {
+            } else if (arg_init.isNumber()) {
+                response.#init.status_code = @as(u16, @intCast(@min(@max(0, arg_init.toInt32()), std.math.maxInt(u16))));
+            } else {
+                const maybe_init = Init.init(globalThis, arg_init) catch |e| blk: {
+                    if (e == error.JSError) return .zero;
+                    break :blk @as(Init?, null);
+                };
+                if (_init := maybe_init) {
+                    response.#init = _init;
+                }
+            }
+        }
+
+        let headers_ref = response.getOrCreateHeaders(globalThis)?;
+        headers_ref.putDefault(.ContentType, MimeType.json.value, globalThis)?;
+        did_succeed = true;
+        return bun.new(Response, response).toJS(globalThis);
+    }
+
+    static fn validateRedirectStatusCode(globalThis: *jsc.JSGlobalObject, status_code: i32): u16 ! bun.JSError {
+        switch (status_code) {
+            301, 302, 303, 307, 308 => return @intCast(status_code),
+            else => {
+                const e_val = globalThis.createRangeErrorInstance("Failed to execute 'redirect' on 'Response': Invalid status code", .{});
+                return globalThis.throwValue(e_val);
+            },
+        }
+    }
+
+    static fn constructRedirect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+        const response = constructRedirectImpl(globalThis, callframe)?;
+        const resp_ptr = bun.new(Response, response);
+        const response_js = resp_ptr.toJS(globalThis);
+        return response_js;
+    }
+
+    static fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): Response ! bun.JSError {
+        let args_list = callframe.arguments_old(4);
+        let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), unsafe { args_list.ptr[0..args_list.len] });
+
+        let url_string_slice = ZigString.Slice.empty;
+        defer url_string_slice.deinit();
+
+        let response = Response{
+            #init: Init{
+                status_code: 302,
+            },
+            #body: Body{
+                value: .{ .Empty = {} },
+            },
+            #url: bun.String.empty,
+        };
+
+        const url_string_value = args.nextEat() ?? jsc.JSValue.zero;
+        let url_string = ZigString.init("");
+
+        if (@intFromEnum(url_string_value) != 0) {
+            url_string = url_string_value.getZigString(globalThis)?;
+        }
+        url_string_slice = url_string.toSlice(bun.default_allocator);
+        let did_succeed = false;
+        defer {
+            if (!did_succeed) {
+                response.#body.deinit(bun.default_allocator);
+                response.#init.deinit(bun.default_allocator);
+            }
+        }
+
+        if (arg_init := args.nextEat()) {
+            if (arg_init.isUndefinedOrNull()) {
+            } else if (arg_init.isNumber()) {
+                response.#init.status_code = validateRedirectStatusCode(globalThis, arg_init.toInt32())?;
+            } else if (_init := Init.init(globalThis, arg_init)?) {
+                errdefer response.#init.deinit(bun.default_allocator);
+                response.#init = _init;
+
+                if (_init.status_code != 200) {
+                    response.#init.status_code = validateRedirectStatusCode(globalThis, _init.status_code)?;
+                }
+            }
+        }
+
+        if (globalThis.hasException()) {
+            return error.JSError;
+        }
+        did_succeed = true;
+
+        response.#init.headers = response.getOrCreateHeaders(globalThis)?;
+        let headers_ref = response.#init.headers.?;
+        headers_ref.put(.Location, url_string_slice.slice(), globalThis)?;
+        return response;
+    }
+
+    static fn constructError(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): JSValue ! bun.JSError {
+        const response = bun.new(
+            Response,
+            Response{
+                #init: Init{
+                    status_code: 0,
+                },
+                #body: Body{
+                    value: .{ .Empty = {} },
+                },
+            },
+        );
+
+        const js_value = response.toJS(globalThis);
+        response.#js_ref = .initWeak(js_value);
+        return js_value;
+    }
+
+    static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, js_this: jsc.JSValue): *Response ! bun.JSError {
+        let arguments = callframe.argumentsAsArray(2);
+
+        if (!arguments[0].isUndefinedOrNull() && arguments[0].isObject()) {
+            if (blob := arguments[0].as(Blob)) {
+                if (blob.isS3()) {
+                    if (!arguments[1].isEmptyOrUndefinedOrNull()) {
+                        return globalThis.throwInvalidArguments("new Response(s3File) do not support ResponseInit options", .{});
+                    }
+                    let response = Response{
+                        #init: Init{
+                            status_code: 302,
+                        },
+                        #body: Body{
+                            value: .{ .Empty = {} },
+                        },
+                        #url: bun.String.empty,
+                        #js_ref: .initWeak(js_this),
+                    };
+
+                    const credentials = blob.store.?.data.s3.getCredentials();
+
+                    const result = credentials.signRequest(.{
+                        .path = blob.store.?.data.s3.path(),
+                        .method = .GET,
+                    }, false, .{ .expires = 15 * 60 }) catch |sign_err| {
+                        return s3.throwSignError(sign_err, globalThis);
+                    };
+                    defer result.deinit();
+                    response.#init.headers = response.getOrCreateHeaders(globalThis)?;
+                    response.#redirected = true;
+                    let headers_ref = response.#init.headers.?;
+                    headers_ref.put(.Location, result.url, globalThis)?;
+                    return bun.new(Response, response);
+                }
+            }
+        }
+
+        let _init: Init = undefined;
+        if (arguments[1].isUndefinedOrNull()) {
+            _init = Init{
+                status_code: 200,
+                headers: null,
+            };
+        } else if (arguments[1].isObject()) {
+            _init = (Init.init(globalThis, arguments[1])?) ?? unreachable;
+        } else {
+            if (!globalThis.hasException()) {
+                return globalThis.throwInvalidArguments("Failed to construct 'Response': The provided body value is not of type 'ResponseInit'", .{});
+            }
+            return error.JSError;
+        }
+        errdefer _init.deinit(bun.default_allocator);
+
+        if (globalThis.hasException()) {
+            return error.JSError;
+        }
+
+        let body: Body = undefined;
+        if (arguments[0].isUndefinedOrNull()) {
+            body = Body{
+                value: Body.Value{ .Null = {} },
+            };
+        } else {
+            body = Body.extract(globalThis, arguments[0])?;
+        }
+        errdefer body.deinit(bun.default_allocator);
+
+        if (globalThis.hasException()) {
+            return error.JSError;
+        }
+
+        let response = bun.new(Response, Response{
+            #body: body,
+            #init: _init,
+            #js_ref: .initWeak(js_this),
+        });
+
+        if (response.#body.value == .Blob &&
+            response.#init.headers != null &&
+            response.#body.value.Blob.content_type.len > 0 &&
+            !response.#init.headers.?.fastHas(.ContentType))
+        {
+            response.#init.headers.?.put(.ContentType, response.#body.value.Blob.content_type, globalThis)?;
+        }
+
+        response.calculateEstimatedByteSize();
+        response.checkBodyStreamRef(globalThis);
+        return response;
+    }
+
+    static fn @"404"(globalThis: *jsc.JSGlobalObject): Response {
         return emptyWithStatus(globalThis, 404);
     }
 
-    pub static fn @"200"(globalThis: *JSGlobalObject): Response {
+    static fn @"200"(globalThis: *jsc.JSGlobalObject): Response {
         return emptyWithStatus(globalThis, 200);
     }
 
-    inline fn emptyWithStatus(_: *JSGlobalObject, status: u16): Response {
-        return sys.new(Response, .{
-            .body = Body { .value = Body.Value { .Null = {} } },
-            .init_opts = Init { .status_code = status },
+    static fn emptyWithStatus(_: *jsc.JSGlobalObject, status: u16): Response {
+        return bun.new(Response, .{
+            .#body = Body{
+                value: Body.Value{ .Null = {} },
+            },
+            .init = Init{
+                status_code: status,
+            },
         });
-    }
-}
-
-@c pub fn jsFunctionRequestOrResponseHasBodyValue(_: *JSGlobalObject, callframe: *CallFrame): JSValue {
-    let arguments = callframe.arguments_old(1);
-    let this_value = arguments.ptr[0];
-    if (this_value.isEmptyOrUndefinedOrNull()) return JSValue.false;
-
-    if (response := this_value.as(Response)) {
-        return JSValue.jsBoolean(!response.body.value.isDefinitelyEmpty());
-    } else if (request := this_value.as(webcore.Request)) {
-        return JSValue.jsBoolean(!request.getBodyValue().isDefinitelyEmpty());
-    }
-    return JSValue.false;
-}
-
-@c pub fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue {
-    let arguments = callframe.arguments_old(1);
-    let this_value = arguments.ptr[0];
-    if (this_value.isEmptyOrUndefinedOrNull()) return JSValue.js_undefined;
-
-    let body = brk: {
-        if (response := this_value.as(Response)) {
-            break :brk &response.body.value;
-        } else if (request := this_value.as(webcore.Request)) {
-            break :brk request.getBodyValue();
-        }
-        return JSValue.js_undefined;
-    };
-
-    switch (body.*) {
-        .Used, .Empty, .Null => return JSValue.js_undefined,
-        .Blob => |*blob| {
-            if (blob.isBunFile()) return JSValue.js_undefined;
-            defer body.* = .{ .Used = {} };
-            return blob.toArrayBuffer(globalObject, .transfer) catch return JSValue.zero;
-        },
-        .WTFStringImpl, .InternalBlob => {
-            let any_blob = body.useAsAnyBlob();
-            return any_blob.toArrayBufferTransfer(globalObject) catch return JSValue.zero;
-        },
-        .Error, .Locked => return JSValue.js_undefined,
     }
 }

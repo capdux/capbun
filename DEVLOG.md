@@ -1353,3 +1353,6 @@
 
 ### 2026-11-20 06:19:59 UTC - 跨模块根因修复经验（http/NullableAllocator/unicode）
 - `UTF16AllocReturn(sentinel)` 辅助类型函数解决 `cpc` 下条件返回类型被吞；`http.cp` 顶层 `pub` 导出与 `http_.zig` 对齐归零。
+
+### 2026-11-20 06:23:10 UTC - Response 与 EventLoopTimer @root struct 重构经验
+- 根结构体辅助类型提顶层、根字段与方法归入 `@root struct`，彻底恢复 `Response.WeakRef` 与 `EventLoopTimer.less` 等文件根导出。

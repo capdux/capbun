@@ -64,55 +64,55 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 const Method = @import("../../http_types/Method.zig").Method;
+pub const Props = struct {
+};
+
 pub const Init = struct {
     headers: ?*FetchHeaders = null,
-    status_code: u16 = 200,
-    status_text: String = String.empty,
+    status_code: u16,
+    status_text: bun.String = bun.String.empty,
     method: Method = Method.GET,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.headers = null; self_ptr.status_code = 200; self_ptr.status_text = String.empty; self_ptr.method = Method.GET; return self_ptr; }
 
-pub fn clone(self: *const Init, ctx: *JSGlobalObject) JSError!*Init {
-            var cloned_headers: ?*FetchHeaders = null;
-            _ = &cloned_headers;
-            if (self.headers) |head| {
+pub fn clone(self: Init, ctx: *JSGlobalObject) bun.JSError!Init {
+            var that = self;
+            _ = &that;
+            const headers = self.headers;
+            if (headers) |head| {
                 _ = &head;
-                cloned_headers = try head.cloneThis(ctx);
+                that.headers = try head.cloneThis(ctx);
             }
-            return Init{ .headers = cloned_headers, .status_code = self.status_code, .status_text = self.status_text.clone(), .method = self.method };
+            that.status_text = self.status_text.clone();
+            return that;
     }
 
-pub fn init(globalThis: *JSGlobalObject, response_init: JSValue) JSError!?*Init {
+pub fn init(globalThis: *JSGlobalObject, response_init: jsc.JSValue) bun.JSError!?Init {
             var result = Init{ .status_code = 200 };
-            var __result_moved = false; _ = &__result_moved;
-            defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
-            defer {
+            _ = &result;
+            errdefer {
             {
+                _ = result.deinit(bun.default_allocator);
             }
             }
             if ((!response_init.isCell())) {
                 return null;
             }
-            var js_type = response_init.jsType();
-            var __js_type_moved = false; _ = &__js_type_moved;
-            defer if (!__js_type_moved) { const __T = @TypeOf(js_type); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = js_type.release() catch {}; } else { js_type.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = js_type; _drop_val.release(); } };
+            const js_type = response_init.jsType();
             if ((!js_type.isObject())) {
                 return null;
             }
             if ((js_type == .DOMWrapper)) {
-                if (response_init.asDirect(webcore.Request)) |req| {
+                if (response_init.asDirect(Request)) |req| {
                     _ = &req;
                     if (req.getFetchHeadersUnlessEmpty()) |headers| {
                         _ = &headers;
                         result.headers = try headers.cloneThis(globalThis);
                     }
                     result.method = req.method;
-                    __result_moved = true;
                     return result;
                 }
                 if (response_init.asDirect(Response)) |resp| {
                     _ = &resp;
-                    return try resp.init_opts.clone(globalThis);
+                    return try resp.#init.clone(globalThis);
                 }
             }
             if (globalThis.hasException()) {
@@ -134,17 +134,13 @@ pub fn init(globalThis: *JSGlobalObject, response_init: JSValue) JSError!?*Init 
             }
             if (try response_init.fastGet(globalThis, .status)) |status_value| {
                 _ = &status_value;
-                var number = try status_value.coerceToInt64(globalThis);
-                var __number_moved = false; _ = &__number_moved;
-                defer if (!__number_moved) { const __T = @TypeOf(number); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = number.release() catch {}; } else { number.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = number; _drop_val.release(); } };
+                const number = try status_value.coerceToInt64(globalThis);
                 if ((((200 <= number) and (number < 600)) or (number == 101))) {
                     result.status_code = @as(u16, @truncate(@as(u32, @intCast(number))));
                 } else {
                     if ((!globalThis.hasException())) {
-                        var err = globalThis.createRangeErrorInstance("The status provided ({d}) must be 101 or in the range of [200, 599]", .{ number });
-                        var __err_moved = false; _ = &__err_moved;
-                        defer if (!__err_moved) { const __T = @TypeOf(err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = err.release() catch {}; } else { err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = err; _drop_val.release(); } };
-                        return globalThis.throwValue(err);
+                        const e_val = globalThis.createRangeErrorInstance("The status provided ({d}) must be 101 or in the range of [200, 599]", .{ number });
+                        return globalThis.throwValue(e_val);
                     }
                     return error.JSError;
                 }
@@ -154,7 +150,7 @@ pub fn init(globalThis: *JSGlobalObject, response_init: JSValue) JSError!?*Init 
             }
             if (try response_init.getTruthy(globalThis, "statusText")) |status_text| {
                 _ = &status_text;
-                result.status_text = try String.fromJS(status_text, globalThis);
+                result.status_text = try bun.String.fromJS(status_text, globalThis);
             }
             if (try response_init.getTruthy(globalThis, "method")) |method_value| {
                 _ = &method_value;
@@ -163,471 +159,754 @@ pub fn init(globalThis: *JSGlobalObject, response_init: JSValue) JSError!?*Init 
                     result.method = m;
                 }
             }
-            __result_moved = true;
             return result;
     }
 
-pub fn release(self: *Init) void {
+pub fn deinit(self: *Init, _: std.mem.Allocator) void {
             if (self.headers) |headers| {
                 _ = &headers;
                 self.headers = null;
                 _ = headers.deref();
             }
             _ = self.status_text.deref();
-            self.status_text = String.empty;
-    }
-
-pub fn deinit(self: *Init, _: sys.Allocator) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            self.status_text = bun.String.empty;
     }
 };
 
-pub const Response = struct {
-    body: Body,
-    init_opts: *Init,
-    url: String = String.empty,
-    redirected: bool = false,
-    ref_count: u32 = 1,
-    weak_ptr_data: WeakRef.Data = .empty,
-    js_ref: JSRef = .empty(),
-    reported_estimated_size: usize = 0,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.url = String.empty; self_ptr.redirected = false; self_ptr.ref_count = 1; self_ptr.weak_ptr_data = .empty; self_ptr.js_ref = .empty(); self_ptr.reported_estimated_size = 0; return self_ptr; }
+pub const Response = @This();
 
-pub fn init(response_init: *Init, body: Body, url: String, redirected: bool) *Response {
-            return Response{ .init_opts = response_init, .body = body, .url = url, .redirected = redirected };
-    }
+#body: Body,
+#init: Init,
+#url: bun.String = bun.String.empty,
+#redirected: bool = false,
+ref_count: u32 = 1,
+weak_ptr_data: WeakRef.Data = .empty,
+#js_ref: jsc.JSRef = .empty(),
+#reported_estimated_size: usize = 0,
 
-pub fn setInit(self: *Response, method: Method, status_code: u16, status_text: String) void {
-            self.init_opts.method = method;
-            self.init_opts.status_code = status_code;
-            _ = self.init_opts.status_text.deref();
-            self.init_opts.status_text = status_text;
-    }
+pub fn init(response_init: Init, body: Body, url: bun.String, redirected: bool) Response {
+        return Response{ .#init = response_init, .#body = body, .#url = url, .#redirected = redirected };
+}
+
+pub fn setInit(self: *Response, method: Method, status_code: u16, status_text: bun.String) void {
+        self.#init.method = method;
+        self.#init.status_code = status_code;
+        _ = self.#init.status_text.deref();
+        self.#init.status_text = status_text;
+}
 
 pub fn setInitHeaders(self: *Response, headers: ?*FetchHeaders) void {
-            if (self.init_opts.headers) |_headers| {
-                _ = &_headers;
-                _ = _headers.deref();
-            }
-            self.init_opts.headers = headers;
-    }
+        if (self.#init.headers) |_headers| {
+            _ = &_headers;
+            _ = _headers.deref();
+        }
+        self.#init.headers = headers;
+}
 
-pub fn getInitStatusCode(self: *const Response) u16 {
-            return self.init_opts.status_code;
-    }
+pub fn getInitStatusCode(self: *Response) u16 {
+        return self.#init.status_code;
+}
 
-pub fn getInitStatusText(self: *const Response) String {
-            return self.init_opts.status_text;
-    }
+pub fn getInitStatusText(self: *Response) bun.String {
+        return self.#init.status_text;
+}
 
-pub fn setUrl(self: *Response, url: String) void {
-            _ = self.url.deref();
-            self.url = url;
-    }
+pub fn setUrl(self: *Response, url: bun.String) void {
+        _ = self.#url.deref();
+        self.#url = url;
+}
 
-pub fn getUTF8Url(self: *Response, allocator: sys.Allocator) ZigString.Slice {
-            return self.url.toUTF8(allocator);
-    }
+pub fn getUTF8Url(self: *Response, allocator: std.mem.Allocator) ZigString.Slice {
+        return self.#url.toUTF8(allocator);
+}
 
-pub fn getUrl(self: *const Response) String {
-            return self.url;
-    }
+pub fn getUrl(self: *Response) bun.String {
+        return self.#url;
+}
 
-pub fn getInitHeaders(self: *const Response) ?*FetchHeaders {
-            return self.init_opts.headers;
-    }
+pub fn getInitHeaders(self: *Response) ?*FetchHeaders {
+        return self.#init.headers;
+}
 
 pub fn swapInitHeaders(self: *Response) ?*FetchHeaders {
-            if (self.init_opts.headers) |headers| {
-                _ = &headers;
-                self.init_opts.headers = null;
-                return headers;
+        if (self.#init.headers) |headers| {
+            _ = &headers;
+            self.#init.headers = null;
+            return headers;
+        }
+        return null;
+}
+
+pub fn getBodyLen(self: *Response) usize {
+        return self.#body.len();
+}
+
+pub fn getMethod(self: *Response) Method {
+        return self.#init.method;
+}
+
+pub fn getFormDataEncoding(self: *Response) bun.JSError!?*bun.FormData.AsyncFormData {
+        const content_type_opt = try self.getContentType();
+        if (content_type_opt) |content_type_slice| {
+            _ = &content_type_slice;
+            var ct = content_type_slice;
+            _ = &ct;
+            defer {
+            _ = ct.deinit();
+            }
+            if (bun.FormData.Encoding.get(ct.slice())) |encoding| {
+                _ = &encoding;
+                return bun.handleOom(bun.FormData.AsyncFormData.init(bun.default_allocator, encoding));
             }
             return null;
-    }
-
-pub fn getBodyLen(self: *const Response) usize {
-            return self.body.len();
-    }
-
-pub fn getMethod(self: *const Response) Method {
-            return self.init_opts.method;
-    }
-
-pub fn getFormDataEncoding(self: *Response) JSError!?*FormData.AsyncFormData {
-            var content_type_slice: ZigString.Slice = ((try self.getContentType()) orelse { return .{ .ok = null }; });
-            _ = &content_type_slice;
-            defer {
-            _ = content_type_slice.deinit();
-            }
-            var encoding = ((FormData.Encoding.get(content_type_slice.slice())) orelse { return .{ .ok = null }; });
-            var __encoding_moved = false; _ = &__encoding_moved;
-            defer if (!__encoding_moved) { const __T = @TypeOf(encoding); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = encoding.release() catch {}; } else { encoding.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = encoding; _drop_val.release(); } };
-            return sys.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
-    }
+        }
+        return null;
+}
 
 pub fn estimatedSize(self: *Response) callconv(.c) usize {
-            return self.reported_estimated_size;
-    }
+        return self.#reported_estimated_size;
+}
 
 pub fn calculateEstimatedByteSize(self: *Response) void {
-            self.reported_estimated_size = ((((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).estimatedSize() + self.url.byteSlice().len) + self.init_opts.status_text.byteSlice().len) + @sizeOf(Response));
-    }
+        self.#reported_estimated_size = ((((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).estimatedSize() + self.#url.byteSlice().len) + self.#init.status_text.byteSlice().len) + @sizeOf(Response));
+}
 
 pub fn checkBodyStreamRef(self: *Response, globalObject: *JSGlobalObject) void {
-            if (self.js_ref.tryGet()) |js_value| {
-                _ = &js_value;
-                if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value) == .Locked)) {
-                    if ((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable.get(globalObject)) |stream| {
-                        _ = &stream;
-                        _ = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value).ensureStillAlive();
-                        _ = js.gc.stream.set(js_value, globalObject, (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value));
-                        _ = (if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable.deinit();
-                        (if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable = .{};
-                    }
+        if (self.#js_ref.tryGet()) |js_value| {
+            _ = &js_value;
+            if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value) == .Locked)) {
+                if ((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable.get(globalObject)) |stream| {
+                    _ = &stream;
+                    _ = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value).ensureStillAlive();
+                    _ = js.gc.stream.set(js_value, globalObject, (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value));
+                    _ = (if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable.deinit();
+                    (if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable = .{};
                 }
             }
-    }
+        }
+}
 
 pub fn toJS(self: *Response, globalObject: *JSGlobalObject) JSValue {
-            _ = self.calculateEstimatedByteSize();
-            var js_value = js.toJSUnchecked(globalObject, self);
-            var __js_value_moved = false; _ = &__js_value_moved;
-            defer if (!__js_value_moved) { const __T = @TypeOf(js_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = js_value.release() catch {}; } else { js_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = js_value; _drop_val.release(); } };
-            self.js_ref = .initWeak(js_value);
-            _ = self.checkBodyStreamRef(globalObject);
-            __js_value_moved = true;
-            return js_value;
-    }
+        _ = self.calculateEstimatedByteSize();
+        const js_value = js.toJSUnchecked(globalObject, self);
+        self.#js_ref = .initWeak(js_value);
+        _ = self.checkBodyStreamRef(globalObject);
+        return js_value;
+}
 
 pub fn getBodyValue(self: *Response) *Body.Value {
-            return (&(if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value));
-    }
+        return (&(if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value));
+}
 
-pub fn getBodyReadableStream(self: *Response, globalObject: *JSGlobalObject) ?webcore.ReadableStream {
-            if (self.js_ref.tryGet()) |js_r| {
-                _ = &js_r;
-                if (js.gc.stream.get(js_r)) |stream| {
-                    _ = &stream;
-                    return (blk_catch_0: { break :blk_catch_0 ((webcore.ReadableStream.fromJS(stream, globalObject)) catch |e| { _ = &e; _ = globalObject.takeException(e);
-                    return null; }); });
-                }
+pub fn getBodyReadableStream(self: *Response, globalObject: *JSGlobalObject) ?jsc.WebCore.ReadableStream {
+        if (self.#js_ref.tryGet()) |js_r| {
+            _ = &js_r;
+            if (js.gc.stream.get(js_r)) |stream| {
+                _ = &stream;
+                return (blk_catch_0: { break :blk_catch_0 ((jsc.WebCore.ReadableStream.fromJS(stream, globalObject)) catch |e| { _ = &e; _ = globalObject.takeException(e);
+                return null; }); });
             }
-            if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value) == .Locked)) {
-                return (if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable.get(globalObject);
-            }
-            return null;
-    }
+        }
+        if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value) == .Locked)) {
+            return (if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable.get(globalObject);
+        }
+        return null;
+}
 
-pub fn detachReadableStream(self: *Response, globalObject: *JSGlobalObject) void {
-            if (self.js_ref.tryGet()) |js_r| {
-                _ = &js_r;
-                _ = js.gc.stream.clear(js_r, globalObject);
-            }
-            if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value) == .Locked)) {
-                var old = (if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable;
-                var __old_moved = false; _ = &__old_moved;
-                defer if (!__old_moved) { const __T = @TypeOf(old); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = old.release() catch {}; } else { old.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = old; _drop_val.release(); } };
-                _ = old.deinit();
-                (if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable = .{};
-            }
-    }
+pub fn detachReadableStream(self: *Response, globalObject: *jsc.JSGlobalObject) void {
+        if (self.#js_ref.tryGet()) |js_r| {
+            _ = &js_r;
+            _ = js.gc.stream.clear(js_r, globalObject);
+        }
+        if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value) == .Locked)) {
+            var old = (if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable;
+            _ = &old;
+            _ = old.deinit();
+            (if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable = .{};
+        }
+}
 
 pub fn setSizeHint(self: *Response, size_hint: Blob.SizeType) void {
-            if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value) == .Locked)) {
-                (if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.size_hint = size_hint;
-                if ((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable.get((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.global)) |readable| {
-                    _ = &readable;
-                    if ((readable.ptr == .Bytes)) {
-                        readable.ptr.Bytes.size_hint = size_hint;
-                    }
+        if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value) == .Locked)) {
+            (if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.size_hint = size_hint;
+            if ((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable.get((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.global)) |readable| {
+                _ = &readable;
+                if ((readable.ptr == .Bytes)) {
+                    readable.ptr.Bytes.size_hint = size_hint;
                 }
             }
-    }
+        }
+}
 
-pub fn getFetchHeaders(self: *const Response) ?*FetchHeaders {
-            return self.init_opts.headers;
-    }
+pub fn getFetchHeaders(self: *Response) ?*FetchHeaders {
+        return self.#init.headers;
+}
 
-pub fn statusCode(self: *const Response) u16 {
-            return self.init_opts.status_code;
-    }
+pub fn statusCode(self: Response) u16 {
+        return self.#init.status_code;
+}
 
-pub fn redirectLocation(self: *const Response) ?[]const u8 {
-            return self.header(.Location);
-    }
+pub fn redirectLocation(self: Response) ?[]const u8 {
+        return self.header(.Location);
+}
 
-pub fn header(self: *const Response, name: FetchHeaders.HTTPHeaderName) ?[]const u8 {
-            const headers = ((self.init_opts.headers) orelse { return null; });
-            if ((blk_catch_1: { break :blk_catch_1 ((headers.fastGet(name)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |str| {
+pub fn header(self: Response, name: bun.webcore.FetchHeaders.HTTPHeaderName) ?[]const u8 {
+        if (self.#init.headers) |headers| {
+            _ = &headers;
+            if (headers.fastGet(name)) |str| {
                 _ = &str;
                 return str.slice();
             }
-            return null;
-    }
+        }
+        return null;
+}
 
-pub fn isOK(self: *const Response) bool {
-            return ((self.init_opts.status_code >= 200) and (self.init_opts.status_code <= 299));
-    }
-
-pub fn getURL(self: *Response, globalThis: *JSGlobalObject) JSError!JSValue {
-            return self.url.toJS(globalThis);
-    }
-
-pub fn getResponseType(self: *Response, globalThis: *JSGlobalObject) JSError!JSValue {
-            if ((self.init_opts.status_code < 200)) {
-                return globalThis.commonStrings().@"error"();
-            }
-            return globalThis.commonStrings().default();
-    }
-
-pub fn getStatusText(self: *Response, globalThis: *JSGlobalObject) JSError!JSValue {
-            return self.init_opts.status_text.toJS(globalThis);
-    }
-
-pub fn getRedirected(self: *const Response, _: *JSGlobalObject) JSValue {
-            return JSValue.jsBoolean(self.redirected);
-    }
-
-pub fn getOK(self: *const Response, _: *JSGlobalObject) JSValue {
-            return JSValue.jsBoolean(self.isOK());
-    }
-
-pub fn getOrCreateHeaders(self: *Response, globalThis: *JSGlobalObject) JSError!*FetchHeaders {
-            if ((self.init_opts.headers == null)) {
-                self.init_opts.headers = FetchHeaders.createEmpty();
-                if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value) == .Blob)) {
-                    var content_type = (if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Blob.content_type;
-                    var __content_type_moved = false; _ = &__content_type_moved;
-                    defer if (!__content_type_moved) { const __T = @TypeOf(content_type); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = content_type.release() catch {}; } else { content_type.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = content_type; _drop_val.release(); } };
-                    if ((content_type.len > 0)) {
-                        _ = try self.init_opts.headers.?.put(.ContentType, content_type, globalThis);
-                    }
+pub fn writeFormat(self: *Response, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool) !void {
+        const Writer = @TypeOf(writer);
+        _ = try writer.print("Response ({f}) {{\n", .{ bun.fmt.size(self.#body.len(), .{}) });
+        {
+            formatter.indent = (formatter.indent + 1);
+            defer {
+            {
+                if ((formatter.indent > 0)) {
+                    formatter.indent = (formatter.indent - 1);
                 }
             }
-            return self.init_opts.headers.?;
-    }
+            }
+            _ = try formatter.writeIndent(Writer, writer);
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>ok<d>:<r> ", enable_ansi_colors)));
+            _ = try formatter.printAs(.Boolean, Writer, writer, jsc.JSValue.jsBoolean(self.isOK()), .BooleanObject, enable_ansi_colors);
+            _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+            _ = try writer.writeAll("\n");
+            _ = try formatter.writeIndent(Writer, writer);
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>url<d>:<r> \"", enable_ansi_colors)));
+            _ = try writer.print((comptime Output.prettyFmt("<r><b>{f}<r>", enable_ansi_colors)), .{ self.#url });
+            _ = try writer.writeAll("\"");
+            _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+            _ = try writer.writeAll("\n");
+            _ = try formatter.writeIndent(Writer, writer);
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>status<d>:<r> ", enable_ansi_colors)));
+            _ = try formatter.printAs(.Double, Writer, writer, jsc.JSValue.jsNumber(self.#init.status_code), .NumberObject, enable_ansi_colors);
+            _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+            _ = try writer.writeAll("\n");
+            _ = try formatter.writeIndent(Writer, writer);
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>statusText<d>:<r> ", enable_ansi_colors)));
+            _ = try writer.print((comptime Output.prettyFmt("<r>\"<b>{f}<r>\"", enable_ansi_colors)), .{ self.#init.status_text });
+            _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+            _ = try writer.writeAll("\n");
+            _ = try formatter.writeIndent(Writer, writer);
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>headers<d>:<r> ", enable_ansi_colors)));
+            _ = try formatter.printAs(.Private, Writer, writer, try self.getHeaders(formatter.globalThis), .DOMWrapper, enable_ansi_colors);
+            _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+            _ = try writer.writeAll("\n");
+            _ = try formatter.writeIndent(Writer, writer);
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r>redirected<d>:<r> ", enable_ansi_colors)));
+            _ = try formatter.printAs(.Boolean, Writer, writer, jsc.JSValue.jsBoolean(self.#redirected), .BooleanObject, enable_ansi_colors);
+            _ = try formatter.printComma(Writer, writer, enable_ansi_colors);
+            _ = try writer.writeAll("\n");
+            _ = formatter.resetLine();
+            _ = try self.#body.writeFormat(Formatter, formatter, writer, enable_ansi_colors);
+        }
+        _ = try writer.writeAll("\n");
+        _ = try formatter.writeIndent(Writer, writer);
+        _ = try writer.writeAll("}");
+        _ = formatter.resetLine();
+}
 
-pub fn getHeaders(self: *Response, globalThis: *JSGlobalObject) JSError!JSValue {
-            return try self.getOrCreateHeaders(globalThis).toJS(globalThis);
-    }
+pub fn isOK(self: Response) bool {
+        return ((self.#init.status_code >= 200) and (self.#init.status_code <= 299));
+}
 
-pub fn doClone(self: *Response, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
-            var this_value = callframe.this();
-            var __this_value_moved = false; _ = &__this_value_moved;
-            defer if (!__this_value_moved) { const __T = @TypeOf(this_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = this_value.release() catch {}; } else { this_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = this_value; _drop_val.release(); } };
-            var cloned = try self.clone(globalThis);
-            _ = &cloned;
-            var js_wrapper = Response.makeMaybePooled(globalThis, cloned);
-            _ = &js_wrapper;
-            if ((js_wrapper != .zero)) {
-                if (js.gc.stream.get(js_wrapper)) |cloned_stream| {
-                    _ = &cloned_stream;
-                    _ = js.bodySetCached(js_wrapper, globalThis, cloned_stream);
+pub fn getURL(self: *Response, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+        return self.#url.toJS(globalThis);
+}
+
+pub fn getResponseType(self: *Response, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+        if ((self.#init.status_code < 200)) {
+            return globalThis.commonStrings().@"error"();
+        }
+        return globalThis.commonStrings().default();
+}
+
+pub fn getStatusText(self: *Response, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+        return self.#init.status_text.toJS(globalThis);
+}
+
+pub fn getRedirected(self: *Response, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return JSValue.jsBoolean(self.#redirected);
+}
+
+pub fn getOK(self: *Response, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return JSValue.jsBoolean(self.isOK());
+}
+
+pub fn getOrCreateHeaders(self: *Response, globalThis: *jsc.JSGlobalObject) bun.JSError!*FetchHeaders {
+        if ((self.#init.headers == null)) {
+            self.#init.headers = FetchHeaders.createEmpty();
+            if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value) == .Blob)) {
+                const content_type = (if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Blob.content_type;
+                if ((content_type.len > 0)) {
+                    _ = try self.#init.headers.?.put(.ContentType, content_type, globalThis);
                 }
             }
-            if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value) == .Locked)) {
-                if ((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Locked.readable.get(globalThis)) |readable| {
-                    _ = &readable;
-                    _ = js.bodySetCached(this_value, globalThis, (if (@typeInfo(@TypeOf(readable)) == .@"enum") @intFromEnum(readable) else readable.value));
+        }
+        return self.#init.headers.?;
+}
+
+pub fn getHeaders(self: *Response, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+        const hdrs = try self.getOrCreateHeaders(globalThis);
+        return hdrs.toJS(globalThis);
+}
+
+pub fn doClone(self: *Response, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        const this_value = callframe.this();
+        const cloned = try self.clone(globalThis);
+        const js_wrapper = Response.makeMaybePooled(globalThis, cloned);
+        if ((js_wrapper != .zero)) {
+            if (js.gc.stream.get(js_wrapper)) |cloned_stream| {
+                _ = &cloned_stream;
+                _ = js.bodySetCached(js_wrapper, globalThis, cloned_stream);
+            }
+        }
+        if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value) == .Locked)) {
+            if ((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Locked.readable.get(globalThis)) |readable| {
+                _ = &readable;
+                _ = js.bodySetCached(this_value, globalThis, (if (@typeInfo(@TypeOf(readable)) == .@"enum") @intFromEnum(readable) else readable.value));
+            }
+        }
+        _ = self.checkBodyStreamRef(globalThis);
+        return js_wrapper;
+}
+
+pub fn makeMaybePooled(globalObject: *jsc.JSGlobalObject, resp_ptr: *Response) JSValue {
+        return resp_ptr.toJS(globalObject);
+}
+
+pub fn cloneValue(self: *Response, globalThis: *JSGlobalObject) bun.JSError!Response {
+        var body: Body = undefined;
+        _ = &body;
+        var cloned_from_stream = false;
+        _ = &cloned_from_stream;
+        if (self.#js_ref.tryGet()) |js_r| {
+            _ = &js_r;
+            if (js.gc.stream.get(js_r)) |stream| {
+                _ = &stream;
+                var readable = try jsc.WebCore.ReadableStream.fromJS(stream, globalThis);
+                _ = &readable;
+                if ((readable != null)) {
+                    body = try self.#body.cloneWithReadableStream(globalThis, (&readable.?));
+                    cloned_from_stream = true;
                 }
             }
-            _ = self.checkBodyStreamRef(globalThis);
-            return js_wrapper;
-    }
+        }
+        if ((!cloned_from_stream)) {
+            body = try self.#body.clone(globalThis);
+        }
+        errdefer {
+        _ = body.deinit(bun.default_allocator);
+        }
+        var _init = try self.#init.clone(globalThis);
+        _ = &_init;
+        errdefer {
+        _ = _init.deinit(bun.default_allocator);
+        }
+        return Response{ .#body = body, .#init = _init, .#url = self.#url.clone(), .#redirected = self.#redirected };
+}
 
-pub fn makeMaybePooled(globalObject: *JSGlobalObject, response: *Response) JSValue {
-            return response.toJS(globalObject);
-    }
+pub fn clone(self: *Response, globalThis: *JSGlobalObject) bun.JSError!*Response {
+        return bun.new(Response, try self.cloneValue(globalThis));
+}
 
-pub fn cloneValue(self: *Response, globalThis: *JSGlobalObject) JSError!*Response {
-            var body: Body.Value = undefined;
-            _ = &body;
-            if (self.js_ref.tryGet()) |js_r| {
-                _ = &js_r;
-                if (js.gc.stream.get(js_r)) |stream| {
-                    _ = &stream;
-                    var readable = try webcore.ReadableStream.fromJS(stream, globalThis);
-                    var __readable_moved = false; _ = &__readable_moved;
-                    defer if (!__readable_moved) { const __T = @TypeOf(readable); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = readable.release() catch {}; } else { readable.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = readable; _drop_val.release(); } };
-                    if ((readable != null)) {
-                        body = try self.body.cloneWithReadableStream(globalThis, (&readable.?));
-                    } else {
-                        body = try self.body.clone(globalThis);
-                    }
-                } else {
-                    body = try self.body.clone(globalThis);
-                }
-            } else {
-                body = try self.body.clone(globalThis);
-            }
-            var _init = try self.init_opts.clone(globalThis);
-            var ___init_moved = false; _ = &___init_moved;
-            defer if (!___init_moved) { const __T = @TypeOf(_init); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = _init.release() catch {}; } else { _init.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = _init; _drop_val.release(); } };
-            return Response{ .body = body, .init_opts = _init, .url = self.url.clone(), .redirected = self.redirected };
-    }
-
-pub fn clone(self: *Response, globalThis: *JSGlobalObject) JSError!*Response {
-            return sys.new(Response, try self.cloneValue(globalThis));
-    }
-
-pub fn getStatus(self: *const Response, _: *JSGlobalObject) JSValue {
-            return JSValue.jsNumber(self.init_opts.status_code);
-    }
+pub fn getStatus(self: *Response, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return JSValue.jsNumber(self.#init.status_code);
+}
 
 pub fn destroy(self: *Response) void {
-            _ = self.init_opts.deinit(default_allocator);
-            _ = self.body.deinit(default_allocator);
-            _ = self.url.deref();
-            _ = self.js_ref.deinit();
-            if (self.weak_ptr_data.onFinalize()) {
-                _ = sys.destroy(self);
-            }
-    }
+        _ = self.#init.deinit(bun.default_allocator);
+        _ = self.#body.deinit(bun.default_allocator);
+        _ = self.#url.deref();
+        _ = self.#js_ref.deinit();
+        if (self.weak_ptr_data.onFinalize()) {
+            _ = bun.destroy(self);
+        }
+}
 
 pub fn ref(self: *Response) *Response {
-            self.ref_count = (self.ref_count + 1);
-            return self;
-    }
+        self.ref_count = (self.ref_count + 1);
+        return self;
+}
 
 pub fn unref(self: *Response) void {
-            _ = sys.assert((self.ref_count > 0));
-            self.ref_count = (self.ref_count - 1);
-            if ((self.ref_count == 0)) {
-                _ = self.destroy();
-            }
-    }
+        _ = bun.assert((self.ref_count > 0));
+        self.ref_count = (self.ref_count - 1);
+        if ((self.ref_count == 0)) {
+            _ = self.destroy();
+        }
+}
 
 pub fn finalize(self: *Response) callconv(.c) void {
-            _ = self.js_ref.finalize();
-            _ = self.unref();
-    }
+        _ = self.#js_ref.finalize();
+        _ = self.unref();
+}
 
-pub fn getContentType(self: *Response) JSError!?ZigString.Slice {
-            if (self.init_opts.headers) |headers| {
-                _ = &headers;
-                if (headers.fastGet(.ContentType)) |value| {
-                    _ = &value;
-                    return value.toSlice(default_allocator);
+pub fn getContentType(self: *Response) bun.JSError!?ZigString.Slice {
+        if (self.#init.headers) |headers| {
+            _ = &headers;
+            if (headers.fastGet(.ContentType)) |value| {
+                _ = &value;
+                return value.toSlice(bun.default_allocator);
+            }
+        }
+        if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value) == .Blob)) {
+            if (((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Blob.content_type.len > 0)) {
+                return ZigString.Slice.fromUTF8NeverFree((if (@typeInfo(@TypeOf(self.#body)) == .@"enum") @intFromEnum(self.#body) else self.#body.value).Blob.content_type);
+            }
+        }
+        return null;
+}
+
+pub fn constructJSON(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        const args_list = callframe.arguments_old(2);
+        var args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), (blk: {
+        break :blk args_list.ptr[0..args_list.len];
+
+}));
+        _ = &args;
+        var response = Response{ .#body = Body{ .value = .{ .Empty = .{} } }, .#init = Init{ .status_code = 200 }, .#url = bun.String.empty };
+        _ = &response;
+        var did_succeed = false;
+        _ = &did_succeed;
+        defer {
+        {
+            if ((!did_succeed)) {
+                _ = response.#body.deinit(bun.default_allocator);
+                _ = response.#init.deinit(bun.default_allocator);
+            }
+        }
+        }
+        const json_value = ((args.nextEat()) orelse (jsc.JSValue.zero));
+        if ((@intFromEnum(json_value) != 0)) {
+            if (((json_value.isUndefined() or json_value.isSymbol()) or (json_value.jsType() == .JSFunction))) {
+                const e_val = globalThis.createTypeErrorInstance("Value is not JSON serializable", .{});
+                return globalThis.throwValue(e_val);
+            }
+            if (json_value.isBigInt()) {
+                const e_val = globalThis.createTypeErrorInstance("Do not know how to serialize a BigInt", .{});
+                return globalThis.throwValue(e_val);
+            }
+            var str = bun.String.empty;
+            _ = &str;
+            _ = try json_value.jsonStringifyFast(globalThis, (&str));
+            if (globalThis.hasException()) {
+                return error.zero;
+            }
+            if ((!str.isEmpty())) {
+                if ((if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl.toUTF8IfNeeded(bun.default_allocator)) |bytes| {
+                    _ = &bytes;
+                    defer {
+                    _ = str.deref();
+                    }
+                    (if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value) = .{ .InternalBlob = InternalBlob{ .bytes = std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, @constCast(bytes.slice())), .was_string = true } };
+                } else {
+                    (if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value) = Body.Value{ .WTFStringImpl = (if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl };
                 }
             }
-            if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value) == .Blob)) {
-                if (((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Blob.content_type.len > 0)) {
-                    return ZigString.Slice.fromUTF8NeverFree((if (@typeInfo(@TypeOf(self.body)) == .@"enum") @intFromEnum(self.body) else self.body.value).Blob.content_type);
+        }
+        if (args.nextEat()) |arg_init| {
+            _ = &arg_init;
+            if (arg_init.isUndefinedOrNull()) {
+            } else {
+                if (arg_init.isNumber()) {
+                    response.#init.status_code = @as(u16, @intCast(@min(@max(0, arg_init.toInt32()), std.math.maxInt(u16))));
+                } else {
+                    const maybe_init = (blk_catch_1: { break :blk_catch_1 ((Init.init(globalThis, arg_init)) catch |e| { _ = &e; break :blk_catch_1 @as(?Init, blk: {
+                    if ((e == error.JSError)) {
+                        return error.zero;
+                    }
+                    break :blk @as(?Init, null);
+}); }); });
+                    if (maybe_init) |_init| {
+                        _ = &_init;
+                        response.#init = _init;
+                    }
                 }
             }
-            return null;
-    }
+        }
+        var headers_ref = try response.getOrCreateHeaders(globalThis);
+        _ = &headers_ref;
+        _ = try headers_ref.putDefault(.ContentType, (if (@typeInfo(@TypeOf(MimeType.json)) == .@"enum") @intFromEnum(MimeType.json) else MimeType.json.value), globalThis);
+        did_succeed = true;
+        return bun.new(Response, response).toJS(globalThis);
+}
 
-pub fn @"404"(globalThis: *JSGlobalObject) *Response {
-            return emptyWithStatus(globalThis, 404);
-    }
+pub fn validateRedirectStatusCode(globalThis: *jsc.JSGlobalObject, status_code: i32) bun.JSError!u16 {
+        switch (status_code) {
+301, 302, 303, 307, 308 => {
+return @intCast(status_code);
+},
+else => {
+const e_val = globalThis.createRangeErrorInstance("Failed to execute 'redirect' on 'Response': Invalid status code", .{});
+        return globalThis.throwValue(e_val);
+},
+}
+}
 
-pub fn @"200"(globalThis: *JSGlobalObject) *Response {
-            return emptyWithStatus(globalThis, 200);
-    }
+pub fn constructRedirect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        const response = try constructRedirectImpl(globalThis, callframe);
+        const resp_ptr = bun.new(Response, response);
+        const response_js = resp_ptr.toJS(globalThis);
+        return response_js;
+}
 
-pub inline fn emptyWithStatus(self: *Response, _: *JSGlobalObject, status: u16) *Response {
-        _ = self;
-            return sys.new(Response, .{ .body = Body{ .value = Body.Value{ .Null = .{} } }, .init_opts = Init{ .status_code = status } });
-    }
-    pub const WeakRef = ptr.WeakPtr(Response, "weak_ptr_data");
-};
+pub fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!Response {
+        var args_list = callframe.arguments_old(4);
+        _ = &args_list;
+        var args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), (blk: {
+        break :blk args_list.ptr[0..args_list.len];
 
-const Output = bun.Output;
-const default_allocator = bun.default_allocator;
-const S3 = bun.S3;
-const webcore = bun.webcore;
-const http = bun.http;
-const jsc = bun.jsc;
-const String = bun.String;
-const ptr = bun.ptr;
-const sys = bun.sys;
-const JSError = bun.JSError;
-const FormData = bun.FormData;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const CallFrame = jsc.CallFrame;
-const ZigString = jsc.ZigString;
-const JSRef = jsc.JSRef;
-const Codegen = jsc.Codegen;
-const FetchHeaders = webcore.FetchHeaders;
-const Blob = webcore.Blob;
-const Body = webcore.Body;
-pub const js = Codegen.JSResponse;
+}));
+        _ = &args;
+        var url_string_slice = ZigString.Slice.empty;
+        _ = &url_string_slice;
+        defer {
+        _ = url_string_slice.deinit();
+        }
+        var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .{ .Empty = .{} } }, .#url = bun.String.empty };
+        _ = &response;
+        const url_string_value = ((args.nextEat()) orelse (jsc.JSValue.zero));
+        var url_string = ZigString.init("");
+        _ = &url_string;
+        if ((@intFromEnum(url_string_value) != 0)) {
+            url_string = try url_string_value.getZigString(globalThis);
+        }
+        url_string_slice = url_string.toSlice(bun.default_allocator);
+        var did_succeed = false;
+        _ = &did_succeed;
+        defer {
+        {
+            if ((!did_succeed)) {
+                _ = response.#body.deinit(bun.default_allocator);
+                _ = response.#init.deinit(bun.default_allocator);
+            }
+        }
+        }
+        if (args.nextEat()) |arg_init| {
+            _ = &arg_init;
+            if (arg_init.isUndefinedOrNull()) {
+            } else {
+                if (arg_init.isNumber()) {
+                    response.#init.status_code = try validateRedirectStatusCode(globalThis, arg_init.toInt32());
+                } else {
+                    if (try Init.init(globalThis, arg_init)) |_init| {
+                        _ = &_init;
+                        errdefer {
+                        _ = response.#init.deinit(bun.default_allocator);
+                        }
+                        response.#init = _init;
+                        if ((_init.status_code != 200)) {
+                            response.#init.status_code = try validateRedirectStatusCode(globalThis, _init.status_code);
+                        }
+                    }
+                }
+            }
+        }
+        if (globalThis.hasException()) {
+            return error.JSError;
+        }
+        did_succeed = true;
+        response.#init.headers = try response.getOrCreateHeaders(globalThis);
+        var headers_ref = response.#init.headers.?;
+        _ = &headers_ref;
+        _ = try headers_ref.put(.Location, url_string_slice.slice(), globalThis);
+        return response;
+}
+
+pub fn constructError(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+        const response = bun.new(Response, Response{ .#init = Init{ .status_code = 0 }, .#body = Body{ .value = .{ .Empty = .{} } } });
+        const js_value = response.toJS(globalThis);
+        response.#js_ref = .initWeak(js_value);
+        return js_value;
+}
+
+pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, js_this: jsc.JSValue) bun.JSError!*Response {
+        var arguments = callframe.argumentsAsArray(2);
+        _ = &arguments;
+        if (((!arguments[0].isUndefinedOrNull()) and arguments[0].isObject())) {
+            if (arguments[0].as(Blob)) |blob| {
+                _ = &blob;
+                if (blob.isS3()) {
+                    if ((!arguments[1].isEmptyOrUndefinedOrNull())) {
+                        return globalThis.throwInvalidArguments("new Response(s3File) do not support ResponseInit options", .{});
+                    }
+                    var response = Response{ .#init = Init{ .status_code = 302 }, .#body = Body{ .value = .{ .Empty = .{} } }, .#url = bun.String.empty, .#js_ref = .initWeak(js_this) };
+                    _ = &response;
+                    const credentials = blob.store.?.data.s3.getCredentials();
+                    const result = (blk_catch_2: { break :blk_catch_2 ((credentials.signRequest(.{ .path = blob.store.?.data.s3.path(), .method = .GET }, false, .{ .expires = (15 * 60) })) catch |sign_err| { _ = &sign_err; return s3.throwSignError(sign_err, globalThis); }); });
+                    defer {
+                    _ = result.deinit();
+                    }
+                    response.#init.headers = try response.getOrCreateHeaders(globalThis);
+                    response.#redirected = true;
+                    var headers_ref = response.#init.headers.?;
+                    _ = &headers_ref;
+                    _ = try headers_ref.put(.Location, result.url, globalThis);
+                    return bun.new(Response, response);
+                }
+            }
+        }
+        var _init: Init = undefined;
+        _ = &_init;
+        if (arguments[1].isUndefinedOrNull()) {
+            _init = Init{ .status_code = 200, .headers = null };
+        } else {
+            if (arguments[1].isObject()) {
+                if (_init == null) { _init = unreachable; }
+            } else {
+                if ((!globalThis.hasException())) {
+                    return globalThis.throwInvalidArguments("Failed to construct 'Response': The provided body value is not of type 'ResponseInit'", .{});
+                }
+                return error.JSError;
+            }
+        }
+        errdefer {
+        _ = _init.deinit(bun.default_allocator);
+        }
+        if (globalThis.hasException()) {
+            return error.JSError;
+        }
+        var body: Body = undefined;
+        _ = &body;
+        if (arguments[0].isUndefinedOrNull()) {
+            body = Body{ .value = Body.Value{ .Null = .{} } };
+        } else {
+            body = try Body.extract(globalThis, arguments[0]);
+        }
+        errdefer {
+        _ = body.deinit(bun.default_allocator);
+        }
+        if (globalThis.hasException()) {
+            return error.JSError;
+        }
+        var response = bun.new(Response, Response{ .#body = body, .#init = _init, .#js_ref = .initWeak(js_this) });
+        _ = &response;
+        if ((((((if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value) == .Blob) and (response.#init.headers != null)) and ((if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value).Blob.content_type.len > 0)) and (!response.#init.headers.?.fastHas(.ContentType)))) {
+            _ = try response.#init.headers.?.put(.ContentType, (if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value).Blob.content_type, globalThis);
+        }
+        _ = response.calculateEstimatedByteSize();
+        _ = response.checkBodyStreamRef(globalThis);
+        return response;
+}
+
+pub fn @"404"(globalThis: *jsc.JSGlobalObject) Response {
+        return emptyWithStatus(globalThis, 404);
+}
+
+pub fn @"200"(globalThis: *jsc.JSGlobalObject) Response {
+        return emptyWithStatus(globalThis, 200);
+}
+
+pub fn emptyWithStatus(_: *jsc.JSGlobalObject, status: u16) Response {
+        return bun.new(Response, .{ .#body = Body{ .value = Body.Value{ .Null = .{} } }, .init = Init{ .status_code = status } });
+}
+const ResponseMixin = BodyMixin(Response);
+pub const js = jsc.Codegen.JSResponse;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
+pub const WeakRef = bun.ptr.WeakPtr(Response, "weak_ptr_data");
+pub const getText = ResponseMixin.getText;
+pub const getBody = ResponseMixin.getBody;
+pub const getBytes = ResponseMixin.getBytes;
+pub const getBodyUsed = ResponseMixin.getBodyUsed;
+pub const getJSON = ResponseMixin.getJSON;
+pub const getArrayBuffer = ResponseMixin.getArrayBuffer;
+pub const getBlob = ResponseMixin.getBlob;
+pub const getBlobWithoutCallFrame = ResponseMixin.getBlobWithoutCallFrame;
+pub const getFormData = ResponseMixin.getFormData;
+const Output = bun.Output;
+const default_allocator = bun.default_allocator;
+const s3 = bun.S3;
+const FetchHeaders = bun.webcore.FetchHeaders;
+const http = bun.http;
+const MimeType = bun.http.MimeType;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const ZigString = jsc.ZigString;
+const Request = jsc.WebCore.Request;
+const Blob = jsc.WebCore.Blob;
+const InternalBlob = jsc.WebCore.Blob.Internal;
+const Body = jsc.WebCore.Body;
+const BodyMixin = jsc.WebCore.Body.Mixin;
 
 extern "c" fn Response__getAsyncLocalStorageStore(global: *JSGlobalObject, als: JSValue) callconv(.c) JSValue;
 
 extern "c" fn Response__mergeAsyncLocalStorageOptions(global: *JSGlobalObject, alsStore: JSValue, initOptions: JSValue) callconv(.c) void;
 
-pub fn jsFunctionRequestOrResponseHasBodyValue(_: *JSGlobalObject, callframe: *CallFrame) callconv(.c) JSValue {
-        var arguments = callframe.arguments_old(1);
-        var __arguments_moved = false; _ = &__arguments_moved;
-        defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
-        var this_value = arguments.ptr[0];
-        _ = &this_value;
+pub fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
+        const arguments = callframe.arguments_old(1);
+        const this_value = (blk: {
+        break :blk arguments.ptr[0];
+
+});
         if (this_value.isEmptyOrUndefinedOrNull()) {
-            return JSValue.false;
+            return .false;
         }
         if (this_value.as(Response)) |response| {
             _ = &response;
-            return JSValue.jsBoolean((!(if (@typeInfo(@TypeOf(response.body)) == .@"enum") @intFromEnum(response.body) else response.body.value).isDefinitelyEmpty()));
+            return jsc.JSValue.jsBoolean((!(if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value).isDefinitelyEmpty()));
         } else {
-            if (this_value.as(webcore.Request)) |request| {
+            if (this_value.as(Request)) |request| {
                 _ = &request;
-                return JSValue.jsBoolean((!request.getBodyValue().isDefinitelyEmpty()));
+                return jsc.JSValue.jsBoolean((!request.getBodyValue().isDefinitelyEmpty()));
             }
         }
-        return JSValue.false;
+        return .false;
 }
 
-pub fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *JSGlobalObject, callframe: *CallFrame) callconv(.c) JSValue {
-        var arguments = callframe.arguments_old(1);
-        var __arguments_moved = false; _ = &__arguments_moved;
-        defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
-        var this_value = arguments.ptr[0];
-        _ = &this_value;
+pub fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
+        const arguments = callframe.arguments_old(1);
+        const this_value = (blk: {
+        break :blk arguments.ptr[0];
+
+});
         if (this_value.isEmptyOrUndefinedOrNull()) {
-            return JSValue.js_undefined;
+            return .js_undefined;
         }
-        var body = brk: {
+        var body_opt: ?*Body.Value = null;
+        _ = &body_opt;
         if (this_value.as(Response)) |response| {
             _ = &response;
-            break :brk (&(if (@typeInfo(@TypeOf(response.body)) == .@"enum") @intFromEnum(response.body) else response.body.value));
+            body_opt = (&(if (@typeInfo(@TypeOf(response.#body)) == .@"enum") @intFromEnum(response.#body) else response.#body.value));
         } else {
-            if (this_value.as(webcore.Request)) |request| {
+            if (this_value.as(Request)) |request| {
                 _ = &request;
-                break :brk request.getBodyValue();
+                body_opt = request.getBodyValue();
+            } else {
+                return .js_undefined;
             }
         }
-        return JSValue.js_undefined;
-};
-        var __body_moved = false; _ = &__body_moved;
-        defer if (!__body_moved) { const __T = @TypeOf(body); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = body.release() catch {}; } else { body.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = body; _drop_val.release(); } };
+        const body = body_opt.?;
         switch (body.*) {
 .Used, .Empty, .Null => {
-return JSValue.js_undefined;
+return .js_undefined;
 },
-.Blob => |*blob| {
-if (blob.isBunFile()) {
-            return JSValue.js_undefined;
+.Blob => {
+const blob = *const body.Blob;
+        if (blob.isBunFile()) {
+            return .js_undefined;
         }
         defer {
         body.* = .{ .Used = .{} };
         }
-        return (blk_catch_2: { break :blk_catch_2 ((blob.toArrayBuffer(globalObject, .transfer)) catch |__ce_2| { _ = &__ce_2; return JSValue.zero; }); });
+        return (blk_catch_3: { break :blk_catch_3 ((blob.toArrayBuffer(globalObject, .transfer)) catch |__ce_3| { _ = &__ce_3; return .zero; }); });
 },
 .WTFStringImpl, .InternalBlob => {
 var any_blob = body.useAsAnyBlob();
-        var __any_blob_moved = false; _ = &__any_blob_moved;
-        defer if (!__any_blob_moved) { const __T = @TypeOf(any_blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = any_blob.release() catch {}; } else { any_blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = any_blob; _drop_val.release(); } };
-        return (blk_catch_3: { break :blk_catch_3 ((any_blob.toArrayBufferTransfer(globalObject)) catch |__ce_3| { _ = &__ce_3; return JSValue.zero; }); });
+        _ = &any_blob;
+        return (blk_catch_4: { break :blk_catch_4 ((any_blob.toArrayBufferTransfer(globalObject)) catch |__ce_4| { _ = &__ce_4; return .zero; }); });
 },
 .Error, .Locked => {
-return JSValue.js_undefined;
+return .js_undefined;
 },
 }
 }
