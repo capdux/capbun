@@ -129,12 +129,12 @@ pub fn convertFromExtern(extern_value: ExternType) ZigType {
 pub fn BindgenOptional(comptime Child: type) type {
         return struct {
 
-pub fn convertFromExtern(extern_value: ExternType) ?ZigType {
+pub fn convertFromExtern(extern_value: ExternType) ZigType {
             if (comptime @hasDecl(Child, "OptionalExternType")) {
                 return Child.convertOptionalFromExtern(extern_value);
             }
             if ((extern_value.tag == 0)) {
-                return null;
+                return (if (comptime @typeInfo(ZigType) == .@"enum") @as(ZigType, @enumFromInt(null)) else @as(ZigType, null));
             }
             _ = bun.assert_eql(extern_value.tag, 1);
             return Child.convertFromExtern(@field(extern_value.data, "1"));

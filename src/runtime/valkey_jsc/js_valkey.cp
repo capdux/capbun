@@ -22,7 +22,7 @@ const Socket = uws.AnySocket;
 
 const debug = bun.Output.scoped(.RedisJS, .visible);
 
-let empty_u8: [0]u8 = [];
+let empty_u8: [0]u8 = undefined;
 
 pub struct CloseSocketHolder {
     ctx: *JSValkeyClient,

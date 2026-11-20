@@ -240,6 +240,7 @@ const http = @import("bun").http;
 const jsc = @import("bun").jsc;
 const Method = @import("../../../http_types/Method").Method;
 const URL = @import("../../../url/url").URL;
+pub const X509 = @import("../../api/bun/x509.zig");
 pub const FetchHTTPRequestBody = union(enum) {
     AnyBlob: AnyBlob,
     Sendfile: http.SendFile,
@@ -755,11 +756,7 @@ pub fn reject(holder: *@This()) JSTerminated!void {
             _ = &holder;
             holder.* = .{ .held = result, .promise = self.promise.strong, .globalObject = globalThis, .task = undefined };
             self.promise.strong = .empty;
-            holder.task = (switch (success) {
-true => jsc.AnyTask.New(Holder, Holder.resolve).init(holder),
-false => jsc.AnyTask.New(Holder, Holder.reject).init(holder),
-else => unreachable,
-});
+            holder.task = (if (success) jsc.AnyTask.New(Holder, Holder.resolve).init(holder) else jsc.AnyTask.New(Holder, Holder.reject).init(holder));
             _ = vm.enqueueTask(jsc.Task.init((&holder.task)));
     }
 
@@ -1022,7 +1019,7 @@ pub fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) callconv(.c) void {
 
 pub fn onResolve(self: *FetchTasklet) JSValue {
             _ = log("onResolve", .{});
-            const response = api.bun.new(Response, self.toResponse());
+            const response = bun.new(Response, self.toResponse());
             const response_js = Response.makeMaybePooled(@as(*jsc.JSGlobalObject, @ptrCast(@alignCast(self.global_this))), response);
             _ = response_js.ensureStillAlive();
             self.response = jsc.Weak(FetchTasklet).create(response_js, self.global_this, .FetchResponse, self);
@@ -1346,7 +1343,6 @@ const fmt = std.fmt;
 const BunString = String;
 const AtomicValue = Value;
 const ZigURL = URL;
-const X509 = api.bun.x509;
 const FetchHeaders = webcore.FetchHeaders;
 const SSLConfig = api.server.ServerConfig.SSLConfig;
 const FetchRedirect = bun.http.FetchRedirect;

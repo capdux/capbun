@@ -2327,7 +2327,8 @@ pub fn serializable(input: auto): @TypeOf(input) {
             }
         }
     }
-    let zeroed: [@sizeOf(T)]u8 = std.mem.zeroes([@sizeOf(T)]u8);
+    const zeroed_len = comptime @sizeOf(T);
+    let zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
     const result: *T = @ptrCast(@alignCast(&zeroed));
 
     inline for (field_name of comptime std.@"meta".fieldNames(T)) {
@@ -2338,7 +2339,8 @@ pub fn serializable(input: auto): @TypeOf(input) {
 }
 
 pub inline fn serializableInto(comptime T: type, init: auto): T {
-    let zeroed: [@sizeOf(T)]u8 = std.mem.zeroes([@sizeOf(T)]u8);
+    const zeroed_len = comptime @sizeOf(T);
+    let zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
     const result: *T = @ptrCast(@alignCast(&zeroed));
 
     inline for (field_name of comptime std.@"meta".fieldNames(@TypeOf(init))) {

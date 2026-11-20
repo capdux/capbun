@@ -63,12 +63,11 @@ pub fn SSLWrapper(comptime T: type): type {
                 BoringSSL.SSL_set_renegotiate_mode(ssl, BoringSSL.ssl_renegotiate_never);
                 BoringSSL.SSL_set_accept_state(ssl);
             }
-            const bio_mem = BoringSSL.BIO_s_mem();
-            const input = BoringSSL.BIO_new(bio_mem) orelse {
+            const input = BoringSSL.BIO_new(BoringSSL.BIO_s_mem()) orelse {
                 return @as(anyerror!This, error.OutOfMemory);
             };
             errdefer _ = BoringSSL.BIO_free(input);
-            const output = BoringSSL.BIO_new(bio_mem) orelse {
+            const output = BoringSSL.BIO_new(BoringSSL.BIO_s_mem()) orelse {
                 return @as(anyerror!This, error.OutOfMemory);
             };
             _ = BoringSSL.BIO_set_mem_eof_return(input, -1);

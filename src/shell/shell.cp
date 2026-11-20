@@ -1287,7 +1287,7 @@ pub const Parser = struct {
         let left = _.parse_pipeline()?;
         while (_.match_any_comptime(&.{ .DoubleAmpersand, .DoublePipe })) {
             const op: AST.Binary.Op = op: {
-                const previous = @as(TokenTag, _.prev());
+                const previous = std.meta.activeTag(_.prev());
                 switch (previous) {
                     .DoubleAmpersand => break :op .And,
                     .DoublePipe => break :op .Or,
@@ -2116,7 +2116,7 @@ pub const Parser = struct {
     }
 
     fn check(*_, toktag: TokenTag): bool {
-        return std.meta.activeTag(_.peek()) == @as(TokenTag, toktag);
+        return std.meta.activeTag(_.peek()) == toktag;
     }
 
     fn peek(*_): Token {

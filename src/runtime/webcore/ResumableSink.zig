@@ -144,7 +144,8 @@ pub fn initExactRefs(globalThis: *JSGlobalObject, stream: ReadableStream, contex
                         }
                         break :brk_err null;
 };
-                        const bytes = byte_stream.drain();
+                        var bytes = byte_stream.drain();
+                        _ = &bytes;
                         defer {
                         _ = bytes.deinit(default_allocator);
                         }
@@ -154,7 +155,8 @@ pub fn initExactRefs(globalThis: *JSGlobalObject, stream: ReadableStream, contex
                         _ = sink.deref();
                         return sink;
                     }
-                    const bytes = byte_stream.drain();
+                    var bytes = byte_stream.drain();
+                    _ = &bytes;
                     defer {
                     _ = bytes.deinit(default_allocator);
                     }

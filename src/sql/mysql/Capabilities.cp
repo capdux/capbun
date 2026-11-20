@@ -101,7 +101,7 @@ import std from "std";
     pub fn toInt(_: Capabilities): u32 {
         let value: u32 = 0;
 
-        const fields = [
+        const fields: [32][]const u8 = [
             "CLIENT_LONG_PASSWORD",
             "CLIENT_FOUND_ROWS",
             "CLIENT_LONG_FLAG",
@@ -136,8 +136,8 @@ import std from "std";
             "CLIENT_REMEMBER_OPTIONS",
         ];
         @for (field of fields) {
-            if (@field(this, field)) {
-                value |= @field(Capabilities, "_" + field);
+            if (@field(_, field)) {
+                value |= @field(Capabilities, "_" ++ field);
             }
         }
 
@@ -147,7 +147,7 @@ import std from "std";
     pub static fn fromInt(flags: u32): Capabilities {
         let res: Capabilities = Capabilities{};
         @for (field of comptime std.meta.fieldNames(Capabilities)) {
-            @field(res, field) = (@field(Capabilities, "_" + field) & flags) != 0;
+            @field(res, field) = (@field(Capabilities, "_" ++ field) & flags) != 0;
         }
         return res;
     }

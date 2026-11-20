@@ -1245,7 +1245,7 @@ pub fn initWithModuleGraph(opts: Options) !*VirtualMachine {
         const log = opts.log.?;
         const transpiler = try Transpiler.init(allocator, log, opts.args, null);
         const vm: *VirtualMachine = VMHolder.vm.?;
-        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All.init(), .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_24: { break :blk_catch_24 ((std.time.Timer.start()) catch |__ce_24| { _ = &__ce_24; @panic("Timers are not supported on this system."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = opts.graph.?, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
+        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_24: { break :blk_catch_24 ((std.time.Timer.start()) catch |__ce_24| { _ = &__ce_24; @panic("Timers are not supported on this system."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = opts.graph.?, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.regular_event_loop.virtual_machine = VMHolder.vm.?;
@@ -1299,7 +1299,7 @@ pub fn init(opts: Options) !*VirtualMachine {
         if (opts.is_main_thread) {
             VMHolder.main_thread_vm = VMHolder.vm.?;
         }
-        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All.init(), .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_26: { break :blk_catch_26 ((std.time.Timer.start()) catch |__ce_26| { _ = &__ce_26; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
+        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_26: { break :blk_catch_26 ((std.time.Timer.start()) catch |__ce_26| { _ = &__ce_26; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.regular_event_loop.virtual_machine = VMHolder.vm.?;
@@ -1390,7 +1390,7 @@ pub fn initWorker(worker: *webcore.WebWorker, opts: Options) anyerror!*VirtualMa
         _ = console.init(Output.rawErrorWriter(), Output.rawWriter());
         const transpiler = try Transpiler.init(allocator, log, try Config.configureTransformOptionsForBunVM(allocator, opts.args), opts.env_loader);
         const vm: *VirtualMachine = VMHolder.vm.?;
-        vm.* = VirtualMachine{ .global = undefined, .allocator = allocator, .transpiler_store = RuntimeTranspilerStore.init(), .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All.init(), .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_28: { break :blk_catch_28 ((std.time.Timer.start()) catch |__ce_28| { _ = &__ce_28; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = worker.parent.standalone_module_graph, .worker = worker, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = @as(i32, @intCast(worker.execution_context_id)) };
+        vm.* = VirtualMachine{ .global = undefined, .allocator = allocator, .transpiler_store = RuntimeTranspilerStore.init(), .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_28: { break :blk_catch_28 ((std.time.Timer.start()) catch |__ce_28| { _ = &__ce_28; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = worker.parent.standalone_module_graph, .worker = worker, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = @as(i32, @intCast(worker.execution_context_id)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.transpiler.options.emit_dce_annotations = false;
@@ -1439,7 +1439,7 @@ pub fn initBake(opts: Options) anyerror!*VirtualMachine {
         _ = console.init(Output.rawErrorWriter(), Output.rawWriter());
         const transpiler = try Transpiler.init(allocator, log, try Config.configureTransformOptionsForBunVM(allocator, opts.args), opts.env_loader);
         const vm: *VirtualMachine = VMHolder.vm.?;
-        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All.init(), .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_30: { break :blk_catch_30 ((std.time.Timer.start()) catch |__ce_30| { _ = &__ce_30; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
+        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_30: { break :blk_catch_30 ((std.time.Timer.start()) catch |__ce_30| { _ = &__ce_30; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else null), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.regular_event_loop.virtual_machine = VMHolder.vm.?;
@@ -1542,7 +1542,10 @@ pub fn fetchWithoutOnLoadPlugins(jsc_vm: *VirtualMachine, globalObject: *JSGloba
             _ = (blob.*).deinit();
         }
         }
-        const lr = (blk_catch_35: { break :blk_catch_35 ((options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, (&virtual_source_to_use), (&blob_to_deinit), null)) catch |__ce_35| { _ = &__ce_35; return error.ModuleNotFound; }); });
+        const lr = (blk_catch_35: { break :blk_catch_35 ((options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, (&virtual_source_to_use), (blk: {
+        break :blk @as(?*jsc.WebCore.Blob, @ptrCast((&blob_to_deinit)));
+
+}), null)) catch |__ce_35| { _ = &__ce_35; return error.ModuleNotFound; }); });
         var module_type: options.ModuleType = .unknown;
         _ = &module_type;
         if (lr.package_json) |pkg| {
@@ -2747,8 +2750,8 @@ pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, erro
             top.position.column = mapping.original.columns;
             exception.remapped = true;
             top.remapped = true;
-            const last_line = @max(top.position.line.zeroBased(), 0);
-            if (strings.getLinesInText(code.slice(), (if (comptime @typeInfo(@TypeOf(last_line)) == .@"enum") cp_cast_int(i32, @intFromEnum(last_line)) else cp_cast_int(i32, last_line)), ZigException.Holder.source_lines_count)) |lines_buf| {
+            const last_line: u32 = @intCast(@max(top.position.line.zeroBased(), 0));
+            if (strings.getLinesInText(code.slice(), last_line, ZigException.Holder.source_lines_count)) |lines_buf| {
                 _ = &lines_buf;
                 var lines = lines_buf.slice();
                 _ = &lines;
@@ -2823,8 +2826,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
         .js => JSValue,
         .zig_exception => *ZigException,
     }, exception_list: ?*ExceptionList, formatter: *ConsoleObject.Formatter, comptime Writer: type, writer: Writer, comptime allow_ansi_color: bool, comptime allow_side_effects: bool) !void {
-        var exception_holder = (if ((mode == .js)) ZigException.Holder.init() else null);
-        _ = &exception_holder;
+        const exception_holder = (if ((mode == .js)) ZigException.Holder.init() else null);
         var exception = (if ((mode == .js)) exception_holder.zigException() else error_instance);
         _ = &exception;
         defer {
@@ -2930,7 +2932,10 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                     if ((((frame.*).position.isInvalid() or (frame.*).source_url.hasPrefixComptime("bun:")) or (frame.*).source_url.hasPrefixComptime("node:"))) {
                         continue;
                     }
-                    top_frame = (frame.*);
+                    top_frame = (blk: {
+                    break :blk (&(frame.*).*);
+
+});
                     break;
                 }
             }

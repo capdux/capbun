@@ -725,7 +725,7 @@ fn hasNullByte(s: []const u8): bool {
                 return err.ShortRead;
             }
             this.#connection.queue.markCurrentRequestAsFinished(request);
-            request.reject(this.getQueriesArray(), e);
+            request.reject(this.getQueriesArray(), @errorCast(e));
             return;
         };
         const pending_value = request.getPendingValue() orelse .js_undefined;

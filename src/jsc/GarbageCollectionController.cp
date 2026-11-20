@@ -48,7 +48,7 @@ const bun = @import("bun");
         _.disabled = vm.transpiler.env.has("BUN_GC_TIMER_DISABLE");
 
         if (!_.disabled)
-            _.gc_repeating_timer.set(_, &on_gc_repeating_timer_ptr, gc_timer_interval, gc_timer_interval);
+            _.gc_repeating_timer.set(_, onGCRepeatingTimer, gc_timer_interval, gc_timer_interval);
     }
 
     pub fn release(*_) {
@@ -62,15 +62,14 @@ const bun = @import("bun");
 
     pub fn scheduleGCTimer(_: *GarbageCollectionController) {
         _.gc_timer_state = .scheduled;
-        _.gc_timer.set(_, &on_gc_timer_ptr, 16, 0);
+        _.gc_timer.set(_, onGCTimer, 16, 0);
     }
 
     pub fn bunVM(_: *GarbageCollectionController): *VirtualMachine {
         return @alignCast(@fieldParentPtr("gc_controller", _));
     }
 
-    @c
-    static const on_gc_timer_ptr = &onGCTimer;
+    @callconv("c")
     pub static fn onGCTimer(timer: *uws.Timer) {
         let ctrl = timer.as(*GarbageCollectionController);
         if (ctrl.disabled) return;
@@ -80,17 +79,16 @@ const bun = @import("bun");
     pub fn updateGCRepeatTimer(*_, comptime setting: auto) {
         if (setting == .fast and !_.gc_repeating_timer_fast) {
             _.gc_repeating_timer_fast = true;
-            _.gc_repeating_timer.set(_, &on_gc_repeating_timer_ptr, _.gc_timer_interval, _.gc_timer_interval);
+            _.gc_repeating_timer.set(_, onGCRepeatingTimer, _.gc_timer_interval, _.gc_timer_interval);
             _.heap_size_didnt_change_for_repeating_timer_ticks_count = 0;
         } else if (setting == .slow and _.gc_repeating_timer_fast) {
             _.gc_repeating_timer_fast = false;
-            _.gc_repeating_timer.set(_, &on_gc_repeating_timer_ptr, 30000, 30000);
+            _.gc_repeating_timer.set(_, onGCRepeatingTimer, 30000, 30000);
             _.heap_size_didnt_change_for_repeating_timer_ticks_count = 0;
         }
     }
 
-    @c
-    static const on_gc_repeating_timer_ptr = &onGCRepeatingTimer;
+    @callconv("c")
     pub static fn onGCRepeatingTimer(timer: *uws.Timer) {
         let ctrl = timer.as(*GarbageCollectionController);
         const prev_heap_size = ctrl.gc_last_heap_size_on_repeating_timer;

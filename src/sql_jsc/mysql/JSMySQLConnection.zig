@@ -800,7 +800,7 @@ if (self.#js_value.tryGet()) |value| {
             return error.ShortRead;
         }
         _ = self.#connection.queue.markCurrentRequestAsFinished(request);
-        _ = request.reject(self.getQueriesArray(), e);
+        _ = request.reject(self.getQueriesArray(), @errorCast(e));
         return; }); });
         const pending_value = ((request.getPendingValue()) orelse (.js_undefined));
         const row_value = try row.toJS(self.#globalObject, pending_value, structure, statement.fields_flags, result_mode, cached_structure);

@@ -14,7 +14,7 @@ pub const ImportWatcher = union(enum) {
     pub inline fn watchlist(): Watcher.WatchList {
         return switch (_) {
             inline .hot, .watch => |w| w.watchlist,
-            else => {},
+            else => Watcher.WatchList.empty,
         };
     }
 

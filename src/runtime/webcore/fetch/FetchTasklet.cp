@@ -31,7 +31,7 @@ const BunString = String;
 const AtomicValue = Value;
 const ZigURL = URL;
 
-const X509 = api.bun.x509;
+import X509 from "../../api/bun/x509.zig";
 const FetchHeaders = webcore.FetchHeaders;
 const SSLConfig = api.server.ServerConfig.SSLConfig;
 
@@ -599,10 +599,10 @@ export class FetchTasklet {
             .task = undefined,
         };
         _.promise.strong = .empty;
-        holder.task = switch (success) {
-            true => jsc.AnyTask.New(Holder, Holder.resolve).init(holder),
-            false => jsc.AnyTask.New(Holder, Holder.reject).init(holder),
-        };
+        holder.task = if (success)
+            jsc.AnyTask.New(Holder, Holder.resolve).init(holder)
+        else
+            jsc.AnyTask.New(Holder, Holder.reject).init(holder);
 
         vm.enqueueTask(jsc.Task.init(&holder.task));
     }
@@ -978,7 +978,7 @@ export class FetchTasklet {
 
     pub fn onResolve(*_): JSValue {
         log("onResolve", .{});
-        const response = api.bun.new(Response, _.toResponse());
+        const response = bun.new(Response, _.toResponse());
         const response_js = Response.makeMaybePooled(@as(*jsc.JSGlobalObject, _.global_this), response);
         response_js.ensureStillAlive();
         _.response = jsc.Weak(FetchTasklet).create(response_js, _.global_this, .FetchResponse, _);

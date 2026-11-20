@@ -34,7 +34,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
         _.status_flags = StatusFlags.fromInt(reader.int(u16)?);
         _.warnings = reader.int(u16)?;
 
-        const peeked = reader.peek();
+        const peeked: []const u8 = reader.peek();
         if (peeked.len > 0 && _.packet_size > read_size) {
             const remaining = _.packet_size - read_size;
             _.info = reader.read(@truncate(remaining))?;

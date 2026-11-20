@@ -366,10 +366,12 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
                     _ = &NEW_PATH;
                     var envp_managed = env_array.toManaged(allocator);
                     _ = &envp_managed;
-                    _ = try appendEnvpFromJS(globalThis, object, (&envp_managed), (blk: {
+                    var new_path_ptr = (blk: {
                     break :blk NEW_PATH;
 
-}));
+});
+                    _ = &new_path_ptr;
+                    _ = try appendEnvpFromJS(globalThis, object, (&envp_managed), new_path_ptr);
                     env_array = envp_managed.moveToUnmanaged();
                     PATH = NEW_PATH;
                 }
@@ -1095,7 +1097,9 @@ pub fn appendEnvpFromJS(globalThis: *jsc.JSGlobalObject, object: *jsc.JSObject, 
             }
             const line = try std.fmt.allocPrintSentinel(envp.allocator, "{f}={f}", .{ key, value_bunstr.toZigString() }, 0);
             if (key.eqlComptime("PATH")) {
-                PATH.* = bun.asByteSlice(line["PATH=".len..]);
+                {
+                    PATH.* = bun.asByteSlice(line["PATH=".len..]);
+                }
             }
             _ = try envp.append(line);
         }

@@ -225,7 +225,7 @@ pub fn listObjects(
 
     search_params.deinit(default_allocator);
 
-    let headers = handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), default_allocator));
+    let headers = handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), default_allocator));
 
     let task = S3HttpSimpleTask.new(.{
         .http = undefined,
@@ -618,7 +618,7 @@ pub fn downloadStream(
             const _headers = result.mixWithHeader(&header_buffer, .{ .name = "range", .value = range_ });
             break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), default_allocator));
         } else {
-            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), default_allocator));
+            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), default_allocator));
         }
     };
     let proxy = proxy_url orelse "";

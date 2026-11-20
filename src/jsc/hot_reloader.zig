@@ -87,10 +87,7 @@ else => {
 pub inline fn watchlist(self: @This()) Watcher.WatchList {
             return (switch (self) {
 inline .hot, .watch => |w| w.watchlist,
-else => {
-{
-            }
-},
+else => Watcher.WatchList.empty,
 });
     }
 

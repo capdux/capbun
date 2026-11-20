@@ -479,7 +479,7 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
         return; }); });
         _ = &result;
         _ = search_params.deinit(default_allocator);
-        var headers = handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), default_allocator));
+        var headers = handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), default_allocator));
         _ = &headers;
         var task = S3HttpSimpleTask.new(.{ .http = undefined, .range = null, .sign_result = result, .callback_context = callback_context, .callback = .{ .listObjects = callback }, .headers = headers, .vm = VirtualMachine.get() });
         _ = &task;
@@ -622,7 +622,7 @@ pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, siz
             const _headers = result.mixWithHeader((&header_buffer), .{ .name = "range", .value = range_ });
             break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), default_allocator));
         } else {
-            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), default_allocator));
+            break :brk handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), default_allocator));
         }
 };
         _ = &headers;

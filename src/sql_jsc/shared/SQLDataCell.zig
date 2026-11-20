@@ -171,7 +171,7 @@ pub const SQLDataCellFlags = packed struct(u32) {
 
 pub const SQLDataCell = extern struct {
     tag: SQLDataCellTag,
-    value: *SQLDataCellValue,
+    value: CellValue,
     free_value: u8 = 0,
     isIndexedColumn: u8 = 0,
     index: u32 = 0,
@@ -269,11 +269,12 @@ pub fn constructObjectFromDataCell(globalObject: *jsc.JSGlobalObject, encodedArr
     pub const JSC__constructObjectFromDataCell = constructObjectFromDataCellExtern;
 };
 
+pub const CellValue = SQLDataCellValue;
 const Data = DataMod.Data;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
-const empty_cells: [0]SQLDataCell = &.{};
-const empty_u8: [0]u8 = &.{};
+const empty_cells: [0]SQLDataCell = undefined;
+const empty_u8: [0]u8 = undefined;
 const constructObjectFromDataCellExtern = JSC__constructObjectFromDataCell;
 
 extern "c" fn JSC__constructObjectFromDataCell(globalObject: *jsc.JSGlobalObject, encodedArrayValue: JSValue, encodedStructureValue: JSValue, cells: [*]SQLDataCell, count: u32, flags: SQLDataCellFlags, result_mode: u8, namesPtr: ?[*]jsc.JSObject.ExternColumnIdentifier, namesCount: u32) callconv(.c) JSValue;

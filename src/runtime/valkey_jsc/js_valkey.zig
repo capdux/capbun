@@ -1235,7 +1235,7 @@ const JSValue = jsc.JSValue;
 const uws = bun.uws;
 const Socket = uws.AnySocket;
 const debug = bun.Output.scoped(.RedisJS, .visible);
-var empty_u8: [0]u8 = &.{};
+var empty_u8: [0]u8 = undefined;
 
 pub fn SocketHandler(comptime ssl: bool) type {
         return struct {

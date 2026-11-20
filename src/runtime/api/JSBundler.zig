@@ -1529,7 +1529,8 @@ pub fn deinit(self: *BundlerPlugin) void {
 
 pub fn hasAnyMatches(self: *BundlerPlugin, path: *const Fs.Path, is_onLoad: bool) bool {
             _ = jsc.markBinding(@src());
-            const tracer = bun.perf.trace("JSBundler.hasAnyMatches");
+            var tracer = bun.perf.trace("JSBundler.hasAnyMatches");
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }
@@ -1546,7 +1547,8 @@ pub fn hasAnyMatches(self: *BundlerPlugin, path: *const Fs.Path, is_onLoad: bool
 
 pub fn matchOnLoad(self: *BundlerPlugin, path: []const u8, namespace: []const u8, context: *anyopaque, default_loader: options.Loader, is_server_side: bool) void {
             _ = jsc.markBinding(@src());
-            const tracer = bun.perf.trace("JSBundler.matchOnLoad");
+            var tracer = bun.perf.trace("JSBundler.matchOnLoad");
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }
@@ -1564,7 +1566,8 @@ pub fn matchOnLoad(self: *BundlerPlugin, path: []const u8, namespace: []const u8
 
 pub fn matchOnResolve(self: *BundlerPlugin, path: []const u8, namespace: []const u8, importer: []const u8, context: *anyopaque, import_record_kind: bun.ImportKind) void {
             _ = jsc.markBinding(@src());
-            const tracer = bun.perf.trace("JSBundler.matchOnResolve");
+            var tracer = bun.perf.trace("JSBundler.matchOnResolve");
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }
@@ -1585,7 +1588,8 @@ pub fn matchOnResolve(self: *BundlerPlugin, path: []const u8, namespace: []const
 
 pub fn addPlugin(self: *BundlerPlugin, object: jsc.JSValue, config: jsc.JSValue, onstart_promises_array: jsc.JSValue, is_last: bool, is_bake: bool) !JSValue {
             _ = jsc.markBinding(@src());
-            const tracer = bun.perf.trace("JSBundler.addPlugin");
+            var tracer = bun.perf.trace("JSBundler.addPlugin");
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }

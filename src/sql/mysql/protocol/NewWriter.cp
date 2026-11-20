@@ -132,12 +132,12 @@ pub fn NewWriter(comptime Context: type): type {
 
 pub fn writeWrap(comptime Container: type, comptime writeFn: anytype): type {
     return struct {
-        pub static fn write(this: *Container, context: anytype) AnyMySQLError.Error!void {
+        pub fn write(target: *Container, context: anytype) AnyMySQLError.Error!void {
             const Context = @TypeOf(context);
             if (@hasDecl(Context, "is_wrapped")) {
-                writeFn(this, Context, context)?;
+                writeFn(target.*, Context, context) catch |e| return @errorCast(e);
             } else {
-                writeFn(this, Context, { wrapped: context })?;
+                writeFn(target.*, Context, .{ .wrapped = context }) catch |e| return @errorCast(e);
             }
         }
     };

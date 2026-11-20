@@ -111,7 +111,7 @@ pub fn ResumableSink(
                             break :brk_err null;
                         };
 
-                        const bytes = byte_stream.drain();
+                        let bytes = byte_stream.drain();
                         defer bytes.deinit(default_allocator);
                         log("onWrite {}", .{bytes.len});
                         _ = onWrite(sink.context, bytes.slice());
@@ -120,7 +120,7 @@ pub fn ResumableSink(
                         return sink;
                     }
 
-                    const bytes = byte_stream.drain();
+                    let bytes = byte_stream.drain();
                     defer bytes.deinit(default_allocator);
                     if (bytes.len > 0) {
                         log("onWrite {}", .{bytes.len});

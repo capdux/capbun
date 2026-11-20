@@ -76,8 +76,8 @@ pub fn decodeInternal(self: *OKPacket, comptime Context: type, reader: NewReader
         self.last_insert_id = try reader.encodedLenIntWithSize((&read_size));
         self.status_flags = StatusFlags.fromInt(try reader.int(u16));
         self.warnings = try reader.int(u16);
-        const peeked = reader.peek();
-        if ((((peeked).?.len > 0) and (self.packet_size > read_size))) {
+        const peeked: []const u8 = reader.peek();
+        if (((peeked.len > 0) and (self.packet_size > read_size))) {
             const remaining = (self.packet_size - read_size);
             self.info = try reader.read(@truncate(remaining));
         }

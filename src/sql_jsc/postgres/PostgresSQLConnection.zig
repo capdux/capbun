@@ -1489,7 +1489,11 @@ const request_opt = self.current();
             return error.ExpectedRequest;
         }
         const request = request_opt.?;
-        var statement = ((request.statement) orelse { return .{ .ok = error.ExpectedStatement }; });
+        const statement_opt = request.statement;
+        if ((statement_opt == null)) {
+            return error.ExpectedStatement;
+        }
+        var statement = statement_opt.?;
         _ = &statement;
         var structure: JSValue = .js_undefined;
         _ = &structure;

@@ -21,7 +21,7 @@ const decodeBinaryValue = DecodeBinaryValue.decodeBinaryValue;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const debug = bun.Output.scoped(.MySQLResultSet, .visible);
-const empty_cells: [0]SQLDataCell = [];
+const empty_cells: [0]SQLDataCell = undefined;
 
 pub const Header = HeaderMod;
 

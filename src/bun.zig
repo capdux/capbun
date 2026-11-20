@@ -2815,9 +2815,9 @@ pub fn serializable(input: anytype) @TypeOf(input) {
         }
 
 }
-        var zeroed: struct { @sizeOf(T) } = undefined;
+        const zeroed_len = (comptime @sizeOf(T));
+        var zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
         _ = &zeroed;
-        u8 = std.mem.zeroes([@sizeOf(T)]u8);
         const result: *T = @ptrCast(@alignCast((&zeroed)));
         inline for ((comptime std.@"meta".fieldNames(T))) |field_name| {
             @field(result, field_name) = @field(input, field_name);
@@ -2826,9 +2826,9 @@ pub fn serializable(input: anytype) @TypeOf(input) {
 }
 
 pub inline fn serializableInto(comptime T: type, init: anytype) T {
-        var zeroed: struct { @sizeOf(T) } = undefined;
+        const zeroed_len = (comptime @sizeOf(T));
+        var zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
         _ = &zeroed;
-        u8 = std.mem.zeroes([@sizeOf(T)]u8);
         const result: *T = @ptrCast(@alignCast((&zeroed)));
         inline for ((comptime std.@"meta".fieldNames(@TypeOf(init)))) |field_name| {
             @field(result, field_name) = @field(init, field_name);

@@ -63,7 +63,7 @@ pub fn BindgenOptional(comptime Child: type): type {
                 return Child.convertOptionalFromExtern(extern_value);
             }
             if (extern_value.tag == 0) {
-                return null;
+                return @as(ZigType, null);
             }
             bun.assert_eql(extern_value.tag, 1);
             return Child.convertFromExtern(@field(extern_value.data, "1"));

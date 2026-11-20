@@ -65,7 +65,7 @@ export struct AuthResponse {
         debug("FastAuthStatus: {d}", .{status});
         _.status = @enumFromInt(status);
 
-        const remaining = reader.peek();
+        const remaining: []const u8 = reader.peek();
         if (remaining.len > 0) {
             _.data = reader.read(remaining.len)?;
         }
@@ -108,7 +108,9 @@ export struct AuthEncryptedPassword {
         }
         BoringSSL.load();
         BoringSSL.c.ERR_clear_error();
-        const bio = BoringSSL.c.BIO_new_mem_buf(&_.public_key[0], @intCast(_.public_key.len)) orelse return error.InvalidPublicKey;
+        const bio_opt = BoringSSL.c.BIO_new_mem_buf(&_.public_key[0], @intCast(_.public_key.len));
+        if (bio_opt == null) return error.InvalidPublicKey;
+        const bio = bio_opt.?;
         defer * = BoringSSL.c.BIO_free(bio);
 
         const rsa_opt = BoringSSL.c.PEM_read_bio_RSA_PUBKEY(bio, null, null, null);
@@ -164,7 +166,7 @@ export struct AuthPublicKeyResponse {
     }
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
-        const remaining = reader.peek();
+        const remaining: []const u8 = reader.peek();
         if (remaining.len > 0) {
             _.data = reader.read(remaining.len)?;
         }

@@ -4,8 +4,8 @@ import DataMod from "../../sql/shared/Data.zig";
 const Data = DataMod.Data;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
-const empty_cells: [0]SQLDataCell = [];
-const empty_u8: [0]u8 = [];
+const empty_cells: [0]SQLDataCell = undefined;
+const empty_u8: [0]u8 = undefined;
 
 export enum SQLDataCellTag: u8 {
     @"null" = 0,
@@ -111,9 +111,11 @@ extern fn JSC__constructObjectFromDataCell(
 
 const constructObjectFromDataCellExtern = JSC__constructObjectFromDataCell;
 
+pub type CellValue = SQLDataCellValue;
+
 export @extern struct SQLDataCell {
     tag: SQLDataCellTag,
-    value: SQLDataCellValue,
+    value: CellValue,
     free_value: u8 = 0,
     isIndexedColumn: u8 = 0,
     index: u32 = 0,

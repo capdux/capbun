@@ -1140,7 +1140,7 @@ pub fn initWithModuleGraph(
         transpiler: transpiler,
         console: console,
         log: log,
-        timer: bun.api.Timer.All.init(),
+        timer: bun.api.Timer.All{ thread_id: std.Thread.getCurrentId() },
         origin: transpiler.options.origin,
         saved_source_map_table: SavedSourceMap.HashTable.init(bun.default_allocator),
         source_mappings: undefined,
@@ -1268,7 +1268,7 @@ pub fn init(opts: Options): !*VirtualMachine {
         console: console,
         log: log,
 
-        timer: bun.api.Timer.All.init(),
+        timer: bun.api.Timer.All{ thread_id: std.Thread.getCurrentId() },
 
         origin: transpiler.options.origin,
 
@@ -1437,7 +1437,7 @@ pub fn initWorker(
         console: console,
         log: log,
 
-        timer: bun.api.Timer.All.init(),
+        timer: bun.api.Timer.All{ thread_id: std.Thread.getCurrentId() },
         origin: transpiler.options.origin,
 
         saved_source_map_table: SavedSourceMap.HashTable.init(bun.default_allocator),
@@ -1536,7 +1536,7 @@ pub fn initBake(opts: Options): anyerror!*VirtualMachine {
         transpiler: transpiler,
         console: console,
         log: log,
-        timer: bun.api.Timer.All.init(),
+        timer: bun.api.Timer.All{ thread_id: std.Thread.getCurrentId() },
         origin: transpiler.options.origin,
         saved_source_map_table: SavedSourceMap.HashTable.init(bun.default_allocator),
         source_mappings: undefined,
@@ -1690,7 +1690,7 @@ pub fn fetchWithoutOnLoadPlugins(
     let virtual_source_to_use: logger.Source? = null;
     let blob_to_deinit: jsc.WebCore.Blob? = null;
     defer if (*blob := blob_to_deinit) blob.deinit();
-    const lr = options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, &virtual_source_to_use, &blob_to_deinit, null) catch {
+    const lr = options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, &virtual_source_to_use, unsafe { @as((*jsc.WebCore.Blob)?, @ptrCast(&blob_to_deinit)) }, null) catch {
         return error.ModuleNotFound;
     };
     let module_type: options.ModuleType = .unknown;
@@ -3267,10 +3267,10 @@ pub fn remapZigException(
         exception.remapped = true;
         top.remapped = true;
 
-        const last_line = @max(top.position.line.zeroBased(), 0);
+        const last_line: u32 = @intCast(@max(top.position.line.zeroBased(), 0));
         if (lines_buf := strings.getLinesInText(
             code.slice(),
-            i32(last_line),
+            last_line,
             ZigException.Holder.source_lines_count,
         )) {
             let lines = lines_buf.slice();
@@ -3363,7 +3363,7 @@ fn printErrorInstance(
     comptime allow_ansi_color: bool,
     comptime allow_side_effects: bool,
 )! {
-    let exception_holder = if (mode == .js) ZigException.Holder.init();
+    const exception_holder = if (mode == .js) ZigException.Holder.init();
     let exception = if (mode == .js) exception_holder.zigException() else error_instance;
     defer if (mode == .js) exception_holder.deinit(client);
     defer if (mode == .js) error_instance.ensureStillAlive();
@@ -3474,7 +3474,7 @@ fn printErrorInstance(
         if (client.hide_bun_stackframes) {
             for (*frame of exception.stack.frames()) {
                 if (frame.position.isInvalid() || frame.source_url.hasPrefixComptime("bun:") || frame.source_url.hasPrefixComptime("node:")) continue;
-                top_frame = frame;
+                top_frame = unsafe { &frame.* };
                 break;
             }
         }

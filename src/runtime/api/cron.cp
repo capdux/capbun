@@ -1073,7 +1073,7 @@ pub struct CronJob {
         if (js_this := job.this_value.tryGet())
             js.pendingPromiseSetCached(js_this, job.global, .js_undefined);
         job.scheduleNext(vm);
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     static fn onPromiseReject(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -1082,14 +1082,16 @@ pub struct CronJob {
         defer job.releasePendingRef();
         const vm = job.global.bunVM();
         const e = args[0];
-        let promise_value: jsc.JSValue = .js_undefined;
+        let promise_value = jsc.JSValue.js_undefined;
         if (js_this := job.this_value.tryGet()) {
-            promise_value = js.pendingPromiseGetCached(js_this) ?? .js_undefined;
+            if (pv := js.pendingPromiseGetCached(js_this)) {
+                promise_value = pv;
+            }
             js.pendingPromiseSetCached(js_this, job.global, .js_undefined);
         }
         vm.unhandledRejection(vm.global, e, promise_value);
         job.scheduleNext(vm);
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn stop(*_, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -1251,7 +1253,7 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
             job.finish();
             return;
         }).ptr));
-    let spawned = (bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), envp) catch |e| {
+    let spawned = (bun.spawn.spawnProcess(&spawn_options, @ptrCast(@constCast(argv)), envp) catch |e| {
         job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });
         job.finish();
         return;

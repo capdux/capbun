@@ -111,7 +111,7 @@ pub fn init(self: *GarbageCollectionController, vm: *VirtualMachine) void {
         }
         self.disabled = vm.transpiler.env.has("BUN_GC_TIMER_DISABLE");
         if ((!self.disabled)) {
-            _ = self.gc_repeating_timer.set(self, *const on_gc_repeating_timer_ptr, gc_timer_interval, gc_timer_interval);
+            _ = self.gc_repeating_timer.set(self, onGCRepeatingTimer, gc_timer_interval, gc_timer_interval);
         }
 }
 
@@ -126,14 +126,14 @@ pub fn deinit(self: *GarbageCollectionController) void {
 
 pub fn scheduleGCTimer(self: *GarbageCollectionController) void {
         self.gc_timer_state = .scheduled;
-        _ = self.gc_timer.set(self, *const on_gc_timer_ptr, 16, 0);
+        _ = self.gc_timer.set(self, onGCTimer, 16, 0);
 }
 
 pub fn bunVM(self: *GarbageCollectionController) *VirtualMachine {
         return @alignCast(@fieldParentPtr("gc_controller", self));
 }
 
-pub fn onGCTimer(timer: *uws.Timer) void {
+pub fn onGCTimer(timer: *uws.Timer) callconv(.c) void {
         var ctrl = timer.as(*GarbageCollectionController);
         var __ctrl_moved = false; _ = &__ctrl_moved;
         defer if (!__ctrl_moved) { const __T = @TypeOf(ctrl); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ctrl.release() catch {}; } else { ctrl.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ctrl; _drop_val.release(); } };
@@ -146,18 +146,18 @@ pub fn onGCTimer(timer: *uws.Timer) void {
 pub fn updateGCRepeatTimer(self: *GarbageCollectionController, comptime setting: anytype) void {
         if (((setting == .fast) and (!self.gc_repeating_timer_fast))) {
             self.gc_repeating_timer_fast = true;
-            _ = self.gc_repeating_timer.set(self, *const on_gc_repeating_timer_ptr, self.gc_timer_interval, self.gc_timer_interval);
+            _ = self.gc_repeating_timer.set(self, onGCRepeatingTimer, self.gc_timer_interval, self.gc_timer_interval);
             self.heap_size_didnt_change_for_repeating_timer_ticks_count = 0;
         } else {
             if (((setting == .slow) and self.gc_repeating_timer_fast)) {
                 self.gc_repeating_timer_fast = false;
-                _ = self.gc_repeating_timer.set(self, *const on_gc_repeating_timer_ptr, 30000, 30000);
+                _ = self.gc_repeating_timer.set(self, onGCRepeatingTimer, 30000, 30000);
                 self.heap_size_didnt_change_for_repeating_timer_ticks_count = 0;
             }
         }
 }
 
-pub fn onGCRepeatingTimer(timer: *uws.Timer) void {
+pub fn onGCRepeatingTimer(timer: *uws.Timer) callconv(.c) void {
         var ctrl = timer.as(*GarbageCollectionController);
         var __ctrl_moved = false; _ = &__ctrl_moved;
         defer if (!__ctrl_moved) { const __T = @TypeOf(ctrl); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ctrl.release() catch {}; } else { ctrl.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ctrl; _drop_val.release(); } };
@@ -231,8 +231,6 @@ pub fn performGC(self: *GarbageCollectionController) void {
         _ = vm.collectAsync();
         self.gc_last_heap_size = vm.blockBytesAllocated();
 }
-const on_gc_timer_ptr = (&onGCTimer);
-const on_gc_repeating_timer_ptr = (&onGCRepeatingTimer);
 const VirtualMachine = jsc.VirtualMachine;
 const bun = @import("bun");
 pub const GCTimerState = enum {

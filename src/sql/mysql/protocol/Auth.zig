@@ -112,9 +112,9 @@ pub fn decodeInternal(self: *AuthResponse, comptime Context: type, reader: NewRe
             const status = try reader.int(u8);
             _ = debug("FastAuthStatus: {d}", .{ status });
             self.status = @enumFromInt(status);
-            const remaining = reader.peek();
-            if (((remaining).?.len > 0)) {
-                self.data = try reader.read((remaining).?.len);
+            const remaining: []const u8 = reader.peek();
+            if ((remaining.len > 0)) {
+                self.data = try reader.read(remaining.len);
             }
     }
     pub const decode = decoderWrap(AuthResponse, decodeInternal).decode;
@@ -161,7 +161,11 @@ pub fn writeInternal(self: AuthEncryptedPassword, comptime Context: type, writer
             }
             _ = BoringSSL.load();
             _ = BoringSSL.c.ERR_clear_error();
-            const bio = ((BoringSSL.c.BIO_new_mem_buf((&self.public_key[0]), @intCast(self.public_key.len))) orelse { return .{ .ok = error.InvalidPublicKey }; });
+            const bio_opt = BoringSSL.c.BIO_new_mem_buf((&self.public_key[0]), @intCast(self.public_key.len));
+            if ((bio_opt == null)) {
+                return error.InvalidPublicKey;
+            }
+            const bio = bio_opt.?;
             defer {
             _ = BoringSSL.c.BIO_free(bio);
             }
@@ -219,9 +223,9 @@ pub fn deinit(self: *AuthPublicKeyResponse) void {
     }
 
 pub fn decodeInternal(self: *AuthPublicKeyResponse, comptime Context: type, reader: NewReader(Context)) anyerror!void {
-            const remaining = reader.peek();
-            if (((remaining).?.len > 0)) {
-                self.data = try reader.read((remaining).?.len);
+            const remaining: []const u8 = reader.peek();
+            if ((remaining.len > 0)) {
+                self.data = try reader.read(remaining.len);
             }
     }
     pub const decode = decoderWrap(AuthPublicKeyResponse, decodeInternal).decode;

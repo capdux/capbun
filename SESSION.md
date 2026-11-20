@@ -3170,3 +3170,5 @@ Options:
 - **[2026-11-20 23:05] Wave 23 A 组验收提交（18 模块全绿）**：完成 JSParser/Bundler/Bake/Interchange/Sourcemap 18 模块独立验收（18/18 PASS，ratio 0.877x~1.051x）并原子提交；已流水线补派 D 组扫荡剩余全部 39 个 1 错长尾。
 
 - **[2026-11-20 23:08] Wave 23 C 组验收提交（32 模块全绿）**：完成 1 错长尾第 1 批 32 模块独立验收（32/32 PASS，ratio 0.814x~1.167x，`json.cp` 原无备份除外）并原子提交；记录 3 外部根因（`node_process.cp` `ProcessParamKV`、`bun.cp` `MakePath.makeOpenPath`、`bundler/options.cp:1003` `blob_to_deinit`）。
+
+- **[2026-11-20 23:09] Wave 23 B 组验收提交（23 模块全绿）**：完成 JSC/SQL/Bun/Shell/API/WebCore/Socket/Valkey 23 模块独立验收（23/23 PASS，ratio 0.784x~1.096x，含 `bindgen.cp:61` `@as(ZigType, null)`）并原子提交；已流水线补派 E 组 5 文件根因小队（`node_process`/`bun`/`options`/`HTTPThread`/`StringBuilder`）。

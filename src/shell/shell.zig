@@ -1784,7 +1784,7 @@ pub fn parse_binary(self: *@This()) !AST.Expr {
             _ = &left;
             while (self.match_any_comptime((&.{ .DoubleAmpersand, .DoublePipe }))) {
                 const op: AST.Binary.Op = op: {
-                const previous = @as(TokenTag, @enumFromInt(self.prev()));
+                const previous = std.meta.activeTag(self.prev());
                 break :op (switch (previous) {
 .DoubleAmpersand => break :op .And,
 .DoublePipe => break :op .Or,
@@ -2581,7 +2581,7 @@ pub fn check_any(self: *@This(), toktags: []const TokenTag) bool {
     }
 
 pub fn check(self: *@This(), toktag: TokenTag) bool {
-            return (std.meta.activeTag(self.peek()) == @as(TokenTag, @enumFromInt(toktag)));
+            return (std.meta.activeTag(self.peek()) == toktag);
     }
 
 pub fn peek(self: *@This()) Token {

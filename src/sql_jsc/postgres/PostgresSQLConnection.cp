@@ -1492,7 +1492,9 @@ export struct SocketHandlerSSL {
                 if (request_opt == null) return error.ExpectedRequest;
                 const request = request_opt.?;
 
-                let statement = request.statement orelse return error.ExpectedStatement;
+                const statement_opt = request.statement;
+                if (statement_opt == null) return error.ExpectedStatement;
+                let statement = statement_opt.?;
                 let structure: JSValue = .js_undefined;
                 let cached_structure: PostgresCachedStructure? = null;
                 switch (request.flags.result_mode) {
