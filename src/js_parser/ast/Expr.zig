@@ -2445,7 +2445,7 @@ _ = @compileError(("Invalid type passed to Expr.init: " ++ @typeName(Type)));
 
 pub fn init(comptime Type: type, st: Type, loc: logger.Loc) Expr {
         if (comptime (Type == @TypeOf(Expr))) {
-            return init(st, std.mem.zeroes(st), loc);
+            return init(st, .{}, loc);
         }
         icount = (icount + 1);
         _ = Data.Store.assert();

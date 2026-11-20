@@ -1445,3 +1445,7 @@
 - **[2026-11-20] Wave 17 A 组新坑**：向 `void` 值参数传 `{}` 会被 lower 成 `.{}`，用 `undefined` 绕过；单参方法调用 `x.isLocked(a)` 会丢实参，改 `const f = T.isLocked; f(x, a)`；`err` 做枚举成员名会被改写成 `e`，需写 `@"err"`。
 
 - **[2026-11-20] Wave 18 D 组要点**：`DevServer/memory_cost.cp` 对照原版重写 `useAllFields` 移除虚构字段；`ErrorReportRequest` `run`/`finalize`/`runWithBody` 改 `static fn` 消除循环依赖；`streams.cp` 补 `Signal.initWithType`/`init` 并改 `ResultWritable.toJS` 为 `switch (_)`；`QueryBindingIterator` 补 `static fn init`。
+- **[2026-11-21] Wave 50 全仓 `zig:check` 0-Error 收尾经验**：
+  - `Expr.init(type, st, loc)` 内 `std.mem.zeroes(st)` 会在泛型分析时触发 `BabyList.#origin` 私有字段及非空指针置零错误，改用 `.{}` 默认初始化即可消除；
+  - `std.mem.sort`/`std.sort.pdq` 回调上下文传 `{}` 会被 lower 成 `.{}` 而回调期望 `void`，使用空上下文结构体 `EmptySortCtx{}` + `static fn lessThan` 统一解决；
+  - `for (x of start..end)` 当 `start` 为 `u32`/`usize` 时 `cpc` 默认推导循环变量为 `i32`，改用显式类型的 `while` 循环；`DependencyBehavior.includes(...)` 被误识别为容器 `includes` 时用函数引用 `const f = T.includes; f(x, y)` 绕过；`TopFormatter.repository` 改值传递 `Repository` 同步消除了潜在栈悬垂指针风险。

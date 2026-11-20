@@ -343,7 +343,7 @@ pub fn generate(
     }
 
     // Break output into pieces && resolve chunk references to final paths
-    let intermediate = c.breakOutputIntoPieces(allocator, &j, @as(i32, @intCast(chunks.len)))?;
+    let intermediate = c.breakOutputIntoPieces(allocator, &j, @as(u32, @intCast(chunks.len)))?;
 
     // Get final output with all chunk references resolved
     const code_result = intermediate.code(
@@ -612,8 +612,9 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
     writer.writeAll("Modules sorted by bytes contributed to the output bundle. Large modules may indicate bloat.\n\n")?;
 
     // Sort by bytes_in_output descending
-    std.mem.sort(InputFileInfo, input_files.items, {}, struct {
-        fn lessThan(_: void, a: InputFileInfo, b: InputFileInfo) bool {
+    const EmptySortCtx = struct {};
+    std.mem.sort(InputFileInfo, input_files.items, EmptySortCtx{}, struct {
+        static fn lessThan(_: EmptySortCtx, a: InputFileInfo, b: InputFileInfo): bool {
             return a.bytes_in_output > b.bytes_in_output;
         }
     }.lessThan);
@@ -759,8 +760,8 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
                     }
                 }
 
-                std.mem.sort(ModuleSize, module_sizes.items, {}, struct {
-                    fn lessThan(_: void, a: ModuleSize, b: ModuleSize) bool {
+                std.mem.sort(ModuleSize, module_sizes.items, EmptySortCtx{}, struct {
+                    static fn lessThan(_: EmptySortCtx, a: ModuleSize, b: ModuleSize): bool {
                         return a.bytes > b.bytes;
                     }
                 }.lessThan);
@@ -794,8 +795,8 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
         highly_imported.append(allocator, ImportedByInfo{ path: entry.key_ptr.*, count: entry.value_ptr.items.len })?;
     }
 
-    std.mem.sort(ImportedByInfo, highly_imported.items, {}, struct {
-        fn lessThan(_: void, a: ImportedByInfo, b: ImportedByInfo) bool {
+    std.mem.sort(ImportedByInfo, highly_imported.items, EmptySortCtx{}, struct {
+        static fn lessThan(_: EmptySortCtx, a: ImportedByInfo, b: ImportedByInfo): bool {
             return a.count > b.count;
         }
     }.lessThan);
@@ -847,8 +848,8 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
         sorted_paths.append(allocator, PathOnly{ path: entry.key_ptr.* })?;
     }
 
-    std.mem.sort(PathOnly, sorted_paths.items, {}, struct {
-        fn lessThan(_: void, a: PathOnly, b: PathOnly) bool {
+    std.mem.sort(PathOnly, sorted_paths.items, EmptySortCtx{}, struct {
+        static fn lessThan(_: EmptySortCtx, a: PathOnly, b: PathOnly): bool {
             return std.mem.lessThan(u8, a.path, b.path);
         }
     }.lessThan);

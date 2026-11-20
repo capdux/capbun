@@ -715,199 +715,187 @@ else => {
                 return invalidPnpmLockfile();
             }
             const importer_versions = importer_versions_opt.?;
-            {
-                var _dep_id: i32 = pkg_deps[0].begin();
-                _ = &_dep_id;
-                const __end_8 = pkg_deps[0].end();
-                while (_dep_id < __end_8) : (_dep_id += 1) {
-                    const dep_id: DependencyID = @intCast(_dep_id);
-                    const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                    if (dep.behavior.isWorkspace()) {
-                        const workspace_path = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).workspace.slice(string_buf);
-                        var path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                        _ = &path_buf;
-                        defer {
-                        _ = path_buf.deinit();
-                        }
-                        _ = path_buf.join((&.{ workspace_path }));
-                        if (pkg_map.get(path_buf.slice())) |workspace_pkg_id| {
-                            _ = &workspace_pkg_id;
-                            lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = workspace_pkg_id;
-                            continue;
-                        }
+            var _dep_id: u32 = pkg_deps[0].begin();
+            _ = &_dep_id;
+            const _dep_end: u32 = pkg_deps[0].end();
+            while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
+                const dep_id: DependencyID = @intCast(_dep_id);
+                const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
+                if (dep.behavior.isWorkspace()) {
+                    const workspace_path = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).workspace.slice(string_buf);
+                    var path_buf: bun.AutoAbsPath = .initTopLevelDir();
+                    _ = &path_buf;
+                    defer {
+                    _ = path_buf.deinit();
                     }
-                    const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
-                    const ver_maybe_alias_opt = importer_versions.get(dep_name);
-                    if ((ver_maybe_alias_opt == null)) {
-                        _ = try log.addErrorFmt(null, logger.Loc.Empty, allocator, "pnpm-lock.yaml cannot resolve root dependency '{s}' - missing version in importer", .{ dep_name });
-                        return error.PnpmLockfileUnresolvableDependency;
+                    _ = path_buf.join((&.{ workspace_path }));
+                    if (pkg_map.get(path_buf.slice())) |workspace_pkg_id| {
+                        _ = &workspace_pkg_id;
+                        lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = workspace_pkg_id;
+                        continue;
                     }
-                    var version_maybe_alias = ver_maybe_alias_opt.?;
-                    _ = &version_maybe_alias;
-                    if (strings.hasPrefixComptime(version_maybe_alias, "npm:")) {
-                        version_maybe_alias = version_maybe_alias["npm:".len..];
-                    }
-                    const split_res = Dependency.splitVersionAndMaybeName(version_maybe_alias);
-                    const version = split_res[0];
-                    const has_alias = split_res[1];
-                    const version_without_suffix = removeSuffix(version);
-                    if (strings.withoutPrefixIfPossibleComptime(version_without_suffix, "link:")) |maybe_path| {
-                        _ = &maybe_path;
-                        var path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                        _ = &path_buf;
-                        defer {
-                        _ = path_buf.deinit();
-                        }
-                        _ = path_buf.join((&.{ maybe_path }));
-                        if (pkg_map.get(path_buf.slice())) |link_pkg_id| {
-                            _ = &link_pkg_id;
-                            lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = link_pkg_id;
-                            continue;
-                        }
-                    }
-                    var name_to_print_dep = dep_name;
-                    _ = &name_to_print_dep;
-                    if (has_alias) |alias| {
-                        _ = &alias;
-                        name_to_print_dep = alias;
-                    }
-                    _ = res_buf.clearRetainingCapacity();
-                    _ = try res_buf.writer().print("{s}@{s}", .{ name_to_print_dep, version_without_suffix });
-                    const pkg_id_opt = pkg_map.get(res_buf.items);
-                    if ((pkg_id_opt == null)) {
-                        return invalidPnpmLockfile();
-                    }
-                    const pkg_id = pkg_id_opt.?;
-                    lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = pkg_id;
                 }
-            }
-        }
-        {
-            var _pkg_id: i32 = workspace_pkgs_off;
-            _ = &_pkg_id;
-            const __end_9 = workspace_pkgs_end;
-            while (_pkg_id < __end_9) : (_pkg_id += 1) {
-                const pkg_id: PackageID = @intCast(_pkg_id);
-                const workspace_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
-                const workspace_path = (if (@typeInfo(@TypeOf(workspace_res)) == .@"enum") @intFromEnum(workspace_res) else workspace_res.value).workspace.slice(string_buf);
-                const importer_versions_opt = importer_dep_res_versions.get(workspace_path);
-                if ((importer_versions_opt == null)) {
+                const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
+                const ver_maybe_alias_opt = importer_versions.get(dep_name);
+                if ((ver_maybe_alias_opt == null)) {
+                    _ = try log.addErrorFmt(null, logger.Loc.Empty, allocator, "pnpm-lock.yaml cannot resolve root dependency '{s}' - missing version in importer", .{ dep_name });
+                    return error.PnpmLockfileUnresolvableDependency;
+                }
+                var version_maybe_alias = ver_maybe_alias_opt.?;
+                _ = &version_maybe_alias;
+                if (strings.hasPrefixComptime(version_maybe_alias, "npm:")) {
+                    version_maybe_alias = version_maybe_alias["npm:".len..];
+                }
+                const split_res = Dependency.splitVersionAndMaybeName(version_maybe_alias);
+                const version = split_res[0];
+                const has_alias = split_res[1];
+                const version_without_suffix = removeSuffix(version);
+                if (strings.withoutPrefixIfPossibleComptime(version_without_suffix, "link:")) |maybe_path| {
+                    _ = &maybe_path;
+                    var path_buf: bun.AutoAbsPath = .initTopLevelDir();
+                    _ = &path_buf;
+                    defer {
+                    _ = path_buf.deinit();
+                    }
+                    _ = path_buf.join((&.{ maybe_path }));
+                    if (pkg_map.get(path_buf.slice())) |link_pkg_id| {
+                        _ = &link_pkg_id;
+                        lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = link_pkg_id;
+                        continue;
+                    }
+                }
+                var name_to_print_dep = dep_name;
+                _ = &name_to_print_dep;
+                if (has_alias) |alias| {
+                    _ = &alias;
+                    name_to_print_dep = alias;
+                }
+                _ = res_buf.clearRetainingCapacity();
+                _ = try res_buf.writer().print("{s}@{s}", .{ name_to_print_dep, version_without_suffix });
+                const pkg_id_opt = pkg_map.get(res_buf.items);
+                if ((pkg_id_opt == null)) {
                     return invalidPnpmLockfile();
                 }
-                const importer_versions = importer_versions_opt.?;
-                const deps = pkg_deps[@as(usize, @intCast(pkg_id))];
-                {
-                    var _dep_id: i32 = deps.begin();
-                    _ = &_dep_id;
-                    const __end_10 = deps.end();
-                    while (_dep_id < __end_10) : (_dep_id += 1) {
-                        const dep_id: DependencyID = @intCast(_dep_id);
-                        const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                        const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
-                        const ver_maybe_alias_opt = importer_versions.get(dep_name);
-                        if ((ver_maybe_alias_opt == null)) {
-                            _ = try log.addErrorFmt(null, logger.Loc.Empty, allocator, "pnpm-lock.yaml cannot resolve workspace dependency '{s}' in '{s}' - missing version", .{ dep_name, workspace_path });
-                            return error.PnpmLockfileUnresolvableDependency;
-                        }
-                        var version_maybe_alias = ver_maybe_alias_opt.?;
-                        _ = &version_maybe_alias;
-                        if (strings.hasPrefixComptime(version_maybe_alias, "npm:")) {
-                            version_maybe_alias = version_maybe_alias["npm:".len..];
-                        }
-                        const split_res = Dependency.splitVersionAndMaybeName(version_maybe_alias);
-                        const version = split_res[0];
-                        const has_alias = split_res[1];
-                        const version_without_suffix = removeSuffix(version);
-                        if (strings.withoutPrefixIfPossibleComptime(version_without_suffix, "link:")) |maybe_path| {
-                            _ = &maybe_path;
-                            var path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                            _ = &path_buf;
-                            defer {
-                            _ = path_buf.deinit();
-                            }
-                            _ = path_buf.join((&.{ workspace_path, maybe_path }));
-                            if (pkg_map.get(path_buf.slice())) |link_pkg_id| {
-                                _ = &link_pkg_id;
-                                lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = link_pkg_id;
-                                continue;
-                            }
-                        }
-                        var name_to_print_dep = dep_name;
-                        _ = &name_to_print_dep;
-                        if (has_alias) |alias| {
-                            _ = &alias;
-                            name_to_print_dep = alias;
-                        }
-                        _ = res_buf.clearRetainingCapacity();
-                        _ = try res_buf.writer().print("{s}@{s}", .{ name_to_print_dep, version_without_suffix });
-                        const res_pkg_id_opt = pkg_map.get(res_buf.items);
-                        if ((res_pkg_id_opt == null)) {
-                            return invalidPnpmLockfile();
-                        }
-                        const res_pkg_id = res_pkg_id_opt.?;
-                        lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_pkg_id;
-                    }
-                }
+                const pkg_id = pkg_id_opt.?;
+                lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = pkg_id;
             }
         }
-        {
-            var _pkg_id: i32 = workspace_pkgs_end;
-            _ = &_pkg_id;
-            const __end_11 = lockfile.packages.len;
-            while (_pkg_id < __end_11) : (_pkg_id += 1) {
-                const pkg_id: PackageID = @intCast(_pkg_id);
-                const deps = pkg_deps[@as(usize, @intCast(pkg_id))];
-                {
-                    var _dep_id: i32 = deps.begin();
-                    _ = &_dep_id;
-                    const __end_12 = deps.end();
-                    while (_dep_id < __end_12) : (_dep_id += 1) {
-                        const dep_id: DependencyID = @intCast(_dep_id);
-                        const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                        var version_maybe_alias = dep.version.literal.slice(string_buf);
-                        _ = &version_maybe_alias;
-                        if (strings.hasPrefixComptime(version_maybe_alias, "npm:")) {
-                            version_maybe_alias = version_maybe_alias["npm:".len..];
-                        }
-                        const split_res = Dependency.splitVersionAndMaybeName(version_maybe_alias);
-                        const version = split_res[0];
-                        const has_alias = split_res[1];
-                        const version_without_suffix = removeSuffix(version);
-                        switch (dep.version.tag) {
+        var _pkg_id: usize = workspace_pkgs_off;
+        _ = &_pkg_id;
+        while ((_pkg_id < workspace_pkgs_end)) : (_pkg_id = (_pkg_id + 1)) {
+            const pkg_id: PackageID = @intCast(_pkg_id);
+            const workspace_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+            const workspace_path = (if (@typeInfo(@TypeOf(workspace_res)) == .@"enum") @intFromEnum(workspace_res) else workspace_res.value).workspace.slice(string_buf);
+            const importer_versions_opt = importer_dep_res_versions.get(workspace_path);
+            if ((importer_versions_opt == null)) {
+                return invalidPnpmLockfile();
+            }
+            const importer_versions = importer_versions_opt.?;
+            const deps = pkg_deps[@as(usize, @intCast(pkg_id))];
+            var _dep_id: u32 = deps.begin();
+            _ = &_dep_id;
+            const _dep_end: u32 = deps.end();
+            while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
+                const dep_id: DependencyID = @intCast(_dep_id);
+                const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
+                const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
+                const ver_maybe_alias_opt = importer_versions.get(dep_name);
+                if ((ver_maybe_alias_opt == null)) {
+                    _ = try log.addErrorFmt(null, logger.Loc.Empty, allocator, "pnpm-lock.yaml cannot resolve workspace dependency '{s}' in '{s}' - missing version", .{ dep_name, workspace_path });
+                    return error.PnpmLockfileUnresolvableDependency;
+                }
+                var version_maybe_alias = ver_maybe_alias_opt.?;
+                _ = &version_maybe_alias;
+                if (strings.hasPrefixComptime(version_maybe_alias, "npm:")) {
+                    version_maybe_alias = version_maybe_alias["npm:".len..];
+                }
+                const split_res = Dependency.splitVersionAndMaybeName(version_maybe_alias);
+                const version = split_res[0];
+                const has_alias = split_res[1];
+                const version_without_suffix = removeSuffix(version);
+                if (strings.withoutPrefixIfPossibleComptime(version_without_suffix, "link:")) |maybe_path| {
+                    _ = &maybe_path;
+                    var path_buf: bun.AutoAbsPath = .initTopLevelDir();
+                    _ = &path_buf;
+                    defer {
+                    _ = path_buf.deinit();
+                    }
+                    _ = path_buf.join((&.{ workspace_path, maybe_path }));
+                    if (pkg_map.get(path_buf.slice())) |link_pkg_id| {
+                        _ = &link_pkg_id;
+                        lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = link_pkg_id;
+                        continue;
+                    }
+                }
+                var name_to_print_dep = dep_name;
+                _ = &name_to_print_dep;
+                if (has_alias) |alias| {
+                    _ = &alias;
+                    name_to_print_dep = alias;
+                }
+                _ = res_buf.clearRetainingCapacity();
+                _ = try res_buf.writer().print("{s}@{s}", .{ name_to_print_dep, version_without_suffix });
+                const res_pkg_id_opt = pkg_map.get(res_buf.items);
+                if ((res_pkg_id_opt == null)) {
+                    return invalidPnpmLockfile();
+                }
+                const res_pkg_id = res_pkg_id_opt.?;
+                lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_pkg_id;
+            }
+        }
+        var _pkg_id2: usize = workspace_pkgs_end;
+        _ = &_pkg_id2;
+        while ((_pkg_id2 < lockfile.packages.len)) : (_pkg_id2 = (_pkg_id2 + 1)) {
+            const pkg_id: PackageID = @intCast(_pkg_id2);
+            const deps = pkg_deps[@as(usize, @intCast(pkg_id))];
+            var _dep_id: u32 = deps.begin();
+            _ = &_dep_id;
+            const _dep_end: u32 = deps.end();
+            while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
+                const dep_id: DependencyID = @intCast(_dep_id);
+                const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
+                var version_maybe_alias = dep.version.literal.slice(string_buf);
+                _ = &version_maybe_alias;
+                if (strings.hasPrefixComptime(version_maybe_alias, "npm:")) {
+                    version_maybe_alias = version_maybe_alias["npm:".len..];
+                }
+                const split_res = Dependency.splitVersionAndMaybeName(version_maybe_alias);
+                const version = split_res[0];
+                const has_alias = split_res[1];
+                const version_without_suffix = removeSuffix(version);
+                switch (dep.version.tag) {
 .folder, .symlink, .workspace => {
 const maybe_path = strings.withoutPrefixComptime(version_without_suffix, "link:");
-                        var path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                        _ = &path_buf;
-                        defer {
-                        _ = path_buf.deinit();
-                        }
-                        _ = path_buf.join((&.{ maybe_path }));
-                        if (pkg_map.get(path_buf.slice())) |link_pkg_id| {
-                            _ = &link_pkg_id;
-                            lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = link_pkg_id;
-                            continue;
-                        }
+                var path_buf: bun.AutoAbsPath = .initTopLevelDir();
+                _ = &path_buf;
+                defer {
+                _ = path_buf.deinit();
+                }
+                _ = path_buf.join((&.{ maybe_path }));
+                if (pkg_map.get(path_buf.slice())) |link_pkg_id| {
+                    _ = &link_pkg_id;
+                    lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = link_pkg_id;
+                    continue;
+                }
 },
 else => {
 
 },
 }
-                        var name_to_print_slice = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
-                        _ = &name_to_print_slice;
-                        if (has_alias) |alias| {
-                            _ = &alias;
-                            name_to_print_slice = alias;
-                        }
-                        _ = res_buf.clearRetainingCapacity();
-                        _ = try res_buf.writer().print("{s}@{s}", .{ name_to_print_slice, version_without_suffix });
-                        const res_pkg_id_opt = pkg_map.get(res_buf.items);
-                        if ((res_pkg_id_opt == null)) {
-                            return invalidPnpmLockfile();
-                        }
-                        const res_pkg_id = res_pkg_id_opt.?;
-                        lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_pkg_id;
-                    }
+                var name_to_print_slice = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
+                _ = &name_to_print_slice;
+                if (has_alias) |alias| {
+                    _ = &alias;
+                    name_to_print_slice = alias;
                 }
+                _ = res_buf.clearRetainingCapacity();
+                _ = try res_buf.writer().print("{s}@{s}", .{ name_to_print_slice, version_without_suffix });
+                const res_pkg_id_opt = pkg_map.get(res_buf.items);
+                if ((res_pkg_id_opt == null)) {
+                    return invalidPnpmLockfile();
+                }
+                const res_pkg_id = res_pkg_id_opt.?;
+                lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_pkg_id;
             }
         }
         _ = try lockfile.resolve(log);
@@ -923,7 +911,7 @@ pub fn parseAppendPackageDependencies(lockfile: *Lockfile, allocator: std.mem.Al
         _ = version_buf.deinit();
         }
         const off: u32 = @truncate(lockfile.buffers.dependencies.items.len);
-        const snapshot_dependency_groups: []DepGroup = .{ DepGroup{ .name = "devDependencies", .behavior = Dependency.Behavior{ .dev = true } }, DepGroup{ .name = "optionalDependencies", .behavior = Dependency.Behavior{ .optional = true } } };
+        const snapshot_dependency_groups: [2]DepGroup = .{ DepGroup{ .name = "devDependencies", .behavior = Dependency.Behavior{ .dev = true } }, DepGroup{ .name = "optionalDependencies", .behavior = Dependency.Behavior{ .optional = true } } };
         inline for (snapshot_dependency_groups) |dependency_group| {
             const group_name = (if (@typeInfo(@TypeOf(dependency_group)) == .@"enum" or @typeInfo(@TypeOf(dependency_group)) == .@"union") @tagName(dependency_group) else dependency_group.name);
             const group_behavior = dependency_group.behavior;
@@ -1035,7 +1023,12 @@ pub fn parseAppendPackageDependencies(lockfile: *Lockfile, allocator: std.mem.Al
                                         if ((!p_meta.isObject())) {
                                             return invalidPnpmLockfile();
                                         }
-                                        if (behavior.optional == null) { behavior.optional = false; }
+                                        if (p_meta.getBoolean("optional")) |opt_val| {
+                                            _ = &opt_val;
+                                            behavior.optional = opt_val;
+                                        } else {
+                                            behavior.optional = false;
+                                        }
                                         break;
                                     }
                                 }
@@ -1517,8 +1510,8 @@ _ = read_pnpm_workspace_yaml: {
                 {
                     var prop_i: i32 = 0;
                     _ = &prop_i;
-                    const __end_28 = ws_patched.data.e_object.properties.len;
-                    while (prop_i < __end_28) : (prop_i += 1) {
+                    const __end_23 = ws_patched.data.e_object.properties.len;
+                    while (prop_i < __end_23) : (prop_i += 1) {
                         var prop = (&ws_patched.data.e_object.properties.ptr[@as(usize, @intCast(prop_i))]);
                         _ = &prop;
                         const key_str_opt = prop.key.?.asString(allocator);

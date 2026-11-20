@@ -128,10 +128,9 @@ pub fn detectAndLoadOtherLockfile(
         const migrate_result = @import("./pnpm.zig").migratePnpmLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
             if (e == error.PnpmLockfileTooOld) {
                 Output.prettyErrorln(
-                    \\<red><b>warning<r><d>:<r> pnpm-lock.yaml version is too old (\< v7)
-                    \\
-                    \\Please upgrade using 'pnpm install --lockfile-only' first, then try again.
-                , .{});
+                    "<red><b>warning<r><d>:<r> pnpm-lock.yaml version is too old (\\< v7)\n\nPlease upgrade using 'pnpm install --lockfile-only' first, then try again.",
+                    .{},
+                );
             } else if (e == error.NonExistentWorkspaceDependency) {
                 Output.warn("Workspace link dependencies to non-existent folders aren't supported yet in pnpm-lock.yaml migration. Please follow along at <magenta>https://github.com/oven-sh/bun/issues/23026<r>", .{});
             } else if (e == error.RelativeLinkDependency) {
@@ -183,7 +182,7 @@ pub fn detectAndLoadOtherLockfile(
         return migrate_result;
     }
 
-    return LoadResult{ not_found: .{} };
+    return LoadResult{ not_found: undefined };
 }
 
 pub fn migrateNPMLockfile(

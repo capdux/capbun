@@ -2441,7 +2441,7 @@ pub struct BundleV2 {
             is_executable: false,
             side: null,
             entry_point_index: null,
-        }));
+        }))?;
     }
 
     fn shouldAddWatcherPlugin(*_, namespace: []const u8, path: []const u8): bool {

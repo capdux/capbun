@@ -232,7 +232,7 @@
 
     pub fn toJson(
         comptime style: FormatStyle,
-        indent: if (style == .multi_line) *u32 else void,
+        indent: if (style == FormatStyle.multi_line) *u32 else void,
         buf: string,
         extern_strings: []const ExternalString,
         writer: *std.Io.Writer,

@@ -16,7 +16,7 @@ struct TreeDepsSortCtx {
     static fn isLessThan(_: @This(), lhs: DependencyID, rhs: DependencyID): bool {
         const l = this.deps_buf[lhs];
         const r = this.deps_buf[rhs];
-        return strings.cmpStringsAsc({}, l.name.slice(this.string_buf), r.name.slice(this.string_buf));
+        return strings.cmpStringsAsc(undefined, l.name.slice(this.string_buf), r.name.slice(this.string_buf));
     }
 }
 
@@ -182,9 +182,11 @@ pub struct Stringifier {
             const TreeSortCtx = struct {
                 pub const Item = struct { []const DependencyID, string, usize };
 
-                fn isLessThan(_: void, l: Item, r: Item): bool {
-                    let [_l_deps, l_rel_path, l_depth] = l;
-                    let [_r_deps, r_rel_path, r_depth] = r;
+                static fn isLessThan(_: @This(), l: Item, r: Item): bool {
+                    const l_rel_path = l[1];
+                    const l_depth = l[2];
+                    const r_rel_path = r[1];
+                    const r_depth = r[2];
                     return switch (std.math.order(l_depth, r_depth)) {
                         .lt => true,
                         .gt => false,
@@ -253,7 +255,7 @@ pub struct Stringifier {
             std.sort.pdq(
                 TreeSortCtx.Item,
                 tree_sort_buf.items,
-                {},
+                TreeSortCtx{},
                 TreeSortCtx.isLessThan,
             );
 
@@ -277,7 +279,8 @@ pub struct Stringifier {
                 indent.* += 1;
                 let values_iter = found_patched_dependencies.valueIterator();
                 while (value := values_iter.next()) {
-                    let [name_and_version, patch_path] = value.*;
+                    const name_and_version = value.*[0];
+                    const patch_path = value.*[1];
                     writeIndent(writer, indent)?;
                     writer.print("{f}: {f},\n", .{ bun.fmt.formatJSONStringUTF8(name_and_version, {}), patch_path.fmtJson(buf, {}) })?;
                 }
@@ -357,7 +360,9 @@ pub struct Stringifier {
             writer.writeAll("\"packages\": {")?;
             let first = true;
             for (item of tree_sort_buf.items) {
-                let [dependencies, relative_path, depth] = item;
+                const dependencies = item[0];
+                const relative_path = item[1];
+                const depth = item[2];
                 tree_deps_sort_buf.clearRetainingCapacity();
                 tree_deps_sort_buf.appendSlice(allocator, dependencies)?;
 
@@ -454,7 +459,7 @@ pub struct Stringifier {
                                 writer.writeAll(if (pkg_bin.tag == .dir) " \"binDir\": " else " \"bin\": ")?;
 
                                 // TODO(dylan-conway) move this to "workspaces" object
-                                pkg_bin.toJson(.single_line, {}, buf, extern_strings, writer, &writeIndent)?;
+                                pkg_bin.toJson(.single_line, undefined, buf, extern_strings, writer, &writeIndent)?;
 
                                 writer.writeAll(" }]")?;
                             } else {
@@ -680,7 +685,8 @@ pub struct Stringifier {
             let first = true;
             for (dep_id of pkg_dep_ids) {
                 const dep = &deps_buf[dep_id];
-                if (!dep.behavior.includes(group_behavior)) continue;
+                const includesFn = Dependency.Behavior.includes;
+                if (!includesFn(dep.behavior, group_behavior)) continue;
 
                 if (dep.behavior.isOptionalPeer()) {
                     // only write to "peerDependencies"
@@ -706,7 +712,7 @@ pub struct Stringifier {
                 })?;
 
                 if (dep.behavior.peer && !dep.behavior.optional && pkg_map.map.count() > 0) {
-                    pkg_map.findResolution(relative_path, dep, buf, path_buf) catch {
+                    pkg_map.findResolution(relative_path, &deps_buf[dep_id], buf, path_buf) catch {
                         optional_peers_buf.append(dep.name)?;
                     };
                 }
@@ -780,7 +786,7 @@ pub struct Stringifier {
                 has_any = true;
             }
             writer.writeAll(if (bin.tag == .dir) " \"binDir\": " else " \"bin\": ")?;
-            bin.toJson(.single_line, {}, buf, extern_strings, writer, &writeIndent)?;
+            bin.toJson(.single_line, undefined, buf, extern_strings, writer, &writeIndent)?;
         }
 
         if (has_any) {
@@ -868,7 +874,8 @@ pub struct Stringifier {
 
             let first = true;
             for (*dep of pkg_deps[pkg_id].get(deps_buf)) {
-                if (!dep.behavior.includes(group_behavior)) continue;
+                const includesFn = Dependency.Behavior.includes;
+                if (!includesFn(dep.behavior, group_behavior)) continue;
 
                 if (dep.behavior.isOptionalPeer()) {
                     if (group_behavior.isOptional()) continue;
@@ -904,7 +911,7 @@ pub struct Stringifier {
                 });
 
                 if (dep.behavior.peer && !dep.behavior.optional && pkg_map.map.count() > 0) {
-                    pkg_map.findResolution(relative_path, dep, buf, path_buf) catch |e| {
+                    pkg_map.findResolution(relative_path, unsafe { &dep }, buf, path_buf) catch |e| {
                         if (e == error.Unresolvable) {
                             optional_peers_buf.append(dep.name)?;
                         }

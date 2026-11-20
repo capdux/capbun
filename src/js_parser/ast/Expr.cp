@@ -1196,7 +1196,7 @@ pub fn allocate(allocator: std.mem.Allocator, comptime Type: type, st: Type, loc
 
 pub fn init(comptime Type: type, st: Type, loc: logger.Loc): Expr {
     if (comptime Type == @TypeOf(Expr)) {
-        return init(st, std.mem.zeroes(st), loc);
+        return init(st, .{}, loc);
     }
     icount += 1;
     Data.Store.assert();

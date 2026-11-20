@@ -61,17 +61,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-fn cp_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.indexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } for (__cp_slice, 0..) |__item, __idx| { if (cp_eq(__item, __needle)) return @intCast(__idx); } return -1; }
-fn cp_last_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.lastIndexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } var __idx: usize = __cp_slice.len; while (__idx > 0) { __idx -= 1; if (cp_eq(__cp_slice[__idx], __needle)) return @intCast(__idx); } return -1; }
-fn cp_includes(__container: anytype, __needle: anytype) bool { return cp_index_of(__container, __needle) != -1; }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const ExtractTarball = @import("../extract_tarball.zig");
@@ -83,7 +72,7 @@ pub const TreeDepsSortCtx = struct {
 pub fn isLessThan(self: @This(), lhs: DependencyID, rhs: DependencyID) bool {
             const l = self.deps_buf[@as(usize, @intCast(lhs))];
             const r = self.deps_buf[@as(usize, @intCast(rhs))];
-            return strings.cmpStringsAsc(.{}, (if (@typeInfo(@TypeOf(l)) == .@"enum" or @typeInfo(@TypeOf(l)) == .@"union") @tagName(l) else l.name).slice(self.string_buf), (if (@typeInfo(@TypeOf(r)) == .@"enum" or @typeInfo(@TypeOf(r)) == .@"union") @tagName(r) else r.name).slice(self.string_buf));
+            return strings.cmpStringsAsc(undefined, (if (@typeInfo(@TypeOf(l)) == .@"enum" or @typeInfo(@TypeOf(l)) == .@"union") @tagName(l) else l.name).slice(self.string_buf), (if (@typeInfo(@TypeOf(r)) == .@"enum" or @typeInfo(@TypeOf(r)) == .@"union") @tagName(r) else r.name).slice(self.string_buf));
     }
 };
 
@@ -213,21 +202,11 @@ pub fn isLessThan(self: @This(), l: PackageID, r: PackageID) bool {
                 _ = try writer.writeAll("},\n");
                 const TreeSortCtx = struct {
 
-pub fn isLessThan(_: void, l: Item, r: Item) bool {
-            const _tmp_v0 = l;
-            var _l_deps = cp_unpack_elem(_tmp_v0, 0);
-            _ = &_l_deps;
-            var l_rel_path = cp_unpack_elem(_tmp_v0, 1);
-            _ = &l_rel_path;
-            var l_depth = cp_unpack_elem(_tmp_v0, 2);
-            _ = &l_depth;
-            const _tmp_v1 = r;
-            var _r_deps = cp_unpack_elem(_tmp_v1, 0);
-            _ = &_r_deps;
-            var r_rel_path = cp_unpack_elem(_tmp_v1, 1);
-            _ = &r_rel_path;
-            var r_depth = cp_unpack_elem(_tmp_v1, 2);
-            _ = &r_depth;
+pub fn isLessThan(_: @This(), l: Item, r: Item) bool {
+            const l_rel_path = l[1];
+            const l_depth = l[2];
+            const r_rel_path = r[1];
+            const r_depth = r[2];
             return (switch (std.math.order(l_depth, r_depth)) {
 .lt => true,
 .gt => false,
@@ -289,7 +268,7 @@ _ = try temp_writer.print("{f}", .{ res.fmt(buf, .posix) });
                     }
                 }
                 _ = pkgs_iter.reset();
-                _ = std.sort.pdq(TreeSortCtx.Item, tree_sort_buf.items, .{}, TreeSortCtx.isLessThan);
+                _ = std.sort.pdq(TreeSortCtx.Item, tree_sort_buf.items, TreeSortCtx{  }, TreeSortCtx.isLessThan);
                 if ((found_trusted_dependencies.count() > 0)) {
                     _ = try writeIndent(writer, indent);
                     _ = try writer.writeAll("\"trustedDependencies\": [\n");
@@ -310,11 +289,8 @@ _ = try temp_writer.print("{f}", .{ res.fmt(buf, .posix) });
                     var values_iter = found_patched_dependencies.valueIterator();
                     _ = &values_iter;
                     while (values_iter.next()) |value| {
-                        const _tmp_v4 = value.*;
-                        var name_and_version = cp_unpack_elem(_tmp_v4, 0);
-                        _ = &name_and_version;
-                        var patch_path = cp_unpack_elem(_tmp_v4, 1);
-                        _ = &patch_path;
+                        const name_and_version = value.*[0];
+                        const patch_path = value.*[1];
                         _ = try writeIndent(writer, indent);
                         _ = try writer.print("{f}: {f},\n", .{ bun.fmt.formatJSONStringUTF8(name_and_version, .{}), patch_path.fmtJson(buf, .{}) });
                     }
@@ -388,13 +364,9 @@ _ = try temp_writer.print("{f}", .{ res.fmt(buf, .posix) });
                 _ = &first;
                 for (tree_sort_buf.items) |item| {
                     _ = &item;
-                    const _tmp_v9 = item;
-                    var dependencies = cp_unpack_elem(_tmp_v9, 0);
-                    _ = &dependencies;
-                    var relative_path = cp_unpack_elem(_tmp_v9, 1);
-                    _ = &relative_path;
-                    var depth = cp_unpack_elem(_tmp_v9, 2);
-                    _ = &depth;
+                    const dependencies = item[0];
+                    const relative_path = item[1];
+                    const depth = item[2];
                     _ = tree_deps_sort_buf.clearRetainingCapacity();
                     _ = try tree_deps_sort_buf.appendSlice(allocator, dependencies);
                     _ = std.sort.pdq(DependencyID, tree_deps_sort_buf.items, TreeDepsSortCtx{ .string_buf = buf, .deps_buf = deps_buf }, TreeDepsSortCtx.isLessThan);
@@ -454,7 +426,7 @@ _ = try writer.print("[\"{f}@root:\", ", .{ pkg_name.fmtJson(buf, .{ .quote = fa
                         _ = try writer.writeByte(123);
                         if ((pkg_bin.tag != .none)) {
                             _ = try writer.writeAll((if ((pkg_bin.tag == .dir)) " \"binDir\": " else " \"bin\": "));
-                            _ = try pkg_bin.toJson(.single_line, .{}, buf, extern_strings, writer, (&writeIndent));
+                            _ = try pkg_bin.toJson(.single_line, undefined, buf, extern_strings, writer, (&writeIndent));
                             _ = try writer.writeAll(" }]");
                         } else {
                             _ = try writer.writeAll("}]");
@@ -538,7 +510,8 @@ pub fn writePackageInfoObject(writer: *std.Io.Writer, dep_behavior: Dependency.B
                 for (cp_iter_slice(pkg_dep_ids)) |dep_id| {
                     _ = &dep_id;
                     const dep = (&deps_buf[@as(usize, @intCast(dep_id))]);
-                    if ((!cp_includes(dep.behavior, group_behavior))) {
+                    const includesFn = Dependency.Behavior.includes;
+                    if ((!includesFn(dep.behavior, group_behavior))) {
                         continue;
                     }
                     if (dep.behavior.isOptionalPeer()) {
@@ -559,7 +532,7 @@ pub fn writePackageInfoObject(writer: *std.Io.Writer, dep_behavior: Dependency.B
                     }
                     _ = try writer.print("{f}: {f}", .{ bun.fmt.formatJSONStringUTF8((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(buf), .{}), bun.fmt.formatJSONStringUTF8(dep.version.literal.slice(buf), .{}) });
                     if (((dep.behavior.peer and (!dep.behavior.optional)) and (pkg_map.map.count() > 0))) {
-                        _ = (blk_catch_0: { break :blk_catch_0 ((pkg_map.findResolution(relative_path, dep, buf, path_buf)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 try optional_peers_buf.append((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name)); }); });
+                        _ = (blk_catch_0: { break :blk_catch_0 ((pkg_map.findResolution(relative_path, (&deps_buf[@as(usize, @intCast(dep_id))]), buf, path_buf)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 try optional_peers_buf.append((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name)); }); });
                     }
                 }
                 if ((!first)) {
@@ -610,7 +583,7 @@ pub fn writePackageInfoObject(writer: *std.Io.Writer, dep_behavior: Dependency.B
                     has_any = true;
                 }
                 _ = try writer.writeAll((if ((bin.tag == .dir)) " \"binDir\": " else " \"bin\": "));
-                _ = try bin.toJson(.single_line, .{}, buf, extern_strings, writer, (&writeIndent));
+                _ = try bin.toJson(.single_line, undefined, buf, extern_strings, writer, (&writeIndent));
             }
             if (has_any) {
                 _ = try writer.writeAll(" }");
@@ -676,7 +649,8 @@ pub fn writeWorkspaceDeps(writer: anytype, indent: *u32, pkg_id: PackageID, res:
                 _ = &first;
                 for (cp_mut_slice(&pkg_deps[@as(usize, @intCast(pkg_id))].get(deps_buf))) |*dep| {
                     _ = &dep;
-                    if ((!cp_includes((dep.*).behavior, group_behavior))) {
+                    const includesFn = Dependency.Behavior.includes;
+                    if ((!includesFn((dep.*).behavior, group_behavior))) {
                         continue;
                     }
                     if ((dep.*).behavior.isOptionalPeer()) {
@@ -707,7 +681,10 @@ pub fn writeWorkspaceDeps(writer: anytype, indent: *u32, pkg_id: PackageID, res:
                     const version = (dep.*).version.literal.slice(buf);
                     _ = try writer.print("{f}: {f}", .{ bun.fmt.formatJSONStringUTF8(name, .{}), bun.fmt.formatJSONStringUTF8(version, .{}) });
                     if ((((dep.*).behavior.peer and (!(dep.*).behavior.optional)) and (pkg_map.map.count() > 0))) {
-                        _ = (blk_catch_1: { break :blk_catch_1 ((pkg_map.findResolution(relative_path, (dep.*), buf, path_buf)) catch |e| { _ = &e; if ((e == error.Unresolvable)) {
+                        _ = (blk_catch_1: { break :blk_catch_1 ((pkg_map.findResolution(relative_path, (blk: {
+                        break :blk (&(dep.*));
+
+}), buf, path_buf)) catch |e| { _ = &e; if ((e == error.Unresolvable)) {
                             _ = try optional_peers_buf.append((if (@typeInfo(@TypeOf((dep.*))) == .@"enum" or @typeInfo(@TypeOf((dep.*))) == .@"union") @tagName((dep.*)) else (dep.*).name));
                         } }); });
                     }
@@ -743,8 +720,8 @@ pub fn writeIndent(writer: *std.Io.Writer, indent: *const u32) !void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_14 = indent.*;
-                while (i < __end_14) : (i += 1) {
+                const __end_12 = indent.*;
+                while (i < __end_12) : (i += 1) {
                     _ = try writer.splatByteAll(32, indent_scalar);
                 }
             }
@@ -755,8 +732,8 @@ pub fn incIndent(writer: *std.Io.Writer, indent: *u32) !void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_15 = indent.*;
-                while (i < __end_15) : (i += 1) {
+                const __end_13 = indent.*;
+                while (i < __end_13) : (i += 1) {
                     _ = try writer.splatByteAll(32, indent_scalar);
                 }
             }
@@ -767,8 +744,8 @@ pub fn decIndent(writer: *std.Io.Writer, indent: *u32) !void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_16 = indent.*;
-                while (i < __end_16) : (i += 1) {
+                const __end_14 = indent.*;
+                while (i < __end_14) : (i += 1) {
                     _ = try writer.splatByteAll(32, indent_scalar);
                 }
             }
@@ -1396,8 +1373,8 @@ else => {
                         {
                             var _workspace_pkg_id: i32 = workspace_pkgs_off;
                             _ = &_workspace_pkg_id;
-                            const __end_28 = (workspace_pkgs_off + workspace_pkgs_len);
-                            while (_workspace_pkg_id < __end_28) : (_workspace_pkg_id += 1) {
+                            const __end_26 = (workspace_pkgs_off + workspace_pkgs_len);
+                            while (_workspace_pkg_id < __end_26) : (_workspace_pkg_id += 1) {
                                 const workspace_pkg_id: PackageID = @intCast(_workspace_pkg_id);
                                 if (res.eql((&pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))]), string_buf.bytes.items, string_buf.bytes.items)) {
                                     if (comptime Environment.isDebug) {
@@ -1590,8 +1567,8 @@ else => {
                 {
                     var _pkg_id: i32 = workspace_pkgs_off;
                     _ = &_pkg_id;
-                    const __end_29 = (workspace_pkgs_off + workspace_pkgs_len);
-                    while (_pkg_id < __end_29) : (_pkg_id += 1) {
+                    const __end_27 = (workspace_pkgs_off + workspace_pkgs_len);
+                    while (_pkg_id < __end_27) : (_pkg_id += 1) {
                         const pkg_id: PackageID = @intCast(_pkg_id);
                         const workspace_name = pkg_names[@as(usize, @intCast(pkg_id))].slice(lockfile.buffers.string_bytes.items);
                         _ = seen_deps.clearRetainingCapacity();

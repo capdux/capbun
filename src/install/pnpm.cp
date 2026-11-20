@@ -748,7 +748,9 @@ pub fn migratePnpmLockfile(
         const importer_versions = importer_versions_opt.?;
 
         // resolve root dependencies first
-        for (_dep_id of pkg_deps[0].begin()..pkg_deps[0].end()) {
+        let _dep_id: u32 = pkg_deps[0].begin();
+        const _dep_end: u32 = pkg_deps[0].end();
+        while (_dep_id < _dep_end) : (_dep_id += 1) {
             const dep_id: DependencyID = @intCast(_dep_id);
             const dep = &lockfile.buffers.dependencies.items[dep_id];
 
@@ -807,7 +809,8 @@ pub fn migratePnpmLockfile(
         }
     }
 
-    for (_pkg_id of workspace_pkgs_off..workspace_pkgs_end) {
+    let _pkg_id: usize = workspace_pkgs_off;
+    while (_pkg_id < workspace_pkgs_end) : (_pkg_id += 1) {
         const pkg_id: PackageID = @intCast(_pkg_id);
 
         const workspace_res = pkg_resolutions[pkg_id];
@@ -818,7 +821,9 @@ pub fn migratePnpmLockfile(
         const importer_versions = importer_versions_opt.?;
 
         const deps = pkg_deps[pkg_id];
-        for (_dep_id of deps.begin()..deps.end()) {
+        let _dep_id: u32 = deps.begin();
+        const _dep_end: u32 = deps.end();
+        while (_dep_id < _dep_end) : (_dep_id += 1) {
             const dep_id: DependencyID = @intCast(_dep_id);
             const dep = &lockfile.buffers.dependencies.items[dep_id];
             const dep_name = dep.name.slice(string_buf);
@@ -864,11 +869,14 @@ pub fn migratePnpmLockfile(
         }
     }
 
-    for (_pkg_id of workspace_pkgs_end..lockfile.packages.len) {
-        const pkg_id: PackageID = @intCast(_pkg_id);
+    let _pkg_id2: usize = workspace_pkgs_end;
+    while (_pkg_id2 < lockfile.packages.len) : (_pkg_id2 += 1) {
+        const pkg_id: PackageID = @intCast(_pkg_id2);
 
         const deps = pkg_deps[pkg_id];
-        for (_dep_id of deps.begin()..deps.end()) {
+        let _dep_id: u32 = deps.begin();
+        const _dep_end: u32 = deps.end();
+        while (_dep_id < _dep_end) : (_dep_id += 1) {
             const dep_id: DependencyID = @intCast(_dep_id);
             const dep = &lockfile.buffers.dependencies.items[dep_id];
             let version_maybe_alias = dep.version.literal.slice(string_buf);
@@ -942,7 +950,7 @@ fn parseAppendPackageDependencies(
 
     const off: u32 = @truncate(lockfile.buffers.dependencies.items.len);
 
-    const snapshot_dependency_groups = [
+    const snapshot_dependency_groups: [2]DepGroup = [
         DepGroup{ name: "devDependencies", behavior: Dependency.Behavior{ dev: true } },
         DepGroup{ name: "optionalDependencies", behavior: Dependency.Behavior{ optional: true } },
     ];
@@ -1072,7 +1080,11 @@ fn parseAppendPackageDependencies(
                                         return invalidPnpmLockfile();
                                     }
 
-                                    behavior.optional = p_meta.getBoolean("optional") ?? false;
+                                    if (opt_val := p_meta.getBoolean("optional")) {
+                                        behavior.optional = opt_val;
+                                    } else {
+                                        behavior.optional = false;
+                                    }
                                     break;
                                 }
                             }

@@ -137,7 +137,7 @@ pub struct SharedEnv {
 
 
 pub struct TopStorePathFormatter {
-    repo: *const Repository,
+    repo: Repository,
     label: string,
     string_buf: string,
 
@@ -170,7 +170,7 @@ pub struct TopStorePathFormatter {
 pub struct TopFormatter {
     label: []const u8 = "",
     buf: []const u8,
-    repository: *const Repository,
+    repository: Repository,
 
     pub fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
         if (comptime Environment.allow_assert) bun.assert(_.label.len > 0);
@@ -338,7 +338,7 @@ pub struct TopFormatter {
     }
 
     pub fn formatAs(label: string, buf: []const u8, writer: *std.Io.Writer): std.Io.Writer.Error!void {
-        const formatter = TopFormatter{ label: label, repository: &_, buf: buf };
+        const formatter = TopFormatter{ label: label, repository: _, buf: buf };
         return formatter.format(writer)?;
     }
 

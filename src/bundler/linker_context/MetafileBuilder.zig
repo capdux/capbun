@@ -371,7 +371,7 @@ else => null,
         if ((chunks.len == 0)) {
             return j.done(allocator);
         }
-        var intermediate = try c.breakOutputIntoPieces(allocator, (&j), @as(i32, @intCast(chunks.len)));
+        var intermediate = try c.breakOutputIntoPieces(allocator, (&j), @as(u32, @intCast(chunks.len)));
         _ = &intermediate;
         const code_result = try intermediate.code(allocator, c.parse_graph, (&c.graph), "", (&chunks[0]), chunks, null, false, false);
         return code_result.buffer;
@@ -624,9 +624,11 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
         }
         _ = try writer.writeAll("\n## Largest Modules by Output Contribution\n\n");
         _ = try writer.writeAll("Modules sorted by bytes contributed to the output bundle. Large modules may indicate bloat.\n\n");
-        _ = std.mem.sort(InputFileInfo, input_files.items, .{}, struct {
+        const EmptySortCtx = struct {
+};
+        _ = std.mem.sort(InputFileInfo, input_files.items, EmptySortCtx{  }, struct {
 
-pub fn lessThan(_: void, a: InputFileInfo, b: InputFileInfo) bool {
+pub fn lessThan(_: EmptySortCtx, a: InputFileInfo, b: InputFileInfo) bool {
             return (a.bytes_in_output > b.bytes_in_output);
     }
 }.lessThan);
@@ -772,9 +774,9 @@ pub fn lessThan(_: void, a: InputFileInfo, b: InputFileInfo) bool {
                             }
                         }
                     }
-                    _ = std.mem.sort(ModuleSize, module_sizes.items, .{}, struct {
+                    _ = std.mem.sort(ModuleSize, module_sizes.items, EmptySortCtx{  }, struct {
 
-pub fn lessThan(_: void, a: ModuleSize, b: ModuleSize) bool {
+pub fn lessThan(_: EmptySortCtx, a: ModuleSize, b: ModuleSize) bool {
             return (a.bytes > b.bytes);
     }
 }.lessThan);
@@ -810,9 +812,9 @@ pub fn lessThan(_: void, a: ModuleSize, b: ModuleSize) bool {
         while (ib_iter.next()) |entry| {
             _ = try highly_imported.append(allocator, ImportedByInfo{ .path = entry.key_ptr.*, .count = entry.value_ptr.items.len });
         }
-        _ = std.mem.sort(ImportedByInfo, highly_imported.items, .{}, struct {
+        _ = std.mem.sort(ImportedByInfo, highly_imported.items, EmptySortCtx{  }, struct {
 
-pub fn lessThan(_: void, a: ImportedByInfo, b: ImportedByInfo) bool {
+pub fn lessThan(_: EmptySortCtx, a: ImportedByInfo, b: ImportedByInfo) bool {
             return (a.count > b.count);
     }
 }.lessThan);
@@ -871,9 +873,9 @@ pub fn lessThan(_: void, a: ImportedByInfo, b: ImportedByInfo) bool {
         while (path_iter.next()) |entry| {
             _ = try sorted_paths.append(allocator, PathOnly{ .path = entry.key_ptr.* });
         }
-        _ = std.mem.sort(PathOnly, sorted_paths.items, .{}, struct {
+        _ = std.mem.sort(PathOnly, sorted_paths.items, EmptySortCtx{  }, struct {
 
-pub fn lessThan(_: void, a: PathOnly, b: PathOnly) bool {
+pub fn lessThan(_: EmptySortCtx, a: PathOnly, b: PathOnly) bool {
             return std.mem.lessThan(u8, a.path, b.path);
     }
 }.lessThan);

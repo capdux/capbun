@@ -201,7 +201,7 @@ pub fn get(self: *SharedEnv, allocator: std.mem.Allocator, other: *DotEnv.Loader
 };
 
 pub const TopStorePathFormatter = struct {
-    repo: *const Repository,
+    repo: Repository,
     label: []const u8,
     string_buf: []const u8,
 
@@ -237,7 +237,7 @@ pub fn format(self: TopStorePathFormatter, writer: *std.Io.Writer) std.Io.Writer
 pub const TopFormatter = struct {
     label: []const u8 = "",
     buf: []const u8,
-    repository: *const Repository,
+    repository: Repository,
 
 pub fn format(self: TopFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!void {
             if (comptime Environment.allow_assert) {
@@ -405,7 +405,7 @@ pub fn eql(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8, 
     }
 
 pub fn formatAs(self: Repository, label: []const u8, buf: []const u8, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            const formatter = TopFormatter{ .label = label, .repository = (&self), .buf = buf };
+            const formatter = TopFormatter{ .label = label, .repository = self, .buf = buf };
             return try formatter.format(writer);
     }
 
