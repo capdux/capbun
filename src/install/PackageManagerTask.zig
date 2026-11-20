@@ -212,7 +212,7 @@ pub const Data = union {
     package_manifest: Npm.PackageManifest,
     extract: ExtractData,
     git_clone: bun.FD,
-    git_checkout: Repository.GitCheckoutData,
+    git_checkout: ExtractData,
 };
 
 pub const PackageManagerTask = @This();

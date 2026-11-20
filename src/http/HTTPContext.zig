@@ -65,6 +65,7 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 const SocketHandler = @import("../uws_sys/socket.zig").SocketHandler;
 const SocketGroup = @import("../uws_sys/SocketGroup.zig").SocketGroup;
 const BunSocketContextOptions = @import("../uws_sys/SocketContext.zig").BunSocketContextOptions;
+pub const ProxyTunnel = @import("./ProxyTunnel.zig");
 pub const DeadSocket = struct {
     garbage: u8 = 0,
 };
@@ -243,7 +244,7 @@ pub fn existingSocket(self: *@This(), reject_unauthorized: bool, hostname: []con
                             _ = s.deinit();
                         }
                         socket.ssl_config = null;
-                        var tunnel: ?*bun.http.ProxyTunnel = (if ((socket.proxy_tunnel != null)) socket.proxy_tunnel.?.leak() else null);
+                        var tunnel: ?*ProxyTunnel = (if ((socket.proxy_tunnel != null)) socket.proxy_tunnel.?.leak() else null);
                         _ = &tunnel;
                         socket.proxy_tunnel = null;
                         if ((socket.target_hostname.len > 0)) {
@@ -444,7 +445,7 @@ pub fn sslCtx(self: *@This()) *bun.BoringSSL.c.SSL_CTX {
                 return self.secure.?;
         }
 
-pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_error_while_reject_unauthorized_is_false: bool, hostname: []const u8, port: u16, ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr, tunnel: ?*bun.http.ProxyTunnel, target_hostname: []const u8, target_port: u16, proxy_auth_hash: u64, h2_session: ?*bun.http.H2.ClientSession) void {
+pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_error_while_reject_unauthorized_is_false: bool, hostname: []const u8, port: u16, ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr, tunnel: ?*ProxyTunnel, target_hostname: []const u8, target_port: u16, proxy_auth_hash: u64, h2_session: ?*bun.http.H2.ClientSession) void {
                 if (bun.Environment.allow_assert) {
                     _ = bun.assert((!socket.isClosed()));
                     _ = bun.assert((!socket.isShutdown()));
@@ -469,7 +470,7 @@ pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_er
                         pending.port = port;
                         pending.owner = self;
                         pending.ssl_config = (if ((ssl_config != null)) ssl_config.?.clone() else null);
-                        pending.proxy_tunnel = (if ((tunnel != null)) bun.http.ProxyTunnel.RefPtr.takeRef(tunnel.?) else null);
+                        pending.proxy_tunnel = (if ((tunnel != null)) ProxyTunnel.RefPtr.takeRef(tunnel.?) else null);
                         pending.proxy_auth_hash = proxy_auth_hash;
                         pending.target_hostname = (if (((tunnel != null) and (target_hostname.len > 0))) bun.handleOom(bun.default_allocator.dupe(u8, target_hostname)) else "");
                         pending.target_port = target_port;
@@ -498,7 +499,7 @@ pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_er
             did_have_handshaking_error_while_reject_unauthorized_is_false: bool = false,
             ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr = null,
             owner: *HTTPContext(ssl),
-            proxy_tunnel: ?bun.http.ProxyTunnel.RefPtr = null,
+            proxy_tunnel: ?ProxyTunnel.RefPtr = null,
             target_hostname: []const u8 = "",
             target_port: u16 = 0,
             proxy_auth_hash: u64 = 0,
@@ -514,7 +515,7 @@ pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_er
         };
         pub const ExistingSocket = struct {
             socket: HTTPSocket,
-            tunnel: ?*bun.http.ProxyTunnel,
+            tunnel: ?*ProxyTunnel,
             h2_session: ?*bun.http.H2.ClientSession,
         
         pub fn hasTunnel(self: @This()) bool {

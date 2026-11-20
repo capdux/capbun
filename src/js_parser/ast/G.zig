@@ -235,7 +235,7 @@ pub fn deepClone(self: Arg, allocator: std.mem.Allocator) !Arg {
 };
 
 const string = []const u8;
-const empty_properties: [0]Property = &.{};
+var empty_properties: [0]Property = undefined;
 pub const PropertyKind = enum(u3) {
     normal,
     get,

@@ -998,8 +998,7 @@ pub fn nonASCIISequenceLength(first_byte: u8) u3_fast {
 194...223 => 2,
 224...239 => 3,
 240...244 => 4,
-245...255 => 0,
-else => unreachable,
+else => 0,
 });
 }
 
@@ -1319,11 +1318,11 @@ pub fn isAllASCII(slice: []const u8) bool {
 }
 
 pub fn u16Lead(supplementary: anytype) callconv(bun.callconv_inline) u16 {
-        return (if (comptime @typeInfo(@TypeOf((cp_shr(supplementary, 10) + 55232))) == .@"enum") cp_cast_int(i32, @intFromEnum((cp_shr(supplementary, 10) + 55232))) else cp_cast_int(i32, (cp_shr(supplementary, 10) + 55232)));
+        return @intCast((cp_shr(supplementary, 10) + 55232));
 }
 
 pub fn u16Trail(supplementary: anytype) callconv(bun.callconv_inline) u16 {
-        return (if (comptime @typeInfo(@TypeOf(((supplementary & 1023) | 56320))) == .@"enum") cp_cast_int(i32, @intFromEnum(((supplementary & 1023) | 56320))) else cp_cast_int(i32, ((supplementary & 1023) | 56320)));
+        return @intCast(((supplementary & 1023) | 56320));
 }
 
 pub fn u16IsTrail(supplementary: u16) callconv(bun.callconv_inline) bool {
@@ -1390,12 +1389,10 @@ pub fn cp1252ToCodepointAssumeNotASCII(char: u8, comptime CodePointType: type) C
 }
 
 pub fn latin1ToCodepointBytesAssumeNotASCII(char: u32) [2]u8 {
-    _ = char;
-        var bytes = [4]u8;
+        const z: u8 = 0;
+        var bytes: [4]u8 = .{ z, z, z, z };
         _ = &bytes;
-        {
-            _ = 0;
-        }
+        _ = encodeWTF8Rune((&bytes), (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(char)) == .@"enum") cp_cast_int(i32, @intFromEnum(char)) else cp_cast_int(i32, char)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(char)) == .@"enum") cp_cast_int(i32, @intFromEnum(char)) else cp_cast_int(i32, char)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(char)) == .@"enum") cp_cast_int(i32, @intFromEnum(char)) else cp_cast_int(i32, char)))));
         return (bytes[0..2]).*;
 }
 

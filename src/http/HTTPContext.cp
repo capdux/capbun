@@ -7,6 +7,7 @@ const std = @import("std");
 import { SocketHandler } from "../uws_sys/socket.cp";
 import { SocketGroup } from "../uws_sys/SocketGroup.cp";
 import { BunSocketContextOptions } from "../uws_sys/SocketContext.cp";
+import ProxyTunnel from "./ProxyTunnel.zig";
 
 pub type AnyPtr = *!;
 pub type AnyPtrPtr = **!;
@@ -34,7 +35,7 @@ export class HTTPContext<const ssl: bool> {
         did_have_handshaking_error_while_reject_unauthorized_is_false: bool = false,
         ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr = null,
         owner: *HTTPContext(ssl),
-        proxy_tunnel: ?bun.http.ProxyTunnel.RefPtr = null,
+        proxy_tunnel: ?ProxyTunnel.RefPtr = null,
         target_hostname: []const u8 = "",
         target_port: u16 = 0,
         proxy_auth_hash: u64 = 0,
@@ -50,7 +51,7 @@ export class HTTPContext<const ssl: bool> {
 
     pub const ExistingSocket = struct {
         socket: HTTPSocket,
-        tunnel: ?*bun.http.ProxyTunnel,
+        tunnel: ?*ProxyTunnel,
         h2_session: ?*bun.http.H2.ClientSession,
 
         pub fn hasTunnel(self: @This()) bool {
@@ -445,7 +446,7 @@ export class HTTPContext<const ssl: bool> {
 
                 if (s := socket.ssl_config) s.deinit();
                 socket.ssl_config = null;
-                let tunnel: *bun.http.ProxyTunnel? = if (socket.proxy_tunnel != null) socket.proxy_tunnel.?.leak() else null;
+                let tunnel: *ProxyTunnel? = if (socket.proxy_tunnel != null) socket.proxy_tunnel.?.leak() else null;
                 socket.proxy_tunnel = null;
                 if (socket.target_hostname.len > 0) {
                     bun.default_allocator.free(socket.target_hostname);
@@ -669,7 +670,7 @@ export class HTTPContext<const ssl: bool> {
         hostname: []const u8,
         port: u16,
         ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr?,
-        tunnel: *bun.http.ProxyTunnel?,
+        tunnel: *ProxyTunnel?,
         target_hostname: []const u8,
         target_port: u16,
         proxy_auth_hash: u64,
@@ -702,7 +703,7 @@ export class HTTPContext<const ssl: bool> {
                 pending.port = port;
                 pending.owner = this;
                 pending.ssl_config = if (ssl_config != null) ssl_config.?.clone() else null;
-                pending.proxy_tunnel = if (tunnel != null) bun.http.ProxyTunnel.RefPtr.takeRef(tunnel.?) else null;
+                pending.proxy_tunnel = if (tunnel != null) ProxyTunnel.RefPtr.takeRef(tunnel.?) else null;
                 pending.proxy_auth_hash = proxy_auth_hash;
                 pending.target_hostname = if (tunnel != null && target_hostname.len > 0)
                     bun.handleOom(bun.default_allocator.dupe(u8, target_hostname))

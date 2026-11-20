@@ -117,7 +117,7 @@ pub const ParseResult = struct {
     source: logger.Source,
     loader: options.Loader,
     ast: js_ast.Ast,
-    already_bundled: *_AlreadyBundled = .none,
+    already_bundled: AlreadyBundledVal = .none,
     input_fd: ?FD = null,
     empty: bool = false,
     pending_imports: _resolver.PendingResolution.List = .{},
@@ -904,8 +904,9 @@ pub const ServeResult = struct {
 
 pub const MacroJSCtx = PluginRunnerModule.MacroJSCtx;
 pub const PluginRunner = PluginRunnerModule.PluginRunner;
-var empty_u8: [0]u8 = &.{};
+var empty_u8: [0]u8 = undefined;
 pub const AlreadyBundled = _AlreadyBundled;
+const AlreadyBundledVal = _AlreadyBundled;
 pub const BuildResolveResultPair = _BuildResolveResultPair;
 pub const ParseOptions = _ParseOptions;
 pub const ResolveResults = std.AutoHashMap(u64, void);

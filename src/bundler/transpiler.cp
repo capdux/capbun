@@ -7,7 +7,7 @@ import PluginRunnerModule from "../bundler_jsc/PluginRunner.zig";
 pub const MacroJSCtx = PluginRunnerModule.MacroJSCtx;
 pub const PluginRunner = PluginRunnerModule.PluginRunner;
 
-let empty_u8: [0]u8 = [];
+let empty_u8: [0]u8 = undefined;
 
 pub union(enum) _AlreadyBundled {
     none: void,
@@ -33,6 +33,7 @@ pub union(enum) _AlreadyBundled {
 }
 
 pub const AlreadyBundled = _AlreadyBundled;
+const AlreadyBundledVal = _AlreadyBundled;
 
 pub struct ParseResult {
     pub const AlreadyBundled = _AlreadyBundled;
@@ -40,7 +41,7 @@ pub struct ParseResult {
     source: logger.Source,
     loader: options.Loader,
     ast: js_ast.Ast,
-    already_bundled: _AlreadyBundled = .none,
+    already_bundled: AlreadyBundledVal = .none,
     input_fd: FD? = null,
     empty: bool = false,
     pending_imports: _resolver.PendingResolution.List = .{},

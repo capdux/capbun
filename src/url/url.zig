@@ -728,8 +728,8 @@ pub fn getAllWithHashFromOffset(self: *const QueryStringMap, target: [][]const u
             return target_i;
     }
 
-pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: *CombinedScanner) !?*QueryStringMap {
-            var list = Param.List;
+pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: CombinedScanner) !?*QueryStringMap {
+            var list: Param.List = .{};
             _ = &list;
             var scanner = CombinedScanner{ .pathname = _scanner.pathname, .query = _scanner.query };
             _ = &scanner;
@@ -834,7 +834,7 @@ pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: *CombinedScanner)
     }
 
 pub fn init(allocator: std.mem.Allocator, query_string: []const u8) !?*QueryStringMap {
-            var list = Param.List;
+            var list: Param.List = .{};
             _ = &list;
             var scanner = Scanner.init(query_string);
             _ = &scanner;
@@ -1013,12 +1013,10 @@ const start = i;
 };
 
 pub const CombinedScanner = struct {
-    query: *Scanner,
+    query: Scanner,
     pathname: PathnameScanner,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn init(query_string: []const u8, pathname: []const u8, routename: []const u8, url_params: *ParamsList) *CombinedScanner {
+pub fn init(query_string: []const u8, pathname: []const u8, routename: []const u8, url_params: *ParamsList) CombinedScanner {
             return CombinedScanner{ .query = Scanner.init(query_string), .pathname = PathnameScanner.init(pathname, routename, url_params) };
     }
 
@@ -1037,8 +1035,6 @@ pub const PathnameScanner = struct {
     pathname: []const u8,
     routename: []const u8,
     i: usize = 0,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.i = 0; return self_ptr; }
 
 pub inline fn isDone(self: *const PathnameScanner) bool {
             return (self.params.len <= self.i);
@@ -1070,10 +1066,8 @@ pub const Scanner = struct {
     query_string: []const u8,
     i: usize,
     start: usize = 0,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.start = 0; return self_ptr; }
 
-pub fn init(query_string: []const u8) *Scanner {
+pub fn init(query_string: []const u8) Scanner {
             if (((query_string.len > 0) and (query_string[0] == 63))) {
                 return Scanner{ .query_string = query_string, .i = 1, .start = 1 };
             }

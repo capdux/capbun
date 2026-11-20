@@ -3032,3 +3032,5 @@ Options:
 - [2026-11-20 06:27:53 UTC] 验收并提交第 4 轮 `zig:check` Runtime/Image/Crypto/WebCore 簇 5 模块修复（`Image`/`ffi`/`ResumableSink`/`streams`/`CryptoHasher`，5/5 全 PASS）；接力派发 4 处外部根因（`EVP`/`node/types`/`Body`/`ReadableStream`）。
 
 - [2026-11-20 06:29:07 UTC] 验收并提交第 4 轮 `zig:check` JSC+TestRunner 簇 10 模块修复（消除 44 处报错，10/10 全 PASS）；接力派发 `FileReader`/`ByteBlobLoader`/`ByteStream` 升级 `@root struct`。
+
+- [2026-11-20 06:30:01 UTC] 验收并提交第 4 轮 `zig:check` Bake+URL+Shell+Parser 簇 12 模块修复（12/12 全 PASS）；接力派发 4 处外部根因（`EnvMap`/`event_loop`/`bun`/`http`）。

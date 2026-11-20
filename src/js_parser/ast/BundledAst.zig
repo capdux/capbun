@@ -120,7 +120,7 @@ pub fn addUrlForCss(self: *BundledAst, allocator: std.mem.Allocator, source: *co
 pub const Flags = BundledAstFlags;
 pub const empty = BundledAst.init(Ast.empty);
 const string = []const u8;
-const empty_u32s: [0]u32 = &.{};
+var empty_u32s: [0]u32 = undefined;
 pub const CommonJSNamedExports = Ast.CommonJSNamedExports;
 pub const ConstValuesMap = Ast.ConstValuesMap;
 pub const NamedExports = Ast.NamedExports;

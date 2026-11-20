@@ -73,9 +73,9 @@ top_level_await_keyword: logger.Range = logger.Range.None,
 import_records: ImportRecord.List = .{},
 hashbang: []const u8 = "",
 directive: ?[]const u8 = null,
-parts: Part.List = Part.List,
-symbols: Symbol.List = Symbol.List,
-module_scope: Scope = Scope{  },
+parts: Part.List = .{},
+symbols: Symbol.List = .{},
+module_scope: Scope = .{},
 char_freq: ?CharFreq = null,
 exports_ref: Ref = Ref.None,
 module_ref: Ref = Ref.None,
@@ -119,7 +119,7 @@ pub const NamedExports = bun.StringArrayHashMapUnmanaged(NamedExport);
 pub const ConstValuesMap = std.ArrayHashMapUnmanaged(Ref, Expr, RefHashCtx, false);
 pub const TsEnumsMap = std.ArrayHashMapUnmanaged(Ref, bun.StringHashMapUnmanaged(InlinedEnumValue), RefHashCtx, false);
 var empty_u32s: [0]u32 = &.{};
-pub const empty = Ast{ .parts = Part.List, .runtime_imports = .{} };
+pub const empty = Ast{ .parts = .{}, .runtime_imports = .{} };
 pub const Class = G.Class;
 const Runtime = runtime_pkg.Runtime;
 const BabyList = bun.BabyList;

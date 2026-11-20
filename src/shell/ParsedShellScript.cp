@@ -80,13 +80,13 @@ pub fn setCwd(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe
     const str = bun.String.fromJS(str_js_opt.?, globalThis)?;
     if (*prev := client.cwd) prev.deref();
     client.cwd = str;
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 pub fn setQuiet(client: *ParsedShellScript, _: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arg = callframe.argument(0);
     client.quiet = arg.toBoolean();
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 pub fn setEnv(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -128,7 +128,7 @@ pub fn setEnv(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe
         previous.deinit();
     }
     client.export_env = env;
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 pub const createParsedShellScript = jsc.MarkedArgumentBuffer.wrap(createParsedShellScriptImpl);

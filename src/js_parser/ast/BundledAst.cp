@@ -23,7 +23,7 @@
     _padding: u7 = 0,
 }
 
-const empty_u32s: [0]u32 = [];
+let empty_u32s: [0]u32 = undefined;
 
 @root struct BundledAst {
     approximate_newline_count: u32 = 0,

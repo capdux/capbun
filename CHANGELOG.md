@@ -1633,3 +1633,6 @@
 
 ### 2026-11-20 06:29:07 UTC - zig:check 第 4 轮 JSC+TestRunner 簇 10 模块语义修复入库
 - 完成：`expect`/`ScopeFunctions`/`ConsoleObject`/`GeneratedBindings`/`JSValue`/`DecodedJSValue`/`FetchHeaders`/`JSRef`/`ResolveMessage`/`Strong` 10/10 全 PASS（消除 44 处语义错）。
+
+### 2026-11-20 06:30:01 UTC - zig:check 第 4 轮 Bake+URL+Shell+Parser 簇 12 模块语义修复入库
+- 完成：`FrameworkRouter`/`unicode`/`url`/`HTTPContext`/`ParsedShellScript`/`Chunk`/`transpiler`/`PackageManagerTask`/`Ast`/`BundledAst`/`G`/`picohttp` 12/12 全 PASS。

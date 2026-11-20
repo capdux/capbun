@@ -40,9 +40,9 @@ let empty_u32s: [0]u32 = [];
 
     hashbang: string = "",
     directive: string? = null,
-    parts: Part.List = Part.List{},
-    symbols: Symbol.List = Symbol.List{},
-    module_scope: Scope = Scope{},
+    parts: Part.List = .{},
+    symbols: Symbol.List = .{},
+    module_scope: Scope = .{},
     char_freq: CharFreq? = null,
     exports_ref: Ref = Ref.None,
     module_ref: Ref = Ref.None,
@@ -94,7 +94,7 @@ let empty_u32s: [0]u32 = [];
     }
 }
 
-pub const empty = Ast{ parts: Part.List{}, runtime_imports: .{} };
+pub const empty = Ast{ parts: .{}, runtime_imports: .{} };
 
 pub const Class = G.Class;
 

@@ -773,10 +773,11 @@ pub struct JSFrameworkRouter {
     const validators = bun.jsc.Node.validators;
 
     static fn getBindings(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        return (try jsc.JSObject.create({
+        const obj = jsc.JSObject.create({
             parseRoutePattern: jsc.JSFunction.create(global, "parseRoutePattern", jsc.host_fn.toJSHostFn(parseRoutePattern), 1, {}),
             FrameworkRouter: js.getConstructor(global),
-        }, global)).toJS();
+        }, global)?;
+        return obj.toJS();
     }
 
     static fn constructor(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*JSFrameworkRouter {
@@ -784,8 +785,11 @@ pub struct JSFrameworkRouter {
         if (!opts.isObject())
             return global.throwInvalidArguments("FrameworkRouter needs an object as it's first argument", {});
 
-        const root = try opts.getOptional(global, "root", bun.String.Slice) ??
+        const root_opt = opts.getOptional(global, "root", bun.String.Slice)?;
+        if (root_opt == null) {
             return global.throwInvalidArguments("Missing options.root", {});
+        }
+        const root = root_opt.?;
         defer root.deinit();
 
         let style = try Style.fromJS(try opts.getOptional(global, "style", JSValue) ?? .js_undefined, global);
@@ -850,7 +854,7 @@ pub struct JSFrameworkRouter {
             let sfb = std.heap.stackFallback(4096, bun.default_allocator);
             const alloc = sfb.get();
 
-            return (try jsc.JSObject.create({
+            const res_obj = jsc.JSObject.create({
                 params: if (params_out.params.len > 0) params: {
                     const obj = JSValue.createEmptyObject(global, params_out.params.len);
                     for (param of params_out.params.slice()) {
@@ -861,7 +865,8 @@ pub struct JSFrameworkRouter {
                     break :params obj;
                 } else JSValue.jsNull(),
                 route: try jsfr.routeToJsonInverse(global, index, alloc),
-            }, global)).toJS();
+            }, global)?;
+            return res_obj.toJS();
         }
 
         return JSValue.jsNull();
@@ -877,7 +882,7 @@ pub struct JSFrameworkRouter {
 
     static fn routeToJson(jsfr: *JSFrameworkRouter, global: *JSGlobalObject, route_index: Route.Index, allocator: Allocator): !JSValue {
         const route = jsfr.router.routePtr(route_index);
-        return (try jsc.JSObject.create({
+        const obj = jsc.JSObject.create({
             part: try partToJS(global, route.part, allocator),
             page: try jsfr.fileIdToJS(global, route.file_page),
             layout: try jsfr.fileIdToJS(global, route.file_layout),
@@ -896,7 +901,8 @@ pub struct JSFrameworkRouter {
                 }
                 break :brk arr;
             },
-        }, global)).toJS();
+        }, global)?;
+        return obj.toJS();
     }
 
     static fn routeToJsonInverse(jsfr: *JSFrameworkRouter, global: *JSGlobalObject, route_index: Route.Index, allocator: Allocator): !JSValue {
@@ -905,13 +911,14 @@ pub struct JSFrameworkRouter {
         if (parent := route.parent.unwrap()) {
             parent_json = try routeToJsonInverse(jsfr, global, parent, allocator);
         }
-        return (try jsc.JSObject.create({
+        const obj = jsc.JSObject.create({
             part: try partToJS(global, route.part, allocator),
             page: try jsfr.fileIdToJS(global, route.file_page),
             layout: try jsfr.fileIdToJS(global, route.file_layout),
             // .notFound = jsfr.fileIdToJS(global, route.file_not_found),
             parent: parent_json,
-        }, global)).toJS();
+        }, global)?;
+        return obj.toJS();
     }
 
     fn finalize(*_) {
@@ -937,13 +944,14 @@ pub struct JSFrameworkRouter {
         errdefer style.deinit();
 
         let log = TinyLog.empty;
-        const parsed = style.parse(filepath.slice(), std.fs.path.extension(filepath.slice()), &log, true, alloc) catch |e| {
+        const parsed_opt = style.parse(filepath.slice(), std.fs.path.extension(filepath.slice()), &log, true, alloc) catch |e| {
             if (e == error.InvalidRoutePattern) {
                 return global.throw("{s} ({d}:{d})", .{ log.msg.slice(), log.cursor_at, log.cursor_len });
             }
             return e;
-        } ??
-            return JSValue.jsNull();
+        };
+        if (parsed_opt == null) return JSValue.jsNull();
+        const parsed = parsed_opt.?;
 
         let rendered = std.array_list.Managed(u8).initCapacity(alloc, filepath.slice().len)?;
         for (part of parsed.parts) try part.toStringForInternalUse(rendered.writer());
@@ -987,7 +995,9 @@ pub struct JSFrameworkRouter {
     }
 
     static fn fileIdToJS(jsfr: *JSFrameworkRouter, global: *JSGlobalObject, id: OpaqueFileId.Optional): bun.JSError!JSValue {
-        const file_id = id.unwrap() ?? return JSValue.jsNull();
+        const file_id_opt = id.unwrap();
+        if (file_id_opt == null) return JSValue.jsNull();
+        const file_id = file_id_opt.?;
         return jsfr.files.items[file_id.get()].toJS(global);
     }
 }

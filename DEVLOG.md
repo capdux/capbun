@@ -1362,3 +1362,6 @@
 
 ### 2026-11-20 06:29:07 UTC - zig:check 第 4 轮 JSC+TestRunner 修复经验
 - `ConsoleObject` 用 `@TypeOf(&writer)` 规避 `*@TypeOf` 误解析、`Strong` opaque 类型方法用 `*_` 禁止按值传参、`expect`/`ScopeFunctions` 消除 `?? return` 误包 `.{ .ok = ... }`。
+
+### 2026-11-20 06:30:01 UTC - zig:check 第 4 轮 Bake+URL+Shell+Parser 修复经验
+- `url.cp` Scanner 从 `class` 改值类型 `struct`；`BundledAst`/`G`/`picohttp` 空定长数组 `[0]T = undefined`；`transpiler.cp` 别名规避 `union(enum)` 自动指针化。

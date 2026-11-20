@@ -8,7 +8,7 @@ const StringBuilder = bun.StringBuilder;
 const assert = bun.assert;
 const strings = bun.strings;
 
-let EMPTY_HEADERS: [0]Header = [];
+let EMPTY_HEADERS: [0]Header = undefined;
 
 export struct HeaderList {
     list: []Header = *EMPTY_HEADERS,

@@ -763,7 +763,7 @@ pub const Chunk = struct {
 
     output_source_map: SourceMap.SourceMapPieces,
 
-    intermediate_output: ChunkIntermediateOutput = { empty: {} },
+    intermediate_output: ChunkIntermediateOutput = .empty,
     isolated_hash: u64 = std.math.maxInt(u64),
 
     renamer: renamer.Renamer = undefined,

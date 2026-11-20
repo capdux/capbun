@@ -23,7 +23,7 @@ pub struct ExportStarAlias {
     original_name: string,
 }
 
-const empty_properties: [0]Property = [];
+let empty_properties: [0]Property = undefined;
 
 pub struct Class {
     class_keyword: logger.Range = logger.Range.None,

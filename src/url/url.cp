@@ -623,7 +623,7 @@ export class QueryStringMap {
         allocator: std.mem.Allocator,
         _scanner: CombinedScanner,
     ): !QueryStringMap? {
-        let list = Param.List{};
+        let list: Param.List = .{};
         let scanner = CombinedScanner{ .pathname = _scanner.pathname, .query = _scanner.query };
 
         let estimated_str_len: usize = 0;
@@ -727,7 +727,7 @@ export class QueryStringMap {
         allocator: std.mem.Allocator,
         query_string: string,
     ): !QueryStringMap? {
-        let list = Param.List{};
+        let list: Param.List = .{};
 
         let scanner = Scanner.init(query_string);
         let count: usize = 0;
@@ -892,9 +892,9 @@ export class PercentEncoding {
 
 pub const FormData = @import("../runtime/webcore/FormData.zig").FormData;
 
-export class CombinedScanner {
-    query: Scanner;
-    pathname: PathnameScanner;
+export struct CombinedScanner {
+    query: Scanner,
+    pathname: PathnameScanner,
 
     pub static fn init(query_string: string, pathname: string, routename: string, url_params: *ParamsList): CombinedScanner {
         return CombinedScanner{
@@ -934,11 +934,11 @@ fn stringPointerFromStrings(parent: string, input_str: string): api.StringPointe
     return api.StringPointer{};
 }
 
-export class PathnameScanner {
-    params: *ParamsList;
-    pathname: string;
-    routename: string;
-    i: usize = 0;
+export struct PathnameScanner {
+    params: *ParamsList,
+    pathname: string,
+    routename: string,
+    i: usize = 0,
 
     pub inline fn isDone(_: *const PathnameScanner): bool {
         return _.params.len <= _.i;
@@ -973,10 +973,10 @@ export class PathnameScanner {
     }
 }
 
-export class Scanner {
-    query_string: string;
-    i: usize;
-    start: usize = 0;
+export struct Scanner {
+    query_string: string,
+    i: usize,
+    start: usize = 0,
 
     pub static fn init(query_string: string): Scanner {
         if (query_string.len > 0 and query_string[0] == '?') {

@@ -635,7 +635,7 @@ pub const Chunk = struct {
     content: ChunkContent,
     entry_point: ChunkEntryPoint = .{},
     output_source_map: SourceMap.SourceMapPieces,
-    intermediate_output: ChunkIntermediateOutput = .{ .empty = .{} },
+    intermediate_output: ChunkIntermediateOutput = .empty,
     isolated_hash: u64 = std.math.maxInt(u64),
     renamer: renamer.Renamer = undefined,
     compile_results_for_chunk: []CompileResult = &.{},

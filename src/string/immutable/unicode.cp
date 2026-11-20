@@ -1103,11 +1103,11 @@ pub fn withoutUTF8BOM(bytes: []const u8): []const u8 {
 // https://github.com/WebKit/WebKit/blob/443e796d1538654c34f2690e39600c70c8052b63/Source/WebCore/PAL/pal/text/TextCodecUTF8.cpp#L69
 pub fn nonASCIISequenceLength(first_byte: u8): u3_fast {
     return switch (first_byte) {
-        0...193 => 0,
-        194...223 => 2,
-        224...239 => 3,
-        240...244 => 4,
-        245...255 => 0,
+        0..=193 => 0,
+        194..=223 => 2,
+        224..=239 => 3,
+        240..=244 => 4,
+        else => 0,
     };
 }
 
@@ -1516,12 +1516,12 @@ pub fn isAllASCII(slice: []const u8): bool {
 
 // #define U16_LEAD(supplementary) (UChar)(((supplementary)>>10)+0xd7c0)
 pub fn u16Lead(supplementary: auto) callconv(bun.callconv_inline): u16 {
-    return i32((supplementary >> 10) + 0xd7c0);
+    return @intCast((supplementary >> 10) + 0xd7c0);
 }
 
 // #define U16_TRAIL(supplementary) (UChar)(((supplementary)&0x3ff)|0xdc00)
 pub fn u16Trail(supplementary: auto) callconv(bun.callconv_inline): u16 {
-    return i32((supplementary & 0x3ff) | 0xdc00);
+    return @intCast((supplementary & 0x3ff) | 0xdc00);
 }
 
 // #define U16_IS_TRAIL(c) (((c)&0xfffffc00)==0xdc00)
@@ -1658,7 +1658,8 @@ const cp1252_to_utf16_conversion_table = [256]u16{
 };
 
 pub fn latin1ToCodepointBytesAssumeNotASCII(char: u32): [2]u8 {
-    let bytes = [4]u8{ 0, 0, 0, 0 };
+    const z: u8 = 0;
+    let bytes: [4]u8 = [ z, z, z, z ];
     * = encodeWTF8Rune(&bytes, @as(i32, i32(char)));
     return bytes[0..2].*;
 }
