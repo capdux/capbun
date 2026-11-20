@@ -204,7 +204,12 @@ fn parseField(comptime T: type, field: []const u8, min: u7, max: u7, kind: NameK
         if (part.len == 0) return error.InvalidField;
         // Split by / for step
         let step_iter = std.mem.splitScalar(u8, part, '/');
-        const base = step_iter.next() ?? return error.InvalidField;
+        let base: []const u8 = "";
+        if (b := step_iter.next()) {
+            base = b;
+        } else {
+            return error.InvalidField;
+        }
         const step_str = step_iter.next();
         if (step_iter.next() != null) return error.InvalidStep;
 

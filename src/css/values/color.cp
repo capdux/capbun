@@ -250,7 +250,7 @@ pub const CssColor = union(enum) {
 
         switch (token.*) {
             .unrestrictedhash, .idhash => |v| {
-                const r, const g, const b, const a = css.color.parseHashColor(v) orelse return .{ .err = location.newUnexpectedTokenError(token.*) };
+                const _t1 = css.color.parseHashColor(v) orelse return .{ .err = location.newUnexpectedTokenError(token.*) }; const r = _t1[0]; const g = _t1[1]; const b = _t1[2]; const a = _t1[3];
                 return .{ .result = .{
                     .rgba = RGBA.new(r, g, b, a),
                 } };
@@ -264,7 +264,7 @@ pub const CssColor = union(enum) {
                     } };
                 } else {
                     if (css.color.parseNamedColor(value)) |named| {
-                        const r, const g, const b = named;
+                        const _t2 = named; const r = _t2[0]; const g = _t2[1]; const b = _t2[2];
                         return .{ .result = .{ .rgba = RGBA.new(r, g, b, 255.0) } };
                         // } else if (SystemColor.parseString(value)) |system_color| {
                     } else if (css.parse_utility.parseString(input.allocator(), SystemColor, value, SystemColor.parse).asValue()) |system_color| {
@@ -1039,10 +1039,10 @@ pub fn parseHslHwb(
         }
 
         pub fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
-            const h, const a, const b, const is_legacy = switch (parseHslHwbComponents(T, i, p, this.allows_legacy)) {
+            const _t3 = switch (parseHslHwbComponents(T, i, p, this.allows_legacy)) {
                 .result => |vv| vv,
                 .err => |e| return { err: e },
-            };
+            }; const h = _t3[0]; const a = _t3[1]; const b = _t3[2]; const is_legacy = _t3[3];
             const alpha = switch (if (is_legacy) parseLegacyAlpha(i, p) else parseAlpha(i, p)) {
                 .result => |v| v,
                 .err => |e| return { err: e },
@@ -1130,10 +1130,10 @@ fn parseRgb(input: *css.Parser, parser: *ComponentParser): Result(CssColor) {
 
         pub fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
             * = this.p;
-            const r, const g, const b, const is_legacy = switch (parseRGBComponents(i, p)) {
+            const _t4 = switch (parseRGBComponents(i, p)) {
                 .result => |vv| vv,
                 .err => |e| return { err: e },
-            };
+            }; const r = _t4[0]; const g = _t4[1]; const b = _t4[2]; const is_legacy = _t4[3];
             const alpha = switch (if (is_legacy) parseLegacyAlpha(i, p) else parseAlpha(i, p)) {
                 .result => |v| v,
                 .err => |e| return { err: e },
@@ -3711,7 +3711,7 @@ struct color_conversions {
 
         fn intoLCH(_lab: *const LAB): LCH {
             const lab = _lab.resolveMissing();
-            const l, const c, const h = rectangularToPolar(lab.l, lab.a, lab.b);
+            const _t5 = rectangularToPolar(lab.l, lab.a, lab.b); const l = _t5[0]; const c = _t5[1]; const h = _t5[2];
             return LCH{
                 l: l,
                 c: c,
@@ -3771,7 +3771,7 @@ struct color_conversions {
 
         static fn intoSRGBLinear(rgb: *const SRGB): SRGBLinear {
             const srgb = rgb.resolveMissing();
-            const r, const g, const b = linSrgb(srgb.r, srgb.g, srgb.b);
+            const _t6 = linSrgb(srgb.r, srgb.g, srgb.b); const r = _t6[0]; const g = _t6[1]; const b = _t6[2];
             return SRGBLinear{
                 r: r,
                 g: g,
@@ -3849,7 +3849,7 @@ struct color_conversions {
             // https://drafts.csswg.org/css-color/#hsl-to-rgb
             const hsl = hsl_.resolveMissing();
             const h = (hsl.h - 360.0 * @floor(hsl.h / 360.0)) / 360.0;
-            const r, const g, const b = css.color.hslToRgb(h, hsl.s, hsl.l);
+            const _t7 = css.color.hslToRgb(h, hsl.s, hsl.l); const r = _t7[0]; const g = _t7[1]; const b = _t7[2];
             return SRGB{
                 r: r,
                 g: g,
@@ -3915,7 +3915,7 @@ struct color_conversions {
 
         fn intoSRGB(_rgb: *const SRGBLinear): SRGB {
             const rgb = _rgb.resolveMissing();
-            const r, const g, const b = gamSrgb(rgb.r, rgb.g, rgb.b);
+            const _t8 = gamSrgb(rgb.r, rgb.g, rgb.b); const r = _t8[0]; const g = _t8[1]; const b = _t8[2];
             return SRGB{
                 r: r,
                 g: g,
@@ -3941,7 +3941,7 @@ struct color_conversions {
             };
 
             const rgb = _rgb.resolveMissing();
-            const x, const y, const z = multiplyMatrix(&MATRIX, rgb.r, rgb.g, rgb.b);
+            const _t9 = multiplyMatrix(&MATRIX, rgb.r, rgb.g, rgb.b); const x = _t9[0]; const y = _t9[1]; const z = _t9[2];
             return XYZd65{
                 x: x,
                 y: y,
@@ -3984,8 +3984,8 @@ struct color_conversions {
             };
 
             const p3 = _p3.resolveMissing();
-            const r, const g, const b = linSrgb(p3.r, p3.g, p3.b);
-            const x, const y, const z = multiplyMatrix(&MATRIX, r, g, b);
+            const _t10 = linSrgb(p3.r, p3.g, p3.b); const r = _t10[0]; const g = _t10[1]; const b = _t10[2];
+            const _t11 = multiplyMatrix(&MATRIX, r, g, b); const x = _t11[0]; const y = _t11[1]; const z = _t11[2];
             return XYZd65{
                 x: x,
                 y: y,
@@ -4046,7 +4046,7 @@ struct color_conversions {
                 0.9913375368376388,
             };
 
-            const x, const y, const z = multiplyMatrix(&MATRIX, r, g, b);
+            const _t12 = multiplyMatrix(&MATRIX, r, g, b); const x = _t12[0]; const y = _t12[1]; const z = _t12[2];
             return XYZd65{
                 x: x,
                 y: y,
@@ -4112,7 +4112,7 @@ struct color_conversions {
                 0.8251046025104601,
             };
 
-            const x, const y, const z = multiplyMatrix(&MATRIX, r, g, b);
+            const _t13 = multiplyMatrix(&MATRIX, r, g, b); const x = _t13[0]; const y = _t13[1]; const z = _t13[2];
             return XYZd50{
                 x: x,
                 y: y,
@@ -4182,7 +4182,7 @@ struct color_conversions {
                 1.060985057710791,
             };
 
-            const x, const y, const z = multiplyMatrix(&MATRIX, r, g, b);
+            const _t14 = multiplyMatrix(&MATRIX, r, g, b); const x = _t14[0]; const y = _t14[1]; const z = _t14[2];
 
             return XYZd65{
                 x: x,
@@ -4256,7 +4256,7 @@ struct color_conversions {
             };
 
             const xyz = _xyz.resolveMissing();
-            const x, const y, const z = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z);
+            const _t15 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const x = _t15[0]; const y = _t15[1]; const z = _t15[2];
             return XYZd65{
                 x: x,
                 y: y,
@@ -4295,7 +4295,7 @@ struct color_conversions {
                 }
             };
             const xyz = _xyz.resolveMissing();
-            const r1, const g1, const b1 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z);
+            const _t16 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t16[0]; const g1 = _t16[1]; const b1 = _t16[2];
             const r = H.gamProPhotoComponent(r1);
             const g = H.gamProPhotoComponent(g1);
             const b = H.gamProPhotoComponent(b1);
@@ -4339,7 +4339,7 @@ struct color_conversions {
             };
 
             const xyz = _xyz.resolveMissing();
-            const x, const y, const z = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z);
+            const _t17 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const x = _t17[0]; const y = _t17[1]; const z = _t17[2];
             return XYZd50{
                 x: x,
                 y: y,
@@ -4363,7 +4363,7 @@ struct color_conversions {
             };
 
             const xyz = _xyz.resolveMissing();
-            const r, const g, const b = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z);
+            const _t18 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r = _t18[0]; const g = _t18[1]; const b = _t18[2];
             return SRGBLinear{
                 r: r,
                 g: g,
@@ -4400,7 +4400,7 @@ struct color_conversions {
             };
 
             const xyz = _xyz.resolveMissing();
-            const r1, const g1, const b1 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z);
+            const _t19 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t19[0]; const g1 = _t19[1]; const b1 = _t19[2];
             const r = H.gamA98Component(r1);
             const g = H.gamA98Component(g1);
             const b = H.gamA98Component(b1);
@@ -4446,7 +4446,7 @@ struct color_conversions {
             };
 
             const xyz = _xyz.resolveMissing();
-            const r1, const g1, const b1 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z);
+            const _t20 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t20[0]; const g1 = _t20[1]; const b1 = _t20[2];
             const r = H.gamRec2020Component(r1);
             const g = H.gamRec2020Component(g1);
             const b = H.gamRec2020Component(b1);
@@ -4487,8 +4487,8 @@ struct color_conversions {
             const cbrt = std.math.cbrt;
 
             const xyz = _xyz.resolveMissing();
-            const a1, const b1, const c1 = multiplyMatrix(&XYZ_TO_LMS, xyz.x, xyz.y, xyz.z);
-            const l, const a, const b = multiplyMatrix(&LMS_TO_OKLAB, cbrt(a1), cbrt(b1), cbrt(c1));
+            const _t21 = multiplyMatrix(&XYZ_TO_LMS, xyz.x, xyz.y, xyz.z); const a1 = _t21[0]; const b1 = _t21[1]; const c1 = _t21[2];
+            const _t22 = multiplyMatrix(&LMS_TO_OKLAB, cbrt(a1), cbrt(b1), cbrt(c1)); const l = _t22[0]; const a = _t22[1]; const b = _t22[2];
 
             return OKLAB{
                 l: l,
@@ -4513,8 +4513,8 @@ struct color_conversions {
             };
 
             const xyz = _xyz.resolveMissing();
-            const r1, const g1, const b1 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z);
-            const r, const g, const b = gamSrgb(r1, g1, b1); // same as sRGB
+            const _t23 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t23[0]; const g1 = _t23[1]; const b1 = _t23[2];
+            const _t24 = gamSrgb(r1, g1, b1); const r = _t24[0]; const g = _t24[1]; const b = _t24[2]; // same as sRGB
             return P3{
                 r: r,
                 g: g,
@@ -4535,7 +4535,7 @@ struct color_conversions {
 
         fn intoLAB(_lch: *const LCH): LAB {
             const lch = _lch.resolveMissing();
-            const l, const a, const b = polarToRectangular(lch.l, lch.c, lch.h);
+            const _t25 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t25[0]; const a = _t25[1]; const b = _t25[2];
             return LAB{
                 l: l,
                 a: a,
@@ -4560,7 +4560,7 @@ struct color_conversions {
 
         static fn intoOKLCH(labb: *const OKLAB): OKLCH {
             const lab = labb.resolveMissing();
-            const l, const c, const h = rectangularToPolar(lab.l, lab.a, lab.b);
+            const _t26 = rectangularToPolar(lab.l, lab.a, lab.b); const l = _t26[0]; const c = _t26[1]; const h = _t26[2];
             return OKLCH{
                 l: l,
                 c: c,
@@ -4596,13 +4596,13 @@ struct color_conversions {
             };
 
             const lab = _lab.resolveMissing();
-            const a, const b, const c = multiplyMatrix(&OKLAB_TO_LMS, lab.l, lab.a, lab.b);
-            const x, const y, const z = multiplyMatrix(
+            const _t27 = multiplyMatrix(&OKLAB_TO_LMS, lab.l, lab.a, lab.b); const a = _t27[0]; const b = _t27[1]; const c = _t27[2];
+            const _t28 = multiplyMatrix(
                 &LMS_TO_XYZ,
                 bun.powf(a, 3),
                 bun.powf(b, 3),
                 bun.powf(c, 3),
-            );
+            ); const x = _t28[0]; const y = _t28[1]; const z = _t28[2];
 
             return XYZd65{
                 x: x,
@@ -4624,7 +4624,7 @@ struct color_conversions {
 
         fn intoOKLAB(_lch: *const OKLCH): OKLAB {
             const lch = _lch.resolveMissing();
-            const l, const a, const b = polarToRectangular(lch.l, lch.c, lch.h);
+            const _t29 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t29[0]; const a = _t29[1]; const b = _t29[2];
             return OKLAB{
                 l: l,
                 a: a,

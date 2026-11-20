@@ -71,11 +71,11 @@ pub const ExtractContext = struct {
     store: *jsc.WebCore.Blob.Store,
     path: []const u8,
     glob_patterns: ?PatternList,
-    result: Result = .{ .err = error.ReadError },
+    result: Result = Result{ .@"err" = error.ReadError },
 
 pub fn run(self: *ExtractContext) Result {
             if ((self.glob_patterns != null)) {
-                const count = (blk_catch_0: { break :blk_catch_0 ((extractToDiskFiltered(self.store.sharedView(), self.path, self.glob_patterns)) catch |__ce_0| { _ = &__ce_0; return .{ .err = error.ReadError }; }); });
+                const count = (blk_catch_0: { break :blk_catch_0 ((extractToDiskFiltered(self.store.sharedView(), self.path, self.glob_patterns)) catch |__ce_0| { _ = &__ce_0; return Result{ .@"err" = error.ReadError }; }); });
                 return .{ .success = count };
             }
             const count = (blk_catch_1: { break :blk_catch_1 ((libarchive.Archiver.extractToDisk(self.store.sharedView(), self.path, null, void, .{}, .{ .depth_to_skip = 0, .close_handles = true, .log = false, .npm = false })) catch |__ce_1| { _ = &__ce_1; return ExtractContext.Result{ .@"err" = error.ReadError }; }); });
@@ -99,7 +99,7 @@ pub fn deinit(self: *ExtractContext) void {
     }
     const Result = union(enum) {
             success: u32,
-            e: error{ReadError},
+            @"err": error{ReadError},
         };
 };
 
@@ -107,7 +107,7 @@ pub const BlobContext = struct {
     store: *jsc.WebCore.Blob.Store,
     compress: Compression,
     output_type: OutputType,
-    result: Result = .{ .uncompressed = .{} },
+    result: Result = .uncompressed,
 
 pub fn run(self: *BlobContext) Result {
             switch (self.compress) {
@@ -115,7 +115,7 @@ pub fn run(self: *BlobContext) Result {
 return BlobContext.Result{ .compressed = (blk_catch_2: { break :blk_catch_2 ((compressGzip(self.store.sharedView(), opts.level)) catch |e| { _ = &e; return BlobContext.Result{ .@"err" = e }; }); }) };
 },
 .none => {
-return BlobContext.Result{ .uncompressed = .{} };
+return BlobContext.Result.uncompressed;
 },
 }
     }
@@ -126,7 +126,7 @@ pub fn runFromJS(self: *BlobContext, globalThis: *jsc.JSGlobalObject) bun.JSErro
 return PromiseResult{ .reject = globalThis.createErrorInstance("{s}", .{ @errorName(e) }) };
 },
 .compressed => |data| {
-self.result = .{ .uncompressed = .{} };
+self.result = .uncompressed;
             return PromiseResult{ .resolve = (switch (self.output_type) {
 .blob => jsc.WebCore.Blob.new(jsc.WebCore.Blob.createWithBytesAndAllocator(data, bun.default_allocator, globalThis, false)).toJS(globalThis),
 .bytes => jsc.JSValue.createBuffer(globalThis, data),
@@ -158,7 +158,7 @@ pub fn deinit(self: *BlobContext) void {
     const Result = union(enum) {
         compressed: []u8,
         uncompressed: void,
-        e: Error,
+        @"err": Error,
     };
 };
 
@@ -166,7 +166,7 @@ pub const WriteContext = struct {
     data: Data,
     path: [:0]const u8,
     compress: Compression,
-    result: Result = .{ .success = .{} },
+    result: Result = .success,
 
 pub fn run(self: *WriteContext) Result {
             const source_data = (switch (self.data) {
@@ -193,7 +193,7 @@ return Result{ .sys_err = e.clone(bun.default_allocator) };
             }
             return (switch (file.writeAll(data_to_write)) {
 .err => |e| Result{ .sys_err = e.clone(bun.default_allocator) },
-.result => Result{ .success = .{} },
+.result => Result.success,
 });
     }
 
@@ -224,7 +224,7 @@ _ = s.deref();
     const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
     const Result = union(enum) {
         success: void,
-        e: Error,
+        @"err": Error,
         sys_err: bun.sys.Error,
     };
     const Data = union(enum) {
@@ -236,7 +236,7 @@ _ = s.deref();
 pub const FilesContext = struct {
     store: *jsc.WebCore.Blob.Store,
     glob_patterns: ?PatternList,
-    result: Result = .{ .err = error.ReadError },
+    result: Result = Result{ .@"err" = error.ReadError },
 
 pub fn freeEntries(list: *FileEntryList) void {
             for (list.items) |e| {
@@ -377,7 +377,7 @@ pub fn deinit(self: *FilesContext) void {
     const Result = union(enum) {
         success: FileEntryList,
         libarchive_err: [*:0]u8,
-        e: Error,
+        @"err": Error,
     
     pub fn deinit(self: *@This()) void {
                 switch (self.*) {
@@ -947,7 +947,7 @@ pub fn startFilesTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.
 
 pub fn parseCompressionOptions(globalThis: *jsc.JSGlobalObject, options_arg: jsc.JSValue) bun.JSError!Compression {
         if (options_arg.isUndefinedOrNull()) {
-            return error.none;
+            return Compression.none;
         }
         if ((!options_arg.isObject())) {
             return globalThis.throwInvalidArguments("Archive: options must be an object", .{});
@@ -979,7 +979,7 @@ pub fn parseCompressionOptions(globalThis: *jsc.JSGlobalObject, options_arg: jsc
             }
             return .{ .gzip = .{ .level = level } };
         }
-        return error.none;
+        return Compression.none;
 }
 
 pub fn createArchive(data: []u8, compress: Compression) *Archive {

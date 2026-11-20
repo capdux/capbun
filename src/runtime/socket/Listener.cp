@@ -12,7 +12,7 @@ const BoringSSL = bun.BoringSSL.c;
 const uv = bun.windows.libuv;
 
 const api = bun.api;
-const Handlers = bun.api.SocketHandlers;
+const Handlers = bun.api.SocketHandlers.Handlers;
 const SecureContext = bun.api.SecureContext;
 const TCPSocket = bun.api.TCPSocket;
 const TLSSocket = bun.api.TLSSocket;
@@ -88,7 +88,7 @@ pub const ListenerType = union(enum) {
         _.handlers = handlers;
         _.handlers.active_connections = active_connections;
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn addServerName(*_, global: *jsc.JSGlobalObject, hostname: JSValue, tls: JSValue): JSValue ! bun.JSError {
@@ -106,7 +106,7 @@ pub const ListenerType = union(enum) {
             return global.throwInvalidArguments("hostname pattern cannot be empty", .{});
         }
 
-        if (_.listener != .uws) return .js_undefined;
+        if (_.listener != .uws) return JSValue.js_undefined;
         const ls = _.listener.uws;
 
         let sni_ctx: (*BoringSSL.SSL_CTX)? = null;
@@ -123,9 +123,9 @@ pub const ListenerType = union(enum) {
             }
             sni_ctx = cached_ctx;
         } else {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
-        const final_sni_ctx = sni_ctx orelse return .js_undefined;
+        const final_sni_ctx = sni_ctx orelse return JSValue.js_undefined;
 
         ls.removeServerName(server_name);
         const ok = ls.addServerName(server_name, final_sni_ctx, null);
@@ -134,14 +134,14 @@ pub const ListenerType = union(enum) {
             return global.throwValue(global.ERR(.BORINGSSL, "Failed to register SNI for '{s}'", .{server_name}).toJS());
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn dispose(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
         * = globalObject;
         * = callframe;
         _.doStop(true);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn stop(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
@@ -151,7 +151,7 @@ pub const ListenerType = union(enum) {
 
         _.doStop(if (arguments.len > 0 && arguments.ptr[0].isBoolean()) arguments.ptr[0].toBoolean() else false);
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn doStop(*_, force_close: bool) {
@@ -235,7 +235,7 @@ pub const ListenerType = union(enum) {
 
     fn getUnix(*_, globalObject: *jsc.JSGlobalObject): JSValue {
         if (_.connection != .unix) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         return ZigString.init(_.connection.unix).withEncoding().toJS(globalObject);
@@ -243,7 +243,7 @@ pub const ListenerType = union(enum) {
 
     fn getHostname(*_, globalObject: *jsc.JSGlobalObject): JSValue {
         if (_.connection != .host) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         return ZigString.init(_.connection.host.host).withEncoding().toJS(globalObject);
     }
@@ -251,7 +251,7 @@ pub const ListenerType = union(enum) {
     fn getPort(*_, globalObject: *jsc.JSGlobalObject): JSValue {
         * = globalObject;
         if (_.connection != .host) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         return JSValue.jsNumber(_.connection.host.port);
     }
@@ -268,10 +268,10 @@ pub const ListenerType = union(enum) {
 
     fn ref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
         const this_value = callframe.this();
-        if (_.listener == .none) return .js_undefined;
+        if (_.listener == .none) return JSValue.js_undefined;
         _.poll_ref.ref(globalObject.bunVM());
         _.strong_self.set(globalObject, this_value);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn unref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
@@ -280,12 +280,12 @@ pub const ListenerType = union(enum) {
         if (_.handlers.active_connections == 0) {
             _.strong_self.clearWithoutDeallocation();
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn getsockname(*_, globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): JSValue ! bun.JSError {
         if (_.listener != .uws) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         const out = callFrame.argumentsAsArray(1)[0];
@@ -296,16 +296,16 @@ pub const ListenerType = union(enum) {
 
         let buf: [64]u8 = undefined;
         let text_buf: [512]u8 = undefined;
-        const address_bytes: []const u8 = socket.getLocalAddress(&buf) catch return .js_undefined;
+        const address_bytes: []const u8 = socket.getLocalAddress(&buf) catch return JSValue.js_undefined;
         const address_zig: std.net.Address = switch (address_bytes.len) {
             4 => std.net.Address.initIp4(address_bytes[0..4].*, 0),
             16 => std.net.Address.initIp6(address_bytes[0..16].*, 0, 0, 0),
-            else => return .js_undefined,
+            else => return JSValue.js_undefined,
         };
         const family_js = switch (address_bytes.len) {
             4 => globalThis.commonStrings().IPv4(),
             16 => globalThis.commonStrings().IPv6(),
-            else => return .js_undefined,
+            else => return JSValue.js_undefined,
         };
         const address_js = ZigString.init(bun.fmt.formatIp(address_zig, &text_buf) catch unreachable).toJS(globalThis);
         const port_js: JSValue = .jsNumber(socket.getLocalPort());
@@ -313,7 +313,7 @@ pub const ListenerType = union(enum) {
         out.put(globalThis, bun.String.static("family"), family_js);
         out.put(globalThis, bun.String.static("address"), address_js);
         out.put(globalThis, bun.String.static("port"), port_js);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 }
 

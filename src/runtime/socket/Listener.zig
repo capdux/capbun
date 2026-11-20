@@ -114,7 +114,7 @@ pub fn reload(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *js
         _ = self.handlers.deinit();
         self.handlers = handlers;
         self.handlers.active_connections = active_connections;
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSValue, tls: JSValue) bun.JSError!JSValue {
@@ -140,7 +140,7 @@ pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSV
             return global.throwInvalidArguments("hostname pattern cannot be empty", .{});
         }
         if ((self.listener != .uws)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const ls = self.listener.uws;
         var __ls_moved = false; _ = &__ls_moved;
@@ -171,10 +171,10 @@ pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSV
                 }
                 sni_ctx = cached_ctx;
             } else {
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
         }
-        const final_sni_ctx = ((sni_ctx) orelse { return .{ .ok = .js_undefined }; });
+        const final_sni_ctx = ((sni_ctx) orelse { return .{ .ok = JSValue.js_undefined }; });
         _ = ls.removeServerName(server_name);
         const ok = ls.addServerName(server_name, final_sni_ctx, null);
         var __ok_moved = false; _ = &__ok_moved;
@@ -183,14 +183,14 @@ pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSV
         if ((!ok)) {
             return global.throwValue(global.ERR(.BORINGSSL, "Failed to register SNI for '{s}'", .{ server_name }).toJS());
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn dispose(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = &globalObject;
         _ = &callframe;
         _ = self.doStop(true);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn stop(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -200,7 +200,7 @@ pub fn stop(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.
         defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
         _ = log("close", .{});
         _ = self.doStop((if (((arguments.len > 0) and arguments.ptr[0].isBoolean())) arguments.ptr[0].toBoolean() else false));
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doStop(self: *Listener, force_close: bool) void {
@@ -313,14 +313,14 @@ pub fn getConnectionsCount(self: *Listener, globalObject: *jsc.JSGlobalObject) J
 
 pub fn getUnix(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
         if ((self.connection != .unix)) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         return ZigString.init(self.connection.unix).withEncoding().toJS(globalObject);
 }
 
 pub fn getHostname(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
         if ((self.connection != .host)) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         return ZigString.init(self.connection.host.host).withEncoding().toJS(globalObject);
 }
@@ -328,7 +328,7 @@ pub fn getHostname(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
 pub fn getPort(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
         _ = &globalObject;
         if ((self.connection != .host)) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         return JSValue.jsNumber(self.connection.host.port);
 }
@@ -350,11 +350,11 @@ pub fn ref(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         var __this_value_moved = false; _ = &__this_value_moved;
         defer if (!__this_value_moved) { const __T = @TypeOf(this_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = this_value.release() catch {}; } else { this_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = this_value; _drop_val.release(); } };
         if ((self.listener == .none)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         _ = self.poll_ref.ref(globalObject.bunVM());
         _ = self.strong_self.set(globalObject, this_value);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn unref(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -363,12 +363,12 @@ pub fn unref(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc
         if ((self.handlers.active_connections == 0)) {
             _ = self.strong_self.clearWithoutDeallocation();
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getsockname(self: *Listener, globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
         if ((self.listener != .uws)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const out = callFrame.argumentsAsArray(1)[0];
         if ((!out.isObject())) {
@@ -381,19 +381,19 @@ pub fn getsockname(self: *Listener, globalThis: *jsc.JSGlobalObject, callFrame: 
         _ = &buf;
         var text_buf: [512]u8 = undefined;
         _ = &text_buf;
-        const address_bytes: []const u8 = (blk_catch_0: { break :blk_catch_0 ((socket.getLocalAddress((&buf))) catch |__ce_0| { _ = &__ce_0; return error.js_undefined; }); });
+        const address_bytes: []const u8 = (blk_catch_0: { break :blk_catch_0 ((socket.getLocalAddress((&buf))) catch |__ce_0| { _ = &__ce_0; return JSValue.js_undefined; }); });
         const address_zig: std.net.Address = (switch (address_bytes.len) {
 4 => std.net.Address.initIp4((address_bytes[0..4]).*, 0),
 16 => std.net.Address.initIp6((address_bytes[0..16]).*, 0, 0, 0),
 else => {
-return error.js_undefined;
+return JSValue.js_undefined;
 },
 });
         const family_js = (switch (address_bytes.len) {
 4 => globalThis.commonStrings().IPv4(),
 16 => globalThis.commonStrings().IPv6(),
 else => {
-return error.js_undefined;
+return JSValue.js_undefined;
 },
 });
         var __family_js_moved = false; _ = &__family_js_moved;
@@ -405,7 +405,7 @@ return error.js_undefined;
         _ = out.put(globalThis, bun.String.static("family"), family_js);
         _ = out.put(globalThis, bun.String.static("address"), address_js);
         _ = out.put(globalThis, bun.String.static("port"), port_js);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 pub const js = jsc.Codegen.JSListener;
 pub const toJS = js.toJS;
@@ -421,7 +421,7 @@ const uws = bun.uws;
 const BoringSSL = bun.BoringSSL.c;
 const uv = bun.windows.libuv;
 const api = bun.api;
-const Handlers = bun.api.SocketHandlers;
+const Handlers = bun.api.SocketHandlers.Handlers;
 const SecureContext = bun.api.SecureContext;
 const TCPSocket = bun.api.TCPSocket;
 const TLSSocket = bun.api.TLSSocket;

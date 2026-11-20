@@ -1387,3 +1387,5 @@
 - **[2026-11-20] Wave 6 Batch A 典型修复**：`ArrayBufferSink` 升级 `@root struct` 导出根级 `JSSink`；`ServerWebSocket`/`SecureContext` 修正 `memoryCost` 接收者 `*_` 与错误联合返回 `JSValue.*` 显式限定；`BunObject` 用 `@export(&@field(BunObject, ...))` 避开 `&UpperCase`；`SocketAddress`/`TextDecoder` 拆解元组解构避开 `CpUnpackElemType(?anyopaque)`。
 
 - **[2026-11-20] Wave 7 Batch A 核弹级根因修复**：`output.cp` 用 `type IoWriterPtr = *std.Io.Writer; out: *IoWriterPtr` 消除 263 处二级指针压平报错；`ref_count.cp` 以 `const empty_ctx: void = undefined` 消除 16 处 void `.{}` 报错；`ReadableStream.JSReadableStreamSource` 与 `node_zlib_binding.CompressionStream` 方法统一 `static fn` 显式接源类型指针消除 53 处绑定错；`Blob` 补全 23 项根导出、`S3Client` 补 `static fn`、`node_fs_binding` 补 6 项导出。
+
+- **[2026-11-20] Wave 7 Batch B 典型修复**：`color.cp` 29 处多重元组解构改下标访问；`TimeoutObject`/`ImmediateObject`/`Listener` 修正跨模块类型路径；`BlockList.cp` 提取数组长度常量与拆分 `try` 优先级；`uws_sys/Response.cp` 补全 `AnyResponse` 全部转发方法并消除 `NodeHTTPResponse` 6 错；`cron_parser.cp` 消除 `?? return` 错误 lowering。

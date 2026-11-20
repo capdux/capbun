@@ -7,15 +7,15 @@ const string = []const u8;
 pub fn CpResult(comptime __T: type, comptime __E: type) type {
     return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-pub const Err = struct {
+const __CpErr = struct {
     code: i32 = 0,
     msg: []const u8 = "",
     cause: ?*const anyopaque = null,
     cause_type_id: u64 = 0,
     pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
-    pub fn init(__cp_code: i32, __cp_msg: []const u8) Err { return Err{ .code = __cp_code, .msg = __cp_msg }; }
-    pub fn with_cause(__cp_self: Err, __cp_cause: anytype) Err { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return Err{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
-    pub fn downcast(__cp_self: Err, comptime __CpTarget: type) ?*const __CpTarget {
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
         if (__cp_self.cause) |__cp_c| {
             if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
                 if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
@@ -27,7 +27,8 @@ pub const Err = struct {
         return null;
     }
 };
-pub const Error = Err;
+pub const Err = __CpErr;
+pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
@@ -42,8 +43,8 @@ fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_r
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
-fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == Err) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return Err.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return Err.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
-fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 fn cp_eq(a: anytype, b: anytype) bool {
     const Ta = @TypeOf(a); const Tb = @TypeOf(b);
     if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
@@ -988,9 +989,10 @@ pub const color_conversions = struct {
     
     pub fn intoLCH(_lab: *const LAB) LCH {
                 const lab = _lab.resolveMissing();
-                const l = undefined;
-                const c = undefined;
-                const h = rectangularToPolar(lab.l, lab.a, lab.b);
+                const _t5 = rectangularToPolar(lab.l, lab.a, lab.b);
+                const l = _t5[0];
+                const c = _t5[1];
+                const h = _t5[2];
                 return LCH{ .l = l, .c = c, .h = h, .alpha = lab.alpha };
         }
     
@@ -1021,9 +1023,10 @@ pub const color_conversions = struct {
     
     pub fn intoSRGBLinear(rgb: *const SRGB) SRGBLinear {
                 const srgb = rgb.resolveMissing();
-                const r = undefined;
-                const g = undefined;
-                const b = linSrgb(srgb.r, srgb.g, srgb.b);
+                const _t6 = linSrgb(srgb.r, srgb.g, srgb.b);
+                const r = _t6[0];
+                const g = _t6[1];
+                const b = _t6[2];
                 return SRGBLinear{ .r = r, .g = g, .b = b, .alpha = srgb.alpha };
         }
     
@@ -1078,9 +1081,10 @@ pub const color_conversions = struct {
     pub fn intoSRGB(hsl_: *const HSL) SRGB {
                 const hsl = hsl_.resolveMissing();
                 const h = ((hsl.h - (360.0 * @floor((hsl.h / 360.0)))) / 360.0);
-                const r = undefined;
-                const g = undefined;
-                const b = css.color.hslToRgb(h, hsl.s, hsl.l);
+                const _t7 = css.color.hslToRgb(h, hsl.s, hsl.l);
+                const r = _t7[0];
+                const g = _t7[1];
+                const b = _t7[2];
                 return SRGB{ .r = r, .g = g, .b = b, .alpha = hsl.alpha };
         }
     };
@@ -1121,18 +1125,20 @@ pub const color_conversions = struct {
     
     pub fn intoSRGB(_rgb: *const SRGBLinear) SRGB {
                 const rgb = _rgb.resolveMissing();
-                const r = undefined;
-                const g = undefined;
-                const b = gamSrgb(rgb.r, rgb.g, rgb.b);
+                const _t8 = gamSrgb(rgb.r, rgb.g, rgb.b);
+                const r = _t8[0];
+                const g = _t8[1];
+                const b = _t8[2];
                 return SRGB{ .r = r, .g = g, .b = b, .alpha = rgb.alpha };
         }
     
     pub fn intoXYZd65(_rgb: *const SRGBLinear) XYZd65 {
                 const MATRIX: [9]f32 = .{ 0.41239079926595934, 0.357584339383878, 0.1804807884018343, 0.21263900587151027, 0.715168678767756, 0.07219231536073371, 0.01933081871559182, 0.11919477979462598, 0.9505321522496607 };
                 const rgb = _rgb.resolveMissing();
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&MATRIX), rgb.r, rgb.g, rgb.b);
+                const _t9 = multiplyMatrix((&MATRIX), rgb.r, rgb.g, rgb.b);
+                const x = _t9[0];
+                const y = _t9[1];
+                const z = _t9[2];
                 return XYZd65{ .x = x, .y = y, .z = z, .alpha = rgb.alpha };
         }
     };
@@ -1149,12 +1155,14 @@ pub const color_conversions = struct {
     pub fn intoXYZd65(_p3: *const P3) XYZd65 {
                 const MATRIX: [9]f32 = .{ 0.4865709486482162, 0.26566769316909306, 0.1982172852343625, 0.2289745640697488, 0.6917385218365064, 0.079286914093745, 0.0, 0.04511338185890264, 1.043944368900976 };
                 const p3 = _p3.resolveMissing();
-                const r = undefined;
-                const g = undefined;
-                const b = linSrgb(p3.r, p3.g, p3.b);
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&MATRIX), r, g, b);
+                const _t10 = linSrgb(p3.r, p3.g, p3.b);
+                const r = _t10[0];
+                const g = _t10[1];
+                const b = _t10[2];
+                const _t11 = multiplyMatrix((&MATRIX), r, g, b);
+                const x = _t11[0];
+                const y = _t11[1];
+                const z = _t11[2];
                 return XYZd65{ .x = x, .y = y, .z = z, .alpha = p3.alpha };
         }
     };
@@ -1181,9 +1189,10 @@ pub const color_conversions = struct {
                 const g = H.linA98rgbComponent(a98.g);
                 const b = H.linA98rgbComponent(a98.b);
                 const MATRIX: [9]f32 = .{ 0.5766690429101305, 0.1855582379065463, 0.1882286462349947, 0.29734497525053605, 0.6273635662554661, 0.07529145849399788, 0.02703136138641234, 0.07068885253582723, 0.9913375368376388 };
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&MATRIX), r, g, b);
+                const _t12 = multiplyMatrix((&MATRIX), r, g, b);
+                const x = _t12[0];
+                const y = _t12[1];
+                const z = _t12[2];
                 return XYZd65{ .x = x, .y = y, .z = z, .alpha = a98.alpha };
         }
     };
@@ -1215,9 +1224,10 @@ pub const color_conversions = struct {
                 const g = H.linProPhotoComponent(prophoto.g);
                 const b = H.linProPhotoComponent(prophoto.b);
                 const MATRIX: [9]f32 = .{ 0.7977604896723027, 0.13518583717574031, 0.0313493495815248, 0.2880711282292934, 0.7118432178101014, 0.00008565396060525902, 0.0, 0.0, 0.8251046025104601 };
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&MATRIX), r, g, b);
+                const _t13 = multiplyMatrix((&MATRIX), r, g, b);
+                const x = _t13[0];
+                const y = _t13[1];
+                const z = _t13[2];
                 return XYZd50{ .x = x, .y = y, .z = z, .alpha = prophoto.alpha };
         }
     };
@@ -1250,9 +1260,10 @@ pub const color_conversions = struct {
                 const g = H.linRec2020Component(rec2020.g);
                 const b = H.linRec2020Component(rec2020.b);
                 const MATRIX: [9]f32 = .{ 0.6369580483012914, 0.14461690358620832, 0.1688809751641721, 0.2627002120112671, 0.6779980715188708, 0.05930171646986196, 0.0, 0.028072693049087428, 1.060985057710791 };
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&MATRIX), r, g, b);
+                const _t14 = multiplyMatrix((&MATRIX), r, g, b);
+                const x = _t14[0];
+                const y = _t14[1];
+                const z = _t14[2];
                 return XYZd65{ .x = x, .y = y, .z = z, .alpha = rec2020.alpha };
         }
     };
@@ -1285,9 +1296,10 @@ pub const color_conversions = struct {
     pub fn intoXYZd65(_xyz: *const XYZd50) XYZd65 {
                 const MATRIX: [9]f32 = .{ 0.9554734527042182, -0.023098536874261423, 0.0632593086610217, -0.028369706963208136, 1.0099954580058226, 0.021041398966943008, 0.012314001688319899, -0.020507696433477912, 1.3303659366080753 };
                 const xyz = _xyz.resolveMissing();
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const _t15 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const x = _t15[0];
+                const y = _t15[1];
+                const z = _t15[2];
                 return XYZd65{ .x = x, .y = y, .z = z, .alpha = xyz.alpha };
         }
     
@@ -1306,9 +1318,10 @@ pub const color_conversions = struct {
         }
     };
                 const xyz = _xyz.resolveMissing();
-                const r1 = undefined;
-                const g1 = undefined;
-                const b1 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const _t16 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const r1 = _t16[0];
+                const g1 = _t16[1];
+                const b1 = _t16[2];
                 const r = H.gamProPhotoComponent(r1);
                 const g = H.gamProPhotoComponent(g1);
                 const b = H.gamProPhotoComponent(b1);
@@ -1328,18 +1341,20 @@ pub const color_conversions = struct {
     pub fn intoXYZd50(_xyz: *const XYZd65) XYZd50 {
                 const MATRIX: [9]f32 = .{ 1.0479298208405488, 0.022946793341019088, -0.05019222954313557, 0.029627815688159344, 0.990434484573249, -0.01707382502938514, -0.009243058152591178, 0.015055144896577895, 0.7518742899580008 };
                 const xyz = _xyz.resolveMissing();
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const _t17 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const x = _t17[0];
+                const y = _t17[1];
+                const z = _t17[2];
                 return XYZd50{ .x = x, .y = y, .z = z, .alpha = xyz.alpha };
         }
     
     pub fn intoSRGBLinear(_xyz: *const XYZd65) SRGBLinear {
                 const MATRIX: [9]f32 = .{ 3.2409699419045226, -1.537383177570094, -0.4986107602930034, -0.9692436362808796, 1.8759675015077202, 0.04155505740717559, 0.05563007969699366, -0.20397695888897652, 1.0569715142428786 };
                 const xyz = _xyz.resolveMissing();
-                const r = undefined;
-                const g = undefined;
-                const b = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const _t18 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const r = _t18[0];
+                const g = _t18[1];
+                const b = _t18[2];
                 return SRGBLinear{ .r = r, .g = g, .b = b, .alpha = xyz.alpha };
         }
     
@@ -1353,9 +1368,10 @@ pub const color_conversions = struct {
         }
     };
                 const xyz = _xyz.resolveMissing();
-                const r1 = undefined;
-                const g1 = undefined;
-                const b1 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const _t19 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const r1 = _t19[0];
+                const g1 = _t19[1];
+                const b1 = _t19[2];
                 const r = H.gamA98Component(r1);
                 const g = H.gamA98Component(g1);
                 const b = H.gamA98Component(b1);
@@ -1378,9 +1394,10 @@ pub const color_conversions = struct {
         }
     };
                 const xyz = _xyz.resolveMissing();
-                const r1 = undefined;
-                const g1 = undefined;
-                const b1 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const _t20 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const r1 = _t20[0];
+                const g1 = _t20[1];
+                const b1 = _t20[2];
                 const r = H.gamRec2020Component(r1);
                 const g = H.gamRec2020Component(g1);
                 const b = H.gamRec2020Component(b1);
@@ -1392,24 +1409,28 @@ pub const color_conversions = struct {
                 const LMS_TO_OKLAB: [9]f32 = .{ 0.2104542553, 0.793617785, -0.0040720468, 1.9779984951, -2.428592205, 0.4505937099, 0.0259040371, 0.7827717662, -0.808675766 };
                 const cbrt = std.math.cbrt;
                 const xyz = _xyz.resolveMissing();
-                const a1 = undefined;
-                const b1 = undefined;
-                const c1 = multiplyMatrix((&XYZ_TO_LMS), xyz.x, xyz.y, xyz.z);
-                const l = undefined;
-                const a = undefined;
-                const b = multiplyMatrix((&LMS_TO_OKLAB), cbrt(a1), cbrt(b1), cbrt(c1));
+                const _t21 = multiplyMatrix((&XYZ_TO_LMS), xyz.x, xyz.y, xyz.z);
+                const a1 = _t21[0];
+                const b1 = _t21[1];
+                const c1 = _t21[2];
+                const _t22 = multiplyMatrix((&LMS_TO_OKLAB), cbrt(a1), cbrt(b1), cbrt(c1));
+                const l = _t22[0];
+                const a = _t22[1];
+                const b = _t22[2];
                 return OKLAB{ .l = l, .a = a, .b = b, .alpha = xyz.alpha };
         }
     
     pub fn intoP3(_xyz: *const XYZd65) P3 {
                 const MATRIX: [9]f32 = .{ 2.493496911941425, -0.9313836179191239, -0.40271078445071684, -0.8294889695615747, 1.7626640603183463, 0.023624685841943577, 0.03584583024378447, -0.07617238926804182, 0.9568845240076872 };
                 const xyz = _xyz.resolveMissing();
-                const r1 = undefined;
-                const g1 = undefined;
-                const b1 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
-                const r = undefined;
-                const g = undefined;
-                const b = gamSrgb(r1, g1, b1);
+                const _t23 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
+                const r1 = _t23[0];
+                const g1 = _t23[1];
+                const b1 = _t23[2];
+                const _t24 = gamSrgb(r1, g1, b1);
+                const r = _t24[0];
+                const g = _t24[1];
+                const b = _t24[2];
                 return P3{ .r = r, .g = g, .b = b, .alpha = xyz.alpha };
         }
     };
@@ -1421,9 +1442,10 @@ pub const color_conversions = struct {
     
     pub fn intoLAB(_lch: *const LCH) LAB {
                 const lch = _lch.resolveMissing();
-                const l = undefined;
-                const a = undefined;
-                const b = polarToRectangular(lch.l, lch.c, lch.h);
+                const _t25 = polarToRectangular(lch.l, lch.c, lch.h);
+                const l = _t25[0];
+                const a = _t25[1];
+                const b = _t25[2];
                 return LAB{ .l = l, .a = a, .b = b, .alpha = lch.alpha };
         }
     };
@@ -1439,9 +1461,10 @@ pub const color_conversions = struct {
     
     pub fn intoOKLCH(labb: *const OKLAB) OKLCH {
                 const lab = labb.resolveMissing();
-                const l = undefined;
-                const c = undefined;
-                const h = rectangularToPolar(lab.l, lab.a, lab.b);
+                const _t26 = rectangularToPolar(lab.l, lab.a, lab.b);
+                const l = _t26[0];
+                const c = _t26[1];
+                const h = _t26[2];
                 return OKLCH{ .l = l, .c = c, .h = h, .alpha = lab.alpha };
         }
     
@@ -1449,12 +1472,14 @@ pub const color_conversions = struct {
                 const LMS_TO_XYZ: [9]f32 = .{ 1.2268798733741557, -0.5578149965554813, 0.28139105017721583, -0.04057576262431372, 1.1122868293970594, -0.07171106666151701, -0.07637294974672142, -0.4214933239627914, 1.5869240244272418 };
                 const OKLAB_TO_LMS: [9]f32 = .{ 0.9999999984505198, 0.39633779217376786, 0.2158037580607588, 1.0000000088817609, -0.10556134232365635, -0.06385417477170591, 1.0000000546724108, -0.08948418209496575, -1.2914855378640917 };
                 const lab = _lab.resolveMissing();
-                const a = undefined;
-                const b = undefined;
-                const c = multiplyMatrix((&OKLAB_TO_LMS), lab.l, lab.a, lab.b);
-                const x = undefined;
-                const y = undefined;
-                const z = multiplyMatrix((&LMS_TO_XYZ), bun.powf(a, 3), bun.powf(b, 3), bun.powf(c, 3));
+                const _t27 = multiplyMatrix((&OKLAB_TO_LMS), lab.l, lab.a, lab.b);
+                const a = _t27[0];
+                const b = _t27[1];
+                const c = _t27[2];
+                const _t28 = multiplyMatrix((&LMS_TO_XYZ), bun.powf(a, 3), bun.powf(b, 3), bun.powf(c, 3));
+                const x = _t28[0];
+                const y = _t28[1];
+                const z = _t28[2];
                 return XYZd65{ .x = x, .y = y, .z = z, .alpha = lab.alpha };
         }
     };
@@ -1466,9 +1491,10 @@ pub const color_conversions = struct {
     
     pub fn intoOKLAB(_lch: *const OKLCH) OKLAB {
                 const lch = _lch.resolveMissing();
-                const l = undefined;
-                const a = undefined;
-                const b = polarToRectangular(lch.l, lch.c, lch.h);
+                const _t29 = polarToRectangular(lch.l, lch.c, lch.h);
+                const l = _t29[0];
+                const a = _t29[1];
+                const b = _t29[2];
                 return OKLAB{ .l = l, .a = a, .b = b, .alpha = lch.alpha };
         }
     
@@ -1684,7 +1710,7 @@ pub const CssColor = union(enum) {
 
         switch (token.*) {
             .unrestrictedhash, .idhash => |v| {
-                const r, const g, const b, const a = css.color.parseHashColor(v) orelse return .{ .err = location.newUnexpectedTokenError(token.*) };
+                const _t1 = css.color.parseHashColor(v) orelse return .{ .err = location.newUnexpectedTokenError(token.*) }; const r = _t1[0]; const g = _t1[1]; const b = _t1[2]; const a = _t1[3];
                 return .{ .result = .{
                     .rgba = RGBA.new(r, g, b, a),
                 } };
@@ -1698,7 +1724,7 @@ pub const CssColor = union(enum) {
                     } };
                 } else {
                     if (css.color.parseNamedColor(value)) |named| {
-                        const r, const g, const b = named;
+                        const _t2 = named; const r = _t2[0]; const g = _t2[1]; const b = _t2[2];
                         return .{ .result = .{ .rgba = RGBA.new(r, g, b, 255.0) } };
                         // } else if (SystemColor.parseString(value)) |system_color| {
                     } else if (css.parse_utility.parseString(input.allocator(), SystemColor, value, SystemColor.parse).asValue()) |system_color| {
@@ -2878,15 +2904,16 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(CssColor) {
     }
 
 pub fn parseRelativeFn(self: @This(), i: *css.Parser, p: *ComponentParser) Result(CssColor) {
-            const h = undefined;
-            const a = undefined;
-            const b = undefined;
-            const is_legacy = (switch (parseHslHwbComponents(T, i, p, self.allows_legacy)) {
+            const _t3 = (switch (parseHslHwbComponents(T, i, p, self.allows_legacy)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
 },
 });
+            const h = _t3[0];
+            const a = _t3[1];
+            const b = _t3[2];
+            const is_legacy = _t3[3];
             const alpha = (switch ((if (is_legacy) parseLegacyAlpha(i, p) else parseAlpha(i, p))) {
 .result => |v| v,
 .err => |e| {
@@ -2957,15 +2984,16 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(CssColor) {
 
 pub fn parseRelativeFn(self: @This(), i: *css.Parser, p: *ComponentParser) Result(CssColor) {
             _ = self.p;
-            const r = undefined;
-            const g = undefined;
-            const b = undefined;
-            const is_legacy = (switch (parseRGBComponents(i, p)) {
+            const _t4 = (switch (parseRGBComponents(i, p)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
 },
 });
+            const r = _t4[0];
+            const g = _t4[1];
+            const b = _t4[2];
+            const is_legacy = _t4[3];
             const alpha = (switch ((if (is_legacy) parseLegacyAlpha(i, p) else parseAlpha(i, p))) {
 .result => |v| v,
 .err => |e| {

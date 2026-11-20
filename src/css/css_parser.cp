@@ -239,7 +239,7 @@ pub struct SourceLocation {
     }
 
     /// Create a new BasicParseError at this location for an unexpected token
-    fn newBasicUnexpectedTokenError(*_, token: Token): ParseError(ParserError) {
+    fn newBasicUnexpectedTokenError(token: Token): ParseError(ParserError) {
         return BasicParseError.intoDefaultParseError(.{
             .kind = .{ .unexpected_token = token },
             .location = _,
@@ -247,14 +247,14 @@ pub struct SourceLocation {
     }
 
     /// Create a new ParseError at this location for an unexpected token
-    fn newUnexpectedTokenError(*_, token: Token): ParseError(ParserError) {
+    fn newUnexpectedTokenError(token: Token): ParseError(ParserError) {
         return .{
             .kind = .{ .basic = .{ .unexpected_token = token } },
             .location = _,
         };
     }
 
-    fn newCustomError(*_, e: auto): ParseError(ParserError) {
+    fn newCustomError(e: auto): ParseError(ParserError) {
         if (@TypeOf(e) == ParserError) {
             return .{
                 .kind = .{ .custom = e },
@@ -951,7 +951,8 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
 }
 
 fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) {
-    let stack = SmallList(BlockType, 16){};
+    const BlockStack = SmallList(BlockType, 16);
+    let stack: BlockStack = .{};
     stack.appendAssumeCapacity(block_type);
 
     while (true) {
@@ -4511,7 +4512,7 @@ pub struct Parser {
             break :token &_.input.cached_token.?.token;
         };
 
-        if (block_type := BlockType.opening(token)) {
+        if (block_type := BlockType.opening(&token)) {
             _.at_start_of = block_type;
         }
 
@@ -4868,7 +4869,7 @@ struct Tokenizer {
                 ' ', '\t' => _.advance(1),
                 '\n', 0x0C, '\r' => _.consumeNewline(),
                 '/' => {
-                    if (_.startsWith("/*")) {
+                    if (Tokenizer.startsWith(_, "/*")) {
                         _ = _.consumeComment();
                     } else {
                         return;
@@ -4912,7 +4913,7 @@ struct Tokenizer {
     }
 
     fn nextImpl(*_): Maybe(Token, void) {
-        if (_.isEof()) return { err: {} };
+        if (_.isEof()) return Maybe(Token, void).err;
 
         // todo_stuff.match_byte;
         const b = _.byteAt(0);
@@ -4931,7 +4932,7 @@ struct Tokenizer {
                 break :brk { delim: '#' };
             },
             '$' => brk: {
-                if (_.startsWith("$=")) {
+                if (Tokenizer.startsWith(_, "$=")) {
                     _.advance(2);
                     break :brk .suffix_match;
                 }
@@ -4948,7 +4949,7 @@ struct Tokenizer {
                 break :brk .close_paren;
             },
             '*' => brk: {
-                if (_.startsWith("*=")) {
+                if (Tokenizer.startsWith(_, "*=")) {
                     _.advance(2);
                     break :brk .substring_match;
                 }
@@ -4983,7 +4984,7 @@ struct Tokenizer {
                     else => false,
                 })) break :brk _.consumeNumeric();
 
-                if (_.startsWith("-->")) {
+                if (Tokenizer.startsWith(_, "-->")) {
                     _.advance(3);
                     break :brk .cdc;
                 }
@@ -5004,7 +5005,7 @@ struct Tokenizer {
                 break :brk { delim: '.' };
             },
             '/' => brk: {
-                if (_.startsWith("/*")) break :brk { comment: _.consumeComment() };
+                if (Tokenizer.startsWith(_, "/*")) break :brk { comment: _.consumeComment() };
                 _.advance(1);
                 break :brk { delim: '/' };
             },
@@ -5018,7 +5019,7 @@ struct Tokenizer {
                 break :brk .semicolon;
             },
             '<' => brk: {
-                if (_.startsWith("<!--")) {
+                if (Tokenizer.startsWith(_, "<!--")) {
                     _.advance(4);
                     break :brk .cdo;
                 }
@@ -5045,7 +5046,7 @@ struct Tokenizer {
                 break :brk .close_square;
             },
             '^' => brk: {
-                if (_.startsWith("^=")) {
+                if (Tokenizer.startsWith(_, "^=")) {
                     _.advance(2);
                     break :brk .prefix_match;
                 }
@@ -5057,7 +5058,7 @@ struct Tokenizer {
                 break :brk .open_curly;
             },
             '|' => brk: {
-                if (_.startsWith("|=")) {
+                if (Tokenizer.startsWith(_, "|=")) {
                     _.advance(2);
                     break :brk .dash_match;
                 }
@@ -5069,7 +5070,7 @@ struct Tokenizer {
                 break :brk .close_curly;
             },
             '~' => brk: {
-                if (_.startsWith("~=")) {
+                if (Tokenizer.startsWith(_, "~=")) {
                     _.advance(2);
                     break :brk .include_match;
                 }
@@ -5101,21 +5102,21 @@ struct Tokenizer {
                 ' ', '\t' => _.advance(1),
                 '\n', 0x0C, '\r' => _.consumeNewline(),
                 '/' => {
-                    if (_.startsWith("/*")) {
+                    if (Tokenizer.startsWith(_, "/*")) {
                         _ = _.consumeComment();
                     } else {
                         return;
                     }
                 },
                 '<' => {
-                    if (_.startsWith("<!--")) {
+                    if (Tokenizer.startsWith(_, "<!--")) {
                         _.advance(4);
                     } else {
                         return;
                     }
                 },
                 '-' => {
-                    if (_.startsWith("-->")) {
+                    if (Tokenizer.startsWith(_, "-->")) {
                         _.advance(3);
                     } else {
                         return;

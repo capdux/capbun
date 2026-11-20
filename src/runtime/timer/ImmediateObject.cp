@@ -3,7 +3,7 @@ import Debugger from "../../jsc/Debugger.zig";
 
 const EventLoopTimer = bun.api.Timer.EventLoopTimer;
 const ID = bun.api.Timer.ID;
-const TimerObjectInternals = bun.api.Timer.TimerObjectInternals;
+const TimerObjectInternals = bun.api.Timer.TimerObjectInternals.TimerObjectInternals;
 
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;

@@ -311,15 +311,15 @@ pub fn toLoggerLocation(self: SourceLocation, file: []const u8) bun.logger.Locat
             return bun.logger.Location{ .file = file, .line = @intCast(self.line), .column = @intCast(self.column) };
     }
 
-pub fn newBasicUnexpectedTokenError(self: *SourceLocation, token: Token) ParseError(ParserError) {
+pub fn newBasicUnexpectedTokenError(self: SourceLocation, token: Token) ParseError(ParserError) {
             return BasicParseError.intoDefaultParseError(.{ .kind = .{ .unexpected_token = token }, .location = self });
     }
 
-pub fn newUnexpectedTokenError(self: *SourceLocation, token: Token) ParseError(ParserError) {
+pub fn newUnexpectedTokenError(self: SourceLocation, token: Token) ParseError(ParserError) {
             return .{ .kind = .{ .basic = .{ .unexpected_token = token } }, .location = self };
     }
 
-pub fn newCustomError(self: *SourceLocation, e: anytype) ParseError(ParserError) {
+pub fn newCustomError(self: SourceLocation, e: anytype) ParseError(ParserError) {
             if ((@TypeOf(e) == ParserError)) {
                 return .{ .kind = .{ .custom = e }, .location = self };
             } else {
@@ -1405,7 +1405,7 @@ return .{ .err = self.newError(BasicParseErrorKind.end_of_input) };
             self.input.cached_token = CachedToken{ .token = new_token, .start_position = token_start_position, .end_state = self.input.tokenizer.state() };
             break :token self.input.cached_token.?.token;
 });
-            if (BlockType.opening(token)) |block_type| {
+            if (BlockType.opening((&token))) |block_type| {
                 _ = &block_type;
                 self.at_start_of = block_type;
             }
@@ -1720,7 +1720,7 @@ _ = self.advance(1);
 _ = self.consumeNewline();
 },
 '/' => {
-if (@import("std").mem.startsWith(u8, self, "/*")) {
+if (Tokenizer.startsWith(self, "/*")) {
                     _ = self.consumeComment();
                 } else {
                     return;
@@ -1760,7 +1760,7 @@ pub inline fn next(self: *Tokenizer) Maybe(Token,void) {
 
 pub fn nextImpl(self: *Tokenizer) Maybe(Token,void) {
             if (self.isEof()) {
-                return .{ .err = .{} };
+                return Maybe(Token, void).err;
             }
             const b = self.byteAt(0);
             const token: Token = (switch (b) {
@@ -1781,7 +1781,7 @@ else => false,
             break :brk .{ .delim = 35 };
 },
 '$' => brk: {
-            if (@import("std").mem.startsWith(u8, self, "$=")) {
+            if (Tokenizer.startsWith(self, "$=")) {
                 _ = self.advance(2);
                 break :brk .suffix_match;
             }
@@ -1798,7 +1798,7 @@ else => false,
             break :brk .close_paren;
 },
 '*' => brk: {
-            if (@import("std").mem.startsWith(u8, self, "*=")) {
+            if (Tokenizer.startsWith(self, "*=")) {
                 _ = self.advance(2);
                 break :brk .substring_match;
             }
@@ -1832,7 +1832,7 @@ else => false,
 })))) {
                 break :brk self.consumeNumeric();
             }
-            if (@import("std").mem.startsWith(u8, self, "-->")) {
+            if (Tokenizer.startsWith(self, "-->")) {
                 _ = self.advance(3);
                 break :brk .cdc;
             }
@@ -1853,7 +1853,7 @@ else => false,
             break :brk .{ .delim = 46 };
 },
 '/' => brk: {
-            if (@import("std").mem.startsWith(u8, self, "/*")) {
+            if (Tokenizer.startsWith(self, "/*")) {
                 break :brk .{ .comment = self.consumeComment() };
             }
             _ = self.advance(1);
@@ -1869,7 +1869,7 @@ else => false,
             break :brk .semicolon;
 },
 '<' => brk: {
-            if (@import("std").mem.startsWith(u8, self, "<!--")) {
+            if (Tokenizer.startsWith(self, "<!--")) {
                 _ = self.advance(4);
                 break :brk .cdo;
             }
@@ -1900,7 +1900,7 @@ else => false,
             break :brk .close_square;
 },
 '^' => brk: {
-            if (@import("std").mem.startsWith(u8, self, "^=")) {
+            if (Tokenizer.startsWith(self, "^=")) {
                 _ = self.advance(2);
                 break :brk .prefix_match;
             }
@@ -1912,7 +1912,7 @@ else => false,
             break :brk .open_curly;
 },
 '|' => brk: {
-            if (@import("std").mem.startsWith(u8, self, "|=")) {
+            if (Tokenizer.startsWith(self, "|=")) {
                 _ = self.advance(2);
                 break :brk .dash_match;
             }
@@ -1924,7 +1924,7 @@ else => false,
             break :brk .close_curly;
 },
 '~' => brk: {
-            if (@import("std").mem.startsWith(u8, self, "~=")) {
+            if (Tokenizer.startsWith(self, "~=")) {
                 _ = self.advance(2);
                 break :brk .include_match;
             }
@@ -1958,21 +1958,21 @@ _ = self.advance(1);
 _ = self.consumeNewline();
 },
 '/' => {
-if (@import("std").mem.startsWith(u8, self, "/*")) {
+if (Tokenizer.startsWith(self, "/*")) {
                     _ = self.consumeComment();
                 } else {
                     return;
                 }
 },
 '<' => {
-if (@import("std").mem.startsWith(u8, self, "<!--")) {
+if (Tokenizer.startsWith(self, "<!--")) {
                     _ = self.advance(4);
                 } else {
                     return;
                 }
 },
 '-' => {
-if (@import("std").mem.startsWith(u8, self, "-->")) {
+if (Tokenizer.startsWith(self, "-->")) {
                     _ = self.advance(3);
                 } else {
                     return;
@@ -4436,11 +4436,11 @@ pub fn valueType(self: @This()) MediaFeatureType {
 }
 
 pub fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) void {
-    _ = block_type;
-        var stack = SmallList(BlockType, 16);
+        const BlockStack = SmallList(BlockType, 16);
+        _ = &BlockStack;
+        var stack: BlockStack = .{};
         _ = &stack;
-        {
-        }
+        _ = stack.appendAssumeCapacity(block_type);
         while (true) {
             const tok = (switch (tokenizer.next()) {
 .result => |v| v,

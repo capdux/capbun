@@ -260,7 +260,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         };
 
         pub fn memoryCost(this: *ThisSink) callconv(.c) usize {
-            return @sizeOf(ThisSink) + SinkType.memoryCost(&this.sink);
+            return @sizeOf(ThisSink) + this.sink.memoryCost();
         }
 
         const AssignToStreamFn = *const fn (*JSGlobalObject, JSValue, *!, **void) callconv(.c) JSValue;
@@ -271,12 +271,12 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         const SetDestroyCallbackFn = *const fn (JSValue, usize) callconv(.c) void;
         const DetachPtrFn = *const fn (JSValue) callconv(.c) void;
 
-        const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" });
+        const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" }).*;
         const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" }).*;
-        const onReadyExtern = @extern(OnReadyFn, .{ .name = abi_name ++ "__onReady" });
-        const onStartExtern = @extern(OnStartFn, .{ .name = abi_name ++ "__onStart" });
-        const createObjectExtern = @extern(CreateObjectFn, .{ .name = abi_name ++ "__createObject" });
-        const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = abi_name ++ "__setDestroyCallback" });
+        const onReadyExtern = @extern(OnReadyFn, .{ .name = abi_name ++ "__onReady" }).*;
+        const onStartExtern = @extern(OnStartFn, .{ .name = abi_name ++ "__onStart" }).*;
+        const createObjectExtern = @extern(CreateObjectFn, .{ .name = abi_name ++ "__createObject" }).*;
+        const setDestroyCallbackExtern = @extern(SetDestroyCallbackFn, .{ .name = abi_name ++ "__setDestroyCallback" }).*;
         const detachPtrExtern = @extern(DetachPtrFn, .{ .name = abi_name ++ "__detachPtr" }).*;
 
         pub fn assignToStream(globalThis: *JSGlobalObject, stream: JSValue, ptr: *!, jsvalue_ptr: **void): JSValue {
@@ -410,9 +410,10 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
                     return JSValue.jsNumber(0);
                 }
 
-                return this.sink.writeBytes(
+                let res = this.sink.writeBytes(
                     .{ .temporary = ByteList.fromBorrowedSliceDangerous(slice) },
-                ).toJS(globalThis);
+                );
+                return res.toJS(globalThis);
             }
 
             if (!arg.isString()) {
@@ -428,14 +429,16 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
             defer str.ensureStillAlive();
             if (view.is16Bit()) {
-                return this.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(
+                let res = this.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(
                     mem.sliceAsBytes(view.utf16SliceAligned()),
-                ) }).toJS(globalThis);
+                ) });
+                return res.toJS(globalThis);
             }
 
-            return this.sink.writeLatin1(
+            let res = this.sink.writeLatin1(
                 .{ .temporary = ByteList.fromBorrowedSliceDangerous(view.slice()) },
-            ).toJS(globalThis);
+            );
+            return res.toJS(globalThis);
         }
 
         pub fn writeUTF8(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
@@ -535,7 +538,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
                         try streams.Start.fromJSWithTag(
                             globalThis,
                             callframe.argument(0),
-                            comptime @field(streams.Start, abi_name),
+                            comptime @field(streams.StartTag, abi_name),
                         )
                     else
                         .{ .empty = {} },

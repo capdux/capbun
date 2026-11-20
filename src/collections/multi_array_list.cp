@@ -92,7 +92,8 @@ fn MultiArrayListSlice(
         pub fn items(this, comptime field: Field): []FieldType(field) {
             const F = FieldType(field);
             if (this.capacity == 0) {
-                return &([] as [0]F);
+                let empty_arr: [0]F = [];
+                return empty_arr[0..0];
             }
             const byte_ptr = this.ptrs[@intFromEnum(field)];
             unsafe {

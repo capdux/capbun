@@ -90,7 +90,9 @@ pub struct Context {
         return Error.ok;
     }
 
-    fn error_for_message(*_, default_msg: [*:0]const u8): Error {
+    const CStr = [*:0]const u8;
+
+    fn error_for_message(*_, default_msg: CStr): Error {
         let message = default_msg;
         if (msg := _.state.err_msg) message = msg;
         return Error{
@@ -354,7 +356,7 @@ pub struct Context {
 
         _.stream.init(level, windowBits, memLevel, strategy, dictionary);
 
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub fn params(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -371,7 +373,7 @@ pub struct Context {
         if (e.isError()) {
             StreamImpl.emitError(_, globalThis, callframe.this(), e);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn deinit(*_) {

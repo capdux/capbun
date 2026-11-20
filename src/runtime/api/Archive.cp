@@ -348,13 +348,13 @@ fn AsyncTask(comptime Context: type): type {
 struct ExtractContext {
     const Result = union(enum) {
         success: u32,
-        e: error{ReadError},
+        @"err": error{ReadError},
     };
 
     store: *jsc.WebCore.Blob.Store,
     path: []const u8,
     glob_patterns: PatternList?,
-    result: Result = { err: error.ReadError },
+    result: Result = Result{ @"err": error.ReadError },
 
     fn run(*_): Result {
         // If we have glob patterns, use filtered extraction
@@ -363,7 +363,7 @@ struct ExtractContext {
                 _.store.sharedView(),
                 _.path,
                 _.glob_patterns,
-            ) catch return { err: error.ReadError };
+            ) catch return Result{ @"err": error.ReadError };
             return { success: count };
         }
 
@@ -424,20 +424,20 @@ struct BlobContext {
     const Result = union(enum) {
         compressed: []u8,
         uncompressed: void,
-        e: Err,
+        @"err": Err,
     };
 
     store: *jsc.WebCore.Blob.Store,
     compress: Compression,
     output_type: OutputType,
-    result: Result = { uncompressed: {} },
+    result: Result = .uncompressed,
 
     fn run(*_): Result {
         switch (_.compress) {
             .gzip => |opts| {
                 return BlobContext.Result{ compressed: compressGzip(_.store.sharedView(), opts.level) catch |e| return BlobContext.Result{ @"err": e } };
             },
-            .none => return BlobContext.Result{ uncompressed: {} },
+            .none => return BlobContext.Result.uncompressed,
         }
     }
 
@@ -445,7 +445,7 @@ struct BlobContext {
         switch (_.result) {
             .err => |e| return PromiseResult{ reject: globalThis.createErrorInstance("{s}", .{ @errorName(e) }) },
             .compressed => |data| {
-                _.result = { uncompressed: {} }; // Ownership transferred
+                _.result = .uncompressed; // Ownership transferred
                 return PromiseResult{ resolve: switch (_.output_type) {
                     .blob => jsc.WebCore.Blob.new(jsc.WebCore.Blob.createWithBytesAndAllocator(data, bun.default_allocator, globalThis, false)).toJS(globalThis),
                     .bytes => jsc.JSValue.createBuffer(globalThis, data),
@@ -491,7 +491,7 @@ struct WriteContext {
     const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
     const Result = union(enum) {
         success: void,
-        e: Err,
+        @"err": Err,
         sys_err: bun.sys.Error,
     };
     const Data = union(enum) {
@@ -502,7 +502,7 @@ struct WriteContext {
     data: Data,
     path: [:0]const u8,
     compress: Compression,
-    result: Result = { success: {} },
+    result: Result = .success,
 
     fn run(*_): Result {
         const source_data = switch (_.data) {
@@ -523,7 +523,7 @@ struct WriteContext {
 
         return switch (file.writeAll(data_to_write)) {
             .err => |e| Result{ sys_err: e.clone(bun.default_allocator) },
-            .result => Result{ success: {} },
+            .result => Result.success,
         };
     }
 
@@ -584,7 +584,7 @@ struct FilesContext {
     const Result = union(enum) {
         success: FileEntryList,
         libarchive_err: [*:0]u8,
-        e: Err,
+        @"err": Err,
 
         fn deinit(*_) {
             switch (_.*) {
@@ -605,7 +605,7 @@ struct FilesContext {
 
     store: *jsc.WebCore.Blob.Store,
     glob_patterns: PatternList?,
-    result: Result = { err: error.ReadError },
+    result: Result = Result{ @"err": error.ReadError },
 
     static fn cloneErrorString(archive: *libarchive.lib.Archive): [*:0]u8? {
         const err_str = archive.errorString();
@@ -734,7 +734,7 @@ fn startFilesTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Stor
 fn parseCompressionOptions(globalThis: *jsc.JSGlobalObject, options_arg: jsc.JSValue): bun.JSError!Compression {
     // No options provided means no compression (caller handles defaults)
     if (options_arg.isUndefinedOrNull()) {
-        return .none;
+        return Compression.none;
     }
 
     if (!options_arg.isObject()) {
@@ -772,7 +772,7 @@ fn parseCompressionOptions(globalThis: *jsc.JSGlobalObject, options_arg: jsc.JSV
     }
 
     // No compress option specified in options object means no compression
-    return .none;
+    return Compression.none;
 }
 
 fn createArchive(data: []u8, compress: Compression): *Archive {

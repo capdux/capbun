@@ -152,7 +152,7 @@ else => {
             return Error.ok;
     }
 
-pub fn error_for_message(self: *Context, default_msg: [*:0]u8) Error {
+pub fn error_for_message(self: *Context, default_msg: CStr) Error {
             var message = default_msg;
             _ = &message;
             if (self.state.err_msg) |msg| {
@@ -352,6 +352,7 @@ status = c.inflateEnd((&self.state));
             self.mode = .NONE;
     }
     const c = bun.zlib;
+    const CStr = [*:0]const u8;
 };
 
 pub const NativeZlib = @This();
@@ -413,7 +414,7 @@ pub fn init(self: *NativeZlib, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
             _ = js.dictionarySetCached(this_value, globalThis, arguments[6]);
         }
         _ = self.stream.init(level, windowBits, memLevel, strategy, dictionary);
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn params(self: *NativeZlib, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -427,7 +428,7 @@ pub fn params(self: *NativeZlib, globalThis: *jsc.JSGlobalObject, callframe: *js
         if (e.isError()) {
             _ = StreamImpl.emitError(self, globalThis, callframe.this(), e);
         }
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn deinit(self: *NativeZlib) void {

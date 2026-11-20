@@ -100,14 +100,15 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         } else {
             validators.validateString(globalThis, address_js, "address", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            address = (SocketAddress.initFromAddrFamily(globalThis, address_js, family_js)?)._addr;
+            const sa = SocketAddress.initFromAddrFamily(globalThis, address_js, family_js)?;
+            address = sa._addr;
         }
 
         _.mutex.lock();
         defer _.mutex.unlock();
         _.da_rules.insert(0, Rule{ addr: address })?;
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub fn addRange(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -122,7 +123,8 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         } else {
             validators.validateString(globalThis, start_js, "start", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            start = (SocketAddress.initFromAddrFamily(globalThis, start_js, family_js)?)._addr;
+            const sa = SocketAddress.initFromAddrFamily(globalThis, start_js, family_js)?;
+            start = sa._addr;
         }
         let end: sockaddr = undefined;
         if (sa := end_js.as(SocketAddress)) {
@@ -130,7 +132,8 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         } else {
             validators.validateString(globalThis, end_js, "end", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            end = (SocketAddress.initFromAddrFamily(globalThis, end_js, family_js)?)._addr;
+            const sa = SocketAddress.initFromAddrFamily(globalThis, end_js, family_js)?;
+            end = sa._addr;
         }
         if (ord := _compare(&start, &end)) {
             if (ord.compare(.gt)) {
@@ -141,7 +144,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         defer _.mutex.unlock();
         _.da_rules.insert(0, Rule{ range: { start: start, end: end } })?;
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub fn addSubnet(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -156,7 +159,8 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         } else {
             validators.validateString(globalThis, network_js, "network", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            network = (SocketAddress.initFromAddrFamily(globalThis, network_js, family_js)?)._addr;
+            const sa = SocketAddress.initFromAddrFamily(globalThis, network_js, family_js)?;
+            network = sa._addr;
         }
         let prefix: u8 = 0;
         if (network.sin.family == std.posix.AF.INET) {
@@ -168,7 +172,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         defer _.mutex.unlock();
         _.da_rules.insert(0, Rule{ subnet: { network: network, prefix: prefix } })?;
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub fn check(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -182,55 +186,56 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         } else {
             validators.validateString(globalThis, address_js, "address", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            addr_val = (SocketAddress.initFromAddrFamily(globalThis, address_js, family_js) catch |e| {
+            const sa = SocketAddress.initFromAddrFamily(globalThis, address_js, family_js) catch |e| {
                 bun.debugAssert(e == error.JSError);
                 globalThis.clearException();
-                return .false;
-            })._addr;
+                return jsc.JSValue.false;
+            };
+            addr_val = sa._addr;
         }
         const address = &addr_val;
         _.mutex.lock();
         defer _.mutex.unlock();
         for (*item of _.da_rules.items) {
-            switch (item.*) {
+            switch (item) {
                 .addr => |*a| {
                     const order = _compare(address, a) ?? continue;
-                    if (order.compare(.eq)) return .true;
+                    if (order.compare(.eq)) return jsc.JSValue.true;
                 },
                 .range => |*r| {
                     const os = _compare(address, &r.start) ?? continue;
                     const oe = _compare(address, &r.end) ?? continue;
-                    if (os.compare(.gte) && oe.compare(.lte)) return .true;
+                    if (os.compare(.gte) && oe.compare(.lte)) return jsc.JSValue.true;
                 },
                 .subnet => |*s| {
                     if (ip_addr := address.as_v4()) {
                         if (subnet_addr := s.network.as_v4()) {
                             if (s.prefix == 32) {
-                                if (ip_addr == subnet_addr) return .true else continue;
+                                if (ip_addr == subnet_addr) return jsc.JSValue.true else continue;
                             }
                             const one: u32 = 1;
                             const mask_addr = ((one << @intCast(s.prefix)) - 1) << @intCast(32 - s.prefix);
                             const ip_net: u32 = @byteSwap(ip_addr) & mask_addr;
                             const subnet_net: u32 = @byteSwap(subnet_addr) & mask_addr;
-                            if (ip_net == subnet_net) return .true;
+                            if (ip_net == subnet_net) return jsc.JSValue.true;
                         }
                     }
                     if (address.sin.family == std.posix.AF.INET6 && s.network.sin.family == std.posix.AF.INET6) {
                         const ip_addr: u128 = @bitCast(address.sin6.addr);
                         const subnet_addr: u128 = @bitCast(s.network.sin6.addr);
                         if (s.prefix == 128) {
-                            if (ip_addr == subnet_addr) return .true else continue;
+                            if (ip_addr == subnet_addr) return jsc.JSValue.true else continue;
                         }
                         const one: u128 = 1;
                         const mask_addr = ((one << @intCast(s.prefix)) - 1) << @intCast(128 - s.prefix);
                         const ip_net: u128 = @byteSwap(ip_addr) & mask_addr;
                         const subnet_net: u128 = @byteSwap(subnet_addr) & mask_addr;
-                        if (ip_net == subnet_net) return .true;
+                        if (ip_net == subnet_net) return jsc.JSValue.true;
                     }
                 },
             }
         }
-        return .false;
+        return jsc.JSValue.false;
     }
 
     pub fn rules(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
@@ -239,19 +244,20 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
 
         _.mutex.lock();
         defer _.mutex.unlock();
+        const ADDR_LEN = SocketAddress.inet.INET6_ADDRSTRLEN;
         for (*rule of _.da_rules.items) {
-            switch (rule.*) {
+            switch (rule) {
                 .addr => |*a| {
-                    let buf: [SocketAddress.inet.INET6_ADDRSTRLEN]u8 = @splat(0);
+                    let buf: [ADDR_LEN]u8 = @splat(0);
                     array.push(globalThis, bun.String.createFormatForJS(globalThis, "Address: {s} {s}", .{ a.family().upper(), a.fmt(&buf) })?)?;
                 },
                 .range => |*r| {
-                    let buf_s: [SocketAddress.inet.INET6_ADDRSTRLEN]u8 = @splat(0);
-                    let buf_e: [SocketAddress.inet.INET6_ADDRSTRLEN]u8 = @splat(0);
+                    let buf_s: [ADDR_LEN]u8 = @splat(0);
+                    let buf_e: [ADDR_LEN]u8 = @splat(0);
                     array.push(globalThis, bun.String.createFormatForJS(globalThis, "Range: {s} {s}-{s}", .{ r.start.family().upper(), r.start.fmt(&buf_s), r.end.fmt(&buf_e) })?)?;
                 },
                 .subnet => |*s| {
-                    let buf: [SocketAddress.inet.INET6_ADDRSTRLEN]u8 = @splat(0);
+                    let buf: [ADDR_LEN]u8 = @splat(0);
                     array.push(globalThis, bun.String.createFormatForJS(globalThis, "Subnet: {s} {s}/{d}", .{ s.network.family().upper(), s.network.fmt(&buf), s.prefix })?)?;
                 },
             }

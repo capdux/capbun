@@ -251,7 +251,7 @@ pub enum QueryStatus: u8 {
         * = globalObject;
         * = callframe;
         this.flags.is_done = true;
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setPendingValueFromJS(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
@@ -259,7 +259,7 @@ pub enum QueryStatus: u8 {
         const result = callframe.argument(0);
         const thisValue = callframe.this();
         js.pendingValueSetCached(thisValue, globalObject, result);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setModeFromJS(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
@@ -272,7 +272,7 @@ pub enum QueryStatus: u8 {
         this.flags.result_mode = std.meta.intToEnum(PostgresSQLQueryResultMode, mode) catch {
             return globalObject.throwInvalidArgumentTypeValue("mode", "Number", js_mode);
         };
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doRun(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
@@ -342,7 +342,7 @@ pub enum QueryStatus: u8 {
             } else {
                 connection.resetConnectionTimeout();
             }
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         const columns_value: JSValue = js.columnsGetCached(this_value) orelse .js_undefined;
@@ -507,14 +507,14 @@ pub enum QueryStatus: u8 {
             connection.resetConnectionTimeout();
             connection.advanceAndFlush();
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doCancel(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = callframe;
         * = globalObject;
         const __unused_self = _; * = __unused_self;
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub const js = jsc.Codegen.JSPostgresSQLQuery;

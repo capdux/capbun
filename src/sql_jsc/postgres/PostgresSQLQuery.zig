@@ -296,7 +296,7 @@ pub fn doDone(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfr
         _ = &globalObject;
         _ = &callframe;
         self.flags.is_done = true;
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setPendingValueFromJS(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -305,7 +305,7 @@ pub fn setPendingValueFromJS(self: *PostgresSQLQuery, globalObject: *jsc.JSGloba
         const result = callframe.argument(0);
         const thisValue = callframe.this();
         _ = js.pendingValueSetCached(thisValue, globalObject, result);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setModeFromJS(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -315,7 +315,7 @@ pub fn setModeFromJS(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject,
         }
         const mode = try js_mode.coerce(i32, globalObject);
         self.flags.result_mode = (blk_catch_2: { break :blk_catch_2 ((std.meta.intToEnum(PostgresSQLQueryResultMode, mode)) catch |__ce_2| { _ = &__ce_2; return globalObject.throwInvalidArgumentTypeValue("mode", "Number", js_mode); }); });
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -376,7 +376,7 @@ pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfra
             } else {
                 _ = connection.resetConnectionTimeout();
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const columns_value: JSValue = ((js.columnsGetCached(this_value)) orelse (.js_undefined));
         var signature = (blk_catch_6: { break :blk_catch_6 ((Signature.generate(globalObject, query_str.slice(), binding_value, columns_value, connection.prepared_statement_id, connection.flags.use_unnamed_prepared_statements)) catch |e| { _ = &e; _ = self.deref();
@@ -522,7 +522,7 @@ if (((!connection.hasQueryRunning()) or connection.canPipeline())) {
             _ = connection.resetConnectionTimeout();
             _ = connection.advanceAndFlush();
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doCancel(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -530,7 +530,7 @@ pub fn doCancel(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, call
         _ = &globalObject;
         const __unused_self = self;
         _ = &__unused_self;
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
 pub const Status = QueryStatus;
