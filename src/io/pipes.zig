@@ -117,7 +117,7 @@ pub fn closeImpl(self: *PollOrFd, ctx: ?*anyopaque, comptime onCloseFn: anytype,
                         }
                     }
                 }
-                if (comptime (@TypeOf(onCloseFn) != void)) {
+                if (comptime ((@TypeOf(onCloseFn) != void) and (@TypeOf(onCloseFn) != @TypeOf(.{})))) {
                     _ = onCloseFn(@ptrCast(@alignCast(ctx.?)));
                 }
             } else {

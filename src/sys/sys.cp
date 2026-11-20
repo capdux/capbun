@@ -997,7 +997,7 @@ pub fn fcntl(fd: bun.FD, cmd: i32, arg: auto): Maybe(fnctl_int) {
             if (e.getErrno() == .INTR) continue;
             return e;
         }
-        return { result: i32(result) };
+        return .{ .result = @intCast(result) };
     }
 
     unreachable;

@@ -44,21 +44,6 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-fn cp_eq(a: anytype, b: anytype) bool {
-    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
-    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
-    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
-    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
-    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
-    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
-    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
-    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
-    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
-    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
-    if (comptime Ta != Tb) return false;
-    return a == b;
-}
-fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
@@ -87,54 +72,148 @@ pub fn createPostgresError(globalObject: *jsc.JSGlobalObject, message: []const u
 }
 
 pub fn postgresErrorToJS(globalObject: *jsc.JSGlobalObject, message: ?[]const u8, pg_err: AnyPostgresError) JSValue {
-        const code = (switch (pg_err) {
-.ConnectionClosed => "ERR_POSTGRES_CONNECTION_CLOSED",
-.ExpectedRequest => "ERR_POSTGRES_EXPECTED_REQUEST",
-.ExpectedStatement => "ERR_POSTGRES_EXPECTED_STATEMENT",
-.InvalidBackendKeyData => "ERR_POSTGRES_INVALID_BACKEND_KEY_DATA",
-.InvalidBinaryData => "ERR_POSTGRES_INVALID_BINARY_DATA",
-.InvalidByteSequence => "ERR_POSTGRES_INVALID_BYTE_SEQUENCE",
-.InvalidByteSequenceForEncoding => "ERR_POSTGRES_INVALID_BYTE_SEQUENCE_FOR_ENCODING",
-.InvalidCharacter => "ERR_POSTGRES_INVALID_CHARACTER",
-.InvalidMessage => "ERR_POSTGRES_INVALID_MESSAGE",
-.InvalidMessageLength => "ERR_POSTGRES_INVALID_MESSAGE_LENGTH",
-.InvalidQueryBinding => "ERR_POSTGRES_INVALID_QUERY_BINDING",
-.InvalidServerKey => "ERR_POSTGRES_INVALID_SERVER_KEY",
-.InvalidServerSignature => "ERR_POSTGRES_INVALID_SERVER_SIGNATURE",
-.InvalidTimeFormat => "ERR_POSTGRES_INVALID_TIME_FORMAT",
-.MultidimensionalArrayNotSupportedYet => "ERR_POSTGRES_MULTIDIMENSIONAL_ARRAY_NOT_SUPPORTED_YET",
-.NullsInArrayNotSupportedYet => "ERR_POSTGRES_NULLS_IN_ARRAY_NOT_SUPPORTED_YET",
-.Overflow => "ERR_POSTGRES_OVERFLOW",
-.PBKDFD2 => "ERR_POSTGRES_AUTHENTICATION_FAILED_PBKDF2",
-.SASL_SIGNATURE_MISMATCH => "ERR_POSTGRES_SASL_SIGNATURE_MISMATCH",
-.SASL_SIGNATURE_INVALID_BASE64 => "ERR_POSTGRES_SASL_SIGNATURE_INVALID_BASE64",
-.TLSNotAvailable => "ERR_POSTGRES_TLS_NOT_AVAILABLE",
-.TLSUpgradeFailed => "ERR_POSTGRES_TLS_UPGRADE_FAILED",
-.TooManyParameters => {
-{
-            const too_many_msg: []const u8 = "query has too many parameters - the PostgreSQL wire protocol supports a maximum of 65535 parameters per query. Try reducing your batch size.";
-            return (blk_catch_0: { break :blk_catch_0 ((createPostgresError(globalObject, too_many_msg, PostgresErrorOptions{ .code = "ERR_POSTGRES_TOO_MANY_PARAMETERS", .hint = "Reduce the number of rows in your batch insert so that total_rows * columns_per_row does not exceed 65535." })) catch |e| { _ = &e; break :blk_catch_0 @as(JSValue, globalObject.takeError(e)); }); });
+        var code: []const u8 = "ERR_POSTGRES_UNEXPECTED_MESSAGE";
+        _ = &code;
+        if ((pg_err == error.ConnectionClosed)) {
+            code = "ERR_POSTGRES_CONNECTION_CLOSED";
+        } else {
+            if ((pg_err == error.ExpectedRequest)) {
+                code = "ERR_POSTGRES_EXPECTED_REQUEST";
+            } else {
+                if ((pg_err == error.ExpectedStatement)) {
+                    code = "ERR_POSTGRES_EXPECTED_STATEMENT";
+                } else {
+                    if ((pg_err == error.InvalidBackendKeyData)) {
+                        code = "ERR_POSTGRES_INVALID_BACKEND_KEY_DATA";
+                    } else {
+                        if ((pg_err == error.InvalidBinaryData)) {
+                            code = "ERR_POSTGRES_INVALID_BINARY_DATA";
+                        } else {
+                            if ((pg_err == error.InvalidByteSequence)) {
+                                code = "ERR_POSTGRES_INVALID_BYTE_SEQUENCE";
+                            } else {
+                                if ((pg_err == error.InvalidByteSequenceForEncoding)) {
+                                    code = "ERR_POSTGRES_INVALID_BYTE_SEQUENCE_FOR_ENCODING";
+                                } else {
+                                    if ((pg_err == error.InvalidCharacter)) {
+                                        code = "ERR_POSTGRES_INVALID_CHARACTER";
+                                    } else {
+                                        if ((pg_err == error.InvalidMessage)) {
+                                            code = "ERR_POSTGRES_INVALID_MESSAGE";
+                                        } else {
+                                            if ((pg_err == error.InvalidMessageLength)) {
+                                                code = "ERR_POSTGRES_INVALID_MESSAGE_LENGTH";
+                                            } else {
+                                                if ((pg_err == error.InvalidQueryBinding)) {
+                                                    code = "ERR_POSTGRES_INVALID_QUERY_BINDING";
+                                                } else {
+                                                    if ((pg_err == error.InvalidServerKey)) {
+                                                        code = "ERR_POSTGRES_INVALID_SERVER_KEY";
+                                                    } else {
+                                                        if ((pg_err == error.InvalidServerSignature)) {
+                                                            code = "ERR_POSTGRES_INVALID_SERVER_SIGNATURE";
+                                                        } else {
+                                                            if ((pg_err == error.InvalidTimeFormat)) {
+                                                                code = "ERR_POSTGRES_INVALID_TIME_FORMAT";
+                                                            } else {
+                                                                if ((pg_err == error.MultidimensionalArrayNotSupportedYet)) {
+                                                                    code = "ERR_POSTGRES_MULTIDIMENSIONAL_ARRAY_NOT_SUPPORTED_YET";
+                                                                } else {
+                                                                    if ((pg_err == error.NullsInArrayNotSupportedYet)) {
+                                                                        code = "ERR_POSTGRES_NULLS_IN_ARRAY_NOT_SUPPORTED_YET";
+                                                                    } else {
+                                                                        if ((pg_err == error.Overflow)) {
+                                                                            code = "ERR_POSTGRES_OVERFLOW";
+                                                                        } else {
+                                                                            if ((pg_err == error.PBKDFD2)) {
+                                                                                code = "ERR_POSTGRES_AUTHENTICATION_FAILED_PBKDF2";
+                                                                            } else {
+                                                                                if ((pg_err == error.SASL_SIGNATURE_MISMATCH)) {
+                                                                                    code = "ERR_POSTGRES_SASL_SIGNATURE_MISMATCH";
+                                                                                } else {
+                                                                                    if ((pg_err == error.SASL_SIGNATURE_INVALID_BASE64)) {
+                                                                                        code = "ERR_POSTGRES_SASL_SIGNATURE_INVALID_BASE64";
+                                                                                    } else {
+                                                                                        if ((pg_err == error.TLSNotAvailable)) {
+                                                                                            code = "ERR_POSTGRES_TLS_NOT_AVAILABLE";
+                                                                                        } else {
+                                                                                            if ((pg_err == error.TLSUpgradeFailed)) {
+                                                                                                code = "ERR_POSTGRES_TLS_UPGRADE_FAILED";
+                                                                                            } else {
+                                                                                                if ((pg_err == error.TooManyParameters)) {
+                                                                                                    const too_many_msg: []const u8 = "query has too many parameters - the PostgreSQL wire protocol supports a maximum of 65535 parameters per query. Try reducing your batch size.";
+                                                                                                    return (blk_catch_0: { break :blk_catch_0 ((createPostgresError(globalObject, too_many_msg, PostgresErrorOptions{ .code = "ERR_POSTGRES_TOO_MANY_PARAMETERS", .hint = "Reduce the number of rows in your batch insert so that total_rows * columns_per_row does not exceed 65535." })) catch |e| { _ = &e; break :blk_catch_0 @as(JSValue, globalObject.takeError(e)); }); });
+                                                                                                } else {
+                                                                                                    if ((pg_err == error.UnexpectedMessage)) {
+                                                                                                        code = "ERR_POSTGRES_UNEXPECTED_MESSAGE";
+                                                                                                    } else {
+                                                                                                        if ((pg_err == error.UNKNOWN_AUTHENTICATION_METHOD)) {
+                                                                                                            code = "ERR_POSTGRES_UNKNOWN_AUTHENTICATION_METHOD";
+                                                                                                        } else {
+                                                                                                            if ((pg_err == error.UNSUPPORTED_AUTHENTICATION_METHOD)) {
+                                                                                                                code = "ERR_POSTGRES_UNSUPPORTED_AUTHENTICATION_METHOD";
+                                                                                                            } else {
+                                                                                                                if ((pg_err == error.UnsupportedByteaFormat)) {
+                                                                                                                    code = "ERR_POSTGRES_UNSUPPORTED_BYTEA_FORMAT";
+                                                                                                                } else {
+                                                                                                                    if ((pg_err == error.UnsupportedArrayFormat)) {
+                                                                                                                        code = "ERR_POSTGRES_UNSUPPORTED_ARRAY_FORMAT";
+                                                                                                                    } else {
+                                                                                                                        if ((pg_err == error.UnsupportedIntegerSize)) {
+                                                                                                                            code = "ERR_POSTGRES_UNSUPPORTED_INTEGER_SIZE";
+                                                                                                                        } else {
+                                                                                                                            if ((pg_err == error.UnsupportedNumericFormat)) {
+                                                                                                                                code = "ERR_POSTGRES_UNSUPPORTED_NUMERIC_FORMAT";
+                                                                                                                            } else {
+                                                                                                                                if ((pg_err == error.UnknownFormatCode)) {
+                                                                                                                                    code = "ERR_POSTGRES_UNKNOWN_FORMAT_CODE";
+                                                                                                                                } else {
+                                                                                                                                    if ((pg_err == error.JSError)) {
+                                                                                                                                        return globalObject.takeException(error.JSError);
+                                                                                                                                    } else {
+                                                                                                                                        if ((pg_err == error.JSTerminated)) {
+                                                                                                                                            return globalObject.takeException(error.JSTerminated);
+                                                                                                                                        } else {
+                                                                                                                                            if ((pg_err == error.OutOfMemory)) {
+                                                                                                                                                return globalObject.createOutOfMemoryError();
+                                                                                                                                            } else {
+                                                                                                                                                if ((pg_err == error.ShortRead)) {
+                                                                                                                                                    _ = bun.unreachablePanic("Assertion failed: ShortRead should be handled by the caller in postgres", .{});
+                                                                                                                                                }
+                                                                                                                                            }
+                                                                                                                                        }
+                                                                                                                                    }
+                                                                                                                                }
+                                                                                                                            }
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                }
+                                                                                                            }
+                                                                                                        }
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-},
-.UnexpectedMessage => "ERR_POSTGRES_UNEXPECTED_MESSAGE",
-.UNKNOWN_AUTHENTICATION_METHOD => "ERR_POSTGRES_UNKNOWN_AUTHENTICATION_METHOD",
-.UNSUPPORTED_AUTHENTICATION_METHOD => "ERR_POSTGRES_UNSUPPORTED_AUTHENTICATION_METHOD",
-.UnsupportedByteaFormat => "ERR_POSTGRES_UNSUPPORTED_BYTEA_FORMAT",
-.UnsupportedArrayFormat => "ERR_POSTGRES_UNSUPPORTED_ARRAY_FORMAT",
-.UnsupportedIntegerSize => "ERR_POSTGRES_UNSUPPORTED_INTEGER_SIZE",
-.UnsupportedNumericFormat => "ERR_POSTGRES_UNSUPPORTED_NUMERIC_FORMAT",
-.UnknownFormatCode => "ERR_POSTGRES_UNKNOWN_FORMAT_CODE",
-.JSError => {
-return globalObject.takeException(error.JSError);
-},
-.JSTerminated => {
-return globalObject.takeException(error.JSTerminated);
-},
-.OutOfMemory => {
-return globalObject.createOutOfMemoryError();
-},
-.ShortRead => bun.unreachablePanic("Assertion failed: ShortRead should be handled by the caller in postgres", .{}),
-});
         var buffer_message: [256]u8 = std.mem.zeroes([256]u8);
         _ = &buffer_message;
         const msg = ((message) orelse ((blk_catch_1: { break :blk_catch_1 ((std.fmt.bufPrint(buffer_message[0..], "Failed to bind query: {s}", .{ @errorName(pg_err) })) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 "Failed to bind query"; }); })));

@@ -1081,7 +1081,7 @@ pub const PipeReader = struct {
     reader: IOReader = undefined,
     process: ?*ShellSubprocess = null,
     event_loop: jsc.EventLoopHandle = undefined,
-    state: PipeReaderState = .{ .pending = .{} },
+    state: PipeReaderState = .pending,
     stdio_result: StdioResult,
     out_type: bun.shell.subproc.ShellSubprocess.OutKind,
     captured_writer: CapturedWriter = .{},

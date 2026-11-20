@@ -244,10 +244,8 @@ _ = self.source_fd.close();
 pub fn doOpenFile(self: *CopyFile, which: IOWhich) !void {
             var path_buf1: bun.PathBuffer = undefined;
             _ = &path_buf1;
-            var open_source_flags = (O.CLOEXEC | O.RDONLY);
-            _ = &open_source_flags;
-            var open_destination_flags = (((O.CLOEXEC | O.CREAT) | O.WRONLY) | O.TRUNC);
-            _ = &open_destination_flags;
+            const open_source_flags = (O.CLOEXEC | O.RDONLY);
+            const open_destination_flags = (((O.CLOEXEC | O.CREAT) | O.WRONLY) | O.TRUNC);
             if (((which == .both) or (which == .source))) {
                 self.source_fd = (switch (sys.open(self.source_file_store.pathlike.path.sliceZ((&path_buf1)), open_source_flags, 0)) {
 .result => |result| (switch (result.makeLibUVOwnedForSyscall(.open, .close_on_fail)) {

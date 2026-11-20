@@ -833,11 +833,8 @@ pub inline fn addErrorFmtOpts(self: *Log, allocator: std.mem.Allocator, comptime
 pub fn addSysError(self: *Log, alloc: std.mem.Allocator, e: bun.sys.Error, comptime fmt: []const u8, args: anytype) OOM!void {
             if (e.getErrorCodeTagName()) |pair| {
                 _ = &pair;
-                const _tmp_v15 = pair;
-                const tag_name = cp_unpack_elem(_tmp_v15, 0);
-                _ = &tag_name;
-                const sys_errno = cp_unpack_elem(_tmp_v15, 1);
-                _ = &sys_errno;
+                const tag_name = @field(pair, "0");
+                const sys_errno = @field(pair, "1");
                 const prefix = ((bun.sys.coreutils_error_map.get(sys_errno)) orelse (tag_name));
                 const msg_body = try Log.allocPrint(alloc, fmt, args);
                 defer {

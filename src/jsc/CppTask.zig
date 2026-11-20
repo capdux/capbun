@@ -69,7 +69,7 @@ pub fn run(self: *EventLoopTaskNoContextImpl) void {
             _ = EventLoopTaskNoContextImpl.Bun__EventLoopTaskNoContext__performTask(self);
     }
 
-pub fn getVM(self: EventLoopTaskNoContextImpl) ?*VirtualMachine {
+pub fn getVM(self: *EventLoopTaskNoContextImpl) ?*VirtualMachine {
             return EventLoopTaskNoContextImpl.Bun__EventLoopTaskNoContext__createdInBunVm(self);
     }
 };

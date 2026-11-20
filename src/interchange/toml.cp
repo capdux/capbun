@@ -366,7 +366,7 @@ const Rope = js_ast.E.Object.Rope;
         }
     }
 
-    pub fn parseMaybeTrailingComma(*_, closer: lexer.T): !bool {
+    pub fn parseMaybeTrailingComma(*_, closer: lexer.TokenType): !bool {
         try this.lexer.expect(.t_comma);
 
         if (this.lexer.token == closer) {

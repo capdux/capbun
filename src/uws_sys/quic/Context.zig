@@ -132,12 +132,14 @@ else => .err,
     pub const ConnectResult = QuicConnectResult;
 };
 
+const OptSocket = ?*Socket;
+const OptPending = ?*PendingConnect;
 
 extern "c" fn us_create_quic_client_context(loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32) callconv(.c) ?*Context;
 
 extern "c" fn us_quic_socket_context_loop(ctx: *Context) callconv(.c) *Loop;
 
-extern "c" fn us_quic_socket_context_connect(ctx: *Context, host: [*:0]const u8, port: i32, sni: [*:0]const u8, reject_unauthorized: i32, out_qs: **?Socket, out_pending: **?PendingConnect, user: *anyopaque) callconv(.c) i32;
+extern "c" fn us_quic_socket_context_connect(ctx: *Context, host: [*:0]const u8, port: i32, sni: [*:0]const u8, reject_unauthorized: i32, out_qs: *OptSocket, out_pending: *OptPending, user: *anyopaque) callconv(.c) i32;
 
 extern "c" fn us_quic_socket_context_on_hsk_done(ctx: *Context, cb: *const fn (*Socket, i32) callconv(.c) void) callconv(.c) void;
 

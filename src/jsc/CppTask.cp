@@ -24,7 +24,7 @@ pub struct EventLoopTaskNoContextImpl {
     }
 
     /// Get the VM that created this task
-    pub fn getVM(): (*VirtualMachine)? {
+    pub fn getVM(*_): (*VirtualMachine)? {
         return Bun__EventLoopTaskNoContext__createdInBunVm(_);
     }
 }

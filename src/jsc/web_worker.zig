@@ -38,7 +38,7 @@ comptime {
     _ = @export((&WebWorker.setRef), .{ .name = "WebWorker__setRef" });
     _ = @export((&WebWorker.destroy), .{ .name = "WebWorker__destroy" });
     _ = @export((&WebWorker.releaseParentPollRef), .{ .name = "WebWorker__releaseParentPollRef" });
-    _ = @export(*const WebWorker__getParentWorker, .{ .name = "WebWorker__getParentWorker" });
+    _ = @export((&@field(@This(), "WebWorker__getParentWorker")), .{ .name = "WebWorker__getParentWorker" });
 
 }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }

@@ -352,7 +352,7 @@ _ = try self.lexer.unexpected();
 }
     }
 
-pub fn parseMaybeTrailingComma(self: *TOML, closer: lexer.T) !bool {
+pub fn parseMaybeTrailingComma(self: *TOML, closer: lexer.TokenType) !bool {
             _ = try self.lexer.expect(.t_comma);
             if ((self.lexer.token == closer)) {
                 return false;

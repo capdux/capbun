@@ -3,10 +3,13 @@ import { PendingConnect } from "./PendingConnect.cp";
 import { Socket } from "./Socket.cp";
 import { Stream } from "./Stream.cp";
 
+type OptSocket = (*Socket)?;
+type OptPending = (*PendingConnect)?;
+
 @c {
     fn us_create_quic_client_context(loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32): (*Context)?;
     fn us_quic_socket_context_loop(ctx: *Context): *Loop;
-    fn us_quic_socket_context_connect(ctx: *Context, host: cstr, port: i32, sni: cstr, reject_unauthorized: i32, out_qs: **Socket?!, out_pending: **PendingConnect?!, user: *!): i32;
+    fn us_quic_socket_context_connect(ctx: *Context, host: cstr, port: i32, sni: cstr, reject_unauthorized: i32, out_qs: *OptSocket, out_pending: *OptPending, user: *!): i32;
     fn us_quic_socket_context_on_hsk_done(ctx: *Context, cb: @c fn(*Socket, i32) void);
     fn us_quic_socket_context_on_goaway(ctx: *Context, cb: @c fn(*Socket) void);
     fn us_quic_socket_context_on_close(ctx: *Context, cb: @c fn(*Socket) void);

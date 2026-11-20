@@ -1425,3 +1425,5 @@
 - **[2026-11-20] Wave 14 Batch A 核心修复**：`node_fs_binding` 消除 77 处 `error.zero`；`host_fn` 33 处与 `HashObject` 改 `@field(args, comptimePrint)` 消除 65 处 comptime 错；`node_crypto_binding` 改 `AnyTask.AnyTask.New` 与 `@typeInfo(...).pointer.child` 消除 22 处错；`bindgen.cp` 改为只读构造 `@Type(.{ .@"union" = ... })`。
 
 - **[2026-11-20] Wave 14 Batch B 核心修复**：`PipeReader` `BufferedReaderVTable` 5 回调补 `static fn`；`ipc.cp` `IPCSocketUnion` 改值类型联合并补 `pub const Target = FromEnum;`；`subprocess.cp` 用 `@call(.auto, @field(SignalCode, "name"), ...)` 绕开枚举 `.name` 魔法；`interpreter.cp` 用顶层 `OptParser`/`OptLexResult` 修复可选指针优先级。
+
+- **[2026-11-20] Wave 14 Batch E 修复要点**：`napi.cp` 7 处回调改 `@c fn (...)` 消除双层 `*const`；`logger`/`streams` 用 `@field` 替代元组解构消除 `CpUnpackElemType`；`ReadableStream`/`quic/Context` 用顶层指针别名保留 `*?*T` 二级指针。

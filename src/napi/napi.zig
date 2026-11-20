@@ -731,10 +731,17 @@ const OpaquePtr = ?*anyopaque;
 pub const napi_env = ?*NapiEnv;
 pub const napi_handle_scope = ?*NapiHandleScope;
 pub const napi_escapable_handle_scope = ?*NapiHandleScope;
+pub const NapiCallbackFn = *const fn (napi_env, napi_callback_info) callconv(.c) napi_value;
 pub const napi_callback = ?NapiCallbackFn;
+pub const NapiFinalizeFunction = *const fn (napi_env, ?*anyopaque, ?*anyopaque) callconv(.c) void;
 pub const napi_finalize = ?NapiFinalizeFunction;
+pub const napi_async_execute_callback = *const fn (napi_env, ?*anyopaque) callconv(.c) void;
+pub const napi_async_complete_callback = *const fn (napi_env, napi_status, ?*anyopaque) callconv(.c) void;
+pub const napi_threadsafe_function_call_js = *const fn (napi_env, napi_value, ?*anyopaque, ?*anyopaque) callconv(.c) void;
 pub const napi_async_cleanup_hook_handle = ?*struct_napi_async_cleanup_hook_handle__;
+pub const NapiAsyncCleanupHookFn = *const fn (napi_async_cleanup_hook_handle, ?*anyopaque) callconv(.c) void;
 pub const napi_async_cleanup_hook = ?NapiAsyncCleanupHookFn;
+pub const napi_addon_register_func = *const fn (napi_env, napi_value) callconv(.c) napi_value;
 const TODO_EXCEPTION = (if (@typeInfo(jsc.C.ExceptionRef) == .@"enum") @as(jsc.C.ExceptionRef, @enumFromInt(null)) else @as(jsc.C.ExceptionRef, null));
 const log = bun.Output.scoped(.napi, .visible);
 pub const Ref = opaque {};
@@ -780,8 +787,6 @@ pub const NapiStatus = enum(c_uint) {
     would_deadlock = 21,
 };
 pub const napi_status = c_uint;
-pub const NapiCallbackFn = *const *const fn(napi_env, napi_callback_info) callconv(.c) napi_value;
-pub const NapiFinalizeFunction = *const *const fn(napi_env, ?*anyopaque, ?*anyopaque) callconv(.c) void;
 pub const napi_property_descriptor = extern struct {
     utf8name: [*c]const u8,
     name: napi_value,
@@ -813,12 +818,7 @@ pub const napi_threadsafe_function_release_mode = enum(c_uint) {
 pub const napi_tsfn_nonblocking = 0;
 pub const napi_tsfn_blocking = 1;
 pub const napi_threadsafe_function_call_mode = c_uint;
-pub const napi_async_execute_callback = *const *const fn(napi_env, ?*anyopaque) callconv(.c) void;
-pub const napi_async_complete_callback = *const *const fn(napi_env, napi_status, ?*anyopaque) callconv(.c) void;
-pub const napi_threadsafe_function_call_js = *const *const fn(napi_env, napi_value, ?*anyopaque, ?*anyopaque) callconv(.c) void;
 pub const struct_napi_async_cleanup_hook_handle__ = opaque {};
-pub const NapiAsyncCleanupHookFn = *const *const fn(napi_async_cleanup_hook_handle, ?*anyopaque) callconv(.c) void;
-pub const napi_addon_register_func = *const *const fn(napi_env, napi_value) callconv(.c) napi_value;
 pub const struct_napi_module = extern struct {
     nm_version: c_int,
     nm_flags: c_uint,

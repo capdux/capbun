@@ -121,7 +121,9 @@ pub export fn us_socket_buffered_js_write(socket: *uws.us_socket_t, ssl: bool, e
                 node_buffer = buf;
             } else {
                 if ((!globalObject.hasException())) {
-                    return (blk_catch_1: { break :blk_catch_1 ((globalObject.throwInvalidArgumentTypeValue("data", "string, buffer, or blob", data)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
+                    if ((globalObject.throwInvalidArgumentTypeValue("data", "string, buffer, or blob", data) == error.JSError)) {
+                    }
+                    return .zero;
                 }
                 return .zero;
             }
@@ -130,7 +132,7 @@ pub export fn us_socket_buffered_js_write(socket: *uws.us_socket_t, ssl: bool, e
         _ = node_buffer.deinit();
         }
         if (((node_buffer == .blob) and node_buffer.blob.needsToReadFile())) {
-            return (blk_catch_2: { break :blk_catch_2 ((globalObject.throw("File blob not supported yet in this function.", .{})) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); });
+            return (blk_catch_1: { break :blk_catch_1 ((globalObject.throw("File blob not supported yet in this function.", .{})) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
         }
         const data_slice = node_buffer.slice();
         if (stream_buffer.isNotEmpty()) {

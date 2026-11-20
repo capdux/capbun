@@ -1242,7 +1242,7 @@ pub fn fcntl(fd: bun.FD, cmd: i32, arg: anytype) Maybe(fnctl_int) {
                 }
                 return e;
             }
-            return .{ .result = (if (comptime @typeInfo(@TypeOf(result)) == .@"enum") cp_cast_int(i32, @intFromEnum(result)) else cp_cast_int(i32, result)) };
+            return .{ .result = @intCast(result) };
         }
         _ = unreachable;
 }

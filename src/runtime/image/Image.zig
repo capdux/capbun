@@ -1052,7 +1052,7 @@ pub fn run(self: *PipelineTask) void {
                     _ = &probe_err;
                 }
             }
-            var hint: ?codecs.DecodeHint = null;
+            var hint: codecs.DecodeHint = .{};
             _ = &hint;
             if (self.pipeline.resize) |r| {
                 _ = &r;

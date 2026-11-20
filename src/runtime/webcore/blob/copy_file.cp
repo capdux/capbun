@@ -170,8 +170,8 @@ export class CopyFile {
 
     pub fn doOpenFile(*_, which: IOWhich): !void {
         let path_buf1: bun.PathBuffer = undefined;
-        let open_source_flags = O.CLOEXEC | O.RDONLY;
-        let open_destination_flags = O.CLOEXEC | O.CREAT | O.WRONLY | O.TRUNC;
+        const open_source_flags = O.CLOEXEC | O.RDONLY;
+        const open_destination_flags = O.CLOEXEC | O.CREAT | O.WRONLY | O.TRUNC;
 
         if (which == .both or which == .source) {
             this.source_fd = switch (sys.open(

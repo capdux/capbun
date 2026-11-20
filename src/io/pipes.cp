@@ -55,7 +55,7 @@ pub enum PollOrFd {
                     * = fd.closeAllowingBadFileDescriptor(null);
                 }
             }
-            if (comptime (@TypeOf(onCloseFn) != void)) {
+            if (comptime (@TypeOf(onCloseFn) != void && @TypeOf(onCloseFn) != @TypeOf(.{}))) {
                 onCloseFn(@ptrCast(@alignCast(ctx.?)));
             }
         } else {

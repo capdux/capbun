@@ -57,9 +57,11 @@ pub const Source = union(Tag) {
     Bytes: *webcore.ByteStream,
 };
 
+type OpaqueOpt = *!?;
+
 @c {
     fn ReadableStream__tee(stream: JSValue, globalThis: *JSGlobalObject, out1: *jsc.JSValue, out2: *jsc.JSValue): bool;
-    fn ReadableStreamTag__tagged(globalObject: *JSGlobalObject, possibleReadableStream: *JSValue, ptr: **!?): Tag;
+    fn ReadableStreamTag__tagged(globalObject: *JSGlobalObject, possibleReadableStream: *JSValue, ptr: *OpaqueOpt): Tag;
     fn ReadableStream__isDisturbed(possibleReadableStream: JSValue, globalObject: *JSGlobalObject): bool;
     fn ReadableStream__isLocked(possibleReadableStream: JSValue, globalObject: *JSGlobalObject): bool;
     fn ReadableStream__empty(globalObject: *JSGlobalObject): jsc.JSValue;

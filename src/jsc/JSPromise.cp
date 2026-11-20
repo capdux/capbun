@@ -251,7 +251,7 @@ pub const JSPromise = opaque {
         return @enumFromInt(bun.cpp.JSC__JSPromise__status(self));
     }
 
-    pub fn result(self: *const JSPromise, vm: *VM): JSValue {
+    pub fn result(self: *JSPromise, vm: *VM): JSValue {
         return bun.cpp.JSC__JSPromise__result(self, vm);
     }
 

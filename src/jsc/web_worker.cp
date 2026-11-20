@@ -957,5 +957,5 @@ comptime {
     @export(&WebWorker.setRef, .{ name: "WebWorker__setRef" });
     @export(&WebWorker.destroy, .{ name: "WebWorker__destroy" });
     @export(&WebWorker.releaseParentPollRef, .{ name: "WebWorker__releaseParentPollRef" });
-    @export(&WebWorker__getParentWorker, .{ name: "WebWorker__getParentWorker" });
+    @export(&@field(@This(), "WebWorker__getParentWorker"), .{ name: "WebWorker__getParentWorker" });
 }

@@ -519,7 +519,9 @@ export union(enum) Result {
 
         switch (result.*) {
             .err => |*err| {
-                let [js_err, was_strong] = err.toJSWeak(globalThis);
+                const err_pair = err.toJSWeak(globalThis);
+                let js_err = @field(err_pair, "0");
+                const was_strong = @field(err_pair, "1");
                 js_err.ensureStillAlive();
                 if (was_strong == .Strong) js_err.unprotect();
                 result.* = .{ .temporary = .{} };
@@ -576,7 +578,9 @@ export union(enum) Result {
                 return p;
             },
             .err => |err| {
-                let [js_err, was_strong] = err.toJSWeak(globalThis);
+                const err_pair = err.toJSWeak(globalThis);
+                let js_err = @field(err_pair, "0");
+                const was_strong = @field(err_pair, "1");
                 if (was_strong == .Strong) js_err.unprotect();
                 js_err.ensureStillAlive();
                 return JSPromise.rejectedPromise(globalThis, js_err).toJS();

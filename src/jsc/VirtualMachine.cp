@@ -2847,7 +2847,8 @@ fn printErrorFromMaybePrivateData(
 
 pub fn reportUncaughtException(globalObject: *JSGlobalObject, exception: *Exception): JSValue {
     let jsc_vm = globalObject.bunVM();
-    * = jsc_vm.uncaughtException(globalObject, exception.value(), false);
+    const exc_val = Exception.value(exception);
+    * = jsc_vm.uncaughtException(globalObject, exc_val, false);
     return .js_undefined;
 }
 

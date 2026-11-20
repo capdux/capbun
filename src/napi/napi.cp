@@ -255,11 +255,11 @@ pub const NapiStatus = enum(c_uint) {
 /// napi_env.setLastError.
 pub const napi_status = c_uint;
 
-pub const NapiCallbackFn = *const fn (napi_env, napi_callback_info) callconv(.c) napi_value;
+pub type NapiCallbackFn = @c fn (napi_env, napi_callback_info) napi_value;
 pub type napi_callback = NapiCallbackFn?;
 
 /// expects `napi_env`, `callback_data`, `context`
-pub const NapiFinalizeFunction = *const fn (napi_env, *!?, *!?) callconv(.c) void;
+pub type NapiFinalizeFunction = @c fn (napi_env, *!?, *!?) void;
 pub type napi_finalize = NapiFinalizeFunction?;
 pub const napi_property_descriptor = extern struct {
     utf8name: [*c]const u8,
@@ -1231,9 +1231,9 @@ pub const napi_threadsafe_function_release_mode = enum(c_uint) {
 pub const napi_tsfn_nonblocking = 0;
 pub const napi_tsfn_blocking = 1;
 pub const napi_threadsafe_function_call_mode = c_uint;
-pub const napi_async_execute_callback = *const fn (napi_env, *!?) callconv(.c) void;
-pub const napi_async_complete_callback = *const fn (napi_env, napi_status, *!?) callconv(.c) void;
-pub const napi_threadsafe_function_call_js = *const fn (napi_env, napi_value, *!?, *!?) callconv(.c) void;
+pub type napi_async_execute_callback = @c fn (napi_env, *!?) void;
+pub type napi_async_complete_callback = @c fn (napi_env, napi_status, *!?) void;
+pub type napi_threadsafe_function_call_js = @c fn (napi_env, napi_value, *!?, *!?) void;
 @c pub struct napi_node_version {
     major: u32,
     minor: u32,
@@ -1251,10 +1251,10 @@ pub const napi_threadsafe_function_call_js = *const fn (napi_env, napi_value, *!
 }
 pub const struct_napi_async_cleanup_hook_handle__ = opaque {};
 pub type napi_async_cleanup_hook_handle = (*struct_napi_async_cleanup_hook_handle__)?;
-pub const NapiAsyncCleanupHookFn = *const fn (napi_async_cleanup_hook_handle, *!?) callconv(.c) void;
+pub type NapiAsyncCleanupHookFn = @c fn (napi_async_cleanup_hook_handle, *!?) void;
 pub type napi_async_cleanup_hook = NapiAsyncCleanupHookFn?;
 
-pub const napi_addon_register_func = *const fn (napi_env, napi_value) callconv(.c) napi_value;
+pub type napi_addon_register_func = @c fn (napi_env, napi_value) napi_value;
 pub const struct_napi_module = extern struct {
     nm_version: c_int,
     nm_flags: c_uint,

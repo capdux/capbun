@@ -590,7 +590,7 @@ pub struct FSWatcher {
 
     static fn emitJS(listener: jsc.JSValue, globalObject: *jsc.JSGlobalObject, filename: jsc.JSValue, comptime event_type: _EventType) {
         let args: [2]jsc.JSValue = [
-            event_type.toJS(globalObject),
+            Bun__domEventNameToJS(globalObject, event_type),
             filename,
         ];
 

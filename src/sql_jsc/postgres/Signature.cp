@@ -14,8 +14,9 @@ const JSValue = jsc.JSValue;
     prepared_statement_name: []const u8,
 
     pub static fn empty(): @This() {
+        const empty_fields = std.mem.zeroes([0]int4);
         return Signature{
-            fields: &[],
+            fields: empty_fields[0..0],
             name: "",
             query: "",
             prepared_statement_name: "",

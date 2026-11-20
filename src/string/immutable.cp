@@ -598,7 +598,6 @@ pub struct StringOrTinyString {
                 const len = std.mem.readInt(usize, _.remainder_buf[@sizeOf(usize) .. @sizeOf(usize) * 2], .little);
                 return ptr[0..len];
             }
-            else => unreachable,
         };
     }
 

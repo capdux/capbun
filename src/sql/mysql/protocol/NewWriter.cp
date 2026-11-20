@@ -63,7 +63,7 @@ pub fn NewWriterWrap(
         pub fn start(this, sequence_id: u8) AnyMySQLError.Error!Packet {
             const o = offsetFn(this.wrapped);
             debug("starting packet: {d}", .{o});
-            const zeros: [PacketHeader.size]u8 = [0; PacketHeader.size];
+            const zeros = std.mem.zeroes([PacketHeader.size]u8);
             this.write(zeros[0..])?;
             return Packet{
                 header: PacketHeader{ sequence_id: sequence_id, length: 0 },

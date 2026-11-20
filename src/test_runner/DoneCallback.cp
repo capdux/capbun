@@ -26,7 +26,8 @@ const groupLog = bun_test.debug.group;
         if (r := callback.ref) {
             r.deref();
         }
-        VirtualMachine.get().allocator.destroy(callback);
+        const vm = VirtualMachine.get();
+        vm.allocator.destroy(callback);
     }
 
     pub static fn createUnbound(globalThis: *JSGlobalObject): JSValue {

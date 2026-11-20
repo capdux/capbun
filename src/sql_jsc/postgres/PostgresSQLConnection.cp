@@ -847,7 +847,12 @@ export struct SocketHandlerSSL {
             if (tls_object.isBoolean() && tls_object.toBoolean()) {
                 tls_config = .{};
             } else if (tls_object.isObject()) {
-                tls_config = (jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object) catch return JSValue.zero) orelse .{};
+                const maybe_tls = jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object) catch return JSValue.zero;
+                if (cfg := maybe_tls) {
+                    tls_config = cfg;
+                } else {
+                    tls_config = .{};
+                }
             } else {
                 return globalObject.throwInvalidArguments("tls must be a boolean or an object", .{});
             }

@@ -366,7 +366,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             client.enqueueDescribeOrTestCallback(bunTest, globalThis, callFrame, args.callback, args.description, args.options, callback_length, line_no)?;
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn enqueueDescribeOrTestCallback(*_, bunTest: *bun_test.BunTest, globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, callback: jsc.JSValue?, description: ([]const u8)?, options: ParseArgumentsOptions, callback_length: usize, line_no: u32): bun.JSError!void {

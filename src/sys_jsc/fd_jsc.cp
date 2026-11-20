@@ -14,7 +14,7 @@ pub fn fromJS(value: JSValue): FD? {
     if (fd64 < 0 || fd64 > std.math.maxInt(i32)) {
         return null;
     }
-    const fd: i32 = fd64 as i32;
+    const fd: i32 = @intCast(fd64);
     return FD.fromUV(fd);
 }
 
@@ -32,7 +32,7 @@ pub fn fromJSValidated(value: JSValue, global: *jsc.JSGlobalObject): FD? ! bun.J
         return global.throwRangeError(float, { field_name: "fd", min: 0, max: std.math.maxInt(i32) });
     }
     const int: i64 = @intFromFloat(float);
-    const fd: c_int = int as c_int;
+    const fd: c_int = @intCast(int);
     return FD.fromUV(fd);
 }
 

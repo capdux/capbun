@@ -851,7 +851,13 @@ else => .disable,
                 tls_config = .{};
             } else {
                 if (tls_object.isObject()) {
-                    if (tls_config == null) { tls_config = .{}; }
+                    const maybe_tls = (blk_catch_10: { break :blk_catch_10 ((jsc.API.ServerConfig.SSLConfig.fromJS(vm, globalObject, tls_object)) catch |__ce_10| { _ = &__ce_10; return JSValue.zero; }); });
+                    if (maybe_tls) |cfg| {
+                        _ = &cfg;
+                        tls_config = cfg;
+                    } else {
+                        tls_config = .{};
+                    }
                 } else {
                     return globalObject.throwInvalidArguments("tls must be a boolean or an object", .{});
                 }

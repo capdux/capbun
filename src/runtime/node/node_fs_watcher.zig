@@ -754,7 +754,7 @@ pub fn emit(self: *FSWatcher, file_name: []const u8, comptime event_type: _Event
     }
 
 pub fn emitJS(listener: jsc.JSValue, globalObject: *jsc.JSGlobalObject, filename: jsc.JSValue, comptime event_type: _EventType) void {
-            var args: [2]jsc.JSValue = .{ event_type.toJS(globalObject), filename };
+            var args: [2]jsc.JSValue = .{ Bun__domEventNameToJS(globalObject, event_type), filename };
             _ = &args;
             _ = (blk_catch_7: { break :blk_catch_7 ((listener.callWithGlobalThis(globalObject, (&args))) catch |e| { _ = &e; break :blk_catch_7 globalObject.reportActiveExceptionAsUnhandled(e); }); });
     }

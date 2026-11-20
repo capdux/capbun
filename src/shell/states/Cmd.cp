@@ -247,7 +247,7 @@ pub struct ShellAsyncSubprocessDone {
     exit_code: ExitCode? = null,
     io: IO,
 
-    state: CmdState,
+    state: CmdState = .idle,
 
     static fn init(
         interpreter: *Interpreter,

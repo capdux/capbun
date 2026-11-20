@@ -985,7 +985,7 @@ pub struct PipelineTask {
         // can be over-shrunk and then upscaled, throwing away detail.
         // (flip/flop are pure mirrors that never change w/h, so the hint
         //  stays valid through them.)
-        let hint: codecs.DecodeHint? = null;
+        let hint: codecs.DecodeHint = .{};
         if (r := _.pipeline.resize) {
             let tw = r.w;
             // r.h==0 means "preserve aspect" — constrain on width only.

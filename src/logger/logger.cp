@@ -940,7 +940,8 @@ pub struct Log {
 
     pub fn addSysError(*_, alloc: std.mem.Allocator, e: bun.sys.Error, comptime fmt: string, args: auto): void ! OOM {
         if (pair := e.getErrorCodeTagName()) {
-            const [tag_name, sys_errno] = pair;
+            const tag_name = @field(pair, "0");
+            const sys_errno = @field(pair, "1");
             const prefix = bun.sys.coreutils_error_map.get(sys_errno) ?? tag_name;
             const msg_body = allocPrint(alloc, fmt, args)?;
             defer alloc.free(msg_body);

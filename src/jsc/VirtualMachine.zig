@@ -1868,9 +1868,9 @@ pub fn printException(client: *VirtualMachine, exception: *Exception, exception_
         _ = formatter.deinit();
         }
         if (Output.enable_ansi_colors_stderr) {
-            _ = client.printErrorlikeObject((if (@typeInfo(@TypeOf(exception)) == .@"enum") @intFromEnum(exception) else exception.value)(), exception, exception_list, (&formatter), Writer, writer, true, allow_side_effects);
+            _ = client.printErrorlikeObject(exception.value(), exception, exception_list, (&formatter), Writer, writer, true, allow_side_effects);
         } else {
-            _ = client.printErrorlikeObject((if (@typeInfo(@TypeOf(exception)) == .@"enum") @intFromEnum(exception) else exception.value)(), exception, exception_list, (&formatter), Writer, writer, false, allow_side_effects);
+            _ = client.printErrorlikeObject(exception.value(), exception, exception_list, (&formatter), Writer, writer, false, allow_side_effects);
         }
 }
 
@@ -2409,7 +2409,8 @@ pub fn printErrorFromMaybePrivateData(self: *VirtualMachine, value: JSValue, exc
 pub fn reportUncaughtException(globalObject: *JSGlobalObject, exception: *Exception) JSValue {
         var jsc_vm = globalObject.bunVM();
         _ = &jsc_vm;
-        _ = jsc_vm.uncaughtException(globalObject, (if (@typeInfo(@TypeOf(exception)) == .@"enum") @intFromEnum(exception) else exception.value)(), false);
+        const exc_val = Exception.value(exception);
+        _ = jsc_vm.uncaughtException(globalObject, exc_val, false);
         return .js_undefined;
 }
 

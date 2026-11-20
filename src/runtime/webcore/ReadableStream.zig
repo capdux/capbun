@@ -766,6 +766,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
 };
 }
 pub const CloseHandlerFn = *const fn (?*anyopaque) void;
+const OpaqueOpt = ?*anyopaque;
 const Environment = bun.Environment;
 const Syscall = bun.sys;
 const jsc = bun.jsc;
@@ -808,7 +809,7 @@ pub const Source = union(Tag) {
 
 extern "c" fn ReadableStream__tee(stream: JSValue, globalThis: *JSGlobalObject, out1: *jsc.JSValue, out2: *jsc.JSValue) callconv(.c) bool;
 
-extern "c" fn ReadableStreamTag__tagged(globalObject: *JSGlobalObject, possibleReadableStream: *JSValue, ptr: ?**anyopaque) callconv(.c) Tag;
+extern "c" fn ReadableStreamTag__tagged(globalObject: *JSGlobalObject, possibleReadableStream: *JSValue, ptr: *OpaqueOpt) callconv(.c) Tag;
 
 extern "c" fn ReadableStream__isDisturbed(possibleReadableStream: JSValue, globalObject: *JSGlobalObject) callconv(.c) bool;
 

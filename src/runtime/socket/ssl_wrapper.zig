@@ -91,12 +91,12 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
             return .{ .handlers = handlers, .flags = .{ .is_client = is_client }, .ctx = ctx, .ssl = ssl };
     }
 
-pub fn init(ssl_options: jsc.API.ServerConfig.SSLConfig, is_client: bool, handlers: Handlers) This!void {
+pub fn init(ssl_options: jsc.API.ServerConfig.SSLConfig, is_client: bool, handlers: Handlers) !This {
             _ = bun.BoringSSL.load();
             const ctx_opts: uws.SocketContext.BunSocketContextOptions = ssl_options.asUSockets();
             var err: uws.create_bun_socket_error_t = .none;
             _ = &err;
-            const ssl_ctx = ((ctx_opts.createSSLContext((&err))) orelse { return .{ .ok = error.InvalidOptions }; });
+            const ssl_ctx = ((ctx_opts.createSSLContext((&err))) orelse { return error.InvalidOptions; });
             var __ssl_ctx_moved = false; _ = &__ssl_ctx_moved;
             defer if (!__ssl_ctx_moved) { const __T = @TypeOf(ssl_ctx); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ssl_ctx.release() catch {}; } else { ssl_ctx.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ssl_ctx; _drop_val.release(); } };
             errdefer {

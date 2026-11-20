@@ -31,7 +31,10 @@ pub fn valkeyErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8)?
         error.IdleTimeout => .REDIS_IDLE_TIMEOUT,
         error.NestingDepthExceeded => .REDIS_INVALID_RESPONSE,
         error.JSError => { return globalObject.takeException(error.JSError); },
-        error.OutOfMemory => { globalObject.throwOutOfMemory() catch return globalObject.takeException(error.JSError); },
+        error.OutOfMemory => {
+            if (globalObject.throwOutOfMemory() == error.JSError) {}
+            return globalObject.takeException(error.JSError);
+        },
         error.JSTerminated => { return globalObject.takeException(error.JSTerminated); },
     };
 

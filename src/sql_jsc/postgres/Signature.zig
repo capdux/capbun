@@ -72,7 +72,8 @@ query: []const u8,
 prepared_statement_name: []const u8,
 
 pub fn empty() @This() {
-        return Signature{ .fields = (&&.{}), .name = "", .query = "", .prepared_statement_name = "" };
+        const empty_fields = std.mem.zeroes([0]int4);
+        return Signature{ .fields = empty_fields[0..0], .name = "", .query = "", .prepared_statement_name = "" };
 }
 
 pub fn deinit(self: *Signature) void {
