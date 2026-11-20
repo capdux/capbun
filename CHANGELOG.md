@@ -1851,3 +1851,4 @@
 - **[2026-11-21] Wave 41 A 组 (24 模块)**：更新 `css/{media_query,context,css_parser,selectors/parser,values/{image,position,resolution,gradient,ident,url},rules/{font_face,page,supports,container,counter_style,font_palette_values,property,rules,style},properties/{custom,margin_padding,align,box_shadow,display}}`。
 - **[2026-11-21] Wave 42 B 组 (7 模块)**：更新 `bundler/{Chunk,HTMLImportManifest,bundle_v2,linker_context/{computeCrossChunkDependencies,writeOutputFilesToDisk}}`, `install/{lockfile/bun.lock,yarn}`。
 - **[2026-11-21] Wave 42 A 组 (14 模块)**：更新 `css/{css_parser,media_query,selectors/parser,rules/{document,font_palette_values,font_face},values/{syntax,resolution,gradient},properties/{align,box_shadow,custom,display,margin_padding}}`。
+- **[2026-11-21] Wave 42 C 组 (1 跨模块根因)**：更新 `js_parser/ast/P`。

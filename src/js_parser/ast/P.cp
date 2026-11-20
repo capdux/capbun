@@ -762,7 +762,7 @@ pub fn NewParser_(
                         const decls = bun.handleOom(p.allocator.alloc(Decl, 1));
                         decls[0] = {
                             binding: p.b(B.Identifier{ ref: ctx.stack_ref }, loc),
-                            value: p.newExpr(std.mem.zeroes(E.Array), loc),
+                            value: p.newExpr(E.Array{ is_single_line: false }, loc),
                         };
                         break :decls G.Decl.List.fromOwnedSlice(decls);
                     },
@@ -5205,7 +5205,7 @@ pub fn NewParser_(
                                 },
                                 name_loc,
                             ),
-                            right: p.newExpr(std.mem.zeroes(E.Object), name_loc),
+                            right: p.newExpr(E.Object{ is_single_line: false }, name_loc),
                         }, name_loc),
                     );
                 };
@@ -5215,7 +5215,7 @@ pub fn NewParser_(
                 break :arg_expr p.newExpr(E.Binary{
                     op: .bin_logical_or_assign,
                     left: Expr.initIdentifier(name_ref, name_loc),
-                    right: p.newExpr(std.mem.zeroes(E.Object), name_loc),
+                    right: p.newExpr(E.Object{ is_single_line: false }, name_loc),
                 }, name_loc);
             };
 

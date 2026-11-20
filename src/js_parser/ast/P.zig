@@ -3513,10 +3513,10 @@ pub fn generateClosureForTypeScriptNamespaceOrEnum(p: *P, stmts: *ListManaged(St
                     const name = p.symbols.items[@as(usize, @intCast(name_ref.innerIndex()))].original_name;
                     _ = p.recordUsage(namespace);
                     _ = p.recordUsage(name_ref);
-                    break :arg_expr Expr.assign(Expr.initIdentifier(name_ref, name_loc), p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = p.newExpr(E.Dot{ .target = Expr.initIdentifier(namespace, name_loc), .name = name, .name_loc = name_loc }, name_loc), .right = p.newExpr(std.mem.zeroes(E.Object), name_loc) }, name_loc));
+                    break :arg_expr Expr.assign(Expr.initIdentifier(name_ref, name_loc), p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = p.newExpr(E.Dot{ .target = Expr.initIdentifier(namespace, name_loc), .name = name, .name_loc = name_loc }, name_loc), .right = p.newExpr(E.Object{ .is_single_line = false }, name_loc) }, name_loc));
                 }
             }
-            break :arg_expr p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = Expr.initIdentifier(name_ref, name_loc), .right = p.newExpr(std.mem.zeroes(E.Object), name_loc) }, name_loc);
+            break :arg_expr p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = Expr.initIdentifier(name_ref, name_loc), .right = p.newExpr(E.Object{ .is_single_line = false }, name_loc) }, name_loc);
 };
             var func_args = bun.handleOom(allocator.alloc(G.Arg, 1));
             _ = &func_args;
@@ -4916,7 +4916,7 @@ pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source
                 _ = bun.handleOom(result.ensureUnusedCapacity((2 + (if (comptime @typeInfo(@TypeOf(@intFromBool((exports.items.len > 0)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((exports.items.len > 0)))) else cp_cast_int(usize, @intFromBool((exports.items.len > 0)))))));
                 _ = result.appendAssumeCapacity(p.s(S.Local{ .decls = decls: {
                 const decls = bun.handleOom(p.allocator.alloc(Decl, 1));
-                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = ctx.stack_ref }, loc), .value = p.newExpr(std.mem.zeroes(E.Array), loc) };
+                decls[cp_cast_int(usize, 0)] = .{ .binding = p.b(B.Identifier{ .ref = ctx.stack_ref }, loc), .value = p.newExpr(E.Array{ .is_single_line = false }, loc) };
                 break :decls G.Decl.List.fromOwnedSlice(decls);
     }, .kind = .k_let }, loc));
                 _ = result.appendAssumeCapacity(p.s(S.Try{ .body = non_exported_statements, .body_loc = loc, .catch_ = .{ .binding = p.b(B.Identifier{ .ref = caught_ref }, loc), .body = catch_body: {
