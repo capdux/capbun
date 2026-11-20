@@ -906,9 +906,8 @@ pub fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
                         if (((pre_stmt.*).data == .s_local)) {
                             for (cp_mut_slice(&(pre_stmt.*).data.s_local.decls.slice())) |*decl| {
                                 _ = &decl;
-                                if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*v| {
-                                    _ = &v;
-                                    _ = rewriteExpr(p, (v.*), rk);
+                                if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
+                                    _ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?), rk);
                                 }
                             }
                         }

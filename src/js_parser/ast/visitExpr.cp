@@ -353,10 +353,11 @@ fn VisitExprVisitors(
                             args[2] = key;
                         } else if (p.options.jsx.development) {
                             // if (maybeKey !== undefined)
+                            const undef: E.Undefined = {};
                             args[2] = Expr{
                                 loc: expr.loc,
                                 data: {
-                                    e_undefined: E.Undefined{},
+                                    e_undefined: undef,
                                 },
                             };
                         }
@@ -1610,7 +1611,7 @@ fn VisitExprVisitors(
             });
             p.pushScopeForVisitPass(.function_body, e_.body.loc) catch unreachable;
 
-            let react_hook_data: (*ReactRefresh.HookContext)? = null;
+            let react_hook_data: ReactRefresh.HookContext? = null;
             const prev = p.react_refresh.hook_ctx_storage;
             defer p.react_refresh.hook_ctx_storage = prev;
             p.react_refresh.hook_ctx_storage = &react_hook_data;
@@ -1644,7 +1645,7 @@ fn VisitExprVisitors(
                 return expr;
             }
 
-            let react_hook_data: (*ReactRefresh.HookContext)? = null;
+            let react_hook_data: ReactRefresh.HookContext? = null;
             const prev = p.react_refresh.hook_ctx_storage;
             defer p.react_refresh.hook_ctx_storage = prev;
             p.react_refresh.hook_ctx_storage = &react_hook_data;

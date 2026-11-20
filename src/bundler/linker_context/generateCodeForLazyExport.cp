@@ -221,7 +221,7 @@ pub fn generateCodeForLazyExport(c: *LinkerContext, source_index: Index.Int): vo
             @panic("Internal error: expected top-level lazy export statement");
         }
         if (css_ast.local_scope.count() > 0) out: {
-            let exports = E.Object{};
+            let exports: E.Object = {};
 
             const symbols: *const Symbol.List = &c.graph.ast.items(.symbols)[source_index];
             const all_import_records: []const BabyList(bun.css.ImportRecord) = c.graph.ast.items(.import_records);

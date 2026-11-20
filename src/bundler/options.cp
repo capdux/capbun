@@ -2599,7 +2599,8 @@ pub struct PathTemplate {
 
             let count: isize = 1;
             let end_len: usize = remain.len;
-            for (c of remain) {
+            for (idx of 0..remain.len) {
+                const c = remain[@as(usize, @intCast(idx))];
                 count += switch (c) {
                     '[' => @as(isize, 1),
                     ']' => @as(isize, -1),
@@ -2607,7 +2608,7 @@ pub struct PathTemplate {
                 };
 
                 if (count == 0) {
-                    end_len = @intFromPtr(c) - @intFromPtr(remain.ptr);
+                    end_len = @intCast(idx);
                     bun.assert(end_len <= remain.len);
                     break;
                 }

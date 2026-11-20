@@ -129,7 +129,7 @@ const p = (&entry.kind.external_path);
                 _ = &conditions;
                 if ((entry.conditions.len > 0)) {
                     conditions = entry.conditions.mut(0);
-                    _ = (blk_catch_1: { break :blk_catch_1 ((entry.condition_import_records.append(allocator, bun.ImportRecord{ .kind = .at, .path = p.*, .range = Logger.Range })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+                    _ = (blk_catch_1: { break :blk_catch_1 ((entry.condition_import_records.append(allocator, bun.ImportRecord{ .kind = .at, .path = p.*, .range = Logger.Range.none })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
                     var j: usize = entry.conditions.len;
                     _ = &j;
                     while ((j != 1)) {
@@ -268,12 +268,14 @@ pub fn wrapRulesWithConditions(ast: *bun.css.BundlerStyleSheet, temp_allocator: 
 };
             }
             if ((ast.rules.v.items.len > 0)) {
-                if (item.supports) |*supports| {
+                if (item.supports) |supports_val| {
+                    _ = &supports_val;
+                    var supports = supports_val;
                     _ = &supports;
                     ast.rules = brk: {
                     var new_rules = bun.css.BundlerCssRuleList{  };
                     _ = &new_rules;
-                    _ = (blk_catch_8: { break :blk_catch_8 ((new_rules.v.append(temp_allocator, .{ .supports = bun.css.BundlerSupportsRule{ .condition = (supports.*).cloneWithImportRecords(temp_allocator, (&dummy_import_records)), .rules = ast.rules, .loc = bun.css.Location.dummy() } })) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
+                    _ = (blk_catch_8: { break :blk_catch_8 ((new_rules.v.append(temp_allocator, .{ .supports = bun.css.BundlerSupportsRule{ .condition = supports.cloneWithImportRecords(temp_allocator, (&dummy_import_records)), .rules = ast.rules, .loc = bun.css.Location.dummy() } })) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
                     break :brk new_rules;
 };
                 }

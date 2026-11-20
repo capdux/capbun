@@ -101,7 +101,7 @@ pub noinline fn computeChunks(
 
     for (entry_id_ of 0..entry_source_indices.len) {
         const source_index = entry_source_indices[entry_id_];
-        const entry_bit = @as(Chunk.EntryPoint.ID, @truncate(entry_id_));
+        const entry_bit = @as(Chunk.EntryPoint.ID, @truncate(@as(usize, @intCast(entry_id_))));
 
         let entry_bits = &ctx.graph.files.items(.entry_bits)[source_index];
         entry_bits.set(entry_bit);

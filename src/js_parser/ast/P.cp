@@ -2407,7 +2407,7 @@ pub fn NewParser_(
                 return { continue_: expr };
             }
 
-            const tag: Expr.Tag = @as(Expr.Tag, expr.data);
+            const tag: Expr.Tag = std.meta.activeTag(expr.data);
 
             // We can always reorder past primitive values
             if (tag.isPrimitiveLiteral()) {
@@ -6128,7 +6128,7 @@ pub fn NewParser_(
 
             const InlinedEnumValue = js_ast.InlinedEnumValue;
             let map: js_ast.Ast.TsEnumsMap = {};
-            map.ensureTotalCapacity(allocator, i32(p.top_level_enums.items.len))?;
+            map.ensureTotalCapacity(allocator, @intCast(p.top_level_enums.items.len))?;
             for (sym_ref of p.top_level_enums.items) {
                 const entry = p.ref_to_ts_namespace_member.getEntry(sym_ref).?;
                 const namespace = entry.value_ptr.namespace;
@@ -6678,7 +6678,7 @@ pub fn NewParser_(
                     symbols: []const js_ast.Symbol,
                     part_index: u32,
 
-                    pub fn next(ctx: @This(), input: Ref) {
+                    static fn next(ctx: @This(), input: Ref) {
                         // If this symbol was merged, use the symbol at the end of the
                         // linked list in the map. This is the case for multiple "var"
                         // declarations with the same name, for example.

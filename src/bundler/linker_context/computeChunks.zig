@@ -178,7 +178,7 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
             const __end_0 = entry_source_indices.len;
             while (entry_id_ < __end_0) : (entry_id_ += 1) {
                 const source_index = entry_source_indices[@as(usize, @intCast(entry_id_))];
-                const entry_bit = @as(Chunk.EntryPoint.ID, @truncate(entry_id_));
+                const entry_bit = @as(Chunk.EntryPoint.ID, @truncate(@as(usize, @intCast(entry_id_))));
                 var entry_bits = (&ctx.graph.files.items(.entry_bits)[@as(usize, @intCast(source_index))]);
                 _ = &entry_bits;
                 _ = entry_bits.set(entry_bit);

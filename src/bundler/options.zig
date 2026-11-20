@@ -1682,17 +1682,22 @@ pub fn format(self: PathTemplate, writer: *std.Io.Writer) !void {
                 _ = &count;
                 var end_len: usize = remain.len;
                 _ = &end_len;
-                for (cp_iter_slice(remain)) |c| {
-                    _ = &c;
-                    count = (count + (switch (c) {
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_19 = remain.len;
+                    while (idx < __end_19) : (idx += 1) {
+                        const c = remain[@as(usize, @intCast(@as(usize, @intCast(idx))))];
+                        count = (count + (switch (c) {
 '[' => (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(isize, @intFromEnum(1)) else cp_cast_int(isize, 1)),
 ']' => (if (comptime @typeInfo(@TypeOf(-1)) == .@"enum") cp_cast_int(isize, @intFromEnum(-1)) else cp_cast_int(isize, -1)),
 else => (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(isize, @intFromEnum(0)) else cp_cast_int(isize, 0)),
 }));
-                    if ((count == 0)) {
-                        end_len = (@intFromPtr(c) - @intFromPtr(remain.ptr));
-                        _ = bun.assert((end_len <= remain.len));
-                        break;
+                        if ((count == 0)) {
+                            end_len = @intCast(idx);
+                            _ = bun.assert((end_len <= remain.len));
+                            break;
+                        }
                     }
                 }
                 const placeholder = remain[0..end_len];

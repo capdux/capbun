@@ -880,7 +880,8 @@ pub fn assignNestedScopeSlotsHelper(sorted_members: *std.array_list.Managed(u32)
                 sorted_members_buf[cp_cast_int(usize, i)] = member.ref.innerIndex();
                 i = (i + 1);
             }
-            _ = std.sort.pdq(u32, sorted_members_buf, .{}, std.sort.asc(u32));
+            const void_ctx: void = undefined;
+            _ = std.sort.pdq(u32, sorted_members_buf, void_ctx, std.sort.asc(u32));
             for (cp_iter_slice(sorted_members_buf)) |inner_index| {
                 _ = &inner_index;
                 var symbol = (&symbols[@as(usize, @intCast(inner_index))]);

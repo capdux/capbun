@@ -596,7 +596,7 @@ pub const LinkerContext = struct {
     }
 
     pub fn treeShakingAndCodeSplitting(c: *LinkerContext) OOM!void {
-        const trace = bun.perf.trace("Bundler.treeShakingAndCodeSplitting");
+        let trace = bun.perf.trace("Bundler.treeShakingAndCodeSplitting");
         defer trace.end();
 
         const parts = c.graph.ast.items(.parts);

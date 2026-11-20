@@ -679,7 +679,7 @@ pub fn LowerDecorators(
                     for (*pre_stmt of pre_eval_stmts.items) {
                         if (pre_stmt.data == .s_local) {
                             for (*decl of pre_stmt.data.s_local.decls.slice()) {
-                                if (*v := decl.value) rewriteExpr(p, v, rk);
+                                if (decl.value != null) rewriteExpr(p, &decl.value.?, rk);
                             }
                         }
                     }

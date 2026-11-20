@@ -382,7 +382,8 @@ pub fn assignNestedScopeSlotsHelper(sorted_members: *std.array_list.Managed(u32)
             sorted_members_buf[i] = member.ref.innerIndex();
             i += 1;
         }
-        std.sort.pdq(u32, sorted_members_buf, {}, std.sort.asc(u32));
+        const void_ctx: void = undefined;
+        std.sort.pdq(u32, sorted_members_buf, void_ctx, std.sort.asc(u32));
 
         // Assign slots for this scope's symbols. Only do this if the slot is
         // not already assigned. Nested scopes have copies of symbols from parent

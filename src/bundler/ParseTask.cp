@@ -1430,7 +1430,7 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
                     target: client.known_target,
                 } };
             }
-            break :blk null;
+            break :blk @as(ResultSuccess?, null);
         };
         if (ast := maybe_ast) {
             // When using HMR, always flag asts with errors as parse failures.

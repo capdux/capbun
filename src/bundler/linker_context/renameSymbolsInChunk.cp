@@ -41,7 +41,8 @@ pub fn renameSymbolsInChunk(
             }
         }
 
-        std.sort.pdq(StableRef, list.items, {}, StableRef.isLessThan);
+        const void_ctx: void = undefined;
+        std.sort.pdq(StableRef, list.items, void_ctx, StableRef.isLessThan);
         break :brk list;
     };
     defer sorted_imports_from_other_chunks.deinit();
@@ -114,7 +115,8 @@ pub fn renameSymbolsInChunk(
                 }
             }
 
-            std.sort.pdq(renamer.StableSymbolCount, top_level_symbols.items, {}, StableSymbolCount.lessThan);
+            const void_ctx2: void = undefined;
+            std.sort.pdq(renamer.StableSymbolCount, top_level_symbols.items, void_ctx2, StableSymbolCount.lessThan);
             capacity += top_level_symbols.items.len;
             top_level_symbols_all.appendSlice(top_level_symbols.items) catch unreachable;
         }

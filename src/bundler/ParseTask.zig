@@ -1024,7 +1024,7 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
             } else {
                 value = .{ .e = .{ .e = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
             }
-            break :blk null;
+            break :blk @as(?ResultSuccess, null);
 }); }); });
             _ = &maybe_ast;
             if (maybe_ast) |ast| {

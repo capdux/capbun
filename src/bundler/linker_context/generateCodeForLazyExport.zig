@@ -222,7 +222,7 @@ pub fn generateCodeForLazyExport(c: *LinkerContext, source_index: Index.Int) bun
             }
             if ((css_ast.local_scope.count() > 0)) {
                 _ = out: {
-                var exports = E.Object;
+                var exports: E.Object = .{};
                 _ = &exports;
                 const symbols: *const Symbol.List = (&c.graph.ast.items(.symbols)[@as(usize, @intCast(source_index))]);
                 const all_import_records: []const BabyList(bun.css.ImportRecord) = c.graph.ast.items(.import_records);

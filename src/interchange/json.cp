@@ -166,9 +166,9 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
             const DuplicateNodeType = if (opts.json_warn_duplicate_keys) *HashMapPool.LinkedList.Node else void;
             const HashMapType = if (opts.json_warn_duplicate_keys) HashMapPool.HashMap else void;
 
-            let duplicates_node: DuplicateNodeType = if (opts.json_warn_duplicate_keys) HashMapPool.get(p.allocator);
+            let duplicates_node: DuplicateNodeType = if (opts.json_warn_duplicate_keys) HashMapPool.get(p.allocator) else undefined;
 
-            let duplicates: HashMapType = if (opts.json_warn_duplicate_keys) duplicates_node.data;
+            let duplicates: HashMapType = if (opts.json_warn_duplicate_keys) duplicates_node.data else undefined;
 
             defer {
                 if (opts.json_warn_duplicate_keys) {

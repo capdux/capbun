@@ -1383,7 +1383,7 @@ pub struct BundleV2 {
         } ];
         server.appendStmt(S.Local{
             kind: .k_const,
-            decls: G.Decl.List.fromSlice(alloc, &server_manifest_decls),
+            decls: G.Decl.List.fromSlice(alloc, &server_manifest_decls)?,
             is_export: true,
         });
         const ssr_manifest_decls: [1]G.Decl = [ {
@@ -1396,7 +1396,7 @@ pub struct BundleV2 {
         } ];
         server.appendStmt(S.Local{
             kind: .k_const,
-            decls: G.Decl.List.fromSlice(alloc, &ssr_manifest_decls),
+            decls: G.Decl.List.fromSlice(alloc, &ssr_manifest_decls)?,
             is_export: true,
         });
 

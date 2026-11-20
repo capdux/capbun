@@ -377,7 +377,7 @@ var name: []const u8 = js_ast.ClauseItem.default_alias;
             } else {
                 (if (@typeInfo(@TypeOf(func.func)) == .@"enum" or @typeInfo(@TypeOf(func.func)) == .@"union") @tagName(func.func) else func.func.name) = data.default_name;
             }
-            var react_hook_data: ?*ReactRefresh.HookContext = null;
+            var react_hook_data: ?ReactRefresh.HookContext = null;
             _ = &react_hook_data;
             const prev = p.react_refresh.hook_ctx_storage;
             defer {
@@ -504,7 +504,7 @@ pub fn s_function(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.Functi
                 }
             }
             }
-            var react_hook_data: ?*ReactRefresh.HookContext = null;
+            var react_hook_data: ?ReactRefresh.HookContext = null;
             _ = &react_hook_data;
             const prev = p.react_refresh.hook_ctx_storage;
             defer {

@@ -403,9 +403,9 @@ _ = try p.lexer.next();
         }
         const DuplicateNodeType = (if (opts.json_warn_duplicate_keys) *HashMapPool.LinkedList.Node else void);
         const HashMapType = (if (opts.json_warn_duplicate_keys) HashMapPool.HashMap else void);
-        var duplicates_node: DuplicateNodeType = (if (opts.json_warn_duplicate_keys) HashMapPool.get(p.allocator) else null);
+        var duplicates_node: DuplicateNodeType = (if (opts.json_warn_duplicate_keys) HashMapPool.get(p.allocator) else undefined);
         _ = &duplicates_node;
-        var duplicates: HashMapType = (if (opts.json_warn_duplicate_keys) duplicates_node.data else null);
+        var duplicates: HashMapType = (if (opts.json_warn_duplicate_keys) duplicates_node.data else undefined);
         _ = &duplicates;
         defer {
         {

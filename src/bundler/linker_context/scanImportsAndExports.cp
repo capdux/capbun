@@ -1165,7 +1165,8 @@ struct Visitor {
 
     fn visit(*_, idx: Index.Int, ast: *bun.css.BundlerStyleSheet, target_ref: Ref) {
         if (_.visited.contains(target_ref)) return;
-        _.visited.put(target_ref, {}) catch unreachable;
+        const void_val: void = undefined;
+        _.visited.put(target_ref, void_val) catch unreachable;
 
         // This local name was in a style rule that
         if (composes := ast.composes.getPtr(target_ref)) {

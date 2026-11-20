@@ -74,7 +74,8 @@ const Loc = Logger.Loc;
 
 pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) void {
         const source_index = source_index_.get();
-        const trace = bun.perf.trace("Bundler.CreateNamespaceExports");
+        var trace = bun.perf.trace("Bundler.CreateNamespaceExports");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

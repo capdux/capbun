@@ -1584,7 +1584,7 @@ else => {
             if ((replacement_can_be_removed and p.exprCanBeRemovedIfUnused((&expr)))) {
                 return .{ .continue_ = expr };
             }
-            const tag: Expr.Tag = (if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(expr.data)) else @as(Expr.Tag, expr.data));
+            const tag: Expr.Tag = std.meta.activeTag(expr.data);
             if (tag.isPrimitiveLiteral()) {
                 return .{ .continue_ = expr };
             }
@@ -4131,7 +4131,7 @@ pub fn computeTsEnumsMap(p: *const P, allocator: Allocator) !js_ast.Ast.TsEnumsM
             const InlinedEnumValue = js_ast.InlinedEnumValue;
             var map: js_ast.Ast.TsEnumsMap = .{};
             _ = &map;
-            _ = try map.ensureTotalCapacity(allocator, (if (comptime @typeInfo(@TypeOf(p.top_level_enums.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(p.top_level_enums.items.len)) else cp_cast_int(i32, p.top_level_enums.items.len)));
+            _ = try map.ensureTotalCapacity(allocator, @intCast(p.top_level_enums.items.len));
             for (p.top_level_enums.items) |sym_ref| {
                 _ = &sym_ref;
                 const entry = (p.ref_to_ts_namespace_member.getEntry(sym_ref)).?;
@@ -4510,8 +4510,7 @@ else => {
     symbols: []const js_ast.Symbol,
     part_index: u32,
 
-pub fn next(self: @This(), ctx: @This(), input: Ref) void {
-        _ = self;
+pub fn next(ctx: @This(), input: Ref) void {
             var sym_ref = input;
             _ = &sym_ref;
             var symbol_ref = (&ctx.symbols[@as(usize, @intCast(sym_ref.innerIndex()))]);

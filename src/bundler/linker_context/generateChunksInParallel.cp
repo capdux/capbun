@@ -52,13 +52,14 @@ pub fn generateChunksInParallel(
             let batch: ThreadPoolLib.Batch = {};
             let tasks = bun.handleOom(c.allocator().alloc(LinkerContext.PrepareCssAstTask, total_count));
             let i: usize = 0;
-            for (*chunk of chunks) {
-                if (chunk.content == .css) {
+            for (idx of 0..chunks.len) {
+                const u_idx = @as(usize, @intCast(idx));
+                if (chunks[u_idx].content == .css) {
                     tasks[i] = LinkerContext.PrepareCssAstTask{
                         task: ThreadPoolLib.Task{
                             callback: &LinkerContext.prepareCssAstsForChunk,
                         },
-                        chunk: chunk,
+                        chunk: &chunks[u_idx],
                         linker: c,
                     };
                     batch.push(.@"from"(&tasks[i].task));

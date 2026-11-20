@@ -344,7 +344,8 @@ const tag: Expr = tagger: {
                         args[cp_cast_int(usize, 2)] = key;
                     } else {
                         if (p.options.jsx.development) {
-                            args[cp_cast_int(usize, 2)] = Expr{ .loc = expr.loc, .data = .{ .e_undefined = E.Undefined } };
+                            const undef: E.Undefined = .{};
+                            args[cp_cast_int(usize, 2)] = Expr{ .loc = expr.loc, .data = .{ .e_undefined = undef } };
                         }
                     }
                     if (p.options.jsx.development) {
@@ -1217,7 +1218,7 @@ pub fn e_arrow(p: *P, expr: Expr, unused_in: ExprIn) Expr {
             const dupe = ((p.allocator.dupe(Stmt, e_.body.stmts)) catch unreachable);
             _ = p.visitArgs(e_.args, VisitArgsOpts{ .has_rest_arg = e_.has_rest_arg, .body = dupe, .is_unique_formal_parameters = true });
             _ = ((p.pushScopeForVisitPass(.function_body, e_.body.loc)) catch unreachable);
-            var react_hook_data: ?*ReactRefresh.HookContext = null;
+            var react_hook_data: ?ReactRefresh.HookContext = null;
             _ = &react_hook_data;
             const prev = p.react_refresh.hook_ctx_storage;
             defer {
@@ -1257,7 +1258,7 @@ pub fn e_function(p: *P, expr: Expr, unused_in: ExprIn) Expr {
             if (p.is_revisit_for_substitution) {
                 return expr;
             }
-            var react_hook_data: ?*ReactRefresh.HookContext = null;
+            var react_hook_data: ?ReactRefresh.HookContext = null;
             _ = &react_hook_data;
             const prev = p.react_refresh.hook_ctx_storage;
             defer {

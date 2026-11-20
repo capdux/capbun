@@ -238,7 +238,8 @@ pub fn visit(self: *Visitor, idx: Index.Int, ast: *bun.css.BundlerStyleSheet, ta
             if (self.visited.contains(target_ref)) {
                 return;
             }
-            _ = ((self.visited.put(target_ref, .{})) catch unreachable);
+            const void_val: void = undefined;
+            _ = ((self.visited.put(target_ref, void_val)) catch unreachable);
             if (ast.composes.getPtr(target_ref)) |composes| {
                 _ = &composes;
                 for (cp_mut_slice(&composes.composes.sliceConst())) |*compose| {

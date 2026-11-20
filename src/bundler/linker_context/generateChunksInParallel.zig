@@ -176,12 +176,17 @@ pub fn generateChunksInParallel(c: *LinkerContext, chunks: []Chunk, comptime is_
                 _ = &tasks;
                 var i: usize = 0;
                 _ = &i;
-                for (cp_mut_slice(&chunks)) |*chunk| {
-                    _ = &chunk;
-                    if (((chunk.*).content == .css)) {
-                        tasks[cp_cast_int(usize, i)] = LinkerContext.PrepareCssAstTask{ .task = ThreadPoolLib.Task{ .callback = (&LinkerContext.prepareCssAstsForChunk) }, .chunk = (chunk.*), .linker = c };
-                        _ = batch.push(.{ .@"from" = (&tasks[@as(usize, @intCast(i))].task) });
-                        i = (i + 1);
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_1 = chunks.len;
+                    while (idx < __end_1) : (idx += 1) {
+                        const u_idx = @as(usize, @intCast(idx));
+                        if ((chunks[@as(usize, @intCast(u_idx))].content == .css)) {
+                            tasks[cp_cast_int(usize, i)] = LinkerContext.PrepareCssAstTask{ .task = ThreadPoolLib.Task{ .callback = (&LinkerContext.prepareCssAstsForChunk) }, .chunk = (&chunks[@as(usize, @intCast(u_idx))]), .linker = c };
+                            _ = batch.push(.{ .@"from" = (&tasks[@as(usize, @intCast(i))].task) });
+                            i = (i + 1);
+                        }
                     }
                 }
                 _ = c.parse_graph.pool.worker_pool.schedule(batch);

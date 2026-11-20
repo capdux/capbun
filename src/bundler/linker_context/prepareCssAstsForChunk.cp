@@ -53,7 +53,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                         conditions = entry.conditions.mut(0);
                         entry.condition_import_records.append(
                             allocator,
-                            bun.ImportRecord{ kind: .at, path: p.*, range: Logger.Range{} },
+                            bun.ImportRecord{ kind: .at, path: p.*, range: Logger.Range.none },
                         ) catch |e| bun.handleOom(e);
 
                         // Handling a chain of nested conditions is complicated. We can't
@@ -285,7 +285,8 @@ fn wrapRulesWithConditions(
         // Generate "@supports" wrappers. This is not done if the rule block is
         // empty because empty "@supports" rules have no effect.
         if (ast.rules.v.items.len > 0) {
-            if (*supports := item.supports) {
+            if (supports_val := item.supports) {
+                let supports = supports_val;
                 ast.rules = brk: {
                     let new_rules = bun.css.BundlerCssRuleList{};
                     new_rules.v.append(temp_allocator, {

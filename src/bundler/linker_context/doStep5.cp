@@ -33,7 +33,7 @@ const Loc = Logger.Loc;
 /// imported using an import star statement.
 pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) {
     const source_index = source_index_.get();
-    const trace = bun.perf.trace("Bundler.CreateNamespaceExports");
+    let trace = bun.perf.trace("Bundler.CreateNamespaceExports");
     defer trace.end();
 
     const id = source_index;

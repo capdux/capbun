@@ -129,7 +129,8 @@ pub fn renameSymbolsInChunk(c: *LinkerContext, allocator: std.mem.Allocator, chu
                 remain = remain[1..];
             }
         }
-        _ = std.sort.pdq(StableRef, list.items, .{}, StableRef.isLessThan);
+        const void_ctx: void = undefined;
+        _ = std.sort.pdq(StableRef, list.items, void_ctx, StableRef.isLessThan);
         break :brk list;
 };
         _ = &sorted_imports_from_other_chunks;
@@ -201,7 +202,8 @@ pub fn renameSymbolsInChunk(c: *LinkerContext, allocator: std.mem.Allocator, chu
                         _ = try minify_renamer.accumulateSymbolUseCount((&top_level_symbols), declared_ref, 1, stable_source_indices);
                     }
                 }
-                _ = std.sort.pdq(renamer.StableSymbolCount, top_level_symbols.items, .{}, StableSymbolCount.lessThan);
+                const void_ctx2: void = undefined;
+                _ = std.sort.pdq(renamer.StableSymbolCount, top_level_symbols.items, void_ctx2, StableSymbolCount.lessThan);
                 capacity = (capacity + top_level_symbols.items.len);
                 _ = ((top_level_symbols_all.appendSlice(top_level_symbols.items)) catch unreachable);
             }
