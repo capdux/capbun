@@ -2946,3 +2946,5 @@ Options:
 - [2026-11-20 04:08:29 UTC] [发送至 cp_agy] 工单 `task-bun-20261120-prelude-ptr-shadow`（复现 `/data/dev/cp/temp/repro_prelude_ptr_shadow.cp`）：`Err.with_cause` prelude 中未加前缀的局部变量 `var ptr` 遮蔽顶层 `pub const ptr`；`src/bun.cp` (3907行, 1.022x) 已完成全部 CP 改写暂标 BLOCKED，原 `src/bun.zig` 已还原保护。
 
 - [2026-11-20 04:11:20 UTC] 验收并提交 `src/runtime/api/bun/h2_frame_parser.cp` (5035行, 1.032x)——整个 `src/runtime/` 实现 100% 闭环；接力派发 `src/sys/windows/windows.zig` (4108行)。
+
+- [2026-11-20 04:12:36 UTC] 验收并提交 `src/install/` 最后 2 模块：`bin.cp` (1.041x), `dependency.cp` (1.044x)——`src/install/` 实现 100% 闭环；接力派发 `src/sys/sys.zig` (4703行)。

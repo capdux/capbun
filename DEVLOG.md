@@ -1239,3 +1239,6 @@
 
 ### 2026-11-20 04:11:20 UTC - HTTP/2 帧解析器迁移经验
 - 将 5 个 `@packed(uN)` 结构体、`@tls` 变量与 `FramePayload` 提升至顶层，`?? return` 全改 Walrus 解包，膨胀率 1.032x。
+
+### 2026-11-20 04:12:36 UTC - src/install/ 100% 收官经验
+- 规避局部变量命名为 `any`（会被 codegen 误替为 `anytype`）、`enum` 方法去 `pub inline`、顶层 `comptime` 位移常量展开，膨胀率 1.041x~1.044x。
