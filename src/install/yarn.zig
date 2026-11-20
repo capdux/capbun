@@ -617,7 +617,10 @@ pub fn findEntryBySpec(self: *YarnLock, spec: []const u8) ?*YarnLockEntry {
                 for (cp_iter_slice((entry.*).specs)) |entry_spec| {
                     _ = &entry_spec;
                     if (strings.eql(entry_spec, spec)) {
-                        return (entry.*);
+                        return (blk: {
+                        break :blk (&(entry.*));
+
+});
                     }
                 }
             }
@@ -1272,7 +1275,7 @@ pub fn migrateYarnLockfile(lockfile: *Lockfile, manager: *Install.PackageManager
         }
         for (cp_mut_slice(&package_dependents)) |*list| {
             _ = &list;
-            (list.*).* = PackageIDList.init(allocator);
+            (list.*) = PackageIDList.init(allocator);
         }
         var dep_idx_first: usize = 0;
         _ = &dep_idx_first;

@@ -1653,12 +1653,12 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
                 _ = &entry_point;
                 const eps: [1]Index = .{ entry_point };
                 const order = self.linker.findImportedFilesInCSSOrder(self.allocator(), (&eps));
-                chunk.* = .{ .entry_point = .{ .entry_point_id = (if (comptime @typeInfo(@TypeOf(entry_point.get())) == .@"enum") cp_cast_int(i32, @intFromEnum(entry_point.get())) else cp_cast_int(i32, entry_point.get())), .source_index = entry_point.get(), .is_entry_point = false }, .content = .{ .css = .{ .imports_in_chunk_in_order = order, .asts = try self.allocator().alloc(bun.css.BundlerStyleSheet, order.len) } }, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
+                chunk.* = .{ .entry_point = .{ .entry_point_id = @intCast(entry_point.get()), .source_index = entry_point.get(), .is_entry_point = false }, .content = .{ .css = .{ .imports_in_chunk_in_order = order, .asts = try self.allocator().alloc(bun.css.BundlerStyleSheet, order.len) } }, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
             }
             for (html_files.keys(), chunks[1 + start.css_entry_points.count() ..]) |source_index, *chunk| {
                 _ = &source_index;
                 _ = &chunk;
-                chunk.* = .{ .entry_point = .{ .entry_point_id = (if (comptime @typeInfo(@TypeOf(source_index.get())) == .@"enum") cp_cast_int(i32, @intFromEnum(source_index.get())) else cp_cast_int(i32, source_index.get())), .source_index = source_index.get(), .is_entry_point = false }, .content = .html, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
+                chunk.* = .{ .entry_point = .{ .entry_point_id = @intCast(source_index.get()), .source_index = source_index.get(), .is_entry_point = false }, .content = .html, .output_source_map = SourceMap.SourceMapPieces.init(self.allocator()) };
             }
             _ = self.graph.heap.helpCatchMemoryIssues();
             _ = try self.linker.generateChunksInParallel(chunks, true);

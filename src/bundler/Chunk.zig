@@ -136,10 +136,11 @@ pub fn sort(a: []ChunkOrder) void {
             _ = std.sort.pdq(ChunkOrder, a, ChunkOrder{  }, lessThan);
     }
 };
-pub const CodeResult = struct {
+const _CodeResult = struct {
     buffer: []u8 = "",
     shifts: []SourceMap.SourceMapShifts = &.{},
 };
+pub const CodeResult = _CodeResult;
 pub const ChunkOutputPiece = struct {
     data_ptr: [*]const u8,
     data_len: u32,
@@ -488,7 +489,7 @@ else => {
                 _ = &piece;
                 const data = piece.data();
                 if (enable_source_map_shifts) {
-                    var data_offset = SourceMap.LineColumnOffset;
+                    var data_offset: SourceMap.LineColumnOffset = .{};
                     _ = &data_offset;
                     _ = data_offset.advance(data);
                     _ = shift.before.add(data_offset);
@@ -607,8 +608,10 @@ else => unreachable,
             _ = bun.assert((total_buf.len == (count + debug_id_len)));
             return .{ .buffer = total_buf, .shifts = (if (enable_source_map_shifts) shifts.items else &.{}) };
 },
-.joiner => |joiner| {
-const allocator = ((allocator_to_use) orelse (allocatorForSize(joiner.len)));
+.joiner => |joiner_val| {
+var joiner = joiner_val;
+            _ = &joiner;
+            const allocator = ((allocator_to_use) orelse (allocatorForSize(joiner.len)));
             if (display_size) |amt| {
                 _ = &amt;
                 amt.* = joiner.len;
@@ -701,6 +704,7 @@ pub fn getCSSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
 pub inline fn entryBits(self: @This()) *const AutoBitSet {
             return (&self.entry_bits);
     }
+    pub const CodeResult = _CodeResult;
     pub const Flags = ChunkFlags;
     pub const Order = ChunkOrder;
     pub const IntermediateOutput = ChunkIntermediateOutput;

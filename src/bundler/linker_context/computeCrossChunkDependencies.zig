@@ -177,14 +177,14 @@ pub fn walk(deps: *CrossChunkDependencies, chunk: *Chunk, chunk_index: usize) vo
                             if (comptime Environment.allow_assert) {
                                 _ = debug("Cross-chunk export: {s}", .{ (deps.symbols.get(target_ref)).?.original_name });
                             }
-                            _ = ((imports.put(target_ref, .{})) catch unreachable);
+                            _ = ((imports.put(target_ref, undefined)) catch unreachable);
                         }
                     }
                     if (flags.force_include_exports_for_entry_point) {
-                        _ = ((imports.put(deps.exports_refs[@as(usize, @intCast(chunk.entry_point.source_index))], .{})) catch unreachable);
+                        _ = ((imports.put(deps.exports_refs[@as(usize, @intCast(chunk.entry_point.source_index))], undefined)) catch unreachable);
                     }
                     if ((flags.wrap != .none)) {
-                        _ = ((imports.put(deps.wrapper_refs[@as(usize, @intCast(chunk.entry_point.source_index))], .{})) catch unreachable);
+                        _ = ((imports.put(deps.wrapper_refs[@as(usize, @intCast(chunk.entry_point.source_index))], undefined)) catch unreachable);
                     }
                 }
             }

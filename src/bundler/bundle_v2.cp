@@ -2674,7 +2674,7 @@ pub struct BundleV2 {
             const order = _.linker.findImportedFilesInCSSOrder(_.allocator(), &eps);
             chunk.* = {
                 entry_point: {
-                    entry_point_id: i32(entry_point.get()),
+                    entry_point_id: @intCast(entry_point.get()),
                     source_index: entry_point.get(),
                     is_entry_point: false,
                 },
@@ -2692,7 +2692,7 @@ pub struct BundleV2 {
         for (html_files.keys(), chunks[1 + start.css_entry_points.count() ..]) |source_index, *chunk| {
             chunk.* = {
                 entry_point: {
-                    entry_point_id: i32(source_index.get()),
+                    entry_point_id: @intCast(source_index.get()),
                     source_index: source_index.get(),
                     is_entry_point: false,
                 },

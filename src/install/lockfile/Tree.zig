@@ -467,7 +467,7 @@ pub fn reset(self: *@This()) void {
             self.tree_id = 0;
     }
 
-pub fn next(self: *@This(), completed_trees: if ((path_style == true)) ?*Bitset else void) ?Next {
+pub fn next(self: *@This(), completed_trees: if ((path_style == IteratorPathStyle.node_modules)) ?*Bitset else void) ?Next {
             const trees = self.lockfile.buffers.trees.items;
             if ((self.tree_id >= trees.len)) {
                 return null;

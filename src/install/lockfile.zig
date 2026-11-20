@@ -1828,7 +1828,8 @@ pub fn hasTrustedDependency(client: *const Lockfile, name: []const u8, resolutio
         }
         return ((resolution.tag == .npm) and default_trusted_dependencies.has(name));
 }
-pub const Stream = std.io.FixedBufferStream(&.{}, u8);
+const StreamByteSlice = []u8;
+pub const Stream = std.io.FixedBufferStream(StreamByteSlice);
 pub const default_filename = "bun.lockb";
 const PendingResolutions = std.array_list.Managed(PendingResolution);
 pub const FormatVersion = enum(u32) {

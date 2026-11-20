@@ -177,20 +177,20 @@ pub struct CrossChunkDependencies {
                         if (comptime Environment.allow_assert)
                             debug("Cross-chunk export: {s}", [deps.symbols.get(target_ref).?.original_name]);
 
-                        imports.put(target_ref, {}) catch unreachable;
+                        imports.put(target_ref, undefined) catch unreachable;
                     }
                 }
 
                 // Ensure "exports" is included if the current output format needs it
                 // https://github.com/evanw/esbuild/blob/v0.27.2/internal/linker/linker.go#L1049-L1051
                 if (flags.force_include_exports_for_entry_point) {
-                    imports.put(deps.exports_refs[chunk.entry_point.source_index], {}) catch unreachable;
+                    imports.put(deps.exports_refs[chunk.entry_point.source_index], undefined) catch unreachable;
                 }
 
                 // Include the wrapper if present
                 // https://github.com/evanw/esbuild/blob/v0.27.2/internal/linker/linker.go#L1053-L1056
                 if (flags.wrap != .none) {
-                    imports.put(deps.wrapper_refs[chunk.entry_point.source_index], {}) catch unreachable;
+                    imports.put(deps.wrapper_refs[chunk.entry_point.source_index], undefined) catch unreachable;
                 }
             }
         }

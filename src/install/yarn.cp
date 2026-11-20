@@ -506,7 +506,7 @@ pub struct YarnLock {
         for (*entry of _.entries.items) {
             for (entry_spec of entry.specs) {
                 if (strings.eql(entry_spec, spec)) {
-                    return entry;
+                    return unsafe { &entry };
                 }
             }
         }
@@ -1233,7 +1233,7 @@ pub fn migrateYarnLockfile(
         allocator.free(package_dependents);
     }
     for (*list of package_dependents) {
-        list.* = PackageIDList.init(allocator);
+        list = PackageIDList.init(allocator);
     }
 
     let dep_idx_first: usize = 0;

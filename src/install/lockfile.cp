@@ -720,7 +720,8 @@ catalogs: CatalogMap = {},
 saved_config_version: bun.ConfigVersion?,
 
 
-pub const Stream = std.io.FixedBufferStream([]u8);
+type StreamByteSlice = []u8;
+pub const Stream = std.io.FixedBufferStream(StreamByteSlice);
 pub const default_filename = "bun.lockb";
 
 

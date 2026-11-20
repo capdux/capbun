@@ -62,10 +62,11 @@ pub const ChunkOrder = struct {
     }
 };
 
-pub const CodeResult = struct {
+const _CodeResult = struct {
     buffer: []u8 = "",
     shifts: []SourceMap.SourceMapShifts = [],
 };
+pub const CodeResult = _CodeResult;
 
 pub const ChunkOutputPiece = struct {
     /// Pointer and length split to reduce struct size
@@ -564,7 +565,7 @@ pub const ChunkIntermediateOutput = union(enum) {
                     const data = piece.data();
 
                     if (enable_source_map_shifts) {
-                        let data_offset = SourceMap.LineColumnOffset{};
+                        let data_offset: SourceMap.LineColumnOffset = {};
                         data_offset.advance(data);
                         shift.before.add(data_offset);
                         shift.after.add(data_offset);
@@ -707,7 +708,8 @@ pub const ChunkIntermediateOutput = union(enum) {
                         [],
                 };
             },
-            .joiner joiner => {
+            .joiner joiner_val => {
+                let joiner = joiner_val;
                 const allocator = allocator_to_use ?? allocatorForSize(joiner.len);
 
                 if (amt := display_size) {
@@ -743,6 +745,7 @@ pub const ChunkIntermediateOutput = union(enum) {
 };
 
 pub const Chunk = struct {
+    pub const CodeResult = _CodeResult;
     /// This is a random string and is used to represent the output path of this
     /// chunk before the final output path has been computed. See OutputPiece
     /// for more info on this technique.

@@ -179,7 +179,7 @@ pub fn Iterator(comptime path_style: IteratorPathStyle): type {
             depth: usize,
         };
 
-        pub fn next(*_, completed_trees: if (path_style == .node_modules) (*Bitset)? else void): Next? {
+        pub fn next(*_, completed_trees: if (path_style == IteratorPathStyle.node_modules) (*Bitset)? else void): Next? {
             const trees = _.lockfile.buffers.trees.items;
 
             if (_.tree_id >= trees.len) return null;
