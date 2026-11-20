@@ -393,7 +393,7 @@ pub struct Path {
             return new_path;
         } else if (start_len := allocators.sliceRange(_.pretty, _.text)) {
             if (FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.DirnameStore.instance.exists(_.text)) {
-                return _.*;
+                return _;
             }
             let new_path = Fs.Path.init(FileSystem.FilenameStore.instance.append(string, _.text)?);
             new_path.pretty = _.text[start_len[0]..][0..start_len[1]];
@@ -406,7 +406,7 @@ pub struct Path {
                 (FileSystem.FilenameStore.instance.exists(_.pretty) ||
                     FileSystem.DirnameStore.instance.exists(_.pretty)))
             {
-                return _.*;
+                return _;
             }
 
             if (offset := strings.indexOf(_.text, _.pretty)) {

@@ -1234,6 +1234,14 @@ pub union(enum) BlobAny {
         };
     }
 
+    fn hasContentTypeFromUser(): bool {
+        return switch (_) {
+            .Blob => _.Blob.hasContentTypeFromUser(),
+            .WTFStringImpl => false,
+            .InternalBlob => false,
+        };
+    }
+
     fn slice(): []const u8 {
         switch (_) {
             .Blob(b) => return b.sharedView(),

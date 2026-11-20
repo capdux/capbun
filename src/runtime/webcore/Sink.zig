@@ -302,7 +302,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8) type {
         const DetachPtrFn = *const fn(JSValue) callconv(.c) void;
 
         const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" });
-        const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" });
+        const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" }).*;
         const onReadyExtern = @extern(OnReadyFn, .{ .name = abi_name ++ "__onReady" });
         const onStartExtern = @extern(OnStartFn, .{ .name = abi_name ++ "__onStart" });
         const createObjectExtern = @extern(CreateObjectFn, .{ .name = abi_name ++ "__createObject" });

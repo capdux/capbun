@@ -467,14 +467,12 @@ pub enum StdinFdType: i32 {
 
     pub fn closeAllWatchersForIsolation(*_) {
         for (watcher of _.fs_watchers_for_isolation.items) {
-            watcher.stop();
-            watcher.deinit();
+            watcher.detach();
         }
         _.fs_watchers_for_isolation.clearRetainingCapacity();
 
         for (watcher of _.stat_watchers_for_isolation.items) {
-            watcher.stop();
-            watcher.detach();
+            watcher.close();
         }
         _.stat_watchers_for_isolation.clearRetainingCapacity();
     }

@@ -73,8 +73,8 @@ pub const Ctx = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn end(self: Ctx) void {
-            switch (self) {
+pub fn end(self: *Ctx) void {
+            switch (self.*) {
 inline else => |*ctx| {
 _ = ctx.end();
 },

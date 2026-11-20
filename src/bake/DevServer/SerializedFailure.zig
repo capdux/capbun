@@ -151,11 +151,16 @@ pub fn eql(a: SerializedFailure, b: SerializedFailure, _: usize) bool {
 
 pub const FailureArrayHashAdapter = struct {
 
-pub fn hash(owner_val: FailureOwner) u32 {
+pub fn hash(self: FailureArrayHashAdapter, owner_val: FailureOwner) u32 {
+            const self_ref = self;
+            _ = &self_ref;
             return std.hash.int(@as(u32, @bitCast(owner_val.encode())));
     }
 
-pub fn eql(a: FailureOwner, b: SerializedFailure, _: usize) bool {
+pub fn eql(self: FailureArrayHashAdapter, a: FailureOwner, b: SerializedFailure, idx: usize) bool {
+            const self_ref = self;
+            _ = &self_ref;
+            _ = &idx;
             return (@as(u32, @bitCast(a.encode())) == @as(u32, @bitCast(b.getOwner().encode())));
     }
 };

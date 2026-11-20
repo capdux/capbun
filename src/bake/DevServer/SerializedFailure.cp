@@ -53,11 +53,16 @@ pub struct FailureArrayHashContextViaOwner {
 }
 
 pub struct FailureArrayHashAdapter {
-    static fn hash(owner_val: FailureOwner): u32 {
+    pub fn hash(owner_val: FailureOwner): u32 {
+        const self_ref = _;
+        * = self_ref;
         return std.hash.int(@as(u32, @bitCast(owner_val.encode())));
     }
 
-    static fn eql(a: FailureOwner, b: SerializedFailure, _: usize): bool {
+    pub fn eql(a: FailureOwner, b: SerializedFailure, idx: usize): bool {
+        const self_ref = _;
+        * = self_ref;
+        * = idx;
         return @as(u32, @bitCast(a.encode())) == @as(u32, @bitCast(b.getOwner().encode()));
     }
 }

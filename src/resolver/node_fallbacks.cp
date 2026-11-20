@@ -33,9 +33,9 @@ pub struct FallbackModule {
     pub static fn init(comptime name: string): FallbackModule {
         @setEvalBranchQuota(99999);
         const version = "0.0.0-polyfill";
-        const code_path = "node-fallbacks/" + name + ".js";
+        const code_path = "node-fallbacks/" ++ name ++ ".js";
         return FallbackModule{
-            path: Fs.Path.initWithNamespaceVirtual(import_path + name + "/index.js", "node", name),
+            path: Fs.Path.initWithNamespaceVirtual(import_path ++ name ++ "/index.js", "node", name),
             package_json: &PackageJSON{
                 name: name,
                 version: version,

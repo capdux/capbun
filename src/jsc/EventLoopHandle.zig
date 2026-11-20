@@ -214,7 +214,8 @@ pub inline fn env(self: @This()) *bun.DotEnv.Loader {
 });
     }
     pub const platformEventLoop = loop;
-    pub const NullDelimitedEnvMap = ?[:null][*:0]const u8;
+    const NullDelimitedEnvElem = ?[*:0]const u8;
+    pub const NullDelimitedEnvMap = [:null]NullDelimitedEnvElem;
 };
 pub const EventLoopTask = union(EventLoopKind) {
     js: jsc.ConcurrentTask,

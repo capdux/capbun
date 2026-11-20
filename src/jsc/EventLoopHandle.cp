@@ -124,7 +124,8 @@ pub const EventLoopHandle = union(EventLoopKind) {
         this.loop().unref();
     }
 
-    pub type NullDelimitedEnvMap = [:null]?[*:0]const u8;
+    type NullDelimitedEnvElem = ([*:0]const u8)?;
+    pub type NullDelimitedEnvMap = [:null]NullDelimitedEnvElem;
     pub inline fn createNullDelimitedEnvMap(this: @This(), alloc: Allocator): NullDelimitedEnvMap! {
         return switch (this) {
             .js => this.js.virtual_machine.transpiler.env.map.createNullDelimitedEnvMap(alloc),

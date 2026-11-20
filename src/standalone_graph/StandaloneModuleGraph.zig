@@ -554,7 +554,7 @@ pub fn toBytes(allocator: std.mem.Allocator, prefix: []const u8, output_files: [
                 _ = &output_file;
                 _ = string_builder.countZ(output_file.dest_path);
                 _ = string_builder.countZ(prefix);
-                if ((std.meta.activeTag((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value)) == .buffer)) {
+                if ((std.meta.activeTag((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value).*) == .buffer)) {
                     if ((output_file.output_kind == .sourcemap)) {
                         string_builder.cap = (string_builder.cap + ((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value).buffer.bytes.len * 2));
                     } else {
@@ -610,7 +610,7 @@ pub fn toBytes(allocator: std.mem.Allocator, prefix: []const u8, output_files: [
                 if ((!output_file.output_kind.isFileInStandaloneMode())) {
                     continue;
                 }
-                if ((std.meta.activeTag((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value)) != .buffer)) {
+                if ((std.meta.activeTag((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value).*) != .buffer)) {
                     continue;
                 }
                 const dest_path = bun.strings.removeLeadingDotSlash(output_file.dest_path);

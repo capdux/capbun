@@ -398,11 +398,11 @@ pub fn handle(socket: *UwsListenSocket, domain_str: [*:0]const u8, fl: i32, data
             _ = handler(@ptrCast(@alignCast(data)), socket);
     }
 };
-            const domainZ: [*:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
+            const domainZ: [:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
             defer {
             _ = bun.default_allocator.free(domainZ);
             }
-            _ = uws_app_listen_domain_with_options(ssl_flag, bun.cast(*uws_app_t, self), domainZ, domain_name.len, flags, Wrapper.handle, @ptrCast(user_data));
+            _ = uws_app_listen_domain_with_options(ssl_flag, bun.cast(*uws_app_t, self), domainZ.ptr, domain_name.len, flags, Wrapper.handle, @ptrCast(user_data));
     }
     pub const is_ssl: bool = ssl;
     pub const ssl_flag: i32 = (if (ssl) 1 else 0);

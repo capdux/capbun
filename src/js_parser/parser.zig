@@ -973,7 +973,7 @@ pub inline fn generatedSymbolName(name: []const u8) []const u8 {
         const hash = std.hash.Wyhash.hash(0, name);
         var __hash_moved = false; _ = &__hash_moved;
         defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };
-        const hash_str = std.fmt.comptimePrint("_{f}", .{ bun.fmt.truncatedHash32((if (@typeInfo(@TypeOf(hash)) == .@"enum") cp_cast_int(i32, @intFromEnum(hash)) else cp_cast_int(i32, hash))) });
+        const hash_str = std.fmt.comptimePrint("_{f}", .{ bun.fmt.truncatedHash32(@intCast(hash)) });
         var __hash_str_moved = false; _ = &__hash_str_moved;
         defer if (!__hash_str_moved) { const __T = @TypeOf(hash_str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash_str.release() catch {}; } else { hash_str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash_str; _drop_val.release(); } };
         return (name ++ hash_str);

@@ -220,7 +220,7 @@ pub const Map = struct {
         return new_ref;
     }
 
-    pub fn get(*_, target: Ref): (*Symbol)? {
+    pub fn get(target: Ref): (*Symbol)? {
         if (Ref.isSourceIndexNull(target.sourceIndex()) || target.isSourceContentsSlice()) {
             return null;
         }

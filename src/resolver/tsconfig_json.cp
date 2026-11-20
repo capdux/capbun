@@ -344,7 +344,8 @@ pub struct TSConfigJSON {
                 const warn = source.rangeOfString(loc);
                 log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", [text]) catch {};
                 parts.deinit();
-                return &([]);
+                let empty_parts: [0][]const u8 = [];
+                return empty_parts[0..0];
             }
 
             parts.appendAssumeCapacity(text);
@@ -358,7 +359,8 @@ pub struct TSConfigJSON {
                 const warn = source.rangeOfString(loc);
                 log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", [part]) catch {};
                 parts.deinit();
-                return &([]);
+                let empty_parts: [0][]const u8 = [];
+                return empty_parts[0..0];
             }
             parts.appendAssumeCapacity(part);
         }

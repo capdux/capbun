@@ -251,10 +251,10 @@ pub struct PatchFile {
                 for (part of hunk.parts.items) {
                     switch (part.type) {
                         .deletion => {
-                            count += if (part.no_newline_at_end_of_file) 1 else 0;
+                            count += @intFromBool(part.no_newline_at_end_of_file);
                         },
                         .insertion => {
-                            count -= if (part.no_newline_at_end_of_file) 1 else 0;
+                            count -= @intFromBool(part.no_newline_at_end_of_file);
                         },
                         .context => {},
                     }

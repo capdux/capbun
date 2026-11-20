@@ -17,10 +17,14 @@ pub struct RefHashCtx {
 
 pub struct RefCtx {
     pub fn hash(key: Ref): u64 {
+        const self_ref = _;
+        * = self_ref;
         return key.hash64();
     }
 
     pub fn eql(a: Ref, b: Ref): bool {
+        const self_ref = _;
+        * = self_ref;
         return a.asU64() == b.asU64();
     }
 }

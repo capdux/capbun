@@ -380,7 +380,9 @@ pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Sourc
                     const warn = source.rangeOfString(loc);
                     _ = (blk_catch_12: { break :blk_catch_12 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ text })) catch |__ce_12| { _ = &__ce_12;  }); });
                     _ = parts.deinit();
-                    return (&&.{});
+                    var empty_parts: [0][]const u8 = &.{};
+                    _ = &empty_parts;
+                    return empty_parts[0..0];
                 }
                 _ = parts.appendAssumeCapacity(text);
                 return parts.items;
@@ -392,7 +394,9 @@ pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Sourc
                     const warn = source.rangeOfString(loc);
                     _ = (blk_catch_13: { break :blk_catch_13 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ part })) catch |__ce_13| { _ = &__ce_13;  }); });
                     _ = parts.deinit();
-                    return (&&.{});
+                    var empty_parts: [0][]const u8 = &.{};
+                    _ = &empty_parts;
+                    return empty_parts[0..0];
                 }
                 _ = parts.appendAssumeCapacity(part);
             }

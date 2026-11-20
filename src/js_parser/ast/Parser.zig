@@ -306,7 +306,7 @@ pub fn _parse(self: Parser, comptime ParserType: type) !js_ast.Result {
                 if (runtime_transpiler_cache) |cache| {
                     _ = &cache;
                     if (cache.get(p.source, (&p.options), (p.options.jsx.parse and ((!p.source.path.isNodeModule()) or p.source.path.isJSXFile())))) {
-                        return js_ast.Result{ .cached = .{} };
+                        return js_ast.Result{ .cached = undefined };
                     }
                 }
             }

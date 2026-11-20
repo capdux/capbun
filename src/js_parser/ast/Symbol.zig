@@ -275,7 +275,7 @@ pub fn merge(self: *@This(), old: Ref, new_ref: Ref) Ref {
             return new_ref;
     }
 
-pub fn get(self: *@This(), target: Ref) ?*Symbol {
+pub fn get(self: @This(), target: Ref) ?*Symbol {
             if ((Ref.isSourceIndexNull(target.sourceIndex()) or target.isSourceContentsSlice())) {
                 return null;
             }

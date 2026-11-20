@@ -21,8 +21,10 @@ const OwnedString = bun.MutableString;
             if (_.map.count() == 0) return null;
 
             if (comptime !bun.Environment.isWindows) {
-                const entry = _.map.get(specifier) ?? return null;
-                return entry.slice();
+                if (entry := _.map.get(specifier)) {
+                    return entry.slice();
+                }
+                return null;
             }
 
             // Normalize backslashes to forward slashes for consistent lookup
@@ -30,8 +32,10 @@ const OwnedString = bun.MutableString;
             const buf = bun.path_buffer_pool.get();
             defer bun.path_buffer_pool.put(buf);
             const normalized = bun.path.pathToPosixBuf(u8, specifier, buf);
-            const entry = _.map.get(normalized) ?? return null;
-            return entry.slice();
+            if (entry := _.map.get(normalized)) {
+                return entry.slice();
+            }
+            return null;
         }
 
         /// Check if the file map contains a given specifier.
@@ -167,7 +171,9 @@ const OwnedString = bun.MutableString;
             };
             errdefer file_map.deinitAndUnprotect();
 
-            const files_obj = files_value.getObject() ?? return globalThis.throwInvalidArguments("Expected files to be an object", .{});
+            const files_obj_opt = files_value.getObject();
+            if (files_obj_opt == null) return globalThis.throwInvalidArguments("Expected files to be an object", .{});
+            const files_obj = files_obj_opt.?;
 
             let files_iter = try jsc.JSPropertyIterator(.{
                 skip_empty_name: true,
@@ -181,7 +187,9 @@ const OwnedString = bun.MutableString;
                 const property_value = files_iter.value;
 
                 // Parse the value as BlobOrStringOrBuffer using async mode for thread safety
-                let blob_or_string = try jsc.Node.BlobOrStringOrBuffer.fromJSAsync(globalThis, bun.default_allocator, property_value) ?? return globalThis.throwInvalidArguments("Expected file content to be a string, Blob, File, TypedArray, or ArrayBuffer", .{});
+                const maybe_blob_or_string = jsc.Node.BlobOrStringOrBuffer.fromJSAsync(globalThis, bun.default_allocator, property_value)?;
+                if (maybe_blob_or_string == null) return globalThis.throwInvalidArguments("Expected file content to be a string, Blob, File, TypedArray, or ArrayBuffer", .{});
+                let blob_or_string = maybe_blob_or_string.?;
                 errdefer blob_or_string.deinitAndUnprotect();
 
                 // Clone the key since we need to own it
@@ -502,7 +510,11 @@ const OwnedString = bun.MutableString;
                     cfg.target = .bun;
                     did_set_target = true;
                 } else {
-                    cfg.target = options.Target.Map.get(slice.slice()) ?? return globalThis.throwInvalidArguments("Expected target to be one of 'browser', 'node', 'bun', 'macro', or 'bun-<target>', got {s}", .{ slice.slice() });
+                    if (t := options.Target.Map.get(slice.slice())) {
+                        cfg.target = t;
+                    } else {
+                        return globalThis.throwInvalidArguments("Expected target to be one of 'browser', 'node', 'bun', 'macro', or 'bun-<target>', got {s}", .{ slice.slice() });
+                    }
                     did_set_target = true;
                 }
             }
@@ -527,7 +539,9 @@ const OwnedString = bun.MutableString;
                         return globalThis.throwInvalidArguments("Expected plugin to have a name", .{});
                     }
 
-                    const function = (try plugin.getFunction(globalThis, "setup")) ?? return globalThis.throwInvalidArguments("Expected plugin to have a setup() function", .{});
+                    const function_opt = plugin.getFunction(globalThis, "setup")?;
+                    if (function_opt == null) return globalThis.throwInvalidArguments("Expected plugin to have a setup() function", .{});
+                    const function = function_opt.?;
 
                     let bun_plugins: *BundlerPlugin = undefined;
                     if (p := plugins.*) {

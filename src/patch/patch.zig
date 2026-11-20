@@ -428,10 +428,10 @@ return .{ .err = e.withPath(file_path) };
                     _ = &part;
                     switch (part.type) {
 .deletion => {
-count = (count + (if (part.no_newline_at_end_of_file) 1 else 0));
+count = (count + @intFromBool(part.no_newline_at_end_of_file));
 },
 .insertion => {
-count = (count - (if (part.no_newline_at_end_of_file) 1 else 0));
+count = (count - @intFromBool(part.no_newline_at_end_of_file));
 },
 .context => {
 

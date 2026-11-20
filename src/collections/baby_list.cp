@@ -52,7 +52,8 @@ pub fn BabyList(comptime Type: type): type {
         }
 
         pub static fn moveFromList(list_ptr: auto): Self {
-            const ListType = std.meta.Child(@TypeOf(list_ptr));
+            const ListArgType = @TypeOf(list_ptr);
+            const ListType = if (comptime @typeInfo(ListArgType) == .pointer) std.meta.Child(ListArgType) else ListArgType;
 
             if (comptime ListType == Self) {
                 @compileError("unnecessary call to `moveFromList`");

@@ -280,6 +280,14 @@ else => @truncate(self.slice().len),
 });
     }
 
+pub fn hasContentTypeFromUser(self: BlobAny) bool {
+            return (switch (self) {
+.Blob => self.Blob.hasContentTypeFromUser(),
+.WTFStringImpl => false,
+.InternalBlob => false,
+});
+    }
+
 pub fn slice(self: BlobAny) []const u8 {
             switch (self) {
 .Blob => |b| {

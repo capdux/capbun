@@ -571,7 +571,7 @@ pub fn dupeAlloc(self: Path, allocator: std.mem.Allocator) !Fs.Path {
                     if (allocators.sliceRange(self.pretty, self.text)) |start_len| {
                         _ = &start_len;
                         if ((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text))) {
-                            return self.*;
+                            return self;
                         }
                         var new_path = Fs.Path.init(try FileSystem.FilenameStore.instance.append(string, self.text));
                         _ = &new_path;
@@ -581,7 +581,7 @@ pub fn dupeAlloc(self: Path, allocator: std.mem.Allocator) !Fs.Path {
                         return new_path;
                     } else {
                         if (((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text)) and (FileSystem.FilenameStore.instance.exists(self.pretty) or FileSystem.DirnameStore.instance.exists(self.pretty)))) {
-                            return self.*;
+                            return self;
                         }
                         if (strings.indexOf(self.text, self.pretty)) |offset| {
                             _ = &offset;

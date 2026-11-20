@@ -482,14 +482,12 @@ pub fn removeStatWatcherForIsolation(self: *RareData, watcher: *StatWatcher) voi
 pub fn closeAllWatchersForIsolation(self: *RareData) void {
         for (self.fs_watchers_for_isolation.items) |watcher| {
             _ = &watcher;
-            _ = watcher.stop();
-            _ = watcher.deinit();
+            _ = watcher.detach();
         }
         _ = self.fs_watchers_for_isolation.clearRetainingCapacity();
         for (self.stat_watchers_for_isolation.items) |watcher| {
             _ = &watcher;
-            _ = watcher.stop();
-            _ = watcher.detach();
+            _ = watcher.close();
         }
         _ = self.stat_watchers_for_isolation.clearRetainingCapacity();
 }

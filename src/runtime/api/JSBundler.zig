@@ -112,16 +112,22 @@ pub fn get(self: BundlerFileMap, specifier: []const u8) ?[]const u8 {
                 return null;
             }
             if (comptime (!bun.Environment.isWindows)) {
-                const entry = ((self.map.get(specifier)) orelse { return null; });
-                return entry.slice();
+                if (self.map.get(specifier)) |entry| {
+                    _ = &entry;
+                    return entry.slice();
+                }
+                return null;
             }
             const buf = bun.path_buffer_pool.get();
             defer {
             _ = bun.path_buffer_pool.put(buf);
             }
             const normalized = bun.path.pathToPosixBuf(u8, specifier, buf);
-            const entry = ((self.map.get(normalized)) orelse { return null; });
-            return entry.slice();
+            if (self.map.get(normalized)) |entry| {
+                _ = &entry;
+                return entry.slice();
+            }
+            return null;
     }
 
 pub fn contains(self: BundlerFileMap, specifier: []const u8) bool {
@@ -214,7 +220,11 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, files_value: jsc.JSValue) JSError
             errdefer {
             _ = file_map.deinitAndUnprotect();
             }
-            const files_obj = ((files_value.getObject()) orelse { return .{ .ok = globalThis.throwInvalidArguments("Expected files to be an object", .{}) }; });
+            const files_obj_opt = files_value.getObject();
+            if ((files_obj_opt == null)) {
+                return globalThis.throwInvalidArguments("Expected files to be an object", .{});
+            }
+            const files_obj = files_obj_opt.?;
             var files_iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = true, .include_value = true }).init(globalThis, files_obj);
             _ = &files_iter;
             defer {
@@ -223,7 +233,11 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, files_value: jsc.JSValue) JSError
             _ = try file_map.map.ensureTotalCapacity(bun.default_allocator, (if (comptime @typeInfo(@TypeOf(files_iter.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(files_iter.len)) else cp_cast_int(i32, files_iter.len)));
             while (try files_iter.next()) |prop| {
                 const property_value = (if (@typeInfo(@TypeOf(files_iter)) == .@"enum") @intFromEnum(files_iter) else files_iter.value);
-                var blob_or_string = ((try jsc.Node.BlobOrStringOrBuffer.fromJSAsync(globalThis, bun.default_allocator, property_value)) orelse { return .{ .ok = globalThis.throwInvalidArguments("Expected file content to be a string, Blob, File, TypedArray, or ArrayBuffer", .{}) }; });
+                const maybe_blob_or_string = try jsc.Node.BlobOrStringOrBuffer.fromJSAsync(globalThis, bun.default_allocator, property_value);
+                if ((maybe_blob_or_string == null)) {
+                    return globalThis.throwInvalidArguments("Expected file content to be a string, Blob, File, TypedArray, or ArrayBuffer", .{});
+                }
+                var blob_or_string = maybe_blob_or_string.?;
                 _ = &blob_or_string;
                 errdefer {
                 _ = blob_or_string.deinitAndUnprotect();
@@ -525,7 +539,12 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, plugins: *?*
                     cfg.target = .bun;
                     did_set_target = true;
                 } else {
-                    if (cfg.target == null) { cfg.target = return globalThis.throwInvalidArguments("Expected target to be one of 'browser', 'node', 'bun', 'macro', or 'bun-<target>', got {s}", .{ slice.slice() }); }
+                    if (options.Target.Map.get(slice.slice())) |t| {
+                        _ = &t;
+                        cfg.target = t;
+                    } else {
+                        return globalThis.throwInvalidArguments("Expected target to be one of 'browser', 'node', 'bun', 'macro', or 'bun-<target>', got {s}", .{ slice.slice() });
+                    }
                     did_set_target = true;
                 }
             }
@@ -553,7 +572,11 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, plugins: *?*
                     } else {
                         return globalThis.throwInvalidArguments("Expected plugin to have a name", .{});
                     }
-                    const function = ((try plugin.getFunction(globalThis, "setup")) orelse { return .{ .ok = globalThis.throwInvalidArguments("Expected plugin to have a setup() function", .{}) }; });
+                    const function_opt = try plugin.getFunction(globalThis, "setup");
+                    if ((function_opt == null)) {
+                        return globalThis.throwInvalidArguments("Expected plugin to have a setup() function", .{});
+                    }
+                    const function = function_opt.?;
                     var bun_plugins: *BundlerPlugin = undefined;
                     _ = &bun_plugins;
                     if (plugins.*) |p| {

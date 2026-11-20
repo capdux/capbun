@@ -134,6 +134,16 @@ pub fn setIntervalOnMainThread(self: *StatWatcherScheduler) void {
 }));
     }
 
+pub fn timerCallback(self: *StatWatcherScheduler) void {
+            const has_been_cleared = ((self.event_loop_timer.state == .CANCELLED) or (self.vm.scriptExecutionStatus() != .running));
+            self.event_loop_timer.state = .FIRED;
+            self.event_loop_timer.heap = .{};
+            if (has_been_cleared) {
+                return;
+            }
+            _ = jsc.WorkPool.schedule((&self.task));
+    }
+
 pub fn onEventLoopTimer(timer: *EventLoopTimer) void {
             const scheduler: *StatWatcherScheduler = @fieldParentPtr("event_loop_timer", timer);
             defer {

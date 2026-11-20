@@ -19,8 +19,8 @@ export enum Ctx {
 
     pub const Disabled = DisabledCtx;
 
-    pub fn end() {
-        switch (this) {
+    pub fn end(*_) {
+        switch (_.*) {
             inline else => |*ctx| ctx.end(),
         }
     }

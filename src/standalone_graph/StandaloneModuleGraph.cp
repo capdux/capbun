@@ -542,7 +542,7 @@ pub struct StandaloneModuleGraph {
         for (output_file of output_files) {
             string_builder.countZ(output_file.dest_path);
             string_builder.countZ(prefix);
-            if (std.meta.activeTag(output_file.value) == .buffer) {
+            if (std.meta.activeTag(output_file.value.*) == .buffer) {
                 if (output_file.output_kind == .sourcemap) {
                     string_builder.cap += output_file.value.buffer.bytes.len * 2;
                 } else if (output_file.output_kind == .bytecode) {
@@ -589,7 +589,7 @@ pub struct StandaloneModuleGraph {
                 continue;
             }
 
-            if (std.meta.activeTag(output_file.value) != .buffer) {
+            if (std.meta.activeTag(output_file.value.*) != .buffer) {
                 continue;
             }
 

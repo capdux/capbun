@@ -46,150 +46,158 @@ fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTarge
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const bun = @import("bun");
+pub const bun = @import("bun");
+pub const TickState = enum {
+    timeout,
+    completed,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const SpawnSyncEventLoop = @This();
+
+event_loop: jsc.EventLoop = undefined,
+uws_loop: *uws.Loop = undefined,
+original_event_loop_handle: @FieldType(jsc.VirtualMachine,"event_loop_handle") = undefined,
+uv_timer: if (bun.Environment.isWindows) ?*bun.windows.libuv.Timer else void = (if (bun.Environment.isWindows) null else ({
+})),
+did_timeout: bool = false,
+
+pub fn init(self: *SpawnSyncEventLoop, vm: *jsc.VirtualMachine) void {
+        const loop = uws.Loop.create(Handler);
+        self.* = .{ .event_loop = undefined, .uws_loop = loop };
+        self.event_loop = .{ .tasks = jsc.EventLoop.Queue.init(bun.default_allocator), .global = vm.global, .virtual_machine = vm, .uws_loop = (if (bun.Environment.isWindows) self.uws_loop else ({
+})) };
+        _ = self.uws_loop.internal_loop_data.setParentEventLoop(jsc.EventLoopHandle.init((&self.event_loop)));
+        self.uws_loop.internal_loop_data.jsc_vm = null;
+}
+
+pub fn onCloseUVTimer(timer: *bun.windows.libuv.Timer) callconv(.c) void {
+        _ = bun.default_allocator.destroy(timer);
+}
+
+pub fn deinit(self: *SpawnSyncEventLoop) void {
+        if (comptime bun.Environment.isWindows) {
+            if (self.uv_timer) |timer| {
+                _ = &timer;
+                _ = timer.stop();
+                _ = timer.unref();
+                self.uv_timer = null;
+                _ = libuv.uv_close(@ptrCast(@alignCast(timer)), @ptrCast((&onCloseUVTimer)));
+            }
+        }
+        _ = self.event_loop.deinit();
+        _ = self.uws_loop.deinit();
+}
+
+pub fn prepare(self: *SpawnSyncEventLoop, vm: *jsc.VirtualMachine) void {
+        self.event_loop.global = vm.global;
+        self.did_timeout = false;
+        self.event_loop.virtual_machine = vm;
+        self.original_event_loop_handle = vm.event_loop_handle;
+        vm.event_loop_handle = (if (bun.Environment.isPosix) self.uws_loop else self.uws_loop.uv_loop);
+}
+
+pub fn cleanup(self: *SpawnSyncEventLoop, vm: *jsc.VirtualMachine, prev_event_loop: *jsc.EventLoop) void {
+        vm.event_loop_handle = self.original_event_loop_handle;
+        vm.event_loop = prev_event_loop;
+        if (bun.Environment.isWindows) {
+            if (self.uv_timer) |timer| {
+                _ = &timer;
+                _ = timer.stop();
+                _ = timer.unref();
+            }
+        }
+}
+
+pub fn handle(self: SpawnSyncEventLoop) jsc.EventLoopHandle {
+        return jsc.EventLoopHandle.init((&self.event_loop));
+}
+
+pub fn onUVTimer(timer_: *bun.windows.libuv.Timer) callconv(.c) void {
+        const loop: *SpawnSyncEventLoop = @ptrCast(@alignCast(timer_.data));
+        loop.did_timeout = true;
+        _ = loop.uws_loop.uv_loop.stop();
+}
+
+pub fn prepareTimerOnWindows(self: *SpawnSyncEventLoop, ts: *const bun.timespec) void {
+        if (self.uv_timer) |timer| {
+            _ = &timer;
+            _ = timer.start(ts.msUnsigned(), 0, (&onUVTimer));
+            _ = timer.ref();
+            self.uv_timer = timer;
+            timer.data = self;
+            return;
+        }
+        const uv_timer: *bun.windows.libuv.Timer = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.create(bun.windows.libuv.Timer)) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+        uv_timer.* = std.mem.zeroes(bun.windows.libuv.Timer);
+        _ = uv_timer.init(self.uws_loop.uv_loop);
+        _ = uv_timer.start(ts.msUnsigned(), 0, (&onUVTimer));
+        _ = uv_timer.ref();
+        uv_timer.data = self;
+        self.uv_timer = uv_timer;
+}
+
+pub fn tickWithTimeout(self: *SpawnSyncEventLoop, timeout: ?*const bun.timespec) TickState {
+        var dur_val: bun.timespec = undefined;
+        _ = &dur_val;
+        var duration: ?*const bun.timespec = null;
+        _ = &duration;
+        if (timeout) |ts| {
+            _ = &ts;
+            dur_val = ts.duration((&bun.timespec.now(.allow_mocked_time)));
+            duration = (&dur_val);
+        }
+        if (bun.Environment.isWindows) {
+            if (duration) |ts| {
+                _ = &ts;
+                _ = self.prepareTimerOnWindows(ts);
+            }
+        }
+        const vm = self.event_loop.virtual_machine;
+        const prev_suppress = vm.suppress_microtask_drain;
+        vm.suppress_microtask_drain = true;
+        defer {
+        vm.suppress_microtask_drain = prev_suppress;
+        }
+        _ = self.uws_loop.tickWithTimeout(duration);
+        if (timeout) |ts| {
+            _ = &ts;
+            if (bun.Environment.isWindows) {
+                _ = self.uv_timer.?.unref();
+                _ = self.uv_timer.?.stop();
+            } else {
+                self.did_timeout = (bun.timespec.now(.allow_mocked_time).order(ts) != .lt);
+            }
+        }
+        _ = self.event_loop.tickTasksOnly();
+        const did_timeout = self.did_timeout;
+        self.did_timeout = false;
+        if (did_timeout) {
+            return .timeout;
+        }
+        return .completed;
+}
+
+pub fn isActive(self: SpawnSyncEventLoop) bool {
+        return self.uws_loop.isActive();
+}
 const jsc = bun.jsc;
 const uws = bun.uws;
 const libuv = bun.windows.libuv;
-pub const SpawnSyncEventLoop = struct {
-    event_loop: jsc.EventLoop = undefined,
-    uws_loop: *uws.Loop = undefined,
-    original_event_loop_handle: @FieldType(jsc.VirtualMachine,"event_loop_handle") = undefined,
-    uv_timer: if (bun.Environment.isWindows) ?*bun.windows.libuv.Timer else void = (if (bun.Environment.isWindows) null else ({
-})),
-    did_timeout: bool = false,
+const Handler = struct {
 
-pub fn init(self: *@This(), vm: *jsc.VirtualMachine) void {
-            const loop = uws.Loop.create(Handler);
-            self.* = .{ .event_loop = undefined, .uws_loop = loop };
-            self.event_loop = .{ .tasks = jsc.EventLoop.Queue.init(bun.default_allocator), .global = vm.global, .virtual_machine = vm, .uws_loop = (if (bun.Environment.isWindows) self.uws_loop else ({
-})) };
-            _ = self.uws_loop.internal_loop_data.setParentEventLoop(jsc.EventLoopHandle.init((&self.event_loop)));
-            self.uws_loop.internal_loop_data.jsc_vm = null;
+pub fn wakeup(loop: *uws.Loop) callconv(.c) void {
+            _ = &loop;
     }
 
-pub fn onCloseUVTimer(timer: *bun.windows.libuv.Timer) callconv(.c) void {
-            _ = bun.default_allocator.destroy(timer);
+pub fn pre(loop: *uws.Loop) callconv(.c) void {
+            _ = &loop;
     }
 
-pub fn deinit(self: *@This()) void {
-            if (comptime bun.Environment.isWindows) {
-                if (self.uv_timer) |timer| {
-                    _ = &timer;
-                    _ = timer.stop();
-                    _ = timer.unref();
-                    self.uv_timer = null;
-                    _ = libuv.uv_close(@ptrCast(@alignCast(timer)), @ptrCast((&onCloseUVTimer)));
-                }
-            }
-            _ = self.event_loop.deinit();
-            _ = self.uws_loop.deinit();
+pub fn post(loop: *uws.Loop) callconv(.c) void {
+            _ = &loop;
     }
-
-pub fn prepare(self: *@This(), vm: *jsc.VirtualMachine) void {
-            self.event_loop.global = vm.global;
-            self.did_timeout = false;
-            self.event_loop.virtual_machine = vm;
-            self.original_event_loop_handle = vm.event_loop_handle;
-            vm.event_loop_handle = (if (bun.Environment.isPosix) self.uws_loop else self.uws_loop.uv_loop);
-    }
-
-pub fn cleanup(self: *@This(), vm: *jsc.VirtualMachine, prev_event_loop: *jsc.EventLoop) void {
-            vm.event_loop_handle = self.original_event_loop_handle;
-            vm.event_loop = prev_event_loop;
-            if (bun.Environment.isWindows) {
-                if (self.uv_timer) |timer| {
-                    _ = &timer;
-                    _ = timer.stop();
-                    _ = timer.unref();
-                }
-            }
-    }
-
-pub fn handle(self: *@This()) jsc.EventLoopHandle {
-            return jsc.EventLoopHandle.init((&self.event_loop));
-    }
-
-pub fn onUVTimer(timer_: *bun.windows.libuv.Timer) callconv(.c) void {
-            const loop: *SpawnSyncEventLoop = @ptrCast(@alignCast(timer_.data));
-            loop.did_timeout = true;
-            _ = loop.uws_loop.uv_loop.stop();
-    }
-
-pub fn prepareTimerOnWindows(self: *@This(), ts: *const bun.timespec) void {
-            if (self.uv_timer) |timer| {
-                _ = &timer;
-                _ = timer.start(ts.msUnsigned(), 0, (&onUVTimer));
-                _ = timer.ref();
-                self.uv_timer = timer;
-                timer.data = self;
-                return;
-            }
-            const uv_timer: *bun.windows.libuv.Timer = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.create(bun.windows.libuv.Timer)) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
-            uv_timer.* = std.mem.zeroes(bun.windows.libuv.Timer);
-            _ = uv_timer.init(self.uws_loop.uv_loop);
-            _ = uv_timer.start(ts.msUnsigned(), 0, (&onUVTimer));
-            _ = uv_timer.ref();
-            uv_timer.data = self;
-            self.uv_timer = uv_timer;
-    }
-
-pub fn tickWithTimeout(self: *@This(), timeout: ?*const bun.timespec) TickState {
-            var dur_val: bun.timespec = undefined;
-            _ = &dur_val;
-            var duration: ?*const bun.timespec = null;
-            _ = &duration;
-            if (timeout) |ts| {
-                _ = &ts;
-                dur_val = ts.duration((&bun.timespec.now(.allow_mocked_time)));
-                duration = (&dur_val);
-            }
-            if (bun.Environment.isWindows) {
-                if (duration) |ts| {
-                    _ = &ts;
-                    _ = self.prepareTimerOnWindows(ts);
-                }
-            }
-            const vm = self.event_loop.virtual_machine;
-            const prev_suppress = vm.suppress_microtask_drain;
-            vm.suppress_microtask_drain = true;
-            defer {
-            vm.suppress_microtask_drain = prev_suppress;
-            }
-            _ = self.uws_loop.tickWithTimeout(duration);
-            if (timeout) |ts| {
-                _ = &ts;
-                if (bun.Environment.isWindows) {
-                    _ = self.uv_timer.?.unref();
-                    _ = self.uv_timer.?.stop();
-                } else {
-                    self.did_timeout = (bun.timespec.now(.allow_mocked_time).order(ts) != .lt);
-                }
-            }
-            _ = self.event_loop.tickTasksOnly();
-            const did_timeout = self.did_timeout;
-            self.did_timeout = false;
-            if (did_timeout) {
-                return .timeout;
-            }
-            return .completed;
-    }
-
-pub fn isActive(self: *const @This()) bool {
-            return self.uws_loop.isActive();
-    }
-    const Handler = struct {
-    
-    pub fn wakeup(loop: *uws.Loop) callconv(.c) void {
-                _ = loop;
-        }
-    
-    pub fn pre(loop: *uws.Loop) callconv(.c) void {
-                _ = loop;
-        }
-    
-    pub fn post(loop: *uws.Loop) callconv(.c) void {
-                _ = loop;
-        }
-    };
-    pub const TickState = enum { timeout, completed };
 };

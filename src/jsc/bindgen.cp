@@ -58,7 +58,7 @@ pub fn BindgenOptional(comptime Child: type): type {
         else
             ExternTaggedUnion(&.{ u8, Child.ExternType });
 
-        pub fn convertFromExtern(extern_value: ExternType): ZigType? {
+        pub fn convertFromExtern(extern_value: ExternType): ZigType {
             if (comptime @hasDecl(Child, "OptionalExternType")) {
                 return Child.convertOptionalFromExtern(extern_value);
             }

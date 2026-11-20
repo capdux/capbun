@@ -2163,7 +2163,7 @@ fn NewLexer_(
                                         lexer.addError(
                                             lexer.current,
                                             "Duplicate flag \"{u}\" in regular expression",
-                                            .{@as(u21, i32(lexer.code_point))},
+                                            .{@as(u21, @intCast(lexer.code_point))},
                                             false,
                                         );
                                     }

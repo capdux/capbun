@@ -395,7 +395,7 @@ pub struct Parser {
             if (cache := runtime_transpiler_cache) {
                 if (cache.get(p.source, &p.options, p.options.jsx.parse && (!p.source.path.isNodeModule() || p.source.path.isJSXFile()))) {
                     return js_ast.Result{
-                        cached: {},
+                        cached: undefined,
                     };
                 }
             }

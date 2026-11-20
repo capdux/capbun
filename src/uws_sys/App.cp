@@ -342,12 +342,12 @@ pub fn NewApp(comptime ssl: bool): type {
                 handler(@ptrCast(@alignCast(data)), socket);
             }
         };
-        const domainZ: [*:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
+        const domainZ: [:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
         defer bun.default_allocator.free(domainZ);
         uws_app_listen_domain_with_options(
             ssl_flag,
             bun.cast(*uws_app_t, this),
-            domainZ,
+            domainZ.ptr,
             domain_name.len,
             flags,
             Wrapper.handle,

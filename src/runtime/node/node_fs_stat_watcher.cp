@@ -95,6 +95,19 @@ pub struct StatWatcherScheduler {
         _.vm.timer.update(&_.event_loop_timer, unsafe { &next_ts });
     }
 
+    pub fn timerCallback(*_) {
+        const has_been_cleared = _.event_loop_timer.state == .CANCELLED || _.vm.scriptExecutionStatus() != .running;
+
+        _.event_loop_timer.state = .FIRED;
+        _.event_loop_timer.heap = .{};
+
+        if (has_been_cleared) {
+            return;
+        }
+
+        jsc.WorkPool.schedule(&_.task);
+    }
+
     pub static fn onEventLoopTimer(timer: *EventLoopTimer) {
         const scheduler: *StatWatcherScheduler = @fieldParentPtr("event_loop_timer", timer);
         // this is ref'd when timer is registered, so we need to deref it when the timer is fired

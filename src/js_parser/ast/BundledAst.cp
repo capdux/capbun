@@ -186,8 +186,8 @@ let empty_u32s: [0]u32 = undefined;
         *_,
         allocator: std.mem.Allocator,
         source: *const logger.Source,
-        mime_type_: []const u8?,
-        unique_key: []const u8?,
+        mime_type_: ([]const u8)?,
+        unique_key: ([]const u8)?,
         force_inline: bool,
     ) {
         let mime_type = mime_type_ ?? MimeType.byExtension(bun.strings.trimLeadingChar(std.fs.path.extension(source.path.text), '.')).value;

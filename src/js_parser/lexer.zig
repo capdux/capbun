@@ -2005,7 +2005,7 @@ if ((!has_set_flags_start)) {
                     }
                     const flag = (max_flag - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(lexer.code_point)) == .@"enum") cp_cast_int(i32, @intFromEnum(lexer.code_point)) else cp_cast_int(i32, lexer.code_point)))) == .@"enum") cp_cast_int(u8, @intFromEnum((if (comptime @typeInfo(@TypeOf(lexer.code_point)) == .@"enum") cp_cast_int(i32, @intFromEnum(lexer.code_point)) else cp_cast_int(i32, lexer.code_point)))) else cp_cast_int(u8, (if (comptime @typeInfo(@TypeOf(lexer.code_point)) == .@"enum") cp_cast_int(i32, @intFromEnum(lexer.code_point)) else cp_cast_int(i32, lexer.code_point)))));
                     if (flags.isSet(flag)) {
-                        _ = lexer.addError(lexer.current, "Duplicate flag \"{u}\" in regular expression", .{ (if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt((if (comptime @typeInfo(@TypeOf(lexer.code_point)) == .@"enum") cp_cast_int(i32, @intFromEnum(lexer.code_point)) else cp_cast_int(i32, lexer.code_point)))) else @as(u21, (if (comptime @typeInfo(@TypeOf(lexer.code_point)) == .@"enum") cp_cast_int(i32, @intFromEnum(lexer.code_point)) else cp_cast_int(i32, lexer.code_point)))) }, false);
+                        _ = lexer.addError(lexer.current, "Duplicate flag \"{u}\" in regular expression", .{ @as(u21, @intCast(lexer.code_point)) }, false);
                     }
                     _ = flags.set(flag);
                     _ = lexer.step();

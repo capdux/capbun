@@ -160,7 +160,8 @@ pub fn initOne(allocator: std.mem.Allocator, value: Type) OOM!Self {
     }
 
 pub fn moveFromList(list_ptr: anytype) Self {
-            const ListType = std.meta.Child(@TypeOf(list_ptr));
+            const ListArgType = @TypeOf(list_ptr);
+            const ListType = (if (comptime (@typeInfo(ListArgType) == .pointer)) std.meta.Child(ListArgType) else ListArgType);
             if (comptime (ListType == Self)) {
                 _ = @compileError("unnecessary call to `moveFromList`");
             }
