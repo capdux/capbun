@@ -475,7 +475,7 @@ pub const Enable = packed struct(u16) {
         // technically, npm_config is case in-sensitive
         // load_registry:
         {
-            const registry_keys = [
+            const registry_keys: [3]string = [
                 "BUN_CONFIG_REGISTRY",
                 "NPM_CONFIG_REGISTRY",
                 "npm_config_registry",

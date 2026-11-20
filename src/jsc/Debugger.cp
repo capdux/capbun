@@ -476,10 +476,10 @@ fn start(other_vm: *VirtualMachine) {
         jsc.markBinding(@src());
         if (!has_created_debugger) {
             has_created_debugger = true;
-            std.mem.doNotOptimizeAway(&TestReporterAgent.Bun__TestReporterAgentDisable);
-            std.mem.doNotOptimizeAway(&LifecycleAgent.Bun__LifecycleAgentDisable);
-            std.mem.doNotOptimizeAway(&TestReporterAgent.Bun__TestReporterAgentEnable);
-            std.mem.doNotOptimizeAway(&LifecycleAgent.Bun__LifecycleAgentEnable);
+            std.mem.doNotOptimizeAway(unsafe { &TestReporterAgent.Bun__TestReporterAgentDisable });
+            std.mem.doNotOptimizeAway(unsafe { &LifecycleAgent.Bun__LifecycleAgentDisable });
+            std.mem.doNotOptimizeAway(unsafe { &TestReporterAgent.Bun__TestReporterAgentEnable });
+            std.mem.doNotOptimizeAway(unsafe { &LifecycleAgent.Bun__LifecycleAgentEnable });
             let debugger = &vm.debugger.?;
             debugger.script_execution_context_id = Bun__createJSDebugger(globalObject);
             if (!vm.has_started_debugger) {

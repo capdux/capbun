@@ -695,7 +695,7 @@ pub fn loadFromDir(self: *Lockfile, dir: bun.FD, manager: ?*PackageManager, allo
         if ((lockfile_format == .text)) {
             const source = (&logger.Source.initPathString("bun.lock", buf));
             _ = initializeStore();
-            const json = (blk_catch_5: { break :blk_catch_5 ((JSON.parsePackageJSONUTF8(source, log, allocator)) catch |e| { _ = &e; return .{ .e = .{ .step = .parse_file, .value = e, .lockfile_path = "bun.lock", .format = lockfile_format } }; }); });
+            const json = (blk_catch_5: { break :blk_catch_5 ((JSON.parsePackageJSONUTF8(source, log, allocator)) catch |e| { _ = &e; return .{ .@"err" = .{ .step = .parse_file, .value = e, .lockfile_path = "bun.lock", .format = lockfile_format } }; }); });
             _ = (blk_catch_6: { break :blk_catch_6 ((TextLockfile.parseIntoBinaryLockfile(self, allocator, json, source, log, manager)) catch |e| { _ = &e; break :blk_catch_6 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  break :__sw_blk_1 cp_val(bun.outOfMemory()); } } {  return .{ .e = .{ .step = .parse_file, .value = e, .lockfile_path = "bun.lock", .format = lockfile_format } }; }  unreachable; }); }); });
             bun.analytics.Features.text_lockfile = (bun.analytics.Features.text_lockfile + 1);
             return .{ .ok = .{ .lockfile = self, .serializer_result = .{}, .loaded_from_binary_lockfile = false, .format = lockfile_format } };

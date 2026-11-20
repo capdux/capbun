@@ -537,7 +537,7 @@ pub struct Parser {
 
                         let enum_parts = ListManaged(js_ast.Part).init(p.allocator);
                         let sliced = ListManaged(Stmt).initCapacity(p.allocator, 1)?;
-                        sliced.appendAssumeCapacity(stmt.*);
+                        sliced.appendAssumeCapacity(stmt);
                         p.appendPart(&enum_parts, sliced.items)?;
                         preprocessed_enums.append(p.allocator, enum_parts.items)?;
                     }

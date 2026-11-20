@@ -191,10 +191,10 @@ pub fn clone(self: *const @This(), pm: *PackageManager, old: *Lockfile, new_lock
     }
 
 pub fn fromPackageJSON(lockfile: *Lockfile, pm: *PackageManager, package_json: *PackageJSON, comptime features: Features) !@This() {
-            var package = @This();
+            const Self = @This();
+            _ = &Self;
+            var package = Self{  };
             _ = &package;
-            {
-            }
             var string_builder = lockfile.stringBuilder();
             _ = &string_builder;
             var total_dependencies_count: u32 = 0;
@@ -261,10 +261,10 @@ pub fn fromPackageJSON(lockfile: *Lockfile, pm: *PackageManager, package_json: *
     }
 
 pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, log: *logger.Log, manifest: *const Npm.PackageManifest, version: Semver.Version, package_version_ptr: *const Npm.PackageVersion, comptime features: Features) !@This() {
-            var package = @This();
+            const Self = @This();
+            _ = &Self;
+            var package = Self{  };
             _ = &package;
-            {
-            }
             const package_version = package_version_ptr.*;
             const dependency_groups = (comptime brk: {
             const group_count = ((((if (features.dependencies) 1 else 0) + (if (features.dev_dependencies) 1 else 0)) + (if (features.optional_dependencies) 1 else 0)) + (if (features.peer_dependencies) 1 else 0));
@@ -297,7 +297,7 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
             var bin_extern_strings_count: u32 = 0;
             _ = &bin_extern_strings_count;
             {
-                _ = string_builder.count((if (@typeInfo(@TypeOf(manifest)) == .@"enum" or @typeInfo(@TypeOf(manifest)) == .@"union") @tagName(manifest) else manifest.name)());
+                _ = string_builder.count(manifest.name());
                 _ = version.count(manifest.string_buf, @TypeOf((&string_builder)), (&string_builder));
                 inline for (dependency_groups) |group| {
                     _ = &group;
@@ -334,7 +334,7 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
             extern_strings_list.items.len = (extern_strings_list.items.len + bin_extern_strings_count);
             const extern_strings_slice = extern_strings_list.items[(extern_strings_list.items.len - bin_extern_strings_count)..];
             {
-                const package_name: ExternalString = string_builder.appendWithHash(ExternalString, (if (@typeInfo(@TypeOf(manifest)) == .@"enum" or @typeInfo(@TypeOf(manifest)) == .@"union") @tagName(manifest) else manifest.name)(), (if (@typeInfo(@TypeOf(manifest.pkg)) == .@"enum" or @typeInfo(@TypeOf(manifest.pkg)) == .@"union") @tagName(manifest.pkg) else manifest.pkg.name).hash);
+                const package_name: ExternalString = string_builder.appendWithHash(ExternalString, manifest.name(), (if (@typeInfo(@TypeOf(manifest.pkg)) == .@"enum" or @typeInfo(@TypeOf(manifest.pkg)) == .@"union") @tagName(manifest.pkg) else manifest.pkg.name).hash);
                 package.name_hash = package_name.hash;
                 (if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name) = (if (@typeInfo(@TypeOf(package_name)) == .@"enum") @intFromEnum(package_name) else package_name.value);
                 package.resolution = Resolution{ .value = .{ .npm = .{ .version = version.append(manifest.string_buf, @TypeOf((&string_builder)), (&string_builder)), .url = string_builder.append(String, manifest.str((&package_version_ptr.tarball_url))) } }, .tag = .npm };
@@ -428,7 +428,7 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                 resolutions_list.items = resolutions_list.items.ptr[0..new_length];
                 if (comptime Environment.isDebug) {
                     if ((if (@typeInfo(@TypeOf(package.resolution)) == .@"enum") @intFromEnum(package.resolution) else package.resolution.value).npm.url.isEmpty()) {
-                        _ = Output.panic("tarball_url is empty for package {s}@{}", .{ (if (@typeInfo(@TypeOf(manifest)) == .@"enum" or @typeInfo(@TypeOf(manifest)) == .@"union") @tagName(manifest) else manifest.name)(), version });
+                        _ = Output.panic("tarball_url is empty for package {s}@{}", .{ manifest.name(), version });
                     }
                 }
                 return package;

@@ -59,7 +59,7 @@ pub struct WTF {
             return buffer[0..0];
         }
 
-        return buffer[0..i32(res)];
+        return buffer[0..@as(usize, @intCast(res))];
     }
 
     pub const StringBuilder = @import("./StringBuilder.zig");

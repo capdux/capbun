@@ -946,7 +946,8 @@ pub fn parseEnvJSON(source: *const logger.Source, log: *logger.Log, allocator: s
                 },
                 .t_identifier => {
                     if (strings.eqlComptime(parser.lexer.identifier, "undefined")) {
-                        return Expr{ .loc = logger.Loc{ .start = 0 }, .data = .{ .e_undefined = E.Undefined{} } };
+                        const undef: E.Undefined = {};
+                        return Expr{ .loc = logger.Loc{ .start = 0 }, .data = .{ .e_undefined = undef } };
                     }
 
                     return try parser.parseExpr(true, false);

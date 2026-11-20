@@ -98,7 +98,8 @@ fn scanSmall(out: *align(1) Buffer, text: string, delta: i32) {
         const array: CharAndCount.Array = brk: {
             let _array: CharAndCount.Array = undefined;
 
-            for (i of 0..char_freq_count) {
+            let i: usize = 0;
+            while (i < char_freq_count) : (i += 1) {
                 _array[i] = CharAndCount{
                     char: NameMinifier.default_tail[i],
                     index: i,

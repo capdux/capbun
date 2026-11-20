@@ -916,7 +916,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         eval_mode: bool,
         worker_ptr: *!?,
     ): *JSGlobalObject {
-        const trace = bun.perf.trace("JSGlobalObject.create");
+        let trace = bun.perf.trace("JSGlobalObject.create");
         defer trace.end();
 
         v.eventLoop().ensureWaker();

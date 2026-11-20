@@ -208,17 +208,14 @@ pub fn convertFromExtern(extern_value: ExternType) ZigType {
                     if (comptime ((@sizeOf(Child.ZigType) <= @sizeOf(Child.ExternType)) and (@alignOf(Child.ZigType) <= bun.allocators.mimalloc.MI_MAX_ALIGN_SIZE))) {
                         var storage: []u8 = @ptrCast(unmanaged.allocatedSlice());
                         _ = &storage;
-                        {
-                            var i: i32 = 0;
-                            _ = &i;
-                            const __end_0 = length;
-                            while (i < __end_0) : (i += 1) {
-                                var old_elem: Child.ExternType = undefined;
-                                _ = &old_elem;
-                                _ = @memcpy(std.mem.asBytes((&old_elem)), storage[(i * @sizeOf(Child.ExternType))..][0..@sizeOf(Child.ExternType)]);
-                                const new_elem = Child.convertFromExtern(old_elem);
-                                _ = @memcpy(storage[(i * @sizeOf(Child.ZigType))..][0..@sizeOf(Child.ZigType)], std.mem.asBytes((&new_elem)));
-                            }
+                        var i: usize = 0;
+                        _ = &i;
+                        while ((i < length)) : (i = (i + 1)) {
+                            var old_elem: Child.ExternType = undefined;
+                            _ = &old_elem;
+                            _ = @memcpy(std.mem.asBytes((&old_elem)), storage[(i * @sizeOf(Child.ExternType))..][0..@sizeOf(Child.ExternType)]);
+                            const new_elem = Child.convertFromExtern(old_elem);
+                            _ = @memcpy(storage[(i * @sizeOf(Child.ZigType))..][0..@sizeOf(Child.ZigType)], std.mem.asBytes((&new_elem)));
                         }
                         const new_size_is_multiple = (comptime ((@sizeOf(Child.ExternType) % @sizeOf(Child.ZigType)) == 0));
                         const new_capacity = (if (comptime new_size_is_multiple) (capacity * (@sizeOf(Child.ExternType) / @sizeOf(Child.ZigType))) else blk: {

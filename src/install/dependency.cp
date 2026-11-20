@@ -1065,13 +1065,17 @@ static fn parseWithTag(
                     while (i < str.len) : (i += 1) {
                         if (str[i] == '@') {
                             input = str[i + 1 ..];
-                            break :brk sliced.sub(str[0..i]).value();
+                            const sub_alias = sliced.sub(str[0..i]);
+                            const val_fn = @TypeOf(sub_alias).value;
+                            break :brk val_fn(sub_alias);
                         }
                     }
 
                     input = str[i..];
 
-                    break :brk sliced.sub(str[0..i]).value();
+                    const sub_alias = sliced.sub(str[0..i]);
+                    const val_fn = @TypeOf(sub_alias).value;
+                    break :brk val_fn(sub_alias);
                 }
 
                 break :brk alias;

@@ -495,7 +495,7 @@ pub struct JunitReporter {
                 _.contents.writer(bun.default_allocator).print(
                     \\  <failure message="test marked with .failing() did not throw" type="AssertionError"/>
                     \\
-                , {})?;
+                , .{})?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.appendSlice(bun.default_allocator, "</testcase>\n")?;
             },

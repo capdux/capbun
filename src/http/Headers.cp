@@ -185,10 +185,11 @@ export @root @value struct Headers {
             };
 
             if (b2 := options.body) {
-                bun.copy(u8, headers.buf.items[buf_len_before_content_type + "Content-Type".len..], b2.contentType());
+                const req_body2: *const bun.webcore.Blob.BlobAny = b2;
+                bun.copy(u8, headers.buf.items[buf_len_before_content_type + "Content-Type".len..], req_body2.contentType());
                 values[header_count - 1] = {
                     offset: buf_len_before_content_type + ("Content-Type".len as u32),
-                    length: b2.contentType().len as u32,
+                    length: req_body2.contentType().len as u32,
                 };
             }
         }

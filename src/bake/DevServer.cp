@@ -966,7 +966,7 @@ fn onJsRequest(dev: *DevServer, req: *Request, resp: AnyResponse) {
             return notFound(resp);
         let arena_ = std.heap.ArenaAllocator.init(dev.allocator());
         defer arena_.deinit();
-        const json_bytes = entry.renderJSON(
+        const json_bytes: []u8 = entry.renderJSON(
             dev,
             arena_.allocator(),
             source_id.kind,

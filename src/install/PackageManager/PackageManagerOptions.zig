@@ -431,7 +431,7 @@ self.ca = (&.{ ca_str });
         break :brk (Output.stderr_descriptor_type != .terminal);
 };
         {
-            const registry_keys: [][]const u8 = .{ "BUN_CONFIG_REGISTRY", "NPM_CONFIG_REGISTRY", "npm_config_registry" };
+            const registry_keys: [3][]const u8 = .{ "BUN_CONFIG_REGISTRY", "NPM_CONFIG_REGISTRY", "npm_config_registry" };
             var did_set = false;
             _ = &did_set;
             inline for (registry_keys) |registry_key| {

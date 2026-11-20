@@ -1465,7 +1465,7 @@ var result: Result = Result{ .path_pair = PathPair{ .primary = Path.empty }, .js
                 if ((base_dir_info == null)) {
                     return .{ .success = result };
                 }
-                if (base_dir_info.getEnclosingBrowserScope()) |browser_scope| {
+                if (base_dir_info.?.getEnclosingBrowserScope()) |browser_scope| {
                     _ = &browser_scope;
                     if (r.checkBrowserMap(browser_scope, res.path_pair.primary.text, .AbsolutePath)) |remap| {
                         _ = &remap;

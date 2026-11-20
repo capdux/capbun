@@ -370,7 +370,7 @@ pub fn _parse(self: Parser, comptime ParserType: type) !js_ast.Result {
                             _ = &enum_parts;
                             var sliced = try ListManaged(Stmt).initCapacity(p.allocator, 1);
                             _ = &sliced;
-                            _ = sliced.appendAssumeCapacity((stmt.*).*);
+                            _ = sliced.appendAssumeCapacity((stmt.*));
                             _ = try p.appendPart((&enum_parts), sliced.items);
                             _ = try preprocessed_enums.append(p.allocator, enum_parts.items);
                         }

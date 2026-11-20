@@ -1671,7 +1671,7 @@ pub struct Resolver {
                     if (base_dir_info == null) {
                         return { success: result };
                     }
-                    if (browser_scope := base_dir_info.getEnclosingBrowserScope()) {
+                    if (browser_scope := base_dir_info.?.getEnclosingBrowserScope()) {
                         if (remap := r.checkBrowserMap(
                             browser_scope,
                             res.path_pair.primary.text,

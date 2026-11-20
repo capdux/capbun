@@ -97,22 +97,19 @@ pub fn legacyPackageToDependencyID(self: Buffers, dependency_visited: ?*Bitset, 
         if ((package_id == invalid_package_id)) {
             return invalid_package_id;
         }
-        {
-            var dep_id: i32 = 0;
-            _ = &dep_id;
-            const __end_0 = self.resolutions.items.len;
-            while (dep_id < __end_0) : (dep_id += 1) {
-                const pkg_id = self.resolutions.items[@as(usize, @intCast(dep_id))];
-                if ((pkg_id == package_id)) {
-                    if (dependency_visited) |visited| {
-                        _ = &visited;
-                        if (visited.isSet(dep_id)) {
-                            continue;
-                        }
-                        _ = visited.set(dep_id);
+        var dep_id: usize = 0;
+        _ = &dep_id;
+        while ((dep_id < self.resolutions.items.len)) : (dep_id = (dep_id + 1)) {
+            const pkg_id = self.resolutions.items[@as(usize, @intCast(dep_id))];
+            if ((pkg_id == package_id)) {
+                if (dependency_visited) |visited| {
+                    _ = &visited;
+                    if (visited.isSet(dep_id)) {
+                        continue;
                     }
-                    return @as(DependencyID, @truncate(dep_id));
+                    _ = visited.set(dep_id);
                 }
+                return @as(DependencyID, @truncate(dep_id));
             }
         }
         return error.@"Lockfile is missing resolution data";
@@ -234,8 +231,8 @@ pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*Pack
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_4 = tree_list.items.len;
-                        while (i < __end_4) : (i += 1) {
+                        const __end_3 = tree_list.items.len;
+                        while (i < __end_3) : (i += 1) {
                             buffers.trees.items[cp_cast_int(usize, i)] = Tree.toTree(tree_list.items[@as(usize, @intCast(i))]);
                         }
                     }
@@ -265,8 +262,8 @@ pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*Pack
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_5 = buffers.dependencies.items.len;
-                while (i < __end_5) : (i += 1) {
+                const __end_4 = buffers.dependencies.items.len;
+                while (i < __end_4) : (i += 1) {
                     buffers.dependencies.items[cp_cast_int(usize, i)] = Dependency.toDependency(external_deps[0], extern_context);
                     external_deps = (external_deps + 1);
                 }
@@ -278,8 +275,8 @@ pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*Pack
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_6 = buffers.trees.items.len;
-                while (i < __end_6) : (i += 1) {
+                const __end_5 = buffers.trees.items.len;
+                while (i < __end_5) : (i += 1) {
                     const package_id = buffers.trees.items[@as(usize, @intCast(i))].dependency_id;
                     buffers.trees.items[@as(usize, @intCast(i))].dependency_id = try buffers.legacyPackageToDependencyID((&visited), package_id);
                 }
@@ -288,8 +285,8 @@ pub fn load(stream: *Stream, allocator: Allocator, log: *logger.Log, pm_: ?*Pack
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_7 = buffers.hoisted_dependencies.items.len;
-                while (i < __end_7) : (i += 1) {
+                const __end_6 = buffers.hoisted_dependencies.items.len;
+                while (i < __end_6) : (i += 1) {
                     const pid = buffers.hoisted_dependencies.items[@as(usize, @intCast(i))];
                     buffers.hoisted_dependencies.items[cp_cast_int(usize, i)] = try buffers.legacyPackageToDependencyID((&visited), pid);
                 }
@@ -352,8 +349,8 @@ const sizes = blk: {
     {
         var i: i32 = 0;
         _ = &i;
-        const __end_8 = N;
-        while (i < __end_8) : (i += 1) {
+        const __end_7 = N;
+        while (i < __end_7) : (i += 1) {
             const field_info = fields[@as(usize, @intCast(i))];
             _ = &field_info;
             data[cp_cast_int(usize, i)] = BufferData{ .size = @sizeOf(field_info.@"type"), .name = (if (@typeInfo(@TypeOf(field_info)) == .@"enum" or @typeInfo(@TypeOf(field_info)) == .@"union") @tagName(field_info) else field_info.name), .alignment = (if ((@sizeOf(field_info.@"type") == 0)) 1 else field_info.alignment), .@"type" = field_info.@"type".Slice };
@@ -369,8 +366,8 @@ const sizes = blk: {
     {
         var i: i32 = 0;
         _ = &i;
-        const __end_9 = N;
-        while (i < __end_9) : (i += 1) {
+        const __end_8 = N;
+        while (i < __end_8) : (i += 1) {
             const elem = data[@as(usize, @intCast(i))];
             _ = &elem;
             sizes_bytes[cp_cast_int(usize, i)] = elem.size;

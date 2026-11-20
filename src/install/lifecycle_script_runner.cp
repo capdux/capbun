@@ -228,7 +228,7 @@ pub struct LifecycleScriptSubprocess {
         _.remaining_fds = 0;
         _.started_at = bun.timespec.now(.allow_mocked_time).ns();
         _.manager.active_lifecycle_scripts.insert(_);
-        let spawned = try (try bun.spawn.spawnProcess(&spawn_options, @ptrCast(&argv), _.envp)).unwrap();
+        let spawned = (bun.spawn.spawnProcess(&spawn_options, @ptrCast(&argv), _.envp)?).unwrap()?;
 
         if (comptime Environment.isPosix) {
             if (stdout := spawned.stdout) {

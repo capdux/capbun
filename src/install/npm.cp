@@ -2687,7 +2687,7 @@ pub struct PackageManifest {
 
                 let all_indices = bun.default_allocator.alloc(Int, max_versions_count)?;
                 defer bun.default_allocator.free(all_indices);
-                const releases_list = .{ &result.pkg.releases, &result.pkg.prereleases };
+                const releases_list = [ &result.pkg.releases, &result.pkg.prereleases ];
 
                 let all_cloned_versions = bun.default_allocator.alloc(Semver.Version, max_versions_count)?;
                 defer bun.default_allocator.free(all_cloned_versions);

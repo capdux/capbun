@@ -106,13 +106,10 @@ pub fn compile(self: CharFreq, allocator: std.mem.Allocator) NameMinifier {
         const array: CharAndCount.Array = brk: {
         var _array: CharAndCount.Array = undefined;
         _ = &_array;
-        {
-            var i: i32 = 0;
-            _ = &i;
-            const __end_0 = char_freq_count;
-            while (i < __end_0) : (i += 1) {
-                _array[cp_cast_int(usize, i)] = CharAndCount{ .char = NameMinifier.default_tail[@as(usize, @intCast(i))], .index = i, .count = self.freqs[@as(usize, @intCast(i))] };
-            }
+        var i: usize = 0;
+        _ = &i;
+        while ((i < char_freq_count)) : (i = (i + 1)) {
+            _array[cp_cast_int(usize, i)] = CharAndCount{ .char = NameMinifier.default_tail[@as(usize, @intCast(i))], .index = i, .count = self.freqs[@as(usize, @intCast(i))] };
         }
         _ = std.sort.pdq(CharAndCount, (&_array), .{}, CharAndCount.lessThan);
         break :brk _array;

@@ -407,8 +407,7 @@ pub const DependencyURI = union(DependencyURITag) {
     local: String,
     remote: String,
 
-pub fn eql(self: *const DependencyURI, lhs: *DependencyURI, rhs: *DependencyURI, lhs_buf: []const u8, rhs_buf: []const u8) bool {
-        _ = self;
+pub fn eql(lhs: DependencyURI, rhs: DependencyURI, lhs_buf: []const u8, rhs_buf: []const u8) bool {
             if ((@as(DependencyURITag, @enumFromInt(lhs)) != @as(DependencyURITag, @enumFromInt(rhs)))) {
                 return false;
             }
@@ -448,7 +447,7 @@ pub fn eql(self: DependencyTagInfo, that: DependencyTagInfo, this_buf: []const u
 };
 
 pub const DependencyTarballInfo = struct {
-    uri: *DependencyURI,
+    uri: DependencyURI,
     package_name: String = .{},
 
 pub fn eql(self: DependencyTarballInfo, that: DependencyTarballInfo, this_buf: []const u8, that_buf: []const u8) bool {
@@ -945,11 +944,15 @@ var input = dependency;
             while ((i < str.len)) : (i = (i + 1)) {
                 if ((str[@as(usize, @intCast(i))] == 64)) {
                     input = str[(i + 1)..];
-                    break :brk (if (@typeInfo(@TypeOf(sliced.sub(str[0..i]))) == .@"enum") @intFromEnum(sliced.sub(str[0..i])) else sliced.sub(str[0..i]).value)();
+                    const sub_alias = sliced.sub(str[0..i]);
+                    const val_fn = (if (@typeInfo(@TypeOf(@TypeOf(sub_alias))) == .@"enum") @intFromEnum(@TypeOf(sub_alias)) else @TypeOf(sub_alias).value);
+                    break :brk val_fn(sub_alias);
                 }
             }
             input = str[i..];
-            break :brk (if (@typeInfo(@TypeOf(sliced.sub(str[0..i]))) == .@"enum") @intFromEnum(sliced.sub(str[0..i])) else sliced.sub(str[0..i]).value)();
+            const sub_alias = sliced.sub(str[0..i]);
+            const val_fn = (if (@typeInfo(@TypeOf(@TypeOf(sub_alias))) == .@"enum") @intFromEnum(@TypeOf(sub_alias)) else @TypeOf(sub_alias).value);
+            break :brk val_fn(sub_alias);
         }
         break :brk alias;
 };
@@ -958,7 +961,7 @@ var input = dependency;
             input = input[1..];
         }
         const version = (blk_catch_5: { break :blk_catch_5 ((Semver.Query.parse(allocator, input, sliced.sub(input))) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 bun.outOfMemory(); }); });
-        const result = Version{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .npm = .{ .is_alias = is_alias, .name = name, .version = version } }, .tag = .npm };
+        const result = Version{ .literal = sliced.value(), .value = .{ .npm = .{ .is_alias = is_alias, .name = name, .version = version } }, .tag = .npm };
         if (is_alias) {
             if (package_manager) |pm| {
                 _ = &pm;
@@ -968,9 +971,9 @@ var input = dependency;
         return result;
 },
 .dist_tag => {
-var tag_to_use = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)();
+var tag_to_use = sliced.value();
         _ = &tag_to_use;
-        const actual = (if ((strings.hasPrefixComptime(dependency, "npm:") and (dependency.len > "npm:".len))) (if (@typeInfo(@TypeOf(sliced.sub(brk: {
+        const actual = (if ((strings.hasPrefixComptime(dependency, "npm:") and (dependency.len > "npm:".len))) sliced.sub(brk: {
         var i = "npm:".len;
         _ = &i;
         i = (i + @intFromBool((dependency[@as(usize, @intCast(i))] == 64)));
@@ -979,35 +982,13 @@ var tag_to_use = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(slice
                 break;
             }
         }
-        tag_to_use = (if (@typeInfo(@TypeOf(sliced.sub(dependency[(i + 1)..]))) == .@"enum") @intFromEnum(sliced.sub(dependency[(i + 1)..])) else sliced.sub(dependency[(i + 1)..]).value)();
+        tag_to_use = sliced.sub(dependency[(i + 1)..]).value();
         break :brk dependency["npm:".len..i];
-}))) == .@"enum") @intFromEnum(sliced.sub(brk: {
-        var i = "npm:".len;
-        _ = &i;
-        i = (i + @intFromBool((dependency[@as(usize, @intCast(i))] == 64)));
-        while ((i < dependency.len)) : (i = (i + 1)) {
-            if ((dependency[@as(usize, @intCast(i))] == 64)) {
-                break;
-            }
-        }
-        tag_to_use = (if (@typeInfo(@TypeOf(sliced.sub(dependency[(i + 1)..]))) == .@"enum") @intFromEnum(sliced.sub(dependency[(i + 1)..])) else sliced.sub(dependency[(i + 1)..]).value)();
-        break :brk dependency["npm:".len..i];
-})) else sliced.sub(brk: {
-        var i = "npm:".len;
-        _ = &i;
-        i = (i + @intFromBool((dependency[@as(usize, @intCast(i))] == 64)));
-        while ((i < dependency.len)) : (i = (i + 1)) {
-            if ((dependency[@as(usize, @intCast(i))] == 64)) {
-                break;
-            }
-        }
-        tag_to_use = (if (@typeInfo(@TypeOf(sliced.sub(dependency[(i + 1)..]))) == .@"enum") @intFromEnum(sliced.sub(dependency[(i + 1)..])) else sliced.sub(dependency[(i + 1)..]).value)();
-        break :brk dependency["npm:".len..i];
-}).value)() else alias);
+}).value() else alias);
         if (comptime Environment.allow_assert) {
             _ = bun.assert((!actual.isEmpty()));
         }
-        return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .dist_tag = .{ .name = actual, .tag = (if (tag_to_use.isEmpty()) String.@"from"("latest") else tag_to_use) } }, .tag = .dist_tag };
+        return .{ .literal = sliced.value(), .value = .{ .dist_tag = .{ .name = actual, .tag = (if (tag_to_use.isEmpty()) String.@"from"("latest") else tag_to_use) } }, .tag = .dist_tag };
 },
 .git => {
 var input = dependency;
@@ -1023,9 +1004,9 @@ var input = dependency;
         if (hash_index) |index| {
             _ = &index;
             repo_str = input[0..index];
-            committish_val = (if (@typeInfo(@TypeOf(sliced.sub(input[(index + 1)..]))) == .@"enum") @intFromEnum(sliced.sub(input[(index + 1)..])) else sliced.sub(input[(index + 1)..]).value)();
+            committish_val = sliced.sub(input[(index + 1)..]).value();
         }
-        return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .git = .{ .owner = String.@"from"(""), .repo = (if (@typeInfo(@TypeOf(sliced.sub(repo_str))) == .@"enum") @intFromEnum(sliced.sub(repo_str)) else sliced.sub(repo_str).value)(), .committish = committish_val } }, .tag = .git };
+        return .{ .literal = sliced.value(), .value = .{ .git = .{ .owner = String.@"from"(""), .repo = sliced.sub(repo_str).value(), .committish = committish_val } }, .tag = .git };
 },
 .github => {
 const info_opt = (blk_catch_7: { break :blk_catch_7 ((bun.handleOom(hosted_git_info.HostedGitInfo.fromUrl(allocator, dependency))) catch |__ce_7| { _ = &__ce_7; return null; }); });
@@ -1040,33 +1021,33 @@ const info_opt = (blk_catch_7: { break :blk_catch_7 ((bun.handleOom(hosted_git_i
         _ = &owner;
         if (strings.indexOf(dependency, owner_str)) |idx| {
             _ = &idx;
-            owner = (if (@typeInfo(@TypeOf(sliced.sub(dependency[idx..(idx + owner_str.len)]))) == .@"enum") @intFromEnum(sliced.sub(dependency[idx..(idx + owner_str.len)])) else sliced.sub(dependency[idx..(idx + owner_str.len)]).value)();
+            owner = sliced.sub(dependency[idx..(idx + owner_str.len)]).value();
         }
         var repo = String.@"from"("");
         _ = &repo;
         if (strings.indexOf(dependency, repo_str)) |idx| {
             _ = &idx;
-            repo = (if (@typeInfo(@TypeOf(sliced.sub(dependency[idx..(idx + repo_str.len)]))) == .@"enum") @intFromEnum(sliced.sub(dependency[idx..(idx + repo_str.len)])) else sliced.sub(dependency[idx..(idx + repo_str.len)]).value)();
+            repo = sliced.sub(dependency[idx..(idx + repo_str.len)]).value();
         }
         var committish = String.@"from"("");
         _ = &committish;
         if ((committish_str.len > 0)) {
             if (strings.indexOf(dependency, committish_str)) |idx| {
                 _ = &idx;
-                committish = (if (@typeInfo(@TypeOf(sliced.sub(dependency[idx..(idx + committish_str.len)]))) == .@"enum") @intFromEnum(sliced.sub(dependency[idx..(idx + committish_str.len)])) else sliced.sub(dependency[idx..(idx + committish_str.len)]).value)();
+                committish = sliced.sub(dependency[idx..(idx + committish_str.len)]).value();
             }
         }
-        return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .github = .{ .owner = owner, .repo = repo, .committish = committish } }, .tag = .github };
+        return .{ .literal = sliced.value(), .value = .{ .github = .{ .owner = owner, .repo = repo, .committish = committish } }, .tag = .github };
 },
 .tarball => {
 if (Dependency.isRemoteTarball(dependency)) {
-            return .{ .tag = .tarball, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .tarball = .{ .uri = .{ .remote = (if (@typeInfo(@TypeOf(sliced.sub(dependency))) == .@"enum") @intFromEnum(sliced.sub(dependency)) else sliced.sub(dependency).value)() } } } };
+            return .{ .tag = .tarball, .literal = sliced.value(), .value = .{ .tarball = .{ .uri = .{ .remote = sliced.sub(dependency).value() } } } };
         } else {
             if (strings.hasPrefixComptime(dependency, "file://")) {
-                return .{ .tag = .tarball, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .tarball = .{ .uri = .{ .local = (if (@typeInfo(@TypeOf(sliced.sub(dependency[7..]))) == .@"enum") @intFromEnum(sliced.sub(dependency[7..])) else sliced.sub(dependency[7..]).value)() } } } };
+                return .{ .tag = .tarball, .literal = sliced.value(), .value = .{ .tarball = .{ .uri = .{ .local = sliced.sub(dependency[7..]).value() } } } };
             } else {
                 if (strings.hasPrefixComptime(dependency, "file:")) {
-                    return .{ .tag = .tarball, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .tarball = .{ .uri = .{ .local = (if (@typeInfo(@TypeOf(sliced.sub(dependency[5..]))) == .@"enum") @intFromEnum(sliced.sub(dependency[5..])) else sliced.sub(dependency[5..]).value)() } } } };
+                    return .{ .tag = .tarball, .literal = sliced.value(), .value = .{ .tarball = .{ .uri = .{ .local = sliced.sub(dependency[5..]).value() } } } };
                 } else {
                     if (strings.contains(dependency, "://")) {
                         if (log_) |log| {
@@ -1078,7 +1059,7 @@ if (Dependency.isRemoteTarball(dependency)) {
                 }
             }
         }
-        return .{ .tag = .tarball, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .tarball = .{ .uri = .{ .local = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() } } } };
+        return .{ .tag = .tarball, .literal = sliced.value(), .value = .{ .tarball = .{ .uri = .{ .local = sliced.value() } } } };
 },
 .folder => {
 if (strings.indexOfChar(dependency, 58)) |protocol| {
@@ -1098,25 +1079,25 @@ if (strings.indexOfChar(dependency, 58)) |protocol| {
                 break :folder dependency[(protocol + 1)..];
 };
                 if ((((maybe_dot_dot.len > 1) and (maybe_dot_dot[0] == 46)) and (maybe_dot_dot[1] == 46))) {
-                    return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .folder = (if (@typeInfo(@TypeOf(sliced.sub(maybe_dot_dot))) == .@"enum") @intFromEnum(sliced.sub(maybe_dot_dot)) else sliced.sub(maybe_dot_dot).value)() }, .tag = .folder };
+                    return .{ .literal = sliced.value(), .value = .{ .folder = sliced.sub(maybe_dot_dot).value() }, .tag = .folder };
                 }
                 break :folder dependency[(protocol + 1)..];
 };
                 if (comptime Environment.isWindows) {
                     if (isWindowsAbsPathWithLeadingSlashes(folder)) |dep| {
                         _ = &dep;
-                        return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .folder = (if (@typeInfo(@TypeOf(sliced.sub(dep))) == .@"enum") @intFromEnum(sliced.sub(dep)) else sliced.sub(dep).value)() }, .tag = .folder };
+                        return .{ .literal = sliced.value(), .value = .{ .folder = sliced.sub(dep).value() }, .tag = .folder };
                     }
                 }
-                return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .folder = (if (@typeInfo(@TypeOf(sliced.sub(folder))) == .@"enum") @intFromEnum(sliced.sub(folder)) else sliced.sub(folder).value)() }, .tag = .folder };
+                return .{ .literal = sliced.value(), .value = .{ .folder = sliced.sub(folder).value() }, .tag = .folder };
             }
             if (comptime Environment.isWindows) {
                 if (((protocol == 1) and strings.startsWithWindowsDriveLetter(dependency))) {
-                    return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .folder = (if (@typeInfo(@TypeOf(sliced.sub(dependency))) == .@"enum") @intFromEnum(sliced.sub(dependency)) else sliced.sub(dependency).value)() }, .tag = .folder };
+                    return .{ .literal = sliced.value(), .value = .{ .folder = sliced.sub(dependency).value() }, .tag = .folder };
                 }
                 if (isWindowsAbsPathWithLeadingSlashes(dependency)) |dep| {
                     _ = &dep;
-                    return .{ .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)(), .value = .{ .folder = (if (@typeInfo(@TypeOf(sliced.sub(dep))) == .@"enum") @intFromEnum(sliced.sub(dep)) else sliced.sub(dep).value)() }, .tag = .folder };
+                    return .{ .literal = sliced.value(), .value = .{ .folder = sliced.sub(dep).value() }, .tag = .folder };
                 }
             }
             if (log_) |log| {
@@ -1125,7 +1106,7 @@ if (strings.indexOfChar(dependency, 58)) |protocol| {
             }
             return null;
         }
-        return .{ .value = .{ .folder = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() }, .tag = .folder, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() };
+        return .{ .value = .{ .folder = sliced.value() }, .tag = .folder, .literal = sliced.value() };
 },
 .uninitialized => {
 return null;
@@ -1133,9 +1114,9 @@ return null;
 .symlink => {
 if (strings.indexOfChar(dependency, 58)) |colon| {
             _ = &colon;
-            return .{ .value = .{ .symlink = (if (@typeInfo(@TypeOf(sliced.sub(dependency[(colon + 1)..]))) == .@"enum") @intFromEnum(sliced.sub(dependency[(colon + 1)..])) else sliced.sub(dependency[(colon + 1)..]).value)() }, .tag = .symlink, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() };
+            return .{ .value = .{ .symlink = sliced.sub(dependency[(colon + 1)..]).value() }, .tag = .symlink, .literal = sliced.value() };
         }
-        return .{ .value = .{ .symlink = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() }, .tag = .symlink, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() };
+        return .{ .value = .{ .symlink = sliced.value() }, .tag = .symlink, .literal = sliced.value() };
 },
 .workspace => {
 var input = dependency;
@@ -1143,13 +1124,13 @@ var input = dependency;
         if (strings.hasPrefixComptime(input, "workspace:")) {
             input = input["workspace:".len..];
         }
-        return .{ .value = .{ .workspace = (if (@typeInfo(@TypeOf(sliced.sub(input))) == .@"enum") @intFromEnum(sliced.sub(input)) else sliced.sub(input).value)() }, .tag = .workspace, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() };
+        return .{ .value = .{ .workspace = sliced.sub(input).value() }, .tag = .workspace, .literal = sliced.value() };
 },
 .catalog => {
 _ = bun.assert(strings.hasPrefixComptime(dependency, "catalog:"));
         const group = dependency["catalog:".len..];
         const trimmed = strings.trim(group, (&strings.whitespace_chars));
-        return .{ .value = .{ .catalog = (if (@typeInfo(@TypeOf(sliced.sub(trimmed))) == .@"enum") @intFromEnum(sliced.sub(trimmed)) else sliced.sub(trimmed).value)() }, .tag = .catalog, .literal = (if (@typeInfo(@TypeOf(sliced)) == .@"enum") @intFromEnum(sliced) else sliced.value)() };
+        return .{ .value = .{ .catalog = sliced.sub(trimmed).value() }, .tag = .catalog, .literal = sliced.value() };
 },
 }
 }

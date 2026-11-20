@@ -229,7 +229,10 @@ pub fn resolveEntryPoint(transpiler: *Transpiler, entry_point: []const u8) !_res
             break :name bun.path.joinAbsStringBufZ(transpiler.fs.top_level_dir, (&cache_bust_buf), (&parts), .auto);
 };
             if (transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name))) {
-                const maybe_result: ?_resolver.Result = (blk_catch_3: { break :blk_catch_3 ((_resolveEntryPoint(transpiler, entry_point)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 @as(_resolver.Result, null); }); });
+                const maybe_result: ?_resolver.Result = blk: {
+                const res = (blk_catch_3: { break :blk_catch_3 ((_resolveEntryPoint(transpiler, entry_point)) catch |__ce_3| { _ = &__ce_3; break :blk @as(?_resolver.Result, null); }); });
+                break :blk @as(?_resolver.Result, res);
+};
                 if (maybe_result) |result| {
                     _ = &result;
                     return result;

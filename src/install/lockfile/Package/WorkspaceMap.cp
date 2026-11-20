@@ -164,7 +164,7 @@ pub fn processNamesArray(
     for (item of arr.slice()) {
         const input_path_opt = item.asStringZ(allocator)?;
         if (input_path_opt == null) {
-            log.addError(source, item.loc, allocator, "Workspaces expects an array of strings") catch {};
+            log.addErrorFmt(source, item.loc, allocator, "Workspaces expects an array of strings", .{}) catch {};
             return error.InvalidPackageJSON;
         }
         const input_path = input_path_opt.?;

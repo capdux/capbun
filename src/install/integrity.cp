@@ -34,7 +34,7 @@ pub enum IntegrityTag: u8 {
         return @intFromEnum(_) >= @intFromEnum(IntegrityTag.sha1) && @intFromEnum(_) <= @intFromEnum(IntegrityTag.sha512);
     }
 
-    pub fn parse(buf: []const u8): [IntegrityTag, usize] {
+    static fn parse(buf: []const u8): [IntegrityTag, usize] {
         const Matcher = strings.ExactSizeMatcher(8);
 
         const i = strings.indexOfChar(buf[0..@min(buf.len, 7)], '-') ?? return .{ IntegrityTag.unknown, 0 };

@@ -817,7 +817,8 @@ pub fn ERR(global: *JSGlobalObject, comptime code: jsc.Error, comptime fmt: [:0]
     }
 
 pub fn create(v: *jsc.VirtualMachine, console: *anyopaque, context_id: i32, mini_mode: bool, eval_mode: bool, worker_ptr: ?*anyopaque) *JSGlobalObject {
-            const trace = bun.perf.trace("JSGlobalObject.create");
+            var trace = bun.perf.trace("JSGlobalObject.create");
+            _ = &trace;
             defer {
             _ = trace.end();
             }

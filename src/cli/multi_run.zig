@@ -148,7 +148,6 @@ pub fn start(self: *ProcessHandle) !void {
             _ = bun.handleOom(self.state.env.map.put("PATH", original_path));
             }
             const envp = try self.state.env.map.createNullDelimitedEnvMap(arena_.allocator());
-            const OptCstr = try cstr;
             const argv_ptr: [*:null]OptCstr = (blk: {
             break :blk @ptrCast((&argv));
 
@@ -431,6 +430,7 @@ pub const FilteredPackage = struct {
 
 const string = []const u8;
 const cstr = [*:0]const u8;
+const OptCstr = ?[*:0]const u8;
 const ScriptsMap = *const bun.StringArrayHashMap(string);
 const colors: [6][]const u8 = .{ "\x1b[36m", "\x1b[33m", "\x1b[35m", "\x1b[32m", "\x1b[34m", "\x1b[31m" };
 const reset = "\x1b[0m";

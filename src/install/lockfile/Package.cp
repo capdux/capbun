@@ -216,7 +216,8 @@ pub fn Package(comptime SemverIntType: type): type {
             package_json: *PackageJSON,
             comptime features: Features,
         ): !@This() {
-            let package = @This(){};
+            const Self = @This();
+            let package = Self{};
 
             // var string_buf = package_json;
 
@@ -311,7 +312,8 @@ pub fn Package(comptime SemverIntType: type): type {
             package_version_ptr: *const Npm.PackageVersion,
             comptime features: Features,
         ): !@This() {
-            let package = @This(){};
+            const Self = @This();
+            let package = Self{};
 
             const package_version = package_version_ptr.*;
 

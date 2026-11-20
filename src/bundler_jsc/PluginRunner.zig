@@ -77,7 +77,11 @@ pub fn onResolve(self: *PluginRunner, specifier: []const u8, importer: []const u
             _ = &global;
             const namespace_slice = PluginRunner.extractNamespace(specifier);
             const namespace = (if (((namespace_slice.len > 0) and (!strings.eqlComptime(namespace_slice, "file")))) bun.String.init(namespace_slice) else bun.String.empty);
-            const on_resolve_plugin = ((try global.runOnResolvePlugins(namespace, bun.String.init(specifier).substring((if ((namespace.length() > 0)) (namespace.length() + 1) else 0)), bun.String.init(importer), target)) orelse { return .{ .ok = null }; });
+            const on_resolve_plugin_opt = try global.runOnResolvePlugins(namespace, bun.String.init(specifier).substring((if ((namespace.length() > 0)) (namespace.length() + 1) else 0)), bun.String.init(importer), target);
+            if ((on_resolve_plugin_opt == null)) {
+                return null;
+            }
+            const on_resolve_plugin = on_resolve_plugin_opt.?;
             const path_value = ((try on_resolve_plugin.get(global, "path")) orelse { return .{ .ok = null }; });
             if (path_value.isEmptyOrUndefinedOrNull()) {
                 return null;

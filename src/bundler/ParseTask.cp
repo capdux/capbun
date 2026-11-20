@@ -1382,7 +1382,8 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
     let value: ResultValue = { empty: { source_index: client.source_index } };
     let done = false;
     if (client.stage == .needs_source_code) {
-        let maybe_entry: CacheEntry? = getSourceCode(client, worker, &log) catch e => blk: {
+        let maybe_entry: CacheEntry? = null;
+        const entry_res = getSourceCode(client, worker, &log) catch |e| blk_err: {
             value = { e: {
                 e: e,
                 step: step,
@@ -1391,9 +1392,10 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
                 target: client.known_target,
             } };
             done = true;
-            break :blk null;
+            break :blk_err undefined;
         };
         if (!done) {
+            maybe_entry = entry_res;
             if (entry := maybe_entry) {
                 client.stage = { needs_parse: entry };
             }

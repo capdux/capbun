@@ -1,5 +1,6 @@
 type string = []const u8;
 type cstr = [*:0]const u8;
+type OptCstr = cstr?;
 type ScriptsMap = *const bun.StringArrayHashMap(string);
 
 pub struct ScriptConfig {
@@ -90,7 +91,6 @@ pub struct ProcessHandle {
             bun.handleOom(_.state.env.map.put("PATH", _.config.PATH));
             defer bun.handleOom(_.state.env.map.put("PATH", original_path));
             const envp = _.state.env.map.createNullDelimitedEnvMap(arena_.allocator())?;
-            const OptCstr = cstr?;
             const argv_ptr: [*:null]OptCstr = unsafe { @ptrCast(&argv) };
             break :brk (bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?).unwrap()?;
         };

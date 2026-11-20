@@ -175,7 +175,8 @@ pub fn BindgenArray(comptime Child: type): type {
                 let storage: []u8 = @ptrCast(unmanaged.allocatedSlice());
 
                 // Convert the elements.
-                for (i of 0..length) {
+                let i: usize = 0;
+                while (i < length) : (i += 1) {
                     // Zig doesn't have a formal aliasing model, so we should be maximally
                     // pessimistic.
                     let old_elem: Child.ExternType = undefined;

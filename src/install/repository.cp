@@ -197,7 +197,8 @@ pub struct TopFormatter {
             writer.writeAll(resolved)?;
         } else if (!_.repository.committish.isEmpty()) {
             writer.writeAll("#")?;
-            writer.writeAll(_.repository.committish.slice(_.buf))?;
+            const committish_slice_fn = String.slice;
+            writer.writeAll(committish_slice_fn(_.repository.committish, _.buf))?;
         }
     }
 }

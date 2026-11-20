@@ -370,7 +370,7 @@ pub fn isValidTSConfigPathPattern(text: []const u8, log: *logger.Log, source: *c
 
 pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: []const u8, allocator: std.mem.Allocator) ![][]const u8 {
             if ((text.len == 0)) {
-                var empty_parts: [0][]const u8 = &.{};
+                var empty_parts: [0][]const u8 = undefined;
                 _ = &empty_parts;
                 return empty_parts[0..0];
             }
@@ -382,7 +382,7 @@ pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Sourc
                     const warn = source.rangeOfString(loc);
                     _ = (blk_catch_12: { break :blk_catch_12 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ text })) catch |__ce_12| { _ = &__ce_12;  }); });
                     _ = parts.deinit();
-                    var empty_parts: [0][]const u8 = &.{};
+                    var empty_parts: [0][]const u8 = undefined;
                     _ = &empty_parts;
                     return empty_parts[0..0];
                 }
@@ -396,7 +396,7 @@ pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Sourc
                     const warn = source.rangeOfString(loc);
                     _ = (blk_catch_13: { break :blk_catch_13 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ part })) catch |__ce_13| { _ = &__ce_13;  }); });
                     _ = parts.deinit();
-                    var empty_parts: [0][]const u8 = &.{};
+                    var empty_parts: [0][]const u8 = undefined;
                     _ = &empty_parts;
                     return empty_parts[0..0];
                 }

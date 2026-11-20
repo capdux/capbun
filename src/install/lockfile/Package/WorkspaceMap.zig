@@ -192,7 +192,7 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
             _ = &item;
             const input_path_opt = try item.asStringZ(allocator);
             if ((input_path_opt == null)) {
-                _ = (blk_catch_1: { break :blk_catch_1 ((log.addError(source, item.loc, allocator, "Workspaces expects an array of strings")) catch |__ce_1| { _ = &__ce_1;  }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((log.addErrorFmt(source, item.loc, allocator, "Workspaces expects an array of strings", .{})) catch |__ce_1| { _ = &__ce_1;  }); });
                 return error.InvalidPackageJSON;
             }
             const input_path = input_path_opt.?;

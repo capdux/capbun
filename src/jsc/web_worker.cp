@@ -825,7 +825,7 @@ pub struct LiveWorkers {
             },
         ) catch |e| {
             if (e == error.OutOfMemory) {
-                globalObject.throwOutOfMemory() catch {};
+                if (globalObject.throwOutOfMemory() == error.JSError) {}
             }
             error_instance = globalObject.tryTakeException().?;
         };

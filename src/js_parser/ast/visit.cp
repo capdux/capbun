@@ -807,7 +807,7 @@ pub fn Visit(
                             p.scope_order_to_visit = p.scopes_in_order_for_enum.get(stmt.loc).?;
 
                             let temp = ListManaged(Stmt).init(p.allocator);
-                            p.visitAndAppendStmt(&temp, stmt)?;
+                            p.visitAndAppendStmt(&temp, &stmt)?;
                             preprocessed_enums.append(p.allocator, temp.items)?;
                             found += 1;
                         }

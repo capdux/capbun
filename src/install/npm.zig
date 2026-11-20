@@ -1607,7 +1607,7 @@ pub fn isLessThan(self: @This(), left: Int, right: Int) bool {
             defer {
             _ = bun.default_allocator.free(all_indices);
             }
-            const releases_list: struct { *anyopaque, *anyopaque } = .{ (&result.pkg.releases), (&result.pkg.prereleases) };
+            const releases_list = .{ (&result.pkg.releases), (&result.pkg.prereleases) };
             var all_cloned_versions = try bun.default_allocator.alloc(Semver.Version, max_versions_count);
             _ = &all_cloned_versions;
             defer {

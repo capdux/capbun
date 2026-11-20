@@ -15,6 +15,7 @@ const CLI = bun.cli;
 const Command = CLI.Command;
 
 type cstr = [*:0]const u8;
+type OptCstr = cstr?;
 
 pub struct ScriptConfig {
     package_json_path: []u8,
@@ -87,7 +88,6 @@ pub struct ProcessHandle {
             let arena_allocator = std.heap.ArenaAllocator.init(bun.default_allocator);
             defer arena_allocator.deinit();
             const envp = getEnvp(_.state.env, _.config.PATH, arena_allocator.allocator())?;
-            const OptCstr = cstr?;
             const argv_ptr: [*:null]OptCstr = unsafe { @ptrCast(&argv) };
             break :brk (bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?).unwrap()?;
         };

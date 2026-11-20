@@ -990,13 +990,15 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
         var done = false;
         _ = &done;
         if ((client.stage == .needs_source_code)) {
-            var maybe_entry: ?CacheEntry = (blk_catch_15: { break :blk_catch_15 ((getSourceCode(client, worker, (&log))) catch |e| { _ = &e; break :blk_catch_15 @as(CacheEntry, blk: {
+            var maybe_entry: ?CacheEntry = null;
+            _ = &maybe_entry;
+            const entry_res = (blk_catch_15: { break :blk_catch_15 ((getSourceCode(client, worker, (&log))) catch |e| { _ = &e; break :blk_catch_15 @as(CacheEntry, blk_err: {
             value = .{ .e = .{ .e = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
             done = true;
-            break :blk null;
+            break :blk_err undefined;
 }); }); });
-            _ = &maybe_entry;
             if ((!done)) {
+                maybe_entry = entry_res;
                 if (maybe_entry) |entry| {
                     _ = &entry;
                     client.stage = .{ .needs_parse = entry };

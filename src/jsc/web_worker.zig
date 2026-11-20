@@ -639,11 +639,12 @@ pub fn onUnhandledRejection(vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobal
         const worker = ((vm.worker) orelse (@panic("Assertion failure: no worker")));
         const writer = (&array.writer);
         _ = (blk_catch_11: { break :blk_catch_11 ((jsc.ConsoleObject.format2(.Debug, globalObject, (&error_instance)[0..1].ptr, 1, writer, .{ .enable_colors = false, .add_newline = false, .flush = false, .max_depth = 32 })) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
-            _ = (blk_catch_12: { break :blk_catch_12 ((globalObject.throwOutOfMemory()) catch |__ce_12| { _ = &__ce_12;  }); });
+            if ((globalObject.throwOutOfMemory() == error.JSError)) {
+            }
         }
         error_instance = (globalObject.tryTakeException()).?;
         break :blk_catch_11 {}; }); });
-        _ = (blk_catch_13: { break :blk_catch_13 ((writer.flush()) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 bun.outOfMemory(); }); });
+        _ = (blk_catch_12: { break :blk_catch_12 ((writer.flush()) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 bun.outOfMemory(); }); });
         _ = jsc.markBinding(@src());
         _ = WebWorker__dispatchError(globalObject, worker.cpp_worker, bun.String.cloneUTF8(array.written()), error_instance);
         _ = worker.setRequestedTerminate();
@@ -704,8 +705,8 @@ pub fn resolveEntryPointSpecifier(parent: *jsc.VirtualMachine, str: []const u8, 
                 return null;
             }
         }
-        var resolved_entry_point: bun.resolver.Result = (blk_catch_14: { break :blk_catch_14 ((parent.transpiler.resolveEntryPoint(str)) catch |__ce_14| { _ = &__ce_14; const out = (blk_catch_16: { break :blk_catch_16 ((blk: {
-        const out = (blk_catch_15: { break :blk_catch_15 ((logger.toJS(parent.global, bun.default_allocator, "Error resolving Worker entry point")) catch |e| { _ = &e; break :blk e; }); });
+        var resolved_entry_point: bun.resolver.Result = (blk_catch_13: { break :blk_catch_13 ((parent.transpiler.resolveEntryPoint(str)) catch |__ce_13| { _ = &__ce_13; const out = (blk_catch_15: { break :blk_catch_15 ((blk: {
+        const out = (blk_catch_14: { break :blk_catch_14 ((logger.toJS(parent.global, bun.default_allocator, "Error resolving Worker entry point")) catch |e| { _ = &e; break :blk e; }); });
         break :blk out.toBunString(parent.global);
 }) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             _ = bun.outOfMemory();

@@ -51,12 +51,14 @@ pub struct PluginRunner {
             bun.String.init(namespace_slice)
         else
             bun.String.empty;
-        const on_resolve_plugin = global.runOnResolvePlugins(
+        const on_resolve_plugin_opt = global.runOnResolvePlugins(
             namespace,
             bun.String.init(specifier).substring(if (namespace.length() > 0) namespace.length() + 1 else 0),
             bun.String.init(importer),
             target,
-        )? ?? return null;
+        )?;
+        if (on_resolve_plugin_opt == null) return null;
+        const on_resolve_plugin = on_resolve_plugin_opt.?;
         const path_value = on_resolve_plugin.get(global, "path")? ?? return null;
         if (path_value.isEmptyOrUndefinedOrNull()) return null;
         if (!path_value.isString()) {

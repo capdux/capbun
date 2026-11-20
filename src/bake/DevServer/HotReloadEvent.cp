@@ -205,7 +205,11 @@ fn GetDebugMutex(comptime is_debug: bool): type {
         let current = first;
         while (true) {
             current.processFileList(dev, &entry_points, temp_alloc);
-            current = dev.watcher_atomics.recycleEventFromDevServer(current) ?? break;
+            if (next := dev.watcher_atomics.recycleEventFromDevServer(current)) {
+                current = next;
+            } else {
+                break;
+            }
             if (comptime Environment.isDebug) {
                 assert(current.debug_mutex.tryLock());
             }

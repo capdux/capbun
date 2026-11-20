@@ -807,7 +807,7 @@ pub fn loadFromDir(
         initializeStore();
         const json = JSON.parsePackageJSONUTF8(source, log, allocator) catch |e| {
             return {
-                e: {
+                @"err": {
                     step: .parse_file,
                     value: e,
                     lockfile_path: "bun.lock",

@@ -110,8 +110,7 @@ pub inline fn isSupported(self: IntegrityTag) bool {
             return ((@intFromEnum(self) >= @intFromEnum(IntegrityTag.sha1)) and (@intFromEnum(self) <= @intFromEnum(IntegrityTag.sha512)));
     }
 
-pub fn parse(self: IntegrityTag, buf: []const u8) struct { IntegrityTag, usize } {
-        _ = self;
+pub fn parse(buf: []const u8) struct { IntegrityTag, usize } {
             const Matcher = strings.ExactSizeMatcher(8);
             const i = ((strings.indexOfChar(buf[0..@min(buf.len, 7)], 45)) orelse { return .{ IntegrityTag.unknown, 0 }; });
             if ((buf.len <= (i + 1))) {

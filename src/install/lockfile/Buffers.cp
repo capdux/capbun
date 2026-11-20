@@ -213,7 +213,8 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
     fn legacyPackageToDependencyID(dependency_visited: (*Bitset)?, package_id: PackageID): DependencyID! {
         if (package_id == 0) return Tree.root_dep_id;
         if (package_id == invalid_package_id) return invalid_package_id;
-        for (dep_id of 0.._.resolutions.items.len) {
+        let dep_id: usize = 0;
+        while (dep_id < _.resolutions.items.len) : (dep_id += 1) {
             const pkg_id = _.resolutions.items[dep_id];
             if (pkg_id == package_id) {
                 if (visited := dependency_visited) {

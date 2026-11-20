@@ -1772,3 +1772,5 @@
 - **[2026-11-20] Wave 23 E 组 (5 跨模块根因)**：更新 `runtime/node/node_process`, `bun`, `bundler/options`, `http/HTTPThread`, `string/StringBuilder`。
 
 - **[2026-11-20] Wave 24 A 组 (9 模块)**：更新 `runtime/node/{node_fs,node_fs_watcher}`, `js_parser/ast/{P,parse,parseProperty}`, `js_printer/js_printer`, `resolver/package_json`, `install/hosted_git_info`, `bundler_jsc/output_file_jsc`。
+
+- **[2026-11-20] Wave 24 C 组 (32 模块)**：更新 `bake/DevServer{,/HotReloadEvent}`, `bundler/{ParseTask,analyze_transpiled_module,transpiler}`, `bundler_jsc/PluginRunner`, `cli/{filter_run,multi_run,test_command}`, `http/Headers`, `install/{PackageManager/PackageManagerOptions,TarballStream,dependency,integrity,lifecycle_script_runner,lockfile,lockfile/{Buffers,Package,Package/WorkspaceMap},npm,repository}`, `interchange/json`, `js_parser/ast/{CharFreq,Parser,visit}`, `jsc/{Debugger,JSGlobalObject,WTF,bindgen,web_worker}`, `resolver/{resolver,tsconfig_json}`。

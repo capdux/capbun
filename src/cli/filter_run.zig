@@ -134,7 +134,6 @@ pub fn start(self: *ProcessHandle) !void {
             _ = arena_allocator.deinit();
             }
             const envp = try getEnvp(self.state.env, self.config.PATH, arena_allocator.allocator());
-            const OptCstr = try cstr;
             const argv_ptr: [*:null]OptCstr = (blk: {
             break :blk @ptrCast((&argv));
 
@@ -462,6 +461,7 @@ pub fn uninstall() void {
 };
 
 const cstr = [*:0]const u8;
+const OptCstr = ?[*:0]const u8;
 const OptCString = ?[*:0]const u8;
 const DependencyMap = package_json.DependencyMap;
 const RunCommand = run_cmd.RunCommand;

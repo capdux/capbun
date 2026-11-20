@@ -334,7 +334,7 @@ pub struct TSConfigJSON {
 
     pub static fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: string, allocator: std.mem.Allocator): ([]string)! {
         if (text.len == 0) {
-            let empty_parts: [0][]const u8 = [];
+            let empty_parts: [0][]const u8 = undefined;
             return empty_parts[0..0];
         }
         const parts_count = std.mem.count(u8, text, ".") + @as(usize, @intFromBool(text[text.len - 1] != '.'));
@@ -345,7 +345,7 @@ pub struct TSConfigJSON {
                 const warn = source.rangeOfString(loc);
                 log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", [text]) catch {};
                 parts.deinit();
-                let empty_parts: [0][]const u8 = [];
+                let empty_parts: [0][]const u8 = undefined;
                 return empty_parts[0..0];
             }
 
@@ -360,7 +360,7 @@ pub struct TSConfigJSON {
                 const warn = source.rangeOfString(loc);
                 log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", [part]) catch {};
                 parts.deinit();
-                let empty_parts: [0][]const u8 = [];
+                let empty_parts: [0][]const u8 = undefined;
                 return empty_parts[0..0];
             }
             parts.appendAssumeCapacity(part);

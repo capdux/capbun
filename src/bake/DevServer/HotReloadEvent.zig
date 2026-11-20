@@ -224,7 +224,12 @@ pub fn run(first: *HotReloadEvent) void {
         _ = &current;
         while (true) {
             _ = current.processFileList(dev, (&entry_points), temp_alloc);
-            if (current == null) { current = break; }
+            if (dev.watcher_atomics.recycleEventFromDevServer(current)) |next| {
+                _ = &next;
+                current = next;
+            } else {
+                break;
+            }
             if (comptime Environment.isDebug) {
                 _ = assert((if (comptime @typeInfo(@TypeOf(current.debug_mutex)) == .pointer) (current.debug_mutex) else &(current.debug_mutex)).tryLock());
             }

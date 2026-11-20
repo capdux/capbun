@@ -268,7 +268,8 @@ pub fn format(self: TopFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!vo
             } else {
                 if ((!self.repository.committish.isEmpty())) {
                     _ = try writer.writeAll("#");
-                    _ = try writer.writeAll(cp_iter_slice(self.repository.committish)[@intCast(self.buf)..]);
+                    const committish_slice_fn = String.slice;
+                    _ = try writer.writeAll(committish_slice_fn(self.repository.committish, self.buf));
                 }
             }
     }

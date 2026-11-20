@@ -379,10 +379,22 @@ pub fn create(vm: *VirtualMachine, globalObject: *JSGlobalObject) !void {
         _ = jsc.markBinding(@src());
         if ((!has_created_debugger)) {
             has_created_debugger = true;
-            _ = std.mem.doNotOptimizeAway(*const TestReporterAgent.Bun__TestReporterAgentDisable);
-            _ = std.mem.doNotOptimizeAway(*const LifecycleAgent.Bun__LifecycleAgentDisable);
-            _ = std.mem.doNotOptimizeAway(*const TestReporterAgent.Bun__TestReporterAgentEnable);
-            _ = std.mem.doNotOptimizeAway(*const LifecycleAgent.Bun__LifecycleAgentEnable);
+            _ = std.mem.doNotOptimizeAway((blk: {
+            break :blk *const TestReporterAgent.Bun__TestReporterAgentDisable;
+
+}));
+            _ = std.mem.doNotOptimizeAway((blk: {
+            break :blk *const LifecycleAgent.Bun__LifecycleAgentDisable;
+
+}));
+            _ = std.mem.doNotOptimizeAway((blk: {
+            break :blk *const TestReporterAgent.Bun__TestReporterAgentEnable;
+
+}));
+            _ = std.mem.doNotOptimizeAway((blk: {
+            break :blk *const LifecycleAgent.Bun__LifecycleAgentEnable;
+
+}));
             var debugger = (&vm.debugger.?);
             _ = &debugger;
             debugger.script_execution_context_id = Bun__createJSDebugger(globalObject);

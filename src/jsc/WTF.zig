@@ -62,7 +62,7 @@ pub fn writeHTTPDate(buffer: *[32]u8, timestampMs: u64) []u8 {
             if ((res < 1)) {
                 return buffer[0..0];
             }
-            return buffer[0..(if (comptime @typeInfo(@TypeOf(res)) == .@"enum") cp_cast_int(i32, @intFromEnum(res)) else cp_cast_int(i32, res))];
+            return buffer[0..@as(usize, @intCast(res))];
     }
     pub const StringBuilder = @import("./StringBuilder.zig");
 };
