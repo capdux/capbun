@@ -533,7 +533,7 @@ else => ((((((((((((((((((((((((((((((("var __dispose = Symbol.dispose || /* @__
 }
 
 pub fn getEmptyCSSAST(log: *Logger.Log, transpiler: *Transpiler, opts: js_parser.Parser.Options, allocator: std.mem.Allocator, source: *const Logger.Source) !JSAst {
-        const root = Expr.init(E.Object, E.Object, Logger.Loc{ .start = 0 });
+        const root = Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc{ .start = 0 });
         var ast = JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")).?);
         _ = &ast;
         ast.css = bun.create(allocator, bun.css.BundlerStyleSheet, bun.css.BundlerStyleSheet.empty(allocator));
@@ -566,7 +566,7 @@ var trace = bun.perf.trace("Bundler.ParseJSON");
         defer {
         _ = trace.end();
         }
-        const root = ((try resolver.caches.json.parseJSON(log, source, allocator, (if ((loader == .jsonc)) .jsonc else .json), true)) orelse (Expr.init(E.Object, E.Object, Logger.Loc.Empty)));
+        const root = ((try resolver.caches.json.parseJSON(log, source, allocator, (if ((loader == .jsonc)) .jsonc else .json), true)) orelse (Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc.Empty)));
         return JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")).?);
 },
 .toml => {
@@ -650,7 +650,7 @@ if ((!transpiler.options.target.isBun())) {
         break :brk source.path.text;
 };
         const import_path = Expr.init(E.String, E.String{ .data = path_to_use }, Logger.Loc{ .start = 0 });
-        const import_meta = Expr.init(E.ImportMeta, E.ImportMeta, Logger.Loc{ .start = 0 });
+        const import_meta = Expr.init(E.ImportMeta, std.mem.zeroes(E.ImportMeta), Logger.Loc{ .start = 0 });
         const require_property = Expr.init(E.Dot, E.Dot{ .target = import_meta, .name_loc = Logger.Loc.Empty, .name = "require" }, Logger.Loc{ .start = 0 });
         var require_args = ((allocator.alloc(Expr, 2)) catch unreachable);
         _ = &require_args;
@@ -681,7 +681,7 @@ if ((transpiler.options.target == .browser)) {
 var scanner = HTMLScanner.init(allocator, log, source);
         _ = &scanner;
         _ = try scanner.scan(source.contents);
-        var ast = (try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, Expr.init(E.Missing, E.Missing, Logger.Loc.Empty), source, "")).?;
+        var ast = (try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, Expr.init(E.Missing, std.mem.zeroes(E.Missing), Logger.Loc.Empty), source, "")).?;
         _ = &ast;
         ast.import_records = scanner.import_records;
         ast.has_lazy_export = false;
@@ -753,7 +753,7 @@ var import_records: BabyList(ImportRecord) = .{};
         if ((css_ast.local_scope.count() > 0)) {
             _ = has_any_css_locals.fetchAdd(1, .monotonic);
         }
-        const root = Expr.init(E.Object, E.Object, Logger.Loc{ .start = 0 });
+        const root = Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc{ .start = 0 });
         const css_ast_heap = bun.create(allocator, bun.css.BundlerStyleSheet, css_ast);
         var ast = JSAst.init((try js_parser.newLazyExportASTImpl(allocator, transpiler.options.define, opts, (&temp_log), root, source, "", extra.symbols)).?);
         _ = &ast;

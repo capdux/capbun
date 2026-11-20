@@ -1,7 +1,7 @@
 import bun from "bun";
 const jsc = bun.jsc;
 
-@c pub struct Counters {
+@root pub struct Counters {
     spawnSync_blocking: i32 = 0,
     spawn_memfd: i32 = 0,
 
@@ -10,7 +10,7 @@ const jsc = bun.jsc;
     }
 
     fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        return (jsc.JSObject.create(_.*, globalObject)?).toJS();
+        return (jsc.JSObject.create(_, globalObject)?).toJS();
     }
 
     static fn createCountersObject(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {

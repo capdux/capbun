@@ -1810,3 +1810,4 @@
 - **[2026-11-20] Wave 28 C 组 (11 模块)**：更新 `jsc/VirtualMachine`, `sql_jsc/postgres/{PostgresSQLConnection,DataCell}`, `runtime/{webcore/s3/multipart,api/{JSTranspiler,bun/process},server/ServerConfig}`, `http/AsyncHTTP`, `shell/shell`, `threading/channel`, `watcher/INotifyWatcher`。
 
 - **[2026-11-20] Wave 28 B 组 (15 模块)**：更新 `semver/SemverQuery`, `bake/bake`, `bundler/{HTMLScanner,analyze_transpiled_module,bundle_v2}`, `install/{NetworkTask,TarballStream,extract_tarball,lockfile,lockfile/bun.lock,migration,npm,resolution,resolvers/folder_resolver}`, `router/router`。
+- **[2026-11-20] Wave 28 D 组 (3 跨模块根因)**：更新 `bundler/ParseTask`, `js_parser/ast/KnownGlobal`, `jsc/Counters`。

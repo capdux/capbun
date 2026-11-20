@@ -47,22 +47,21 @@ fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T 
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
-pub const Counters = extern struct {
-    spawnSync_blocking: i32 = 0,
-    spawn_memfd: i32 = 0,
+pub const Counters = @This();
+
+spawnSync_blocking: i32 = 0,
+spawn_memfd: i32 = 0,
 
 pub fn mark(self: *Counters, comptime tag: Field) void {
-            @field(self, @tagName(tag)) = (@field(self, @tagName(tag)) +| 1);
-    }
+        @field(self, @tagName(tag)) = (@field(self, @tagName(tag)) +| 1);
+}
 
 pub fn toJS(self: Counters, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-            return try jsc.JSObject.create(self.*, globalObject).toJS();
-    }
+        return try jsc.JSObject.create(self, globalObject).toJS();
+}
 
 pub fn createCountersObject(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            return globalObject.bunVM().counters.toJS(globalObject);
-    }
-};
-
+        return globalObject.bunVM().counters.toJS(globalObject);
+}
 const jsc = bun.jsc;
 const Field = std.@"meta".FieldEnum(Counters);
