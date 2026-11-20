@@ -201,7 +201,7 @@ pub struct BlobExternalSharedDescriptor {
         read_file_task.schedule();
     }
 
-    fn readBytesToHandler(*_, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject): bun.JSTerminated! {
+    fn readBytesToHandler(*_, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject): void ! bun.JSTerminated {
         if (_.needsToReadFile()) {
             const Adapter = struct {
                 static fn run(c: *Handler, r: read_file_mod.ReadFileResultType) {

@@ -124,8 +124,8 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
             if (info.isOptional()) {
                 if (data == null) return Self.initNull();
             }
-            const unwrapped = if (info.isOptional()) data.? else data;
-            return switch (info.kind()) {
+            const unwrapped = if (comptime info.isOptional()) data.? else data;
+            return switch (comptime info.kind()) {
                 .single => unsafe { Self.allocIn(unwrapped.*, allocator_) },
                 .slice => Self{
                     #pointer: bun.allocators.asStd(allocator_).dupe(Child, unwrapped)?,
@@ -375,7 +375,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
             if (comptime mode == .deep) {
                 bun.memory.deinit(data);
             }
-            switch (info.kind()) {
+            switch (comptime info.kind()) {
                 .single => bun.memory.destroy(this.getStdAllocator(), data),
                 .slice => this.getStdAllocator().free(data),
             }

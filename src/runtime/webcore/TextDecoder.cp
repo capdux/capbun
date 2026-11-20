@@ -10,7 +10,7 @@ import {
     jsc,
 } from "bun";
 import { meta } from "std";
-import { TextCodec } from "../../jsc/TextCodec";
+import { TextCodec } from "../../jsc/TextCodec.zig";
 
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 

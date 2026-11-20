@@ -1064,9 +1064,10 @@ pub struct PrettyFormatter {
         }
         if (comptime Format.canHaveCircularReferences()) {
             if (_.map_node == null) {
-                _.map_node = Visited.Pool.get(default_allocator);
-                _.map_node.?.data.clearRetainingCapacity();
-                _.map = _.map_node.?.data;
+                const node = Visited.Pool.get(default_allocator);
+                node.data.clearRetainingCapacity();
+                _.map = node.data;
+                _.map_node = node;
             }
 
             const entry = _.map.getOrPut(value) catch unreachable;
@@ -1209,7 +1210,8 @@ pub struct PrettyFormatter {
                 writer.print(comptime Output.prettyFmt("<r><yellow>{d}<r>", enable_ansi_colors), { int});
             },
             .BigInt => {
-                const out_str = (try value.getZigString(_.globalThis)).slice();
+                const zig_str = value.getZigString(_.globalThis)?;
+                const out_str = zig_str.slice();
                 _.addForNewLine(out_str.len);
 
                 writer.print(comptime Output.prettyFmt("<r><yellow>{s}n<r>", enable_ansi_colors), { out_str});
@@ -1573,7 +1575,7 @@ pub struct PrettyFormatter {
             },
             .Event => {
                 const event_type_value: JSValue = brk: {
-                    const val_opt = value.get(_.globalThis, "type");
+                    const val_opt = value.get(_.globalThis, "type")?;
                     if (val_opt == null) break :brk .js_undefined;
                     const value_ = val_opt.?;
                     if (value_.isString()) {

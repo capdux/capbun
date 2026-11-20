@@ -637,7 +637,7 @@ pub struct ValidateObjectOptions {
     /// proof of an exception via `error.JSError`
     pub fn takeException(*_, proof: bun.JSError): JSValue {
         if (proof == error.OutOfMemory) {
-            * = _.throwOutOfMemory();
+            _.throwOutOfMemory() catch {};
         }
 
         return _.tryTakeException() ?? @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
@@ -645,7 +645,7 @@ pub struct ValidateObjectOptions {
 
     pub fn takeError(*_, proof: bun.JSError): JSValue {
         if (proof == error.OutOfMemory) {
-            * = _.throwOutOfMemory();
+            _.throwOutOfMemory() catch {};
         }
 
         const exc = _.tryTakeException() ?? @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");

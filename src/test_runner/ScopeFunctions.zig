@@ -236,7 +236,7 @@ pub fn callAsFunction(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JS
             callback_length = try cb.getLength(globalThis);
         }
         if ((client.each != .zero)) {
-            var iterator = client.each.arrayIterator(globalThis);
+            var iterator = try client.each.arrayIterator(globalThis);
             _ = &iterator;
             var test_idx: usize = 0;
             _ = &test_idx;
@@ -253,7 +253,7 @@ pub fn callAsFunction(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JS
                 }
                 }
                 if (item.isArray()) {
-                    var item_iterator = item.arrayIterator(globalThis);
+                    var item_iterator = try item.arrayIterator(globalThis);
                     _ = &item_iterator;
                     while (try item_iterator.next()) |array_item| {
                         _ = bun.handleOom(args_list.append(.init(bunTest.gpa, array_item)));

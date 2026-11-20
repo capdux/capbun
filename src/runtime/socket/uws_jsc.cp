@@ -66,8 +66,7 @@ pub fn anyWebSocketGetTopicsAsJSArray(ws: uws.AnyWebSocket, globalObject: *jsc.J
             node_buffer = buf;
         } else {
             if (!globalObject.hasException()) {
-                * = globalObject.throwInvalidArgumentTypeValue("data", "string, buffer, or blob", data);
-                return .zero;
+                return globalObject.throwInvalidArgumentTypeValue("data", "string, buffer, or blob", data) catch .zero;
             }
             return .zero;
         }

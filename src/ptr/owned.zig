@@ -118,8 +118,8 @@ pub fn allocDupeIn(data: ConstPointer, allocator_: Allocator) AllocError!Self {
                     return Self.initNull();
                 }
             }
-            const unwrapped = (if (info.isOptional()) data.? else data);
-            return (switch (info.kind()) {
+            const unwrapped = (if (comptime info.isOptional()) data.? else data);
+            return (switch ((comptime info.kind())) {
 .single => (blk: {
             break :blk Self.allocIn(unwrapped.*, allocator_);
 
@@ -241,7 +241,7 @@ pub fn deinitImpl(self: *@This(), comptime mode: DeinitMode) void {
             if (comptime (mode == .deep)) {
                 _ = bun.memory.deinit(data);
             }
-            switch (info.kind()) {
+            switch ((comptime info.kind())) {
 .single => {
 _ = bun.memory.destroy(self.getStdAllocator(), data);
 },

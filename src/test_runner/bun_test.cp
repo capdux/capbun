@@ -283,18 +283,18 @@ pub struct ExecutionData {
 
 pub struct DoneData {}
 
-pub union(enum) BunTestRefDataValue {
+pub const BunTestRefDataValue = union(enum) {
     start: void,
     collection: CollectionData,
     execution: ExecutionData,
     done: DoneData,
 
     fn group(buntest: *BunTest): (*Execution.ConcurrentGroup)? {
-        if (_.* != .execution) return null;
+        if (_ != .execution) return null;
         return &buntest.execution.groups[_.execution.group_index];
     }
     fn sequence(buntest: *BunTest): (*Execution.ExecutionSequence)? {
-        if (_.* != .execution) return null;
+        if (_ != .execution) return null;
         if (group_item := _.group(buntest)) {
             if (entry_data := _.execution.entry_data) {
                 return &group_item.sequences(&buntest.execution)[entry_data.sequence_index];
@@ -303,16 +303,16 @@ pub union(enum) BunTestRefDataValue {
         return null;
     }
     fn entry(buntest: *BunTest): (*ExecutionEntry)? {
-        if (_.* != .execution) return null;
+        if (_ != .execution) return null;
         if (buntest.phase != .execution) return null;
-        const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(_.*);
+        const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(_);
         if (seq_opt == null) return null;
         const the_sequence = seq_opt.?.sequence;
         return the_sequence.active_entry;
     }
 
     fn format(writer: *std.Io.Writer)! {
-        switch (_.*) {
+        switch (_) {
             .start => writer.print("start", .{})?,
             .collection => writer.print("collection: active_scope={?s}", .{ _.collection.active_scope.base.name })?,
             .execution => {
@@ -325,7 +325,7 @@ pub union(enum) BunTestRefDataValue {
             .done => writer.print("done", .{})?,
         }
     }
-}
+};
 
 pub const BunTestRefData = struct {
     buntest_weak: BunTestPtr.Weak,

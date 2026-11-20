@@ -327,7 +327,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         }
 
         if (client.each != .zero) {
-            let iterator = client.each.arrayIterator(globalThis);
+            let iterator = client.each.arrayIterator(globalThis)?;
 
             let test_idx: usize = 0;
             while (item := iterator.next()?) : (test_idx += 1) {
@@ -338,7 +338,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
                 }
 
                 if (item.isArray()) {
-                    let item_iterator = item.arrayIterator(globalThis);
+                    let item_iterator = item.arrayIterator(globalThis)?;
                     while (array_item := item_iterator.next()?) {
                         bun.handleOom(args_list.append(.init(bunTest.gpa, array_item)));
                     }

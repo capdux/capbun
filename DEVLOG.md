@@ -1415,3 +1415,5 @@
 - **[2026-11-20] Wave 12 Batch B 典型修复**：`expect.cp` `argsToTuple` 改用 `@field(tup, comptimePrint("{d}", .{i}))` 一次清零 86 处 comptime 错；`node_fs.cp` 统一 `DirIterator.PathType`、修复 6 个 IO 内联方法 `*_` 接收者并提取 `max_path_bytes`；`YAMLObject`/`yaml` 消除 `||` 错误集合并退化。
 
 - **[2026-11-20] Wave 12 全量收官**：全仓 `bun run zig:check` 从 422 暴跌至 **103 错 / 30 个 `src/` 文件**（97.7% 模块零错误）；`meta.cp`、`expect.cp`（含全部 57 matcher）、`calc.cp` 均清零；`js_bun_spawn_bindings.cp` 用 `pub fn @"spawn"` 规避关键字跳导。
+
+- **[2026-11-20] Wave 13 Batch C 修复要点**：`owned.cp` 补 `switch (comptime info.kind())` 消除 `std/meta.zig:116`；`bun_test.cp` `BunTestRefDataValue` 改值类型联合消除 `Io/Writer.zig:1087`；`Blob.cp` `readBytesToHandler` 返回类型修正为 `void ! bun.JSTerminated`。

@@ -266,7 +266,7 @@ pub fn doReadFileInternal(self: *Blob, comptime Handler: type, ctx: Handler, com
         _ = read_file_task.schedule();
 }
 
-pub fn readBytesToHandler(self: *Blob, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject) !bun.JSTerminated {
+pub fn readBytesToHandler(self: *Blob, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject) bun.JSTerminated!void {
         if (self.needsToReadFile()) {
             const Adapter = struct {
 

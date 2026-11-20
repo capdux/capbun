@@ -299,71 +299,6 @@ pub const ExecutionData = struct {
 pub const DoneData = struct {
 };
 
-pub const BunTestRefDataValue = union(enum) {
-    start: void,
-    collection: CollectionData,
-    execution: ExecutionData,
-    done: DoneData,
-
-pub fn group(self: *BunTestRefDataValue, buntest: *BunTest) ?*Execution.ConcurrentGroup {
-            if ((self.* != .execution)) {
-                return null;
-            }
-            return (&buntest.execution.groups[@as(usize, @intCast(self.execution.group_index))]);
-    }
-
-pub fn sequence(self: *BunTestRefDataValue, buntest: *BunTest) ?*Execution.ExecutionSequence {
-            if ((self.* != .execution)) {
-                return null;
-            }
-            if (self.group(buntest)) |group_item| {
-                _ = &group_item;
-                if (self.execution.entry_data) |entry_data| {
-                    _ = &entry_data;
-                    return (&group_item.sequences((&buntest.execution))[@as(usize, @intCast(entry_data.sequence_index))]);
-                }
-            }
-            return null;
-    }
-
-pub fn entry(self: *BunTestRefDataValue, buntest: *BunTest) ?*ExecutionEntry {
-            if ((self.* != .execution)) {
-                return null;
-            }
-            if ((buntest.phase != .execution)) {
-                return null;
-            }
-            const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(self.*);
-            if ((seq_opt == null)) {
-                return null;
-            }
-            const the_sequence = seq_opt.?.sequence;
-            return the_sequence.active_entry;
-    }
-
-pub fn format(self: *BunTestRefDataValue, writer: *std.Io.Writer) !void {
-            switch (self.*) {
-.start => {
-_ = try writer.print("start", .{});
-},
-.collection => {
-_ = try writer.print("collection: active_scope={?s}", .{ self.collection.active_scope.base.name });
-},
-.execution => {
-if (self.execution.entry_data) |entry_data| {
-                _ = &entry_data;
-                _ = try writer.print("execution: group_index={d},sequence_index={d},entry_index={x},remaining_repeat_count={d}", .{ self.execution.group_index, entry_data.sequence_index, @intFromPtr(entry_data.entry), entry_data.remaining_repeat_count });
-            } else {
-                _ = try writer.print("execution: group_index={d}", .{ self.execution.group_index });
-            }
-},
-.done => {
-_ = try writer.print("done", .{});
-},
-}
-    }
-};
-
 pub const BunTest = struct {
     bun_test_root: *BunTestRoot,
     in_run_loop: bool,
@@ -415,7 +350,7 @@ pub fn deinit(self: *BunTest) void {
             _ = self.allocation_scope.deinit();
     }
 
-pub fn getCurrentStateData(self: *BunTest) *BunTestRefDataValue {
+pub fn getCurrentStateData(self: *BunTest) BunTestRefDataValue {
             return (switch (self.phase) {
 .collection => .{ .collection = .{ .active_scope = self.collection.active_scope } },
 .execution => blk: {
@@ -441,7 +376,7 @@ pub fn getCurrentStateData(self: *BunTest) *BunTestRefDataValue {
 });
     }
 
-pub fn @"ref"(this_strong: BunTestPtr, phase: *BunTestRefDataValue) *BunTestRefData {
+pub fn @"ref"(this_strong: BunTestPtr, phase: BunTestRefDataValue) *BunTestRefData {
             _ = group.begin(@src());
             defer {
             _ = group.end();
@@ -572,7 +507,7 @@ _ = (blk_catch_0: { break :blk_catch_0 ((buntest.execution.handleTimeout(vm.glob
             _ = (blk_catch_1: { break :blk_catch_1 ((BunTest.run(this_strong, vm.global)) catch |e| { _ = &e; break :blk_catch_1 @as(void, buntest.onUncaughtException(vm.global, vm.global.takeException(e), false, .done)); }); });
     }
 
-pub fn runNextTick(weak: BunTestPtr.Weak, globalThis: *jsc.JSGlobalObject, phase: *BunTestRefDataValue) void {
+pub fn runNextTick(weak: BunTestPtr.Weak, globalThis: *jsc.JSGlobalObject, phase: BunTestRefDataValue) void {
             const done_callback_test = bun.new(BunTestRunTestsTask, BunTestRunTestsTask{ .weak = weak.clone(), .globalThis = globalThis, .phase = phase });
             errdefer {
             _ = bun.destroy(done_callback_test);
@@ -595,7 +530,7 @@ pub fn runNextTick(weak: BunTestPtr.Weak, globalThis: *jsc.JSGlobalObject, phase
             _ = vm.enqueueTask(task);
     }
 
-pub fn addResult(self: *BunTest, result: *BunTestRefDataValue) void {
+pub fn addResult(self: *BunTest, result: BunTestRefDataValue) void {
             _ = bun.handleOom(self.result_queue.writeItem(result));
     }
 
@@ -722,7 +657,7 @@ return error.exit;
 }
     }
 
-pub fn runTestCallback(this_strong: BunTestPtr, globalThis: *jsc.JSGlobalObject, cfg_callback: jsc.JSValue, cfg_done_parameter: bool, cfg_data: *BunTestRefDataValue, timeout: *const bun.timespec) ?*BunTestRefDataValue {
+pub fn runTestCallback(this_strong: BunTestPtr, globalThis: *jsc.JSGlobalObject, cfg_callback: jsc.JSValue, cfg_done_parameter: bool, cfg_data: BunTestRefDataValue, timeout: *const bun.timespec) ?BunTestRefDataValue {
             _ = group.begin(@src());
             defer {
             _ = group.end();
@@ -817,7 +752,7 @@ const value = promise.result(globalThis.vm());
             return cfg_data;
     }
 
-pub fn onUncaughtException(self: *BunTest, globalThis: *jsc.JSGlobalObject, exception: ?jsc.JSValue, is_rejection: bool, user_data: *BunTestRefDataValue) void {
+pub fn onUncaughtException(self: *BunTest, globalThis: *jsc.JSGlobalObject, exception: ?jsc.JSValue, is_rejection: bool, user_data: BunTestRefDataValue) void {
             _ = group.begin(@src());
             defer {
             _ = group.end();
@@ -1154,9 +1089,73 @@ pub const ExecutionEntryData = struct {
     entry: *const anyopaque,
     remaining_repeat_count: i64,
 };
+pub const BunTestRefDataValue = union(enum) {
+    start: void,
+    collection: CollectionData,
+    execution: ExecutionData,
+    done: DoneData,
+
+pub fn group(self: @This(), buntest: *BunTest) ?*Execution.ConcurrentGroup {
+            if ((self != .execution)) {
+                return null;
+            }
+            return (&buntest.execution.groups[@as(usize, @intCast(self.execution.group_index))]);
+    }
+
+pub fn sequence(self: @This(), buntest: *BunTest) ?*Execution.ExecutionSequence {
+            if ((self != .execution)) {
+                return null;
+            }
+            if (self.group(buntest)) |group_item| {
+                _ = &group_item;
+                if (self.execution.entry_data) |entry_data| {
+                    _ = &entry_data;
+                    return (&group_item.sequences((&buntest.execution))[@as(usize, @intCast(entry_data.sequence_index))]);
+                }
+            }
+            return null;
+    }
+
+pub fn entry(self: @This(), buntest: *BunTest) ?*ExecutionEntry {
+            if ((self != .execution)) {
+                return null;
+            }
+            if ((buntest.phase != .execution)) {
+                return null;
+            }
+            const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(self);
+            if ((seq_opt == null)) {
+                return null;
+            }
+            const the_sequence = seq_opt.?.sequence;
+            return the_sequence.active_entry;
+    }
+
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+            switch (self) {
+.start => {
+_ = try writer.print("start", .{});
+},
+.collection => {
+_ = try writer.print("collection: active_scope={?s}", .{ self.collection.active_scope.base.name });
+},
+.execution => {
+if (self.execution.entry_data) |entry_data| {
+                _ = &entry_data;
+                _ = try writer.print("execution: group_index={d},sequence_index={d},entry_index={x},remaining_repeat_count={d}", .{ self.execution.group_index, entry_data.sequence_index, @intFromPtr(entry_data.entry), entry_data.remaining_repeat_count });
+            } else {
+                _ = try writer.print("execution: group_index={d}", .{ self.execution.group_index });
+            }
+},
+.done => {
+_ = try writer.print("done", .{});
+},
+}
+    }
+};
 pub const BunTestRefData = struct {
     buntest_weak: BunTestPtr.Weak,
-    phase: *BunTestRefDataValue,
+    phase: BunTestRefDataValue,
     ref_count: RefCount,
 
 pub fn dupe(self: *@This()) *BunTestRefData {
@@ -1189,7 +1188,7 @@ pub fn bunTest(self: *@This()) ?BunTestPtr {
 pub const BunTestRunTestsTask = struct {
     weak: BunTestPtr.Weak,
     globalThis: *jsc.JSGlobalObject,
-    phase: *BunTestRefDataValue,
+    phase: BunTestRefDataValue,
 
 pub fn call(self: *@This()) void {
             defer {

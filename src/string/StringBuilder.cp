@@ -235,7 +235,7 @@ const assert = bun.assert;
     }
 
     pub fn allocatedSlice(*_): []u8 {
-        let empty_buf: [0]u8 = [];
+        let empty_buf: [0]u8 = std.mem.zeroes([0]u8);
         let ptr = this.ptr orelse return &empty_buf;
         if (comptime Environment.allow_assert) {
             assert(this.cap > 0);
@@ -244,7 +244,7 @@ const assert = bun.assert;
     }
 
     pub fn writable(*_): []u8 {
-        let empty_buf: [0]u8 = [];
+        let empty_buf: [0]u8 = std.mem.zeroes([0]u8);
         let ptr = this.ptr orelse return &empty_buf;
         if (comptime Environment.allow_assert) {
             assert(this.cap > 0);

@@ -776,9 +776,10 @@ pub fn printAs(self: *PrettyFormatter, comptime Format: JestPrettyFormat.Formatt
             }
             if (comptime Format.canHaveCircularReferences()) {
                 if ((self.map_node == null)) {
-                    self.map_node = Visited.Pool.get(default_allocator);
-                    _ = (self.map_node.?).?.data.clearRetainingCapacity();
-                    self.map = (self.map_node.?).?.data;
+                    const node = Visited.Pool.get(default_allocator);
+                    _ = node.data.clearRetainingCapacity();
+                    self.map = node.data;
+                    self.map_node = node;
                 }
                 const entry = ((self.map.getOrPut(value)) catch unreachable);
                 if (entry.found_existing) {
@@ -932,7 +933,8 @@ const int = value.toInt64();
             _ = writer.print((comptime Output.prettyFmt("<r><yellow>{d}<r>", enable_ansi_colors)), .{ .int = int });
 },
 .BigInt => {
-const out_str = try value.getZigString(self.globalThis).slice();
+const zig_str = try value.getZigString(self.globalThis);
+            const out_str = zig_str.slice();
             _ = self.addForNewLine(out_str.len);
             _ = writer.print((comptime Output.prettyFmt("<r><yellow>{s}n<r>", enable_ansi_colors)), .{ .out_str = out_str });
 },
@@ -1298,7 +1300,7 @@ var str = bun.String.empty;
 },
 .Event => {
 const event_type_value: JSValue = brk: {
-            const val_opt = value.get(self.globalThis, "type");
+            const val_opt = try value.get(self.globalThis, "type");
             if ((val_opt == null)) {
                 break :brk .js_undefined;
             }
