@@ -1254,3 +1254,6 @@
 
 ### 2026-11-20 04:30:41 UTC - 复检历史受阻模块
 - `multi_run.cp` 已随新 `cpc` 解封 PASS；`options.cp` 与 `pm_pkg_command.cp` 各仅余 1 处 `cpc` codegen 缺陷，已写入最小复现重新投递 SQLite 队列。
+
+### 2026-11-20 04:33:58 UTC - Libuv C-FFI 3200行全量迁移经验
+- 118 个 `@c struct`、49 个 `@c union`、274 个 `extern fn` 与 30+ 可选 C 回调全部纯 CP 化，膨胀率 1.010x。
