@@ -18,7 +18,7 @@ pub enum LengthOrNumber {
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        switch (_) {
+        switch (_.*) {
             .number => {},
             .length => |*l| l.deinit(allocator),
         }
@@ -285,7 +285,9 @@ pub enum LengthValue {
     }
 
     pub fn toCss(_: *const @This(), dest: *css.Printer): css.PrintErr!void {
-        let [value, unit] = this.toUnitValue();
+        const _uv = this.toUnitValue();
+        let value = _uv[0];
+        let unit = _uv[1];
 
         // The unit can be omitted if the value is zero, except inside calc()
         // expressions, where unitless numbers won't be parsed as dimensions.
@@ -569,8 +571,8 @@ pub enum Length {
         return .{ .result = { value: len } };
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
-        return switch (_) {
+    pub static fn toCss(len_val: *const @This(), dest: *Printer): PrintErr!void {
+        return switch (len_val.*) {
             .value => |a| a.toCss(dest),
             .calc => |c| c.toCss(dest),
         };

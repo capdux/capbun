@@ -107,7 +107,7 @@ pub fn initOutsideOfBundler(records: *bun.BabyList(bun.ImportRecord)) ImportInfo
 };
 
 pub const Printer = struct {
-    sources: ?*const ArrayList(bun.string),
+    sources: ?*const ArrayList(SourceNameSlice),
     dest: *std.Io.Writer,
     loc: Location = Location{ .source_index = 0, .line = 0, .column = 1 },
     indent_amt: u8 = 0,
@@ -472,6 +472,7 @@ pub fn writeIndent(self: *Printer) PrintErr!void {
     const This = @This();
 };
 
+const SourceNameSlice = []const u8;
 const DashedIdent = css_values.ident.DashedIdent;
 pub const Error = css.Error;
 const Location = css.Location;

@@ -94,9 +94,10 @@ pub struct ImportInfo {
 ///
 /// `Printer` also includes helper functions that assist with writing output
 /// that respects options such as `minify`, and `css_modules`.
+type SourceNameSlice = []const u8;
 pub struct Printer {
     // #[cfg(feature = "sourcemap")]
-    sources: (*const ArrayList(bun.string))?,
+    sources: (*const ArrayList(SourceNameSlice))?,
     dest: *std.Io.Writer,
     loc: Location = Location{
         source_index: 0,

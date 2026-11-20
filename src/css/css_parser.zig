@@ -455,7 +455,7 @@ pub const BundlerAtRuleParser = struct {
     const This = @This();
     pub const CustomAtRuleParser = struct {
     
-    pub fn parsePrelude(self: *@This(), name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
+    pub fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
                 if (comptime ENABLE_TAILWIND_PARSING) {
                     const PreludeNames = enum {
                         tailwind,
@@ -467,7 +467,7 @@ pub const BundlerAtRuleParser = struct {
     .tailwind => {
     {
                             const loc_ = input.currentSourceLocation();
-                            const loc = css_rules.Location{ .source_index = self.options.source_index, .line = loc_.line, .column = loc_.column };
+                            const loc = css_rules.Location{ .source_index = b.options.source_index, .line = loc_.line, .column = loc_.column };
                             const style_name = (switch (css_rules.tailwind.TailwindStyleName.parse(input)) {
     .result => |v| v,
     .err => {
@@ -483,12 +483,12 @@ pub const BundlerAtRuleParser = struct {
                 return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
         }
     
-    pub fn parseBlock(self: *@This(), _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
+    pub fn parseBlock(self: *@This(), _: *BundlerAtRuleParser, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
             _ = self;
                 return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
         }
     
-    pub fn ruleWithoutBlock(self: *@This(), prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
+    pub fn ruleWithoutBlock(self: *@This(), _: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
             _ = self;
                 if (comptime ENABLE_TAILWIND_PARSING) {
                     return (switch (prelude) {
@@ -2840,10 +2840,7 @@ pub fn eql(lhs: *const Token, rhs: *const Token) bool {
 
 pub fn hash(self: Token, hasher: *std.hash.Wyhash) void {
             const _self = self;
-            return implementHash(@This(), (blk: {
-            break :blk _self;
-
-}), hasher);
+            return implementHash(@This(), _self, hasher);
     }
 
 pub fn isParseError(self: Token) bool {
@@ -4338,7 +4335,7 @@ pub fn DeriveToCss(comptime T: type) type {
         const is_enum_or_union_enum = ((tyinfo == .@"union") or (tyinfo == .@"enum"));
         return struct {
 
-pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: *const T, dest: *Printer) PrintErr!void {
             if (comptime is_enum_or_union_enum) {
                 inline for (std.@"meta".fields(T), 0..) |field, i| {
                     _ = &field;
@@ -4413,15 +4410,15 @@ return .{ .err = e };
             return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: *const T, dest: *Printer) PrintErr!void {
             return dest.writeStr(@tagName(self.*));
     }
 
-pub inline fn deepClone(self: @This(), _: std.mem.Allocator) T {
+pub inline fn deepClone(self: *const T, _: std.mem.Allocator) T {
             return self.*;
     }
 
-pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
+pub fn hash(self: *const T, hasher: *std.hash.Wyhash) void {
             const tag = @intFromEnum(self.*);
             _ = hasher.update(std.mem.asBytes((&tag)));
     }

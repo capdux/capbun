@@ -274,7 +274,8 @@ pub inline fn adaptedParseQueryCondition(i: *css.Parser, flags: QueryConditionFl
             return css.media_query.parseQueryCondition(StyleQuery, i, flags);
     }
 
-pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(ContainerCondition) {
+pub fn parseNestedBlockFn(self: @This(), _: @TypeOf({}), i: *css.Parser) Result(ContainerCondition) {
+        _ = self;
             if (i.tryParse(@This().adaptedParseQueryCondition, .{ QueryConditionFlags{ .allow_or = true } }).asValue()) |res| {
                 _ = &res;
                 return .{ .result = .{ .style = res } };
@@ -287,7 +288,7 @@ return .{ .err = e };
 }) } };
     }
 };
-            return input.parseNestedBlock(ContainerCondition, undefined, Fns.parseNestedBlockFn);
+            return input.parseNestedBlock(ContainerCondition, .{}, Fns.parseNestedBlockFn);
     }
 
 pub fn needsParens(self: @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {

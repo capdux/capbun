@@ -155,7 +155,8 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: EasingFunction, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn parse(input: *css.Parser) Result(EasingFunction) {

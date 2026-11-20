@@ -1453,7 +1453,7 @@ pub struct AlignHandler {
                         ) catch |e| bun.handleOom(e);
                     }
 
-                    if (comptime justify_prop != null) {
+                    if (comptime @TypeOf(justify_prop) != @TypeOf(null)) {
                         const justify_actual = &__v2.*[0];
                         let justify_prefix = &__v2.*[1];
                         justify_prefix.* = flushPrefixesHelper(context, justify_prop.?.feature);

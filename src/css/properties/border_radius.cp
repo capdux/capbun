@@ -38,7 +38,7 @@ pub struct BorderRadius {
     };
 
     static fn parse(input: *css.Parser): css.Result(BorderRadius) {
-        const widths = switch (Rect(LengthPercentage).parse(input)) {
+        let widths = switch (Rect(LengthPercentage).parse(input)) {
             .result => |v| v,
             .err => |e| return { err: e },
         };

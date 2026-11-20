@@ -387,8 +387,8 @@ pub enum MediaCondition {
 
     const This = @This();
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_) {
+    pub static fn toCss(m: *const @This(), dest: *Printer): PrintErr!void {
+        switch (m.*) {
             .feature => |f| {
                 f.toCss(dest)?;
             },
@@ -405,7 +405,7 @@ pub enum MediaCondition {
     }
 
     /// QueryCondition.parseFeature
-    pub fn parseFeature(input: *css.Parser): Result(MediaCondition) {
+    pub static fn parseFeature(input: *css.Parser): Result(MediaCondition) {
         const feature = switch (MediaFeature.parse(input)) {
             .err => |e| return { err: e },
             .result => |v| v,
@@ -1158,12 +1158,12 @@ pub enum MediaFeatureComparison: u8 {
     /// `<=`
     @"less-than-equal" = 16,
 
-    pub fn asStr(_: *const @This()): []const u8 {
-        return css.enum_property_util.asStr(@This(), this);
+    pub fn asStr(): []const u8 {
+        return css.enum_property_util.asStr(@This(), _);
     }
 
-    pub fn toCss(_: *const @This(), dest: *Printer): PrintErr!void {
-        switch (this.*) {
+    pub fn toCss(dest: *Printer): PrintErr!void {
+        switch (_) {
             .equal => {
                 dest.delim('-', true)?;
             },
@@ -1278,7 +1278,8 @@ pub enum MediaFeatureValue {
     /// Parses a single media query feature value, with an expected type.
     /// If the type is unknown, pass MediaFeatureType::Unknown instead.
     static fn parse(input: *css.Parser, expected_type: MediaFeatureType): Result(MediaFeatureValue) {
-        if (value := input.tryParse(MediaFeatureValue.parseKnown, .{expected_type}).asValue()) {
+        const parse_known_fn = MediaFeatureValue.parseKnown;
+        if (value := input.tryParse(parse_known_fn, .{expected_type}).asValue()) {
             return { result: value };
         }
 
@@ -1429,14 +1430,14 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
         }
 
         pub fn valueType(): MediaFeatureType {
-            return switch (_.*) {
+            return switch (_) {
                 .standard => |standard| standard.valueType(),
                 else => .unknown,
             };
         }
 
         pub fn toCss(dest: *Printer): PrintErr!void {
-            return switch (_.*) {
+            return switch (_) {
                 .standard => |v| v.toCss(dest),
                 .custom => |d| DashedIdentFns.toCss(&d, dest),
                 .unknown => |v| IdentFns.toCss(&v, dest),
@@ -1444,7 +1445,7 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
         }
 
         pub fn toCssWithPrefix(prefix: []const u8, dest: *Printer): PrintErr!void {
-            return switch (_.*) {
+            return switch (_) {
                 .standard => |v| v.toCssWithPrefix(prefix, dest),
                 .custom => |d| {
                     try dest.writeStr(prefix);

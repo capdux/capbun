@@ -71,7 +71,7 @@ pub const AnimationName = union(enum) {
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
 pub fn hash(self: *AnimationName, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), (&self), hasher);
+            return css.implementHash(@This(), self, hasher);
     }
 
 pub fn eql(self: AnimationName, lhs: *const @This(), rhs: *const @This()) bool {

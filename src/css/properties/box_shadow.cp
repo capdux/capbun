@@ -192,21 +192,21 @@ pub struct BoxShadowHandler {
             return;
         }
         const taken = taken_opt.?;
-        let box_shadows = taken[0];
+        let box_shadows_list = taken[0];
         const prefixes2 = taken[1];
 
         if (!_.flushed) {
             const ColorFallbackKind = css.ColorFallbackKind;
             let prefixes = context.targets.prefixes(prefixes2, Feature.box_shadow);
             let fallbacks = ColorFallbackKind{};
-            for (shadow of box_shadows.slice()) {
+            for (shadow of box_shadows_list.slice()) {
                 bun.bits.insert(ColorFallbackKind, &fallbacks, shadow.color.getNecessaryFallbacks(context.targets));
             }
 
             if (fallbacks.rgb) {
-                let rgb = SmallList(BoxShadow, 1).initCapacity(context.allocator, box_shadows.len());
-                rgb.setLen(box_shadows.len());
-                const src_slice = box_shadows.slice();
+                let rgb = SmallList(BoxShadow, 1).initCapacity(context.allocator, box_shadows_list.len());
+                rgb.setLen(box_shadows_list.len());
+                const src_slice = box_shadows_list.slice();
                 const dst_slice = rgb.slice_mut();
                 let i: usize = 0;
                 while (i < src_slice.len) : (i += 1) {
@@ -230,9 +230,9 @@ pub struct BoxShadowHandler {
             }
 
             if (fallbacks.p3) {
-                let p3 = SmallList(BoxShadow, 1).initCapacity(context.allocator, box_shadows.len());
-                p3.setLen(box_shadows.len());
-                const src_slice = box_shadows.slice();
+                let p3 = SmallList(BoxShadow, 1).initCapacity(context.allocator, box_shadows_list.len());
+                p3.setLen(box_shadows_list.len());
+                const src_slice = box_shadows_list.slice();
                 const dst_slice = p3.slice_mut();
                 let i: usize = 0;
                 while (i < src_slice.len) : (i += 1) {
@@ -249,9 +249,9 @@ pub struct BoxShadowHandler {
             }
 
             if (fallbacks.lab) {
-                let lab = SmallList(BoxShadow, 1).initCapacity(context.allocator, box_shadows.len());
-                lab.setLen(box_shadows.len());
-                const src_slice = box_shadows.slice();
+                let lab = SmallList(BoxShadow, 1).initCapacity(context.allocator, box_shadows_list.len());
+                lab.setLen(box_shadows_list.len());
+                const src_slice = box_shadows_list.slice();
                 const dst_slice = lab.slice_mut();
                 let i: usize = 0;
                 while (i < src_slice.len) : (i += 1) {
@@ -266,10 +266,10 @@ pub struct BoxShadowHandler {
                 }
                 bun.handleOom(dest.append(context.allocator, .{ .@"box-shadow" = .{ lab, VendorPrefix.NONE } }));
             } else {
-                bun.handleOom(dest.append(context.allocator, .{ .@"box-shadow" = .{ box_shadows, prefixes } }));
+                bun.handleOom(dest.append(context.allocator, .{ .@"box-shadow" = .{ box_shadows_list, prefixes } }));
             }
         } else {
-            bun.handleOom(dest.append(context.allocator, .{ .@"box-shadow" = .{ box_shadows, prefixes2 } }));
+            bun.handleOom(dest.append(context.allocator, .{ .@"box-shadow" = .{ box_shadows_list, prefixes2 } }));
         }
 
         _.flushed = true;

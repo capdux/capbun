@@ -258,7 +258,7 @@ pub const ContainerCondition = union(enum) {
                 return css.media_query.parseQueryCondition(StyleQuery, i, flags);
             }
 
-            pub fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ContainerCondition) {
+            pub fn parseNestedBlockFn(_: @TypeOf({}), i: *css.Parser): Result(ContainerCondition) {
                 if (i.tryParse(
                     @This().adaptedParseQueryCondition,
                     .{
@@ -276,7 +276,7 @@ pub const ContainerCondition = union(enum) {
                 } };
             }
         };
-        return input.parseNestedBlock(ContainerCondition, undefined, Fns.parseNestedBlockFn);
+        return input.parseNestedBlock(ContainerCondition, {}, Fns.parseNestedBlockFn);
     }
 
     pub fn needsParens(

@@ -72,7 +72,7 @@ pub const attrs = struct {
                 try dest.writeChar('[');
                 if (nsp := this.namespace) switch (nsp) {
                     .specific => |v| {
-                        try css.IdentFns.toCss(&v.prefix, dest);
+                        try css.IdentFns.toCss(v.prefix, dest);
                         try dest.writeChar('|');
                     },
                     .any => {
@@ -2819,7 +2819,9 @@ pub fn parse_one_simple_selector(
                             }
                         };
 
-                        const names = switch (input.parseNestedBlock([]Impl.SelectorImpl.Identifier, &Closure{ .parser = parser }, Closure.parsefn)) {
+                        const IdentSlice = []Impl.SelectorImpl.Identifier;
+                        let closure = Closure{ .parser = parser };
+                        const names = switch (input.parseNestedBlock(IdentSlice, &closure, Closure.parsefn)) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
                         };

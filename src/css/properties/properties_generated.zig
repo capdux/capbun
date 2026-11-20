@@ -7668,10 +7668,10 @@ pub const PropertyId = union(PropertyIdTag) {
     custom: CustomPropertyName,
 
 pub inline fn name(self: PropertyId) []const u8 {
-            if ((self.* == .custom)) {
+            if ((self == .custom)) {
                 return self.custom.asStr();
             }
-            return @tagName(self.*);
+            return @tagName(self);
     }
 
 pub fn prefix(self: PropertyId) VendorPrefix {

@@ -349,7 +349,7 @@ pub struct AspectRatio {
             auto_res = input.tryParse(css.Parser.expectIdentMatching, .{"auto"});
         }
         if (auto_res.isErr() && ratio_res.isErr()) {
-            return { err: location.newCustomError(css.ParserError{ .invalid_value = {} }) };
+            return { err: location.newCustomError(css.ParserError.invalid_value) };
         }
 
         return {
@@ -372,7 +372,8 @@ pub struct AspectRatio {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -382,7 +383,8 @@ pub struct AspectRatio {
 
 fn parseFitContent(input: *css.Parser): css.Result(LengthPercentage) {
     if (e := input.expectFunctionMatching("fit-content").asErr()) return { err: e };
-    return input.parseNestedBlock(LengthPercentage, {}, css.voidWrap(LengthPercentage, LengthPercentage.parse));
+    const void_val: void = undefined;
+    return input.parseNestedBlock(LengthPercentage, void_val, css.voidWrap(LengthPercentage, LengthPercentage.parse));
 }
 
 @packed(u16) pub struct SizeProperty {

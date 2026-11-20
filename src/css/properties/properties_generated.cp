@@ -8886,8 +8886,8 @@ pub union(PropertyIdTag) PropertyId {
 
   /// Returns the property name, without any vendor prefixes.
   inline fn name(): []const u8 {
-      if (_.* == .custom) return _.custom.asStr();
-      return @tagName(_.*);
+      if (_ == .custom) return _.custom.asStr();
+      return @tagName(_);
   }
 
   /// Returns the vendor prefix for this property id.

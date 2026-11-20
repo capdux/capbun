@@ -427,8 +427,7 @@ pub fn parsefn(i: *css.Parser) Result(void) {
 _ = composes_ctx.recordComposes(input.allocator(), (&property.composes));
 },
 .disallow_nested => |info| {
-const empty_notes: [0]bun.logger.Data = &.{};
-                _ = options.warnFmtWithNotes("\"composes\" is not allowed inside nested selectors", .{}, info.line, info.column, (&empty_notes));
+_ = options.warnFmtWithNotes("\"composes\" is not allowed inside nested selectors", .{}, info.line, info.column, &.{});
 },
 .disallow_not_single_class => |info| {
 const err_data: [1]bun.logger.Data = .{ bun.logger.Data{ .text = bun.handleOom(options.allocator.dupe(u8, "The parent selector is not a single class selector because of the syntax here:")), .location = info.toLoggerLocation(options.filename) } };

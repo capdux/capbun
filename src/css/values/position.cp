@@ -179,7 +179,8 @@ pub struct Position {
                 switch (_.x) {
                     .side => |side| {
                         if (side.side == .left) {
-                            if (*offset := side.offset) {
+                            if (side.offset != null) {
+                                const offset = &side.offset.?;
                                 if (offset.isZero()) {
                                     break :x_len &zero;
                                 } else {
@@ -204,7 +205,8 @@ pub struct Position {
                 switch (_.y) {
                     .side => |side| {
                         if (side.side == .top) {
-                            if (*offset := side.offset) {
+                            if (side.offset != null) {
+                                const offset = &side.offset.?;
                                 if (offset.isZero()) {
                                     break :y_len &zero;
                                 } else {
@@ -368,11 +370,12 @@ pub enum HorizontalPositionKeyword {
     right,
 
     fn deepClone(allocator: std.mem.Allocator): HorizontalPositionKeyword {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     fn eql(other: *const HorizontalPositionKeyword): bool {
-        return _.* == other.*;
+        return _ == other.*;
     }
 
     fn asStr(): []const u8 {
@@ -384,11 +387,12 @@ pub enum HorizontalPositionKeyword {
     }
 
     fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+        const s = _;
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 
     fn intoLengthPercentage(): LengthPercentage {
-        return switch (_.*) {
+        return switch (_) {
             .left => LengthPercentage.zero(),
             .right => LengthPercentage{ .percentage = css.css_values.percentage.Percentage{ .v = 1.0 } },
         };
@@ -402,11 +406,12 @@ pub enum VerticalPositionKeyword {
     bottom,
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     fn eql(other: *const VerticalPositionKeyword): bool {
-        return _.* == other.*;
+        return _ == other.*;
     }
 
     fn asStr(): []const u8 {
@@ -418,11 +423,12 @@ pub enum VerticalPositionKeyword {
     }
 
     fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+        const s = _;
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 
     fn intoLengthPercentage(): LengthPercentage {
-        return switch (_.*) {
+        return switch (_) {
             .top => LengthPercentage.zero(),
             .bottom => LengthPercentage{ .percentage = Percentage{ .v = 1.0 } },
         };

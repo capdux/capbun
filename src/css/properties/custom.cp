@@ -1535,8 +1535,8 @@ pub const CustomPropertyName = union(enum) {
         }
     }
 
-    pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+    pub fn deepClone(allocator: Allocator): @This() {
+        return css.implementDeepClone(@This(), _, allocator);
     }
 
     pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

@@ -88,7 +88,7 @@ pub fn handleProperty(self: *FallbackHandler, property: *const Property, dest: *
                     return true;
                 }
             }
-            if (((if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(property.*)) else @as(PropertyIdTag, property.*)) == .unparsed)) {
+            if ((std.meta.activeTag(property.*) == .unparsed)) {
                 const val: *const UnparsedProperty = (&property.unparsed);
                 const unparsed_and_index = unparsed_and_index: {
                 inline for (std.@"meta".fields(FallbackHandler)) |field| {

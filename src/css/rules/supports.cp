@@ -302,10 +302,11 @@ pub union(enum) SupportsCondition {
     }
 
     pub fn toCss(dest: *css.Printer): css.PrintErr!void {
+        const self_val = _;
         switch (_) {
             .not => |condition| {
                 dest.writeStr(" not ")?;
-                condition.toCssWithParensIfNeeded(dest, condition.needsParens(&_))?;
+                condition.toCssWithParensIfNeeded(dest, condition.needsParens(&self_val))?;
             },
             .@"and" => |conditions| {
                 let first = true;

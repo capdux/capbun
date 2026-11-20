@@ -35,7 +35,8 @@ pub struct Transition {
     }
 
     fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     static fn parse(parser: *css.Parser): css.Result(@This()) {
@@ -254,7 +255,8 @@ pub struct TransitionHandler {
             if (!intersection.isEmpty()) {
                 const transitions = getTransitions(context, properties, durations, delays, timing_functions);
 
-                if (*rtl_properties2 := rtl_properties) {
+                if (rtl_properties != null) {
+                    let rtl_properties2 = &rtl_properties.?;
                     const rtl_transitions = getTransitions(context, rtl_properties2, durations, delays, timing_functions);
                     context.addLogicalRule(
                         context.allocator,
@@ -388,7 +390,7 @@ pub struct TransitionHandler {
 
 fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.PropertyHandlerContext): SmallList(PropertyId, 1)? {
     const replace = struct {
-        inline fn replace(allocator: Allocator, propertiez: auto, props: []const PropertyId, i: u32) {
+        inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId, 1), props: []const PropertyId, i: u32) {
             propertiez.mut(i).* = props[0].deepClone(allocator);
             if (props.len > 1) {
                 propertiez.insertSlice(allocator, i + 1, props[1..]);

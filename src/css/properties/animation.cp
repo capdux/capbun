@@ -225,7 +225,7 @@ pub enum AnimationName {
     const This = @This();
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        return css.implementHash(@This(), _, hasher);
     }
 
     pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {

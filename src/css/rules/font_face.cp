@@ -228,8 +228,13 @@ pub struct UnicodeRange {
         let text = if (_text.len > 0 && _text[0] == '+') _text[1..] else {
             return { err: undefined };
         };
-        let [first_hex_value, hex_digit_count] = consumeHex(unsafe { &text });
-        const question_marks = consumeQuestionMarks(unsafe { &text });
+        const hex1 = consumeHex(text);
+        const first_hex_value = hex1.value;
+        const hex_digit_count = hex1.digits;
+        text = hex1.rest;
+        const qm = consumeQuestionMarks(text);
+        const question_marks = qm.count;
+        text = qm.rest;
         const consumed = hex_digit_count + question_marks;
 
         if (consumed == 0 || consumed > 6) {
@@ -249,7 +254,10 @@ pub struct UnicodeRange {
         } else {
             if (text.len > 0 && text[0] == '-') {
                 text = text[1..];
-                let [second_hex_value, hex_digit_count2] = consumeHex(&text);
+                const hex2 = consumeHex(text);
+                const second_hex_value = hex2.value;
+                const hex_digit_count2 = hex2.digits;
+                text = hex2.rest;
                 if (hex_digit_count2 > 0 && hex_digit_count2 <= 6 && text.len == 0) {
                     return { result: UnicodeRange{
                         start: first_hex_value,
@@ -261,28 +269,41 @@ pub struct UnicodeRange {
         return { err: undefined };
     }
 
-    static fn consumeQuestionMarks(text: *[]const u8): usize {
+    const QmResult = struct {
+        count: usize,
+        rest: []const u8,
+    };
+
+    const HexResult = struct {
+        value: u32,
+        digits: usize,
+        rest: []const u8,
+    };
+
+    static fn consumeQuestionMarks(text_in: []const u8): QmResult {
+        let text = text_in;
         let question_marks: usize = 0;
-        while (rest := bun.strings.splitFirstWithExpected(text.*, '?')) {
+        while (rest := bun.strings.splitFirstWithExpected(text, '?')) {
             question_marks += 1;
-            text.* = rest;
+            text = rest;
         }
-        return question_marks;
+        return .{ count: question_marks, rest: text };
     }
 
-    static fn consumeHex(text: *[]const u8): [u32, usize] {
+    static fn consumeHex(text_in: []const u8): HexResult {
+        let text = text_in;
         let value: u32 = 0;
         let digits: usize = 0;
-        while (result := bun.strings.splitFirst(text.*)) {
+        while (result := bun.strings.splitFirst(text)) {
             if (digit_value := toHexDigit(result.first)) {
                 value = value * 0x10 + digit_value;
                 digits += 1;
-                text.* = result.rest;
+                text = result.rest;
             } else {
                 break;
             }
         }
-        return .{ value, digits };
+        return .{ value: value, digits: digits, rest: text };
     }
 
     static fn toHexDigit(b: u8): u32? {
@@ -419,7 +440,7 @@ pub union(enum) FontFormat {
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
         const s = _;
-        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -469,7 +490,7 @@ pub union(enum) Source {
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
         const s = _;
-        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 

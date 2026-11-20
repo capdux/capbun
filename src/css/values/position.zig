@@ -71,11 +71,12 @@ pub const HorizontalPositionKeyword = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
 pub fn deepClone(self: HorizontalPositionKeyword, allocator: std.mem.Allocator) HorizontalPositionKeyword {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(self: HorizontalPositionKeyword, other: *const HorizontalPositionKeyword) bool {
-            return (self.* == other.*);
+            return (self == other.*);
     }
 
 pub fn asStr(self: HorizontalPositionKeyword) []const u8 {
@@ -87,11 +88,12 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(self: *HorizontalPositionKeyword, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+            const s = self;
+            return css.enum_property_util.toCss(@This(), s, dest);
     }
 
 pub fn intoLengthPercentage(self: HorizontalPositionKeyword) LengthPercentage {
-            return (switch (self.*) {
+            return (switch (self) {
 .left => LengthPercentage.zero(),
 .right => LengthPercentage{ .percentage = css.css_values.percentage.Percentage{ .v = 1.0 } },
 });
@@ -107,11 +109,12 @@ pub const VerticalPositionKeyword = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
 pub fn deepClone(self: VerticalPositionKeyword, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(self: VerticalPositionKeyword, other: *const VerticalPositionKeyword) bool {
-            return (self.* == other.*);
+            return (self == other.*);
     }
 
 pub fn asStr(self: VerticalPositionKeyword) []const u8 {
@@ -123,11 +126,12 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(self: *VerticalPositionKeyword, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+            const s = self;
+            return css.enum_property_util.toCss(@This(), s, dest);
     }
 
 pub fn intoLengthPercentage(self: VerticalPositionKeyword) LengthPercentage {
-            return (switch (self.*) {
+            return (switch (self) {
 .top => LengthPercentage.zero(),
 .bottom => LengthPercentage{ .percentage = Percentage{ .v = 1.0 } },
 });
@@ -261,12 +265,12 @@ pub fn toCss(self: Position, dest: *css.Printer) css.PrintErr!void {
                                             switch (self.x) {
 .side => |side| {
 if ((side.side == .left)) {
-                                                if (side.offset) |*offset| {
-                                                    _ = &offset;
-                                                    if ((offset.*).isZero()) {
+                                                if ((side.offset != null)) {
+                                                    const offset = (&side.offset.?);
+                                                    if (offset.isZero()) {
                                                         break :x_len (&zero);
                                                     } else {
-                                                        break :x_len (offset.*);
+                                                        break :x_len offset;
                                                     }
                                                 } else {
                                                     break :x_len (&zero);
@@ -288,12 +292,12 @@ break :x_len (&fifty);
                                             switch (self.y) {
 .side => |side| {
 if ((side.side == .top)) {
-                                                if (side.offset) |*offset| {
-                                                    _ = &offset;
-                                                    if ((offset.*).isZero()) {
+                                                if ((side.offset != null)) {
+                                                    const offset = (&side.offset.?);
+                                                    if (offset.isZero()) {
                                                         break :y_len (&zero);
                                                     } else {
-                                                        break :y_len (offset.*);
+                                                        break :y_len offset;
                                                     }
                                                 } else {
                                                     break :y_len (&zero);

@@ -871,7 +871,7 @@ pub fn flushShorthandHelper(dest: *css.DeclarationList, context: *css.PropertyHa
                         if ((!align_prefix.isEmpty())) {
                             _ = (blk_catch_3: { break :blk_catch_3 ((dest.append(context.allocator, @unionInit(Property, align_prop.prop, .{ css.generic.deepClone(@TypeOf(align_val.*), align_val, context.allocator), align_prefix.* }))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
                         }
-                        if (comptime (justify_prop != null)) {
+                        if (comptime (@TypeOf(justify_prop) != @TypeOf(null))) {
                             const justify_actual = (&__v2.*[0]);
                             var justify_prefix = (&__v2.*[1]);
                             _ = &justify_prefix;

@@ -138,7 +138,7 @@ pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
                 _ = &nsp;
                 switch (nsp) {
 .specific => |v| {
-_ = try css.IdentFns.toCss((&v.prefix), dest);
+_ = try css.IdentFns.toCss(v.prefix, dest);
                 _ = try dest.writeChar(124);
 },
 .any => {
@@ -2647,7 +2647,11 @@ return .{ .err = e };
             return .{ .result = result.items };
     }
 };
-                const names = (switch (input.parseNestedBlock(&.{}, Impl.SelectorImpl.Identifier, (&Closure{ .parser = parser }), Closure.parsefn)) {
+                const IdentSlice = &.{};
+                _ = Impl.SelectorImpl.Identifier;
+                var closure = Closure{ .parser = parser };
+                _ = &closure;
+                const names = (switch (input.parseNestedBlock(IdentSlice, (&closure), Closure.parsefn)) {
 .err => |e| {
 return .{ .err = e };
 },

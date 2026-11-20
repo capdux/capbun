@@ -179,8 +179,8 @@ pub const MediaCondition = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn toCss(self: *MediaCondition, dest: *Printer) PrintErr!void {
-            switch (self) {
+pub fn toCss(m: *const @This(), dest: *Printer) PrintErr!void {
+            switch (m.*) {
 .feature => |f| {
 _ = try f.toCss(dest);
 },
@@ -195,8 +195,7 @@ _ = try operationToCss(MediaCondition, operation.operator, (&operation.condition
             return;
     }
 
-pub fn parseFeature(self: *MediaCondition, input: *css.Parser) Result(MediaCondition) {
-        _ = self;
+pub fn parseFeature(input: *css.Parser) Result(MediaCondition) {
             const feature = (switch (MediaFeature.parse(input)) {
 .err => |e| {
 return .{ .err = e };
@@ -338,12 +337,12 @@ pub const MediaFeatureComparison = enum(u8) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn asStr(self: *const MediaFeatureComparison) []const u8 {
+pub fn asStr(self: MediaFeatureComparison) []const u8 {
             return css.enum_property_util.asStr(@This(), self);
     }
 
-pub fn toCss(self: *const MediaFeatureComparison, dest: *Printer) PrintErr!void {
-            switch (self.*) {
+pub fn toCss(self: *MediaFeatureComparison, dest: *Printer) PrintErr!void {
+            switch (self) {
 .equal => {
 _ = try dest.delim(45, true);
 },
@@ -479,7 +478,8 @@ pub fn checkType(self: MediaFeatureValue, expected_type: MediaFeatureType) bool 
     }
 
 pub fn parse(input: *css.Parser, expected_type: MediaFeatureType) Result(MediaFeatureValue) {
-            if (input.tryParse(MediaFeatureValue{ .parseKnown = {} }, .{ expected_type }).asValue()) |value| {
+            const parse_known_fn = MediaFeatureValue{ .parseKnown = {} };
+            if (input.tryParse(parse_known_fn, .{ expected_type }).asValue()) |value| {
                 _ = &value;
                 return .{ .result = value };
             }
@@ -1435,14 +1435,14 @@ pub fn eql(lhs: *const This, rhs: *const This) bool {
     }
 
 pub fn valueType(self: @This()) MediaFeatureType {
-            return (switch (self.*) {
+            return (switch (self) {
 .standard => |standard| standard.valueType(),
 else => .unknown,
 });
     }
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .standard => |v| v.toCss(dest),
 .custom => |d| DashedIdentFns.toCss((&d), dest),
 .unknown => |v| IdentFns.toCss((&v), dest),
@@ -1450,7 +1450,7 @@ pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
     }
 
 pub fn toCssWithPrefix(self: @This(), prefix: []const u8, dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .standard => |v| v.toCssWithPrefix(prefix, dest),
 .custom => |d| {
 {

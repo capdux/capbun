@@ -91,7 +91,7 @@ pub struct FallbackHandler {
             }
         }
 
-        if (@as(PropertyIdTag, property.*) == .unparsed) {
+        if (std.meta.activeTag(property.*) == .unparsed) {
             const val: *const UnparsedProperty = &property.unparsed;
             const unparsed_and_index = unparsed_and_index: {
                 inline for (field of std.@"meta".fields(FallbackHandler)) {

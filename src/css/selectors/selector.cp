@@ -532,7 +532,7 @@ const SerializePseudoClassHelpers = struct {
         comptime key: []const u8,
         comptime s: []const u8,
     ): PrintErr!void {
-        let class_name: (?css.css_values.ident.Ident) = null;
+        let class_name: ([]const u8)? = null;
         if (pseudo_classes := d.pseudo_classes) {
             class_name = @field(pseudo_classes, key);
         }
@@ -763,7 +763,8 @@ pub const serialize = struct {
             //    single SPACE (U+0020) if the combinator was not whitespace, to
             //    s.
             if (c := next_combinator) {
-                try serializeCombinator(c, dest);
+                const c_val = c;
+                try serializeCombinator(&c_val, dest);
             } else {
                 combinators_exhausted = true;
             }
@@ -879,8 +880,9 @@ pub const serialize = struct {
             .host selector => {
                 try dest.writeStr(":host");
                 if (sel := selector) {
+                    const sel_val = sel;
                     try dest.writeChar('(');
-                    try serializeSelector(sel, dest, dest.context(), false);
+                    try serializeSelector(&sel_val, dest, dest.context(), false);
                     try dest.writeChar(')');
                 }
                 return;
@@ -1440,8 +1442,9 @@ pub const tocss_servo = struct {
             .host selector => {
                 try dest.writeStr(":host");
                 if (sel := selector) {
+                    const sel_val = sel;
                     try dest.writeChar('(');
-                    try tocss_servo.toCss_Selector(sel, dest);
+                    try tocss_servo.toCss_Selector(&sel_val, dest);
                     try dest.writeChar(')');
                 }
             },

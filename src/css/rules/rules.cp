@@ -85,7 +85,10 @@ pub fn CssRule(comptime Rule: type): type {
 
         pub fn toCss(rule_self: *const @This(), dest: *Printer): PrintErr!void {
             return switch (rule_self.*) {
-                .media => |x| x.toCss(dest),
+                .media => |x| {
+                    let m = x;
+                    return m.toCss(dest);
+                },
                 .@"import" => |x| x.toCss(dest),
                 .style => |x| x.toCss(dest),
                 .keyframes => |x| x.toCss(dest),

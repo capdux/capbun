@@ -297,10 +297,11 @@ return .{ .err = location.newUnexpectedTokenError(tok.*) };
     }
 
 pub fn toCss(self: SupportsCondition, dest: *css.Printer) css.PrintErr!void {
+            const self_val = self;
             switch (self) {
 .not => |condition| {
 _ = try dest.writeStr(" not ");
-            _ = try condition.toCssWithParensIfNeeded(dest, condition.needsParens(self));
+            _ = try condition.toCssWithParensIfNeeded(dest, condition.needsParens(self_val));
 },
 .@"and" => |conditions| {
 var first = true;

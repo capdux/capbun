@@ -59,7 +59,8 @@ pub union(enum) EasingFunction {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     const Map = bun.ComptimeEnumMap(enum {

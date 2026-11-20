@@ -99,7 +99,7 @@ pub fn parse(input: *css.Parser) css.Result(AspectRatio) {
                 auto_res = input.tryParse(css.Parser.expectIdentMatching, .{ "auto" });
             }
             if ((auto_res.isErr() and ratio_res.isErr())) {
-                return .{ .err = location.newCustomError(css.ParserError{ .invalid_value = .{} }) };
+                return .{ .err = location.newCustomError(css.ParserError.invalid_value) };
             }
             return .{ .result = AspectRatio{ .auto = auto_res.isOk(), .ratio = ratio_res.asValue() } };
     }
@@ -118,7 +118,8 @@ pub fn toCss(self: AspectRatio, dest: *css.Printer) css.PrintErr!void {
     }
 
 pub fn deepClone(self: AspectRatio, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -698,5 +699,6 @@ pub fn parseFitContent(input: *css.Parser) css.Result(LengthPercentage) {
             _ = &e;
             return .{ .err = e };
         }
-        return input.parseNestedBlock(LengthPercentage, .{}, css.voidWrap(LengthPercentage, LengthPercentage.parse));
+        const void_val: void = undefined;
+        return input.parseNestedBlock(LengthPercentage, void_val, css.voidWrap(LengthPercentage, LengthPercentage.parse));
 }

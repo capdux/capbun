@@ -357,8 +357,9 @@ pub struct BackgroundPosition {
         return Position{ .x = _.x, .y = _.y };
     }
 
-    pub inline fn deepClone(_: *const @This(), allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+    pub inline fn deepClone(allocator: Allocator): @This() {
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -506,7 +507,7 @@ pub enum BackgroundClip {
     }
 
     fn eqlOrigin(other: *const BackgroundOrigin): bool {
-        return switch (_.*) {
+        return switch (_) {
             .@"border-box" => other.* == .@"border-box",
             .@"padding-box" => other.* == .@"padding-box",
             .@"content-box" => other.* == .@"content-box",
@@ -515,7 +516,7 @@ pub enum BackgroundClip {
     }
 
     fn isBackgroundBox(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .@"border-box", .@"padding-box", .@"content-box" => true,
             else => false,
         };

@@ -743,7 +743,7 @@ fn NewSizeHandler(
         }
 
         static inline fn logicalPropHelper(
-            val: *Property?,
+            val: *(Property?),
             comptime logical: css.PropertyIdTag,
             comptime ltr: css.PropertyIdTag,
             comptime rtl: css.PropertyIdTag,
@@ -816,7 +816,7 @@ fn NewSizeHandler(
         }
 
         static inline fn prop(
-            val: *Property?,
+            val: *(Property?),
             comptime logical: css.PropertyIdTag,
             comptime physical: css.PropertyIdTag,
             dest: *css.DeclarationList,

@@ -665,7 +665,7 @@ var up = unparsed.deepClone(context.allocator);
     pub inline fn push(f: *FlushContext, comptime p: []const u8, val: anytype) void {
                 _ = bun.bits.insert(BorderProperty, (&f.self.flushed_properties), @field(BorderProperty, p));
                 const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
-                const TargetType = std.@"meta".FieldType(css.Property, p);
+                const TargetType = @FieldType(css.Property, p);
                 const final_val: TargetType = (if (comptime (TargetType == @TypeOf(cloned))) cloned else TargetType{ .width = cloned.width, .style = cloned.style, .color = cloned.color });
                 _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_val)));
         }
@@ -673,7 +673,7 @@ var up = unparsed.deepClone(context.allocator);
     pub inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: anytype) void {
                 var val = _val;
                 _ = &val;
-                const TargetType = std.@"meta".FieldType(css.Property, p);
+                const TargetType = @FieldType(css.Property, p);
                 if ((!bun.bits.contains(BorderProperty, f.self.flushed_properties, @field(BorderProperty, p)))) {
                     const fbs = val.getFallbacks(f.ctx.allocator, f.ctx.targets);
                     for (css.generic.slice(@TypeOf(fbs), &fbs)) |fallback| {

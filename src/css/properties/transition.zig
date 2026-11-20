@@ -77,7 +77,8 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: Transition, allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn parse(parser: *css.Parser) css.Result(@This()) {
@@ -285,9 +286,10 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 const intersection = VendorPrefix.bitwiseAnd(VendorPrefix.bitwiseAnd(VendorPrefix.bitwiseAnd(property_prefixes.*, duration_prefixes.*), delay_prefixes.*), timing_prefixes.*);
                 if ((!intersection.isEmpty())) {
                     const transitions = TransitionHandler.getTransitions(context, properties, durations, delays, timing_functions);
-                    if (rtl_properties) |*rtl_properties2| {
+                    if ((rtl_properties != null)) {
+                        var rtl_properties2 = (&rtl_properties.?);
                         _ = &rtl_properties2;
-                        const rtl_transitions = TransitionHandler.getTransitions(context, (rtl_properties2.*), durations, delays, timing_functions);
+                        const rtl_transitions = TransitionHandler.getTransitions(context, rtl_properties2, durations, delays, timing_functions);
                         _ = context.addLogicalRule(context.allocator, Property{ .transition = .{ transitions, intersection } }, Property{ .transition = .{ rtl_transitions, intersection } });
                     } else {
                         _ = (blk_catch_1: { break :blk_catch_1 ((dest.append(context.allocator, Property{ .transition = .{ transitions.deepClone(context.allocator), intersection } })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
@@ -414,7 +416,7 @@ const Allocator = std.mem.Allocator;
 pub fn expandProperties(properties: *SmallList(PropertyId,1), context: *css.PropertyHandlerContext) ?SmallList(PropertyId,1) {
         const replace = struct {
 
-pub inline fn replace(allocator: Allocator, propertiez: anytype, props: []const PropertyId, i: u32) void {
+pub inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId,1), props: []const PropertyId, i: u32) void {
             (propertiez.mut(i)).* = props[0].deepClone(allocator);
             if ((props.len > 1)) {
                 _ = propertiez.insertSlice(allocator, (i + 1), props[1..]);

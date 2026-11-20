@@ -70,12 +70,13 @@ pub const BorderRadius = struct {
     bottom_left: Size2D(LengthPercentage),
 
 pub fn parse(input: *css.Parser) css.Result(BorderRadius) {
-            const widths = (switch (Rect(LengthPercentage).parse(input)) {
+            var widths = (switch (Rect(LengthPercentage).parse(input)) {
 .result => |v| v,
 .err => |e| {
 return .{ .err = e };
 },
 });
+            _ = &widths;
             const heights = (if (input.tryParse(css.Parser.expectDelim, .{ 47 }).isOk()) (switch (Rect(LengthPercentage).parse(input)) {
 .result => |v| v,
 .err => |e| {

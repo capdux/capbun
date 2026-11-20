@@ -223,7 +223,7 @@ pub struct ImageSet {
         };
 
         const Fn = struct {
-            fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ArrayList(ImageSetOption)) {
+            fn parseNestedBlockFn(_: @TypeOf({}), i: *css.Parser): Result(ArrayList(ImageSetOption)) {
                 return i.parseCommaSeparated(ImageSetOption, ImageSetOption.parse);
             }
         };
@@ -402,7 +402,7 @@ type Str = []const u8;
 fn parseFileType(input: *css.Parser): Result(Str) {
     if (e := input.expectFunctionMatching("type").asErr()) return .{ .err = e };
     const Fn = struct {
-        pub fn parseNestedBlockFn(_: void, i: *css.Parser): Result(Str) {
+        pub fn parseNestedBlockFn(_: @TypeOf({}), i: *css.Parser): Result(Str) {
             return i.expectString();
         }
     };

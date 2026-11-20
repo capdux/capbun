@@ -874,7 +874,7 @@ pub struct BorderHandler {
                 css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)
             else
                 css.generic.deepClone(@TypeOf(val), &val, f.ctx.allocator);
-            const TargetType = std.@"meta".FieldType(css.Property, p);
+            const TargetType = @FieldType(css.Property, p);
             const final_val: TargetType = if (comptime TargetType == @TypeOf(cloned))
                 cloned
             else
@@ -884,7 +884,7 @@ pub struct BorderHandler {
 
         inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: auto) {
             let val = _val;
-            const TargetType = std.@"meta".FieldType(css.Property, p);
+            const TargetType = @FieldType(css.Property, p);
             if (!bun.bits.contains(BorderProperty, f.self.flushed_properties, @field(BorderProperty, p))) {
                 const fbs = val.getFallbacks(f.ctx.allocator, f.ctx.targets);
                 for (css.generic.slice(@TypeOf(fbs), &fbs)) |fallback| {

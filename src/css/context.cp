@@ -264,7 +264,7 @@ pub struct PropertyHandlerContext {
     fn addConditionalProperty(*_, condition: css.SupportsCondition, property: css.Property) {
         if (_.context != DeclarationContext.style_rule) return;
 
-        if (entry := brk: {
+        if (*entry := brk: {
             for (*supp of _.supports.items) {
                 if (condition.eql(&supp.condition)) break :brk supp;
             }

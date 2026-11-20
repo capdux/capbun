@@ -120,7 +120,7 @@ pub inline fn writePrefixed(d: *Printer, prefix: css.VendorPrefix, comptime val:
     }
 
 pub inline fn pseudo(d: *Printer, comptime key: []const u8, comptime s: []const u8) PrintErr!void {
-            var class_name: ?css.css_values.ident.Ident = null;
+            var class_name: ?[]const u8 = null;
             _ = &class_name;
             if (d.pseudo_classes) |pseudo_classes| {
                 _ = &pseudo_classes;
@@ -277,7 +277,8 @@ else => .{ true, first_index },
                 }
                 if (next_combinator) |c| {
                     _ = &c;
-                    _ = try serializeCombinator(c, dest);
+                    const c_val = c;
+                    _ = try serializeCombinator((&c_val), dest);
                 } else {
                     combinators_exhausted = true;
                 }
@@ -389,8 +390,9 @@ _ = try dest.writeChar(35);
 _ = try dest.writeStr(":host");
             if (selector) |sel| {
                 _ = &sel;
+                const sel_val = sel;
                 _ = try dest.writeChar(40);
-                _ = try serializeSelector(sel, dest, dest.context(), false);
+                _ = try serializeSelector((&sel_val), dest, dest.context(), false);
                 _ = try dest.writeChar(41);
             }
             return;
@@ -960,8 +962,9 @@ _ = try dest.writeStr(":scope");
 _ = try dest.writeStr(":host");
             if (selector) |sel| {
                 _ = &sel;
+                const sel_val = sel;
                 _ = try dest.writeChar(40);
-                _ = try tocss_servo.toCss_Selector(sel, dest);
+                _ = try tocss_servo.toCss_Selector((&sel_val), dest);
                 _ = try dest.writeChar(41);
             }
 },

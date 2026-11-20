@@ -1444,8 +1444,8 @@ return unknown.v;
 }
     }
 
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+pub fn deepClone(self: @This(), allocator: Allocator) @This() {
+            return css.implementDeepClone(@This(), self, allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

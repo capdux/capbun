@@ -158,7 +158,7 @@ pub fn default() BackgroundClip {
     }
 
 pub fn eqlOrigin(self: BackgroundClip, other: *const BackgroundOrigin) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"border-box" => (other.* == .@"border-box"),
 .@"padding-box" => (other.* == .@"padding-box"),
 .@"content-box" => (other.* == .@"content-box"),
@@ -167,7 +167,7 @@ else => false,
     }
 
 pub fn isBackgroundBox(self: BackgroundClip) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"border-box", .@"padding-box", .@"content-box" => true,
 else => false,
 });
@@ -497,8 +497,9 @@ pub fn intoPosition(self: BackgroundPosition) Position {
             return Position{ .x = self.x, .y = self.y };
     }
 
-pub inline fn deepClone(self: *const BackgroundPosition, allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+pub inline fn deepClone(self: BackgroundPosition, allocator: Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
     const PropertyFieldMap = .{ .x = css.PropertyIdTag.@"background-position-x", .y = css.PropertyIdTag.@"background-position-y" };
 };

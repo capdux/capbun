@@ -80,14 +80,6 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const css = @import("../css_parser.zig");
@@ -293,18 +285,13 @@ pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
             return .{ .err = undefined };
 }));
             _ = &text;
-            const _tmp_v0 = consumeHex((blk: {
-            break :blk text;
-
-}));
-            var first_hex_value = cp_unpack_elem(_tmp_v0, 0);
-            _ = &first_hex_value;
-            var hex_digit_count = cp_unpack_elem(_tmp_v0, 1);
-            _ = &hex_digit_count;
-            const question_marks = consumeQuestionMarks((blk: {
-            break :blk text;
-
-}));
+            const hex1 = consumeHex(text);
+            const first_hex_value = (if (@typeInfo(@TypeOf(hex1)) == .@"enum") @intFromEnum(hex1) else hex1.value);
+            const hex_digit_count = hex1.digits;
+            text = hex1.rest;
+            const qm = consumeQuestionMarks(text);
+            const question_marks = qm.count;
+            text = qm.rest;
             const consumed = (hex_digit_count + question_marks);
             if (((consumed == 0) or (consumed > 6))) {
                 return .{ .err = undefined };
@@ -319,11 +306,10 @@ pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
                 } else {
                     if (((text.len > 0) and (text[0] == 45))) {
                         text = text[1..];
-                        const _tmp_v1 = consumeHex(text);
-                        var second_hex_value = cp_unpack_elem(_tmp_v1, 0);
-                        _ = &second_hex_value;
-                        var hex_digit_count2 = cp_unpack_elem(_tmp_v1, 1);
-                        _ = &hex_digit_count2;
+                        const hex2 = consumeHex(text);
+                        const second_hex_value = (if (@typeInfo(@TypeOf(hex2)) == .@"enum") @intFromEnum(hex2) else hex2.value);
+                        const hex_digit_count2 = hex2.digits;
+                        text = hex2.rest;
                         if ((((hex_digit_count2 > 0) and (hex_digit_count2 <= 6)) and (text.len == 0))) {
                             return .{ .result = UnicodeRange{ .start = first_hex_value, .end = second_hex_value } };
                         }
@@ -333,32 +319,36 @@ pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
             return .{ .err = undefined };
     }
 
-pub fn consumeQuestionMarks(text: *[]const u8) usize {
+pub fn consumeQuestionMarks(text_in: []const u8) QmResult {
+            var text = text_in;
+            _ = &text;
             var question_marks: usize = 0;
             _ = &question_marks;
-            while (bun.strings.splitFirstWithExpected(text.*, 63)) |rest| {
+            while (bun.strings.splitFirstWithExpected(text, 63)) |rest| {
                 question_marks = (question_marks + 1);
-                text.* = rest;
+                text = rest;
             }
-            return question_marks;
+            return .{ .count = question_marks, .rest = text };
     }
 
-pub fn consumeHex(text: *[]const u8) struct { u32, usize } {
+pub fn consumeHex(text_in: []const u8) HexResult {
+            var text = text_in;
+            _ = &text;
             var value: u32 = 0;
             _ = &value;
             var digits: usize = 0;
             _ = &digits;
-            while (bun.strings.splitFirst(text.*)) |result| {
+            while (bun.strings.splitFirst(text)) |result| {
                 if (toHexDigit(result.first)) |digit_value| {
                     _ = &digit_value;
                     value = ((value * 16) + digit_value);
                     digits = (digits + 1);
-                    text.* = result.rest;
+                    text = result.rest;
                 } else {
                     break;
                 }
             }
-            return .{ value, digits };
+            return .{ .value = value, .digits = digits, .rest = text };
     }
 
 pub fn toHexDigit(b: u8) ?u32 {
@@ -370,6 +360,15 @@ pub fn toHexDigit(b: u8) ?u32 {
             digit = ((((if (comptime @typeInfo(@TypeOf(b)) == .@"enum") cp_cast_int(u32, @intFromEnum(b)) else cp_cast_int(u32, b)) | 32) -% (if (comptime @typeInfo(@TypeOf(97)) == .@"enum") cp_cast_int(u32, @intFromEnum(97)) else cp_cast_int(u32, 97))) +| 10);
             return (if ((digit < 16)) digit else null);
     }
+    const QmResult = struct {
+        count: usize,
+        rest: []const u8,
+    };
+    const HexResult = struct {
+        value: u32,
+        digits: usize,
+        rest: []const u8,
+    };
 };
 
 pub const FontStyle = union(enum) {
@@ -503,10 +502,7 @@ _ = try dest.writeStr(self.string);
 
 pub fn deepClone(self: FontFormat, allocator: std.mem.Allocator) @This() {
             const s = self;
-            return css.implementDeepClone(@This(), (blk: {
-            break :blk s;
-
-}), allocator);
+            return css.implementDeepClone(@This(), s, allocator);
     }
 };
 
@@ -559,10 +555,7 @@ _ = try dest.writeStr("local(");
 
 pub fn deepClone(self: Source, allocator: std.mem.Allocator) @This() {
             const s = self;
-            return css.implementDeepClone(@This(), (blk: {
-            break :blk (&s);
-
-}), allocator);
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 };
 

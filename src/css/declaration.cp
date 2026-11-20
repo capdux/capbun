@@ -342,13 +342,12 @@ pub fn parse_declaration_impl(
                     composes_ctx.recordComposes(input.allocator(), &property.composes);
                 },
                 .disallow_nested => |info| {
-                    const empty_notes: [0]bun.logger.Data = [];
                     options.warnFmtWithNotes(
                         "\"composes\" is not allowed inside nested selectors",
                         {},
                         info.line,
                         info.column,
-                        &empty_notes,
+                        [],
                     );
                 },
                 .disallow_not_single_class => |info| {
