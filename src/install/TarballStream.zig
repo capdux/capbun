@@ -500,7 +500,8 @@ client.archive = ar;
         return;
 },
 else => {
-const err_args: struct { *anyopaque } = .{ ar.errorString() };
+const err_msg: []const u8 = ar.errorString();
+        const err_args: struct { []const u8 } = .{ err_msg };
         _ = log("archive_read_open: {s}", err_args);
         return error.Fail;
 },

@@ -3146,3 +3146,5 @@ Options:
 - **[2026-11-20 22:38] Wave 21 B 组验收提交（25 模块全绿：14 多错 + 11 提前排雷）**：完成 `bun`/`S3File`/`ObjectURLRegistry`/`ModuleLoader`/`ipc`/`Archive`/`js_bun_spawn_bindings`/`cron`/`ssl_wrapper`/`interpreter`/`ErrorPacket`/`MySQLConnection`/`SocketContext`/`INotifyWatcher` 14 模块及 `upgrade_command`/`crash_handler_jsc`/`UnsafeObject`/`update_request_jsc`/`npm_jsc`/`dependency_jsc`/`PasswordObject`/`node_cluster_binding`/`node_util_binding`/`jest`/`bun_test` 11 个机械排雷模块独立验收（25/25 PASS，ratio 0.784x~1.123x）并原子提交；静待 A 组（`5a39b9ec`）完成。
 
 - **[2026-11-20 22:40] Wave 21 A 组验收提交（20 模块全绿）+ 固化 `GEMINI.md` 第十节提速铁律**：完成 Resolver/JSParser/JSPrinter/Bundler/Bake 20 模块独立验收（全部 PASS，ratio 0.91x~1.038x）并原子提交；已将「3 路小包裹流水线 + 机械雷区预排雷 + Debug 跳过 LLVM 加速」写入 `GEMINI.md` 第十节。
+
+- **[2026-11-20 22:43] Wave 21 C 组验收提交（17 模块全绿）**：完成 1 错长尾第 1 批 17 模块独立验收（17/17 PASS，ratio 0.653x~1.088x）并原子提交；记录 2 个外部根因（`EventLoopDelayMonitor` 缺 `event_loop_timer`、`Path.initTopLevelDir` 缺 `static fn`）并立即流水线补派 F 组接力。

@@ -207,7 +207,7 @@ pub const RouteType = enum(u8) {
     html = 3,
     @"static" = 4,
 };
-var empty_strings: [0]BunString = &.{};
+var empty_strings: [0]BunString = undefined;
 
 pub export fn Bun__HTTPServerAgent__setEnabled(agent: ?*InspectorHTTPServerAgent) void {
         if (jsc.VirtualMachine.get().debugger) |*debugger| {

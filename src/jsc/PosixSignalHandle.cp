@@ -1,5 +1,6 @@
 // POSIX Signal Handle and task queue bridging for JavaScriptCore in CP
-import { Environment, Output, jsc, VirtualMachine } from "bun";
+import { Environment, Output, jsc } from "bun";
+const VirtualMachine = jsc.VirtualMachine;
 const std = @import("std");
 const bun = @import("bun");
 

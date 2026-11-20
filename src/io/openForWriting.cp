@@ -95,7 +95,11 @@ type SentinelU8 = [:0]u8;
                     if (force_sync || isatty) {
                         * = bun.sys.updateNonblocking(fd, false);
                         is_nonblocking = false;
-                        onForceSyncOrIsaTTY(ctx);
+                        if (Ctx == void) {
+                            onForceSyncOrIsaTTY(undefined);
+                        } else {
+                            onForceSyncOrIsaTTY(ctx);
+                        }
                     } else if (!is_nonblocking) {
                         const flags = match (bun.sys.getFcntlFlags(fd)) {
                             .result(fl) => fl,

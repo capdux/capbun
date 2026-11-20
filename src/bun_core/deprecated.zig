@@ -99,7 +99,7 @@ pub fn hash(seed: u64, input: []const u8) u64 {
             is[cp_cast_int(usize, 0)] = (is[0] ^ (RapidHash.mix((seed ^ sc[0]), sc[1]) ^ len));
             if ((len <= 16)) {
                 if ((len >= 4)) {
-                    const d: u64 = cp_shr((len & 24), @intCast(cp_shr(len, 3)));
+                    const d: u64 = cp_shr((len & 24), @as(u6, @intCast(cp_shr(len, 3))));
                     const e = (len - 4);
                     a = (cp_shl(RapidHash.r32(k), 32) | RapidHash.r32(k[e..]));
                     b = (cp_shl(RapidHash.r32(k[d..]), 32) | RapidHash.r32(k[(e - d)..]));

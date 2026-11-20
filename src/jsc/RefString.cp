@@ -14,7 +14,7 @@ hash: Hash = 0,
 allocator: std.mem.Allocator,
 
 ctx: *!? = null,
-onBeforeDeinit: (*const Callback)? = null,
+onBeforeDeinit: Callback? = null,
 
 pub const Hash = u32;
 pub const Map = std.HashMap(Hash, *RefString, bun.IdentityContext(Hash), 80);

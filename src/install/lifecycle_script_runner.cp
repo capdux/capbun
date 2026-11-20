@@ -38,7 +38,7 @@ pub struct LifecycleScriptSubprocess {
 
     pub const List = bun.io.heap.Intrusive(LifecycleScriptSubprocess, *PackageManager, sortByStartedAt);
 
-    fn sortByStartedAt(_: *PackageManager, a: *LifecycleScriptSubprocess, b: *LifecycleScriptSubprocess): bool {
+    static fn sortByStartedAt(_: *PackageManager, a: *LifecycleScriptSubprocess, b: *LifecycleScriptSubprocess): bool {
         return a.started_at < b.started_at;
     }
 
@@ -411,11 +411,10 @@ pub struct LifecycleScriptSubprocess {
                 for (new_script_index of _.current_script_index + 1..Lockfile.Scripts.names.len) {
                     if (_.scripts.items[new_script_index] != null) {
                         _.resetPolls();
-                        _.spawnNextScript(i32(new_script_index)) catch |e| {
-                            const err_args = .{
-                                Lockfile.Scripts.names[new_script_index],
-                                @errorName(e),
-                            };
+                        _.spawnNextScript(@intCast(new_script_index)) catch |e| {
+                            const s_name: []const u8 = Lockfile.Scripts.names[new_script_index];
+                            const e_name: []const u8 = @errorName(e);
+                            const err_args = .{ s_name, e_name };
                             Output.errGeneric("Failed to run script <b>{s}<r> due to error <b>{s}<r>", err_args);
                             Global.exit(1);
                         };

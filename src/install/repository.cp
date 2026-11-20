@@ -178,9 +178,9 @@ pub struct TopFormatter {
         writer.writeAll(_.label)?;
 
         const sliceFn = @TypeOf(_.repository.repo).slice;
-        const repo = sliceFn(_.repository.repo, _.buf);
+        const repo = sliceFn(&_.repository.repo, _.buf);
         if (!_.repository.owner.isEmpty()) {
-            writer.writeAll(sliceFn(_.repository.owner, _.buf))?;
+            writer.writeAll(sliceFn(&_.repository.owner, _.buf))?;
             writer.writeAll("/")?;
         } else if (Dependency.isSCPLikePath(repo)) {
             writer.writeAll("ssh://")?;

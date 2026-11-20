@@ -416,7 +416,7 @@ pub struct Registry {
         switch (response.status_code) {
             400 => return error.BadRequest,
             429 => return error.TooManyRequests,
-            404 => return PackageVersionResponse{ not_found: {} },
+            404 => return PackageVersionResponse{ not_found: undefined },
             500...599 => return error.HTTPInternalServerError,
             304 => return PackageVersionResponse{
                 cached: loaded_manifest.?,

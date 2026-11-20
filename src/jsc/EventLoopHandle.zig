@@ -186,7 +186,7 @@ pub fn unref(self: @This()) void {
             _ = self.loop().unref();
     }
 
-pub inline fn createNullDelimitedEnvMap(self: @This(), alloc: Allocator) !?[:null][*:0]u8 {
+pub inline fn createNullDelimitedEnvMap(self: @This(), alloc: Allocator) !NullDelimitedEnvMap {
             return (switch (self) {
 .js => self.js.virtual_machine.transpiler.env.map.createNullDelimitedEnvMap(alloc),
 .mini => self.mini.env.?.map.createNullDelimitedEnvMap(alloc),
@@ -214,6 +214,7 @@ pub inline fn env(self: @This()) *bun.DotEnv.Loader {
 });
     }
     pub const platformEventLoop = loop;
+    pub const NullDelimitedEnvMap = ?[:null][*:0]const u8;
 };
 pub const EventLoopTask = union(EventLoopKind) {
     js: jsc.ConcurrentTask,

@@ -413,7 +413,8 @@ fn openArchive(client: *TarballStream)! {
             return;
         },
         else => {
-            const err_args = .{ ar.errorString() };
+            const err_msg: []const u8 = ar.errorString();
+            const err_args = .{ err_msg };
             log("archive_read_open: {s}", err_args);
             return error.Fail;
         },

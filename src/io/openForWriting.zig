@@ -126,7 +126,11 @@ pollable.* = isPollable(stat.mode);
             if ((force_sync or isatty)) {
                 _ = bun.sys.updateNonblocking(fd, false);
                 is_nonblocking = false;
-                _ = onForceSyncOrIsaTTY(ctx);
+                if ((Ctx == void)) {
+                    _ = onForceSyncOrIsaTTY(undefined);
+                } else {
+                    _ = onForceSyncOrIsaTTY(ctx);
+                }
             } else {
                 if ((!is_nonblocking)) {
                     const flags = (switch (bun.sys.getFcntlFlags(fd)) {

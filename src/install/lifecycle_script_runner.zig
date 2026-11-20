@@ -98,8 +98,7 @@ pub const LifecycleScriptSubprocess = struct {
     heap: bun.io.heap.IntrusiveField(LifecycleScriptSubprocess) = .{},
     pub var alive_count: std.atomic.Value(usize) = .init(0);
 
-pub fn sortByStartedAt(self: *LifecycleScriptSubprocess, _: *PackageManager, a: *LifecycleScriptSubprocess, b: *LifecycleScriptSubprocess) bool {
-        _ = self;
+pub fn sortByStartedAt(_: *PackageManager, a: *LifecycleScriptSubprocess, b: *LifecycleScriptSubprocess) bool {
             return (a.started_at < b.started_at);
     }
 
@@ -389,7 +388,9 @@ else => {
                 while (new_script_index < __end_0) : (new_script_index += 1) {
                     if ((self.scripts.items[@as(usize, @intCast(new_script_index))] != null)) {
                         _ = self.resetPolls();
-                        _ = (blk_catch_4: { break :blk_catch_4 ((self.spawnNextScript((if (comptime @typeInfo(@TypeOf(new_script_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(new_script_index)) else cp_cast_int(i32, new_script_index)))) catch |e| { _ = &e; const err_args: struct { *anyopaque, *anyopaque } = .{ Lockfile.Scripts.names[@as(usize, @intCast(new_script_index))], @errorName(e) };
+                        _ = (blk_catch_4: { break :blk_catch_4 ((self.spawnNextScript(@intCast(new_script_index))) catch |e| { _ = &e; const s_name: []const u8 = Lockfile.Scripts.names[@as(usize, @intCast(new_script_index))];
+                        const e_name: []const u8 = @errorName(e);
+                        const err_args: struct { []const u8, []const u8 } = .{ s_name, e_name };
                         _ = Output.errGeneric("Failed to run script <b>{s}<r> due to error <b>{s}<r>", err_args);
                         break :blk_catch_4 @as(void, Global.exit(1)); }); });
                         return;

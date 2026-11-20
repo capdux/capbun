@@ -132,13 +132,13 @@ pub fn reallyGetCacheDir(buf: *bun.PathBuffer) [:0]const u8 {
     }
 
 pub fn getCacheDir(buf: *bun.PathBuffer) [:0]const u8 {
-            if (is_disabled) {
+            if (RuntimeTranspilerCache.is_disabled) {
                 return error.CacheDisabled;
             }
             const path = ((runtime_transpiler_cache) orelse (path: {
             const path = reallyGetCacheDir((&cache_dir_bufs.get().buf));
             if ((path.len == 0)) {
-                is_disabled = true;
+                RuntimeTranspilerCache.is_disabled = true;
                 return error.CacheDisabled;
             }
             runtime_transpiler_cache = path;
@@ -250,7 +250,7 @@ pub fn get(self: *RuntimeTranspilerCache, source: *const bun.logger.Source, pars
             if ((source.contents.len < MINIMUM_CACHE_SIZE)) {
                 return false;
             }
-            if (self.is_disabled) {
+            if (RuntimeTranspilerCache.is_disabled) {
                 return false;
             }
             if ((!source.path.isFile())) {
@@ -289,7 +289,7 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
             if (comptime (!bun.FeatureFlags.runtime_transpiler_cache)) {
                 _ = @compileError("RuntimeTranspilerCache is disabled");
             }
-            if (((self.input_hash == null) or self.is_disabled)) {
+            if (((self.input_hash == null) or RuntimeTranspilerCache.is_disabled)) {
                 return;
             }
             _ = bun.assert((self.entry == null));

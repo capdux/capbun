@@ -122,7 +122,7 @@ return;
 pub fn retroactivelyReportScope(agent: *Handle, scope: *bun_test.DescribeScope, parent_id: i32, max_id: *i32, source_url: *bun.String) void {
             for (scope.entries.items) |*entry| {
                 _ = &entry;
-                switch ((entry.*).*) {
+                switch ((entry.*)) {
 .describe => |describe| {
 if ((describe.base.test_id_for_debugger == 0)) {
                     max_id.* = (max_id.* + 1);

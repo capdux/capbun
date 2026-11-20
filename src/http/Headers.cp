@@ -154,14 +154,15 @@ export @root @value struct Headers {
         };
         const buf_len_before_content_type = buf_len;
         let needs_content_type = false;
-        if (body := options.body) {
+        if (b := options.body) {
             let has_ct = false;
             if (headers_ref2 := fetch_headers_ref) {
                 has_ct = headers_ref2.fastHas(.ContentType);
             }
-            if (body.hasContentTypeFromUser() && !has_ct) {
+            const req_body: *const bun.webcore.Blob.BlobAny = b;
+            if (req_body.hasContentTypeFromUser() && !has_ct) {
                 header_count += 1;
-                buf_len += (body.contentType().len + "Content-Type".len) as u32;
+                buf_len += (req_body.contentType().len + "Content-Type".len) as u32;
                 needs_content_type = true;
             }
         }

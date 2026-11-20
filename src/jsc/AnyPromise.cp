@@ -8,7 +8,7 @@ const JSValue = jsc.JSValue;
 const VM = jsc.VM;
 
 @c {
-    fn JSC__AnyPromise__wrap(arg0: *JSGlobalObject, arg1: JSValue, arg2: *!, arg3: *const fn (*!, *JSGlobalObject) JSValue);
+    fn JSC__AnyPromise__wrap(arg0: *JSGlobalObject, arg1: JSValue, arg2: *!, arg3: *const fn (*!, *JSGlobalObject) callconv(.c) JSValue);
 }
 
 pub union(enum) AnyPromise {

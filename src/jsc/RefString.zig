@@ -55,7 +55,7 @@ hash: Hash = 0,
 @"impl": bun.WTF.StringImpl,
 allocator: std.mem.Allocator,
 ctx: ?*anyopaque = null,
-onBeforeDeinit: ?*const Callback = null,
+onBeforeDeinit: ?Callback = null,
 
 pub fn toJS(client: *RefString, global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
         return bun.String.init(client.@"impl").toJS(global);

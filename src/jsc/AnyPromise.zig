@@ -68,31 +68,31 @@ pub const AnyPromise = union(enum) {
     normal: *JSPromise,
     internal: *JSInternalPromise,
 
-pub fn unwrap(self: *AnyPromise, vm: *VM, mode: JSPromise.UnwrapMode) JSPromise.Unwrapped {
+pub fn unwrap(self: AnyPromise, vm: *VM, mode: JSPromise.UnwrapMode) JSPromise.Unwrapped {
             return (switch (self.*) {
 inline else => |promise| promise.unwrap(vm, mode),
 });
     }
 
-pub fn status(self: *const AnyPromise) JSPromise.Status {
+pub fn status(self: AnyPromise) JSPromise.Status {
             return (switch (self.*) {
 inline else => |promise| promise.status(),
 });
     }
 
-pub fn result(self: *AnyPromise, vm: *VM) JSValue {
+pub fn result(self: AnyPromise, vm: *VM) JSValue {
             return (switch (self.*) {
 inline else => |promise| promise.result(vm),
 });
     }
 
-pub fn isHandled(self: *const AnyPromise) bool {
+pub fn isHandled(self: AnyPromise) bool {
             return (switch (self.*) {
 inline else => |promise| promise.isHandled(),
 });
     }
 
-pub fn setHandled(self: *AnyPromise, vm: *VM) void {
+pub fn setHandled(self: AnyPromise, vm: *VM) void {
             _ = &vm;
             switch (self.*) {
 inline else => |promise| {
@@ -101,7 +101,7 @@ _ = promise.setHandled();
 }
     }
 
-pub fn resolve(self: *AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
+pub fn resolve(self: AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
             switch (self.*) {
 inline else => |promise| {
 _ = try promise.resolve(globalThis, value);
@@ -109,7 +109,7 @@ _ = try promise.resolve(globalThis, value);
 }
     }
 
-pub fn reject(self: *AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
+pub fn reject(self: AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
             switch (self.*) {
 inline else => |promise| {
 _ = try promise.reject(globalThis, value);
@@ -117,19 +117,19 @@ _ = try promise.reject(globalThis, value);
 }
     }
 
-pub fn rejectWithAsyncStack(self: *AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
+pub fn rejectWithAsyncStack(self: AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
             _ = value.attachAsyncStackFromPromise(globalThis, self.asJSPromise());
             _ = try self.reject(globalThis, value);
     }
 
-pub fn asJSPromise(self: *const AnyPromise) *JSPromise {
+pub fn asJSPromise(self: AnyPromise) *JSPromise {
             return (switch (self.*) {
 .normal => |p| p,
 .internal => |p| @ptrCast(p),
 });
     }
 
-pub fn rejectAsHandled(self: *AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
+pub fn rejectAsHandled(self: AnyPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
             switch (self.*) {
 inline else => |promise| {
 _ = try promise.rejectAsHandled(globalThis, value);
@@ -137,13 +137,13 @@ _ = try promise.rejectAsHandled(globalThis, value);
 }
     }
 
-pub fn asValue(self: *const AnyPromise) JSValue {
+pub fn asValue(self: AnyPromise) JSValue {
             return (switch (self.*) {
 inline else => |promise| promise.toJS(),
 });
     }
 
-pub fn wrap(self: *AnyPromise, globalObject: *JSGlobalObject, comptime Function: anytype, args: std.meta.ArgsTuple(@TypeOf(Function))) bun.JSTerminated!void {
+pub fn wrap(self: AnyPromise, globalObject: *JSGlobalObject, comptime Function: anytype, args: std.meta.ArgsTuple(@TypeOf(Function))) bun.JSTerminated!void {
             const Args = std.meta.ArgsTuple(@TypeOf(Function));
             const Fn = Function;
             const Wrapper = struct {
@@ -171,4 +171,4 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const VM = jsc.VM;
 
-extern "c" fn JSC__AnyPromise__wrap(arg0: *JSGlobalObject, arg1: JSValue, arg2: *anyopaque, arg3: *const fn (*anyopaque, *JSGlobalObject) JSValue) callconv(.c) void;
+extern "c" fn JSC__AnyPromise__wrap(arg0: *JSGlobalObject, arg1: JSValue, arg2: *anyopaque, arg3: *const fn (*anyopaque, *JSGlobalObject) callconv(.c) JSValue) callconv(.c) void;

@@ -1,5 +1,6 @@
 // JavaScriptCore Main Thread Task Union and Queue Dispatcher in CP
-import { Environment, Output, TaggedPointerUnion, Async, shell, jsc, VirtualMachine } from "bun";
+import { Environment, Output, TaggedPointerUnion, Async, shell, jsc } from "bun";
+pub const VirtualMachine = jsc.VirtualMachine;
 const std = @import("std");
 const bun = @import("bun");
 

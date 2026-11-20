@@ -1,5 +1,6 @@
 // Garbage Collection Controller for JavaScriptCore in CP
-import { Environment, uws, jsc, VirtualMachine } from "bun";
+import { Environment, uws, jsc } from "bun";
+const VirtualMachine = jsc.VirtualMachine;
 const std = @import("std");
 const bun = @import("bun");
 

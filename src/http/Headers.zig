@@ -185,17 +185,18 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
         const buf_len_before_content_type = buf_len;
         var needs_content_type = false;
         _ = &needs_content_type;
-        if (options.body) |body| {
-            _ = &body;
+        if (options.body) |b| {
+            _ = &b;
             var has_ct = false;
             _ = &has_ct;
             if (fetch_headers_ref) |headers_ref2| {
                 _ = &headers_ref2;
                 has_ct = headers_ref2.fastHas(.ContentType);
             }
-            if (((body).?.hasContentTypeFromUser() and (!has_ct))) {
+            const req_body: *const bun.webcore.Blob.BlobAny = b;
+            if ((req_body.hasContentTypeFromUser() and (!has_ct))) {
                 header_count = (header_count + 1);
-                buf_len = (buf_len + (if (comptime @typeInfo(@TypeOf(((body).?.contentType().len + "Content-Type".len))) == .@"enum") cp_cast_int(u32, @intFromEnum(((body).?.contentType().len + "Content-Type".len))) else cp_cast_int(u32, ((body).?.contentType().len + "Content-Type".len))));
+                buf_len = (buf_len + (if (comptime @typeInfo(@TypeOf((req_body.contentType().len + "Content-Type".len))) == .@"enum") cp_cast_int(u32, @intFromEnum((req_body.contentType().len + "Content-Type".len))) else cp_cast_int(u32, (req_body.contentType().len + "Content-Type".len))));
                 needs_content_type = true;
             }
         }

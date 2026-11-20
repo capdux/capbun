@@ -324,7 +324,7 @@ pub static struct RapidHash {
 
         if (len <= 16) {
             if (len >= 4) {
-                const d: u64 = (len & 24) >> @intCast(len >> 3);
+                const d: u64 = (len & 24) >> @as(u6, @intCast(len >> 3));
                 const e = len - 4;
                 a = (RapidHash.r32(k) << 32) | RapidHash.r32(k[e..]);
                 b = (RapidHash.r32(k[d..]) << 32) | RapidHash.r32(k[(e - d)..]);

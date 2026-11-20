@@ -17,7 +17,7 @@ pub const RouteType = enum(u8) {
     @"static" = 4,
 };
 
-let empty_strings: [0]BunString = [];
+let empty_strings: [0]BunString = undefined;
 
 @c pub struct Route {
     route_id: RouteId,

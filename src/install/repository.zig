@@ -245,9 +245,9 @@ pub fn format(self: TopFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!vo
             }
             _ = try writer.writeAll(self.label);
             const sliceFn = @TypeOf(self.repository.repo).slice;
-            const repo = sliceFn(self.repository.repo, self.buf);
+            const repo = sliceFn((&self.repository.repo), self.buf);
             if ((!self.repository.owner.isEmpty())) {
-                _ = try writer.writeAll(sliceFn(self.repository.owner, self.buf));
+                _ = try writer.writeAll(sliceFn((&self.repository.owner), self.buf));
                 _ = try writer.writeAll("/");
             } else {
                 if (Dependency.isSCPLikePath(repo)) {

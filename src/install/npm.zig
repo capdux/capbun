@@ -107,7 +107,7 @@ return error.BadRequest;
 return error.TooManyRequests;
 },
 404 => {
-return PackageVersionResponse{ .not_found = .{} };
+return PackageVersionResponse{ .not_found = undefined };
 },
 500...599 => {
 return error.HTTPInternalServerError;

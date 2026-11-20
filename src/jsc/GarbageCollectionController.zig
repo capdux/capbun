@@ -64,7 +64,6 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 const Environment = @import("bun").Environment;
 const uws = @import("bun").uws;
 const jsc = @import("bun").jsc;
-const VirtualMachine = @import("bun").VirtualMachine;
 pub const GarbageCollectionController = @This();
 
 gc_timer: *uws.Timer = undefined,
@@ -232,6 +231,7 @@ pub fn performGC(self: *GarbageCollectionController) void {
         _ = vm.collectAsync();
         self.gc_last_heap_size = vm.blockBytesAllocated();
 }
+const VirtualMachine = jsc.VirtualMachine;
 const bun = @import("bun");
 pub const GCTimerState = enum {
     pending,
