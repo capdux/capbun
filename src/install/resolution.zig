@@ -335,7 +335,10 @@ pub fn fmtStorePath(self: @This(), string_buf: []const u8) StorePathFormatter {
         }
 
 pub fn fmtURL(self: @This(), string_bytes: []const u8) URLFormatter {
-                return URLFormatter{ .resolution = self, .buf = string_bytes };
+                return URLFormatter{ .resolution = (blk: {
+                break :blk (&self);
+
+}), .buf = string_bytes };
         }
 
 pub fn fmtForDebug(this_ptr: *const This, string_bytes: []const u8) DebugFormatter {

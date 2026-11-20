@@ -1351,7 +1351,7 @@ else => {
                     return error.InvalidPackageInfo;
 });
                     if ((registry_str.len == 0)) {
-                        var registry_url = Npm.Registry.default_url;
+                        var registry_url: []const u8 = Npm.Registry.default_url;
                         _ = &registry_url;
                         if (manager) |mgr| {
                             _ = &mgr;

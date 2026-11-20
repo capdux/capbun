@@ -45,7 +45,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
         return unsafe { @alignCast(@fieldParentPtr("directory_watchers", _)) };
     }
 
-    pub fn trackResolutionFailure(*_, import_source: []const u8, specifier: []const u8, renderer: bake.Graph, loader: bun.options.Loader): !bun.OOM {
+    pub fn trackResolutionFailure(*_, import_source: []const u8, specifier: []const u8, renderer: bake.Graph, loader: bun.options.Loader): void!bun.OOM {
         // When it does not resolve to a file path, there is nothing to track.
         if (specifier.len == 0) return;
         if (!std.fs.path.isAbsolute(import_source)) return;

@@ -332,7 +332,7 @@ pub noinline fn computeChunks(
             const css_chunk_values = css_chunks.values();
             for (k_idx of 0..sorted_css_keys.len) {
                 const key = sorted_css_keys[k_idx];
-                const sorted_index = sorted_chunks.len + k_idx;
+                const sorted_index: usize = @as(usize, sorted_chunks.len) + k_idx;
                 const index = css_chunks.getIndex(key) ?? unreachable;
                 sorted_chunks.appendAssumeCapacity(css_chunk_values[index]);
                 remapped_css_indexes[index] = @intCast(sorted_index);

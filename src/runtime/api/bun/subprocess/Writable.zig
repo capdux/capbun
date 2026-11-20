@@ -146,7 +146,7 @@ pub fn onStart(self: *@This(), _: *Writable) void {
         _ = self;
     }
 
-pub fn init(stdio: *Stdio, event_loop: *jsc.EventLoop, subprocess: *Subprocess, result: StdioResult, promise_for_stream: *jsc.JSValue) Writable!void {
+pub fn init(stdio: *Stdio, event_loop: *jsc.EventLoop, subprocess: *Subprocess, result: StdioResult, promise_for_stream: *jsc.JSValue) !Writable {
             _ = Subprocess.assertStdioResult(result);
             if (Environment.isWindows) {
                 switch (stdio.*) {
@@ -267,13 +267,13 @@ _ = bun.assert((memfd != bun.invalid_fd));
 return Writable{ .fd = result.? };
 },
 .inherit => {
-return error.inherit;
+return .inherit;
 },
 .path, .ignore => {
-return error.ignore;
+return .ignore;
 },
 .ipc, .capture => {
-return error.ignore;
+return .ignore;
 },
 }
     }

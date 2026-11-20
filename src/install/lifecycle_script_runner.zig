@@ -416,8 +416,7 @@ else => {
 .signaled => |signal| {
 _ = self.printOutput();
             const signal_code = bun.SignalCode.@"from"(signal);
-            const sig_args: struct { []const u8, []const u8, *anyopaque } = .{ self.scriptName(), self.package_name, signal_code.fmt(Output.enable_ansi_colors_stderr) };
-            _ = Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" terminated by {f}<r>", sig_args);
+            _ = Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" terminated by {f}<r>", .{ self.scriptName(), self.package_name, signal_code.fmt(Output.enable_ansi_colors_stderr) });
             _ = Global.raiseIgnoringPanicHandler(signal);
 },
 .err => |e| {

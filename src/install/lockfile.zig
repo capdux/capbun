@@ -1119,7 +1119,7 @@ pub fn fmtMetaHash(client: *const Lockfile) MetaHashFormatter {
 }
 
 pub fn resolve(lockfile: *Lockfile, log: *logger.Log) Tree.SubtreeError!void {
-        return hoist(lockfile, log, .resolvable, .{}, .{}, .{}, .{});
+        return hoist(lockfile, log, .resolvable, undefined, undefined, undefined, undefined);
 }
 
 pub fn filter(lockfile: *Lockfile, log: *logger.Log, manager: *PackageManager, install_root_dependencies: bool, workspace_filters: []const WorkspaceFilter, packages_to_install: ?[]const PackageID) Tree.SubtreeError!void {
@@ -1711,13 +1711,13 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
                 _ = &j;
                 inline while ((j < 16)) : (j = (j + 1)) {
                     alphabetized_names[cp_cast_int(usize, ((i + j) - 1))] = @as(PackageID, @truncate((i + j)));
-                    _ = string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[@as(usize, @intCast((i + j)))], bytes), resolutions[@as(usize, @intCast((i + j)))].fmt(bytes, .posix) });
+                    _ = string_builder.fmtCount("{s}@{f}\n", .{ str_slice((&names[@as(usize, @intCast((i + j)))]), bytes), resolutions[@as(usize, @intCast((i + j)))].fmt(bytes, .posix) });
                 }
             }
             while ((i < packages_len)) : (i = (i + 1)) {
                 const str_slice = String.slice;
                 alphabetized_names[cp_cast_int(usize, (i - 1))] = @as(PackageID, @truncate(i));
-                _ = string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[@as(usize, @intCast(i))], bytes), resolutions[@as(usize, @intCast(i))].fmt(bytes, .posix) });
+                _ = string_builder.fmtCount("{s}@{f}\n", .{ str_slice((&names[@as(usize, @intCast(i))]), bytes), resolutions[@as(usize, @intCast(i))].fmt(bytes, .posix) });
             }
         }
         const scripts_begin: []const u8 = "\n-- BEGIN SCRIPTS --\n";

@@ -111,7 +111,8 @@ pub fn generateCompileResultForJSChunk(task: *ThreadPoolLib.Task) void {
 }
 
 pub fn generateCompileResultForJSChunkImpl(worker: *ThreadPool.Worker, c: *LinkerContext, chunk: *Chunk, part_range: PartRange) CompileResult {
-        const trace = bun.perf.trace("Bundler.generateCodeForFileInChunkJS");
+        var trace = bun.perf.trace("Bundler.generateCodeForFileInChunkJS");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

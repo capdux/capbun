@@ -85,7 +85,7 @@ pub const Writable = union(enum) {
         subprocess: *Subprocess,
         result: StdioResult,
         promise_for_stream: *jsc.JSValue,
-    ) !Writable {
+    ): Writable! {
         Subprocess.assertStdioResult(result);
 
         if (Environment.isWindows) {

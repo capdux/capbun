@@ -209,22 +209,22 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
         if (visitor.has_external_import) {
             var is_at_layer_prefix = true;
             _ = &is_at_layer_prefix;
-            for (cp_mut_slice(&order.slice())) |*entry| {
+            for (cp_iter_slice(order.slice())) |entry| {
                 _ = &entry;
-                if (((((entry.*).kind == .layers) and is_at_layer_prefix) or ((entry.*).kind == .external_path))) {
-                    _ = bun.handleOom(wip_order.append(temp_allocator, (entry.*).*));
+                if ((((entry.kind == .layers) and is_at_layer_prefix) or (entry.kind == .external_path))) {
+                    _ = bun.handleOom(wip_order.append(temp_allocator, entry));
                 }
-                if (((entry.*).kind != .layers)) {
+                if ((entry.kind != .layers)) {
                     is_at_layer_prefix = false;
                 }
             }
             is_at_layer_prefix = true;
-            for (cp_mut_slice(&order.slice())) |*entry| {
+            for (cp_iter_slice(order.slice())) |entry| {
                 _ = &entry;
-                if (((((entry.*).kind != .layers) or (!is_at_layer_prefix)) and ((entry.*).kind != .external_path))) {
-                    _ = bun.handleOom(wip_order.append(temp_allocator, (entry.*).*));
+                if ((((entry.kind != .layers) or (!is_at_layer_prefix)) and (entry.kind != .external_path))) {
+                    _ = bun.handleOom(wip_order.append(temp_allocator, entry));
                 }
-                if (((entry.*).kind != .layers)) {
+                if ((entry.kind != .layers)) {
                     is_at_layer_prefix = false;
                 }
             }
@@ -359,13 +359,13 @@ var layers = (&entry.kind.layers);
                             if (((is_adjacent and (wip_order.at(duplicate_index).kind == .layers)) and importConditionsAreEqual(entry.conditions.sliceConst(), wip_order.at(duplicate_index).conditions.sliceConst()))) {
                                 _ = wip_order.pop();
                             }
-                            _ = bun.handleOom(wip_order.append(temp_allocator, entry.*));
+                            _ = bun.handleOom(wip_order.append(temp_allocator, entry));
                         }
                         continue :next_forward;
                     }
                 }
                 _ = (blk_catch_5: { break :blk_catch_5 ((layer_duplicates.mut(index).indices.append(temp_allocator, @intCast(wip_order.len))) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
-                _ = bun.handleOom(wip_order.append(temp_allocator, entry.*));
+                _ = bun.handleOom(wip_order.append(temp_allocator, entry));
             }
             _ = debugCssOrder(c, (&wip_order), .WHILE_OPTIMIZING_REDUNDANT_LAYER_RULES);
             order.len = wip_order.len;

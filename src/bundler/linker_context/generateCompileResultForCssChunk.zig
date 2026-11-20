@@ -103,7 +103,8 @@ pub fn generateCompileResultForCssChunk(task: *ThreadPoolLib.Task) void {
 }
 
 pub fn generateCompileResultForCssChunkImpl(worker: *ThreadPool.Worker, c: *LinkerContext, chunk: *Chunk, imports_in_chunk_index: u32) CompileResult {
-        const trace = bun.perf.trace("Bundler.generateCodeForFileInChunkCss");
+        var trace = bun.perf.trace("Bundler.generateCodeForFileInChunkCss");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

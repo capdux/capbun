@@ -1384,7 +1384,7 @@ pub fn resolve(
     lockfile: *Lockfile,
     log: *logger.Log,
 ): Tree.SubtreeError!void {
-    return hoist(lockfile, log, .resolvable, {}, {}, {}, {});
+    return hoist(lockfile, log, .resolvable, undefined, undefined, undefined, undefined);
 }
 
 pub fn filter(
@@ -2135,7 +2135,7 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
             inline while (j < 16) : (j += 1) {
                 alphabetized_names[(i + j) - 1] = @as(PackageID, @truncate((i + j)));
                 // posix path separators because we only use posix in the lockfile
-                string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[i + j], bytes), resolutions[i + j].fmt(bytes, .posix) });
+                string_builder.fmtCount("{s}@{f}\n", .{ str_slice(&names[i + j], bytes), resolutions[i + j].fmt(bytes, .posix) });
             }
         }
 
@@ -2143,7 +2143,7 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
             const str_slice = String.slice;
             alphabetized_names[i - 1] = @as(PackageID, @truncate(i));
             // posix path separators because we only use posix in the lockfile
-            string_builder.fmtCount("{s}@{f}\n", .{ str_slice(names[i], bytes), resolutions[i].fmt(bytes, .posix) });
+            string_builder.fmtCount("{s}@{f}\n", .{ str_slice(&names[i], bytes), resolutions[i].fmt(bytes, .posix) });
         }
     }
 

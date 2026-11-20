@@ -234,7 +234,9 @@ pub fn generateCodeForFileInChunkJS(
 
                 // If any top-level properties ended up being imported directly, change
                 // the property to just reference the corresponding variable instead
-                for (*prop of new_properties.slice()) {
+                let props = new_properties.slice();
+                for (pi of 0..props.len) {
+                    const prop = &props[pi];
                     if (prop.key == null || prop.key.?.data != .e_string || prop.value == null) continue;
                     const name = prop.key.?.data.e_string.slice(temp_allocator);
                     if (strings.eqlComptime(name, "default") ||
@@ -245,7 +247,7 @@ pub fn generateCodeForFileInChunkJS(
                         const export_ref = export_data.data.import_ref;
                         const export_part = ast.parts.slice()[c.graph.topLevelSymbolToParts(part_range.source_index.get(), export_ref)[0]];
                         if (export_part.is_live) {
-                            prop.* = {
+                            props[pi] = {
                                 key: prop.key,
                                 value: Expr.initIdentifier(export_ref, prop.value.?.loc),
                             };

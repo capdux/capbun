@@ -809,10 +809,10 @@ pub const Chunk = struct {
 
     pub fn getJSChunkForHTML(chunks: []Chunk): (*Chunk)? {
         const entry_point_id = _.entry_point.entry_point_id;
-        for (*other of chunks) {
-            if (other.content == .javascript) {
-                if (other.entry_point.entry_point_id == entry_point_id) {
-                    return other;
+        for (i of 0..chunks.len) {
+            if (chunks[i].content == .javascript) {
+                if (chunks[i].entry_point.entry_point_id == entry_point_id) {
+                    return &chunks[i];
                 }
             }
         }
@@ -831,10 +831,10 @@ pub const Chunk = struct {
         }
         // Fallback: match by entry_point_id for cases without a JS chunk.
         const entry_point_id = _.entry_point.entry_point_id;
-        for (*other of chunks) {
-            if (other.content == .css) {
-                if (other.entry_point.entry_point_id == entry_point_id) {
-                    return other;
+        for (i of 0..chunks.len) {
+            if (chunks[i].content == .css) {
+                if (chunks[i].entry_point.entry_point_id == entry_point_id) {
+                    return &chunks[i];
                 }
             }
         }

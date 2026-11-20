@@ -990,7 +990,7 @@ pub fn enqueueServerComponentGeneratedFile(self: *BundleV2, data: ServerComponen
             _ = try self.graph.ast.append(self.allocator(), JSAst.empty);
             const task = bun.new(ServerComponentParseTask, .{ .data = data, .ctx = self, .source = new_source });
             _ = self.incrementScanCounter();
-            _ = self.graph.pool.worker_pool.schedule(.{ .@"from" = (&task.task) });
+            _ = self.graph.pool.worker_pool.schedule(ThreadPoolLib.Batch.from((&task.task)));
             return (if (comptime @typeInfo(@TypeOf(source_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(source_index)) else cp_cast_int(i32, source_index));
     }
 
@@ -1564,7 +1564,10 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
                         defer {
                         _ = log.deinit();
                         }
-                        if ((self.linker.scanCSSImports((if (comptime @typeInfo(@TypeOf(index)) == .@"enum") cp_cast_int(i32, @intFromEnum(index)) else cp_cast_int(i32, index)), import_records.slice(), css_asts, sources, loaders, *const log) == .errors)) {
+                        if ((self.linker.scanCSSImports(@as(u32, @intCast(index)), import_records.slice(), css_asts, sources, loaders, (blk: {
+                        break :blk *const log;
+
+})) == .errors)) {
                             _ = dev_server.handleParseTaskFailure(error.InvalidCssImport, .client, sources[@as(usize, @intCast(index))].path.text, *const log, self);
                             _ = start.css_entry_points.swapRemove(Index.init(index));
                         }

@@ -421,7 +421,7 @@ pub struct ShellSubprocess {
                                 pipe: pipe,
                             };
                         }
-                        return Writable{ .inherit = {} };
+                        return .inherit;
                     },
 
                     .blob => |blob| {
@@ -441,7 +441,7 @@ pub struct ShellSubprocess {
                         return Writable{ .fd = dup2.to.toFd() };
                     },
                     .inherit => {
-                        return Writable{ .inherit = {} };
+                        return .inherit;
                     },
                     .memfd, .path, .ignore => {
                         return Writable{ .ignore = {} };
@@ -479,7 +479,7 @@ pub struct ShellSubprocess {
                     return Writable{ .fd = result.? };
                 },
                 .inherit => {
-                    return Writable{ .inherit = {} };
+                    return .inherit;
                 },
                 .path, .ignore => {
                     return Writable{ .ignore = {} };

@@ -445,12 +445,11 @@ pub struct LifecycleScriptSubprocess {
                 _.printOutput();
                 const signal_code = bun.SignalCode.@"from"(signal);
 
-                const sig_args = .{
+                Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" terminated by {f}<r>", .{
                     _.scriptName(),
                     _.package_name,
                     signal_code.fmt(Output.enable_ansi_colors_stderr),
-                };
-                Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> script from \"<b>{s}<r>\" terminated by {f}<r>", sig_args);
+                });
 
                 Global.raiseIgnoringPanicHandler(signal);
             },

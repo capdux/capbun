@@ -332,7 +332,7 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
                 const __end_6 = sorted_css_keys.len;
                 while (k_idx < __end_6) : (k_idx += 1) {
                     const key = sorted_css_keys[@as(usize, @intCast(k_idx))];
-                    const sorted_index = (sorted_chunks.len + k_idx);
+                    const sorted_index: usize = ((if (comptime @typeInfo(@TypeOf(sorted_chunks.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(sorted_chunks.len)) else cp_cast_int(usize, sorted_chunks.len)) + k_idx);
                     const index = ((css_chunks.getIndex(key)) orelse (unreachable));
                     _ = sorted_chunks.appendAssumeCapacity(css_chunk_values[@as(usize, @intCast(index))]);
                     remapped_css_indexes[cp_cast_int(usize, index)] = @intCast(sorted_index);

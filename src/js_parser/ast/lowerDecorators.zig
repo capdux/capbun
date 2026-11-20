@@ -341,9 +341,14 @@ _ = rewriteExpr(p, (&e.test_), kind);
             _ = rewriteExpr(p, (&e.no), kind);
 },
 .e_array => |e| {
-for (cp_mut_slice(&e.items.slice())) |*item| {
-                _ = &item;
-                _ = rewriteExpr(p, (item.*), kind);
+const items = e.items.slice();
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_2 = items.len;
+                while (idx < __end_2) : (idx += 1) {
+                    _ = rewriteExpr(p, (&items[@as(usize, @intCast(idx))]), kind);
+                }
             }
 },
 .e_object => |e| {
@@ -1339,9 +1344,8 @@ else => 5,
             if ((private_lowered_map.count() > 0)) {
                 for (new_properties.items) |*nprop| {
                     _ = &nprop;
-                    if ((if (@typeInfo(@TypeOf((nprop.*))) == .@"enum") @intFromEnum((nprop.*)) else (nprop.*).value)) |*v| {
-                        _ = &v;
-                        _ = rewritePrivateAccessesInExpr(p, (v.*), (&private_lowered_map));
+                    if (((if (@typeInfo(@TypeOf((nprop.*))) == .@"enum") @intFromEnum((nprop.*)) else (nprop.*).value) != null)) {
+                        _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf((nprop.*))) == .@"enum") @intFromEnum((nprop.*)) else (nprop.*).value).?), (&private_lowered_map));
                     }
                     if ((nprop.*).class_static_block) |sb| {
                         _ = &sb;
@@ -1350,16 +1354,14 @@ else => 5,
                 }
                 for (instance_init_entries.items) |*entry| {
                     _ = &entry;
-                    if ((entry.*).prop.initializer) |*ini| {
-                        _ = &ini;
-                        _ = rewritePrivateAccessesInExpr(p, (ini.*), (&private_lowered_map));
+                    if (((entry.*).prop.initializer != null)) {
+                        _ = rewritePrivateAccessesInExpr(p, (&(entry.*).prop.initializer.?), (&private_lowered_map));
                     }
                 }
                 for (static_init_entries.items) |*entry| {
                     _ = &entry;
-                    if ((entry.*).prop.initializer) |*ini| {
-                        _ = &ini;
-                        _ = rewritePrivateAccessesInExpr(p, (ini.*), (&private_lowered_map));
+                    if (((entry.*).prop.initializer != null)) {
+                        _ = rewritePrivateAccessesInExpr(p, (&(entry.*).prop.initializer.?), (&private_lowered_map));
                     }
                 }
                 for (extracted_static_blocks.items) |sb| {

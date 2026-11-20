@@ -97,6 +97,7 @@ pub const AstBuilder = struct {
     declared_symbols: js_ast.DeclaredSymbol.List,
     hot_reloading: bool,
     hmr_api_ref: SymbolRef,
+    options: js_parser.Parser.Options = default_options,
 
 pub fn init(allocator: std.mem.Allocator, source: *const Logger.Source, hot_reloading: bool) !AstBuilder {
             const scope = try allocator.create(Scope);
@@ -143,7 +144,7 @@ pub fn addImportRecord(self: *AstBuilder, path: []const u8, kind: ImportKind) !u
             return @as(u32, @truncate(index));
     }
 
-pub fn addImportStmt(self: *AstBuilder, path: []const u8, identifiers_to_import: anytype) !ImportStmtReturnType(identifiers_to_import) {
+pub fn addImportStmt(self: *AstBuilder, path: []const u8, comptime identifiers_to_import: anytype) !ImportStmtReturnType(identifiers_to_import) {
             var out: ImportStmtReturnType(identifiers_to_import) = undefined;
             _ = &out;
             const record = try self.addImportRecord(path, .stmt);
@@ -308,7 +309,6 @@ pub fn panic(self: *AstBuilder, comptime fmt: []const u8, args: anytype) noretur
 pub fn @"module.exports"(self: *AstBuilder, loc: Logger.Loc) Expr {
             return self.newExpr(E.Dot{ .name = "exports", .name_loc = loc, .target = self.newExpr(E.Identifier{ .@"ref" = self.module_ref }) });
     }
-    pub const options = default_options;
     pub const import_items_for_namespace = default_import_items_for_namespace;
     pub const parser_features = ParserFeatures;
 };

@@ -1694,7 +1694,7 @@ pub fn parseIntoBinaryLockfile(
 
                 if (registry_str.len == 0) {
                     // Use scope-specific registry if available, otherwise fall back to default
-                    let registry_url = Npm.Registry.default_url;
+                    let registry_url: []const u8 = Npm.Registry.default_url;
                     if (mgr := manager) {
                         registry_url = mgr.scopeForPackageName(name_str).url.href;
                     }

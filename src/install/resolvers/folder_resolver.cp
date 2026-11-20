@@ -168,12 +168,13 @@ struct CacheFolderResolver {
     version: Semver.Version,
 
     pub fn resolve(comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr): !Resolution {
+        const str_from = String.from;
         return Resolution{
             tag: Resolution.Tag.npm,
             value: Resolution.Value{
                 npm: .{
                     version: _.version,
-                    url: (String.from)(""),
+                    url: str_from(""),
                 },
             },
         };

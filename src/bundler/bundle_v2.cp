@@ -1523,7 +1523,7 @@ pub struct BundleV2 {
 
         _.incrementScanCounter();
 
-        _.graph.pool.worker_pool.schedule(.@"from"(&task.task));
+        _.graph.pool.worker_pool.schedule(ThreadPoolLib.Batch.from(&task.task));
 
         return i32(source_index);
     }
@@ -2520,12 +2520,12 @@ pub struct BundleV2 {
                         let log = Logger.Log.init(_.allocator());
                         defer log.deinit();
                         if (_.linker.scanCSSImports(
-                            i32(index),
+                            @as(u32, @intCast(index)),
                             import_records.slice(),
                             css_asts,
                             sources,
                             loaders,
-                            &log,
+                            unsafe { &log },
                         ) == .errors) {
                             // TODO: it could be possible for a plugin to change
                             // the type of loader from whatever it was into a

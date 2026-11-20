@@ -369,7 +369,7 @@ fn getEmptyCSSAST(
     allocator: std.mem.Allocator,
     source: *const Logger.Source,
 ): JSAst! {
-    const root = Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc{ start: 0 });
+    const root = Expr.init(E.Object, std.mem.zeroInit(E.Object, {}), Logger.Loc{ start: 0 });
     let ast = JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")?).?);
     ast.css = bun.create(allocator, bun.css.BundlerStyleSheet, bun.css.BundlerStyleSheet.empty(allocator));
     return ast;
@@ -420,7 +420,7 @@ fn getAST(
         .json, .jsonc => {
             let trace = bun.perf.trace("Bundler.ParseJSON");
             defer trace.end();
-            const root = (resolver.caches.json.parseJSON(log, source, allocator, if (loader == .jsonc) .jsonc else .json, true)?) ?? Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc.Empty);
+            const root = (resolver.caches.json.parseJSON(log, source, allocator, if (loader == .jsonc) .jsonc else .json, true)?) ?? Expr.init(E.Object, std.mem.zeroInit(E.Object, {}), Logger.Loc.Empty);
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")?).?);
         },
         .toml => {
@@ -687,7 +687,7 @@ fn getAST(
                 * = has_any_css_locals.fetchAdd(1, .monotonic);
             }
             // If this is a css module, the final exports object wil be set in `generateCodeForLazyExport`.
-            const root = Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc{ start: 0 });
+            const root = Expr.init(E.Object, std.mem.zeroInit(E.Object, {}), Logger.Loc{ start: 0 });
             const css_ast_heap = bun.create(allocator, bun.css.BundlerStyleSheet, css_ast);
             let ast = JSAst.init((js_parser.newLazyExportASTImpl(allocator, transpiler.options.define, opts, &temp_log, root, source, "", extra.symbols)?).?);
             ast.css = css_ast_heap;

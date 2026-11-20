@@ -124,7 +124,8 @@ pub fn ReturnType(comptime is_dev_server: bool) type {
 }
 
 pub fn generateChunksInParallel(c: *LinkerContext, chunks: []Chunk, comptime is_dev_server: bool) !ReturnType(is_dev_server) {
-        const trace = bun.perf.trace("Bundler.generateChunksInParallel");
+        var trace = bun.perf.trace("Bundler.generateChunksInParallel");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

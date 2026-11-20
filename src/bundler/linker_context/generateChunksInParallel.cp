@@ -7,7 +7,7 @@ pub fn generateChunksInParallel(
     chunks: []Chunk,
     comptime is_dev_server: bool,
 ): ReturnType(is_dev_server)! {
-    const trace = bun.perf.trace("Bundler.generateChunksInParallel");
+    let trace = bun.perf.trace("Bundler.generateChunksInParallel");
     defer trace.end();
 
     c.mangleLocalCss();

@@ -531,7 +531,7 @@ else => ((((((((((((((((((((((((((((((("var __dispose = Symbol.dispose || /* @__
 }
 
 pub fn getEmptyCSSAST(log: *Logger.Log, transpiler: *Transpiler, opts: js_parser.Parser.Options, allocator: std.mem.Allocator, source: *const Logger.Source) !JSAst {
-        const root = Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc{ .start = 0 });
+        const root = Expr.init(E.Object, std.mem.zeroInit(E.Object, .{}), Logger.Loc{ .start = 0 });
         var ast = JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")).?);
         _ = &ast;
         ast.css = bun.create(allocator, bun.css.BundlerStyleSheet, bun.css.BundlerStyleSheet.empty(allocator));
@@ -568,7 +568,7 @@ var trace = bun.perf.trace("Bundler.ParseJSON");
         defer {
         _ = trace.end();
         }
-        const root = ((try resolver.caches.json.parseJSON(log, source, allocator, (if ((loader == .jsonc)) .jsonc else .json), true)) orelse (Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc.Empty)));
+        const root = ((try resolver.caches.json.parseJSON(log, source, allocator, (if ((loader == .jsonc)) .jsonc else .json), true)) orelse (Expr.init(E.Object, std.mem.zeroInit(E.Object, .{}), Logger.Loc.Empty)));
         return JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")).?);
 },
 .toml => {
@@ -755,7 +755,7 @@ var import_records: BabyList(ImportRecord) = .{};
         if ((css_ast.local_scope.count() > 0)) {
             _ = has_any_css_locals.fetchAdd(1, .monotonic);
         }
-        const root = Expr.init(E.Object, std.mem.zeroes(E.Object), Logger.Loc{ .start = 0 });
+        const root = Expr.init(E.Object, std.mem.zeroInit(E.Object, .{}), Logger.Loc{ .start = 0 });
         const css_ast_heap = bun.create(allocator, bun.css.BundlerStyleSheet, css_ast);
         var ast = JSAst.init((try js_parser.newLazyExportASTImpl(allocator, transpiler.options.define, opts, (&temp_log), root, source, "", extra.symbols)).?);
         _ = &ast;

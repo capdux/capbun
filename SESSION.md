@@ -28,3 +28,4 @@
 - **[2026-11-21 01:34] Wave 35 A 组验收提交（26 CSS 模块全绿）**：完成 CSS properties(14)/values(7)/selectors(2)/core(3) 26 模块独立验收（26/26 PASS，4 项门禁全绿）并原子提交；静待 C 组（`e288f876`）完成即跑 Wave 36 `zig:check`。
 - **[2026-11-21 01:36] Wave 35 C 组验收提交（4 根因全绿）**：完成 `ParseTask`（`@"err"`）、`Chunk`（`CssImportOrderLayersVTable`）、`jsc/ipc`（`pub const Data = SendQueue`）、`properties_impl`（`static fn toCss`）独立验收（4/4 PASS，4 项门禁全绿，ratio 0.993x~1.039x）并原子提交；静待 D 组（`a320a9de`）完成即跑 Wave 36 `zig:check`。
 - **[2026-11-21 01:37] Wave 35 D 组验收提交（3 CSS 根因全绿，Wave 35 清仓）**：完成 `easing`（`EasingFunction.eql` `static fn`）、`keyframes`、`font_palette_values`（提升嵌套解析器+`static fn`）独立验收（3/3 PASS，4 项门禁全绿，ratio 1.01x~1.018x）并原子提交；随即运行 Wave 36 全仓 `bun run zig:check`。
+- **[2026-11-21 02:51] Wave 36 B 组验收提交（20 修改模块+3 联动/待核对模块全绿）**：完成 Bundler/`linker_context`/`DirectoryWatchStore`/Install/`lowerDecorators`/`Writable`/`subproc` 20 模块独立验收（20/20 PASS，4 项门禁全绿，ratio 0.901x~1.111x）并原子提交；补派 C 组修复 `js_printer.cp:6241` `pub fn print`。

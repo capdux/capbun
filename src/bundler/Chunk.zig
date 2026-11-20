@@ -659,11 +659,15 @@ pub fn closingTagForContent(self: @This()) []const u8 {
 
 pub fn getJSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
             const entry_point_id = self.entry_point.entry_point_id;
-            for (cp_mut_slice(&chunks)) |*other| {
-                _ = &other;
-                if (((other.*).content == .javascript)) {
-                    if (((other.*).entry_point.entry_point_id == entry_point_id)) {
-                        return (other.*);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_0 = chunks.len;
+                while (i < __end_0) : (i += 1) {
+                    if ((chunks[@as(usize, @intCast(i))].content == .javascript)) {
+                        if ((chunks[@as(usize, @intCast(i))].entry_point.entry_point_id == entry_point_id)) {
+                            return (&chunks[@as(usize, @intCast(i))]);
+                        }
                     }
                 }
             }
@@ -679,11 +683,15 @@ pub fn getCSSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
                 }
             }
             const entry_point_id = self.entry_point.entry_point_id;
-            for (cp_mut_slice(&chunks)) |*other| {
-                _ = &other;
-                if (((other.*).content == .css)) {
-                    if (((other.*).entry_point.entry_point_id == entry_point_id)) {
-                        return (other.*);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_1 = chunks.len;
+                while (i < __end_1) : (i += 1) {
+                    if ((chunks[@as(usize, @intCast(i))].content == .css)) {
+                        if ((chunks[@as(usize, @intCast(i))].entry_point.entry_point_id == entry_point_id)) {
+                            return (&chunks[@as(usize, @intCast(i))]);
+                        }
                     }
                 }
             }

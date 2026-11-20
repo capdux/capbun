@@ -314,9 +314,11 @@ pub fn processDependencyList(
             manager.processDependencyListItem(item, &any_root, install_peer)?;
         }
 
-        if (comptime @TypeOf(callbacks) != void && @TypeOf(callbacks.onResolve) != void) {
-            if (any_root) {
-                callbacks.onResolve(ctx);
+        if (comptime @TypeOf(callbacks) != void) {
+            if (comptime @TypeOf(callbacks.onResolve) != void) {
+                if (any_root) {
+                    callbacks.onResolve(ctx);
+                }
             }
         }
 

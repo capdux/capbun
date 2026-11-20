@@ -27,7 +27,7 @@ pub fn generateCompileResultForJSChunk(task: *ThreadPoolLib.Task) {
 }
 
 fn generateCompileResultForJSChunkImpl(worker: *ThreadPool.Worker, c: *LinkerContext, chunk: *Chunk, part_range: PartRange): CompileResult {
-    const trace = bun.perf.trace("Bundler.generateCodeForFileInChunkJS");
+    let trace = bun.perf.trace("Bundler.generateCodeForFileInChunkJS");
     defer trace.end();
 
     // Client and server bundles for Bake must be globally allocated, as they

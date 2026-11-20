@@ -78,7 +78,7 @@ pub struct AstBuilder {
     hmr_api_ref: SymbolRef,
 
     // stub fields for ImportScanner duck typing
-    pub const options = default_options;
+    options: js_parser.Parser.Options = default_options,
     pub const import_items_for_namespace = default_import_items_for_namespace;
     pub const parser_features = ParserFeatures;
 
@@ -171,7 +171,7 @@ pub struct AstBuilder {
     fn addImportStmt(
         *_,
         path: []const u8,
-        identifiers_to_import: auto,
+        comptime identifiers_to_import: auto,
     ): ImportStmtReturnType(identifiers_to_import)! {
         let out: ImportStmtReturnType(identifiers_to_import) = undefined;
 

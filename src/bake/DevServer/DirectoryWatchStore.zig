@@ -96,7 +96,7 @@ pub fn owner(self: *DirectoryWatchStore) *DevServer {
 });
 }
 
-pub fn trackResolutionFailure(self: *DirectoryWatchStore, import_source: []const u8, specifier: []const u8, renderer: bake.Graph, loader: bun.options.Loader) !bun.OOM {
+pub fn trackResolutionFailure(self: *DirectoryWatchStore, import_source: []const u8, specifier: []const u8, renderer: bake.Graph, loader: bun.options.Loader) bun.OOM!void {
         if ((specifier.len == 0)) {
             return;
         }

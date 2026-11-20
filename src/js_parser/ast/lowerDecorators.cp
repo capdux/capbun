@@ -242,7 +242,8 @@ pub fn LowerDecorators(
                     rewriteExpr(p, &e.no, kind);
                 },
                 .e_array => |e| {
-                    for (*item of e.items.slice()) rewriteExpr(p, item, kind);
+                    const items = e.items.slice();
+                    for (idx of 0..items.len) rewriteExpr(p, &items[idx], kind);
                 },
                 .e_object => |e| {
                     for (*prop of e.properties.slice()) {
@@ -1120,15 +1121,15 @@ pub fn LowerDecorators(
             // ── Phase 5: Rewrite private accesses ────────────
             if (private_lowered_map.count() > 0) {
                 for (*nprop of new_properties.items) {
-                    if (*v := nprop.value) rewritePrivateAccessesInExpr(p, v, &private_lowered_map);
+                    if (nprop.value != null) rewritePrivateAccessesInExpr(p, &nprop.value.?, &private_lowered_map);
                     if (sb := nprop.class_static_block)
                         rewritePrivateAccessesInStmts(p, sb.stmts.slice(), &private_lowered_map);
                 }
                 for (*entry of instance_init_entries.items) {
-                    if (*ini := entry.prop.initializer) rewritePrivateAccessesInExpr(p, ini, &private_lowered_map);
+                    if (entry.prop.initializer != null) rewritePrivateAccessesInExpr(p, &entry.prop.initializer.?, &private_lowered_map);
                 }
                 for (*entry of static_init_entries.items) {
-                    if (*ini := entry.prop.initializer) rewritePrivateAccessesInExpr(p, ini, &private_lowered_map);
+                    if (entry.prop.initializer != null) rewritePrivateAccessesInExpr(p, &entry.prop.initializer.?, &private_lowered_map);
                 }
                 for (sb of extracted_static_blocks.items)
                     rewritePrivateAccessesInStmts(p, sb.stmts.slice(), &private_lowered_map);

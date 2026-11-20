@@ -771,7 +771,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     }
                         return Writable{ .pipe = pipe };
                     }
-                    return Writable{ .inherit = .{} };
+                    return .inherit;
     },
     .blob => |blob| {
     return Writable{ .buffer = StaticPipeWriter.create(event_loop, subprocess, result, .{ .blob = blob }) };
@@ -786,7 +786,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     return Writable{ .fd = dup2.to.toFd() };
     },
     .inherit => {
-    return Writable{ .inherit = .{} };
+    return .inherit;
     },
     .memfd, .path, .ignore => {
     return Writable{ .ignore = .{} };
@@ -817,7 +817,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     return Writable{ .fd = result.? };
     },
     .inherit => {
-    return Writable{ .inherit = .{} };
+    return .inherit;
     },
     .path, .ignore => {
     return Writable{ .ignore = .{} };

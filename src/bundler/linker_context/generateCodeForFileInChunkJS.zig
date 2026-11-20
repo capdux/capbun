@@ -286,21 +286,28 @@ _ = ((stmts.inside_wrapper_prefix.appendNonDependencySlice(stmts.inside_wrapper_
                     _ = &new_properties;
                     var resolved_exports = c.graph.@"meta".items(.resolved_exports)[@as(usize, @intCast(part_range.source_index.get()))];
                     _ = &resolved_exports;
-                    for (cp_mut_slice(&new_properties.slice())) |*prop| {
-                        _ = &prop;
-                        if (((((prop.*).key == null) or ((prop.*).key.?.data != .e_string)) or ((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value) == null))) {
-                            continue;
-                        }
-                        const name = (prop.*).key.?.data.e_string.slice(temp_allocator);
-                        if (((strings.eqlComptime(name, "default") or strings.eqlComptime(name, "__esModule")) or (!bun.js_lexer.isIdentifier(name)))) {
-                            continue;
-                        }
-                        if (resolved_exports.get(name)) |export_data| {
-                            _ = &export_data;
-                            const export_ref = export_data.data.import_ref;
-                            const export_part = ast.parts.slice()[@as(usize, @intCast(c.graph.topLevelSymbolToParts(part_range.source_index.get(), export_ref)[0]))];
-                            if (export_part.is_live) {
-                                (prop.*).* = .{ .key = (prop.*).key, .value = Expr.initIdentifier(export_ref, (if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value).?.loc) };
+                    var props = new_properties.slice();
+                    _ = &props;
+                    {
+                        var pi: i32 = 0;
+                        _ = &pi;
+                        const __end_5 = props.len;
+                        while (pi < __end_5) : (pi += 1) {
+                            const prop = (&props[@as(usize, @intCast(pi))]);
+                            if ((((prop.key == null) or (prop.key.?.data != .e_string)) or ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value) == null))) {
+                                continue;
+                            }
+                            const name = prop.key.?.data.e_string.slice(temp_allocator);
+                            if (((strings.eqlComptime(name, "default") or strings.eqlComptime(name, "__esModule")) or (!bun.js_lexer.isIdentifier(name)))) {
+                                continue;
+                            }
+                            if (resolved_exports.get(name)) |export_data| {
+                                _ = &export_data;
+                                const export_ref = export_data.data.import_ref;
+                                const export_part = ast.parts.slice()[@as(usize, @intCast(c.graph.topLevelSymbolToParts(part_range.source_index.get(), export_ref)[0]))];
+                                if (export_part.is_live) {
+                                    props[cp_cast_int(usize, pi)] = .{ .key = prop.key, .value = Expr.initIdentifier(export_ref, (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.loc) };
+                                }
                             }
                         }
                     }

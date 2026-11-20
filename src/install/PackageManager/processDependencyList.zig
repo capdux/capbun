@@ -298,9 +298,11 @@ pub fn processDependencyList(manager: *PackageManager, dep_list: TaskCallbackLis
                 _ = &item;
                 _ = try manager.processDependencyListItem(item, (&any_root), install_peer);
             }
-            if (comptime ((@TypeOf(callbacks) != void) and (@TypeOf(callbacks.onResolve) != void))) {
-                if (any_root) {
-                    _ = callbacks.onResolve(ctx);
+            if (comptime (@TypeOf(callbacks) != void)) {
+                if (comptime (@TypeOf(callbacks.onResolve) != void)) {
+                    if (any_root) {
+                        _ = callbacks.onResolve(ctx);
+                    }
                 }
             }
             _ = dependency_list.deinit(manager.allocator);
