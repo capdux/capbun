@@ -88,7 +88,8 @@ pub fn populateManifestCache(manager: *PackageManager, packages: Packages)! {
                     continue;
                 }
 
-                if ((seen_pkg_ids.getOrPut(pkg_id)?).found_existing) {
+                const gop = seen_pkg_ids.getOrPut(pkg_id)?;
+                if (gop.found_existing) {
                     continue;
                 }
 

@@ -487,11 +487,9 @@ pub fn next(self: *@This(), completed_trees: if ((path_style == IteratorPathStyl
             const current_tree_id = self.tree_id;
             const tree = trees[@as(usize, @intCast(current_tree_id))];
             const tree_dependencies = tree.dependencies.get(self.lockfile.buffers.hoisted_dependencies.items);
-            const _tmp_v0 = relativePathAndDepth(self.lockfile, current_tree_id, (&self.path_buf), (&self.depth_stack), path_style);
-            var relative_path = cp_unpack_elem(_tmp_v0, 0);
-            _ = &relative_path;
-            var depth = cp_unpack_elem(_tmp_v0, 1);
-            _ = &depth;
+            const path_and_depth = relativePathAndDepth(self.lockfile, current_tree_id, (&self.path_buf), (&self.depth_stack), path_style);
+            const relative_path = @field(path_and_depth, "0");
+            const depth = @field(path_and_depth, "1");
             self.tree_id = (self.tree_id + 1);
             return .{ .relative_path = relative_path, .dependencies = tree_dependencies, .tree_id = current_tree_id, .depth = depth };
     }

@@ -74,23 +74,23 @@ pub fn deepClone(self: SyntaxString, allocator: std.mem.Allocator) @This() {
             return css.implementDeepClone(@This(), (&s), allocator);
     }
 
-pub fn toCss(self: *SyntaxString, dest: *Printer) PrintErr!void {
+pub fn toCss(this_ptr: *const @This(), dest: *Printer) PrintErr!void {
             _ = try dest.writeChar(34);
-            switch (self.*) {
+            switch (this_ptr.*) {
 .universal => {
 _ = try dest.writeChar(42);
 },
-.components => |*components| {
+.components => |components| {
 var first = true;
             _ = &first;
-            for (components.items) |*component| {
+            for (components.items) |component| {
                 _ = &component;
                 if (first) {
                     first = false;
                 } else {
                     _ = try dest.delim(124, true);
                 }
-                _ = try (component.*).toCss(dest);
+                _ = try component.toCss(dest);
             }
 },
 }
@@ -404,8 +404,8 @@ pub fn parseString(input: *[]const u8) css.Maybe(SyntaxComponentKind,void) {
             }
     }
 
-pub fn toCss(self: *SyntaxComponentKind, dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
+pub fn toCss(this_ptr: *const @This(), dest: *Printer) PrintErr!void {
+            return (switch (this_ptr.*) {
 .length => try dest.writeStr("<length>"),
 .number => try dest.writeStr("<number>"),
 .percentage => try dest.writeStr("<percentage>"),
@@ -451,8 +451,8 @@ pub const ParsedComponent = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn toCss(self: *ParsedComponent, dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
+pub fn toCss(this_ptr: *const @This(), dest: *Printer) PrintErr!void {
+            return (switch (this_ptr.*) {
 .length => |*v| try v.toCss(dest),
 .number => |*v| try CSSNumberFns.toCss(v, dest),
 .percentage => |*v| try v.toCss(dest),

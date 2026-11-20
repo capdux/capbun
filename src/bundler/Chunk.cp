@@ -179,16 +179,16 @@ pub const ChunkCssImportOrderDebug = struct {
         try writer.print("{s} = ", [ @tagName(this.inner.kind) ]);
         switch (this.inner.kind) {
             .layers layers => {
-                try writer.print("[", []);
+                try writer.print("[", .{});
                 const l = layers.inner();
                 let i: usize = 0;
                 for (layer of l.sliceConst()) {
-                    if (i > 0) try writer.print(", ", []);
+                    if (i > 0) try writer.print(", ", .{});
                     try writer.print("\"{f}\"", [ layer ]);
                     i += 1;
                 }
 
-                try writer.print("]", []);
+                try writer.print("]", .{});
             },
             .external_path path => {
                 try writer.print("\"{s}\"", [ path.pretty ]);

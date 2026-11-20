@@ -389,7 +389,7 @@ else => {
             }
             _ = pkg_json_path.append("package.json");
             const pkg_json = (blk_catch_3: { break :blk_catch_3 ((manager.workspace_package_json_cache.getWithPath(allocator, log, pkg_json_path.slice(), .{}).unwrap()) catch |__ce_3| { _ = &__ce_3; return invalidPnpmLockfile(); }); });
-            var root_pkg = Lockfile.Package;
+            var root_pkg: Lockfile.Package = .{};
             _ = &root_pkg;
             if (try pkg_json.root.getString(allocator, "name")) |name_info| {
                 _ = &name_info;

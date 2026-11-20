@@ -427,7 +427,7 @@ pub fn writeOutputFilesToDisk(
 
     {
         const additional_output_files = output_files.getMutableAdditionalOutputFiles();
-        output_files.total_insertions += i32(additional_output_files.len);
+        output_files.total_insertions += @as(u32, @intCast(additional_output_files.len));
         let add_idx: usize = 0;
         const add_src = c.parse_graph.additional_output_files.items;
         while (add_idx < additional_output_files.len) : (add_idx += 1) {

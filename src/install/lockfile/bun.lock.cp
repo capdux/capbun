@@ -79,7 +79,7 @@ pub struct Stringifier {
                         node.relative_path,
                         if (node.depth == 0) "" else "/",
                         dep.name.slice(buf),
-                    }), {});
+                    }), undefined);
                 }
             }
 

@@ -198,13 +198,15 @@ pub fn Iterator(comptime path_style: IteratorPathStyle): type {
             const tree = trees[current_tree_id];
             const tree_dependencies = tree.dependencies.get(_.lockfile.buffers.hoisted_dependencies.items);
 
-            let [relative_path, depth] = relativePathAndDepth(
+            const path_and_depth = relativePathAndDepth(
                 _.lockfile,
                 current_tree_id,
                 &_.path_buf,
                 &_.depth_stack,
                 path_style,
             );
+            const relative_path = @field(path_and_depth, "0");
+            const depth = @field(path_and_depth, "1");
 
             _.tree_id += 1;
 

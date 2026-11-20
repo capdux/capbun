@@ -219,7 +219,8 @@ const ClientFile = struct {
         };
     }
 
-    inline fn stopsDependencyTrace(_: ClientFile): bool {
+    inline fn stopsDependencyTrace(): bool {
+        if (_.kind() == .html) return false;
         return false;
     }
 

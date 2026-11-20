@@ -283,7 +283,7 @@ else => .server,
         }
         {
             const additional_output_files = output_files.getMutableAdditionalOutputFiles();
-            output_files.total_insertions = (output_files.total_insertions + (if (comptime @typeInfo(@TypeOf(additional_output_files.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(additional_output_files.len)) else cp_cast_int(i32, additional_output_files.len)));
+            output_files.total_insertions = (output_files.total_insertions + @as(u32, @intCast(additional_output_files.len)));
             var add_idx: usize = 0;
             _ = &add_idx;
             const add_src = c.parse_graph.additional_output_files.items;

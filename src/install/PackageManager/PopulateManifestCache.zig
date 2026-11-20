@@ -129,7 +129,8 @@ var seen_pkg_ids: std.AutoHashMap(PackageID,void) = .init(manager.allocator);
             if ((pkg_id == invalid_package_id)) {
                 continue;
             }
-            if (try seen_pkg_ids.getOrPut(pkg_id).found_existing) {
+            const gop = try seen_pkg_ids.getOrPut(pkg_id);
+            if (gop.found_existing) {
                 continue;
             }
             const res = pkg_resolutions[@as(usize, @intCast(pkg_id))];

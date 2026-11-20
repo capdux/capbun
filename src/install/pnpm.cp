@@ -341,7 +341,7 @@ pub fn migratePnpmLockfile(
                 return invalidPnpmLockfile();
             };
 
-            let root_pkg = Lockfile.Package{};
+            let root_pkg: Lockfile.Package = .{};
 
             if (name_info := pkg_json.root.getString(allocator, "name")?) {
                 const name = name_info[0];

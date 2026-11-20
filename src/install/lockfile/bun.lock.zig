@@ -145,7 +145,7 @@ pub fn saveFromBinary_inner(allocator: std.mem.Allocator, lockfile: *BinaryLockf
                     for (cp_iter_slice(node.dependencies)) |dep_id| {
                         _ = &dep_id;
                         const dep = deps_buf[@as(usize, @intCast(dep_id))];
-                        _ = try pkg_map.put(try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ node.relative_path, (if ((node.depth == 0)) "" else "/"), (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(buf) }), .{});
+                        _ = try pkg_map.put(try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ node.relative_path, (if ((node.depth == 0)) "" else "/"), (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(buf) }), undefined);
                     }
                 }
                 _ = pkgs_iter.reset();

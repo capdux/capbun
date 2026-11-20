@@ -48,13 +48,13 @@ pub enum SyntaxString {
         return css.implementDeepClone(@This(), &s, allocator);
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
+    pub static fn toCss(this_ptr: *const @This(), dest: *Printer): PrintErr!void {
         dest.writeChar('"')?;
-        switch (_.*) {
+        switch (this_ptr.*) {
             .universal => try dest.writeChar('*'),
-            .components => |*components| {
+            .components => |components| {
                 let first = true;
-                for (*component of components.items) {
+                for (component of components.items) {
                     if (first) {
                         first = false;
                     } else {
@@ -399,8 +399,8 @@ pub enum SyntaxComponentKind {
         }
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
-        return switch (_.*) {
+    pub static fn toCss(this_ptr: *const @This(), dest: *Printer): PrintErr!void {
+        return switch (this_ptr.*) {
             .length => try dest.writeStr("<length>"),
             .number => try dest.writeStr("<number>"),
             .percentage => try dest.writeStr("<percentage>"),
@@ -477,8 +477,8 @@ pub enum ParsedComponent {
 
     const This = @This();
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
-        return switch (_.*) {
+    pub static fn toCss(this_ptr: *const @This(), dest: *Printer): PrintErr!void {
+        return switch (this_ptr.*) {
             .length => |*v| try v.toCss(dest),
             .number => |*v| try CSSNumberFns.toCss(v, dest),
             .percentage => |*v| try v.toCss(dest),

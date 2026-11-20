@@ -215,19 +215,19 @@ pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
             _ = try writer.print("{s} = ", .{ @tagName(self.inner.kind) });
             switch (self.inner.kind) {
 .layers => |layers| {
-_ = try writer.print("[", &.{});
+_ = try writer.print("[", .{});
             const l = layers.inner();
             var i: usize = 0;
             _ = &i;
             for (cp_iter_slice(l.sliceConst())) |layer| {
                 _ = &layer;
                 if ((i > 0)) {
-                    _ = try writer.print(", ", &.{});
+                    _ = try writer.print(", ", .{});
                 }
                 _ = try writer.print("\"{f}\"", .{ layer });
                 i = (i + 1);
             }
-            _ = try writer.print("]", &.{});
+            _ = try writer.print("]", .{});
 },
 .external_path => |path| {
 _ = try writer.print("\"{s}\"", .{ path.pretty });

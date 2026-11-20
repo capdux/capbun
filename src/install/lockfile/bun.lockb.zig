@@ -238,7 +238,7 @@ pub fn load(lockfile: *Lockfile, stream: *Stream, allocator: Allocator, log: *lo
         if ((total_buffer_size < stream.buffer.len)) {
             stream.buffer = stream.buffer[0..total_buffer_size];
         }
-        const packages_load_result = try Lockfile.Package.Serializer.load(stream, allocator, migrate_from_v2);
+        const packages_load_result = try Lockfile.Package.Serializer.load(stream, total_buffer_size, allocator, migrate_from_v2);
         lockfile.packages = packages_load_result.list;
         res.packages_need_update = packages_load_result.needs_update;
         res.migrated_from_lockb_v2 = migrate_from_v2;

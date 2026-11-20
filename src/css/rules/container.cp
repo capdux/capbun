@@ -310,12 +310,12 @@ pub fn ContainerRule(comptime R: type): type {
 
         const This = @This();
 
-        pub fn toCss(*_, dest: *Printer): PrintErr!void {
+        pub fn toCss(dest: *Printer): PrintErr!void {
             // #[cfg(feature = "sourcemap")]
             // dest.add_mapping(self.loc);
 
             dest.writeStr("@container ")?;
-            if (*name := _.name) {
+            if (name := _.name) {
                 name.toCss(dest)?;
                 dest.writeChar(' ')?;
             }

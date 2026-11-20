@@ -175,8 +175,10 @@ else => null,
 });
     }
 
-pub inline fn stopsDependencyTrace(self: @This(), _: ClientFile) bool {
-        _ = self;
+pub inline fn stopsDependencyTrace(self: @This()) bool {
+            if ((self.kind() == .html)) {
+                return false;
+            }
             return false;
     }
 

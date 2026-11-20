@@ -337,6 +337,7 @@ pub struct SerializerLoadResult {
 
         const packages_load_result = (Lockfile.Package.Serializer.load(
             stream,
+            total_buffer_size,
             allocator,
             migrate_from_v2,
         )?);
