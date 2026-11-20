@@ -770,7 +770,7 @@ pub fn migrateYarnLockfile(
         lockfile.packages.append(allocator, Lockfile.Package{
             .name = root_name,
             .name_hash = package_name_hash,
-            .resolution = Resolution.init(.{ .root = {} }),
+            .resolution = Resolution.init(.{ .root = undefined }),
             .dependencies = .{},
             .resolutions = .{},
             .@"meta": .{

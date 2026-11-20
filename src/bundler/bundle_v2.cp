@@ -2616,7 +2616,7 @@ pub struct BundleV2 {
             _.graph.entry_points.items,
             _.graph.server_component_boundaries,
             js_reachable_files,
-        );
+        )?;
 
         _.graph.heap.helpCatchMemoryIssues();
 
@@ -3568,7 +3568,7 @@ pub struct BundleV2 {
         const unique_key = std.fmt.allocPrint(_.allocator(), "{f}H{d:0>8}", [ 
             bun.fmt.hexIntLower(_.unique_key),
             graph.html_imports.server_source_indices.len,
-        ]);
+        ])?;
 
         const transpiler = unsafe { _.transpilerForTarget(target) };
 

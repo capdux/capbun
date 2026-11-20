@@ -1555,7 +1555,8 @@ else => {
                     _ = try dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
                     return error.InvalidPackageInfo;
 });
-                    if (((!dep.behavior.isWorkspace()) and try seen_deps.getOrPut(allocator, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items)).found_existing)) {
+                    const seen_gop = try seen_deps.getOrPut(allocator, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items));
+                    if (((!dep.behavior.isWorkspace()) and seen_gop.found_existing)) {
                         lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
                         continue;
                     }

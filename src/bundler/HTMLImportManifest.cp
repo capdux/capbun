@@ -74,7 +74,7 @@ fn writeEntryItem(
     writer.writeAll(",\"headers\":{")?;
 
     if (hash > 0) {
-        const base64_buf_len = bun.base64.encodeLenFromSize(@sizeOf(@TypeOf(hash))) + 2;
+        const base64_buf_len = comptime bun.base64.encodeLenFromSize(@sizeOf(@TypeOf(hash))) + 2;
         let base64_buf: [base64_buf_len]u8 = undefined;
         const base64 = base64_buf[0..bun.base64.encodeURLSafe(&base64_buf, &std.mem.toBytes(hash))];
         writer.print("\"etag\":\"{s}\",", .{base64})?;

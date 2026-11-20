@@ -69,7 +69,7 @@ pub fn postProcessCSSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, ch
         const c = ctx.c;
         var j = StringJoiner{ .allocator = worker.allocator, .watcher = .{ .input = chunk.unique_key } };
         _ = &j;
-        var line_offset: bun.SourceMap.LineColumnOffset.Optional = (if ((c.options.source_maps != .none)) bun.SourceMap.LineColumnOffset.Optional{ .value = .{} } else bun.SourceMap.LineColumnOffset.Optional{ .@"null" = .{} });
+        var line_offset: bun.SourceMap.LineColumnOffset.Optional = (if ((c.options.source_maps != .none)) bun.SourceMap.LineColumnOffset.Optional{ .value = .{} } else bun.SourceMap.LineColumnOffset.Optional{ .@"null" = undefined });
         _ = &line_offset;
         var newline_before_comment = false;
         _ = &newline_before_comment;

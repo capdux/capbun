@@ -227,7 +227,7 @@ pub fn computeCrossChunkDependencies(c: *LinkerContext, chunks: []Chunk) bun.OOM
         const chunk_metas = try c.allocator().alloc(ChunkMeta, chunks.len);
         for (cp_mut_slice(&chunk_metas)) |*chunk_meta| {
             _ = &chunk_meta;
-            (chunk_meta.*).* = ChunkMeta{ .imports = ChunkMeta.Map.init(bun.default_allocator), .exports = ChunkMeta.Map.init(bun.default_allocator), .dynamic_imports = std.AutoArrayHashMap(Index.Int, void).init(bun.default_allocator) };
+            (chunk_meta.*) = ChunkMeta{ .imports = ChunkMeta.Map.init(bun.default_allocator), .exports = ChunkMeta.Map.init(bun.default_allocator), .dynamic_imports = std.AutoArrayHashMap(Index.Int, void).init(bun.default_allocator) };
         }
         defer {
         {

@@ -92,7 +92,7 @@ pub fn writeEntryItem(writer: anytype, input: []const u8, path: []const u8, hash
         _ = try writer.writeAll((if ((kind == .@"entry-point")) "true" else "false"));
         _ = try writer.writeAll(",\"headers\":{");
         if ((hash > 0)) {
-            const base64_buf_len = (bun.base64.encodeLenFromSize(@sizeOf(@TypeOf(hash))) + 2);
+            const base64_buf_len = (comptime (bun.base64.encodeLenFromSize(@sizeOf(@TypeOf(hash))) + 2));
             _ = &base64_buf_len;
             var base64_buf: [base64_buf_len]u8 = undefined;
             _ = &base64_buf;

@@ -122,7 +122,7 @@ return KnownGlobal.callFromNew(e, loc);
 {
                 const n = e.args.len;
                 if ((n == 0)) {
-                    return js_ast.Expr.init(E.Object, std.mem.zeroes(E.Object), loc);
+                    return js_ast.Expr.init(E.Object, std.mem.zeroInit(E.Object, .{}), loc);
                 }
                 if ((n == 1)) {
                     const arg = e.args.ptr[0];
@@ -131,7 +131,7 @@ return KnownGlobal.callFromNew(e, loc);
 return arg;
 },
 .e_null, .e_undefined => {
-return js_ast.Expr.init(E.Object, std.mem.zeroes(E.Object), loc);
+return js_ast.Expr.init(E.Object, std.mem.zeroInit(E.Object, .{}), loc);
 },
 else => {
 
@@ -146,7 +146,7 @@ else => {
                 const n = e.args.len;
                 return (switch (n) {
 0 => {
-return js_ast.Expr.init(E.Array, std.mem.zeroes(E.Array), loc);
+return js_ast.Expr.init(E.Array, std.mem.zeroInit(E.Array, .{}), loc);
 },
 1 => {
 {

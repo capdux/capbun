@@ -329,7 +329,8 @@ pub fn getWithLinkConst(symbols: *Map, target: Ref) ?*const Symbol {
     }
 
 pub fn followAll(symbols: *Map) void {
-            const trace = bun.perf.trace("Symbols.followAll");
+            var trace = bun.perf.trace("Symbols.followAll");
+            _ = &trace;
             defer {
             _ = trace.end();
             }

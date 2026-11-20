@@ -858,7 +858,7 @@ pub fn migrateYarnLockfile(lockfile: *Lockfile, manager: *Install.PackageManager
             } else {
                 root_name = try string_buf.append("");
             }
-            _ = try lockfile.packages.append(allocator, Lockfile.Package{ .name = root_name, .name_hash = package_name_hash, .resolution = Resolution.init(.{ .root = .{} }), .dependencies = .{}, .resolutions = .{}, .@"meta" = .{ .id = 0, .origin = .local, .arch = .all, .os = .all, .man_dir = String{  }, .has_install_script = .false, .integrity = Integrity{  } }, .bin = Bin.init(), .scripts = .{} });
+            _ = try lockfile.packages.append(allocator, Lockfile.Package{ .name = root_name, .name_hash = package_name_hash, .resolution = Resolution.init(.{ .root = undefined }), .dependencies = .{}, .resolutions = .{}, .@"meta" = .{ .id = 0, .origin = .local, .arch = .all, .os = .all, .man_dir = String{  }, .has_install_script = .false, .integrity = Integrity{  } }, .bin = Bin.init(), .scripts = .{} });
             if (package_json.asProperty("resolutions")) |resolutions| {
                 _ = &resolutions;
                 var root_package = lockfile.packages.get(0);

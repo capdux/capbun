@@ -206,7 +206,7 @@ pub fn computeCrossChunkDependencies(c: *LinkerContext, chunks: []Chunk): void!b
     const chunk_metas = c.allocator().alloc(ChunkMeta, chunks.len)?;
     for (*chunk_meta of chunk_metas) {
         // these must be global allocator
-        chunk_meta.* = ChunkMeta{
+        chunk_meta = ChunkMeta{
             imports: ChunkMeta.Map.init(bun.default_allocator),
             exports: ChunkMeta.Map.init(bun.default_allocator),
             dynamic_imports: std.AutoArrayHashMap(Index.Int, void).init(bun.default_allocator),

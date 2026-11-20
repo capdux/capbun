@@ -1951,8 +1951,8 @@ pub fn parseIntoBinaryLockfile(
                     return error.InvalidPackageInfo;
                 };
 
-                if (!dep.behavior.isWorkspace() &&
-                    (try seen_deps.getOrPut(allocator, dep.name.slice(lockfile.buffers.string_bytes.items))).found_existing)
+                const seen_gop = seen_deps.getOrPut(allocator, dep.name.slice(lockfile.buffers.string_bytes.items))?;
+                if (!dep.behavior.isWorkspace() && seen_gop.found_existing)
                 {
                     lockfile.buffers.resolutions.items[dep_id] = res_id;
                     continue;

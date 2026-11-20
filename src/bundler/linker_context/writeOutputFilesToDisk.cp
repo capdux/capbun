@@ -32,7 +32,7 @@ pub fn writeOutputFilesToDisk(
     output_files: *OutputFileListBuilder,
     standalone_chunk_contents: ([]const MaybeByteSlice)?,
 )! {
-    const trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
+    let trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
     defer trace.end();
     let root_dir = std.fs.cwd().makeOpenPath(root_path, {}) catch |e| {
         if (e == error.NotDir) {

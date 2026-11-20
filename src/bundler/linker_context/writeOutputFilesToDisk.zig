@@ -85,7 +85,8 @@ pub const ThreadPool = bun.bundle_v2.ThreadPool;
 pub const ParseTask = bun.bundle_v2.ParseTask;
 
 pub fn writeOutputFilesToDisk(c: *LinkerContext, root_path: []const u8, chunks: []Chunk, output_files: *OutputFileListBuilder, standalone_chunk_contents: ?[]const MaybeByteSlice) !void {
-        const trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
+        var trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

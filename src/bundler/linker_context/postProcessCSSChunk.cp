@@ -11,7 +11,7 @@ pub fn postProcessCSSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, ch
     let line_offset: bun.SourceMap.LineColumnOffset.Optional = if (c.options.source_maps != .none)
         bun.SourceMap.LineColumnOffset.Optional{ value: {} }
     else
-        bun.SourceMap.LineColumnOffset.Optional{ @"null": {} };
+        bun.SourceMap.LineColumnOffset.Optional{ @"null": undefined };
 
     let newline_before_comment = false;
 

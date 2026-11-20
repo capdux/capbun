@@ -463,7 +463,9 @@ pub const ChunkIntermediateOutput = union(enum) {
                     SourceMap.SourceMapShifts{
                         after: {},
                         before: {},
-                    };
+                    }
+                else
+                    undefined;
                 let shifts = if (enable_source_map_shifts)
                     std.ArrayList(SourceMap.SourceMapShifts).initCapacity(bun.default_allocator, pieces.len + 1)?
                 else

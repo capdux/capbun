@@ -435,13 +435,11 @@ _ = rewriteStmts(p, data.stmts, kind);
 if ((data.init != null)) {
                     _ = rewriteStmts(p, (&data.init.?)[0..1], kind);
                 }
-                if (data.test_) |*t| {
-                    _ = &t;
-                    _ = rewriteExpr(p, (t.*), kind);
+                if ((data.test_ != null)) {
+                    _ = rewriteExpr(p, (&data.test_.?), kind);
                 }
-                if (data.update) |*u| {
-                    _ = &u;
-                    _ = rewriteExpr(p, (u.*), kind);
+                if ((data.update != null)) {
+                    _ = rewriteExpr(p, (&data.update.?), kind);
                 }
                 _ = rewriteStmts(p, (&data.body)[0..1], kind);
 },
@@ -465,9 +463,8 @@ _ = rewriteExpr(p, (&data.test_), kind);
 _ = rewriteExpr(p, (&data.test_), kind);
                 for (cp_mut_slice(&data.cases)) |*case| {
                     _ = &case;
-                    if ((if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value)) |*v| {
-                        _ = &v;
-                        _ = rewriteExpr(p, (v.*), kind);
+                    if (((if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value) != null)) {
+                        _ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value).?), kind);
                     }
                     _ = rewriteStmts(p, (case.*).body, kind);
                 }
@@ -713,13 +710,11 @@ _ = rewritePrivateAccessesInStmts(p, data.stmts, map);
 if ((data.init != null)) {
                     _ = rewritePrivateAccessesInStmts(p, (&data.init.?)[0..1], map);
                 }
-                if (data.test_) |*t| {
-                    _ = &t;
-                    _ = rewritePrivateAccessesInExpr(p, (t.*), map);
+                if ((data.test_ != null)) {
+                    _ = rewritePrivateAccessesInExpr(p, (&data.test_.?), map);
                 }
-                if (data.update) |*u| {
-                    _ = &u;
-                    _ = rewritePrivateAccessesInExpr(p, (u.*), map);
+                if ((data.update != null)) {
+                    _ = rewritePrivateAccessesInExpr(p, (&data.update.?), map);
                 }
                 _ = rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
 },
@@ -743,9 +738,8 @@ _ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
 _ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
                 for (cp_mut_slice(&data.cases)) |*case| {
                     _ = &case;
-                    if ((if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value)) |*v| {
-                        _ = &v;
-                        _ = rewritePrivateAccessesInExpr(p, (v.*), map);
+                    if (((if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value) != null)) {
+                        _ = rewritePrivateAccessesInExpr(p, (&(if (@typeInfo(@TypeOf((case.*))) == .@"enum") @intFromEnum((case.*)) else (case.*).value).?), map);
                     }
                     _ = rewritePrivateAccessesInStmts(p, (case.*).body, map);
                 }

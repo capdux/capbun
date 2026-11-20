@@ -390,7 +390,7 @@ pub fn finalize(self: *SourceMapPieces, allocator: std.mem.Allocator, _shifts: [
 pub const DebugIDFormatter = struct {
     id: u64 = 0,
 
-pub fn format(self: *DebugIDFormatter, writer: *std.Io.Writer) !void {
+pub fn format(self: DebugIDFormatter, writer: *std.Io.Writer) !void {
             var buf: [32]u8 = undefined;
             _ = &buf;
             const formatter = bun.fmt.hexIntUpper(self.id);

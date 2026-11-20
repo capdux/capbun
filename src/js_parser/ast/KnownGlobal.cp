@@ -55,7 +55,7 @@ pub enum KnownGlobal {
 
                 if (n == 0) {
                     // new Object() -> {}
-                    return js_ast.Expr.init(E.Object, std.mem.zeroes(E.Object), loc);
+                    return js_ast.Expr.init(E.Object, std.mem.zeroInit(E.Object, {}), loc);
                 }
 
                 if (n == 1) {
@@ -69,7 +69,7 @@ pub enum KnownGlobal {
                         .e_null, .e_undefined => {
                             // new Object(null) -> {}
                             // new Object(undefined) -> {}
-                            return js_ast.Expr.init(E.Object, std.mem.zeroes(E.Object), loc);
+                            return js_ast.Expr.init(E.Object, std.mem.zeroInit(E.Object, {}), loc);
                         },
                         else => {},
                     }
@@ -85,7 +85,7 @@ pub enum KnownGlobal {
                 return switch (n) {
                     0 => {
                         // new Array() -> []
-                        return js_ast.Expr.init(E.Array, std.mem.zeroes(E.Array), loc);
+                        return js_ast.Expr.init(E.Array, std.mem.zeroInit(E.Array, {}), loc);
                     },
                     1 => {
                         // For single argument, only convert to literal if we're SURE it's not a number

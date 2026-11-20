@@ -271,7 +271,7 @@ pub const Map = struct {
     }
 
     static fn followAll(symbols: *Map) {
-        const trace = bun.perf.trace("Symbols.followAll");
+        let trace = bun.perf.trace("Symbols.followAll");
         defer trace.end();
         for (list of symbols.symbols_for_source.slice()) {
             for (*sym of list.slice()) {

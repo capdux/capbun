@@ -1618,7 +1618,7 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             break :reachable_files js_files.items;
 };
             _ = self.graph.heap.helpCatchMemoryIssues();
-            _ = self.linker.load(self, self.graph.entry_points.items, self.graph.server_component_boundaries, js_reachable_files);
+            _ = try self.linker.load(self, self.graph.entry_points.items, self.graph.server_component_boundaries, js_reachable_files);
             _ = self.graph.heap.helpCatchMemoryIssues();
             if (Environment.isDebug) {
                 for (cp_iter_slice(js_reachable_files)) |idx| {
@@ -2241,7 +2241,7 @@ pub fn generateServerHTMLModule(self: *BundleV2, path: *const Fs.Path, target: o
             var js_parser_options = bun.js_parser.Parser.Options.init(self.transpilerForTarget(target).options.jsx, .html);
             _ = &js_parser_options;
             js_parser_options.bundle = true;
-            const unique_key = std.fmt.allocPrint(self.allocator(), "{f}H{d:0>8}", .{ bun.fmt.hexIntLower(self.unique_key), graph.html_imports.server_source_indices.len });
+            const unique_key = try std.fmt.allocPrint(self.allocator(), "{f}H{d:0>8}", .{ bun.fmt.hexIntLower(self.unique_key), graph.html_imports.server_source_indices.len });
             const transpiler = (blk: {
             break :blk self.transpilerForTarget(target);
 

@@ -298,8 +298,8 @@ pub fn LowerDecorators(
                     .s_block => |data| rewriteStmts(p, data.stmts, kind),
                     .s_for => |data| {
                         if (data.init != null) rewriteStmts(p, (&data.init.?)[0..1], kind);
-                        if (*t := data.test_) rewriteExpr(p, t, kind);
-                        if (*u := data.update) rewriteExpr(p, u, kind);
+                        if (data.test_ != null) rewriteExpr(p, &data.test_.?, kind);
+                        if (data.update != null) rewriteExpr(p, &data.update.?, kind);
                         rewriteStmts(p, (&data.body)[0..1], kind);
                     },
                     .s_for_in => |data| {
@@ -321,7 +321,7 @@ pub fn LowerDecorators(
                     .s_switch => |data| {
                         rewriteExpr(p, &data.test_, kind);
                         for (*case of data.cases) {
-                            if (*v := case.value) rewriteExpr(p, v, kind);
+                            if (case.value != null) rewriteExpr(p, &case.value.?, kind);
                             rewriteStmts(p, case.body, kind);
                         }
                     },
@@ -495,8 +495,8 @@ pub fn LowerDecorators(
                     .s_block => |data| rewritePrivateAccessesInStmts(p, data.stmts, map),
                     .s_for => |data| {
                         if (data.init != null) rewritePrivateAccessesInStmts(p, (&data.init.?)[0..1], map);
-                        if (*t := data.test_) rewritePrivateAccessesInExpr(p, t, map);
-                        if (*u := data.update) rewritePrivateAccessesInExpr(p, u, map);
+                        if (data.test_ != null) rewritePrivateAccessesInExpr(p, &data.test_.?, map);
+                        if (data.update != null) rewritePrivateAccessesInExpr(p, &data.update.?, map);
                         rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);
                     },
                     .s_for_in => |data| {
@@ -518,7 +518,7 @@ pub fn LowerDecorators(
                     .s_switch => |data| {
                         rewritePrivateAccessesInExpr(p, &data.test_, map);
                         for (*case of data.cases) {
-                            if (*v := case.value) rewritePrivateAccessesInExpr(p, v, map);
+                            if (case.value != null) rewritePrivateAccessesInExpr(p, &case.value.?, map);
                             rewritePrivateAccessesInStmts(p, case.body, map);
                         }
                     },

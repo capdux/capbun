@@ -354,9 +354,9 @@ pub struct SourceMapPieces {
 pub struct DebugIDFormatter {
     id: u64 = 0,
 
-    pub fn format(*_, writer: *std.Io.Writer)! {
+    pub fn format(writer: *std.Io.Writer)! {
         let buf: [32]u8 = undefined;
-        const formatter = bun.fmt.hexIntUpper(this.id);
+        const formatter = bun.fmt.hexIntUpper(_.id);
         * = std.fmt.bufPrint(&buf, "{f}64756E2164756E21", [formatter]) catch unreachable;
         writer.writeAll(&buf)?;
     }
