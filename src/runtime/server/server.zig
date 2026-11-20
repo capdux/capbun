@@ -77,7 +77,7 @@ pub const WebSocketServerContext = @import("./WebSocketServerContext.zig");
 pub const HTTPStatusText = @import("./HTTPStatusText.zig");
 pub const HTMLBundle = @import("./HTMLBundle.zig");
 pub const StaticRoute = @import("./StaticRoute.zig");
-pub const FileRoute = @import("./FileRoute.zig");
+pub const FileRoute = @import("./FileRoute.zig").FileRoute;
 pub const FileResponseStream = @import("./FileResponseStream.zig");
 pub const RangeRequest = @import("./RangeRequest.zig");
 pub const AnyRoute = union(enum) {
@@ -2069,7 +2069,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         port = @intCast(listener.getLocalPort());
 
                         var buf: [64]u8 = [_]u8{0} ** 64;
-                        const address_bytes = listener.socket().localAddress(&buf) orelse return JSValue.jsNull();
+                        const address_bytes = listener.socket(ssl_enabled).localAddress(&buf) orelse return JSValue.jsNull();
                         var addr = SocketAddress.init(address_bytes, port) catch {
                             @branchHint(.unlikely);
                             return JSValue.jsNull();
@@ -2144,7 +2144,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 if (this.listener) |listener| {
                     var buf: [1024]u8 = [_]u8{0} ** 1024;
 
-                    if (listener.socket().remoteAddress(buf[0..1024])) |addr| {
+                    if (listener.socket(ssl_enabled).remoteAddress(buf[0..1024])) |addr| {
                         if (addr.len > 0) {
                             return bun.String.createUTF8ForJS(globalThis, addr);
                         }
@@ -2315,7 +2315,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             this.unref();
 
             if (!ssl_enabled)
-                this.vm.removeListeningSocketForWatchMode(listener.socket().fd());
+                this.vm.removeListeningSocketForWatchMode(listener.socket(ssl_enabled).fd());
 
             this.notifyInspectorServerStopped();
 
@@ -3445,9 +3445,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 // Register HTTP routes
                 switch (user_route.route.method) {
                     .any => {
-                        app.any(user_route.route.path, *UserRoute, user_route, onUserRouteRequest);
+                        app.any(user_route.route.path, user_route, onUserRouteRequest);
                         if (comptime has_h3) {
-                            if (this.h3_app) |h3_app| h3_app.any(user_route.route.path, *UserRoute, user_route, onH3UserRouteRequest);
+                            if (this.h3_app) |h3_app| h3_app.any(user_route.route.path, user_route, onH3UserRouteRequest);
                         }
                         if (is_star_path) {
                             star_methods_covered_by_user = .initFull();
@@ -3493,11 +3493,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             // --- 4. Register negative routes ---
             for (this.config.negative_routes.items) |route_path| {
                 app.head(route_path, *ThisServer, this, onRequest);
-                app.any(route_path, *ThisServer, this, onRequest);
+                app.any(route_path, this, onRequest);
                 if (comptime has_h3) {
                     if (this.h3_app) |h3_app| {
                         h3_app.head(route_path, *ThisServer, this, onH3Request);
-                        h3_app.any(route_path, *ThisServer, this, onH3Request);
+                        h3_app.any(route_path, this, onH3Request);
                     }
                 }
             }
@@ -3616,10 +3616,10 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             } else {
                 switch (this.config.onNodeHTTPRequest) {
                     .zero => switch (this.config.onRequest) {
-                        .zero => app.any("/*", *ThisServer, this, on404),
-                        else => app.any("/*", *ThisServer, this, onRequest),
+                        .zero => app.any("/*", this, on404),
+                        else => app.any("/*", this, onRequest),
                     },
-                    else => app.any("/*", *ThisServer, this, onNodeHTTPRequest),
+                    else => app.any("/*", this, onNodeHTTPRequest),
                 }
             }
 
@@ -3644,9 +3644,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                             }
                         }
                     } else if (this.config.onRequest != .zero) {
-                        h3_app.any("/*", *ThisServer, this, onH3Request);
+                        h3_app.any("/*", this, onH3Request);
                     } else {
-                        h3_app.any("/*", *ThisServer, this, onH3404);
+                        h3_app.any("/*", this, onH3404);
                     }
                 }
             }
@@ -3946,7 +3946,7 @@ pub fn Server__setOnClientError_(globalThis: *jsc.JSGlobalObject, server: jsc.JS
                 _ = &app;
                 _ = srv.on_clienterror.deinit();
                 srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-                _ = app.onClientError(*HTTPServer, srv, HTTPServer.onClientErrorCallback);
+                _ = app.onClientError(srv, HTTPServer.onClientErrorCallback);
             }
         } else {
             if (server.as(HTTPSServer)) |srv| {
@@ -3955,7 +3955,7 @@ pub fn Server__setOnClientError_(globalThis: *jsc.JSGlobalObject, server: jsc.JS
                     _ = &app;
                     _ = srv.on_clienterror.deinit();
                     srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-                    _ = app.onClientError(*HTTPSServer, srv, HTTPSServer.onClientErrorCallback);
+                    _ = app.onClientError(srv, HTTPSServer.onClientErrorCallback);
                 }
             } else {
                 if (server.as(DebugHTTPServer)) |srv| {
@@ -3964,7 +3964,7 @@ pub fn Server__setOnClientError_(globalThis: *jsc.JSGlobalObject, server: jsc.JS
                         _ = &app;
                         _ = srv.on_clienterror.deinit();
                         srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-                        _ = app.onClientError(*DebugHTTPServer, srv, DebugHTTPServer.onClientErrorCallback);
+                        _ = app.onClientError(srv, DebugHTTPServer.onClientErrorCallback);
                     }
                 } else {
                     if (server.as(DebugHTTPSServer)) |srv| {
@@ -3973,7 +3973,7 @@ pub fn Server__setOnClientError_(globalThis: *jsc.JSGlobalObject, server: jsc.JS
                             _ = &app;
                             _ = srv.on_clienterror.deinit();
                             srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-                            _ = app.onClientError(*DebugHTTPSServer, srv, DebugHTTPSServer.onClientErrorCallback);
+                            _ = app.onClientError(srv, DebugHTTPSServer.onClientErrorCallback);
                         }
                     } else {
                         _ = bun.debugAssert(false);

@@ -3102,3 +3102,5 @@ Options:
 - **[2026-11-20 21:01] Wave 15 Batch B+C 验收提交（29 模块全绿）**：完成 B 组 13 模块（NodeFS/Crypto/JSC/Core，~165 错）与 C 组 16 模块（Shell/PipeWriter/YAML/SQL/Test，~95 错）独立验收（29/29 PASS，ratio 0.860x~1.038x）并原子提交；已按用户指令收缩并发上限为 `<= 2`（当前仅 A 组 1 路收尾中）。
 
 - **[2026-11-20 21:03] Wave 15 Batch A 验收提交（14 核心模块全绿）+ Wave 16 `zig:check` 体检**：完成 Server/WebCore/EventLoop 14 模块独立验收（14/14 PASS，ratio 0.485x~1.085x）；Wave 16 `bun run zig:check` 总报错由 **714 降至 507**（`node_fs_binding`/`CryptoHasher`/`shell/Builtin`/`PipeWriter`/`host_fn`/`websocket_client`/`ipc`/`Progress`/`ZigGeneratedClasses` 全部清零）。
+
+- **[2026-11-20 21:20] Wave 16 Batch A 验收提交（Server/WebCore/EventLoop/Bake 13 模块全绿）**：13/13 PASS（ratio 0.512x~1.147x）并原子提交；B 组（`65620450`）仍在 Gemini 上收尾；后续新子智能体统一继承 Claude Sonnet 5.5 (Medium)，并发 `<= 2`。

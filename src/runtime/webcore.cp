@@ -40,6 +40,7 @@ pub const ResumableS3UploadSink = ResumableSinkMod.ResumableS3UploadSink;
 pub const ResumableSinkBackpressure = ResumableSinkMod.ResumableSinkBackpressure;
 import S3ClientMod from "./webcore/S3Client.zig";
 pub const S3Client = S3ClientMod.S3Client;
+pub import S3File from "./webcore/S3File.zig";
 pub import Request from "./webcore/Request.zig";
 pub import Body from "./webcore/Body.zig";
 import CookieMapMod from "./webcore/CookieMap.zig";

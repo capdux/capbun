@@ -658,7 +658,7 @@ pub fn deinit(dev: *DevServer) {
         dev.barrel_needed_exports.deinit(alloc);
     }
 
-    dev.assets.deinit(alloc);
+    dev.assets.deinit(&dev.assets, alloc);
 
     dev.incremental_result.client_components_added.deinit(alloc);
     dev.incremental_result.framework_routes_affected.deinit(alloc);
@@ -1478,7 +1478,7 @@ fn computeArgumentsForFrameworkRequest(
                 if (route.file_layout != .none) n += 1;
                 const parent_opt = route.parent.unwrap();
             if (parent_opt == null) break;
-            route = dev.router.routePtr(parent_opt.unwrap());
+            route = dev.router.routePtr(parent_opt.?);
             }
             const arr = JSValue.createEmptyArray(global, n)?;
             route = dev.router.routePtr(framework_bundle.route_index);
@@ -1502,7 +1502,7 @@ fn computeArgumentsForFrameworkRequest(
                 }
                 const parent_opt = route.parent.unwrap();
             if (parent_opt == null) break;
-            route = dev.router.routePtr(parent_opt.unwrap());
+            route = dev.router.routePtr(parent_opt.?);
             }
             framework_bundle.cached_module_list = .create(arr, global);
             break :arr arr;
@@ -2281,7 +2281,7 @@ fn traceAllRouteImports(dev: *DevServer, route_bundle: *RouteBundle, gts: *Graph
                 }
                 const parent_opt = route.parent.unwrap();
             if (parent_opt == null) break;
-            route = dev.router.routePtr(parent_opt.unwrap());
+            route = dev.router.routePtr(parent_opt.?);
             }
         },
         .html => |html| {
@@ -3431,8 +3431,10 @@ fn getOrPutRouteBundle(dev: *DevServer, route: RouteBundle.UnresolvedIndex): !Ro
             } };
         },
     }
+    const bundle_data_ptr = bun.handleOom(dev.allocator().create(RouteBundle.RouteBundleData));
+    bundle_data_ptr.* = bundle_data;
     dev.route_bundles.appendAssumeCapacity(.{
-        data: bundle_data,
+        data: bundle_data_ptr,
         client_script_generation: std.crypto.random.int(u32),
         server_state: .unqueued,
         client_bundle: null,
@@ -3877,7 +3879,7 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
             bun.assert(value.ref_count > 0);
             w.writeAll(std.mem.asBytes(&key.get()))?;
             w.writeInt(u32, value.ref_count, .little)?;
-            if (entry := dev.source_maps.locateWeakRef(key)) {
+            if (entry := dev.source_maps.locateWeakRef(&dev.source_maps, key)) {
                 w.writeInt(u32, entry.ref.count, .little)?;
                 // floats are easier to decode in JS
                 const expire_f64: f64 = @floatFromInt(entry.ref.expire);

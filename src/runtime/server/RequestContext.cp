@@ -140,7 +140,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (this.flags.has_timeout_handler) return;
             if (this.resp) |resp| {
                 this.flags.has_timeout_handler = true;
-                resp.onTimeout(*RequestContext, RequestContext.onTimeout, this);
+                resp.onTimeout(this, RequestContext.onTimeout);
             }
         }
 
@@ -219,7 +219,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (ctx.method == .HEAD) {
                 if (ctx.resp) |resp| {
                     let pair = HeaderResponsePair{ .this = ctx, .response = response };
-                    resp.runCorkedWithType(*HeaderResponsePair, doRenderHeadResponse, &pair);
+                    resp.runCorkedWithType(&pair, doRenderHeadResponse);
                 }
                 return;
             }
@@ -379,7 +379,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
         pub fn renderMissing(ctx: *RequestContext) void {
             if (ctx.resp) |resp| {
-                resp.runCorkedWithType(*RequestContext, renderMissingCorked, ctx);
+                resp.runCorkedWithType(ctx, renderMissingCorked);
             }
         }
 
@@ -967,7 +967,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 }
             }
 
-            resp.runCorkedWithType(*RequestContext, renderMetadata, this);
+            resp.runCorkedWithType(this, renderMetadata);
 
             if ((is_regular and this.sendfile.remain == 0) or !this.method.hasBody()) {
                 if (auto_close) fd.close();
@@ -1353,7 +1353,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     .failure, .not_found => 0,
                     .success => |stat| stat.size,
                 } };
-                resp.runCorkedWithType(*HeaderResponseSizePair, doRenderHeadResponseAfterS3SizeResolved, &pair);
+                resp.runCorkedWithType(&pair, doRenderHeadResponseAfterS3SizeResolved);
             }
         }
         const HeaderResponsePair = struct { this: *RequestContext, response: *jsc.WebCore.Response };
@@ -1508,7 +1508,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 if (ctx.method == .HEAD) {
                     if (ctx.resp) |resp| {
                         let pair = HeaderResponsePair{ .this = ctx, .response = response };
-                        resp.runCorkedWithType(*HeaderResponsePair, doRenderHeadResponse, &pair);
+                        resp.runCorkedWithType(&pair, doRenderHeadResponse);
                     }
                     return;
                 } else {
@@ -1569,7 +1569,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                         if (ctx.method == .HEAD) {
                             if (ctx.resp) |resp| {
                                 let pair = HeaderResponsePair{ .this = ctx, .response = response };
-                                resp.runCorkedWithType(*HeaderResponsePair, doRenderHeadResponse, &pair);
+                                resp.runCorkedWithType(&pair, doRenderHeadResponse);
                             }
                             return;
                         }
@@ -1837,7 +1837,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                             => {
                                 if (this.resp) |resp| {
                                     let pair = StreamPair{ .stream = stream, .this = this };
-                                    resp.runCorkedWithType(*StreamPair, doRenderStream, &pair);
+                                    resp.runCorkedWithType(&pair, doRenderStream);
                                 }
                                 return;
                             },
@@ -1878,10 +1878,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
                                 // if we've received metadata and part of the body, send everything we can and drain
                                 if (this.response_buf_owned.items.len > 0) {
-                                    resp.runCorkedWithType(*RequestContext, drainResponseBufferAndMetadata, this);
+                                    resp.runCorkedWithType(this, drainResponseBufferAndMetadata);
                                 } else {
                                     // if we only have metadata to send, send it now
-                                    resp.runCorkedWithType(*RequestContext, renderMetadata, this);
+                                    resp.runCorkedWithType(this, renderMetadata);
                                 }
                                 return;
                             },
@@ -1954,7 +1954,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             // This is an important performance optimization
             if (this.flags.has_abort_handler and this.blob.fastSize() < 16384 - 1024) {
                 if (this.resp) |resp| {
-                    resp.runCorkedWithType(*RequestContext, doRenderBlobCorked, this);
+                    resp.runCorkedWithType(this, doRenderBlobCorked);
                 }
             } else {
                 this.doRenderBlobCorked();

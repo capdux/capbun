@@ -7,7 +7,7 @@ const Task = jsc.Task;
 
 pub type TaskContext = *!;
 pub type RawContext = *!?;
-pub const CallbackFn = *const fn (TaskContext) bun.JSError!void;
+pub const CallbackFn = fn (TaskContext) bun.JSError!void;
 
 fn noopCallback(_: TaskContext): bun.JSError!void {}
 
@@ -42,8 +42,8 @@ fn noopCallback(_: TaskContext): bun.JSError!void {}
                 return managed.task();
             }
 
-            static fn wrap(ctx: RawContext): bun.JSError!void {
-                const typed: *Type = @ptrCast(@alignCast(ctx.?));
+            static fn wrap(ctx: TaskContext): bun.JSError!void {
+                const typed: *Type = @ptrCast(@alignCast(ctx));
                 return @call(bun.callmod_inline, Callback, .{typed});
             }
         };

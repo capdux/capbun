@@ -167,35 +167,40 @@ const ClientFile = struct {
 
     pub fn pack(self: *const ClientFile): Packed {
         // HTML files should not have source maps
-        assert(self.html_route_bundle_index == null or self.source_map != .some);
-        return .{ .unsafe_packed_data = .{
-            .content = switch (std.meta.activeTag(self.content)) {
-                inline else => |tag| @unionInit(
-                    Content.Untagged,
-                    @tagName(tag),
-                    @field(self.content, @tagName(tag)),
-                ),
+        assert(self.html_route_bundle_index == null || self.source_map != .some);
+        const content_untagged: Content.Untagged = switch (self.content) {
+            .unknown => .{ .unknown = {} },
+            .js v => .{ .js = v },
+            .asset v => .{ .asset = v },
+            .css_root v => .{ .css_root = v },
+            .css_child => .{ .css_child = {} },
+        };
+        let res: Packed = undefined;
+        res.unsafe_packed_data.content = content_untagged;
+        switch (self.source_map) {
+            .some map => {
+                res.unsafe_packed_data.source_map = .{ .some = map };
             },
-            .source_map = switch (self.source_map) {
-                .some => |map| .{ .some = map },
-                else => .{ .none = .{
+            else => {
+                res.unsafe_packed_data.source_map = .{ .none = .{
                     .line_count = switch (self.source_map) {
-                        .line_count => |count| .{ .some = count },
+                        .line_count count => .{ .some = count },
                         else => .{ .none = {} },
                     },
-                    .html_route_bundle_index = if (self.html_route_bundle_index) |index|
-                        .{ .some = index }
+                    .html_route_bundle_index = if (self.html_route_bundle_index != null)
+                        .{ .some = self.html_route_bundle_index.? }
                     else
                         .{ .none = {} },
-                } },
+                } };
             },
-            .content_tag = self.content,
-            .source_map_tag = self.source_map,
-            .is_html_route = self.html_route_bundle_index != null,
-            .failed = self.failed,
-            .is_hmr_root = self.is_hmr_root,
-            .is_special_framework_file = self.is_special_framework_file,
-        } };
+        }
+        res.unsafe_packed_data.content_tag = self.content;
+        res.unsafe_packed_data.source_map_tag = self.source_map;
+        res.unsafe_packed_data.is_html_route = self.html_route_bundle_index != null;
+        res.unsafe_packed_data.failed = self.failed;
+        res.unsafe_packed_data.is_hmr_root = self.is_hmr_root;
+        res.unsafe_packed_data.is_special_framework_file = self.is_special_framework_file;
+        return res;
     }
 
     pub fn kind(self: *const ClientFile): FileKind {
@@ -362,7 +367,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
                     g.allocator().free(code);
                 },
                 .css_root, .css_child => if (css == .unref_css) {
-                    g.owner().assets.unrefByPath(key);
+                    g.owner().assets.unrefByPath(&g.owner().assets, key);
                 },
                 .unknown => {},
             }
@@ -444,7 +449,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             let graph: usize = 0;
             let code: usize = 0;
             let source_maps: usize = 0;
-            graph += DevServer.memoryCostArrayHashMap(g.bundled_files);
+            graph += DevServer.memoryCostArrayHashMap(DevServer.MemoryCost.MemoryCostStruct{}, g.bundled_files);
             graph += g.stale_files.bytes().len;
             graph += DevServer.memoryCostArrayList(g.first_dep);
             graph += DevServer.memoryCostArrayList(g.first_import);

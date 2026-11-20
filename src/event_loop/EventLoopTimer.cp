@@ -15,8 +15,8 @@ const VirtualMachine = jsc.VirtualMachine;
 const api = jsc.API;
 const WTFTimer = bun.api.Timer.WTFTimer;
 
-type FlagsOptPtr = (*TimerObjectInternals.Flags)?;
-type ConstFlagsOptPtr = (*const TimerObjectInternals.Flags)?;
+type FlagsOptPtr = (*TimerObjectInternals.TimerObjectInternals.Flags)?;
+type ConstFlagsOptPtr = (*const TimerObjectInternals.TimerObjectInternals.Flags)?;
 
 pub enum InHeap {
     none,
@@ -212,7 +212,10 @@ pub enum State {
                 container.onReconnectTimer();
             },
             .DevServerMemoryVisualizerTick => bun.bake.DevServer.emitMemoryVisualizerMessageTimer(_, now),
-            .DevServerSweepSourceMaps => bun.bake.DevServer.SourceMapStore.sweepWeakRefs(_, now),
+            .DevServerSweepSourceMaps => {
+                const store: *bun.bake.DevServer.SourceMapStore = @alignCast(@fieldParentPtr("weak_ref_sweep_timer", _));
+                store.sweepWeakRefs(_, now);
+            },
             .AbortSignalTimeout => {
                 const timeout: *jsc.WebCore.AbortSignal.Timeout = @alignCast(@fieldParentPtr("event_loop_timer", _));
                 timeout.run(vm);

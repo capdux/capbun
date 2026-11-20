@@ -152,6 +152,60 @@ pub const BlobInternal = struct {
     bytes: std.array_list.Managed(u8),
     was_string: bool = false,
 
+pub fn memoryCost(self: BlobInternal) usize {
+            return self.bytes.capacity;
+    }
+
+pub fn deinit(self: *BlobInternal) void {
+            _ = self.bytes.clearAndFree();
+    }
+
+pub fn toStringOwned(self: *BlobInternal, globalThis: *JSGlobalObject) JSError!JSValue {
+            const bytes_without_bom = strings.withoutUTF8BOM(self.bytes.items);
+            var __bytes_without_bom_moved = false; _ = &__bytes_without_bom_moved;
+            defer if (!__bytes_without_bom_moved) { const __T = @TypeOf(bytes_without_bom); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes_without_bom.release() catch {}; } else { bytes_without_bom.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes_without_bom; _drop_val.release(); } };
+            if ((blk_catch_0: { break :blk_catch_0 ((strings.toUTF16Alloc(bun.default_allocator, bytes_without_bom, false, false)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |out| {
+                _ = &out;
+                const return_value = ZigString.toExternalU16(out.ptr, out.len, globalThis);
+                var __return_value_moved = false; _ = &__return_value_moved;
+                defer if (!__return_value_moved) { const __T = @TypeOf(return_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = return_value.release() catch {}; } else { return_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = return_value; _drop_val.release(); } };
+                _ = return_value.ensureStillAlive();
+                _ = self.deinit();
+                return return_value;
+            } else {
+                if ((bytes_without_bom.len != self.bytes.items.len)) {
+                    defer {
+                    _ = self.deinit();
+                    }
+                    var out = String.cloneLatin1(self.bytes.items[3..]);
+                    var __out_moved = false; _ = &__out_moved;
+                    defer if (!__out_moved) { const __T = @TypeOf(out); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = out.release() catch {}; } else { out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = out; _drop_val.release(); } };
+                    defer {
+                    _ = out.deref();
+                    }
+                    return out.toJS(globalThis);
+                } else {
+                    var str = ZigString.init(self.toOwnedSlice());
+                    var __str_moved = false; _ = &__str_moved;
+                    defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                    _ = str.markGlobal();
+                    return str.toExternalValue(globalThis);
+                }
+            }
+    }
+
+pub fn toJSON(self: *BlobInternal, globalThis: *JSGlobalObject) JSValue {
+            const str_bytes = ZigString.init(strings.withoutUTF8BOM(self.bytes.items)).withEncoding();
+            var __str_bytes_moved = false; _ = &__str_bytes_moved;
+            defer if (!__str_bytes_moved) { const __T = @TypeOf(str_bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str_bytes.release() catch {}; } else { str_bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str_bytes; _drop_val.release(); } };
+            const json = str_bytes.toJSONObject(globalThis);
+            var __json_moved = false; _ = &__json_moved;
+            defer if (!__json_moved) { const __T = @TypeOf(json); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = json.release() catch {}; } else { json.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = json; _drop_val.release(); } };
+            _ = self.deinit();
+            __json_moved = true;
+            return json;
+    }
+
 pub fn slice(self: BlobInternal) []u8 {
             return self.bytes.items;
     }
@@ -174,12 +228,37 @@ pub const BlobAny = union(enum) {
     InternalBlob: BlobInternal,
     WTFStringImpl: bun.WTF.StringImpl,
 
-pub fn fromArrayList(list: std.array_list.Managed(u8)) *BlobAny {
+pub fn fromOwnedSlice(allocator: std.mem.Allocator, bytes: []u8) @This() {
+            return BlobAny{ .InternalBlob = BlobInternal{ .bytes = std.array_list.Managed(u8).fromOwnedSlice(allocator, bytes) } };
+    }
+
+pub fn fromArrayList(list: std.array_list.Managed(u8)) @This() {
             return BlobAny{ .InternalBlob = BlobInternal{ .bytes = list } };
     }
 
+pub fn memoryCost(self: *const BlobAny) usize {
+            switch (self.*) {
+.Blob => |b| {
+if (b.store) |s| {
+                _ = &s;
+                return s.memoryCost();
+            }
+            return 0;
+},
+.WTFStringImpl => |s| {
+if ((s.refCount() == 1)) {
+                return s.memoryCost();
+            }
+            return 0;
+},
+.InternalBlob => |b| {
+return b.memoryCost();
+},
+}
+    }
+
 pub inline fn fastSize(self: *const BlobAny) Blob.SizeType {
-            return (switch (self) {
+            return (switch (self.*) {
 .Blob => self.Blob.size,
 .WTFStringImpl => @truncate(self.WTFStringImpl.byteLength()),
 .InternalBlob => @truncate(self.slice().len),
@@ -187,7 +266,7 @@ pub inline fn fastSize(self: *const BlobAny) Blob.SizeType {
     }
 
 pub inline fn size(self: *const BlobAny) Blob.SizeType {
-            return (switch (self) {
+            return (switch (self.*) {
 .Blob => self.Blob.size,
 .WTFStringImpl => @truncate(self.WTFStringImpl.utf8ByteLength()),
 else => @truncate(self.slice().len),
@@ -195,7 +274,7 @@ else => @truncate(self.slice().len),
     }
 
 pub fn slice(self: *const BlobAny) []const u8 {
-            switch (self) {
+            switch (self.*) {
 .Blob => |b| {
 return b.sharedView();
 },
@@ -218,6 +297,126 @@ _ = b.clearAndFree();
 },
 .WTFStringImpl => |s| {
 _ = s.deref();
+},
+}
+    }
+
+pub fn toBlob(self: *BlobAny, global: *JSGlobalObject) Blob {
+            if ((self.size() == 0)) {
+                return Blob.initEmpty(global);
+            }
+            if ((self.* == .Blob)) {
+                return self.Blob.dupe();
+            }
+            if ((self.* == .WTFStringImpl)) {
+                const b = Blob.create(self.slice(), bun.default_allocator, global, true);
+                var __b_moved = false; _ = &__b_moved;
+                defer if (!__b_moved) { const __T = @TypeOf(b); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = b.release() catch {}; } else { b.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = b; _drop_val.release(); } };
+                self.* = BlobAny{ .Blob = Blob{  } };
+                __b_moved = true;
+                return b;
+            }
+            const b = Blob.init(self.InternalBlob.slice(), self.InternalBlob.bytes.allocator, global);
+            var __b_moved = false; _ = &__b_moved;
+            defer if (!__b_moved) { const __T = @TypeOf(b); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = b.release() catch {}; } else { b.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = b; _drop_val.release(); } };
+            self.* = BlobAny{ .Blob = Blob{  } };
+            __b_moved = true;
+            return b;
+    }
+
+pub fn toJSON(self: *BlobAny, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+            switch (self.*) {
+.Blob => {
+return self.Blob.toJSON(global, lifetime);
+},
+.InternalBlob => {
+if ((self.InternalBlob.bytes.items.len == 0)) {
+                return JSValue.jsNull();
+            }
+            const str = self.InternalBlob.toJSON(global);
+            var __str_moved = false; _ = &__str_moved;
+            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+            self.* = BlobAny{ .Blob = Blob{  } };
+            __str_moved = true;
+            return str;
+},
+.WTFStringImpl => {
+var str = String.init(self.WTFStringImpl);
+            var __str_moved = false; _ = &__str_moved;
+            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+            defer {
+            _ = str.deref();
+            }
+            self.* = BlobAny{ .Blob = Blob{  } };
+            if ((str.length() == 0)) {
+                return JSValue.jsNull();
+            }
+            return str.toJSByParseJSON(global);
+},
+}
+    }
+
+pub fn toString(self: *BlobAny, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+            switch (self.*) {
+.Blob => {
+return self.Blob.toString(global, lifetime);
+},
+.InternalBlob => {
+if ((self.InternalBlob.bytes.items.len == 0)) {
+                return ZigString.Empty.toJS(global);
+            }
+            const owned = try self.InternalBlob.toStringOwned(global);
+            var __owned_moved = false; _ = &__owned_moved;
+            defer if (!__owned_moved) { const __T = @TypeOf(owned); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = owned.release() catch {}; } else { owned.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = owned; _drop_val.release(); } };
+            self.* = BlobAny{ .Blob = Blob{  } };
+            __owned_moved = true;
+            return owned;
+},
+.WTFStringImpl => {
+var str = String.init(self.WTFStringImpl);
+            var __str_moved = false; _ = &__str_moved;
+            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+            defer {
+            _ = str.deref();
+            }
+            self.* = BlobAny{ .Blob = Blob{  } };
+            return str.toJS(global);
+},
+}
+    }
+
+pub fn toArrayBuffer(self: *BlobAny, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+            return self.toArrayBufferView(global, lifetime, .ArrayBuffer);
+    }
+
+pub fn toUint8Array(self: *BlobAny, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+            return self.toArrayBufferView(global, lifetime, .Uint8Array);
+    }
+
+pub fn toArrayBufferView(self: *BlobAny, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime, comptime TypedArrayView: JSValue.JSType) JSError!JSValue {
+            switch (self.*) {
+.Blob => {
+return self.Blob.toArrayBufferView(global, lifetime, TypedArrayView);
+},
+.InternalBlob => {
+const bytes = self.InternalBlob.toOwnedSlice();
+            var __bytes_moved = false; _ = &__bytes_moved;
+            defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
+            self.* = BlobAny{ .Blob = Blob{  } };
+            return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
+},
+.WTFStringImpl => {
+const str = String.init(self.WTFStringImpl);
+            var __str_moved = false; _ = &__str_moved;
+            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+            defer {
+            _ = str.deref();
+            }
+            self.* = BlobAny{ .Blob = Blob{  } };
+            const bytes = bun.handleOom(str.toOwnedSlice(bun.default_allocator));
+            var __bytes_moved = false; _ = &__bytes_moved;
+            defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
+            return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
 },
 }
     }
@@ -428,7 +627,7 @@ pub fn doReadFileInternal(self: *Blob, comptime Handler: type, ctx: Handler, com
             _ = read_file_mod.ReadFileUV.start(global.bunVM().eventLoop(), self.store.?, self.offset, self.size, ReadFileHandler, ctx);
             return;
         }
-        const file_read = (blk_catch_0: { break :blk_catch_0 ((read_file_mod.ReadFile.createWithCtx(bun.default_allocator, self.store.?, ctx, NewInternalReadFileHandler(Handler, Function).run, self.offset, self.size)) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+        const file_read = (blk_catch_1: { break :blk_catch_1 ((read_file_mod.ReadFile.createWithCtx(bun.default_allocator, self.store.?, ctx, NewInternalReadFileHandler(Handler, Function).run, self.offset, self.size)) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
         var __file_read_moved = false; _ = &__file_read_moved;
         defer if (!__file_read_moved) { const __T = @TypeOf(file_read); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = file_read.release() catch {}; } else { file_read.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = file_read; _drop_val.release(); } };
         var read_file_task = read_file_mod.ReadFileTask.createOnJSThread(bun.default_allocator, global, file_read);
@@ -523,7 +722,7 @@ _ = t.done(.{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.Str
             return;
         }
         const view = self.sharedView();
-        const owned = (blk_catch_1: { break :blk_catch_1 ((bun.default_allocator.dupe(u8, view)) catch |__ce_1| { _ = &__ce_1; _ = Handler.onReadBytes(ctx, .{ .err = .{ .code = bun.String.static("ENOMEM"), .message = bun.String.static("Out of memory"), .syscall = bun.String.static("read") } });
+        const owned = (blk_catch_2: { break :blk_catch_2 ((bun.default_allocator.dupe(u8, view)) catch |__ce_2| { _ = &__ce_2; _ = Handler.onReadBytes(ctx, .{ .err = .{ .code = bun.String.static("ENOMEM"), .message = bun.String.static("Out of memory"), .syscall = bun.String.static("read") } });
         return; }); });
         var __owned_moved = false; _ = &__owned_moved;
         defer if (!__owned_moved) { const __T = @TypeOf(owned); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = owned.release() catch {}; } else { owned.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = owned; _drop_val.release(); } };
@@ -1242,7 +1441,7 @@ pub fn pipeReadableStreamToBlob(self: *Blob, globalThis: *JSGlobalObject, readab
         _ = &store;
         if (self.isS3()) {
             const s3 = (&self.store.?.data.s3);
-            var aws_options = (blk_catch_2: { break :blk_catch_2 ((s3.getCredentialsWithOptions(extra_options, globalThis)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e)); }); });
+            var aws_options = (blk_catch_3: { break :blk_catch_3 ((s3.getCredentialsWithOptions(extra_options, globalThis)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e)); }); });
             var __aws_options_moved = false; _ = &__aws_options_moved;
             defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
             defer {
@@ -1687,7 +1886,7 @@ _ = fd.close();
         }
 },
 .s3 => |*s3| {
-var aws_options = (blk_catch_3: { break :blk_catch_3 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+var aws_options = (blk_catch_4: { break :blk_catch_4 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
         var __aws_options_moved = false; _ = &__aws_options_moved;
         defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
         defer {
@@ -1778,7 +1977,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                 defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
                 _ = promise_value.ensureStillAlive();
                 _ = write_file_promise.promise.strong.set(ctx, promise_value);
-                _ = (blk_catch_4: { break :blk_catch_4 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
+                _ = (blk_catch_5: { break :blk_catch_5 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
                     return error.JSTerminated;
                 } }); });
                 return promise_value;
@@ -1838,7 +2037,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                                 const s3 = (&destination_store.data.s3);
                                 var __s3_moved = false; _ = &__s3_moved;
                                 defer if (!__s3_moved) { const __T = @TypeOf(s3); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s3.release() catch {}; } else { s3.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s3; _drop_val.release(); } };
-                                var aws_options = (blk_catch_6: { break :blk_catch_6 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+                                var aws_options = (blk_catch_7: { break :blk_catch_7 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
                                 var __aws_options_moved = false; _ = &__aws_options_moved;
                                 defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
                                 defer {
@@ -1938,7 +2137,7 @@ pub fn writeStringToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Pat
                 needs_async.* = true;
                 return .zero;
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_7: { break :blk_catch_7 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_7| { _ = &__ce_7; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_8: { break :blk_catch_8 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return .zero; }); }));
         }
 },
 });
@@ -1990,9 +2189,9 @@ truncate = false;
                     return .zero;
                 }
                 if (comptime (!needs_open)) {
-                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_8: { break :blk_catch_8 ((e.toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return .zero; }); }));
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_9: { break :blk_catch_9 ((e.toJS(globalThis)) catch |__ce_9| { _ = &__ce_9; return .zero; }); }));
                 }
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_9: { break :blk_catch_9 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_9| { _ = &__ce_9; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_10: { break :blk_catch_10 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_10| { _ = &__ce_10; return .zero; }); }));
 },
 }
             }
@@ -2014,7 +2213,7 @@ pub fn writeBytesToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Path
                     return .zero;
                 }
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_10: { break :blk_catch_10 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_10| { _ = &__ce_10; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_11: { break :blk_catch_11 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_11| { _ = &__ce_11; return .zero; }); }));
         }
 },
 });
@@ -2051,9 +2250,9 @@ if ((!Environment.isWindows)) {
                 }
             }
             if (comptime (!needs_open)) {
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_11: { break :blk_catch_11 ((e.toJS(globalThis)) catch |__ce_11| { _ = &__ce_11; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_12: { break :blk_catch_12 ((e.toJS(globalThis)) catch |__ce_12| { _ = &__ce_12; return .zero; }); }));
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_12: { break :blk_catch_12 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_12| { _ = &__ce_12; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_13: { break :blk_catch_13 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_13| { _ = &__ce_13; return .zero; }); }));
 },
 }
         }

@@ -1435,3 +1435,5 @@
 - **[2026-11-20] Wave 15 Batch B+C 核心修复**：`CryptoHasher` 提取 `digest_len` 与可变 `enc` 副本清 40 错；`node_fs_binding` 清 33 处 `error.zero` 并加 `hasDecl(deinit)` 守卫；`shell/IO.cp` `OutKind`、`PipeWriter.cp` `WriteResult`、`MySQLConnection.cp` `AuthState` 改 `pub const X = union(enum)` 恢复值类型存储；`shell/Builtin.cp` 用 `@field(args, comptimePrint)` 消除 19 处 comptime 错。
 
 - **[2026-11-20] Wave 15 收官**：43 个核心模块落地，总报错 714→507；`AnyRequestContext`/`DeferredTaskQueue`/`ManagedTask` 升级 `@root struct`，`Body.Mixin(T)` 补 `static fn` 清零 `host_fn`。
+
+- **[2026-11-20] Wave 16 Batch A 要点**：`AnyRequestContext` 用顶层 `Opt*` 类型别名避免 `?` 被误 lower 为 `try`；`Body.cp` 用 `&@field(x, "Locked")` 避开大写字段取址误解析；`uws` 新签名下统一移除 `onTimeout`/`runCorkedWithType` 多余类型参数。

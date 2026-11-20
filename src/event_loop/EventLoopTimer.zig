@@ -275,7 +275,8 @@ const container: *api.Valkey = @alignCast(@fieldParentPtr("reconnect_timer", sel
 _ = bun.bake.DevServer.emitMemoryVisualizerMessageTimer(self, now);
 },
 .DevServerSweepSourceMaps => {
-_ = bun.bake.DevServer.SourceMapStore.sweepWeakRefs(self, now);
+const store: *bun.bake.DevServer.SourceMapStore = @alignCast(@fieldParentPtr("weak_ref_sweep_timer", self));
+        _ = store.sweepWeakRefs(self, now);
 },
 .AbortSignalTimeout => {
 const timeout: *jsc.WebCore.AbortSignal.Timeout = @alignCast(@fieldParentPtr("event_loop_timer", self));
@@ -342,8 +343,8 @@ const container: *TimerCallback = @alignCast(@fieldParentPtr("event_loop_timer",
 },
 }
 }
-const FlagsOptPtr = ?*TimerObjectInternals.Flags;
-const ConstFlagsOptPtr = ?*const TimerObjectInternals.Flags;
+const FlagsOptPtr = ?*TimerObjectInternals.TimerObjectInternals.Flags;
+const ConstFlagsOptPtr = ?*const TimerObjectInternals.TimerObjectInternals.Flags;
 const Environment = bun.Environment;
 const timespec = bun.timespec;
 const uws = bun.uws;

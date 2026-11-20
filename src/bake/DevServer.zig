@@ -1263,7 +1263,7 @@ pub fn deinit(dev: *DevServer) void {
             }
             _ = dev.barrel_needed_exports.deinit(alloc);
         }
-        _ = dev.assets.deinit(alloc);
+        _ = dev.assets.deinit((&dev.assets), alloc);
         _ = dev.incremental_result.client_components_added.deinit(alloc);
         _ = dev.incremental_result.framework_routes_affected.deinit(alloc);
         _ = dev.incremental_result.client_components_removed.deinit(alloc);
@@ -1842,7 +1842,7 @@ pub fn computeArgumentsForFrameworkRequest(dev: *DevServer, route_bundle_index: 
             if ((parent_opt == null)) {
                 break;
             }
-            route = dev.router.routePtr(parent_opt.unwrap());
+            route = dev.router.routePtr(parent_opt.?);
         }
         const arr = try JSValue.createEmptyArray(global, n);
         route = dev.router.routePtr(framework_bundle.route_index);
@@ -1872,7 +1872,7 @@ pub fn computeArgumentsForFrameworkRequest(dev: *DevServer, route_bundle_index: 
             if ((parent_opt == null)) {
                 break;
             }
-            route = dev.router.routePtr(parent_opt.unwrap());
+            route = dev.router.routePtr(parent_opt.?);
         }
         framework_bundle.cached_module_list = .create(arr, global);
         break :arr arr;
@@ -2399,7 +2399,7 @@ var route = dev.router.routePtr(fw.route_index);
             if ((parent_opt == null)) {
                 break;
             }
-            route = dev.router.routePtr(parent_opt.unwrap());
+            route = dev.router.routePtr(parent_opt.?);
         }
 },
 .html => |html| {
@@ -3288,7 +3288,9 @@ const incremental_graph_index = try dev.client_graph.insertStaleExtra(html.bundl
         bundle_data = .{ .html = .{ .html_bundle = .initRef(html), .bundled_file = incremental_graph_index, .script_injection_offset = .none, .cached_response = null, .bundled_html_text = null } };
 },
 }
-        _ = dev.route_bundles.appendAssumeCapacity(.{ .data = bundle_data, .client_script_generation = std.crypto.random.int(u32), .server_state = .unqueued, .client_bundle = null, .active_viewers = 0 });
+        const bundle_data_ptr = bun.handleOom(dev.allocator().create(RouteBundle.RouteBundleData));
+        bundle_data_ptr.* = bundle_data;
+        _ = dev.route_bundles.appendAssumeCapacity(.{ .data = bundle_data_ptr, .client_script_generation = std.crypto.random.int(u32), .server_state = .unqueued, .client_bundle = null, .active_viewers = 0 });
         index_location.* = bundle_index.toOptional();
         return bundle_index;
 }
@@ -3554,7 +3556,7 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
                     _ = bun.assert((value.ref_count > 0));
                     _ = try w.writeAll(std.mem.asBytes((&key.get())));
                     _ = try w.writeInt(u32, value.ref_count, .little);
-                    if (dev.source_maps.locateWeakRef(key)) |entry| {
+                    if (dev.source_maps.locateWeakRef((&dev.source_maps), key)) |entry| {
                         _ = &entry;
                         _ = try w.writeInt(u32, entry.ref.count, .little);
                         const expire_f64: f64 = @floatFromInt(entry.ref.expire);

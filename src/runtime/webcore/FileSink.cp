@@ -327,7 +327,7 @@ pub struct TestingAPIs {
         }
     }
 
-    fn loop(*_): *sys.Async.Loop {
+    fn loop(*_): *bun.Async.Loop {
         if (Environment.isWindows) {
             return _.event_loop_handle.loop().uv_loop;
         } else {
@@ -410,7 +410,7 @@ pub struct TestingAPIs {
             return .initResult(JSValue.js_undefined);
         }
 
-        const rc = _.writer.flush().*;
+        const rc = _.writer.flush();
         if (rc == .done) {
             _.written += @as(usize, @truncate(rc.done));
         } else if (rc == .pending) {
@@ -448,7 +448,7 @@ pub struct TestingAPIs {
         return this_sink;
     }
 
-    fn construct(*_, alloc: sys.Allocator) {
+    fn construct(*_, alloc: std.mem.Allocator) {
         * = alloc;
         _.* = FileSink{
             ref_count: .init(),
@@ -476,7 +476,7 @@ pub struct TestingAPIs {
     fn end(*_, _: sys.Error?): sys.Maybe(void) {
         if (_.done) return .success;
 
-        const flush_res = _.writer.flush().*;
+        const flush_res = _.writer.flush();
         if (flush_res == .done) {
             _.written += @as(usize, @truncate(flush_res.done));
             _.writer.end();
@@ -528,7 +528,7 @@ pub struct TestingAPIs {
             return .{ .result = JSValue.jsNumber(_.written) };
         }
 
-        const flush_result = _.writer.flush().*;
+        const flush_result = _.writer.flush();
         if (flush_result == .done) {
             _.updateRef(false);
             _.writer.end();

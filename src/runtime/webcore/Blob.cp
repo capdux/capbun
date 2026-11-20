@@ -1133,6 +1133,40 @@ pub struct BlobInternal {
     bytes: std.array_list.Managed(u8),
     was_string: bool = false,
 
+    fn memoryCost(): usize {
+        return _.bytes.capacity;
+    }
+
+    fn deinit(*_) {
+        _.bytes.clearAndFree();
+    }
+
+    fn toStringOwned(*_, globalThis: *JSGlobalObject): JSValue ! JSError {
+        const bytes_without_bom = strings.withoutUTF8BOM(_.bytes.items);
+        if (out := (strings.toUTF16Alloc(bun.default_allocator, bytes_without_bom, false, false) catch null)) {
+            const return_value = ZigString.toExternalU16(out.ptr, out.len, globalThis);
+            return_value.ensureStillAlive();
+            _.deinit();
+            return return_value;
+        } else if (bytes_without_bom.len != _.bytes.items.len) {
+            defer _.deinit();
+            let out = String.cloneLatin1(_.bytes.items[3..]);
+            defer out.deref();
+            return out.toJS(globalThis);
+        } else {
+            let str = ZigString.init(_.toOwnedSlice());
+            str.markGlobal();
+            return str.toExternalValue(globalThis);
+        }
+    }
+
+    fn toJSON(*_, globalThis: *JSGlobalObject): JSValue {
+        const str_bytes = ZigString.init(strings.withoutUTF8BOM(_.bytes.items)).withEncoding();
+        const json = str_bytes.toJSONObject(globalThis);
+        _.deinit();
+        return json;
+    }
+
     fn slice(): []u8 {
         return _.bytes.items;
     }
@@ -1155,12 +1189,30 @@ pub union(enum) BlobAny {
     InternalBlob: BlobInternal,
     WTFStringImpl: bun.WTF.StringImpl,
 
-    static fn fromArrayList(list: std.array_list.Managed(u8)): BlobAny {
+    static fn fromOwnedSlice(allocator: std.mem.Allocator, bytes: []u8): @This() {
+        return BlobAny{ InternalBlob: BlobInternal{ bytes: std.array_list.Managed(u8).fromOwnedSlice(allocator, bytes) } };
+    }
+
+    static fn fromArrayList(list: std.array_list.Managed(u8)): @This() {
         return BlobAny{ InternalBlob: BlobInternal{ bytes: list } };
     }
 
+    fn memoryCost(): usize {
+        switch (_.*) {
+            .Blob(b) => {
+                if (s := b.store) return s.memoryCost();
+                return 0;
+            },
+            .WTFStringImpl(s) => {
+                if (s.refCount() == 1) return s.memoryCost();
+                return 0;
+            },
+            .InternalBlob(b) => return b.memoryCost(),
+        }
+    }
+
     inline fn fastSize(): Blob.SizeType {
-        return switch (_) {
+        return switch (_.*) {
             .Blob => _.Blob.size,
             .WTFStringImpl => @truncate(_.WTFStringImpl.byteLength()),
             .InternalBlob => @truncate(_.slice().len),
@@ -1168,7 +1220,7 @@ pub union(enum) BlobAny {
     }
 
     inline fn size(): Blob.SizeType {
-        return switch (_) {
+        return switch (_.*) {
             .Blob => _.Blob.size,
             .WTFStringImpl => @truncate(_.WTFStringImpl.utf8ByteLength()),
             else => @truncate(_.slice().len),
@@ -1176,7 +1228,7 @@ pub union(enum) BlobAny {
     }
 
     fn slice(): []const u8 {
-        switch (_) {
+        switch (_.*) {
             .Blob(b) => return b.sharedView(),
             .InternalBlob(b) => return b.sliceConst(),
             .WTFStringImpl(s) => return s.latin1Slice(),
@@ -1188,6 +1240,92 @@ pub union(enum) BlobAny {
             .Blob => |*b| b.detach(),
             .InternalBlob => |*b| b.clearAndFree(),
             .WTFStringImpl => |s| s.deref(),
+        }
+    }
+
+    fn toBlob(*_, global: *JSGlobalObject): Blob {
+        if (_.size() == 0) {
+            return Blob.initEmpty(global);
+        }
+        if (_.* == .Blob) {
+            return _.Blob.dupe();
+        }
+        if (_.* == .WTFStringImpl) {
+            const b = Blob.create(_.slice(), bun.default_allocator, global, true);
+            _.* = BlobAny{ Blob: Blob{} };
+            return b;
+        }
+        const b = Blob.init(_.InternalBlob.slice(), _.InternalBlob.bytes.allocator, global);
+        _.* = BlobAny{ Blob: Blob{} };
+        return b;
+    }
+
+    fn toJSON(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSValue ! JSError {
+        switch (_.*) {
+            .Blob => return _.Blob.toJSON(global, lifetime),
+            .InternalBlob => {
+                if (_.InternalBlob.bytes.items.len == 0) {
+                    return JSValue.jsNull();
+                }
+                const str = _.InternalBlob.toJSON(global);
+                _.* = BlobAny{ Blob: Blob{} };
+                return str;
+            },
+            .WTFStringImpl => {
+                let str = String.init(_.WTFStringImpl);
+                defer str.deref();
+                _.* = BlobAny{ Blob: Blob{} };
+                if (str.length() == 0) {
+                    return JSValue.jsNull();
+                }
+                return str.toJSByParseJSON(global);
+            },
+        }
+    }
+
+    fn toString(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSValue ! JSError {
+        switch (_.*) {
+            .Blob => return _.Blob.toString(global, lifetime),
+            .InternalBlob => {
+                if (_.InternalBlob.bytes.items.len == 0) {
+                    return ZigString.Empty.toJS(global);
+                }
+                const owned = _.InternalBlob.toStringOwned(global)?;
+                _.* = BlobAny{ Blob: Blob{} };
+                return owned;
+            },
+            .WTFStringImpl => {
+                let str = String.init(_.WTFStringImpl);
+                defer str.deref();
+                _.* = BlobAny{ Blob: Blob{} };
+                return str.toJS(global);
+            },
+        }
+    }
+
+    fn toArrayBuffer(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSValue ! JSError {
+        return _.toArrayBufferView(global, lifetime, .ArrayBuffer);
+    }
+
+    fn toUint8Array(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSValue ! JSError {
+        return _.toArrayBufferView(global, lifetime, .Uint8Array);
+    }
+
+    fn toArrayBufferView(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime, comptime TypedArrayView: JSValue.JSType): JSValue ! JSError {
+        switch (_.*) {
+            .Blob => return _.Blob.toArrayBufferView(global, lifetime, TypedArrayView),
+            .InternalBlob => {
+                const bytes = _.InternalBlob.toOwnedSlice();
+                _.* = BlobAny{ Blob: Blob{} };
+                return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
+            },
+            .WTFStringImpl => {
+                const str = String.init(_.WTFStringImpl);
+                defer str.deref();
+                _.* = BlobAny{ Blob: Blob{} };
+                const bytes = bun.handleOom(str.toOwnedSlice(bun.default_allocator));
+                return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
+            },
         }
     }
 

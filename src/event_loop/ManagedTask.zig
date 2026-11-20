@@ -79,17 +79,17 @@ pub fn init(ctx: *Type) Task {
             return managed.task();
     }
 
-pub fn wrap(ctx: RawContext) bun.JSError!void {
-            const typed: *Type = @ptrCast(@alignCast(ctx.?));
+pub fn wrap(ctx: TaskContext) bun.JSError!void {
+            const typed: *Type = @ptrCast(@alignCast(ctx));
             return @call(bun.callmod_inline, Callback, .{ typed });
     }
 };
 }
 pub const TaskContext = *anyopaque;
 pub const RawContext = ?*anyopaque;
+pub const CallbackFn = *const fn (TaskContext) bun.JSError!void;
 const jsc = bun.jsc;
 const Task = jsc.Task;
-pub const CallbackFn = *const *const fn(TaskContext) bun.JSError!void;
 
 pub fn noopCallback(_: TaskContext) bun.JSError!void {
 }

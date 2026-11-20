@@ -340,7 +340,7 @@ pub fn onForceSyncOrIsaTTY(fs: *FileSink) void {
         }
 }
 
-pub fn loop(self: *FileSink) *sys.Async.Loop {
+pub fn loop(self: *FileSink) *bun.Async.Loop {
         if (Environment.isWindows) {
             return self.event_loop_handle.loop().uv_loop;
         } else {
@@ -425,7 +425,7 @@ pub fn flushFromJS(self: *FileSink, globalThis: *JSGlobalObject, wait: bool) sys
         if (self.done) {
             return .initResult(JSValue.js_undefined);
         }
-        const rc = (self.writer.flush()).*;
+        const rc = self.writer.flush();
         if ((rc == .done)) {
             self.written = (self.written + @as(usize, @truncate(rc.done)));
         } else {
@@ -465,7 +465,7 @@ pub fn init(fd: FD, event_loop_handle: anytype) *FileSink {
         return this_sink;
 }
 
-pub fn construct(self: *FileSink, alloc: sys.Allocator) void {
+pub fn construct(self: *FileSink, alloc: std.mem.Allocator) void {
         _ = &alloc;
         self.* = FileSink{ .ref_count = .init(), .event_loop_handle = EventLoopHandle.init(VirtualMachine.get().eventLoop()) };
         _ = live_count.fetchAdd(1, .monotonic);
@@ -496,7 +496,7 @@ pub fn end(self: *FileSink, _: ?sys.Error) sys.Maybe(void) {
         if (self.done) {
             return .success;
         }
-        const flush_res = (self.writer.flush()).*;
+        const flush_res = self.writer.flush();
         if ((flush_res == .done)) {
             self.written = (self.written + @as(usize, @truncate(flush_res.done)));
             _ = self.writer.end();
@@ -552,7 +552,7 @@ pub fn endFromJS(self: *FileSink, globalThis: *JSGlobalObject) sys.Maybe(JSValue
             }
             return .{ .result = JSValue.jsNumber(self.written) };
         }
-        const flush_result = (self.writer.flush()).*;
+        const flush_result = self.writer.flush();
         if ((flush_result == .done)) {
             _ = self.updateRef(false);
             _ = self.writer.end();

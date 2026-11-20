@@ -20,7 +20,7 @@ pub fn writeStatus(comptime ssl: bool, resp_ptr: *uws.NewApp(ssl).Response?, sta
 
 // TODO: rename to StaticBlobRoute? the html bundle is sometimes a static route
 pub const StaticRoute = @import("./StaticRoute.zig");
-pub const FileRoute = @import("./FileRoute.zig");
+pub const FileRoute = @import("./FileRoute.zig").FileRoute;
 pub const FileResponseStream = @import("./FileResponseStream.zig");
 pub const RangeRequest = @import("./RangeRequest.zig");
 
@@ -1433,7 +1433,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         port = @intCast(listener.getLocalPort());
 
                         let buf: [64]u8 = [_]u8{0} ** 64;
-                        const address_bytes = listener.socket().localAddress(&buf) orelse return JSValue.jsNull();
+                        const address_bytes = listener.socket(ssl_enabled).localAddress(&buf) orelse return JSValue.jsNull();
                         let addr = SocketAddress.init(address_bytes, port) catch {
                             @branchHint(.unlikely);
                             return JSValue.jsNull();
@@ -1508,7 +1508,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 if (this.listener) |listener| {
                     let buf: [1024]u8 = [_]u8{0} ** 1024;
 
-                    if (listener.socket().remoteAddress(buf[0..1024])) |addr| {
+                    if (listener.socket(ssl_enabled).remoteAddress(buf[0..1024])) |addr| {
                         if (addr.len > 0) {
                             return bun.String.createUTF8ForJS(globalThis, addr);
                         }
@@ -1679,7 +1679,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             this.unref();
 
             if (!ssl_enabled)
-                this.vm.removeListeningSocketForWatchMode(listener.socket().fd());
+                this.vm.removeListeningSocketForWatchMode(listener.socket(ssl_enabled).fd());
 
             this.notifyInspectorServerStopped();
 
@@ -2809,9 +2809,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 // Register HTTP routes
                 switch (user_route.route.method) {
                     .any => {
-                        app.any(user_route.route.path, *UserRoute, user_route, onUserRouteRequest);
+                        app.any(user_route.route.path, user_route, onUserRouteRequest);
                         if (comptime has_h3) {
-                            if (this.h3_app) |h3_app| h3_app.any(user_route.route.path, *UserRoute, user_route, onH3UserRouteRequest);
+                            if (this.h3_app) |h3_app| h3_app.any(user_route.route.path, user_route, onH3UserRouteRequest);
                         }
                         if (is_star_path) {
                             star_methods_covered_by_user = .initFull();
@@ -2857,11 +2857,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             // --- 4. Register negative routes ---
             for (this.config.negative_routes.items) |route_path| {
                 app.head(route_path, *ThisServer, this, onRequest);
-                app.any(route_path, *ThisServer, this, onRequest);
+                app.any(route_path, this, onRequest);
                 if (comptime has_h3) {
                     if (this.h3_app) |h3_app| {
                         h3_app.head(route_path, *ThisServer, this, onH3Request);
-                        h3_app.any(route_path, *ThisServer, this, onH3Request);
+                        h3_app.any(route_path, this, onH3Request);
                     }
                 }
             }
@@ -2980,10 +2980,10 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             } else {
                 switch (this.config.onNodeHTTPRequest) {
                     .zero => switch (this.config.onRequest) {
-                        .zero => app.any("/*", *ThisServer, this, on404),
-                        else => app.any("/*", *ThisServer, this, onRequest),
+                        .zero => app.any("/*", this, on404),
+                        else => app.any("/*", this, onRequest),
                     },
-                    else => app.any("/*", *ThisServer, this, onNodeHTTPRequest),
+                    else => app.any("/*", this, onNodeHTTPRequest),
                 }
             }
 
@@ -3008,9 +3008,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                             }
                         }
                     } else if (this.config.onRequest != .zero) {
-                        h3_app.any("/*", *ThisServer, this, onH3Request);
+                        h3_app.any("/*", this, onH3Request);
                     } else {
-                        h3_app.any("/*", *ThisServer, this, onH3404);
+                        h3_app.any("/*", this, onH3404);
                     }
                 }
             }
@@ -3532,25 +3532,25 @@ pub fn Server__setOnClientError_(globalThis: *jsc.JSGlobalObject, server: jsc.JS
         if (app := srv.app) {
             srv.on_clienterror.deinit();
             srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-            app.onClientError(*HTTPServer, srv, HTTPServer.onClientErrorCallback);
+            app.onClientError(srv, HTTPServer.onClientErrorCallback);
         }
     } else if (srv := server.as(HTTPSServer)) {
         if (app := srv.app) {
             srv.on_clienterror.deinit();
             srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-            app.onClientError(*HTTPSServer, srv, HTTPSServer.onClientErrorCallback);
+            app.onClientError(srv, HTTPSServer.onClientErrorCallback);
         }
     } else if (srv := server.as(DebugHTTPServer)) {
         if (app := srv.app) {
             srv.on_clienterror.deinit();
             srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-            app.onClientError(*DebugHTTPServer, srv, DebugHTTPServer.onClientErrorCallback);
+            app.onClientError(srv, DebugHTTPServer.onClientErrorCallback);
         }
     } else if (srv := server.as(DebugHTTPSServer)) {
         if (app := srv.app) {
             srv.on_clienterror.deinit();
             srv.on_clienterror = jsc.Strong.Optional.create(callback, globalThis);
-            app.onClientError(*DebugHTTPSServer, srv, DebugHTTPSServer.onClientErrorCallback);
+            app.onClientError(srv, DebugHTTPSServer.onClientErrorCallback);
         }
     } else {
         bun.debugAssert(false);

@@ -23,10 +23,10 @@ import { SocketKind } from "./SocketKind.zig";
     fn us_socket_write2(s: *us_socket_t, header: [*]const u8?, len: usize, payload: [*]const u8?, payload_len: usize): i32;
     fn us_socket_raw_write(s: *us_socket_t, data: [*]const u8!, length: i32): i32;
     fn us_socket_flush(s: *us_socket_t);
-    fn us_socket_open(s: *us_socket_t, is_client: i32, ip: [*]const u8?, ip_length: i32): *us_socket_t?;
+    fn us_socket_open(s: *us_socket_t, is_client: i32, ip: [*]const u8?, ip_length: i32): (*us_socket_t)?;
     fn us_socket_pause(s: *us_socket_t);
     fn us_socket_resume(s: *us_socket_t);
-    fn us_socket_close(s: *us_socket_t, code: SocketCloseCode, reason: *!?): *us_socket_t?;
+    fn us_socket_close(s: *us_socket_t, code: SocketCloseCode, reason: *!?): (*us_socket_t)?;
     fn us_socket_shutdown(s: *us_socket_t);
     fn us_socket_is_closed(s: *us_socket_t): i32;
     fn us_socket_shutdown_read(s: *us_socket_t);
@@ -36,8 +36,8 @@ import { SocketKind } from "./SocketKind.zig";
     fn us_socket_verify_error(s: *us_socket_t): bun.uws.us_bun_verify_error_t;
     fn us_socket_get_error(s: *us_socket_t): i32;
     fn us_socket_is_established(s: *us_socket_t): i32;
-    fn us_socket_adopt(s: *us_socket_t, group: *SocketGroup, kind: u8, old_ext_size: i32, ext_size: i32): *us_socket_t?;
-    fn us_socket_adopt_tls(s: *us_socket_t, group: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx, sni: cstr?, old_ext_size: i32, ext_size: i32): *us_socket_t?;
+    fn us_socket_adopt(s: *us_socket_t, group: *SocketGroup, kind: u8, old_ext_size: i32, ext_size: i32): (*us_socket_t)?;
+    fn us_socket_adopt_tls(s: *us_socket_t, group: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx, sni: cstr?, old_ext_size: i32, ext_size: i32): (*us_socket_t)?;
     fn us_socket_start_tls_handshake(s: *us_socket_t);
 }
 
@@ -117,7 +117,7 @@ export @opaque class us_socket_t {
         us_socket_set_kind(this, @intFromEnum(k));
     }
 
-    pub fn adopt(*_, g: *SocketGroup, k: SocketKind, old_ext: i32, new_ext: i32): *us_socket_t? {
+    pub fn adopt(*_, g: *SocketGroup, k: SocketKind, old_ext: i32, new_ext: i32): (*us_socket_t)? {
         return us_socket_adopt(this, g, @intFromEnum(k), old_ext, new_ext);
     }
 
@@ -129,7 +129,7 @@ export @opaque class us_socket_t {
         sni: cstr?,
         old_ext: i32,
         new_ext: i32,
-    ): *us_socket_t? {
+    ): (*us_socket_t)? {
         return us_socket_adopt_tls(this, g, @intFromEnum(k), ssl_ctx, sni, old_ext, new_ext);
     }
 

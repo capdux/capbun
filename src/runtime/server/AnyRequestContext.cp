@@ -22,6 +22,9 @@ pub const Pointer = bun.TaggedPointerUnion(.{
 });
 
 pub const AdditionalOnAbortCallback = RequestContextMod.AdditionalOnAbortCallback;
+type OptSocketAddress = uws.SocketAddress?;
+type OptRequestPtr = (*uws.Request)?;
+type OptDevServerPtr = (*bun.bake.DevServer)?;
 
 fn cbSetAdditionalOnAbortCallback(comptime _: type, ctx: auto, c: AdditionalOnAbortCallback?) {
     bun.assert(ctx.additional_on_abort == null);
@@ -89,7 +92,7 @@ fn cbDeref(comptime _: type, ctx: auto) {
 @root struct AnyRequestContext {
     tagged_pointer: Pointer,
 
-    const Null: AnyRequestContext = AnyRequestContext{ tagged_pointer: Pointer.Null };
+    pub const Null: AnyRequestContext = AnyRequestContext{ tagged_pointer: Pointer.Null };
 
     static fn init(request_ctx: auto): AnyRequestContext {
         return AnyRequestContext{ tagged_pointer: Pointer.init(request_ctx) };
@@ -130,7 +133,7 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn getRemoteSocketInfo(): uws.SocketAddress? {
-        return _.dispatch(uws.SocketAddress?, null, cbGetRemoteSocketInfo, .{});
+        return _.dispatch(OptSocketAddress, null, cbGetRemoteSocketInfo, .{});
     }
 
     fn detachRequest() {
@@ -142,7 +145,7 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn getRequest(): (*uws.Request)? {
-        return _.dispatch((*uws.Request)?, null, cbGetRequest, .{});
+        return _.dispatch(OptRequestPtr, null, cbGetRequest, .{});
     }
 
     fn onAbort(response: uws.AnyResponse) {
@@ -158,7 +161,7 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn devServer(): (*bun.bake.DevServer)? {
-        return _.dispatch((*bun.bake.DevServer)?, null, cbDevServer, .{});
+        return _.dispatch(OptDevServerPtr, null, cbDevServer, .{});
     }
 
     fn deref() {

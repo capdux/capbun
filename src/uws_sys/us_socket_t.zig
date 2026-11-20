@@ -97,11 +97,11 @@ pub fn setKind(self: *us_socket_t, k: SocketKind) void {
             _ = us_socket_set_kind(self, @intFromEnum(k));
     }
 
-pub fn adopt(self: *us_socket_t, g: *SocketGroup, k: SocketKind, old_ext: i32, new_ext: i32) *?*us_socket_t {
+pub fn adopt(self: *us_socket_t, g: *SocketGroup, k: SocketKind, old_ext: i32, new_ext: i32) ?*us_socket_t {
             return us_socket_adopt(self, g, @intFromEnum(k), old_ext, new_ext);
     }
 
-pub fn adoptTLS(self: *us_socket_t, g: *SocketGroup, k: SocketKind, ssl_ctx: *bun.uws.SslCtx, sni: ?[*:0]const u8, old_ext: i32, new_ext: i32) *?*us_socket_t {
+pub fn adoptTLS(self: *us_socket_t, g: *SocketGroup, k: SocketKind, ssl_ctx: *bun.uws.SslCtx, sni: ?[*:0]const u8, old_ext: i32, new_ext: i32) ?*us_socket_t {
             return us_socket_adopt_tls(self, g, @intFromEnum(k), ssl_ctx, sni, old_ext, new_ext);
     }
 
@@ -295,13 +295,13 @@ extern "c" fn us_socket_raw_write(s: *us_socket_t, data: [*]const u8, length: i3
 
 extern "c" fn us_socket_flush(s: *us_socket_t) callconv(.c) void;
 
-extern "c" fn us_socket_open(s: *us_socket_t, is_client: i32, ip: ?[*]const u8, ip_length: i32) callconv(.c) *?*us_socket_t;
+extern "c" fn us_socket_open(s: *us_socket_t, is_client: i32, ip: ?[*]const u8, ip_length: i32) callconv(.c) ?*us_socket_t;
 
 extern "c" fn us_socket_pause(s: *us_socket_t) callconv(.c) void;
 
 extern "c" fn us_socket_resume(s: *us_socket_t) callconv(.c) void;
 
-extern "c" fn us_socket_close(s: *us_socket_t, code: SocketCloseCode, reason: ?*anyopaque) callconv(.c) *?*us_socket_t;
+extern "c" fn us_socket_close(s: *us_socket_t, code: SocketCloseCode, reason: ?*anyopaque) callconv(.c) ?*us_socket_t;
 
 extern "c" fn us_socket_shutdown(s: *us_socket_t) callconv(.c) void;
 
@@ -321,9 +321,9 @@ extern "c" fn us_socket_get_error(s: *us_socket_t) callconv(.c) i32;
 
 extern "c" fn us_socket_is_established(s: *us_socket_t) callconv(.c) i32;
 
-extern "c" fn us_socket_adopt(s: *us_socket_t, group: *SocketGroup, kind: u8, old_ext_size: i32, ext_size: i32) callconv(.c) *?*us_socket_t;
+extern "c" fn us_socket_adopt(s: *us_socket_t, group: *SocketGroup, kind: u8, old_ext_size: i32, ext_size: i32) callconv(.c) ?*us_socket_t;
 
-extern "c" fn us_socket_adopt_tls(s: *us_socket_t, group: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx, sni: ?[*:0]const u8, old_ext_size: i32, ext_size: i32) callconv(.c) *?*us_socket_t;
+extern "c" fn us_socket_adopt_tls(s: *us_socket_t, group: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx, sni: ?[*:0]const u8, old_ext_size: i32, ext_size: i32) callconv(.c) ?*us_socket_t;
 
 extern "c" fn us_socket_start_tls_handshake(s: *us_socket_t) callconv(.c) void;
 

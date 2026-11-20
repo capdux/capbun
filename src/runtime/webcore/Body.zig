@@ -187,9 +187,8 @@ else => unreachable,
 }
             }
             {
-                var promise = jsc.JSPromise.create(globalThis);
-                _ = &promise;
-                const promise_value = (promise).?.toJS();
+                const new_promise = jsc.JSPromise.create(globalThis);
+                const promise_value = new_promise.toJS();
                 value.promise = promise_value;
                 _ = promise_value.protect();
                 if (value.onStartBuffering) |onStartBuffering| {
@@ -433,7 +432,7 @@ defer {
 pub fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, owned_readable_stream: ?jsc.WebCore.ReadableStream) !void {
             _ = assert((value.* == .Locked));
             const locked = (blk: {
-            break :blk *const value.Locked;
+            break :blk (&@field(value, "Locked"));
 
 });
             const readable_stream = brk: {
@@ -1122,7 +1121,7 @@ var blob = self.use();
 },
 .Locked => {
 var locked = (blk: {
-            break :blk *const self.Locked;
+            break :blk (&@field(self, "Locked"));
 
 });
             _ = &locked;
@@ -1180,7 +1179,7 @@ return jsc.WebCore.ReadableStream.empty(globalThis);
 pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue) bun.JSError!Value {
             _ = value.ensureStillAlive();
             if (value.isEmptyOrUndefinedOrNull()) {
-                return Body.Value{ .Null = .{} };
+                return Body.Value.Null;
             }
             const js_type = value.jsType();
             if (js_type.isStringLike()) {
@@ -1271,7 +1270,7 @@ pub fn resolve(self: *@This(), new_val: *Value, global: *JSGlobalObject, headers
             _ = log("resolve", .{});
             if ((self.* == .Locked)) {
                 var locked = (blk: {
-                break :blk *const self.Locked;
+                break :blk (&@field(self, "Locked"));
 
 });
                 _ = &locked;
@@ -1529,7 +1528,12 @@ pub fn toErrorInstance(self: *@This(), e: ValueError, global: *JSGlobalObject) b
                 if (strong_readable.get(global)) |readable| {
                     _ = &readable;
                     if ((readable.ptr == .Bytes)) {
-                        _ = try readable.ptr.Bytes.onData(.{ .err = self.Error.toStreamError(global) }, bun.default_allocator);
+                        var stream_err = self.Error.toStreamError(global);
+                        _ = &stream_err;
+                        _ = try readable.ptr.Bytes.onData(.{ .err = (blk: {
+                        break :blk (&stream_err);
+
+}) }, bun.default_allocator);
                     } else {
                         _ = readable.abort(global);
                     }
@@ -1577,14 +1581,14 @@ pub fn deinit(self: *@This()) void {
 
 pub fn tee(self: *@This(), globalThis: *jsc.JSGlobalObject, owned_readable: ?*jsc.WebCore.ReadableStream) bun.JSError!Value {
             var locked = (blk: {
-            break :blk *const self.Locked;
+            break :blk (&@field(self, "Locked"));
 
 });
             _ = &locked;
             if (owned_readable) |readable| {
                 _ = &readable;
                 if (readable.isDisturbed(globalThis)) {
-                    return error.Used;
+                    return Value.Used;
                 }
                 if (try readable.tee(globalThis)) |new_readable| {
                     _ = &new_readable;
@@ -1593,14 +1597,14 @@ pub fn tee(self: *@This(), globalThis: *jsc.JSGlobalObject, owned_readable: ?*js
                 }
             }
             if (locked.readable.isDisturbed(globalThis)) {
-                return error.Used;
+                return Value.Used;
             }
             if (try locked.readable.tee(globalThis)) |readable| {
                 _ = &readable;
                 return Value{ .Locked = .{ .readable = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis), .global = globalThis } };
             }
             if ((((locked.promise != null) or (locked.action != .none)) or locked.readable.has())) {
-                return error.Used;
+                return Value.Used;
             }
             var drain_result: jsc.WebCore.DrainResult = .{ .estimated_size = 0 };
             _ = &drain_result;
@@ -1611,7 +1615,7 @@ pub fn tee(self: *@This(), globalThis: *jsc.JSGlobalObject, owned_readable: ?*js
             }
             if (((drain_result == .empty) or (drain_result == .aborted))) {
                 self.* = .Null;
-                return error.Null;
+                return Value.Null;
             }
             var reader = jsc.WebCore.ByteStream.Source.new(.{ .context = undefined, .globalThis = globalThis });
             _ = &reader;
@@ -1656,9 +1660,9 @@ pub fn cloneWithReadableStream(self: *@This(), globalThis: *jsc.JSGlobalObject, 
                 return Value{ .WTFStringImpl = self.WTFStringImpl };
             }
             if ((self.* == .Null)) {
-                return error.Null;
+                return Value.Null;
             }
-            return error.Empty;
+            return Value.Empty;
     }
     const log = Output.scoped(.BodyValue, .visible);
     const pool_size = (if (bun.heap_breakdown.enabled) 0 else 256);

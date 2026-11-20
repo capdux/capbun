@@ -118,7 +118,7 @@ pub fn enableTimeoutEvents(self: AnyRequestContext) void {
 }
 
 pub fn getRemoteSocketInfo(self: AnyRequestContext) ?uws.SocketAddress {
-        return self.dispatch(try uws.SocketAddress, null, cbGetRemoteSocketInfo, .{});
+        return self.dispatch(OptSocketAddress, null, cbGetRemoteSocketInfo, .{});
 }
 
 pub fn detachRequest(self: AnyRequestContext) void {
@@ -130,7 +130,7 @@ pub fn setRequest(self: AnyRequestContext, req: *uws.Request) void {
 }
 
 pub fn getRequest(self: AnyRequestContext) ?*uws.Request {
-        return self.dispatch(try *uws.Request, null, cbGetRequest, .{});
+        return self.dispatch(OptRequestPtr, null, cbGetRequest, .{});
 }
 
 pub fn onAbort(self: AnyRequestContext, response: uws.AnyResponse) void {
@@ -146,13 +146,16 @@ pub fn setSignalAborted(self: AnyRequestContext, reason: bun.jsc.CommonAbortReas
 }
 
 pub fn devServer(self: AnyRequestContext) ?*bun.bake.DevServer {
-        return self.dispatch(try *bun.bake.DevServer, null, cbDevServer, .{});
+        return self.dispatch(OptDevServerPtr, null, cbDevServer, .{});
 }
 
 pub fn deref(self: AnyRequestContext) void {
         _ = self.dispatch(void, .{}, cbDeref, .{});
 }
-const Null: AnyRequestContext = AnyRequestContext{ .tagged_pointer = Pointer.Null };
+pub const Null: AnyRequestContext = AnyRequestContext{ .tagged_pointer = Pointer.Null };
+const OptSocketAddress = ?uws.SocketAddress;
+const OptRequestPtr = ?*uws.Request;
+const OptDevServerPtr = ?*bun.bake.DevServer;
 const jsc = bun.jsc;
 const uws = bun.uws;
 const DebugHTTPSServer = bun.api.DebugHTTPSServer;

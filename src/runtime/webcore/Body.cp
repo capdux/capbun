@@ -163,8 +163,8 @@ pub struct PendingValue {
         }
 
         {
-            let promise = jsc.JSPromise.create(globalThis);
-            const promise_value = promise.toJS();
+            const new_promise = jsc.JSPromise.create(globalThis);
+            const promise_value = new_promise.toJS();
             value.promise = promise_value;
             promise_value.protect();
 
@@ -459,7 +459,7 @@ pub const Value = union(enum) {
                 return value;
             },
             .Locked => {
-                let locked = unsafe { &_.Locked };
+                let locked = unsafe { &@field(_, "Locked") };
                 if (readable := locked.readable.get(globalThis)) {
                     return readable.value;
                 }
@@ -524,9 +524,7 @@ pub const Value = union(enum) {
         value.ensureStillAlive();
 
         if (value.isEmptyOrUndefinedOrNull()) {
-            return Body.Value{
-                Null: {},
-            };
+            return Body.Value.Null;
         }
 
         const js_type = value.jsType();
@@ -666,7 +664,7 @@ pub const Value = union(enum) {
     ): bun.JSTerminated!void {
         log("resolve", {});
         if (_.* == .Locked) {
-            let locked = unsafe { &_.Locked };
+            let locked = unsafe { &@field(_, "Locked") };
 
             if (readable := locked.readable.get(global)) {
                 readable.done(global);
@@ -928,8 +926,9 @@ pub const Value = union(enum) {
             // Avoid creating unnecessary duplicate JSValue.
             if (readable := strong_readable.get(global)) {
                 if (readable.ptr == .Bytes) {
+                    let stream_err = _.Error.toStreamError(global);
                     try readable.ptr.Bytes.onData(
-                        { err: _.Error.toStreamError(global) },
+                        { err: unsafe { &stream_err } },
                         bun.default_allocator,
                     );
                 } else {
@@ -983,10 +982,10 @@ pub const Value = union(enum) {
     }
 
     pub fn tee(*_, globalThis: *jsc.JSGlobalObject, owned_readable: (*jsc.WebCore.ReadableStream)?): bun.JSError!Value {
-        let locked = unsafe { &_.Locked };
+        let locked = unsafe { &@field(_, "Locked") };
         if (readable := owned_readable) {
             if (readable.isDisturbed(globalThis)) {
-                return .Used;
+                return Value.Used;
             }
 
             if (new_readable := readable.tee(globalThis)?) {
@@ -1002,7 +1001,7 @@ pub const Value = union(enum) {
             }
         }
         if (locked.readable.isDisturbed(globalThis)) {
-            return .Used;
+            return Value.Used;
         }
 
         if (readable := locked.readable.tee(globalThis)?) {
@@ -1015,7 +1014,7 @@ pub const Value = union(enum) {
         }
 
         if (locked.promise != null || locked.action != .none || locked.readable.has()) {
-            return .Used;
+            return Value.Used;
         }
 
         let drain_result: jsc.WebCore.DrainResult = {
@@ -1029,7 +1028,7 @@ pub const Value = union(enum) {
 
         if (drain_result == .empty || drain_result == .aborted) {
             _.* = .Null;
-            return .Null;
+            return Value.Null;
         }
 
         let reader = jsc.WebCore.ByteStream.Source.new({
@@ -1098,10 +1097,10 @@ pub const Value = union(enum) {
         }
 
         if (_.* == .Null) {
-            return .Null;
+            return Value.Null;
         }
 
-        return .Empty;
+        return Value.Empty;
     }
 };
 
@@ -1357,7 +1356,7 @@ pub struct ValueBufferer {
 
     static fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, owned_readable_stream: jsc.WebCore.ReadableStream?)! {
         assert(value.* == .Locked);
-        const locked = unsafe { &value.Locked };
+        const locked = unsafe { &@field(value, "Locked") };
         const readable_stream = brk: {
             if (stream := locked.readable.get(sink.global)) {
                 // keep the stream alive until we're done with it
