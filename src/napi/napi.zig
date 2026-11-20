@@ -323,7 +323,7 @@ pub const napi_node_version = extern struct {
     major: u32,
     minor: u32,
     patch: u32,
-    release: [*:0]u8,
+    release: [*:0]const u8,
     const parsed_nodejs_version = (blk_catch_0: { break :blk_catch_0 ((std.SemanticVersion.parse(bun.Environment.reported_nodejs_version)) catch |__ce_0| { _ = &__ce_0; @panic("Invalid reported Node.js version"); }); });
     pub const global: napi_node_version = .{ .major = parsed_nodejs_version.major, .minor = parsed_nodejs_version.minor, .patch = parsed_nodejs_version.patch, .release = "node" };
 };
@@ -1654,7 +1654,7 @@ pub fn napi_create_string_latin1(env_: napi_env, str: ?[*]const u8, length: usiz
         if (str) |ptr| {
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
-                break :brk bun.sliceTo(@as([*:0]u8, @ptrCast(ptr)), 0);
+                break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
             } else {
                 if ((length > std.math.maxInt(i32))) {
                     return env.invalidArg();
@@ -1701,7 +1701,7 @@ pub fn napi_create_string_utf8(env_: napi_env, str: ?[*]const u8, length: usize,
         if (str) |ptr| {
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
-                break :brk bun.sliceTo(@as([*:0]u8, @ptrCast(ptr)), 0);
+                break :brk bun.sliceTo(@as([*:0]const u8, @ptrCast(ptr)), 0);
             } else {
                 if ((length > std.math.maxInt(i32))) {
                     return env.invalidArg();
@@ -1740,7 +1740,7 @@ pub fn napi_create_string_utf16(env_: napi_env, str: ?[*]const char16_t, length:
         if (str) |ptr| {
             _ = &ptr;
             if ((NAPI_AUTO_LENGTH == length)) {
-                break :brk bun.sliceTo(@as([*:0]u16, @ptrCast(ptr)), 0);
+                break :brk bun.sliceTo(@as([*:0]const u16, @ptrCast(ptr)), 0);
             } else {
                 if ((length > std.math.maxInt(i32))) {
                     return env.invalidArg();
@@ -2457,7 +2457,7 @@ pub fn napiSpan(ptr: anytype, len: usize) []const u8 {
         return ptr.?[0..len];
 }
 
-pub fn napi_fatal_error(location_ptr: ?[*:0]u8, location_len: usize, message_ptr: ?[*:0]u8, message_len_: usize) noreturn {
+pub fn napi_fatal_error(location_ptr: ?[*:0]const u8, location_len: usize, message_ptr: ?[*:0]const u8, message_len_: usize) noreturn {
         _ = log("napi_fatal_error", .{});
         _ = napi_internal_suppress_crash_on_abort_if_desired();
         var message = napiSpan(message_ptr, message_len_);
@@ -2541,7 +2541,7 @@ extern "c" fn node_api_create_external_string_latin1(a0: napi_env, a1: [*:0]u8, 
 
 extern "c" fn node_api_create_external_string_utf16(a0: napi_env, a1: [*:0]u16, a2: usize, a3: napi_finalize, a4: ?*anyopaque, a5: *JSValue, a6: *bool) callconv(.c) napi_status;
 
-pub fn napi_create_async_work(env_: napi_env, _: napi_value, _: [*:0]u8, execute_: ?napi_async_execute_callback, complete: ?napi_async_complete_callback, data: ?*anyopaque, result_: ?*napi_async_work) napi_status {
+pub fn napi_create_async_work(env_: napi_env, _: napi_value, _: [*:0]const u8, execute_: ?napi_async_execute_callback, complete: ?napi_async_complete_callback, data: ?*anyopaque, result_: ?*napi_async_work) napi_status {
         _ = log("napi_create_async_work", .{});
         if ((env_ == null)) {
             return envIsNull();

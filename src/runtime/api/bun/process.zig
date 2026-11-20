@@ -778,7 +778,7 @@ pub const PosixSpawnOptions = struct {
     cwd: []const u8 = "",
     detached: bool = false,
     windows: void = undefined,
-    argv0: ?[*:0]u8 = null,
+    argv0: ?[*:0]const u8 = null,
     stream: bool = true,
     sync: bool = false,
     can_block_entire_thread_to_reduce_cpu_usage_in_fast_path: bool = false,
@@ -850,7 +850,7 @@ pub const WindowsSpawnOptions = struct {
     cwd: []const u8 = "",
     detached: bool = false,
     windows: WindowsOptions = .{},
-    argv0: ?[*:0]u8 = null,
+    argv0: ?[*:0]const u8 = null,
     stream: bool = true,
     use_execve_on_macos: bool = false,
     can_block_entire_thread_to_reduce_cpu_usage_in_fast_path: bool = false,
@@ -1051,7 +1051,7 @@ pub fn flattenOwnedChunks(total_allocator: std.mem.Allocator, chunks_allocator: 
             return result;
     }
 
-pub fn spawnWindowsWithoutPipes(options: *const Options, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) !Maybe(Result) {
+pub fn spawnWindowsWithoutPipes(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
             var loop = options.windows.loop.platformEventLoop();
             _ = &loop;
             var spawned = (switch (try spawnProcessWindows((&options.toSpawnOptions(false)), argv, envp)) {
@@ -1076,7 +1076,7 @@ return .{ .err = e };
             return .{ .result = .{ .status = process.status } };
     }
 
-pub fn spawnWindowsWithPipes(options: *const Options, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) !Maybe(Result) {
+pub fn spawnWindowsWithPipes(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
             var loop: jsc.EventLoopHandle = options.windows.loop;
             _ = &loop;
             var spawned = (switch (try spawnProcessWindows((&options.toSpawnOptions(false)), argv, envp)) {
@@ -1120,7 +1120,7 @@ _ = win_proc.process.kill(1);
             return .{ .result = result };
     }
 
-pub fn spawnWithArgv(options: *const Options, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) !Maybe(Result) {
+pub fn spawnWithArgv(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
             if (comptime Environment.isWindows) {
                 if ((((options.stdin != .buffer) and (options.stderr != .buffer)) and (options.stdout != .buffer))) {
                     return try spawnWindowsWithoutPipes(options, argv, envp);
@@ -1131,7 +1131,7 @@ pub fn spawnWithArgv(options: *const Options, argv: ?[*:null][*:0]u8, envp: ?[*:
     }
 
 pub fn spawn(options: *const Options) !Maybe(Result) {
-            const envp = ((options.envp) orelse (@as(?[*:null][*:0]u8, @ptrCast(std.c.environ))));
+            const envp = ((options.envp) orelse (@as(?[*:null][*:0]const u8, @ptrCast(std.c.environ))));
             const argv = options.argv;
             var string_builder = bun.StringBuilder{  };
             _ = &string_builder;
@@ -1156,7 +1156,7 @@ pub fn spawn(options: *const Options) !Maybe(Result) {
             return spawnWithArgv(options, @ptrCast(args.items.ptr), @ptrCast(envp));
     }
 
-pub fn spawnPosix(options: *const Options, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) !Maybe(Result) {
+pub fn spawnPosix(options: *const Options, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !Maybe(Result) {
             const no_orphans = (bun.ParentDeathWatchdog.isEnabled() and (!(Environment.isMac and options.use_execve_on_macos)));
             var siblings_buf: [64]std.c.pid_t = undefined;
             _ = &siblings_buf;
@@ -1697,9 +1697,9 @@ pub fn reapChild(child: std.c.pid_t) Status {
         cwd: []const u8 = "",
         detached: bool = false,
         argv: []const []const u8,
-        envp: ??[*:null][*:0]u8,
+        envp: ??[*:null][*:0]const u8,
         use_execve_on_macos: bool = false,
-        argv0: ?[*:0]u8 = null,
+        argv0: ?[*:0]const u8 = null,
         windows: if (Environment.isWindows) WindowsSpawnOptions.WindowsOptions else void = (if (Environment.isWindows) ({
     }) else null),
     
@@ -2091,7 +2091,7 @@ pub fn uv_getrusage(process: *uv.uv_process_t) win_rusage {
         return usage_info;
 }
 
-pub fn spawnProcess(options: *const SpawnOptions, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) !bun.sys.Maybe(SpawnProcessResult) {
+pub fn spawnProcess(options: *const SpawnOptions, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !bun.sys.Maybe(SpawnProcessResult) {
         if (comptime Environment.isPosix) {
             return spawnProcessPosix(options, argv, envp);
         } else {
@@ -2099,7 +2099,7 @@ pub fn spawnProcess(options: *const SpawnOptions, argv: ?[*:null][*:0]u8, envp: 
         }
 }
 
-pub fn spawnProcessPosix(options: *const PosixSpawnOptions, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) !bun.sys.Maybe(PosixSpawnResult) {
+pub fn spawnProcessPosix(options: *const PosixSpawnOptions, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !bun.sys.Maybe(PosixSpawnResult) {
         bun.analytics.Features.spawn = (bun.analytics.Features.spawn + 1);
         var actions = try PosixSpawn.Actions.init();
         _ = &actions;
@@ -2372,7 +2372,7 @@ if ((e.getErrno() == .SRCH)) {
         _ = unreachable;
 }
 
-pub fn spawnProcessWindows(options: *const WindowsSpawnOptions, argv: ?[*:null][*:0]u8, envp: ?[*:null][*:0]u8) !bun.sys.Maybe(WindowsSpawnResult) {
+pub fn spawnProcessWindows(options: *const WindowsSpawnOptions, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !bun.sys.Maybe(WindowsSpawnResult) {
         _ = bun.markWindowsOnly();
         bun.analytics.Features.spawn = (bun.analytics.Features.spawn + 1);
         var uv_process_options = std.mem.zeroes(uv.uv_process_options_t);

@@ -319,14 +319,14 @@ args: *const std.array_list.Managed(OptStringZ),
 args_slice: ?[]const [:0]const u8 = null,
 @"impl": Impl,
 
-pub fn argsSlice(self: *Builtin) []const [*:0]u8 {
+pub fn argsSlice(self: *Builtin) []const [*:0]const u8 {
         const args_raw = self.args.items[1..];
         const args_len = ((std.mem.indexOfScalar(OptStringZ, args_raw, null)) orelse (@panic("bad")));
         if ((args_len == 0)) {
             return &.{};
         }
         {
-            const p: [*][*:0]u8 = @ptrCast(args_raw.ptr);
+            const p: [*][*:0]const u8 = @ptrCast(args_raw.ptr);
             return p[0..args_len];
         }
 }
@@ -746,8 +746,8 @@ pub fn fmtErrorArena(self: *Builtin, comptime kind: ?Kind, comptime fmt_: []cons
         const fmt = (cmd_str ++ fmt_);
         return bun.handleOom(std.fmt.allocPrint(self.@"arena".allocator(), fmt, args));
 }
-pub const StringZ = [*:0]u8;
-pub const OptStringZ = ?[*:0]u8;
+pub const StringZ = [*:0]const u8;
+pub const OptStringZ = ?[*:0]const u8;
 const Allocator = std.mem.Allocator;
 const jsc = bun.jsc;
 const shell = bun.shell;
@@ -766,7 +766,7 @@ const IOWriter = Interpreter.IOWriter;
 const Syscall = bun.sys;
 const Maybe = bun.sys.Maybe;
 pub const Result = @import("../bun_core/result.zig").Result;
-const empty_args: [0][*:0]u8 = &.{};
+const empty_args: [0][*:0]const u8 = &.{};
 pub const Impl = union(Kind) {
     cat: Cat,
     touch: Touch,

@@ -96,14 +96,14 @@ pub fn Bun__Chrome__kill() void {
         }
 }
 
-pub fn Bun__Chrome__ensure(global: *jsc.JSGlobalObject, userDataDir: ?[*:0]u8, path: ?[*:0]u8, extraArgv: ?[*]const [*:0]u8, extraArgvLen: u32, stdoutInherit: bool, stderrInherit: bool) i32 {
+pub fn Bun__Chrome__ensure(global: *jsc.JSGlobalObject, userDataDir: ?[*:0]const u8, path: ?[*:0]const u8, extraArgv: ?[*]const [*:0]const u8, extraArgvLen: u32, stdoutInherit: bool, stderrInherit: bool) i32 {
         if (comptime bun.Environment.isWindows) {
             return -1;
         }
         if ((instance != null)) {
             return -1;
         }
-        var extra: []const [*:0]u8 = &.{};
+        var extra: []const [*:0]const u8 = &.{};
         _ = &extra;
         if (extraArgv) |a| {
             _ = &a;
@@ -114,7 +114,7 @@ pub fn Bun__Chrome__ensure(global: *jsc.JSGlobalObject, userDataDir: ?[*:0]u8, p
         return fd.cast();
 }
 
-pub fn findChrome(alloc: std.mem.Allocator, explicitPath: ?[*:0]u8) !?[:0]const u8 {
+pub fn findChrome(alloc: std.mem.Allocator, explicitPath: ?[*:0]const u8) !?[:0]const u8 {
         if (explicitPath) |p| {
             _ = &p;
             return try alloc.dupeZ(u8, std.mem.span(p));
@@ -243,7 +243,7 @@ return null;
         return null;
 }
 
-pub fn @"spawn"(vm: *jsc.VirtualMachine, userDataDir: ?[*:0]u8, explicitPath: ?[*:0]u8, extraArgv: []const [*:0]u8, stdoutInherit: bool, stderrInherit: bool) anyerror!bun.FD {
+pub fn @"spawn"(vm: *jsc.VirtualMachine, userDataDir: ?[*:0]const u8, explicitPath: ?[*:0]const u8, extraArgv: []const [*:0]const u8, stdoutInherit: bool, stderrInherit: bool) anyerror!bun.FD {
         if (comptime bun.Environment.isWindows) {
             return error.Unsupported;
         }

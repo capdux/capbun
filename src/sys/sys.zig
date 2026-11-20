@@ -292,7 +292,7 @@ pub const AndroidSigactionHandler = extern union {
 
 pub const AndroidSigaction = extern struct {
     flags: c_uint,
-    handler: *AndroidSigactionHandler,
+    handler: AndroidSigactionHandler,
     mask: sigset_t,
     restorer: OptAndroidSigactionRestorerFn = null,
 };
@@ -671,11 +671,11 @@ const fcntl_symbol = syscall.fcntl;
 const pwrite_sym = (if ((((builtin.os.tag == .linux) and builtin.link_libc) and bun.Environment.isGlibc)) libc.pwrite64 else syscall.pwrite);
 const send_flags_nonblock = (c.MSG_DONTWAIT | c.MSG_NOSIGNAL);
 pub const sigset_t = (if (Environment.isAndroid) c_ulong else posix.sigset_t);
-pub const AndroidSigactionHandlerFn = *const *const fn(i32) callconv(.c) void;
-pub const AndroidSigactionFn = *const *const fn(i32, *const posix.siginfo_t, ?*anyopaque) callconv(.c) void;
-pub const AndroidSigactionRestorerFn = *const *const fn() callconv(.c) void;
+pub const AndroidSigactionHandlerFn = *const fn(i32) callconv(.c) void;
+pub const AndroidSigactionFn = *const fn(i32, *const posix.siginfo_t, ?*anyopaque) callconv(.c) void;
+pub const AndroidSigactionRestorerFn = *const fn() callconv(.c) void;
 pub const Sigaction = (if (Environment.isAndroid) AndroidSigaction else posix.Sigaction);
-const LibcSigactionFn = *const *const fn(c_int, OptConstSigactionPtr, OptSigactionPtr) callconv(.c) c_int;
+const LibcSigactionFn = *const fn(c_int, OptConstSigactionPtr, OptSigactionPtr) callconv(.c) c_int;
 const socketpair_t = (if (Environment.isLinux) i32 else c_uint);
 const NonblockingStatus = enum { blocking, nonblocking };
 const MFD_NOEXEC_SEAL: u32 = 8;
@@ -696,7 +696,7 @@ else => {
 pub const preallocate_supported = (@TypeOf(preallocate_length) != void);
 pub const umask = (switch (Environment.os) {
 else => bun.c.umask,
-.windows => @extern(*const *const fn(mode: u16) callconv(.c) u16, .{ .name = "_umask" }),
+.windows => @extern(*const fn(mode: u16) callconv(.c) u16, .{ .name = "_umask" }),
 });
 pub const TestingAPIs = @import("../sys_jsc/error_jsc.zig").TestingAPIs;
 const sys = @This();
@@ -1096,7 +1096,7 @@ pub fn mkdiratA(dir_fd: bun.FD, file_path: []const u8) Maybe(void) {
         return mkdiratW(dir_fd, bun.strings.toWPathNormalized(buf, file_path));
 }
 
-pub fn mkdiratZ(dir_fd: bun.FD, file_path: [*:0]u8, mode: mode_t) Maybe(void) {
+pub fn mkdiratZ(dir_fd: bun.FD, file_path: [*:0]const u8, mode: mode_t) Maybe(void) {
         return (switch (Environment.os) {
 .mac => ((Maybe(void).errnoSysP(syscall.mkdirat((if (comptime @typeInfo(@TypeOf(dir_fd.cast())) == .@"enum") cp_cast_int(i32, @intFromEnum(dir_fd.cast())) else cp_cast_int(i32, dir_fd.cast())), file_path, mode), .mkdir, file_path)) orelse (.success)),
 .linux => ((Maybe(void).errnoSysP(linux.mkdirat((if (comptime @typeInfo(@TypeOf(dir_fd.cast())) == .@"enum") cp_cast_int(i32, @intFromEnum(dir_fd.cast())) else cp_cast_int(i32, dir_fd.cast())), file_path, mode), .mkdir, file_path)) orelse (.success)),
@@ -3341,7 +3341,7 @@ pub fn existsAt(fd: bun.FD, subpath: [:0]const u8) bool {
         _ = @compileError("TODO: existsAtOSPath");
 }
 
-pub extern "c" fn is_executable_file(path: [*:0]u8) callconv(.c) bool;
+pub extern "c" fn is_executable_file(path: [*:0]const u8) callconv(.c) bool;
 
 pub fn isExecutableFileOSPath(path: bun.OSPathSliceZ) bool {
         if (comptime Environment.isPosix) {
@@ -3356,7 +3356,7 @@ pub fn isExecutableFileOSPath(path: bun.OSPathSliceZ) bool {
 pub fn isExecutableFilePath(path: anytype) bool {
         const Type = @TypeOf(path);
         if (comptime Environment.isPosix) {
-            if ((Type == *[*:0]u8) or (Type == *[*:0]u8) or (Type == [*:0]u8) or (Type == [*:0]u8)) {
+            if ((Type == *[*:0]const u8) or (Type == *[*:0]u8) or (Type == [*:0]const u8) or (Type == [*:0]u8)) {
 return is_executable_file(path);
 } else if ((Type == [:0]const u8) or (Type == [:0]u8)) {
 return is_executable_file(path.ptr);
@@ -3694,7 +3694,7 @@ pub fn selfProcessMemoryUsage() ?usize {
         return rss;
 }
 
-pub fn Bun__errnoName(e: c_int) ?[*:0]u8 {
+pub fn Bun__errnoName(e: c_int) ?[*:0]const u8 {
         if (SystemErrno.init(e)) |val| {
             _ = &val;
             return @tagName(val);
@@ -3702,7 +3702,7 @@ pub fn Bun__errnoName(e: c_int) ?[*:0]u8 {
         return null;
 }
 
-pub fn Bun__unlink(ptr: [*:0]u8, len: usize) void {
+pub fn Bun__unlink(ptr: [*:0]const u8, len: usize) void {
         _ = unlink(ptr[0..len :0]);
 }
 

@@ -3120,3 +3120,5 @@ Options:
 - **[2026-11-20 21:34] Wave 17 C 组验收提交（6 模块）**：`Response.cp` 补 `NewResponse.upgrade`；`Assets.replacePath` 改 `*_` 接收者；`fetch.cp` 补 `fetch_type_error_strings`（`server.cp` TODO 已换回引用）；`RouteBundle.RouteBundleData` 改 `pub const ... = union(enum)` 值类型并撤掉 `DevServer.cp` 的 `.data.*` 绕过（6/6 PASS）。
 
 - **[2026-11-20 21:46] Wave 17 B 组验收提交（18 模块）**：dns/cares_jsc/c_ares/NewReader/StackReader/shell/Cmd/rm/Builtin/Yield/types/node_fs/yaml/resolve_path/resolver/fs/pretty_format/VirtualMachine 18/18 PASS（ratio 0.93x~1.154x）；yaml.zig 已用修复后的 `cpc` 重编，仓库内错误集合并旧 `or` 清零。B 组给出的 `std` 调用方清单（output/JSPromise/JSGlobalObject/valkey/interpreter/mv/tagged_pointer/IO/HardcodedModule/ZigStackFramePosition/postgres NewWriter/baby_list）留待 Wave 18。
+
+- **[2026-11-20 21:53] 上游结单 `task-bun-20261120-sentinel-ptr-const` 验收**：`cp_agy` 已在 `cpc/src/parser/types.rs` 修复（带哨兵多元素指针 `[*:0]const u8?`/`[*c:0]const u8?` 完整保留 `const`）；repro 生成 `h2: ?[*:0]const u8 = null`。用新 `cpc` 重编 28 个文件（28/28 PASS），`zig:check` 中不再有 sentinel-const 类报错，全仓总数 428→399（含并行子智能体的中间改动）；`uws_sys/App.cp` 因 Wave 18 A 组正在修改，待其交付后重编。仓库中剩余的 `?[*:0]u8` 均为原版本身的可变指针。此前为绕过该缺陷写的 `CStr`/`ConstCString` 类型别名仍保留，后续可清理。

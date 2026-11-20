@@ -67,20 +67,20 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 pub const bun = @import("bun");
 pub const SSLConfig = @This();
 
-server_name: ?[*:0]u8 = null,
-key_file_name: ?[*:0]u8 = null,
-cert_file_name: ?[*:0]u8 = null,
-ca_file_name: ?[*:0]u8 = null,
-dh_params_file_name: ?[*:0]u8 = null,
-passphrase: ?[*:0]u8 = null,
+server_name: ?[*:0]const u8 = null,
+key_file_name: ?[*:0]const u8 = null,
+cert_file_name: ?[*:0]const u8 = null,
+ca_file_name: ?[*:0]const u8 = null,
+dh_params_file_name: ?[*:0]const u8 = null,
+passphrase: ?[*:0]const u8 = null,
 key: ?CStringSlice = null,
 cert: ?CStringSlice = null,
 ca: ?CStringSlice = null,
 secure_options: u32 = 0,
 request_cert: i32 = 0,
 reject_unauthorized: i32 = 0,
-ssl_ciphers: ?[*:0]u8 = null,
-protos: ?[*:0]u8 = null,
+ssl_ciphers: ?[*:0]const u8 = null,
+protos: ?[*:0]const u8 = null,
 client_renegotiation_limit: u32 = 0,
 client_renegotiation_window: u32 = 0,
 requires_custom_request_ctx: bool = false,
@@ -335,7 +335,7 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
             result.ca_file_name = try handlePath(global, "caFile", ca_file).ptr;
             result.requires_custom_request_ctx = true;
         }
-        const protocols: ?[*:0]u8 = (switch (generated.alpn_protocols) {
+        const protocols: ?[*:0]const u8 = (switch (generated.alpn_protocols) {
 .none => null,
 .string => |*val| val.get().toOwnedSliceZ(bun.default_allocator).ptr,
 .buffer => |*val| blk: {
@@ -383,10 +383,10 @@ pub const SingleFileInput = union(enum) {
     file: *bun.webcore.Blob,
 };
 
-pub const CString = [*:0]u8;
+pub const CString = [*:0]const u8;
 pub const CStringSlice = []CString;
 const OptCStringSlice = ?CStringSlice;
-const OptCString = ?[*:0]u8;
+const OptCString = ?[*:0]const u8;
 const strings = bun.strings;
 const uws = bun.uws;
 const jsc = bun.jsc;
@@ -475,7 +475,7 @@ pub fn remove(config: *SSLConfig) void {
     };
 };
 
-pub fn stringsEqualOpt(first: ?[*:0]u8, second: ?[*:0]u8) bool {
+pub fn stringsEqualOpt(first: ?[*:0]const u8, second: ?[*:0]const u8) bool {
         if (first) |a| {
             _ = &a;
             const b = ((second) orelse { return false; });
@@ -505,7 +505,7 @@ pub fn stringSlicesEqualOpt(first: ?CStringSlice, second: ?CStringSlice) bool {
         }
 }
 
-pub fn stringsEqual(a: [*:0]u8, b: [*:0]u8) bool {
+pub fn stringsEqual(a: [*:0]const u8, b: [*:0]const u8) bool {
         const lhs = bun.asByteSlice(a);
         var __lhs_moved = false; _ = &__lhs_moved;
         defer if (!__lhs_moved) { const __T = @TypeOf(lhs); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = lhs.release() catch {}; } else { lhs.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = lhs; _drop_val.release(); } };
@@ -545,7 +545,7 @@ pub fn cloneStrings(slice: ?CStringSlice) ?CStringSlice {
         return result;
 }
 
-pub fn cloneString(str_opt: ?[*:0]u8) ?[*:0]u8 {
+pub fn cloneString(str_opt: ?[*:0]const u8) ?[*:0]const u8 {
         return bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(((str_opt) orelse { return null; }))));
 }
 
@@ -594,7 +594,7 @@ pub fn handlePath(global: *jsc.JSGlobalObject, comptime field: []const u8, str_i
         return name;
 }
 
-pub fn handleFileForField(global: *jsc.JSGlobalObject, comptime field: []const u8, file: *const jsc.generated.SSLConfigFile) bun.JSError!?[][*:0]u8 {
+pub fn handleFileForField(global: *jsc.JSGlobalObject, comptime field: []const u8, file: *const jsc.generated.SSLConfigFile) bun.JSError!?[][*:0]const u8 {
         return (blk_catch_0: { break :blk_catch_0 ((handleFile(global, file)) catch |e| { _ = &e; if ((e == error.JSError)) {
             return error.JSError;
         }
@@ -610,7 +610,7 @@ pub fn handleFileForField(global: *jsc.JSGlobalObject, comptime field: []const u
         return global.throwInvalidArguments(std.fmt.comptimePrint("TLSOptions.{s} is not a valid BunFile (non-BunFile `Blob`s are not supported)", .{ field }), .{}); }); });
 }
 
-pub fn handleFile(global: *jsc.JSGlobalObject, file: *const jsc.generated.SSLConfigFile) !?[][*:0]u8 {
+pub fn handleFile(global: *jsc.JSGlobalObject, file: *const jsc.generated.SSLConfigFile) !?[][*:0]const u8 {
         const single = try handleSingleFile(global, (switch (file.*) {
 .none => {
 return null;
@@ -633,7 +633,7 @@ return try handleFileArray(global, list.items());
         return result;
 }
 
-pub fn handleFileArray(global: *jsc.JSGlobalObject, elements: []const jsc.generated.SSLConfigSingleFile) !?[][*:0]u8 {
+pub fn handleFileArray(global: *jsc.JSGlobalObject, elements: []const jsc.generated.SSLConfigSingleFile) !?[][*:0]const u8 {
         if ((elements.len == 0)) {
             return null;
         }

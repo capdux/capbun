@@ -89,12 +89,12 @@ pub fn simulateLibcErrno(rc: usize) c_int {
             return (if (((signed > -4096) and (signed < 0))) -1 else int);
     }
 
-pub fn stat(path: [*:0]u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
+pub fn stat(path: [*:0]const u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
             const rc = std.os.linux.fstatat(std.os.linux.AT.FDCWD, path, buf, 0);
             return simulateLibcErrno(rc);
     }
 
-pub fn lstat(path: [*:0]u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
+pub fn lstat(path: [*:0]const u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
             const rc = std.os.linux.fstatat(std.os.linux.AT.FDCWD, path, buf, std.os.linux.AT.SYMLINK_NOFOLLOW);
             return simulateLibcErrno(rc);
     }
@@ -104,12 +104,12 @@ pub fn fstat(fd: c_int, buf: *std.os.linux.Stat) callconv(.c) c_int {
             return simulateLibcErrno(rc);
     }
 
-pub fn fstatat(dirfd: i32, path: [*:0]u8, buf: *std.os.linux.Stat, flags: u32) callconv(.c) c_int {
+pub fn fstatat(dirfd: i32, path: [*:0]const u8, buf: *std.os.linux.Stat, flags: u32) callconv(.c) c_int {
             const rc = std.os.linux.fstatat(dirfd, path, buf, flags);
             return simulateLibcErrno(rc);
     }
 
-pub fn statx(dirfd: i32, path: [*:0]u8, flags: u32, mask: u32, buf: *std.os.linux.Statx) callconv(.c) c_int {
+pub fn statx(dirfd: i32, path: [*:0]const u8, flags: u32, mask: u32, buf: *std.os.linux.Statx) callconv(.c) c_int {
             const rc = std.os.linux.statx(dirfd, path, flags, mask, buf);
             return simulateLibcErrno(rc);
     }
@@ -177,7 +177,7 @@ pub const freebsd = struct {
     pub const stat = @extern(*const fn(noalias [*:0]const u8, noalias *std.c.Stat) callconv(.c) c_int, .{ .name = "stat" });
 };
 
-const OptCStr = ?[*:0]u8;
+const OptCStr = ?[*:0]const u8;
 const OptStatPtr = ?*bun.Stat;
 pub const current = (switch (bun.Environment.os) {
 .linux => linux,

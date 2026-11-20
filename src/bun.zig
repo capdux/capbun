@@ -859,7 +859,7 @@ pub fn makeOpenPathAccessMaskW(self: MakePath, comptime T: type, sub_path: []con
             }
     }
 
-pub fn makeOpenDirAccessMaskW(self: MakePath, sub_path_w: [*:0]u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions) !std.fs.Dir {
+pub fn makeOpenDirAccessMaskW(self: MakePath, sub_path_w: [*:0]const u16, access_mask: u32, flags: MakeOpenDirAccessMaskWOptions) !std.fs.Dir {
             var result = std.fs.Dir{ .fd = undefined };
             _ = &result;
             const path_len_bytes = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((std.mem.sliceTo(sub_path_w, 0).len * 2))) == .@"enum") cp_cast_int(i32, @intFromEnum((std.mem.sliceTo(sub_path_w, 0).len * 2))) else cp_cast_int(i32, (std.mem.sliceTo(sub_path_w, 0).len * 2))))) == .@"enum") cp_cast_int(u16, @intFromEnum((if (comptime @typeInfo(@TypeOf((std.mem.sliceTo(sub_path_w, 0).len * 2))) == .@"enum") cp_cast_int(i32, @intFromEnum((std.mem.sliceTo(sub_path_w, 0).len * 2))) else cp_cast_int(i32, (std.mem.sliceTo(sub_path_w, 0).len * 2))))) else cp_cast_int(u16, (if (comptime @typeInfo(@TypeOf((std.mem.sliceTo(sub_path_w, 0).len * 2))) == .@"enum") cp_cast_int(i32, @intFromEnum((std.mem.sliceTo(sub_path_w, 0).len * 2))) else cp_cast_int(i32, (std.mem.sliceTo(sub_path_w, 0).len * 2)))));
@@ -1315,7 +1315,7 @@ pub fn isSafeToRecurse(self: StackCheck) bool {
 };
 
 const Str = []const u8;
-const OptCStr = ?[*:0]u8;
+const OptCStr = ?[*:0]const u8;
 const ArgvPtr = [*:null]OptCStr;
 const SliceZ = [:0]u8;
 const bun = @This();
@@ -2372,7 +2372,7 @@ pub fn concat(comptime T: type, dest: []T, src: []const []const T) void {
 }
 
 pub fn asByteSlice(buffer: anytype) []const u8 {
-        return (if ((@TypeOf(buffer) == [*:0]u8) or (@TypeOf(buffer) == [*:0]u8)) buffer[0..len(buffer)] else if ((@TypeOf(buffer) == [*c]const u8) or (@TypeOf(buffer) == [*c]u8)) span(buffer) else buffer);
+        return (if ((@TypeOf(buffer) == [*:0]u8) or (@TypeOf(buffer) == [*:0]const u8)) buffer[0..len(buffer)] else if ((@TypeOf(buffer) == [*c]const u8) or (@TypeOf(buffer) == [*c]u8)) span(buffer) else buffer);
 }
 
 pub fn DebugOnlyDisabler(comptime Type: type) type {

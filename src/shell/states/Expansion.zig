@@ -787,7 +787,7 @@ _ = bun.handleOom(self.out.array_of_slice.ensureUnusedCapacity(additional));
 },
 }
 }
-pub const ArgStr = ?[*:0]u8;
+pub const ArgStr = ?[*:0]const u8;
 pub const StringZ = [:0]const u8;
 const assert = bun.assert;
 const Maybe = bun.sys.Maybe;

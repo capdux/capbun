@@ -516,14 +516,14 @@ pub fn ExternCryptoJob(comptime name: []const u8) type {
         const Ctx = opaque {
             const ctx_name = name ++ "Ctx";
 
-            pub const runTask = @extern(@typeInfo(*const *const fn(*Ctx, *JSGlobalObject) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__runTask" }).*;
+            pub const runTask = @extern(@typeInfo(*const fn(*Ctx, *JSGlobalObject) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__runTask" }).*;
 
             pub fn runFromJS(ctx: *Ctx, global: *JSGlobalObject, callback: JSValue) bun.JSError!void {
-                const __runFromJS = @extern(@typeInfo(*const *const fn(*Ctx, *JSGlobalObject, JSValue) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__runFromJS" }).*;
+                const __runFromJS = @extern(@typeInfo(*const fn(*Ctx, *JSGlobalObject, JSValue) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__runFromJS" }).*;
                 return bun.jsc.fromJSHostCallGeneric(global, @src(), __runFromJS, .{ ctx, global, callback });
             }
 
-            pub const deinit = @extern(@typeInfo(*const *const fn(*Ctx) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__deinit" }).*;
+            pub const deinit = @extern(@typeInfo(*const fn(*Ctx) callconv(.c) void).pointer.child, .{ .name = "Bun__" ++ ctx_name ++ "__deinit" }).*;
         };
 
         pub fn create(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) *@This() {
@@ -725,7 +725,7 @@ pub fn setEngine(global: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
         return global.ERR(.CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED, "Custom engines not supported by BoringSSL", .{}).throw();
 }
 
-pub fn forEachHash(_: *const BoringSSL.EVP_MD, maybe_from: ?[*:0]u8, _: ?[*:0]u8, ctx: *void) callconv(.c) void {
+pub fn forEachHash(_: *const BoringSSL.EVP_MD, maybe_from: ?[*:0]const u8, _: ?[*:0]const u8, ctx: *void) callconv(.c) void {
         if ((maybe_from == null)) {
             return;
         }

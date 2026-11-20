@@ -3355,7 +3355,7 @@ pub fn getRuntimeDefaultResultOrderOption(globalThis: *jsc.JSGlobalObject, _: *j
 };
 
 pub const GetAddrInfoAsyncCallback = *const fn (i32, ?*std.c.addrinfo, ?*anyopaque) callconv(.c) void;
-pub const LibInfoGetaddrinfoAsyncStart = *const fn (*bun.mach_port, ?[*:0]u8, ?[*:0]u8, ?*const std.c.addrinfo, GetAddrInfoAsyncCallback, ?*anyopaque) callconv(.c) i32;
+pub const LibInfoGetaddrinfoAsyncStart = *const fn (*bun.mach_port, ?[*:0]const u8, ?[*:0]const u8, ?*const std.c.addrinfo, GetAddrInfoAsyncCallback, ?*anyopaque) callconv(.c) i32;
 pub const LibInfoGetaddrinfoAsyncHandleReply = *const fn (?*bun.mach_port) callconv(.c) i32;
 pub const LibInfoGetaddrinfoAsyncCancel = *const fn (?*bun.mach_port) callconv(.c) void;
 const Allocator = std.mem.Allocator;

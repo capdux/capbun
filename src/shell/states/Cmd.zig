@@ -749,7 +749,7 @@ pub fn bufferedOutputCloseStderr(self: *Cmd, err_opt: ?jsc.SystemError) void {
         _ = self.exec.subproc.buffered_closed.close(self, .{ .stderr = (&self.exec.subproc.child.stderr) });
         _ = self.exec.subproc.child.closeIO(.stderr);
 }
-pub const ArgStr = ?[*:0]u8;
+pub const ArgStr = ?[*:0]const u8;
 const assert = bun.assert;
 const jsc = bun.jsc;
 const which = bun.which;

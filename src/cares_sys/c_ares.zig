@@ -1447,7 +1447,7 @@ pub extern "c" fn ares_set_socket_configure_callback(channel: *Channel, callback
 
 pub extern "c" fn ares_set_sortlist(channel: *Channel, sortstr: [*c]const u8) callconv(.c) c_int;
 
-pub extern "c" fn ares_getaddrinfo(channel: *Channel, node: ?[*:0]u8, service: ?[*:0]u8, hints: [*c]const AddrInfo_hints, callback: ares_addrinfo_callback, arg: ?*anyopaque) callconv(.c) void;
+pub extern "c" fn ares_getaddrinfo(channel: *Channel, node: ?[*:0]const u8, service: ?[*:0]const u8, hints: [*c]const AddrInfo_hints, callback: ares_addrinfo_callback, arg: ?*anyopaque) callconv(.c) void;
 
 pub extern "c" fn ares_freeaddrinfo(ai: *AddrInfo) callconv(.c) void;
 
@@ -1527,7 +1527,7 @@ pub extern "c" fn ares_get_servers(channel: *Channel, servers: *?*struct_ares_ad
 
 pub extern "c" fn ares_get_servers_ports(channel: *Channel, servers: *?*struct_ares_addr_port_node) callconv(.c) c_int;
 
-pub extern "c" fn ares_inet_ntop(af: c_int, src: ?*const void, dst: [*]u8, size: ares_socklen_t) callconv(.c) ?[*:0]u8;
+pub extern "c" fn ares_inet_ntop(af: c_int, src: ?*const void, dst: [*]u8, size: ares_socklen_t) callconv(.c) ?[*:0]const u8;
 
 pub extern "c" fn ares_inet_pton(af: c_int, src: [*c]const u8, dst: ?*anyopaque) callconv(.c) c_int;
 
@@ -1543,7 +1543,7 @@ pub fn getSockaddr(addr: []const u8, port: u16, sa: *std.posix.sockaddr) c_int {
         const buf_size: i32 = 128;
         var buf: [buf_size]u8 = undefined;
         _ = &buf;
-        const addr_ptr: [*:0]u8 = brk: {
+        const addr_ptr: [*:0]const u8 = brk: {
         if (((addr.len == 0) or (addr.len >= buf_size))) {
             return -1;
         }

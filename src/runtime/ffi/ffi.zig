@@ -2357,10 +2357,10 @@ const CompilerRT = struct {
     }
 
     const MyFunctionSStructWorkAround = struct {
-        JSVALUE_TO_INT64: *const *const fn(JSValue0: jsc.JSValue) callconv(.c) i64,
-        JSVALUE_TO_UINT64: *const *const fn(JSValue0: jsc.JSValue) callconv(.c) u64,
-        INT64_TO_JSVALUE: *const *const fn(arg0: *jsc.JSGlobalObject, arg1: i64) callconv(.c) jsc.JSValue,
-        UINT64_TO_JSVALUE: *const *const fn(arg0: *jsc.JSGlobalObject, arg1: u64) callconv(.c) jsc.JSValue,
+        JSVALUE_TO_INT64: *const fn(JSValue0: jsc.JSValue) callconv(.c) i64,
+        JSVALUE_TO_UINT64: *const fn(JSValue0: jsc.JSValue) callconv(.c) u64,
+        INT64_TO_JSVALUE: *const fn(arg0: *jsc.JSGlobalObject, arg1: i64) callconv(.c) jsc.JSValue,
+        UINT64_TO_JSVALUE: *const fn(arg0: *jsc.JSGlobalObject, arg1: u64) callconv(.c) jsc.JSValue,
         bun_call: *const @TypeOf(jsc.C.JSObjectCallAsFunction),
     };
     const headers = JSValue.exposed_to_ffi;

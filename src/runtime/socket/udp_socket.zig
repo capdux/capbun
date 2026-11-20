@@ -1022,7 +1022,7 @@ extern "c" fn htonl(hlong: u32) callconv(.c) u32;
 
 extern "c" fn htons(hshort: u16) callconv(.c) u16;
 
-extern "c" fn inet_ntop(af: c_int, src: ConstOpaquePtr, dst: [*c]u8, size: c_int) callconv(.c) ?[*:0]u8;
+extern "c" fn inet_ntop(af: c_int, src: ConstOpaquePtr, dst: [*c]u8, size: c_int) callconv(.c) ?[*:0]const u8;
 
 extern "c" fn inet_pton(af: c_int, src: [*c]const u8, dst: ?*anyopaque) callconv(.c) c_int;
 
@@ -1100,7 +1100,7 @@ pub fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_in
             defer if (!__peer_moved) { const __T = @TypeOf(peer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = peer.release() catch {}; } else { peer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = peer; _drop_val.release(); } };
             var addr_buf: [67]u8 = undefined;
             _ = &addr_buf;
-            var hostname: ?[*:0]u8 = null;
+            var hostname: ?[*:0]const u8 = null;
             _ = &hostname;
             var port: u16 = 0;
             _ = &port;

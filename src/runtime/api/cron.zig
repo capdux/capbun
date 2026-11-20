@@ -1202,7 +1202,7 @@ pub fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: anytype, stdin_opt
         job.has_called_process_exit = false;
         job.exit_status = null;
         job.remaining_fds = 0;
-        var resolved_argv0: ?[*:0]u8 = null;
+        var resolved_argv0: ?[*:0]const u8 = null;
         _ = &resolved_argv0;
         if (comptime bun.Environment.isWindows) {
             var path_buf: bun.PathBuffer = undefined;

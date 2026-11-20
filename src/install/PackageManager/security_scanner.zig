@@ -514,7 +514,7 @@ return error.IPCPipeFailed;
 .result => |fds| fds,
 });
             const exec_path = try bun.selfExePath();
-            var argv: [5]?[*:0]u8 = .{ try self.manager.allocator.dupeZ(u8, exec_path), "--no-install".ptr, "-e".ptr, try self.manager.allocator.dupeZ(u8, self.code), null };
+            var argv: [5]?[*:0]const u8 = .{ try self.manager.allocator.dupeZ(u8, exec_path), "--no-install".ptr, "-e".ptr, try self.manager.allocator.dupeZ(u8, self.code), null };
             _ = &argv;
             defer {
             {
@@ -529,7 +529,7 @@ return error.IPCPipeFailed;
             }
     }
 
-pub fn spawnPosix(self: *SecurityScanSubprocess, argv: *[5]?[*:0]u8, ipc_output_fds: [2]bun.FD) !void {
+pub fn spawnPosix(self: *SecurityScanSubprocess, argv: *[5]?[*:0]const u8, ipc_output_fds: [2]bun.FD) !void {
             const extra_fds = (&.{ bun.spawn.SpawnOptions.Stdio{ .pipe = ipc_output_fds[1] }, bun.spawn.SpawnOptions.Stdio.buffer });
             const spawn_options = bun.spawn.SpawnOptions{ .stdout = .inherit, .stderr = .inherit, .stdin = .inherit, .cwd = FileSystem.instance.top_level_dir, .extra_fds = extra_fds };
             var spawned = try (blk_oc_0: { const __o_0 = bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), @ptrCast(std.os.environ.ptr)); const __R_0 = CpOptType(@TypeOf(cp_opt_unwrap(__o_0).unwrap())); if (cp_opt_is_null(__o_0)) break :blk_oc_0 @as(__R_0, null); break :blk_oc_0 @as(__R_0, cp_opt_unwrap(__o_0).unwrap()); });
@@ -544,7 +544,7 @@ pub fn spawnPosix(self: *SecurityScanSubprocess, argv: *[5]?[*:0]u8, ipc_output_
             _ = try self.finishSpawn((&spawned), ipc_output_fds[0], spawned.extra_pipes.items[1].fd());
     }
 
-pub fn spawnWindows(self: *SecurityScanSubprocess, argv: *[5]?[*:0]u8, ipc_output_fds: [2]bun.FD) !void {
+pub fn spawnWindows(self: *SecurityScanSubprocess, argv: *[5]?[*:0]const u8, ipc_output_fds: [2]bun.FD) !void {
             const uv = bun.windows.libuv;
             var json_fds: [2]uv.uv_file = undefined;
             _ = &json_fds;
