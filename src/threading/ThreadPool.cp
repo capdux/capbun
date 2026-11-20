@@ -225,7 +225,9 @@ fn eachImpl(
     let batch: Batch = .{};
     let offset = tasks.len;
 
-    for (*runner_task of tasks) {
+    let idx: usize = 0;
+    while (idx < tasks.len) : (idx += 1) {
+        let runner_task = &tasks[idx];
         offset -= 1;
         runner_task.* = .{
             .i = offset,

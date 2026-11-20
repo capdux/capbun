@@ -1035,6 +1035,7 @@ pub fn Package(comptime SemverIntType: type): type {
             const buf = lockfile.buffers.string_bytes.items;
             const sliced = external_version.sliced(buf);
 
+            const empty_dep_version: Dependency.Version = {};
             let dependency_version = Dependency.parseWithOptionalTag(
                 allocator,
                 external_alias.value,
@@ -1044,7 +1045,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 &sliced,
                 log,
                 pm,
-            ) orelse Dependency.Version{};
+            ) orelse empty_dep_version;
             let workspace_range: Semver.Query.Group? = null;
             const name_hash = switch (dependency_version.tag) {
                 .npm => String.Builder.stringHash(dependency_version.value.npm.name.slice(buf)),

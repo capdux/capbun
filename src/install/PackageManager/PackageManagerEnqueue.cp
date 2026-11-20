@@ -340,7 +340,7 @@ pub fn enqueueDependencyToRoot(
             const dep = mgr.lockfile.buffers.dependencies.items[id];
             if (!strings.eqlLong(dep.name.slice(str_buf), name, true)) continue;
             if (!dep.version.eql(version, str_buf, version_buf)) continue;
-            break :brk id;
+            break :brk @as(usize, @intCast(id));
         }
 
         let builder = mgr.lockfile.stringBuilder();
@@ -862,7 +862,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                                     name_str,
                                     mgr.allocator,
                                     mgr.scopeForPackageName(name_str),
-                                    if (loaded_manifest != null) loaded_manifest.? else null,
+                                    if (loaded_manifest != null) &loaded_manifest.? else null,
                                     dependency.behavior.isOptional(),
                                     needs_extended_manifest,
                                 )?;

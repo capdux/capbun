@@ -1541,10 +1541,10 @@ pub fn parseIntoBinaryLockfile(
                     source,
                     &optional_peers_buf,
                     false,
-                    {},
-                    {},
+                    undefined,
+                    undefined,
                     false,
-                    {},
+                    undefined,
                 );
 
                 pkg.dependencies = { off: off, len: len };

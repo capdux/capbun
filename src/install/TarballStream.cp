@@ -783,13 +783,12 @@ fn populateResult(client: *TarballStream, task: *Task) {
     task.data = { extract: {} };
 
     if (e := client.fail) {
-        const fail_args = .{ @errorName(e), tarball.name.slice() };
         task.log.addErrorFmt(
             null,
             logger.Loc.Empty,
             client.allocator,
             "{s} extracting tarball for \"{s}\"",
-            fail_args,
+            .{ @errorName(e), tarball.name.slice() },
         ) catch unreachable;
         task.err = e;
         task.status = .fail;

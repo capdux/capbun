@@ -297,7 +297,7 @@ pub fn enqueueDependencyToRoot(mgr: *PackageManager, name: []const u8, version: 
                 if ((!dep.version.eql(version, str_buf, version_buf))) {
                     continue;
                 }
-                break :brk id;
+                break :brk @as(usize, @intCast(id));
             }
         }
         var builder = mgr.lockfile.stringBuilder();
@@ -615,7 +615,7 @@ if (((patch_task.callback == .calc_hash) and (mgr.getPreinstallState(result.pack
                                     var network_task = mgr.getNetworkTask();
                                     _ = &network_task;
                                     network_task.* = .{ .package_manager = mgr, .callback = undefined, .task_id = task_id, .allocator = mgr.allocator };
-                                    _ = try network_task.forManifest(name_str, mgr.allocator, mgr.scopeForPackageName(name_str), (if ((loaded_manifest != null)) loaded_manifest.? else null), dependency.behavior.isOptional(), needs_extended_manifest);
+                                    _ = try network_task.forManifest(name_str, mgr.allocator, mgr.scopeForPackageName(name_str), (if ((loaded_manifest != null)) (&loaded_manifest.?) else null), dependency.behavior.isOptional(), needs_extended_manifest);
                                     _ = mgr.enqueueNetworkTask(network_task);
                                 }
                             } else {

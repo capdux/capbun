@@ -408,10 +408,10 @@ pub const DependencyURI = union(DependencyURITag) {
     remote: String,
 
 pub fn eql(lhs: DependencyURI, rhs: DependencyURI, lhs_buf: []const u8, rhs_buf: []const u8) bool {
-            if ((@as(DependencyURITag, @enumFromInt(lhs)) != @as(DependencyURITag, @enumFromInt(rhs)))) {
+            if ((std.meta.activeTag(lhs) != std.meta.activeTag(rhs))) {
                 return false;
             }
-            if ((@as(DependencyURITag, @enumFromInt(lhs)) == .local)) {
+            if ((std.meta.activeTag(lhs) == .local)) {
                 return strings.eqlLong(cp_iter_slice(lhs.local)[@intCast(lhs_buf)..], cp_iter_slice(rhs.local)[@intCast(rhs_buf)..], true);
             } else {
                 return strings.eqlLong(cp_iter_slice(lhs.remote)[@intCast(lhs_buf)..], cp_iter_slice(rhs.remote)[@intCast(rhs_buf)..], true);
@@ -701,7 +701,7 @@ pub fn isLessThan(string_buf: []const u8, lhs: Dependency, rhs: Dependency) bool
         break :blk (&rhs.name);
 
 }), string_buf);
-        return strings.cmpStringsAsc(.{}, lhs_name, rhs_name);
+        return strings.cmpStringsAsc(undefined, lhs_name, rhs_name);
 }
 
 pub fn countWithDifferentBuffers(client: *const Dependency, name_buf: []const u8, version_buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {

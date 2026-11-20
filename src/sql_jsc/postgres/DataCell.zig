@@ -97,7 +97,7 @@ pub const Putter = struct {
     count: usize = 0,
     globalObject: *jsc.JSGlobalObject,
 
-pub fn toJS(self: *Putter, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: ?PostgresCachedStructure) !JSValue {
+pub fn toJS(self: *Putter, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: ?PostgresCachedStructure) AnyPostgresError!JSValue {
             var names: ?[*]jsc.JSObject.ExternColumnIdentifier = null;
             _ = &names;
             var names_count: u32 = 0;
@@ -657,7 +657,7 @@ if (((arrayType == .json_array) or (arrayType == .jsonb_array))) {
         return SQLDataCell{ .tag = .array, .value = .{ .array = .{ .ptr = array.items.ptr, .len = @truncate(array.items.len), .cap = @truncate(array.capacity) } }, .free_value = 1 };
 }
 
-pub fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: []const u8, globalObject: *jsc.JSGlobalObject) anyerror!SQLDataCell {
+pub fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: []const u8, globalObject: *jsc.JSGlobalObject) AnyPostgresError!SQLDataCell {
         if (binary) {
             if ((bytes.len < 12)) {
                 return error.InvalidBinaryData;
@@ -707,7 +707,7 @@ pub fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, byte
         }
 }
 
-pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject) !SQLDataCell {
+pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject) AnyPostgresError!SQLDataCell {
         switch (oid) {
 .int4_array => {
 return fromTypedArrayBytes(.int4_array, binary, bigint, bytes, globalObject);

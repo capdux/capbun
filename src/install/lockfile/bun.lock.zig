@@ -1233,7 +1233,7 @@ else => {
                     const name_hash = String.Builder.stringHash(name);
                     (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name) = try string_buf.appendWithHash(name, name_hash);
                     pkg.name_hash = name_hash;
-                    const _tmp_v27 = try parseAppendDependencies(lockfile, allocator, (&value), (&string_buf), log, source, (&optional_peers_buf), false, .{}, .{}, false, .{});
+                    const _tmp_v27 = try parseAppendDependencies(lockfile, allocator, (&value), (&string_buf), log, source, (&optional_peers_buf), false, undefined, undefined, false, undefined);
                     var off = cp_unpack_elem(_tmp_v27, 0);
                     _ = &off;
                     var len = cp_unpack_elem(_tmp_v27, 1);

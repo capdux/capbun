@@ -708,7 +708,7 @@ pub fn migrateNPMLockfile(
     }
 
     // Root resolution isn't hit through dependency tracing.
-    resolutions[0] = Resolution.init(.{ root: .{} });
+    resolutions[0] = Resolution.init(.{ root: undefined });
     metas[0].origin = .local;
     lockfile.getOrPutID(0, lockfile.packages.items(.name_hash)[0])?;
 

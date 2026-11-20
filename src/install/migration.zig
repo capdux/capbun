@@ -673,7 +673,7 @@ num_extern_strings = (num_extern_strings + @as(u32, @truncate((bin.data.e_object
                 _ = bun.assert(((r.tag == .uninitialized) or (r.tag == .workspace)));
             }
         }
-        resolutions[cp_cast_int(usize, 0)] = Resolution.init(.{ .root = .{} });
+        resolutions[cp_cast_int(usize, 0)] = Resolution.init(.{ .root = undefined });
         metas[0].origin = .local;
         _ = try lockfile.getOrPutID(0, lockfile.packages.items(.name_hash)[0]);
         var name_checking_buf: [max_checking_path_len]u8 = undefined;

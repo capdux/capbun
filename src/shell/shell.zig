@@ -1982,7 +1982,8 @@ else => {
                     return ParseError.Expected;
 });
                     if ((!self.matchTok(.DoubleBracketClose))) {
-                        _ = try self.add_error("Expected \"]]\" but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
+                        const bad_tok: Token = self.peek();
+                        _ = try self.add_error("Expected \"]]\" but got: {s}", .{ bad_tok.asHumanReadable(self.strpool) });
                         return ParseError.Expected;
                     }
                     return .{ .op = @enumFromInt((if (@typeInfo(@TypeOf(binary_op)) == .@"enum") @intFromEnum(binary_op) else binary_op.value)), .args = AST.CondExpr.ArgList.initWithSlice((&.{ arg1, arg2 })) };

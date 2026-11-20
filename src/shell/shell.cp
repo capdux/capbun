@@ -1521,7 +1521,8 @@ pub const Parser = struct {
                 };
 
                 if (!_.matchTok(.DoubleBracketClose)) {
-                    _.add_error("Expected \"]]\" but got: {s}", .{_.peek().asHumanReadable(_.strpool)})?;
+                    const bad_tok: Token = _.peek();
+                    _.add_error("Expected \"]]\" but got: {s}", .{bad_tok.asHumanReadable(_.strpool)})?;
                     return ParseError.Expected;
                 }
 

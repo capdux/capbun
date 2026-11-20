@@ -24,11 +24,11 @@ pub union(DependencyURITag) DependencyURI {
     remote: String,
 
     pub fn eql(lhs: DependencyURI, rhs: DependencyURI, lhs_buf: []const u8, rhs_buf: []const u8): bool {
-        if (@as(DependencyURITag, lhs) != @as(DependencyURITag, rhs)) {
+        if (std.meta.activeTag(lhs) != std.meta.activeTag(rhs)) {
             return false;
         }
 
-        if (@as(DependencyURITag, lhs) == .local) {
+        if (std.meta.activeTag(lhs) == .local) {
             return strings.eqlLong(lhs.local.slice(lhs_buf), rhs.local.slice(rhs_buf), true);
         } else {
             return strings.eqlLong(lhs.remote.slice(lhs_buf), rhs.remote.slice(rhs_buf), true);
@@ -743,7 +743,7 @@ static fn isLessThan(string_buf: []const u8, lhs: Dependency, rhs: Dependency): 
     const slice_fn = String.slice;
     const lhs_name = slice_fn(unsafe { &lhs.name }, string_buf);
     const rhs_name = slice_fn(unsafe { &rhs.name }, string_buf);
-    return strings.cmpStringsAsc({}, lhs_name, rhs_name);
+    return strings.cmpStringsAsc(undefined, lhs_name, rhs_name);
 }
 
 static fn countWithDifferentBuffers(client: *const Dependency, name_buf: []const u8, version_buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) {

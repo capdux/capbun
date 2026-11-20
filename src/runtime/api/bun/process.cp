@@ -1599,7 +1599,7 @@ pub fn spawnProcessPosix(
                     std.posix.SOCK.STREAM,
                     0,
                     if (ipc == .ipc) .nonblocking else .blocking,
-                ).unwrap();
+                ).unwrap()?;
 
                 if (!options.sync && ipc == .buffer)
                     bun.sys.setNonblocking(fds[0]).unwrap()?;

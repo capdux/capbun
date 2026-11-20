@@ -10,3 +10,4 @@
 - **[2026-11-21 00:15] Wave 30 C 组验收提交（10 模块全绿）**：完成 Runtime/SQL/JSC/Options/Router/Shell/Threading 10 模块独立验收（10/10 PASS，4 项门禁全绿，ratio 0.842x~1.042x）并原子提交；静待 A/B 组完成。
 - **[2026-11-21 00:20] Wave 30 B 组验收提交（15 模块全绿）**：完成 Bake/Bundler/Install 15 模块独立验收（15/15 PASS，4 项门禁全绿，ratio 0.964x~1.121x）并原子提交；静待 A 组（`7a5dc17c`）完成即跑 Wave 31 `zig:check`。
 - **[2026-11-21 00:26] Wave 30 A 组验收提交（10 模块全绿，Wave 30 清仓）**：完成 `js_printer`、`Expr`、`P`（`newExpr` 兜底 `comptime Type == type`）、`visitExpr`、`visitBinaryExpression`、`ConvertESMExportsForHmr`、`lowerDecorators`、`ServerComponentBoundary`、`parser`（`HookContextPtr` 连带解封 `visit`/`visitStmt`/`visitExpr`）、`Macro` 10 模块独立验收（10/10 PASS，ratio 1.000x~1.041x）并原子提交；随即运行 Wave 31 全仓 `bun run zig:check`。
+- **[2026-11-21 00:34] Wave 31 C 组验收提交（13 模块全绿）**：完成 Install/Postgres(`DataCell` 连带解封 `PostgresSQLConnection`)/JSC/Runtime/Shell/Threading 13 模块独立验收（13/13 PASS，4 项门禁全绿，ratio 0.891x~1.078x）并原子提交；静待 A/B 组完成。

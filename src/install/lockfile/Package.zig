@@ -475,7 +475,8 @@ else => {
 };
             const buf = lockfile.buffers.string_bytes.items;
             const sliced = external_version.sliced(buf);
-            var dependency_version = ((Dependency.parseWithOptionalTag(allocator, (if (@typeInfo(@TypeOf(external_alias)) == .@"enum") @intFromEnum(external_alias) else external_alias.value), external_alias.hash, sliced.slice, tag, (&sliced), log, pm)) orelse (Dependency.Version));
+            const empty_dep_version: Dependency.Version = .{};
+            var dependency_version = ((Dependency.parseWithOptionalTag(allocator, (if (@typeInfo(@TypeOf(external_alias)) == .@"enum") @intFromEnum(external_alias) else external_alias.value), external_alias.hash, sliced.slice, tag, (&sliced), log, pm)) orelse (empty_dep_version));
             _ = &dependency_version;
             var workspace_range: ?Semver.Query.Group = null;
             _ = &workspace_range;

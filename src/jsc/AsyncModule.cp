@@ -384,7 +384,10 @@ pub struct AsyncModule {
         defer log.deinit();
         let errorable: jsc.ErrorableResolvedSource = undefined;
         _.poll_ref.unref(jsc_vm);
-        const opt_res: ResolvedSource? = _.resumeLoadingModule(&log) catch |err_val| {
+        let ok_res: ResolvedSource = undefined;
+        let has_res = true;
+        ok_res = _.resumeLoadingModule(&log) catch |err_val| blk: {
+            has_res = false;
             if (err_val == error.JSError) {
                 errorable = .err(error.JSError, _.globalThis.takeError(error.JSError));
             } else {
@@ -397,10 +400,10 @@ pub struct AsyncModule {
                     err_val,
                 );
             }
-            null
+            break :blk undefined;
         };
-        if (res := opt_res) {
-            errorable = jsc.ErrorableResolvedSource.ok(res);
+        if (has_res) {
+            errorable = jsc.ErrorableResolvedSource.ok(ok_res);
         }
 
         let spec = bun.String.init(ZigString.init(_.specifier).withEncoding());

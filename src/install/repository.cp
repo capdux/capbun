@@ -602,13 +602,12 @@ pub struct TopFormatter {
             Repository.shared_env.get(allocator, env),
             if (committish.len > 0) &argv_with_commit else &argv_no_commit,
         ) catch |e| {
-            const err_args = .{ committish, name };
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
                 allocator,
                 "no commit matching \"{s}\" found for \"{s}\" (but repository exists)",
-                err_args,
+                .{ committish, name },
             ) catch unreachable;
             return e;
         }, " \t\r\n");

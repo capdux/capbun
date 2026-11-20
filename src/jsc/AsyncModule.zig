@@ -387,15 +387,21 @@ pub fn onDone(self: *AsyncModule) void {
             var errorable: jsc.ErrorableResolvedSource = undefined;
             _ = &errorable;
             _ = self.poll_ref.unref(jsc_vm);
-            const opt_res: ?ResolvedSource = (blk_catch_8: { break :blk_catch_8 ((self.resumeLoadingModule((&log))) catch |err_val| { _ = &err_val; if ((err_val == error.JSError)) {
+            var ok_res: ResolvedSource = undefined;
+            _ = &ok_res;
+            var has_res = true;
+            _ = &has_res;
+            ok_res = (blk_catch_8: { break :blk_catch_8 ((self.resumeLoadingModule((&log))) catch |err_val| { _ = &err_val; break :blk_catch_8 @as(ResolvedSource, blk: {
+            has_res = false;
+            if ((err_val == error.JSError)) {
                 errorable = .err(error.JSError, self.globalThis.takeError(error.JSError));
             } else {
                 _ = VirtualMachine.processFetchLog(self.globalThis, bun.String.init(self.specifier), bun.String.init(self.referrer), (&log), (&errorable), err_val);
             }
-            break :blk_catch_8 @as(ResolvedSource, null); }); });
-            if (opt_res) |res| {
-                _ = &res;
-                errorable = jsc.ErrorableResolvedSource.ok(res);
+            break :blk undefined;
+}); }); });
+            if (has_res) {
+                errorable = jsc.ErrorableResolvedSource.ok(ok_res);
             }
             var spec = bun.String.init(ZigString.init(self.specifier).withEncoding());
             _ = &spec;

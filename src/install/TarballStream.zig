@@ -821,8 +821,7 @@ pub fn populateResult(client: *TarballStream, task: *Task) void {
         task.data = .{ .extract = .{} };
         if (client.fail) |e| {
             _ = &e;
-            const fail_args: struct { *anyopaque, *anyopaque } = .{ @errorName(e), (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice() };
-            _ = ((task.log.addErrorFmt(null, logger.Loc.Empty, client.allocator, "{s} extracting tarball for \"{s}\"", fail_args)) catch unreachable);
+            _ = ((task.log.addErrorFmt(null, logger.Loc.Empty, client.allocator, "{s} extracting tarball for \"{s}\"", .{ @errorName(e), (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice() })) catch unreachable);
             task.err = e;
             task.status = .fail;
             return;

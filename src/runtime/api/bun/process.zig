@@ -2309,7 +2309,7 @@ _ = try actions.open(fileno, path, (bun.O.RDWR | bun.O.CREAT), 436);
                 _ = try extra_fds.append(.unavailable);
 },
 .ipc, .buffer => {
-const fds: [2]bun.FD = bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, (if ((ipc == .ipc)) .nonblocking else .blocking)).unwrap();
+const fds: [2]bun.FD = try bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, (if ((ipc == .ipc)) .nonblocking else .blocking)).unwrap();
                 if (((!options.sync) and (ipc == .buffer))) {
                     _ = try bun.sys.setNonblocking(fds[0]).unwrap();
                 }
