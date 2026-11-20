@@ -703,8 +703,9 @@ pub fn parseIsAndWhere(self: *@This()) bool {
             return true;
     }
 
-pub fn parseAnyPrefix(self: @This(), _: *const SelectorParser, name: []const u8) ?css.VendorPrefix {
-        _ = self;
+pub fn parseAnyPrefix(self: @This(), name: []const u8) ?css.VendorPrefix {
+            const _s = self;
+            _ = &_s;
             const Map = (comptime bun.ComptimeStringMap(css.VendorPrefix, .{ .{ "-webkit-any", css.VendorPrefix{ .webkit = true } }, .{ "-moz-any", css.VendorPrefix{ .moz = true } } }));
             return Map.getAnyCase(name);
     }
@@ -729,8 +730,9 @@ pub fn parseNonTsPseudoClass(self: *@This(), loc: css.SourceLocation, name: []co
             return .{ .result = pseudo_class };
     }
 
-pub fn parseHost(self: *@This(), _: *SelectorParser) bool {
-        _ = self;
+pub fn parseHost(self: @This()) bool {
+            const _s = self;
+            _ = &_s;
             return true;
     }
 
@@ -3171,9 +3173,9 @@ return .{ .err = e };
         const args = brk: {
         var args: std.meta.ArgsTuple(@TypeOf(func)) = undefined;
         _ = &args;
-        args[cp_cast_int(usize, 0)] = selector_slice;
+        @field(args, "0") = selector_slice;
         inline for (args_) |a| {
-            args[cp_cast_int(usize, 1)] = a;
+            @field(args, "1") = a;
         }
         break :brk args;
 };

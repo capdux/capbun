@@ -27,7 +27,7 @@ pub struct CustomMediaRule {
         // #[cfg(feature = "sourcemap")]
         // dest.add_mapping(self.loc);
         dest.writeStr("@custom-media ")?;
-        css_values.ident.DashedIdentFns.toCss(&_.name, dest)?;
+        css_values.ident.DashedIdentFns.toCss(_.name, dest)?;
         dest.writeChar(' ')?;
         _.query.toCss(dest)?;
         try dest.writeChar(';');

@@ -32,7 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -551,7 +550,7 @@ pub fn flush(self: *@This(), dest: *css.DeclarationList, context: *css.PropertyH
 pub inline fn logicalPropHelper(val: *OptProperty, comptime logical: css.PropertyIdTag, comptime ltr: css.PropertyIdTag, comptime rtl: css.PropertyIdTag, context: *css.PropertyHandlerContext) void {
             if ((val.* != null)) {
                 const _v = (&val.*.?);
-                if (((if (comptime @typeInfo(css.PropertyIdTag) == .@"enum") @as(css.PropertyIdTag, @enumFromInt(_v.*)) else @as(css.PropertyIdTag, _v.*)) == logical)) {
+                if ((std.meta.activeTag(_v.*) == logical)) {
                     const v = (&@field(_v, @tagName(logical)));
                     _ = context.addLogicalRule(context.allocator, @unionInit(Property, @tagName(ltr), v.deepClone(context.allocator)), @unionInit(Property, @tagName(rtl), v.deepClone(context.allocator)));
                 } else {

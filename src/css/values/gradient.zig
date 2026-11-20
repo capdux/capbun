@@ -1580,10 +1580,9 @@ return .{ .err = e };
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             _ = try self.color.toCss(dest);
-            if (self.position) |*position| {
-                _ = &position;
+            if ((self.position != null)) {
                 _ = try dest.writeChar(32);
-                _ = try css.generic.toCss(D, (position.*), dest);
+                _ = try css.generic.toCss(D, (&self.position.?), dest);
             }
             return;
     }
@@ -1663,17 +1662,19 @@ pub fn serializeItems(comptime D: type, items: *const ArrayList(GradientItem(D))
         _ = &Item;
         var last: ?*const Item = null;
         _ = &last;
-        for (items.items) |*item| {
-            _ = &item;
-            if (((((item.*) == .hint) and ((item.*).hint == .percentage)) and ((item.*).hint.percentage.v == 0.5))) {
+        var i: usize = 0;
+        _ = &i;
+        while ((i < items.items.len)) : (i = (i + 1)) {
+            const item = (&items.items[@as(usize, @intCast(i))]);
+            if ((((item == .hint) and (item.hint == .percentage)) and (item.hint.percentage.v == 0.5))) {
                 continue;
             }
             if (last) |prev| {
                 _ = &prev;
                 if ((!dest.targets.shouldCompile(.double_position_gradients, .{ .double_position_gradients = true }))) {
-                    if ((((((prev.* == .color_stop) and (prev.color_stop.position != null)) and ((item.*) == .color_stop)) and ((item.*).color_stop.position != null)) and prev.color_stop.color.eql((&(item.*).color_stop.color)))) {
+                    if ((((((prev.* == .color_stop) and (prev.color_stop.position != null)) and (item == .color_stop)) and (item.color_stop.position != null)) and prev.color_stop.color.eql((&item.color_stop.color)))) {
                         _ = try dest.writeChar(32);
-                        _ = try (item.*).color_stop.position.?.toCss(dest);
+                        _ = try item.color_stop.position.?.toCss(dest);
                         last = null;
                         continue;
                     }
@@ -1684,8 +1685,8 @@ pub fn serializeItems(comptime D: type, items: *const ArrayList(GradientItem(D))
             } else {
                 _ = try dest.delim(44, false);
             }
-            _ = try (item.*).toCss(dest);
-            last = (item.*);
+            _ = try item.toCss(dest);
+            last = item;
         }
 }
 

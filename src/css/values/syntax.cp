@@ -84,7 +84,7 @@ pub enum SyntaxString {
         // https://drafts.css-houdini.org/css-properties-values-api/#parsing-syntax
         let trimmed_input = std.mem.trimLeft(u8, input, SPACE_CHARACTERS);
         if (trimmed_input.len == 0) {
-            return { err: {} };
+            return { err: undefined };
         }
 
         if (bun.strings.eqlComptime(trimmed_input, "*")) {
@@ -114,7 +114,7 @@ pub enum SyntaxString {
                 continue;
             }
 
-            return { err: {} };
+            return { err: undefined };
         }
 
         return { result: SyntaxString{ .components = components } };
@@ -346,7 +346,7 @@ pub enum SyntaxComponentKind {
         input.* = std.mem.trimLeft(u8, input.*, SPACE_CHARACTERS);
         if (bun.strings.startsWithChar(input.*, '<')) {
             // https://drafts.css-houdini.org/css-properties-values-api/#consume-data-type-name
-            const end_idx = std.mem.indexOfScalar(u8, input.*, '>') ?? return { err: {} };
+            const end_idx = std.mem.indexOfScalar(u8, input.*, '>') ?? return { err: undefined };
             const type_name = input.*[1..end_idx];
             // todo_stuff.match_ignore_ascii_case
             let component: SyntaxComponentKind = .length;
@@ -379,7 +379,7 @@ pub enum SyntaxComponentKind {
             } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(type_name, "custom-ident")) {
                 component = .custom_ident;
             } else {
-                return { err: {} };
+                return { err: undefined };
             }
 
             input.* = input.*[end_idx + 1 ..];
@@ -395,7 +395,7 @@ pub enum SyntaxComponentKind {
             input.* = input.*[end_idx..];
             return { result: SyntaxComponentKind{ .literal = literal } };
         } else {
-            return { err: {} };
+            return { err: undefined };
         }
     }
 

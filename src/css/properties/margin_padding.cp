@@ -766,7 +766,7 @@ fn NewSizeHandler(
         ) {
             if (val.* != null) {
                 const _v = &val.*.?;
-                if (@as(css.PropertyIdTag, _v.*) == logical) {
+                if (std.meta.activeTag(_v.*) == logical) {
                     const v = &@field(_v, @tagName(logical));
                     context.addLogicalRule(
                         context.allocator,

@@ -1115,7 +1115,9 @@ pub const SelectorParser = struct {
     }
 
     /// Whether the given function name is an alias for the `:is()` function.
-    fn parseAnyPrefix(_: *const SelectorParser, name: []const u8): (css.VendorPrefix)? {
+    fn parseAnyPrefix(name: []const u8): (css.VendorPrefix)? {
+        const _s = _;
+        * = _s;
         const Map = comptime bun.ComptimeStringMap(css.VendorPrefix, .{
             .{ "-webkit-any", css.VendorPrefix{ .webkit = true } },
             .{ "-moz-any", css.VendorPrefix{ .moz = true } },
@@ -1238,7 +1240,9 @@ pub const SelectorParser = struct {
         return .{ .result = pseudo_class };
     }
 
-    pub fn parseHost(_: *SelectorParser): bool {
+    pub fn parseHost(): bool {
+        const _s = _;
+        * = _s;
         return true;
     }
 
@@ -3371,10 +3375,10 @@ pub fn parse_is_or_where(
     const result = result: {
         const args = brk: {
             let args: std.meta.ArgsTuple(@TypeOf(func)) = undefined;
-            args[0] = selector_slice;
+            @field(args, "0") = selector_slice;
 
             inline for (a in args_) {
-                args[1] = a;
+                @field(args, "1") = a;
             }
 
             break :brk args;

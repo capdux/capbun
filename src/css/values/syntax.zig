@@ -115,7 +115,7 @@ pub fn parseString(allocator: std.mem.Allocator, input: []const u8) css.Maybe(Sy
             var trimmed_input = std.mem.trimLeft(u8, input, SPACE_CHARACTERS);
             _ = &trimmed_input;
             if ((trimmed_input.len == 0)) {
-                return .{ .err = .{} };
+                return .{ .err = undefined };
             }
             if (bun.strings.eqlComptime(trimmed_input, "*")) {
                 return .{ .result = SyntaxString{ .universal = {} } };
@@ -138,7 +138,7 @@ return .{ .err = e };
                     trimmed_input = trimmed_input[1..];
                     continue;
                 }
-                return .{ .err = .{} };
+                return .{ .err = undefined };
             }
             return .{ .result = SyntaxString{ .components = components } };
     }
@@ -327,7 +327,7 @@ pub fn parseString(self: *SyntaxComponentKind, input: *[]const u8) css.Maybe(Syn
         _ = self;
             input.* = std.mem.trimLeft(u8, input.*, SPACE_CHARACTERS);
             if (bun.strings.startsWithChar(input.*, 60)) {
-                const end_idx = ((std.mem.indexOfScalar(u8, input.*, 62)) orelse { return .{ .err = .{} }; });
+                const end_idx = ((std.mem.indexOfScalar(u8, input.*, 62)) orelse { return .{ .err = undefined }; });
                 const type_name = input.*[1..end_idx];
                 var component: SyntaxComponentKind = .length;
                 _ = &component;
@@ -373,7 +373,7 @@ pub fn parseString(self: *SyntaxComponentKind, input: *[]const u8) css.Maybe(Syn
                                                                     if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(type_name, "custom-ident")) {
                                                                         component = .custom_ident;
                                                                     } else {
-                                                                        return .{ .err = .{} };
+                                                                        return .{ .err = undefined };
                                                                     }
                                                                 }
                                                             }
@@ -400,7 +400,7 @@ pub fn parseString(self: *SyntaxComponentKind, input: *[]const u8) css.Maybe(Syn
                     input.* = input.*[end_idx..];
                     return .{ .result = SyntaxComponentKind{ .literal = literal } };
                 } else {
-                    return .{ .err = .{} };
+                    return .{ .err = undefined };
                 }
             }
     }

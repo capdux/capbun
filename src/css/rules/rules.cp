@@ -109,7 +109,10 @@ pub fn CssRule(comptime Rule: type): type {
                 .viewport => |x| x.toCss(dest),
                 .custom_media => |x| x.toCss(dest),
                 .layer_statement => |x| x.toCss(dest),
-                .layer_block => |x| x.toCss(dest),
+                .layer_block => |x| {
+                    let lb = x;
+                    return lb.toCss(dest);
+                },
                 .property => |x| x.toCss(dest),
                 .starting_style => |x| x.toCss(dest),
                 .container => |x| x.toCss(dest),

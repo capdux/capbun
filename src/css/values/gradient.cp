@@ -1344,9 +1344,9 @@ pub fn ColorStop(comptime D: type): type {
 
         pub fn toCss(dest: *Printer): PrintErr!void {
             _.color.toCss(dest)?;
-            if (*position := _.position) {
+            if (_.position != null) {
                 dest.writeChar(' ')?;
-                css.generic.toCss(D, position, dest)?;
+                css.generic.toCss(D, &_.position.?, dest)?;
             }
             return;
         }
@@ -1599,7 +1599,9 @@ pub fn serializeItems(
     let first = true;
     const Item = GradientItem(D);
     let last: (*const Item)? = null;
-    for (*item of items.items) {
+    let i: usize = 0;
+    while (i < items.items.len) : (i += 1) {
+        const item = &items.items[i];
         // Skip useless hints
         if (item == .hint && item.hint == .percentage && item.hint.percentage.v == 0.5) {
             continue;
