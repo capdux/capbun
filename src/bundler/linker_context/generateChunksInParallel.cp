@@ -546,10 +546,10 @@ pub fn generateChunksInParallel(
                     bun.copy(u8, source_map_final_rel_path[chunk.final_rel_path.len..], ".map");
 
                     if (sm_kind == .linked) {
-                        const norm = if (public_path.len > 0)
+                        const norm: [2][]const u8 = if (public_path.len > 0)
                             cheapPrefixNormalizer(public_path, source_map_final_rel_path)
                         else
-                            [ "", std.fs.path.basename(source_map_final_rel_path) ];
+                            @as([2][]const u8, [ "", std.fs.path.basename(source_map_final_rel_path) ]);
                         const a = norm[0];
                         const b = norm[1];
 

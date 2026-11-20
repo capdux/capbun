@@ -623,7 +623,7 @@ pub struct SerializerLoadResult {
             for (id of 0..name_hashes.len) {
                 const name_hash = name_hashes[id];
                 const resolution = resolutions[id];
-                lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash)?;
+                lockfile.getOrPutID(@as(PackageID, @truncate(@as(usize, @intCast(id)))), name_hash)?;
 
                 // compatibility with < Bun v1.0.4
                 switch (resolution.tag) {
@@ -638,7 +638,7 @@ pub struct SerializerLoadResult {
             const name_hashes = slice.items(.name_hash);
             for (id of 0..name_hashes.len) {
                 const name_hash = name_hashes[id];
-                lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash)?;
+                lockfile.getOrPutID(@as(PackageID, @truncate(@as(usize, @intCast(id)))), name_hash)?;
             }
         }
 

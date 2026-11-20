@@ -176,10 +176,7 @@ else => null,
     }
 
 pub inline fn stopsDependencyTrace(self: @This()) bool {
-            if ((self.kind() == .html)) {
-                return false;
-            }
-            return false;
+            return ((self.kind() == .unknown) and false);
     }
 
 pub fn fileKind(self: *const @This()) FileKind {

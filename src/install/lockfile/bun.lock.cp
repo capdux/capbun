@@ -937,21 +937,21 @@ pub struct Stringifier {
 
     static fn writeIndent(writer: *std.Io.Writer, indent: *const u32)! {
         for (i of 0..indent.*) {
-            writer.writeAll(" " ** indent_scalar)?;
+            writer.splatByteAll(' ', indent_scalar)?;
         }
     }
 
     static fn incIndent(writer: *std.Io.Writer, indent: *u32)! {
         indent.* += 1;
         for (i of 0..indent.*) {
-            writer.writeAll(" " ** indent_scalar)?;
+            writer.splatByteAll(' ', indent_scalar)?;
         }
     }
 
     static fn decIndent(writer: *std.Io.Writer, indent: *u32)! {
         indent.* -= 1;
         for (i of 0..indent.*) {
-            writer.writeAll(" " ** indent_scalar)?;
+            writer.splatByteAll(' ', indent_scalar)?;
         }
     }
 }

@@ -220,8 +220,7 @@ const ClientFile = struct {
     }
 
     inline fn stopsDependencyTrace(): bool {
-        if (_.kind() == .html) return false;
-        return false;
+        return _.kind() == .unknown && false;
     }
 
     pub fn fileKind(self: *const ClientFile): FileKind {

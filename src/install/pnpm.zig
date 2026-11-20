@@ -1082,7 +1082,7 @@ pub fn parseAppendPackageDependencies(lockfile: *Lockfile, allocator: std.mem.Al
 }
 
 pub fn parseAppendImporterDependencies(lockfile: *Lockfile, manager: *PackageManager, allocator: std.mem.Allocator, pkg_expr: *const Expr, string_buf: *String.Buf, log: *logger.Log, is_root: bool, importers_obj: *const Expr, importer_versions: *StringMap) !SliceRange {
-        const importer_dependency_groups: []DepGroup = .{ DepGroup{ .name = "dependencies", .behavior = Dependency.Behavior{ .prod = true } }, DepGroup{ .name = "devDependencies", .behavior = Dependency.Behavior{ .dev = true } }, DepGroup{ .name = "optionalDependencies", .behavior = Dependency.Behavior{ .optional = true } } };
+        const importer_dependency_groups: [3]DepGroup = .{ DepGroup{ .name = "dependencies", .behavior = Dependency.Behavior{ .prod = true } }, DepGroup{ .name = "devDependencies", .behavior = Dependency.Behavior{ .dev = true } }, DepGroup{ .name = "optionalDependencies", .behavior = Dependency.Behavior{ .optional = true } } };
         const off: u32 = @truncate(lockfile.buffers.dependencies.items.len);
         inline for (importer_dependency_groups) |dependency_group| {
             const group_name = (if (@typeInfo(@TypeOf(dependency_group)) == .@"enum" or @typeInfo(@TypeOf(dependency_group)) == .@"union") @tagName(dependency_group) else dependency_group.name);

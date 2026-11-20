@@ -150,30 +150,28 @@ var seen_pkg_ids: std.AutoHashMap(PackageID,void) = .init(manager.allocator);
 for (cp_iter_slice(ids)) |root_pkg_id| {
             _ = &root_pkg_id;
             const pkg_deps = pkg_dependencies[@as(usize, @intCast(root_pkg_id))];
-            {
-                var dep_id: i32 = pkg_deps.begin();
-                _ = &dep_id;
-                const __end_1 = pkg_deps.end();
-                while (dep_id < __end_1) : (dep_id += 1) {
-                    if ((dep_id >= dependencies.len)) {
-                        continue;
-                    }
-                    const pkg_id = resolutions[@as(usize, @intCast(dep_id))];
-                    if ((pkg_id == invalid_package_id)) {
-                        continue;
-                    }
-                    const dep = (&dependencies[@as(usize, @intCast(dep_id))]);
-                    const resolution: Resolution = pkg_resolutions[@as(usize, @intCast(pkg_id))];
-                    if ((resolution.tag != .npm)) {
-                        continue;
-                    }
-                    const needs_extended_manifest = (manager.options.minimum_release_age_ms != null);
-                    const package_name = pkg_names[@as(usize, @intCast(pkg_id))].slice(string_buf);
-                    if ((manager.manifests.byName(manager, manager.scopeForPackageName(package_name), package_name, .load_from_memory_fallback_to_disk, needs_extended_manifest) == null)) {
-                        _ = try startManifestTask(manager, package_name, dep, needs_extended_manifest);
-                        _ = manager.flushNetworkQueue();
-                        _ = manager.scheduleTasks();
-                    }
+            var dep_id: u32 = pkg_deps.begin();
+            _ = &dep_id;
+            const dep_end: u32 = pkg_deps.end();
+            while ((dep_id < dep_end)) : (dep_id = (dep_id + 1)) {
+                if ((dep_id >= dependencies.len)) {
+                    continue;
+                }
+                const pkg_id = resolutions[@as(usize, @intCast(dep_id))];
+                if ((pkg_id == invalid_package_id)) {
+                    continue;
+                }
+                const dep = (&dependencies[@as(usize, @intCast(dep_id))]);
+                const resolution: Resolution = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+                if ((resolution.tag != .npm)) {
+                    continue;
+                }
+                const needs_extended_manifest = (manager.options.minimum_release_age_ms != null);
+                const package_name = pkg_names[@as(usize, @intCast(pkg_id))].slice(string_buf);
+                if ((manager.manifests.byName(manager, manager.scopeForPackageName(package_name), package_name, .load_from_memory_fallback_to_disk, needs_extended_manifest) == null)) {
+                    _ = try startManifestTask(manager, package_name, dep, needs_extended_manifest);
+                    _ = manager.flushNetworkQueue();
+                    _ = manager.scheduleTasks();
                 }
             }
         }

@@ -118,7 +118,9 @@ pub fn populateManifestCache(manager: *PackageManager, packages: Packages)! {
         .ids => |ids| {
             for (root_pkg_id of ids) {
                 const pkg_deps = pkg_dependencies[root_pkg_id];
-                for (dep_id of pkg_deps.begin()..pkg_deps.end()) {
+                let dep_id: u32 = pkg_deps.begin();
+                const dep_end: u32 = pkg_deps.end();
+                while (dep_id < dep_end) : (dep_id += 1) {
                     if (dep_id >= dependencies.len) continue;
                     const pkg_id = resolutions[dep_id];
                     if (pkg_id == invalid_package_id) continue;

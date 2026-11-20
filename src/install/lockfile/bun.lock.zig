@@ -724,7 +724,7 @@ pub fn writeIndent(writer: *std.Io.Writer, indent: *const u32) !void {
                 _ = &i;
                 const __end_14 = indent.*;
                 while (i < __end_14) : (i += 1) {
-                    _ = try writer.writeAll((" " * *indent_scalar));
+                    _ = try writer.splatByteAll(32, indent_scalar);
                 }
             }
     }
@@ -736,7 +736,7 @@ pub fn incIndent(writer: *std.Io.Writer, indent: *u32) !void {
                 _ = &i;
                 const __end_15 = indent.*;
                 while (i < __end_15) : (i += 1) {
-                    _ = try writer.writeAll((" " * *indent_scalar));
+                    _ = try writer.splatByteAll(32, indent_scalar);
                 }
             }
     }
@@ -748,7 +748,7 @@ pub fn decIndent(writer: *std.Io.Writer, indent: *u32) !void {
                 _ = &i;
                 const __end_16 = indent.*;
                 while (i < __end_16) : (i += 1) {
-                    _ = try writer.writeAll((" " * *indent_scalar));
+                    _ = try writer.splatByteAll(32, indent_scalar);
                 }
             }
     }

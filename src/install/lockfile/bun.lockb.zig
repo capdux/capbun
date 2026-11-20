@@ -491,7 +491,7 @@ pub fn load(lockfile: *Lockfile, stream: *Stream, allocator: Allocator, log: *lo
                 while (id < __end_12) : (id += 1) {
                     const name_hash = name_hashes[@as(usize, @intCast(id))];
                     const resolution = resolutions[@as(usize, @intCast(id))];
-                    _ = try lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash);
+                    _ = try lockfile.getOrPutID(@as(PackageID, @truncate(@as(usize, @intCast(id)))), name_hash);
                     switch (resolution.tag) {
 .workspace => {
 _ = try lockfile.workspace_paths.put(allocator, name_hash, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).workspace);
@@ -511,7 +511,7 @@ else => {
                 const __end_13 = name_hashes.len;
                 while (id < __end_13) : (id += 1) {
                     const name_hash = name_hashes[@as(usize, @intCast(id))];
-                    _ = try lockfile.getOrPutID(@as(PackageID, @truncate(id)), name_hash);
+                    _ = try lockfile.getOrPutID(@as(PackageID, @truncate(@as(usize, @intCast(id)))), name_hash);
                 }
             }
         }

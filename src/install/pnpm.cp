@@ -1161,7 +1161,7 @@ fn parseAppendImporterDependencies(
     importers_obj: *const Expr,
     importer_versions: *StringMap,
 ): !SliceRange {
-    const importer_dependency_groups = [
+    const importer_dependency_groups: [3]DepGroup = [
         DepGroup{ name: "dependencies", behavior: Dependency.Behavior{ prod: true } },
         DepGroup{ name: "devDependencies", behavior: Dependency.Behavior{ dev: true } },
         DepGroup{ name: "optionalDependencies", behavior: Dependency.Behavior{ optional: true } },

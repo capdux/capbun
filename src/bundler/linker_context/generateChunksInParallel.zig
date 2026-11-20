@@ -554,7 +554,7 @@ const output_source_map = (blk_catch_8: { break :blk_catch_8 ((chunk.output_sour
                     _ = bun.copy(u8, source_map_final_rel_path, chunk.final_rel_path);
                     _ = bun.copy(u8, source_map_final_rel_path[chunk.final_rel_path.len..], ".map");
                     if ((sm_kind == .linked)) {
-                        const norm = (if ((public_path.len > 0)) cheapPrefixNormalizer(public_path, source_map_final_rel_path) else .{ "", std.fs.path.basename(source_map_final_rel_path) });
+                        const norm: [2][]const u8 = (if ((public_path.len > 0)) cheapPrefixNormalizer(public_path, source_map_final_rel_path) else @as([2][]const u8, .{ "", std.fs.path.basename(source_map_final_rel_path) }));
                         const a = norm[0];
                         const b = norm[1];
                         const source_map_start: []const u8 = "//# sourceMappingURL=";
