@@ -1471,7 +1471,7 @@ pub fn parseIntoBinaryLockfile(
             };
         }
 
-        let [off, len] = try parseAppendDependencies(
+        const root_dep_pair = parseAppendDependencies(
             lockfile,
             allocator,
             &root_pkg_exr,
@@ -1484,7 +1484,9 @@ pub fn parseIntoBinaryLockfile(
             undefined,
             true,
             &workspaces_obj,
-        );
+        )?;
+        const off = @field(root_dep_pair, "0");
+        const len = @field(root_dep_pair, "1");
 
         let root_pkg: BinaryLockfile.Package = {};
 

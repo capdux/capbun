@@ -560,7 +560,7 @@ pub fn migrateNPMLockfile(
             }
         }
 
-        let has_install_script_val = Lockfile.Package.OptionalBool.false;
+        let has_install_script_val: @TypeOf(@as(Lockfile.Package.Meta, undefined).has_install_script) = .false;
         if (has_install_script_expr := pkg.get("hasInstallScript")) {
             if (has_install_script_expr.data != .e_boolean) return error.InvalidNPMLockfile;
             if (has_install_script_expr.data.e_boolean.value) {

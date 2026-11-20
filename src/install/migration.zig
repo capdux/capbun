@@ -577,7 +577,7 @@ num_extern_strings = (num_extern_strings + @as(u32, @truncate((bin.data.e_object
                     meta_os = os.combine();
                 }
             }
-            var has_install_script_val = Lockfile.Package.OptionalBool.false;
+            var has_install_script_val: @TypeOf(@as(Lockfile.Package.Meta,undefined).has_install_script) = .false;
             _ = &has_install_script_val;
             if (pkg.get("hasInstallScript")) |has_install_script_expr| {
                 _ = &has_install_script_expr;

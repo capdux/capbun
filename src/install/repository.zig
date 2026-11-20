@@ -531,8 +531,8 @@ pub fn tryHTTPS(url: []const u8) ?[]const u8 {
 
 pub fn download(allocator: std.mem.Allocator, env: DotEnv.Map, log: *logger.Log, cache_dir: std.fs.Dir, task_id: Install.Task.Id, name: []const u8, url: []const u8, attempt: u8) !std.fs.Dir {
             bun.analytics.Features.git_dependencies = (bun.analytics.Features.git_dependencies + 1);
-            const fmt_args: struct { *anyopaque } = .{ bun.fmt.hexIntLower(task_id.get()) };
-            const folder_name = try std.fmt.bufPrintZ((&tl_bufs.get().folder_name_buf), "{f}.git", fmt_args);
+            const hex = bun.fmt.hexIntLower(task_id.get());
+            const folder_name = try std.fmt.bufPrintZ((&tl_bufs.get().folder_name_buf), "{f}.git", .{ hex });
             if ((blk_catch_2: { break :blk_catch_2 ((cache_dir.openDirZ(folder_name, .{})) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); })) |dir| {
                 _ = &dir;
                 const path_parts: [1][]const u8 = .{ folder_name };

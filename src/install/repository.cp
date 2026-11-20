@@ -519,8 +519,8 @@ pub struct TopFormatter {
         attempt: u8,
     ): std.fs.Dir! {
         bun.analytics.Features.git_dependencies += 1;
-        const fmt_args = .{ bun.fmt.hexIntLower(task_id.get()) };
-        const folder_name = std.fmt.bufPrintZ(&tl_bufs.get().folder_name_buf, "{f}.git", fmt_args)?;
+        const hex = bun.fmt.hexIntLower(task_id.get());
+        const folder_name = std.fmt.bufPrintZ(&tl_bufs.get().folder_name_buf, "{f}.git", .{ hex })?;
 
         if (dir := cache_dir.openDirZ(folder_name, {}) catch null) {
             const path_parts: [1]string = [ folder_name ];

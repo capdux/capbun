@@ -617,7 +617,7 @@ pub struct Transpiler {
         runtime_transpiler_cache: (*bun.jsc.RuntimeTranspilerCache)?,
         module_info: (*analyze_transpiled_module.ModuleInfo)?,
     ): !usize {
-        const tracer = if (enable_source_map)
+        let tracer = if (enable_source_map)
             bun.perf.trace("JSPrinter.printWithSourceMap")
         else
             bun.perf.trace("JSPrinter.print");

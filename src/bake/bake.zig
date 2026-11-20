@@ -196,8 +196,10 @@ pub const SplitBundlerOptions = struct {
     ssr: BuildConfigSubset = .{},
 
 pub fn parsePluginArray(opts: *SplitBundlerOptions, plugin_array: JSValue, global: *jsc.JSGlobalObject) bun.JSError!void {
-            const plugin = ((opts.plugin) orelse (Plugin.create(global, .bun)));
-            opts.plugin = plugin;
+            if ((opts.plugin == null)) {
+                opts.plugin = Plugin.create(global, .bun);
+            }
+            const plugin = opts.plugin.?;
             const empty_object = JSValue.createEmptyObject(global, 0);
             var iter = try plugin_array.arrayIterator(global);
             _ = &iter;

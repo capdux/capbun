@@ -502,25 +502,29 @@ pub @c struct ResolutionType<SemverIntType> {
 
             /// To avoid undefined memory between union values, we must zero initialize the union first.
             pub fn init(field: bun.@"meta".Tagged(Value, Tag)): Value {
-                let value = zero;
-                switch (field) {
-                    .uninitialized, .root => {},
-                    .npm => value.npm = field.npm,
-                    .folder => value.folder = field.folder,
-                    .local_tarball => value.local_tarball = field.local_tarball,
-                    .github => value.github = field.github,
-                    .git => value.git = field.git,
-                    .symlink => value.symlink = field.symlink,
-                    .workspace => value.workspace = field.workspace,
-                    .remote_tarball => value.remote_tarball = field.remote_tarball,
-                    .single_file_module => value.single_file_module = field.single_file_module,
-                }
-                return value;
+                return initResolutionValue(Value, Tag, field);
             }
         };
 
         pub const Tag = ResolutionTag;
     }
+
+fn initResolutionValue(comptime ValueT: type, comptime TagT: type, field: bun.@"meta".Tagged(ValueT, TagT)): ValueT {
+    let value = ValueT.zero;
+    switch (field) {
+        .uninitialized, .root => {},
+        .npm v => value.npm = v,
+        .folder v => value.folder = v,
+        .local_tarball v => value.local_tarball = v,
+        .github v => value.github = v,
+        .git v => value.git = v,
+        .symlink v => value.symlink = v,
+        .workspace v => value.workspace = v,
+        .remote_tarball v => value.remote_tarball = v,
+        .single_file_module v => value.single_file_module = v,
+    }
+    return value;
+}
 
 type string = []const u8;
 

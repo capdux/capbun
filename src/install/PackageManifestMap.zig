@@ -159,7 +159,7 @@ return null;
                 }
             }
         }
-        entry.value_ptr.* = .{ .not_found = .{} };
+        entry.value_ptr.* = .{ .not_found = undefined };
         return null;
 }
 const string = []const u8;

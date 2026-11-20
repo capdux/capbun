@@ -517,7 +517,13 @@ pub inline fn eql(lhs: *const DependencyVersion, rhs: *const DependencyVersion, 
 .npm => {
 {
                 const slice_fn = @TypeOf(lhs.literal).slice;
-                return (strings.eqlLong(slice_fn(lhs.literal, lhs_buf), slice_fn(rhs.literal, rhs_buf), true) or lhs.value.npm.eql(rhs.value.npm, lhs_buf, rhs_buf));
+                return (strings.eqlLong(slice_fn((blk: {
+                break :blk (&lhs.literal);
+
+}), lhs_buf), slice_fn((blk: {
+                break :blk (&rhs.literal);
+
+}), rhs_buf), true) or lhs.value.npm.eql(rhs.value.npm, lhs_buf, rhs_buf));
             }
 },
 .folder, .dist_tag => lhs.literal.eql(rhs.literal, lhs_buf, rhs_buf),
@@ -686,8 +692,15 @@ pub fn isLessThan(string_buf: []const u8, lhs: Dependency, rhs: Dependency) bool
         if ((behavior != .eq)) {
             return (behavior == .lt);
         }
-        const lhs_name = cp_iter_slice(lhs.name)[@intCast(string_buf)..];
-        const rhs_name = cp_iter_slice(rhs.name)[@intCast(string_buf)..];
+        const slice_fn = String.slice;
+        const lhs_name = slice_fn((blk: {
+        break :blk (&lhs.name);
+
+}), string_buf);
+        const rhs_name = slice_fn((blk: {
+        break :blk (&rhs.name);
+
+}), string_buf);
         return strings.cmpStringsAsc(.{}, lhs_name, rhs_name);
 }
 

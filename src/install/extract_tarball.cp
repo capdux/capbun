@@ -509,7 +509,7 @@ const DirnameReader = struct {
             else => _.package_manager.lockfile.trusted_dependencies != null &&
                 _.package_manager.lockfile.trusted_dependencies.?.contains(@truncate(Semver.String.Builder.stringHash(name))),
         }) {
-            let [json_file, json_buf_read] = bun.sys.File.readFileFrom(
+            const json_pair = bun.sys.File.readFileFrom(
                 bun.FD.fromStdDir(cache_dir),
                 bun.path.joinZBuf(&bufs.json_path_buf, [ folder_name, "package.json" ], .auto),
                 bun.default_allocator,
@@ -530,6 +530,8 @@ const DirnameReader = struct {
                 ) catch unreachable;
                 return error.InstallFailed;
             };
+            const json_file = @field(json_pair, "0");
+            const json_buf_read = @field(json_pair, "1");
             defer json_file.close();
             json_buf = json_buf_read;
             json_path = json_file.getPath(

@@ -1817,3 +1817,4 @@
 - **[2026-11-21] Wave 29 D 组 (1 跨模块根因)**：更新 `install/resolvers/folder_resolver`。
 - **[2026-11-21] Wave 29 A 组 (15 模块)**：更新 `js_printer/js_printer`, `js_parser/{parser,ast/{visitExpr,Expr,P,visit,lowerDecorators,visitBinaryExpression,visitStmt,ConvertESMExportsForHmr,E,Parser,SideEffects,maybe}}`, `js_parser_jsc/Macro`。
 - **[2026-11-21] Wave 30 C 组 (10 模块)**：更新 `runtime/{api/bun/{js_bun_spawn_bindings,process},webcore/s3/multipart,server/ServerConfig}`, `sql_jsc/postgres/DataCell`, `jsc/RuntimeTranspilerCache`, `options_types/CompileTarget`, `router/router`, `shell/shell`, `threading/channel`。
+- **[2026-11-21] Wave 30 B 组 (15 模块)**：更新 `bake/bake`, `bundler/{bundle_v2,transpiler,LinkerGraph,ParseTask,analyze_transpiled_module}`, `install/{lockfile/{Package,bun.lock},dependency,PackageManifestMap,TarballStream,extract_tarball,migration,repository,resolution}`。

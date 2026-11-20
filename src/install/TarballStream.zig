@@ -459,7 +459,8 @@ if (client.out_fd) |fd| {
                 }
 },
 else => {
-const db_err: struct { *anyopaque } = .{ archive.errorString() };
+const db_err_msg: []const u8 = archive.errorString();
+                const db_err: struct { []const u8 } = .{ db_err_msg };
                 _ = log("read_data_block: {s}", db_err);
                 return error.Fail;
 },

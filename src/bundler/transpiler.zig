@@ -496,7 +496,8 @@ const hashed_name = try transpiler.linker.getHashedFilename(file_path, null);
     }
 
 pub fn printWithSourceMapMaybe(transpiler: *Transpiler, ast: js_ast.Ast, source: *const logger.Source, comptime Writer: type, writer: Writer, comptime format: js_printer.Format, comptime enable_source_map: bool, source_map_context: ?js_printer.SourceMapHandler, runtime_transpiler_cache: ?*bun.jsc.RuntimeTranspilerCache, module_info: ?*analyze_transpiled_module.ModuleInfo) !usize {
-            const tracer = (if (enable_source_map) bun.perf.trace("JSPrinter.printWithSourceMap") else bun.perf.trace("JSPrinter.print"));
+            var tracer = (if (enable_source_map) bun.perf.trace("JSPrinter.printWithSourceMap") else bun.perf.trace("JSPrinter.print"));
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }

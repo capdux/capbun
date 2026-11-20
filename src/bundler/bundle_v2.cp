@@ -320,7 +320,7 @@ pub struct BundleV2 {
             if (v.visited.isSet(source_index.get())) {
                 if (comptime check_dynamic_imports) {
                     if (was_dynamic_import) {
-                        v.dynamic_import_entry_points.put(source_index.get(), {}) catch unreachable;
+                        v.dynamic_import_entry_points.put(source_index.get(), undefined) catch unreachable;
                     }
                 }
                 return;
@@ -389,7 +389,7 @@ pub struct BundleV2 {
             v.reachable.append(source_index) catch unreachable;
             if (comptime check_dynamic_imports) {
                 if (was_dynamic_import) {
-                    v.dynamic_import_entry_points.put(source_index.get(), {}) catch unreachable;
+                    v.dynamic_import_entry_points.put(source_index.get(), undefined) catch unreachable;
                 }
             }
         }
@@ -475,7 +475,7 @@ pub struct BundleV2 {
             if (url_for_css.len > 0) {
                 // We like to inline additional files in CSS if they fit a size threshold
                 // If we do inline a file in CSS, and it is not imported by JS, then we don't need to copy the additional file into the output directory
-                if (additional_files_imported_by_css_and_inlined.isSet(index) && !additional_files_imported_by_js_and_inlined_in_css.isSet(index)) {
+                if (additional_files_imported_by_css_and_inlined.isSet(@intCast(index)) && !additional_files_imported_by_js_and_inlined_in_css.isSet(@intCast(index))) {
                     additional_files[index].clearRetainingCapacity();
                     unique_keys[index] = "";
                     content_hashes[index] = 0;
@@ -1338,24 +1338,26 @@ pub struct BundleV2 {
                     ])?;
                     const export_name = server.newExpr(E.String{ data: export_name_string });
 
+                    const server_props: [3]G.Property = [
+                        { key: id_string, value: client_path },
+                        { key: name_string, value: export_name },
+                        { key: chunks_string, value: empty_array },
+                    ];
                     // write dependencies on the underlying module, not the proxy
                     server_manifest_props.append(alloc, {
                         key: server.newExpr(E.String{ data: server_key_string }),
                         value: server.newExpr(E.Object{
-                            properties: G.Property.List.fromSlice(alloc, [ 
-                                { key: id_string, value: client_path },
-                                { key: name_string, value: export_name },
-                                { key: chunks_string, value: empty_array },
-                            ])?,
+                            properties: G.Property.List.fromSlice(alloc, &server_props)?,
                         }),
                     })?;
+                    const client_props: [2]G.Property = [
+                        { key: name_string, value: export_name },
+                        { key: specifier_string, value: ssr_path },
+                    ];
                     client_item.* = {
                         key: export_name,
                         value: server.newExpr(E.Object{
-                            properties: G.Property.List.fromSlice(alloc, [ 
-                                { key: name_string, value: export_name },
-                                { key: specifier_string, value: ssr_path },
-                            ])?,
+                            properties: G.Property.List.fromSlice(alloc, &client_props)?,
                         }),
                     };
                 }

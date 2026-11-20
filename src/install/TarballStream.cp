@@ -368,7 +368,8 @@ fn step(client: *TarballStream)! {
                             }
                         },
                         else => {
-                            const db_err = .{ archive.errorString() };
+                            const db_err_msg: []const u8 = archive.errorString();
+                            const db_err = .{ db_err_msg };
                             log("read_data_block: {s}", db_err);
                             return error.Fail;
                         },

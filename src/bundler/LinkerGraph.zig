@@ -477,9 +477,9 @@ pub fn takeAstOwnership(self: *LinkerGraph) void {
                 _ = (part.*).dependencies.transferOwnership(heap);
             }
         }
-        for (cp_mut_slice(&ast.items(.symbols))) |*symbols| {
-            _ = &symbols;
-            _ = self.symbols.transferOwnership(heap);
+        for (cp_mut_slice(&ast.items(.symbols))) |*syms| {
+            _ = &syms;
+            _ = (syms.*).transferOwnership(heap);
         }
 }
 

@@ -475,7 +475,8 @@ pub fn Package(comptime SemverIntType: type): type {
                         if (comptime group.behavior.isOptional()) {
                             if (j := duplicate_at) {
                                 // need to shift dependencies after the duplicate to maintain sort order
-                                for (k of j + 1..total_dependencies_count) {
+                                let k: usize = j + 1;
+                                while (k < total_dependencies_count) : (k += 1) {
                                     dependencies[k - 1] = dependencies[k];
                                 }
 
@@ -1567,7 +1568,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                     , {}) catch {};
                                     return error.InvalidPackageJSON;
                                 }
-                                lockfile.trusted_dependencies.?.putAssumeCapacity(@as(TruncatedPackageNameHash, @truncate(String.Builder.stringHash(name))), {});
+                                lockfile.trusted_dependencies.?.putAssumeCapacity(@as(TruncatedPackageNameHash, @truncate(String.Builder.stringHash(name))), undefined);
                             }
                         },
                         else => {
@@ -1651,7 +1652,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     const value = prop.value.?;
                     if (key.isString() && value.isString()) {
                         let sfb = std.heap.stackFallback(1024, allocator);
-                        const keyhash = key.asStringHash(sfb.get(), String.Builder.stringHash) orelse unreachable;
+                        const keyhash = (key.asStringHash(sfb.get(), String.Builder.stringHash)?) orelse unreachable;
                         const patch_path = string_builder.append(String, value.asString(allocator).?);
                         lockfile.patched_dependencies.put(allocator, keyhash, { path: patch_path }) catch unreachable;
                     }

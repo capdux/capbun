@@ -620,10 +620,10 @@ fn getAST(
                     // This is to ensure that we generate a JavaScript bundle containing all the user's code.
                     let import_record_indices = Part.ImportRecordIndices.initCapacity(allocator, scanner.import_records.len)?;
                     import_record_indices.len = @truncate(scanner.import_records.len);
+                    let ir_slice = import_record_indices.slice();
                     let index: usize = 0;
-                    for (*import_record of import_record_indices.slice()) {
-                        import_record.* = @intCast(index);
-                        index += 1;
+                    while (index < ir_slice.len) : (index += 1) {
+                        ir_slice[index] = @intCast(index);
                     }
                     break :brk2 import_record_indices;
                 },

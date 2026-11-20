@@ -540,8 +540,8 @@ pub struct AsyncDependencyState {
                 part.dependencies.transferOwnership(heap);
             }
         }
-        for (*symbols of ast.items(.symbols)) {
-            symbols.transferOwnership(heap);
+        for (*syms of ast.items(.symbols)) {
+            syms.transferOwnership(heap);
         }
     }
 

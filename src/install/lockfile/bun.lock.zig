@@ -1190,11 +1190,9 @@ else => {
                 return error.InvalidWorkspaceObject;
 }); }
             }
-            const _tmp_v25 = try parseAppendDependencies(lockfile, allocator, (&root_pkg_exr), (&string_buf), log, source, (&optional_peers_buf), false, undefined, undefined, true, (&workspaces_obj));
-            var off = cp_unpack_elem(_tmp_v25, 0);
-            _ = &off;
-            var len = cp_unpack_elem(_tmp_v25, 1);
-            _ = &len;
+            const root_dep_pair = try parseAppendDependencies(lockfile, allocator, (&root_pkg_exr), (&string_buf), log, source, (&optional_peers_buf), false, undefined, undefined, true, (&workspaces_obj));
+            const off = @field(root_dep_pair, "0");
+            const len = @field(root_dep_pair, "1");
             var root_pkg: BinaryLockfile.Package = .{};
             _ = &root_pkg;
             if (maybe_name) |name| {
@@ -1235,10 +1233,10 @@ else => {
                     const name_hash = String.Builder.stringHash(name);
                     (if (@typeInfo(@TypeOf(pkg)) == .@"enum" or @typeInfo(@TypeOf(pkg)) == .@"union") @tagName(pkg) else pkg.name) = try string_buf.appendWithHash(name, name_hash);
                     pkg.name_hash = name_hash;
-                    const _tmp_v28 = try parseAppendDependencies(lockfile, allocator, (&value), (&string_buf), log, source, (&optional_peers_buf), false, .{}, .{}, false, .{});
-                    var off = cp_unpack_elem(_tmp_v28, 0);
+                    const _tmp_v27 = try parseAppendDependencies(lockfile, allocator, (&value), (&string_buf), log, source, (&optional_peers_buf), false, .{}, .{}, false, .{});
+                    var off = cp_unpack_elem(_tmp_v27, 0);
                     _ = &off;
-                    var len = cp_unpack_elem(_tmp_v28, 1);
+                    var len = cp_unpack_elem(_tmp_v27, 1);
                     _ = &len;
                     pkg.dependencies = .{ .off = off, .len = len };
                     pkg.resolutions = .{ .off = off, .len = len };
@@ -1323,16 +1321,16 @@ else => {
                 _ = try log.addError(source, res_info.loc, "Expected a string");
                 return error.InvalidPackageResolution;
 });
-                const _tmp_v31 = name_and_res: {
+                const _tmp_v30 = name_and_res: {
                 if (strings.hasPrefixComptime(res_info_str, "@root:")) {
                     break :name_and_res .{ "", res_info_str[1..] };
                 }
                 break :name_and_res (blk_catch_4: { break :blk_catch_4 ((Dependency.splitNameAndVersion(res_info_str)) catch |__ce_4| { _ = &__ce_4; _ = try log.addError(source, res_info.loc, "Invalid package resolution");
                 return error.InvalidPackageResolution; }); });
 };
-                var name_str = cp_unpack_elem(_tmp_v31, 0);
+                var name_str = cp_unpack_elem(_tmp_v30, 0);
                 _ = &name_str;
-                var res_str = cp_unpack_elem(_tmp_v31, 1);
+                var res_str = cp_unpack_elem(_tmp_v30, 1);
                 _ = &res_str;
                 const name_hash = String.Builder.stringHash(name_str);
                 const name = try string_buf.append(name_str);
@@ -1383,8 +1381,8 @@ else => {
                         {
                             var _workspace_pkg_id: i32 = workspace_pkgs_off;
                             _ = &_workspace_pkg_id;
-                            const __end_32 = (workspace_pkgs_off + workspace_pkgs_len);
-                            while (_workspace_pkg_id < __end_32) : (_workspace_pkg_id += 1) {
+                            const __end_31 = (workspace_pkgs_off + workspace_pkgs_len);
+                            while (_workspace_pkg_id < __end_31) : (_workspace_pkg_id += 1) {
                                 const workspace_pkg_id: PackageID = @intCast(_workspace_pkg_id);
                                 if (res.eql((&pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))]), string_buf.bytes.items, string_buf.bytes.items)) {
                                     if (comptime Environment.isDebug) {
@@ -1421,10 +1419,10 @@ _ = workspace_and_not_v0: {
                     _ = try log.addError(source, deps_os_cpu_libc_bin_bundle_obj.loc, "Expected an object");
                     return error.InvalidPackageInfo;
                 }
-                const _tmp_v33 = try parseAppendDependencies(lockfile, allocator, deps_os_cpu_libc_bin_bundle_obj, (&string_buf), log, source, (&optional_peers_buf), true, pkg_path, (&bundled_pkgs), false, .{});
-                var off = cp_unpack_elem(_tmp_v33, 0);
+                const _tmp_v32 = try parseAppendDependencies(lockfile, allocator, deps_os_cpu_libc_bin_bundle_obj, (&string_buf), log, source, (&optional_peers_buf), true, pkg_path, (&bundled_pkgs), false, .{});
+                var off = cp_unpack_elem(_tmp_v32, 0);
                 _ = &off;
-                var len = cp_unpack_elem(_tmp_v33, 1);
+                var len = cp_unpack_elem(_tmp_v32, 1);
                 _ = &len;
                 pkg.dependencies = .{ .off = off, .len = len };
                 pkg.resolutions = .{ .off = off, .len = len };
@@ -1555,8 +1553,8 @@ else => {
                 {
                     var _dep_id: i32 = pkg_deps[0].begin();
                     _ = &_dep_id;
-                    const __end_34 = pkg_deps[0].end();
-                    while (_dep_id < __end_34) : (_dep_id += 1) {
+                    const __end_33 = pkg_deps[0].end();
+                    while (_dep_id < __end_33) : (_dep_id += 1) {
                         const dep_id: DependencyID = @intCast(_dep_id);
                         const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
                         const res_id = ((pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items))) orelse {
@@ -1580,8 +1578,8 @@ else => {
                 {
                     var _pkg_id: i32 = workspace_pkgs_off;
                     _ = &_pkg_id;
-                    const __end_35 = (workspace_pkgs_off + workspace_pkgs_len);
-                    while (_pkg_id < __end_35) : (_pkg_id += 1) {
+                    const __end_34 = (workspace_pkgs_off + workspace_pkgs_len);
+                    while (_pkg_id < __end_34) : (_pkg_id += 1) {
                         const pkg_id: PackageID = @intCast(_pkg_id);
                         const workspace_name = pkg_names[@as(usize, @intCast(pkg_id))].slice(lockfile.buffers.string_bytes.items);
                         _ = seen_deps.clearRetainingCapacity();
@@ -1589,8 +1587,8 @@ else => {
                         {
                             var _dep_id: i32 = deps.begin();
                             _ = &_dep_id;
-                            const __end_36 = deps.end();
-                            while (_dep_id < __end_36) : (_dep_id += 1) {
+                            const __end_35 = deps.end();
+                            while (_dep_id < __end_35) : (_dep_id += 1) {
                                 const dep_id: DependencyID = @intCast(_dep_id);
                                 const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
                                 const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items);
@@ -1628,8 +1626,8 @@ else => {
                 {
                     var _dep_id: i32 = deps.begin();
                     _ = &_dep_id;
-                    const __end_38 = deps.end();
-                    while (_dep_id < __end_38) : (_dep_id += 1) {
+                    const __end_37 = deps.end();
+                    while (_dep_id < __end_37) : (_dep_id += 1) {
                         const dep_id: DependencyID = @intCast(_dep_id);
                         const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
                         const res_id = (blk_catch_7: { break :blk_catch_7 ((pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf))) catch |e| { _ = &e; if ((e == error.InvalidPackageKey)) {

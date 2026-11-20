@@ -526,7 +526,7 @@ pub struct DependencyVersion {
             // semver ranges involve a ton of pointer chasing
             .npm => {
                 const slice_fn = @TypeOf(lhs.literal).slice;
-                return strings.eqlLong(slice_fn(lhs.literal, lhs_buf), slice_fn(rhs.literal, rhs_buf), true) ||
+                return strings.eqlLong(slice_fn(unsafe { &lhs.literal }, lhs_buf), slice_fn(unsafe { &rhs.literal }, rhs_buf), true) ||
                     lhs.value.npm.eql(rhs.value.npm, lhs_buf, rhs_buf);
             },
             .folder, .dist_tag => lhs.literal.eql(rhs.literal, lhs_buf, rhs_buf),
@@ -740,8 +740,9 @@ static fn isLessThan(string_buf: []const u8, lhs: Dependency, rhs: Dependency): 
         return behavior == .lt;
     }
 
-    const lhs_name = lhs.name.slice(string_buf);
-    const rhs_name = rhs.name.slice(string_buf);
+    const slice_fn = String.slice;
+    const lhs_name = slice_fn(unsafe { &lhs.name }, string_buf);
+    const rhs_name = slice_fn(unsafe { &rhs.name }, string_buf);
     return strings.cmpStringsAsc({}, lhs_name, rhs_name);
 }
 

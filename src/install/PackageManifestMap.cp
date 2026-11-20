@@ -123,7 +123,7 @@ pub enum CacheBehavior {
             }
         }
 
-        entry.value_ptr.* = .{ not_found: {} };
+        entry.value_ptr.* = .{ not_found: undefined };
         return null;
     }
 }

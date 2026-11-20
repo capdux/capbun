@@ -277,7 +277,7 @@ for (self.graph.entry_points.items) |entry_point| {
                 while (index < __end_2) : (index += 1) {
                     const url_for_css = all_urls_for_css[@as(usize, @intCast(index))];
                     if ((url_for_css.len > 0)) {
-                        if ((additional_files_imported_by_css_and_inlined.isSet(index) and (!additional_files_imported_by_js_and_inlined_in_css.isSet(index)))) {
+                        if ((additional_files_imported_by_css_and_inlined.isSet(@intCast(index)) and (!additional_files_imported_by_js_and_inlined_in_css.isSet(@intCast(index))))) {
                             _ = additional_files[@as(usize, @intCast(index))].clearRetainingCapacity();
                             unique_keys[cp_cast_int(usize, index)] = "";
                             content_hashes[cp_cast_int(usize, index)] = 0;
@@ -911,8 +911,10 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
                                 _ = &client_item;
                                 const server_key_string = try std.fmt.allocPrint(alloc, "{f}S{d:0>8}#{s}", .{ bun.fmt.hexIntLower(self.unique_key), source_id, export_name_string });
                                 const export_name = server.newExpr(E.String{ .data = export_name_string });
-                                _ = try server_manifest_props.append(alloc, .{ .key = server.newExpr(E.String{ .data = server_key_string }), .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, .{ .{ .key = id_string, .value = client_path }, .{ .key = name_string, .value = export_name }, .{ .key = chunks_string, .value = empty_array } }) }) });
-                                client_item.* = .{ .key = export_name, .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, .{ .{ .key = name_string, .value = export_name }, .{ .key = specifier_string, .value = ssr_path } }) }) };
+                                const server_props: [3]G.Property = .{ .{ .key = id_string, .value = client_path }, .{ .key = name_string, .value = export_name }, .{ .key = chunks_string, .value = empty_array } };
+                                _ = try server_manifest_props.append(alloc, .{ .key = server.newExpr(E.String{ .data = server_key_string }), .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, (&server_props)) }) });
+                                const client_props: [2]G.Property = .{ .{ .key = name_string, .value = export_name }, .{ .key = specifier_string, .value = ssr_path } };
+                                client_item.* = .{ .key = export_name, .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, (&client_props)) }) };
                             }
                         }
                         _ = client_manifest_props.append(alloc, .{ .key = client_path, .value = server.newExpr(E.Object{ .properties = G.Property.List.fromOwnedSlice(client_manifest_items) }) });
@@ -2453,7 +2455,7 @@ pub fn bustDirCache(vm: *BundleV2, path: []const u8) bool {
                 if (v.visited.isSet(source_index.get())) {
                     if (comptime check_dynamic_imports) {
                         if (was_dynamic_import) {
-                            _ = ((v.dynamic_import_entry_points.put(source_index.get(), .{})) catch unreachable);
+                            _ = ((v.dynamic_import_entry_points.put(source_index.get(), undefined)) catch unreachable);
                         }
                     }
                     return;
@@ -2516,7 +2518,7 @@ pub fn bustDirCache(vm: *BundleV2, path: []const u8) bool {
                 _ = ((v.reachable.append(source_index)) catch unreachable);
                 if (comptime check_dynamic_imports) {
                     if (was_dynamic_import) {
-                        _ = ((v.dynamic_import_entry_points.put(source_index.get(), .{})) catch unreachable);
+                        _ = ((v.dynamic_import_entry_points.put(source_index.get(), undefined)) catch unreachable);
                     }
                 }
         }

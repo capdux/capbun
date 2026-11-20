@@ -398,13 +398,10 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                         if (comptime group.behavior.isOptional()) {
                             if (duplicate_at) |j| {
                                 _ = &j;
-                                {
-                                    var k: i32 = (j + 1);
-                                    _ = &k;
-                                    const __end_5 = total_dependencies_count;
-                                    while (k < __end_5) : (k += 1) {
-                                        dependencies[cp_cast_int(usize, (k - 1))] = dependencies[@as(usize, @intCast(k))];
-                                    }
+                                var k: usize = (j + 1);
+                                _ = &k;
+                                while ((k < total_dependencies_count)) : (k = (k + 1)) {
+                                    dependencies[cp_cast_int(usize, (k - 1))] = dependencies[@as(usize, @intCast(k))];
                                 }
                                 dependencies[cp_cast_int(usize, (total_dependencies_count - 1))] = dependency;
                                 continue :list;
@@ -490,10 +487,10 @@ else => {
             if (((trimmed.len != 1) or (((trimmed[0] != 42) and (trimmed[0] != 94)) and (trimmed[0] != 126)))) {
                 const at = ((strings.lastIndexOfChar(input, 64)) orelse (0));
                 if ((at > 0)) {
-                    workspace_range = (blk_catch_2: { break :blk_catch_2 ((Semver.Query.parse(allocator, input[(at + 1)..], sliced)) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+                    workspace_range = (blk_catch_2: { break :blk_catch_2 ((Semver.Query.parse(allocator, input[(at + 1)..], sliced)) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  break :__sw_blk_5 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
                     break :brk String.Builder.stringHash(input[0..at]);
                 }
-                workspace_range = (blk_catch_3: { break :blk_catch_3 ((Semver.Query.parse(allocator, input, sliced)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_7: { const __disc_7 = e; _ = &__disc_7; if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .OutOfMemory)) {  break :__sw_blk_7 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+                workspace_range = (blk_catch_3: { break :blk_catch_3 ((Semver.Query.parse(allocator, input, sliced)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
             }
             break :brk external_alias.hash;
 } else external_alias.hash),
@@ -878,7 +875,7 @@ if ((lockfile.trusted_dependencies == null)) {
                             _ = (blk_catch_9: { break :blk_catch_9 ((log.addErrorFmt(source, q.loc, allocator, "trustedDependencies expects an array of strings, e.g.\n  <r><green>\"trustedDependencies\"<r>: [\n    <green>\"package_name\"<r>\n  ]", .{})) catch |__ce_9| { _ = &__ce_9;  }); });
                             return error.InvalidPackageJSON;
                         }
-                        _ = lockfile.trusted_dependencies.?.putAssumeCapacity(@as(TruncatedPackageNameHash, @truncate(String.Builder.stringHash(name))), .{});
+                        _ = lockfile.trusted_dependencies.?.putAssumeCapacity(@as(TruncatedPackageNameHash, @truncate(String.Builder.stringHash(name))), undefined);
                     }
 },
 else => {
@@ -949,7 +946,7 @@ _ = (blk_catch_10: { break :blk_catch_10 ((log.addErrorFmt(source, q.loc, alloca
                     if ((key.isString() and value.isString())) {
                         var sfb = std.heap.stackFallback(1024, allocator);
                         _ = &sfb;
-                        const keyhash = ((key.asStringHash(sfb.get(), String.Builder.stringHash)) orelse (unreachable));
+                        const keyhash = ((try key.asStringHash(sfb.get(), String.Builder.stringHash)) orelse (unreachable));
                         const patch_path = string_builder.append(String, (value.asString(allocator)).?);
                         _ = ((lockfile.patched_dependencies.put(allocator, keyhash, .{ .path = patch_path })) catch unreachable);
                     }
