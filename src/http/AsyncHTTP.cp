@@ -143,7 +143,7 @@ export @root @value struct AsyncHTTP {
                     bun.logger.Loc.Empty,
                     allocator,
                     "BUN_CONFIG_MAX_HTTP_REQUESTS value must be a number between 1 and 65535",
-                    [],
+                    .{},
                 ) catch @panic("unreachable");
                 return;
             }

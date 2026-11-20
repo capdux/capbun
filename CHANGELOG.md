@@ -1794,3 +1794,5 @@
 - **[2026-11-20] Wave 26 C 组 (23 模块)**：更新 `shell/{shell,states/Pipeline}`, `paths/resolve_path`, `runtime/{api/{JSTranspiler,Archive,bun/{js_bun_spawn_bindings,spawn}},node/path_watcher,server/server,socket/UpgradedDuplex,webcore/{ResumableSink,blob/{Store,copy_file,write_file},s3/{multipart,simple_request}}}`, `http/HTTPThread`, `http_jsc/headers_jsc`, `libarchive/libarchive`, `ptr/owned`, `router/router`, `string/immutable/exact_size_matcher`, `watcher/INotifyWatcher`。
 
 - **[2026-11-20] Wave 26 D 组 (3 跨模块根因)**：更新 `install/repository`, `jsc/VM`, `sql_jsc/postgres/DataCell`。
+
+- **[2026-11-20] Wave 26 E 组 (4 跨模块根因)**：更新 `http/AsyncHTTP`, `interchange/toml`, `js_parser/ast/parsePrefix`, `string/immutable`。

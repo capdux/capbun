@@ -64,7 +64,7 @@ pub fn ParsePrefix(
         static fn t_null(p: *P): anyerror!Expr {
             const loc = p.lexer.loc();
             p.lexer.next()?;
-            return p.newExpr(E.Null{}, loc);
+            return p.newExpr(std.mem.zeroes(E.Null), loc);
         }
         static fn t_this(p: *P): anyerror!Expr {
             const loc = p.lexer.loc();

@@ -165,7 +165,7 @@ pub fn loadEnv(allocator: std.mem.Allocator, logger: anytype, env: anytype) void
             const max = (blk_catch_1: { break :blk_catch_1 ((std.fmt.parseInt(u16, max_http_requests, 10)) catch |__ce_1| { _ = &__ce_1; _ = (blk_catch_2: { break :blk_catch_2 ((logger.addErrorFmt(null, bun.logger.Loc.Empty, allocator, "BUN_CONFIG_MAX_HTTP_REQUESTS value \"{s}\" is not a valid integer between 1 and 65535", .{ max_http_requests })) catch |__ce_2| { _ = &__ce_2; @panic("unreachable"); }); });
             return; }); });
             if ((max == 0)) {
-                _ = (blk_catch_3: { break :blk_catch_3 ((logger.addWarningFmt(null, bun.logger.Loc.Empty, allocator, "BUN_CONFIG_MAX_HTTP_REQUESTS value must be a number between 1 and 65535", &.{})) catch |__ce_3| { _ = &__ce_3; @panic("unreachable"); }); });
+                _ = (blk_catch_3: { break :blk_catch_3 ((logger.addWarningFmt(null, bun.logger.Loc.Empty, allocator, "BUN_CONFIG_MAX_HTTP_REQUESTS value must be a number between 1 and 65535", .{})) catch |__ce_3| { _ = &__ce_3; @panic("unreachable"); }); });
                 return;
             }
             _ = AsyncHTTP.max_simultaneous_requests.store(max, .monotonic);

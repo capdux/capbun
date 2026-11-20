@@ -152,7 +152,7 @@ pub fn t_true(p: *P) anyerror!Expr {
 pub fn t_null(p: *P) anyerror!Expr {
             const loc = p.lexer.loc();
             _ = try p.lexer.next();
-            return p.newExpr(E.Null, loc);
+            return p.newExpr(std.mem.zeroes(E.Null), loc);
     }
 
 pub fn t_this(p: *P) anyerror!Expr {

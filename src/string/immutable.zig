@@ -2091,8 +2091,7 @@ pub fn lessThan(self: @This(), _: LengthSorter, lhs: Type, rhs: Type) bool {
 pub fn NewGlobLengthSorter(comptime Type: type, comptime field: []const u8) type {
         return struct {
 
-pub fn lessThan(self: @This(), _: GlobLengthSorter, lhs: Type, rhs: Type) bool {
-        _ = self;
+pub fn lessThan(_: GlobLengthSorter, lhs: Type, rhs: Type) bool {
             const key_a = @field(lhs, field);
             const key_b = @field(rhs, field);
             const star_a = indexOfChar(key_a, 42);

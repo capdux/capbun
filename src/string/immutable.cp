@@ -1917,7 +1917,7 @@ pub fn NewLengthSorter(comptime Type: type, comptime field: string): type {
 pub fn NewGlobLengthSorter(comptime Type: type, comptime field: string): type {
     return struct {
         const GlobLengthSorter = @This();
-        pub fn lessThan(_: GlobLengthSorter, lhs: Type, rhs: Type): bool {
+        static fn lessThan(_: GlobLengthSorter, lhs: Type, rhs: Type): bool {
             // Assert: keyA ends with "/" or contains only a single "*".
             // Assert: keyB ends with "/" or contains only a single "*".
             const key_a = @field(lhs, field);
