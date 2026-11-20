@@ -46,7 +46,7 @@ struct Preconnect {
     url: bun.URL,
     is_url_owned: bool,
 
-    fn onResult(*this, dummy_async: *AsyncHTTP, dummy_res: HTTPClientResult): void {
+    fn onResult(*_, dummy_async: *AsyncHTTP, dummy_res: HTTPClientResult) {
         this.response_buffer.deinit();
         this.async_http.clearData();
         this.async_http.client.deinit();
@@ -60,7 +60,7 @@ struct Preconnect {
 struct SingleHTTPChannel {
     channel: Channel8,
 
-    fn reset(*this): void {}
+    fn reset(*_) {}
 
     static fn init(): SingleHTTPChannel {
         return SingleHTTPChannel{
@@ -69,7 +69,7 @@ struct SingleHTTPChannel {
     }
 }
 
-fn sendSyncCallback(channel_holder: *SingleHTTPChannel, async_http: *AsyncHTTP, result: HTTPClientResult): void {
+fn sendSyncCallback(channel_holder: *SingleHTTPChannel, async_http: *AsyncHTTP, result: HTTPClientResult) {
     if (real := async_http.real) {
         real.* = async_http.*;
         real.response_buffer = async_http.response_buffer;
@@ -81,7 +81,7 @@ export struct HTTPChannelContext {
     http: AsyncHTTP = undefined,
     channel: *Channel1000,
 
-    fn callback(*this, _async: *AsyncHTTP, result: HTTPClientResult): void {
+    fn callback(*_, _async: *AsyncHTTP, result: HTTPClientResult) {
         this.channel.writeItem(result) catch @panic("unreachable");
     }
 }
@@ -122,8 +122,8 @@ export @root @value struct AsyncHTTP {
 
     signals: HTTPClient.Signals = {},
 
-    pub var active_requests_count = std.atomic.Value(usize).init(0);
-    pub var max_simultaneous_requests = std.atomic.Value(usize).init(256);
+    static let active_requests_count: std.atomic.Value(usize) = std.atomic.Value(usize).init(0);
+    static let max_simultaneous_requests: std.atomic.Value(usize) = std.atomic.Value(usize).init(256);
 
     static fn loadEnv(allocator: std.mem.Allocator, logger: auto, env: auto) {
         if (max_http_requests := env.get("BUN_CONFIG_MAX_HTTP_REQUESTS")) {
@@ -151,19 +151,19 @@ export @root @value struct AsyncHTTP {
         }
     }
 
-    fn signalHeaderProgress(*this): void {
+    fn signalHeaderProgress(*_) {
         if (progress := this.signals.header_progress) {
             progress.store(true, .release);
         }
     }
 
-    fn enableResponseBodyStreaming(*this): void {
+    fn enableResponseBodyStreaming(*_) {
         if (stream := this.signals.response_body_streaming) {
             stream.store(true, .release);
         }
     }
 
-    fn clearData(*this): void {
+    fn clearData(*_) {
         this.response_headers.deinit(this.allocator);
         this.response_headers = Headers.Entry.List.empty;
         this.request = null;
@@ -172,7 +172,7 @@ export @root @value struct AsyncHTTP {
         this.client.unix_socket_path = bun.jsc.ZigString.Slice.empty;
     }
 
-    static fn preconnect(url: bun.URL, is_url_owned: bool): void {
+    static fn preconnect(url: bun.URL, is_url_owned: bool) {
         if (!bun.FeatureFlags.is_fetch_preconnect_supported) {
             if (is_url_owned) {
                 bun.default_allocator.free(url.href);
@@ -338,7 +338,7 @@ export @root @value struct AsyncHTTP {
         );
     }
 
-    fn reset(*this): !void {
+    fn reset(*_): !void {
         const aborted = this.client.aborted;
         this.client = HTTPClient.init(this.allocator, this.method, this.client.url, this.client.header_entries, this.client.header_buf, aborted)?;
         this.client.http_proxy = this.http_proxy;
@@ -381,13 +381,13 @@ export @root @value struct AsyncHTTP {
         }
     }
 
-    fn schedule(*this, _allocator: std.mem.Allocator, batch: *bun.ThreadPool.Batch): void {
+    fn schedule(*_, _allocator: std.mem.Allocator, batch: *bun.ThreadPool.Batch) {
         _allocator;
         this.state.store(.scheduled, .monotonic);
         batch.push(bun.ThreadPool.Batch.from(&this.task));
     }
 
-    fn sendSync(*this): !bun.picohttp.Response {
+    fn sendSync(*_): !bun.picohttp.Response {
         HTTPThread.init(&{});
 
         let ctx = bun.default_allocator.create(SingleHTTPChannel)?;
@@ -409,7 +409,7 @@ export @root @value struct AsyncHTTP {
         return result.metadata.?.response;
     }
 
-    fn onAsyncHTTPCallback(*this, async_http: *AsyncHTTP, result: HTTPClientResult) {
+    fn onAsyncHTTPCallback(*_, async_http: *AsyncHTTP, result: HTTPClientResult) {
         bun.assert(this.real != null);
 
         let callback = this.result_callback;
@@ -468,7 +468,7 @@ export @root @value struct AsyncHTTP {
         this_ptr.onStart();
     }
 
-    fn onStart(*this) {
+    fn onStart(*_) {
         AsyncHTTP.active_requests_count.fetchAdd(1, .monotonic);
         this.err = null;
         this.state.store(.sending, .monotonic);

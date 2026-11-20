@@ -20,7 +20,7 @@ pub @value class Handler {
     onPing: jsc.JSValue = .zero;
     onPong: jsc.JSValue = .zero;
 
-    app: ?*anyopaque = null;
+    app: *!? = null;
 
     vm: *jsc.VirtualMachine = undefined;
     globalObject: *jsc.JSGlobalObject = undefined;
@@ -28,15 +28,15 @@ pub @value class Handler {
 
     flags: HandlerFlags = .{};
 
-    pub fn runErrorCallback(_: *const Handler, vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue): void {
+    pub fn runErrorCallback(_: *const Handler, vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue) {
         const onError = _.onError;
         if (!onError.isEmptyOrUndefinedOrNull()) {
-            _ = onError.call(globalObject, .js_undefined, &.{error_value}) catch |err|
-                _.globalObject.reportActiveExceptionAsUnhandled(err);
+            * = onError.call(globalObject, .js_undefined, &.{error_value}) catch |e|
+                _.globalObject.reportActiveExceptionAsUnhandled(e);
             return;
         }
 
-        _ = vm.uncaughtException(globalObject, error_value, false);
+        * = vm.uncaughtException(globalObject, error_value, false);
     }
 
     pub static fn fromJS(globalObject: *jsc.JSGlobalObject, object: jsc.JSValue): bun.JSError!Handler {
@@ -44,7 +44,7 @@ pub @value class Handler {
 
         let valid = false;
 
-        inline for (.{
+        inline for (pair of .{
             .{ "error", "onError" },
             .{ "message", "onMessage" },
             .{ "open", "onOpen" },
@@ -52,15 +52,15 @@ pub @value class Handler {
             .{ "drain", "onDrain" },
             .{ "ping", "onPing" },
             .{ "pong", "onPong" },
-        }, 0..) |pair, i| {
-            if (try object.getTruthy(globalObject, pair[0])) |value| {
+        }) {
+            if (value := try object.getTruthy(globalObject, pair[0])) {
                 if (!value.isCell() or !value.isCallable()) {
                     return globalObject.throwInvalidArguments("websocket expects a function for the '{s}' option", .{pair[0]});
                 }
                 const cb = value.withAsyncContextIfNeeded(globalObject);
                 @field(handler, pair[1]) = cb;
                 cb.ensureStillAlive();
-                if (i > 0) {
+                if (!std.mem.eql(u8, pair[0], "error")) {
                     valid = true;
                 }
             }
@@ -72,7 +72,7 @@ pub @value class Handler {
         return globalObject.throwInvalidArguments("WebSocketServerContext expects a message handler", .{});
     }
 
-    pub fn protect(_: Handler): void {
+    pub fn protect(_: Handler) {
         _.onOpen.protect();
         _.onMessage.protect();
         _.onClose.protect();
@@ -82,7 +82,7 @@ pub @value class Handler {
         _.onPong.protect();
     }
 
-    pub fn unprotect(_: Handler): void {
+    pub fn unprotect(_: Handler) {
         if (_.vm.isShuttingDown()) {
             return;
         }
@@ -123,10 +123,10 @@ export @root struct WebSocketServerContext {
         };
     }
 
-    pub fn protect(_: WebSocketServerContext): void {
+    pub fn protect(_: WebSocketServerContext) {
         _.handler.protect();
     }
-    pub fn unprotect(_: WebSocketServerContext): void {
+    pub fn unprotect(_: WebSocketServerContext) {
         _.handler.unprotect();
     }
 
@@ -162,7 +162,7 @@ export @root struct WebSocketServerContext {
         let server = WebSocketServerContext{};
         server.handler = try Handler.fromJS(globalObject, object);
 
-        if (try object.get(globalObject, "perMessageDeflate")) |per_message_deflate| {
+        if (per_message_deflate := try object.get(globalObject, "perMessageDeflate")) {
             deflate: {
                 if (per_message_deflate.isUndefined()) {
                     break :deflate;
@@ -181,7 +181,7 @@ export @root struct WebSocketServerContext {
                     return globalObject.throwInvalidArguments("websocket expects perMessageDeflate to be a boolean or an object", .{});
                 }
 
-                if (try per_message_deflate.getTruthy(globalObject, "compress")) |compression| {
+                if (compression := try per_message_deflate.getTruthy(globalObject, "compress")) {
                     if (compression.isBoolean()) {
                         server.compression |= if (compression.toBoolean()) uws.SHARED_COMPRESSOR else 0;
                     } else if (compression.isString()) {
@@ -195,7 +195,7 @@ export @root struct WebSocketServerContext {
                     }
                 }
 
-                if (try per_message_deflate.getTruthy(globalObject, "decompress")) |compression| {
+                if (compression := try per_message_deflate.getTruthy(globalObject, "decompress")) {
                     if (compression.isBoolean()) {
                         server.compression |= if (compression.toBoolean()) uws.SHARED_DECOMPRESSOR else 0;
                     } else if (compression.isString()) {
@@ -211,7 +211,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (try object.get(globalObject, "maxPayloadLength")) |value| {
+        if (value := try object.get(globalObject, "maxPayloadLength")) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return globalObject.throwInvalidArguments("websocket expects maxPayloadLength to be an integer", .{});
@@ -220,7 +220,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (try object.get(globalObject, "idleTimeout")) |value| {
+        if (value := try object.get(globalObject, "idleTimeout")) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return globalObject.throwInvalidArguments("websocket expects idleTimeout to be an integer", .{});
@@ -238,7 +238,7 @@ export @root struct WebSocketServerContext {
                 server.idleTimeout = idleTimeout;
             }
         }
-        if (try object.get(globalObject, "backpressureLimit")) |value| {
+        if (value := try object.get(globalObject, "backpressureLimit")) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isAnyInt()) {
                     return globalObject.throwInvalidArguments("websocket expects backpressureLimit to be an integer", .{});
@@ -248,7 +248,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (try object.get(globalObject, "closeOnBackpressureLimit")) |value| {
+        if (value := try object.get(globalObject, "closeOnBackpressureLimit")) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isBoolean()) {
                     return globalObject.throwInvalidArguments("websocket expects closeOnBackpressureLimit to be a boolean", .{});
@@ -258,7 +258,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (try object.get(globalObject, "sendPings")) |value| {
+        if (value := try object.get(globalObject, "sendPings")) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isBoolean()) {
                     return globalObject.throwInvalidArguments("websocket expects sendPings to be a boolean", .{});
@@ -268,7 +268,7 @@ export @root struct WebSocketServerContext {
             }
         }
 
-        if (try object.get(globalObject, "publishToSelf")) |value| {
+        if (value := try object.get(globalObject, "publishToSelf")) {
             if (!value.isUndefinedOrNull()) {
                 if (!value.isBoolean()) {
                     return globalObject.throwInvalidArguments("websocket expects publishToSelf to be a boolean", .{});

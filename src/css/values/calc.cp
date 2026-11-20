@@ -427,7 +427,7 @@ pub fn Calc(comptime V: type): type {
                         }
                     };
                     let closure = Closure{ .ctx = ctx };
-                    var min, var center, var max = switch (input.parseNestedBlock(
+                    const clamp_res = switch (input.parseNestedBlock(
                         ClosureResult,
                         &closure,
                         Closure.parseNestedBlock,
@@ -435,6 +435,9 @@ pub fn Calc(comptime V: type): type {
                         .result => |vv| vv,
                         .err => |e| return .{ .err = e },
                     };
+                    let min = clamp_res[0];
+                    let center = clamp_res[1];
+                    let max = clamp_res[2];
 
                     // According to the spec, the minimum should "win" over the maximum if they are in the wrong order.
                     const cmp = if (max != null and max.? == .value and center == .value)

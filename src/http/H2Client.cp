@@ -6,8 +6,8 @@ export const local_max_header_list_size: u32 = 256 * 1024;
 export const write_buffer_high_water: usize = 256 * 1024;
 export const write_buffer_control_limit: usize = 1024 * 1024;
 
-pub var live_sessions = std.atomic.Value(i32).init(0);
-pub var live_streams = std.atomic.Value(i32).init(0);
+pub let live_sessions = std.atomic.Value(i32).init(0);
+pub let live_streams = std.atomic.Value(i32).init(0);
 
 pub const Stream = @import("./h2_client/Stream.zig");
 pub const ClientSession = @import("./h2_client/ClientSession.zig");

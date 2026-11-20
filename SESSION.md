@@ -2962,3 +2962,5 @@ Options:
 - [2026-11-20 04:33:58 UTC] 验收并提交 `src/libuv_sys/libuv.cp` (3246行, 1.010x)——`src/libuv_sys/` 100% 闭环；全仓非豁免模块仅余 `P.zig`（攻坚中）及 5 个已完成待 `cp_agy` 结单模块。
 
 - [2026-11-20 04:35:35 UTC] 【全仓非豁免初迁 100% 达成】验收并提交最大业务模块 `src/js_parser/ast/P.cp` (7057行, 1.013x)；全仓 1293 个非豁免模块全部拥有 `.cp` 源码（5 个已完成待 `cp_agy` 结单）。同步进入下一阶段「全仓存量 `.cp` 零违例净化」，已派发 3 路并发子智能体清理早期 83 个含静态门禁违例的 `.cp` 文件。
+
+- [2026-11-20 04:43:34 UTC] [收到 cp_agy 结单并已 ack] 5 项工单全部结单：`task-bun-20261120-enum-fromname-ambiguous-get`、`task-bun-20261120-prelude-ptr-shadow`、`task-bun-20261120-pub-const-error-collision`、`task-bun-20261120-prelude-target-shadow`、`task-bun-20261120-enum-tag-get-fromname`。立即解封并通过 4 模块：`Expr.cp` (1.016x)、`bun.cp` (1.022x)、`options.cp` (1.012x)、`pm_pkg_command.cp` (1.010x)；`sys.cp` 已解除 `Error` 冲突并派发清理余下 7 处小错。同时验收提交存量净化 36 模块（CSS 8 + HTTP 8 + Server/Socket/DNS 20）；`css_parser.cp` 仅余 `Err` prelude 冲突已提单 `task-bun-20261120-lib-err-error-shadow`。

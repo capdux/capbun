@@ -14,6 +14,7 @@ const Async = bun.Async;
 const jsc = bun.jsc;
 const uws = bun.uws;
 const AnyResponse = uws.AnyResponse;
+type AbortFn = *const fn (*!, AnyResponse) void;
 const log = bun.Output.scoped(.FileResponseStream, .hidden);
 
 export @root struct FileResponseStream {
@@ -24,15 +25,15 @@ fd: bun.FD,
 auto_close: bool,
 idle_timeout: u8,
 
-ctx: *anyopaque,
-on_complete: *const fn (*anyopaque, AnyResponse) void,
-on_abort: ?*const fn (*anyopaque, AnyResponse) void,
-on_error: *const fn (*anyopaque, AnyResponse, bun.sys.Error) void,
+ctx: *!,
+on_complete: *const fn (*!, AnyResponse) void,
+on_abort: AbortFn?,
+on_error: *const fn (*!, AnyResponse, bun.sys.Error) void,
 
 mode: Mode,
 reader: bun.io.BufferedReader = bun.io.BufferedReader.init(FileResponseStream),
-max_size: ?u64 = null,
-eof_task: ?jsc.AnyTask = null,
+max_size: u64? = null,
+eof_task: jsc.AnyTask? = null,
 sendfile: Sendfile = .{},
 
 const State = packed struct(u8) {
@@ -67,18 +68,18 @@ pub const StartOptions = struct {
     /// should be `stat.size - offset` (after Range/slice clamping).
     length: ?u64 = null,
     idle_timeout: u8,
-    ctx: *anyopaque,
-    on_complete: *const fn (*anyopaque, AnyResponse) void,
+    ctx: *!,
+    on_complete: *const fn (*!, AnyResponse) void,
     /// Fires instead of `on_complete` when the client disconnects mid-stream.
     /// If null, abort is reported via `on_complete`.
-    on_abort: ?*const fn (*anyopaque, AnyResponse) void = null,
-    on_error: *const fn (*anyopaque, AnyResponse, bun.sys.Error) void,
+    on_abort: ?*const fn (*!, AnyResponse) void = null,
+    on_error: *const fn (*!, AnyResponse, bun.sys.Error) void,
 };
 
-pub fn start(opts: StartOptions): void {
+pub fn start(opts: StartOptions) {
     const use_sendfile = canSendfile(opts.resp, opts.file_type, opts.length);
 
-    var stream = bun.new(FileResponseStream, .{
+    let stream = bun.new(FileResponseStream, .{
         .ref_count = .init(),
         .resp = opts.resp,
         .vm = opts.vm,
@@ -104,7 +105,7 @@ pub fn start(opts: StartOptions): void {
             .remain = opts.length.?,
         };
         stream.resp.prepareForSendfile();
-        _ = stream.onSendfile();
+        * = stream.onSendfile();
         return;
     }
 
@@ -135,7 +136,7 @@ pub fn start(opts: StartOptions): void {
     stream.reader.updateRef(true);
 
     if (comptime bun.Environment.isPosix) {
-        if (stream.reader.handle.getPoll()) |poll| {
+        if (poll := stream.reader.handle.getPoll()) {
             if (stream.reader.flags.nonblocking) poll.flags.insert(.nonblocking);
             switch (opts.file_type) {
                 .socket => poll.flags.insert(.socket),
@@ -150,7 +151,7 @@ pub fn start(opts: StartOptions): void {
     stream.reader.read();
 }
 
-fn canSendfile(resp: AnyResponse, file_type: bun.io.FileType, length: ?u64): bool {
+fn canSendfile(resp: AnyResponse, file_type: bun.io.FileType, length: u64?): bool {
     if (comptime bun.Environment.isWindows) return false;
     // sendfile() needs a real socket fd; SSL writes go through BIO and H3
     // through lsquic stream frames — neither has one.
@@ -169,9 +170,9 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
 
     if (_.state.response_done) return false;
 
-    var chunk = chunk_;
-    var state = state_;
-    if (_.max_size) |*max| {
+    let chunk = chunk_;
+    let state = state_;
+    if (*max := _.max_size) {
         const c = chunk_[0..@min(chunk_.len, max.*)];
         max.* = max.* -| c.len;
         chunk = c;
@@ -205,12 +206,12 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
     }
 }
 
-pub fn onReaderDone(_: *FileResponseStream): void {
+pub fn onReaderDone(_: *FileResponseStream) {
     defer _.deref();
     _.finish();
 }
 
-pub fn onReaderError(_: *FileResponseStream, err: bun.sys.Error): void {
+pub fn onReaderError(_: *FileResponseStream, err: bun.sys.Error) {
     defer _.deref();
     _.failWith(err);
 }
@@ -244,7 +245,7 @@ fn onSendfile(_: *FileResponseStream): bool {
     if (comptime bun.Environment.isLinux) {
         while (true) {
             const adjusted = @min(_.sendfile.remain, @as(u64, std.math.maxInt(i32)));
-            var off: i64 = @intCast(_.sendfile.offset);
+            let off: i64 = @intCast(_.sendfile.offset);
             const rc = std.os.linux.sendfile(
                 _.sendfile.socket_fd.cast(),
                 _.fd.cast(),
@@ -274,7 +275,7 @@ fn onSendfile(_: *FileResponseStream): bool {
         }
     } else if (comptime bun.Environment.isMac) {
         while (true) {
-            var sbytes: std.posix.off_t = @intCast(@min(_.sendfile.remain, @as(u64, std.math.maxInt(i32))));
+            let sbytes: std.posix.off_t = @intCast(@min(_.sendfile.remain, @as(u64, std.math.maxInt(i32))));
             const errno = bun.sys.getErrno(std.c.sendfile(
                 _.fd.cast(),
                 _.sendfile.socket_fd.cast(),
@@ -322,7 +323,7 @@ fn armSendfileWritable(_: *FileResponseStream): bool {
     return true;
 }
 
-fn endSendfile(_: *FileResponseStream): void {
+fn endSendfile(_: *FileResponseStream) {
     log("endSendfile", .{});
     if (_.state.response_done) return;
     _.state.response_done = true;
@@ -334,7 +335,7 @@ fn endSendfile(_: *FileResponseStream): void {
 
 // ───────────────────────── lifecycle ─────────────────────────
 
-fn onAborted(_: *FileResponseStream, _: AnyResponse): void {
+fn onAborted(_: *FileResponseStream, _: AnyResponse) {
     log("onAborted", .{});
     if (!_.state.response_done) {
         _.state.response_done = true;
@@ -344,7 +345,7 @@ fn onAborted(_: *FileResponseStream, _: AnyResponse): void {
     _.finish();
 }
 
-fn failWith(_: *FileResponseStream, err: bun.sys.Error): void {
+fn failWith(_: *FileResponseStream, err: bun.sys.Error) {
     if (!_.state.response_done) {
         _.state.response_done = true;
         _.state.errored = true;
@@ -360,7 +361,7 @@ fn failWith(_: *FileResponseStream, err: bun.sys.Error): void {
 /// socket back to uWS, which may free it on the next loop tick). After this
 /// runs, `finish()` — which can be reached from the deferred `eof_task` —
 /// will not touch `resp` again.
-fn detachResp(_: *FileResponseStream): void {
+fn detachResp(_: *FileResponseStream) {
     if (_.state.resp_detached) return;
     _.state.resp_detached = true;
     _.resp.clearOnWritable();
@@ -368,7 +369,7 @@ fn detachResp(_: *FileResponseStream): void {
     _.resp.clearTimeout();
 }
 
-fn finish(_: *FileResponseStream): void {
+fn finish(_: *FileResponseStream) {
     log("finish (already={})", .{_.state.finished});
     if (_.state.finished) return;
     _.state.finished = true;
@@ -383,7 +384,7 @@ fn finish(_: *FileResponseStream): void {
     _.deref();
 }
 
-pub fn release(_: *FileResponseStream): void {
+pub fn release(_: *FileResponseStream) {
     log("release", .{});
     if (_.mode == .reader) _.reader.deinit();
     if (_.auto_close) {
@@ -392,7 +393,7 @@ pub fn release(_: *FileResponseStream): void {
     bun.destroy(_);
 }
 
-fn deinit(_: *FileResponseStream): void {
+fn deinit(_: *FileResponseStream) {
     _.release();
 }
 

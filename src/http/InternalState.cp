@@ -65,7 +65,7 @@ export @root @value struct InternalState {
     certificate_info: CertificateInfo? = null,
 
     static fn init(body: HTTPRequestBody, body_out_str: *bun.MutableString): InternalState {
-        var req_body: string = "";
+        let req_body: string = "";
         if (body == .bytes) {
             req_body = body.bytes;
         }
@@ -80,11 +80,11 @@ export @root @value struct InternalState {
         };
     }
 
-    fn isChunkedEncoding(*this): bool {
+    fn isChunkedEncoding(*_): bool {
         return this.transfer_encoding == Encoding.chunked;
     }
 
-    fn reset(*this, allocator: std.mem.Allocator): void {
+    fn reset(*_, allocator: std.mem.Allocator) {
         this.compressed_body.deinit();
         this.response_message_buffer.deinit();
 
@@ -115,7 +115,7 @@ export @root @value struct InternalState {
         };
     }
 
-    fn getBodyBuffer(*this): *bun.MutableString {
+    fn getBodyBuffer(*_): *bun.MutableString {
         if (this.encoding.isCompressed()) {
             return &this.compressed_body;
         }
@@ -125,7 +125,7 @@ export @root @value struct InternalState {
         @panic("body_out_str is null");
     }
 
-    fn isDone(*this): bool {
+    fn isDone(*_): bool {
         if (this.isChunkedEncoding()) {
             return this.flags.received_last_chunk;
         }
@@ -135,18 +135,18 @@ export @root @value struct InternalState {
         return this.flags.received_last_chunk;
     }
 
-    fn decompressBytes(*this, buffer: string, body_out: *bun.MutableString, is_final_chunk: bool): !void {
+    fn decompressBytes(*_, buffer: string, body_out: *bun.MutableString, is_final_chunk: bool): !void {
         defer this.compressed_body.reset();
 
-        var still_needs_to_decompress = true;
+        let still_needs_to_decompress = true;
 
         if (bun.FeatureFlags.isLibdeflateEnabled()) {
             if (is_final_chunk && !this.flags.is_libdeflate_fast_path_disabled && this.encoding.canUseLibDeflate() && this.isDone()) {
                 this.flags.is_libdeflate_fast_path_disabled = true;
 
-                var deflater = bun.http.http_thread.deflater();
+                let deflater = bun.http.http_thread.deflater();
 
-                var handled = false;
+                let handled = false;
                 if (this.encoding == Encoding.gzip && buffer.len > 16 && buffer.len < 1024 * 1024 * 1024) {
                     let estimated_size: u32 = std.mem.readInt(u32, buffer[buffer.len - 4..][0..4], .little);
                     if (estimated_size > deflater.shared_buffer.len && estimated_size < 32 * 1024 * 1024) {
@@ -162,7 +162,7 @@ export @root @value struct InternalState {
                 }
 
                 if (!handled) {
-                    var enc: bun.libdeflate.Encoding = .deflate;
+                    let enc: bun.libdeflate.Encoding = .deflate;
                     if (this.encoding == .gzip) enc = .gzip;
                     const result = deflater.decompressor.decompress(
                         buffer,
@@ -188,21 +188,21 @@ export @root @value struct InternalState {
 
             this.decompressor.updateBuffers(this.encoding, buffer, body_out)?;
 
-            this.decompressor.readAll(this.isDone()) catch (err) {
-                if (this.isDone() || error.ShortRead != err) {
-                    bun.Output.prettyErrorln("<r><red>Decompression error: {s}<r>", [bun.asByteSlice(@errorName(err))]);
+            this.decompressor.readAll(this.isDone()) catch (e) {
+                if (this.isDone() || error.ShortRead != e) {
+                    bun.Output.prettyErrorln("<r><red>Decompression error: {s}<r>", [bun.asByteSlice(@errorName(e))]);
                     bun.Output.flush();
-                    return err;
+                    return e;
                 }
             };
         }
     }
 
-    fn decompress(*this, buffer: bun.MutableString, body_out: *bun.MutableString, is_final_chunk: bool): !void {
+    fn decompress(*_, buffer: bun.MutableString, body_out: *bun.MutableString, is_final_chunk: bool): !void {
         this.decompressBytes(buffer.list.items, body_out, is_final_chunk)?;
     }
 
-    fn processBodyBuffer(*this, buffer: bun.MutableString, is_final_chunk: bool): !bool {
+    fn processBodyBuffer(*_, buffer: bun.MutableString, is_final_chunk: bool): !bool {
         if (this.flags.is_redirect_pending) return false;
 
         const body_msg = this.body_out_str;
@@ -213,10 +213,10 @@ export @root @value struct InternalState {
                 },
                 * => {
                     if (!body_out.owns(buffer.list.items)) {
-                        body_out.append(buffer.list.items) catch (err) {
-                            bun.Output.prettyErrorln("<r><red>Failed to append to body buffer: {s}<r>", [bun.asByteSlice(@errorName(err))]);
+                        body_out.append(buffer.list.items) catch (e) {
+                            bun.Output.prettyErrorln("<r><red>Failed to append to body buffer: {s}<r>", [bun.asByteSlice(@errorName(e))]);
                             bun.Output.flush();
-                            return err;
+                            return e;
                         };
                     }
                 },

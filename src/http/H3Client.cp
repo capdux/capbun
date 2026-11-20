@@ -1,8 +1,8 @@
 // src/http/H3Client.cp
 // HTTP/3 client coordinator exports in CP language
 
-pub var live_sessions = std.atomic.Value(u32).init(0);
-pub var live_streams = std.atomic.Value(u32).init(0);
+pub let live_sessions = std.atomic.Value(u32).init(0);
+pub let live_streams = std.atomic.Value(u32).init(0);
 
 pub const Stream = @import("./h3_client/Stream.zig");
 pub const ClientSession = @import("./h3_client/ClientSession.zig");

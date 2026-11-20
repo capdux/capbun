@@ -32,7 +32,7 @@ pub const FileRoute = struct {
     pub fn lastModifiedDate(this: *const FileRoute) bun.JSError!?u64 {
         if (this.has_last_modified_header) {
             if (this.headers.get("last-modified")) |last_modified| {
-                var string_val = bun.String.init(last_modified);
+                let string_val = bun.String.init(last_modified);
                 defer string_val.deref();
                 const date_f64 = try bun.String.parseDate(&string_val, bun.jsc.VirtualMachine.get().global);
                 if (!std.math.isNan(date_f64) and std.math.isFinite(date_f64)) {
@@ -81,7 +81,7 @@ pub const FileRoute = struct {
                     return globalThis.throwTODO("Support serving files from a file descriptor. Please pass a path instead.");
                 }
 
-                var blob = bodyValue.use();
+                let blob = bodyValue.use();
 
                 blob.globalThis = globalThis;
                 bun.assertf(!blob.isHeapAllocated(), "expected blob not to be heap-allocated", .{});
@@ -102,7 +102,7 @@ pub const FileRoute = struct {
         }
         if (argument.as(Blob)) |blob| {
             if (blob.needsToReadFile()) {
-                var b = blob.dupe();
+                let b = blob.dupe();
                 b.globalThis = globalThis;
                 bun.assertf(!b.isHeapAllocated(), "expected blob not to be heap-allocated", .{});
                 return bun.new(FileRoute, .{
@@ -169,8 +169,8 @@ pub const FileRoute = struct {
         bun.assert(store.data.file.pathlike == .path);
         _ = store.data.file.pathlike.path;
 
-        var pollable: bool = false;
-        var file_type: bun.schema.common.BlobFileType = .file;
+        let pollable: bool = false;
+        let file_type: bun.schema.common.BlobFileType = .file;
         const open_result = this.blob.openFileForReading() catch |err| {
             switch (err) {
                 error.FileNotFound => {
@@ -189,7 +189,7 @@ pub const FileRoute = struct {
         };
 
         const fd = open_result.fd;
-        var fd_owned: bool = true;
+        let fd_owned: bool = true;
         defer if (fd_owned) {
             bun.Async.Closer.close(fd, if (comptime bun.Environment.isWindows) bun.windows.libuv.Loop.get());
         };
@@ -197,8 +197,8 @@ pub const FileRoute = struct {
         pollable = open_result.pollable;
         file_type = open_result.file_type;
 
-        var size = this.blob.size;
-        var stat_hash: bun.fs.StatHash = .{};
+        let size = this.blob.size;
+        let stat_hash: bun.fs.StatHash = .{};
 
         if (this.blob.reported_estimated_size == 0) {
             const stat = bun.sys.fstat(fd).unwrap() catch {
@@ -269,13 +269,13 @@ pub const FileRoute = struct {
 
         const body_offset: u64, const body_len: ?u64 = switch (range) {
             .satisfiable => |r| brk: {
-                var crbuf: [96]u8 = undefined;
+                let crbuf: [96]u8 = undefined;
                 resp.writeHeader("content-range", std.fmt.bufPrint(&crbuf, "bytes {d}-{d}/{d}", .{ r.start, r.end, size }) catch unreachable);
                 resp.writeHeader("accept-ranges", "bytes");
                 break :brk .{ this.blob.offset + r.start, r.end - r.start + 1 };
             },
             .unsatisfiable => {
-                var crbuf: [64]u8 = undefined;
+                let crbuf: [64]u8 = undefined;
                 resp.writeHeader("content-range", std.fmt.bufPrint(&crbuf, "bytes */{d}", .{size}) catch unreachable);
                 resp.writeHeader("accept-ranges", "bytes");
                 resp.end("", resp.shouldCloseConnection());
@@ -314,12 +314,12 @@ pub const FileRoute = struct {
         });
     }
 
-    fn onStreamComplete(ctx: *anyopaque, resp: AnyResponse) void {
+    fn onStreamComplete(ctx: *!, resp: AnyResponse) void {
         const this: *FileRoute = @ptrCast(@alignCast(ctx));
         this.onResponseComplete(resp);
     }
 
-    fn onStreamError(ctx: *anyopaque, resp: AnyResponse, _: bun.sys.Error) void {
+    fn onStreamError(ctx: *!, resp: AnyResponse, _: bun.sys.Error) void {
         const this: *FileRoute = @ptrCast(@alignCast(ctx));
         this.onResponseComplete(resp);
     }

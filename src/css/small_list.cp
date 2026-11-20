@@ -36,7 +36,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
         pub fn initInlined(values: []const T) This {
             bun.assert(values.len <= N);
-            var this = This{
+            let this = This{
                 .capacity = values.len,
                 .data = .{ .inlined = undefined },
             };
@@ -47,7 +47,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
         pub fn parse(input: *Parser) Result(@This()) {
             const parseFn = comptime voidWrap(T, generic.parseFor(T));
-            var values: @This() = .{};
+            let values: @This() = .{};
             while (true) {
                 input.skipWhitespace();
                 switch (input.parseUntilBefore(Delimiters{ .comma = true }, T, {}, parseFn)) {
@@ -86,7 +86,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                 };
             }
             defer list.deinit(allocator);
-            var this: @This() = .{
+            let this: @This() = .{
                 .capacity = list.len,
                 .data = .{ .inlined = undefined },
             };
@@ -101,7 +101,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                     .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } },
                 };
             }
-            var this: @This() = .{
+            let this: @This() = .{
                 .capacity = list.len,
                 .data = .{ .inlined = undefined },
             };
@@ -117,9 +117,9 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                     .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } },
                 };
             }
-            var list_ = list;
+            let list_ = list;
             defer list_.deinit(allocator);
-            var this: @This() = .{
+            let this: @This() = .{
                 .capacity = list_.len,
                 .data = .{ .inlined = undefined },
             };
@@ -134,7 +134,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                     .data = .{ .heap = .{ .len = list.len, .ptr = list.ptr } },
                 };
             }
-            var this: @This() = .{
+            let this: @This() = .{
                 .capacity = list.len,
                 .data = .{ .inlined = undefined },
             };
@@ -143,7 +143,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn withOne(val: T) @This() {
-            var ret = This{};
+            let ret = This{};
             ret.capacity = 1;
             ret.data.inlined[0] = val;
             return ret;
@@ -206,9 +206,9 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
             if (@hasDecl(T, "getImage") and N == 1) {
                 const ColorFallbackKind = css.css_values.color.ColorFallbackKind;
                 // Determine what vendor prefixes and color fallbacks are needed.
-                var prefixes = css.VendorPrefix{};
-                var fallbacks = ColorFallbackKind{};
-                var res: bun.BabyList(@This()) = .{};
+                let prefixes = css.VendorPrefix{};
+                let fallbacks = ColorFallbackKind{};
+                let res: bun.BabyList(@This()) = .{};
                 for (this.slice()) |*item| {
                     bun.bits.insert(css.VendorPrefix, &prefixes, item.getImage().getNecessaryPrefixes(targets));
                     bun.bits.insert(css.ColorFallbackKind, &fallbacks, item.getNecessaryFallbacks(targets));
@@ -216,7 +216,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
                 // Get RGB fallbacks if needed.
                 const rgb: ?SmallList(T, 1) = if (fallbacks.rgb) brk: {
-                    var shallow_clone = this.shallowClone(allocator);
+                    let shallow_clone = this.shallowClone(allocator);
                     for (shallow_clone.slice_mut(), this.slice_mut()) |*out, *in| {
                         out.* = in.getFallback(allocator, ColorFallbackKind{ .rgb = true });
                     }
@@ -229,7 +229,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                 // Legacy -webkit-gradient()
                 if (prefixes.webkit and targets.browsers != null and css.prefixes.Feature.isWebkitGradient(targets.browsers.?)) {
                     const images = images: {
-                        var images = SmallList(T, 1){};
+                        let images = SmallList(T, 1){};
                         for (prefix_images.slice()) |*item| {
                             if (item.getImage().getLegacyWebkit(allocator)) |img| {
                                 images.append(allocator, item.withImage(allocator, img));
@@ -245,7 +245,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                 const prefix = struct {
                     pub inline fn helper(comptime prefix: []const u8, pfs: *css.VendorPrefix, pfi: *const SmallList(T, 1), r: *bun.BabyList(This), alloc: Allocator) void {
                         if (bun.bits.contains(css.VendorPrefix, pfs.*, .fromName(prefix))) {
-                            var images = SmallList(T, 1).initCapacity(alloc, pfi.len());
+                            let images = SmallList(T, 1).initCapacity(alloc, pfi.len());
                             images.setLen(pfi.len());
                             for (images.slice_mut(), pfi.slice()) |*out, *in| {
                                 const image = in.getImage().getPrefixed(alloc, css.VendorPrefix.fromName(prefix));
@@ -266,7 +266,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                     }
 
                     if (fallbacks.p3) {
-                        var p3_images = this.shallowClone(allocator);
+                        let p3_images = this.shallowClone(allocator);
                         for (p3_images.slice_mut(), this.slice_mut()) |*out, *in| {
                             out.* = in.getFallback(allocator, ColorFallbackKind{ .p3 = true });
                         }
@@ -276,13 +276,13 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                     // Convert to lab if needed (e.g. if oklab is not supported but lab is).
                     if (fallbacks.lab) {
                         for (this.slice_mut()) |*item| {
-                            var old = item.*;
+                            let old = item.*;
                             item.* = item.getFallback(allocator, ColorFallbackKind{ .lab = true });
                             old.deinit(allocator);
                         }
                     }
                 } else if (res.pop()) |the_last| {
-                    var old = this.*;
+                    let old = this.*;
                     // Prefixed property with no unprefixed version.
                     // Replace self with the last prefixed version so that it doesn't
                     // get duplicated when the caller pushes the original value.
@@ -292,16 +292,16 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                 return res;
             }
             if (T == TextShadow and N == 1) {
-                var fallbacks = css.ColorFallbackKind{};
+                let fallbacks = css.ColorFallbackKind{};
                 for (this.slice()) |*shadow| {
                     bun.bits.insert(css.ColorFallbackKind, &fallbacks, shadow.color.getNecessaryFallbacks(targets));
                 }
 
-                var res = SmallList(SmallList(TextShadow, 1), 2){};
+                let res = SmallList(SmallList(TextShadow, 1), 2){};
                 if (fallbacks.rgb) {
-                    var rgb = SmallList(TextShadow, 1).initCapacity(allocator, this.len());
+                    let rgb = SmallList(TextShadow, 1).initCapacity(allocator, this.len());
                     for (this.slice()) |*shadow| {
-                        var new_shadow = shadow.*;
+                        let new_shadow = shadow.*;
                         // dummy non-alloced color to avoid deep cloning the real one since we will replace it
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
@@ -312,9 +312,9 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                 }
 
                 if (fallbacks.p3) {
-                    var p3 = SmallList(TextShadow, 1).initCapacity(allocator, this.len());
+                    let p3 = SmallList(TextShadow, 1).initCapacity(allocator, this.len());
                     for (this.slice()) |*shadow| {
-                        var new_shadow = shadow.*;
+                        let new_shadow = shadow.*;
                         // dummy non-alloced color to avoid deep cloning the real one since we will replace it
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
@@ -364,7 +364,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn orderedRemove(this: *@This(), idx: u32) T {
-            var ptr, const len_ptr, const capp = this.tripleMut();
+            const triple = this.tripleMut();
+            let ptr = triple[0];
+            const len_ptr = triple[1];
+            const capp = triple[2];
             _ = capp; // autofix
             bun.assert(idx < len_ptr.*);
 
@@ -379,7 +382,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn swapRemove(this: *@This(), idx: u32) T {
-            var ptr, const len_ptr, const capp = this.tripleMut();
+            const triple = this.tripleMut();
+            let ptr = triple[0];
+            const len_ptr = triple[1];
+            const capp = triple[2];
             _ = capp; // autofix
             bun.assert(idx < len_ptr.*);
 
@@ -400,7 +406,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
         pub fn shallowClone(this: *const @This(), allocator: Allocator) @This() {
             if (!this.spilled()) return this.*;
-            var h = HeapData.initCapacity(allocator, this.capacity);
+            let h = HeapData.initCapacity(allocator, this.capacity);
             h.len = this.data.heap.len;
             @memcpy(h.ptr[0..h.len], this.data.heap.ptr[0..h.len]);
             return .{
@@ -410,7 +416,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
-            var ret: @This() = initCapacity(allocator, this.len());
+            let ret: @This() = initCapacity(allocator, this.len());
             ret.setLen(this.len());
             for (this.slice(), ret.slice_mut()) |*in, *out| {
                 out.* = generic.deepClone(T, in, allocator);
@@ -428,7 +434,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
         /// Shallow clone
         pub fn clone(this: *const @This(), allocator: Allocator) @This() {
-            var ret = this.*;
+            let ret = this.*;
             if (!this.spilled()) return ret;
             // Preserve the invariant that the heap allocation holds `capacity` elements,
             // otherwise a later append that trusts `capacity` would write out of bounds.
@@ -461,7 +467,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
         pub fn initCapacity(allocator: Allocator, capacity: u32) @This() {
             if (capacity > N) {
-                var list: This = .{};
+                let list: This = .{};
                 list.capacity = capacity;
                 list.data = .{ .heap = HeapData.initCapacity(allocator, capacity) };
                 return list;
@@ -483,7 +489,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
             index: u32,
             item: T,
         ) void {
-            var ptr, var len_ptr, const capp = this.tripleMut();
+            const triple = this.tripleMut();
+            let ptr = triple[0];
+            let len_ptr = triple[1];
+            const capp = triple[2];
             if (len_ptr.* == capp) {
                 this.reserveOneUnchecked(allocator);
                 const heap_ptr, const heap_len_ptr = this.heap();
@@ -505,7 +514,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn appendAssumeCapacity(this: *@This(), item: T) void {
-            var ptr, const len_ptr, const capp = this.tripleMut();
+            const triple = this.tripleMut();
+            let ptr = triple[0];
+            const len_ptr = triple[1];
+            const capp = triple[2];
             bun.debugAssert(len_ptr.* < capp);
             ptr[len_ptr.*] = item;
             len_ptr.* += 1;
@@ -520,7 +532,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn append(this: *@This(), allocator: Allocator, item: T) void {
-            var ptr, var len_ptr, const capp = this.tripleMut();
+            const triple = this.tripleMut();
+            let ptr = triple[0];
+            let len_ptr = triple[1];
+            const capp = triple[2];
             if (len_ptr.* == capp) {
                 this.reserveOneUnchecked(allocator);
                 const heap_ptr, const heap_len = this.heap();
@@ -630,7 +645,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         fn growToHeap(this: *@This(), allocator: Allocator, additional: usize) void {
             bun.assert(!this.spilled());
             const new_size = growCapacity(this.capacity, this.capacity + additional);
-            var slc = bun.handleOom(allocator.alloc(T, new_size));
+            let slc = bun.handleOom(allocator.alloc(T, new_size));
             @memcpy(slc[0..this.capacity], this.data.inlined[0..this.capacity]);
             this.data = .{ .heap = HeapData{ .len = this.capacity, .ptr = slc.ptr } };
             this.capacity = new_size;
@@ -645,7 +660,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         /// Called when memory growth is necessary. Returns a capacity larger than
         /// minimum that grows super-linearly.
         fn growCapacity(current: u32, minimum: u32) u32 {
-            var new = current;
+            let new = current;
             while (true) {
                 new +|= new / 2 + 8;
                 if (new >= minimum)

@@ -2543,7 +2543,7 @@ const RelativeComponentParser = struct {
                 };
             }
         };
-        var closure = Closure{
+        let closure = Closure{
             .angle = undefined,
             .parser = this,
         };
@@ -2594,7 +2594,7 @@ const RelativeComponentParser = struct {
                     };
                 }
             };
-            var closure = Closure{
+            let closure = Closure{
                 .parser = this,
             };
             if (input.tryParse(Closure.parsefn, .{
@@ -2620,7 +2620,7 @@ const RelativeComponentParser = struct {
         }
 
         const Closure = struct { self: *const RelativeComponentParser, temp: Percentage = .{ .v = 0 } };
-        var _closure = Closure{ .self = this };
+        let _closure = Closure{ .self = this };
         if (input.tryParse(struct {
             pub fn parseFn(i: *css.Parser, closure: *Closure) Result(Percentage) {
                 const calc_value = switch (Calc(Percentage).parseWith(i, closure, parseIdentFn)) {
@@ -2693,7 +2693,7 @@ const RelativeComponentParser = struct {
                 return .{ .number = v };
             }
         };
-        var closure = Closure{
+        let closure = Closure{
             .p = this,
             .allowed_types = allowed_types,
         };

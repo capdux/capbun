@@ -24,18 +24,18 @@ export @root @value struct SendFile {
         return url.isHTTP() && url.href.len > 0;
     }
 
-    fn write(*this, socket: auto): Status {
+    fn write(*_, socket: auto): Status {
         const adjusted_count_temporary = @min(@as(u64, this.remain), @as(u63, std.math.maxInt(u63)));
         const adjusted_count = adjusted_count_temporary as u63;
 
         if (bun.Environment.isLinux) {
-            var signed_offset: i64 = this.offset as i64;
+            let signed_offset: i64 = this.offset as i64;
             const begin = this.offset;
             const val = std.os.linux.sendfile(socket.fd().cast(), this.fd.cast(), &signed_offset, this.remain);
             this.offset = signed_offset as u64;
 
             const errcode = bun.sys.getErrno(val);
-            var diff: usize = 0;
+            let diff: usize = 0;
             if (this.offset > begin) {
                 diff = this.offset - begin;
             }
@@ -52,7 +52,7 @@ export @root @value struct SendFile {
                 return { err: bun.errnoToZigErr(errcode) };
             }
         } else if (bun.Environment.isFreeBSD) {
-            var sbytes: any = 0;
+            let sbytes = @as(std.c.off_t, 0);
             const signed_offset: i64 = @bitCast(@as(u64, this.offset));
             const errcode = bun.sys.getErrno(std.c.sendfile(
                 this.fd.cast(),
@@ -77,7 +77,7 @@ export @root @value struct SendFile {
                 return { err: bun.errnoToZigErr(errcode) };
             }
         } else if (bun.Environment.isPosix) {
-            var sbytes: any = adjusted_count;
+            let sbytes = @as(std.c.off_t, adjusted_count);
             const signed_offset: i64 = @bitCast(@as(u64, this.offset));
             const errcode = bun.sys.getErrno(std.c.sendfile(
                 this.fd.cast(),

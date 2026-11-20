@@ -288,22 +288,22 @@ pub const Gradient = union(enum) {
     pub fn getPrefixed(this: *const @This(), allocator: Allocator, prefix: css.VendorPrefix): Gradient {
         return switch (this.*) {
             .linear => |*linear| .{ .linear = brk: {
-                var x = linear.deepClone(allocator);
+                let x = linear.deepClone(allocator);
                 x.vendor_prefix = prefix;
                 break :brk x;
             } },
             .repeating_linear => |*linear| .{ .repeating_linear = brk: {
-                var x = linear.deepClone(allocator);
+                let x = linear.deepClone(allocator);
                 x.vendor_prefix = prefix;
                 break :brk x;
             } },
             .radial => |*radial| .{ .radial = brk: {
-                var x = radial.deepClone(allocator);
+                let x = radial.deepClone(allocator);
                 x.vendor_prefix = prefix;
                 break :brk x;
             } },
             .repeating_radial => |*radial| .{ .repeating_radial = brk: {
-                var x = radial.deepClone(allocator);
+                let x = radial.deepClone(allocator);
                 x.vendor_prefix = prefix;
                 break :brk x;
             } },
@@ -805,7 +805,7 @@ pub const WebKitGradient = union(enum) {
     }
 
     pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) WebKitGradient {
-        var stops: ArrayList(WebKitColorStop) = .{};
+        let stops: ArrayList(WebKitColorStop) = .{};
         switch (this.*) {
             .linear => |linear| {
                 stops = bun.handleOom(ArrayList(WebKitColorStop).initCapacity(allocator, linear.stops.items.len));

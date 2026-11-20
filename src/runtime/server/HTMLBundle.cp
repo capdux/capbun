@@ -84,7 +84,7 @@ pub const Route = struct {
     } = .any,
 
     pub fn memoryCost(this: *const Route) usize {
-        var cost: usize = 0;
+        let cost: usize = 0;
         cost += @sizeOf(Route);
         cost += this.pending_responses.items.len * @sizeOf(PendingResponse);
         cost += this.state.memoryCost();
@@ -245,7 +245,7 @@ pub const Route = struct {
         const development = server.config().development;
         const vm = global.bunVM();
 
-        var config: JSBundler.Config = .{};
+        let config: JSBundler.Config = .{};
         errdefer config.deinit(bun.default_allocator);
         try config.entry_points.insert(this.bundle.data.path);
         if (vm.transpiler.options.transform_options.serve_public_path) |public_path| {
@@ -366,11 +366,11 @@ pub const Route = struct {
                 if (server.config().isDevelopment()) {
                     const now = bun.getRoughTickCount(.allow_mocked_time).ns();
                     const duration = now - completion_task.started_at_ns;
-                    var duration_f64: f64 = @floatFromInt(duration);
+                    let duration_f64: f64 = @floatFromInt(duration);
                     duration_f64 /= std.time.ns_per_s;
 
                     bun.Output.printElapsed(duration_f64);
-                    var byte_length: u64 = 0;
+                    let byte_length: u64 = 0;
                     for (output_files) |*output_file| {
                         byte_length += output_file.size_without_sourcemap;
                     }
@@ -379,12 +379,12 @@ pub const Route = struct {
                     bun.Output.flush();
                 }
 
-                var this_html_route: ?*StaticRoute = null;
+                let this_html_route: ?*StaticRoute = null;
 
                 // Create static routes for each output file
                 for (output_files) |*output_file| {
                     const blob = jsc.WebCore.Blob.Any{ .Blob = bun.handleOom(output_file.toBlob(bun.default_allocator, globalThis)) };
-                    var headers = bun.http.Headers{ .allocator = bun.default_allocator };
+                    let headers = bun.http.Headers{ .allocator = bun.default_allocator };
                     const content_type = blob.Blob.contentTypeOrMimeType() orelse brk: {
                         bun.debugAssert(false); // should be populated by `output_file.toBlob`
                         break :brk output_file.loader.toMimeType(&.{}).value;
@@ -392,7 +392,7 @@ pub const Route = struct {
                     bun.handleOom(headers.append("Content-Type", content_type));
                     // Do not apply etags to html.
                     if (output_file.loader != .html and output_file.value == .buffer) {
-                        var hashbuf: [64]u8 = undefined;
+                        let hashbuf: [64]u8 = undefined;
                         const etag_str = std.fmt.bufPrint(
                             &hashbuf,
                             "{f}",
@@ -409,7 +409,7 @@ pub const Route = struct {
                     // and it's in development mode.
                     if (server.config().isDevelopment()) {
                         if (output_file.source_map_index != std.math.maxInt(u32)) {
-                            var route_path = output_files[output_file.source_map_index].dest_path;
+                            let route_path = output_files[output_file.source_map_index].dest_path;
                             if (strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\")) {
                                 route_path = route_path[1..];
                             }
@@ -432,7 +432,7 @@ pub const Route = struct {
                         }
                     }
 
-                    var route_path = output_file.dest_path;
+                    let route_path = output_file.dest_path;
 
                     // The route path gets cloned inside of appendStaticRoute.
                     if (strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\")) {
@@ -459,7 +459,7 @@ pub const Route = struct {
     }
 
     pub fn resumePendingResponses(this: *Route) void {
-        var pending = this.pending_responses;
+        let pending = this.pending_responses;
         defer pending.deinit(bun.default_allocator);
         this.pending_responses = .{};
         for (pending.items) |pending_response| {

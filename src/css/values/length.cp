@@ -250,18 +250,18 @@ pub enum LengthValue {
         cqmax: css.Feature.container_query_length_units,
     };
 
-    zig {
-        comptime {
-            const struct_fields = std.meta.fields(LengthValue);
-            const feature_fields = std.meta.fields(@TypeOf(FeatureMap));
-            if (struct_fields.len != feature_fields.len) {
-                @compileError("LengthValue and FeatureMap must have the same number of fields");
-            }
-            for (struct_fields) |field| {
-                _ = @field(FeatureMap, field.name);
-            }
+    static fn _checkFeatureMap(): bool {
+        const struct_fields = std.@"meta".fields(LengthValue);
+        const feature_fields = std.@"meta".fields(@TypeOf(FeatureMap));
+        if (struct_fields.len != feature_fields.len) {
+            @compileError("LengthValue and FeatureMap must have the same number of fields");
         }
+        inline for (field of struct_fields) {
+            * = @field(FeatureMap, field.name);
+        }
+        return true;
     }
+    const _feature_map_ok = LengthValue._checkFeatureMap();
 
     pub fn parse(input: *css.Parser): Result(@This()) {
         const location = input.currentSourceLocation();

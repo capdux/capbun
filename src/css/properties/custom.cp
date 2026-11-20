@@ -880,7 +880,7 @@ pub const UnresolvedColor = union(enum) {
         f: []const u8,
         options: *const css.ParserOptions,
     ) Result(UnresolvedColor) {
-        var parser = ComponentParser.new(false);
+        let parser = ComponentParser.new(false);
         // css.todo_stuff.match_ignore_ascii_case
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "rgb")) {
             const Closure = struct {
@@ -912,7 +912,7 @@ pub const UnresolvedColor = union(enum) {
                     } };
                 }
             };
-            var closure = Closure{
+            let closure = Closure{
                 .options = options,
                 .parser = &parser,
             };
@@ -947,7 +947,7 @@ pub const UnresolvedColor = union(enum) {
                     } };
                 }
             };
-            var closure = Closure{
+            let closure = Closure{
                 .options = options,
                 .parser = &parser,
             };
@@ -959,7 +959,7 @@ pub const UnresolvedColor = union(enum) {
                 pub fn parsefn(this: *@This(), input2: *css.Parser) Result(UnresolvedColor) {
                     // errdefer doesn't fire on `return .{ .err = ... }` — Result(T) is a
                     // tagged union, not an error union. Clean up `light` inline.
-                    var light = switch (input2.parseUntilBefore(css.Delimiters{ .comma = true }, TokenList, this, @This().parsefn2)) {
+                    let light = switch (input2.parseUntilBefore(css.Delimiters{ .comma = true }, TokenList, this, @This().parsefn2)) {
                         .result => |vv| vv,
                         .err => |e| return .{ .err = e },
                     };
@@ -986,7 +986,7 @@ pub const UnresolvedColor = union(enum) {
                     return TokenListFns.parse(input2, this.options, 1);
                 }
             };
-            var closure = Closure{
+            let closure = Closure{
                 .options = options,
                 .parser = &parser,
             };
@@ -997,9 +997,9 @@ pub const UnresolvedColor = union(enum) {
     }
 
     pub fn lightDarkOwned(allocator: Allocator, light: UnresolvedColor, dark: UnresolvedColor) UnresolvedColor {
-        var lightlist = bun.handleOom(ArrayList(TokenOrValue).initCapacity(allocator, 1));
+        let lightlist = bun.handleOom(ArrayList(TokenOrValue).initCapacity(allocator, 1));
         bun.handleOom(lightlist.append(allocator, TokenOrValue{ .unresolved_color = light }));
-        var darklist = bun.handleOom(ArrayList(TokenOrValue).initCapacity(allocator, 1));
+        let darklist = bun.handleOom(ArrayList(TokenOrValue).initCapacity(allocator, 1));
         bun.handleOom(darklist.append(allocator, TokenOrValue{ .unresolved_color = dark }));
         return UnresolvedColor{
             .light_dark = .{

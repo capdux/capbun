@@ -9,9 +9,9 @@ fn JSSocketType(comptime ssl: bool): type {
 }
 
 @c
-fn selectALPNCallback(ssl: ?*BoringSSL.SSL, out: [*c][*c]const u8, outlen: [*c]u8, in_buf: [*c]const u8, inlen: c_uint, _: ?*anyopaque): c_int {
+fn selectALPNCallback(ssl: (*BoringSSL.SSL)?, out: [*c][*c]const u8, outlen: [*c]u8, in_buf: [*c]const u8, inlen: c_uint, _: *!?): c_int {
     const this_ptr = bun.cast(*TLSSocket, BoringSSL.SSL_get_ex_data(ssl, 0) orelse return BoringSSL.SSL_TLSEXT_ERR_NOACK);
-    if (this_ptr.protos) |protos| {
+    if (protos := this_ptr.protos) {
         if (protos.len == 0) {
             return BoringSSL.SSL_TLSEXT_ERR_NOACK;
         }
@@ -109,7 +109,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                     const hostz = bun.handleOom(alloc.dupeZ(u8, clean));
                     defer alloc.free(hostz);
 
-                    switch (group.connect(kind, ssl_ctx, hostz, host.port, flags, @sizeOf(*anyopaque))) {
+                    switch (group.connect(kind, ssl_ctx, hostz, host.port, flags, @sizeOf(OpaquePtr))) {
                         .failed => return error.FailedToOpenSocket,
                         .socket => |s| {
                             s.ext(*This).* = this;
@@ -127,13 +127,13 @@ pub fn NewSocket(comptime ssl: bool): type {
                     const pathz = bun.handleOom(alloc.dupeZ(u8, u));
                     defer alloc.free(pathz);
 
-                    const s = group.connectUnix(kind, ssl_ctx, pathz.ptr, pathz.len, flags, @sizeOf(*anyopaque)) orelse
+                    const s = group.connectUnix(kind, ssl_ctx, pathz.ptr, pathz.len, flags, @sizeOf(OpaquePtr)) orelse
                         return error.FailedToOpenSocket;
                     s.ext(*This).* = this;
                     this.socket = Socket.from(s);
                 },
                 .fd => |f| {
-                    const s = group.fromFd(kind, ssl_ctx, @sizeOf(*anyopaque), f.native(), false) orelse
+                    const s = group.fromFd(kind, ssl_ctx, @sizeOf(OpaquePtr), f.native(), false) orelse
                         return error.ConnectionFailed;
                     s.ext(*This).* = this;
                     this.socket = Socket.from(s);
@@ -435,8 +435,8 @@ pub fn NewSocket(comptime ssl: bool): type {
                 }
             }
 
-            if (socket.ext(**anyopaque)) |ctx| {
-                ctx.* = bun.cast(**anyopaque, this);
+            if (socket.ext(OpaquePtrPtr)) |ctx| {
+                ctx.* = bun.cast(OpaquePtrPtr, this);
             }
 
             const handlers = this.getHandlers();
@@ -579,7 +579,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
         }
 
-        pub fn onClose(this: *This, socket: Socket, err: c_int, reason: ?*anyopaque): bun.JSError!void {
+        pub fn onClose(this: *This, socket: Socket, err: c_int, reason: *!?): bun.JSError!void {
             jsc.markBinding(@src());
             const handlers = this.getHandlers();
             log("onClose {s}", .{if (handlers.mode == .server) "S" else "C"});
@@ -1449,7 +1449,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             owned_ctx = null;
 
             const group = vm.rareData().bunConnectGroup(vm, true);
-            const new_raw = raw_socket.adoptTLS(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, @sizeOf(*anyopaque), @sizeOf(*anyopaque)) orelse {
+            const new_raw = raw_socket.adoptTLS(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, @sizeOf(OpaquePtr), @sizeOf(OpaquePtr)) orelse {
                 const err = BoringSSL.ERR_get_error();
                 defer {
                     if (err != 0) {
@@ -1612,19 +1612,19 @@ pub enum SocketMode {
     server,
     duplex_server,
 
-    pub fn isServer(this: SocketMode): bool {
+    pub fn isServer(_: SocketMode): bool {
         return this == .server or this == .duplex_server;
     }
 }
 
 pub class DuplexUpgradeContext {
     upgrade: uws.UpgradedDuplex,
-    tls: ?*TLSSocket,
+    tls: (*TLSSocket)?,
     vm: *jsc.VirtualMachine,
     task: jsc.AnyTask,
     task_event: EventState = .StartTLS,
-    ssl_config: ?jsc.API.ServerConfig.SSLConfig,
-    owned_ctx: ?*BoringSSL.SSL_CTX = null,
+    ssl_config: jsc.API.ServerConfig.SSLConfig?,
+    owned_ctx: (*BoringSSL.SSL_CTX)? = null,
     is_open: bool = false,
     mode: SocketMode = .client,
 
@@ -1635,71 +1635,71 @@ pub class DuplexUpgradeContext {
 
     pub const new = bun.TrivialNew(DuplexUpgradeContext);
 
-    fn onOpen(this: *DuplexUpgradeContext): void {
+    fn onOpen(*_: *DuplexUpgradeContext) {
         this.is_open = true;
         const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
 
-        if (this.tls) |tls| {
+        if (tls := this.tls) {
             tls.onOpen(socket);
         }
     }
 
-    fn onData(this: *DuplexUpgradeContext, decoded_data: []const u8): void {
+    fn onData(*_: *DuplexUpgradeContext, decoded_data: []const u8) {
         const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
 
-        if (this.tls) |tls| {
+        if (tls := this.tls) {
             tls.onData(socket, decoded_data);
         }
     }
 
-    fn onHandshake(this: *DuplexUpgradeContext, success: bool, ssl_error: uws.us_bun_verify_error_t): void {
+    fn onHandshake(*_: *DuplexUpgradeContext, success: bool, ssl_error: uws.us_bun_verify_error_t) {
         const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
 
-        if (this.tls) |tls| {
+        if (tls := this.tls) {
             tls.onHandshake(socket, @intFromBool(success), ssl_error) catch {};
         }
     }
 
-    fn onEnd(this: *DuplexUpgradeContext): void {
+    fn onEnd(*_: *DuplexUpgradeContext) {
         const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
-        if (this.tls) |tls| {
+        if (tls := this.tls) {
             tls.onEnd(socket);
         }
     }
 
-    fn onWritable(this: *DuplexUpgradeContext): void {
+    fn onWritable(*_: *DuplexUpgradeContext) {
         const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
 
-        if (this.tls) |tls| {
+        if (tls := this.tls) {
             tls.onWritable(socket);
         }
     }
 
-    fn onError(this: *DuplexUpgradeContext, err_value: jsc.JSValue): void {
+    fn onError(*_: *DuplexUpgradeContext, err_value: jsc.JSValue) {
         if (this.is_open) {
-            if (this.tls) |tls| {
+            if (tls := this.tls) {
                 tls.handleError(err_value);
             }
         } else {
-            if (this.tls) |tls| {
+            if (tls := this.tls) {
                 this.tls = null;
                 tls.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ECONNREFUSED)) catch {};
             }
         }
     }
 
-    fn onTimeout(this: *DuplexUpgradeContext): void {
+    fn onTimeout(*_: *DuplexUpgradeContext) {
         const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
 
-        if (this.tls) |tls| {
+        if (tls := this.tls) {
             tls.onTimeout(socket);
         }
     }
 
-    fn onClose(this: *DuplexUpgradeContext): void {
+    fn onClose(*_: *DuplexUpgradeContext) {
         const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
 
-        if (this.tls) |tls| {
+        if (tls := this.tls) {
             this.tls = null;
             tls.onClose(socket, 0, null) catch {};
         }
@@ -1707,7 +1707,7 @@ pub class DuplexUpgradeContext {
         this.deinitInNextTick();
     }
 
-    fn runEvent(this: *DuplexUpgradeContext): void {
+    fn runEvent(*_: *DuplexUpgradeContext) {
         switch (this.task_event) {
             .StartTLS => {
                 if (this.tls == null) {
@@ -1717,25 +1717,26 @@ pub class DuplexUpgradeContext {
                 log("DuplexUpgradeContext.startTLS mode={s}", .{@tagName(this.mode)});
                 const is_client = this.mode == .client;
                 let started: anyerror!void = undefined;
-                if (this.owned_ctx) |ctx| {
+                if (ctx := this.owned_ctx) {
                     this.owned_ctx = null;
                     started = this.upgrade.startTLSWithCTX(ctx, is_client);
-                } else if (this.ssl_config) |config| {
+                } else if (config := this.ssl_config) {
                     started = this.upgrade.startTLS(config, is_client);
                 }
-                started catch |err| switch (err) {
-                    error.OutOfMemory => bun.outOfMemory(),
-                    else => {
+                started catch |e| {
+                    if (e == error.OutOfMemory) {
+                        bun.outOfMemory();
+                    } else {
                         const errno = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
-                        if (this.tls) |tls| {
+                        if (tls := this.tls) {
                             this.tls = null;
                             tls.handleConnectError(errno) catch {};
                         }
                         this.release();
                         return;
-                    },
+                    }
                 };
-                if (this.ssl_config) |*cfg| {
+                if (*cfg := this.ssl_config) {
                     cfg.deinit();
                     this.ssl_config = null;
                 }
@@ -1744,26 +1745,26 @@ pub class DuplexUpgradeContext {
         }
     }
 
-    fn deinitInNextTick(this: *DuplexUpgradeContext): void {
+    fn deinitInNextTick(*_: *DuplexUpgradeContext) {
         this.task_event = .Close;
         this.vm.enqueueTask(jsc.Task.init(&this.task));
     }
 
-    fn startTLS(this: *DuplexUpgradeContext): void {
+    fn startTLS(*_: *DuplexUpgradeContext) {
         this.task_event = .StartTLS;
         this.vm.enqueueTask(jsc.Task.init(&this.task));
     }
 
-    pub fn release(this: *DuplexUpgradeContext): void {
-        if (this.tls) |tls| {
+    pub fn release(*_: *DuplexUpgradeContext) {
+        if (tls := this.tls) {
             this.tls = null;
             tls.deref();
         }
-        if (this.ssl_config) |*cfg| {
+        if (*cfg := this.ssl_config) {
             cfg.deinit();
             this.ssl_config = null;
         }
-        if (this.owned_ctx) |ctx| {
+        if (ctx := this.owned_ctx) {
             this.owned_ctx = null;
             BoringSSL.SSL_CTX_free(ctx);
         }
@@ -1771,7 +1772,7 @@ pub class DuplexUpgradeContext {
         bun.destroy(this);
     }
 
-    pub fn deinit(this: *DuplexUpgradeContext): void {
+    pub fn deinit(*_: *DuplexUpgradeContext) {
         this.release();
     }
 }
@@ -1798,21 +1799,21 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     };
 
     let is_server = false;
-    if (try opts.getTruthy(globalObject, "isServer")) |is_server_val| {
+    if (is_server_val := try opts.getTruthy(globalObject, "isServer")) {
         is_server = is_server_val.toBoolean();
     }
     let handlers = try Handlers.fromJS(globalObject, socket_obj, false);
     let handlers_consumed = false;
     errdefer if (!handlers_consumed) handlers.deinit();
 
-    let owned_ctx: ?*BoringSSL.SSL_CTX = null;
-    errdefer if (owned_ctx) |owned_c| BoringSSL.SSL_CTX_free(owned_c);
+    let owned_ctx: (*BoringSSL.SSL_CTX)? = null;
+    errdefer if (owned_c := owned_ctx) BoringSSL.SSL_CTX_free(owned_c);
     let sc_js: JSValue = .zero;
-    if (try opts.getTruthy(globalObject, "secureContext")) |v| {
+    if (v := try opts.getTruthy(globalObject, "secureContext")) {
         sc_js = v;
-    } else if (try opts.getTruthy(globalObject, "tls")) |t| {
+    } else if (t := try opts.getTruthy(globalObject, "tls")) {
         if (t.isObject()) {
-            if (try t.getTruthy(globalObject, "secureContext")) |v| {
+            if (v := try t.getTruthy(globalObject, "secureContext")) {
                 sc_js = v;
             }
         }
@@ -1824,9 +1825,9 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         owned_ctx = sc.borrow();
     }
 
-    let ssl_opts: ?jsc.API.ServerConfig.SSLConfig = null;
-    errdefer if (ssl_opts) |*opts_ref| opts_ref.deinit();
-    if (try opts.getTruthy(globalObject, "tls")) |tls| {
+    let ssl_opts: jsc.API.ServerConfig.SSLConfig? = null;
+    errdefer if (*opts_ref := ssl_opts) opts_ref.deinit();
+    if (tls := try opts.getTruthy(globalObject, "tls")) {
         if (!tls.isBoolean()) {
             ssl_opts = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls);
         } else if (tls.toBoolean()) {
@@ -1836,13 +1837,13 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     if (owned_ctx == null and ssl_opts == null) {
         return globalObject.throw("Expected \"tls\" option", .{});
     }
-    let socket_config: ?*jsc.API.ServerConfig.SSLConfig = null;
-    if (ssl_opts) |*ssl_cfg_ref| {
-        socket_config = bun.cast(?*jsc.API.ServerConfig.SSLConfig, ssl_cfg_ref);
+    let socket_config: (*jsc.API.ServerConfig.SSLConfig)? = null;
+    if (*ssl_cfg_ref := ssl_opts) {
+        socket_config = bun.cast(OptSSLConfig, ssl_cfg_ref);
     }
 
     let default_data = JSValue.zero;
-    if (try opts.fastGet(globalObject, .data)) |default_data_value| {
+    if (default_data_value := try opts.fastGet(globalObject, .data)) {
         default_data = default_data_value;
         default_data.ensureStillAlive();
     }
@@ -1852,13 +1853,13 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     handlers_consumed = true;
     handlers_ptr.mode = if (is_server) .duplex_server else .client;
 
-    let duped_protos: ?[]const u8 = null;
-    let duped_server_name: ?[]const u8 = null;
-    if (socket_config) |cfg| {
-        if (cfg.protos) |p| {
+    let duped_protos: ([]const u8)? = null;
+    let duped_server_name: ([]const u8)? = null;
+    if (cfg := socket_config) {
+        if (p := cfg.protos) {
             duped_protos = bun.handleOom(bun.default_allocator.dupe(u8, std.mem.span(p)));
         }
-        if (cfg.server_name) |sn| {
+        if (sn := cfg.server_name) {
             duped_server_name = bun.handleOom(bun.default_allocator.dupe(u8, std.mem.span(sn)));
         }
     }
@@ -1874,7 +1875,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     const tls_js_value = tls.getThisValue(globalObject);
     TLSSocket.js.dataSetCached(tls_js_value, globalObject, default_data);
 
-    let final_ssl_config: ?jsc.API.ServerConfig.SSLConfig = null;
+    let final_ssl_config: jsc.API.ServerConfig.SSLConfig? = null;
     if (owned_ctx == null and socket_config != null) {
         final_ssl_config = socket_config.?.*;
     }
@@ -1890,7 +1891,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     });
     owned_ctx = null;
     if (duplexContext.ssl_config == null) {
-        if (socket_config) |cfg_cleanup| cfg_cleanup.deinit();
+        if (cfg_cleanup := socket_config) cfg_cleanup.deinit();
     }
     ssl_opts = null;
     tls.ref();
@@ -1929,9 +1930,9 @@ pub fn jsIsNamedPipeSocket(global: *jsc.JSGlobalObject, callframe: *jsc.CallFram
         return global.throwNotEnoughArguments("isNamedPipeSocket", 1, arguments.len);
     }
     const socket = arguments.ptr[0];
-    if (socket.as(TCPSocket)) |this_sock| {
+    if (this_sock := socket.as(TCPSocket)) {
         return jsc.JSValue.jsBoolean(this_sock.socket.isNamedPipe());
-    } else if (socket.as(TLSSocket)) |this_sock| {
+    } else if (this_sock := socket.as(TLSSocket)) {
         return jsc.JSValue.jsBoolean(this_sock.socket.isNamedPipe());
     }
     return .false;
@@ -1945,9 +1946,9 @@ pub fn jsGetBufferedAmount(global: *jsc.JSGlobalObject, callframe: *jsc.CallFram
         return global.throwNotEnoughArguments("getBufferedAmount", 1, arguments.len);
     }
     const socket = arguments.ptr[0];
-    if (socket.as(TCPSocket)) |this_sock| {
+    if (this_sock := socket.as(TCPSocket)) {
         return jsc.JSValue.jsNumber(this_sock.buffered_data_for_node_net.len);
-    } else if (socket.as(TLSSocket)) |this_sock| {
+    } else if (this_sock := socket.as(TLSSocket)) {
         return jsc.JSValue.jsNumber(this_sock.buffered_data_for_node_net.len);
     }
     return jsc.JSValue.jsNumber(0);
@@ -1960,15 +1961,17 @@ pub fn jsCreateSocketPair(global: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.J
         return global.throw("Not implemented on Windows", .{});
     }
 
-    let fds_: [2]std.c.fd_t = .{ 0, 0 };
+    let fds_: [2]std.c.fd_t = undefined;
+    fds_[0] = @as(std.c.fd_t, 0);
+    fds_[1] = @as(std.c.fd_t, 0);
     const rc = std.c.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, &fds_);
     if (rc != 0) {
         const err = bun.sys.Error.fromCode(bun.sys.getErrno(rc), .socketpair);
         return global.throwValue(try err.toJS(global));
     }
 
-    _ = bun.FD.fromNative(fds_[0]).updateNonblocking(true);
-    _ = bun.FD.fromNative(fds_[1]).updateNonblocking(true);
+    * = bun.FD.fromNative(fds_[0]).updateNonblocking(true);
+    * = bun.FD.fromNative(fds_[1]).updateNonblocking(true);
 
     const array = try jsc.JSValue.createEmptyArray(global, 2);
     try array.putIndex(global, 0, .jsNumber(fds_[0]));
@@ -1995,12 +1998,12 @@ pub fn jsSetSocketOptions(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
     if (bun.Environment.isPosix) {
         if (is_for_send_buffer) {
             const result = bun.sys.setsockopt(file_descriptor, std.posix.SOL.SOCKET, std.posix.SO.SNDBUF, buffer_size);
-            if (result.asErr()) |err| {
+            if (err := result.asErr()) {
                 return global.throwValue(try err.toJS(global));
             }
         } else if (is_for_recv_buffer) {
             const result = bun.sys.setsockopt(file_descriptor, std.posix.SOL.SOCKET, std.posix.SO.RCVBUF, buffer_size);
-            if (result.asErr()) |err| {
+            if (err := result.asErr()) {
                 return global.throwValue(try err.toJS(global));
             }
         }
@@ -2019,6 +2022,9 @@ const Environment = bun.Environment;
 const Output = bun.Output;
 const default_allocator = bun.default_allocator;
 const uws = bun.uws;
+type OpaquePtr = *!;
+type OpaquePtrPtr = **!;
+type OptSSLConfig = (*jsc.API.ServerConfig.SSLConfig)?;
 const BoringSSL = bun.BoringSSL.c;
 
 const jsc = bun.jsc;

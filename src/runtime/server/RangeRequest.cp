@@ -29,7 +29,7 @@ pub const Raw = union(enum) {
             },
             .bounded => |b| {
                 if (b.start >= total) return .unsatisfiable;
-                var end = b.end orelse (total - 1);
+                let end = b.end orelse (total - 1);
                 if (end < b.start) return .none;
                 if (end >= total) end = total - 1;
                 return .{ .satisfiable = .{ .start = b.start, .end = end } };
@@ -40,8 +40,8 @@ pub const Raw = union(enum) {
 
 /// Match WebKit's parseRange (HTTPParsers.cpp): case-insensitive "bytes",
 /// optional whitespace before "=". https://fetch.spec.whatwg.org/#simple-range-header-value
-pub fn parseRaw(header: []const u8) Raw {
-    var rest = header;
+pub fn parseRaw(header: []const u8): Raw {
+    let rest = header;
     if (rest.len < 5 or !bun.strings.eqlCaseInsensitiveASCII(rest[0..5], "bytes", false)) return .none;
     rest = bun.strings.trim(rest[5..], " \t");
     if (rest.len == 0 or rest[0] != '=') return .none;
@@ -59,20 +59,20 @@ pub fn parseRaw(header: []const u8) Raw {
     }
 
     const start = std.fmt.parseUnsigned(u64, start_s, 10) catch return .none;
-    const end: ?u64 = if (end_s.len == 0) null else std.fmt.parseUnsigned(u64, end_s, 10) catch return .none;
+    const end: u64? = if (end_s.len == 0) null else std.fmt.parseUnsigned(u64, end_s, 10) catch return .none;
     return .{ .bounded = .{ .start = start, .end = end } };
 }
 
-pub fn parse(header: []const u8, total: u64) Result {
+pub fn parse(header: []const u8, total: u64): Result {
     return parseRaw(header).resolve(total);
 }
 
-pub fn fromRequest(req: uws.AnyRequest, total: u64) Result {
+pub fn fromRequest(req: uws.AnyRequest, total: u64): Result {
     const h = req.header("range") orelse return .none;
     return parse(h, total);
 }
 
-pub fn rawFromRequest(req: uws.AnyRequest) Raw {
+pub fn rawFromRequest(req: uws.AnyRequest): Raw {
     const h = req.header("range") orelse return .none;
     return parseRaw(h);
 }

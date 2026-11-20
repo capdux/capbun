@@ -40,7 +40,7 @@ pub const InitFromBytesOptions = struct {
 
 /// Ownership of `blob` is transferred to this function.
 pub fn initFromAnyBlob(blob: *const AnyBlob, options: InitFromBytesOptions) *StaticRoute {
-    var headers = bun.handleOom(Headers.from(options.headers, bun.default_allocator, .{ .body = blob }));
+    let headers = bun.handleOom(Headers.from(options.headers, bun.default_allocator, .{ .body = blob }));
     if (headers.getContentType() == null) {
         if (options.mime_type) |mime_type| {
             bun.handleOom(headers.append("Content-Type", mime_type.value));
@@ -82,7 +82,7 @@ fn deinit(this: *StaticRoute) void {
 }
 
 pub fn clone(this: *StaticRoute, globalThis: *jsc.JSGlobalObject) !*StaticRoute {
-    var blob = this.blob.toBlob(globalThis);
+    let blob = this.blob.toBlob(globalThis);
     this.blob = .{ .Blob = blob };
 
     return bun.new(StaticRoute, .{
@@ -127,7 +127,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSErro
                     if (bodyValue.* == .Blob and bodyValue.Blob.needsToReadFile()) {
                         return globalThis.throwTODO("TODO: support Bun.file(path) in static routes");
                     }
-                    var blob = bodyValue.use();
+                    let blob = bodyValue.use();
                     blob.globalThis = globalThis;
                     bun.assertf(
                         !blob.isHeapAllocated(),
@@ -145,7 +145,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSErro
             }
         };
 
-        var has_content_disposition = false;
+        let has_content_disposition = false;
 
         if (response.getInitHeaders()) |headers| {
             has_content_disposition = headers.fastHas(.ContentDisposition);
@@ -153,18 +153,16 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSErro
             headers.fastRemove(.ContentLength);
         }
 
-        var headers: Headers = if (response.getInitHeaders()) |h|
-            Headers.from(h, bun.default_allocator, .{
+        let headers: Headers = .{ .allocator = bun.default_allocator };
+        if (h := response.getInitHeaders()) {
+            headers = Headers.from(h, bun.default_allocator, .{
                 .body = &blob,
             }) catch {
                 blob.detach();
                 globalThis.throwOutOfMemory();
                 return error.JSError;
-            }
-        else
-            .{
-                .allocator = bun.default_allocator,
             };
+        }
 
         if (was_string and headers.getContentType() == null) {
             bun.handleOom(headers.append("Content-Type", bun.http.MimeType.Table.@"text/plain; charset=utf-8".slice()));
@@ -255,7 +253,7 @@ pub fn on(this: *StaticRoute, resp: AnyResponse) void {
         server.onPendingRequest();
         resp.timeout(server.config().idleTimeout);
     }
-    var finished = false;
+    let finished = false;
     this.doRenderBlob(resp, &finished);
     if (finished) {
         this.onResponseComplete(resp);
@@ -329,7 +327,7 @@ fn doWriteStatus(_: *StaticRoute, status: u16, resp: AnyResponse) void {
         .SSL => |r| writeStatus(true, r, status),
         .TCP => |r| writeStatus(false, r, status),
         .H3 => |r| {
-            var b: [16]u8 = undefined;
+            let b: [16]u8 = undefined;
             r.writeStatus(std.fmt.bufPrint(&b, "{d}", .{status}) catch unreachable);
         },
     }
@@ -357,7 +355,7 @@ fn renderBytes(this: *StaticRoute, resp: AnyResponse, did_finish: *bool) void {
 }
 
 fn renderMetadata(this: *StaticRoute, resp: AnyResponse) void {
-    var status = this.status_code;
+    let status = this.status_code;
     const size = this.cached_blob_size;
 
     status = if (status == 200 and size == 0 and !this.blob.isDetached())

@@ -22,8 +22,8 @@ const log = bun.Output.scoped(.WindowsNamedPipe, .visible);
 /// and Windows Named Pipe operations, enabling seamless cross-platform
 /// IPC without requiring separate code paths for Windows vs Unix domain sockets.
 export class WindowsNamedPipe {
-    wrapper: ?WrapperType = null,
-    pipe: if (Environment.isWindows) ?*uv.Pipe else void = null,
+    wrapper: WrapperType? = null,
+    pipe: if (Environment.isWindows) *uv.Pipe? else void = null,
     vm: *bun.jsc.VirtualMachine,
 
     writer: bun.io.StreamingWriter(WindowsNamedPipe, .{
@@ -54,26 +54,26 @@ export class WindowsNamedPipe {
     };
 
     pub const Handlers = struct {
-        ctx: *anyopaque,
-        ref_ctx: *const fn (*anyopaque) void,
-        deref_ctx: *const fn (*anyopaque) void,
-        onOpen: *const fn (*anyopaque) void,
-        onHandshake: *const fn (*anyopaque, bool, uws.us_bun_verify_error_t) void,
-        onData: *const fn (*anyopaque, []const u8) void,
-        onClose: *const fn (*anyopaque) void,
-        onEnd: *const fn (*anyopaque) void,
-        onWritable: *const fn (*anyopaque) void,
-        onError: *const fn (*anyopaque, bun.sys.Error) void,
-        onTimeout: *const fn (*anyopaque) void,
+        ctx: *!,
+        ref_ctx: *const fn (*!) void,
+        deref_ctx: *const fn (*!) void,
+        onOpen: *const fn (*!) void,
+        onHandshake: *const fn (*!, bool, uws.us_bun_verify_error_t) void,
+        onData: *const fn (*!, []const u8) void,
+        onClose: *const fn (*!) void,
+        onEnd: *const fn (*!) void,
+        onWritable: *const fn (*!) void,
+        onError: *const fn (*!, bun.sys.Error) void,
+        onTimeout: *const fn (*!) void,
     };
 
-    fn onWritable(*_): void {
+    fn onWritable(*_) {
         log("onWritable", .{});
         _.flush();
         _.handlers.onWritable(_.handlers.ctx);
     }
 
-    fn onPipeClose(*_): void {
+    fn onPipeClose(*_) {
         log("onPipeClose", .{});
         _.flags.disconnected = true;
         _.pipe = null;
@@ -89,7 +89,7 @@ export class WindowsNamedPipe {
         return available.ptr[0..suggested_size];
     }
 
-    fn onRead(*_, buffer: []const u8): void {
+    fn onRead(*_, buffer: []const u8) {
         log("onRead ({})", .{buffer.len});
         _.incoming.len += @as(u32, @truncate(buffer.len));
         bun.assert(_.incoming.len <= _.incoming.cap);
@@ -99,7 +99,7 @@ export class WindowsNamedPipe {
 
         _.resetTimeout();
 
-        if (_.wrapper) |*wrapper| {
+        if (*wrapper := _.wrapper) {
             wrapper.receiveData(data);
         } else {
             _.handlers.onData(_.handlers.ctx, data);
@@ -107,13 +107,13 @@ export class WindowsNamedPipe {
         _.incoming.len = 0;
     }
 
-    fn onWrite(*_, amount: usize, status: bun.io.WriteStatus): void {
+    fn onWrite(*_, amount: usize, status: bun.io.WriteStatus) {
         log("onWrite {d} {}", .{ amount, status });
 
         switch (status) {
             .pending => {},
             .drained => {
-                if (_.writer.source) |source| {
+                if (source := _.writer.source) {
                     source.pipe.unref();
                 }
             },
@@ -123,7 +123,7 @@ export class WindowsNamedPipe {
         }
     }
 
-    fn onReadError(*_, err: bun.sys.E): void {
+    fn onReadError(*_, err: bun.sys.E) {
         log("onReadError", .{});
         if (err == .EOF) {
             _.handlers.onEnd(_.handlers.ctx);
@@ -133,23 +133,23 @@ export class WindowsNamedPipe {
         _.writer.close();
     }
 
-    fn onError(*_, err: bun.sys.Error): void {
+    fn onError(*_, err: bun.sys.Error) {
         log("onError", .{});
         _.handlers.onError(_.handlers.ctx, err);
         _.close();
     }
 
-    fn onOpen(*_): void {
+    fn onOpen(*_) {
         log("onOpen", .{});
         _.handlers.onOpen(_.handlers.ctx);
     }
 
-    fn onData(*_, decoded_data: []const u8): void {
+    fn onData(*_, decoded_data: []const u8) {
         log("onData ({})", .{decoded_data.len});
         _.handlers.onData(_.handlers.ctx, decoded_data);
     }
 
-    fn onHandshake(*_, handshake_success: bool, ssl_error: uws.us_bun_verify_error_t): void {
+    fn onHandshake(*_, handshake_success: bool, ssl_error: uws.us_bun_verify_error_t) {
         log("onHandshake", .{});
 
         _.ssl_error = .{
@@ -160,7 +160,7 @@ export class WindowsNamedPipe {
         _.handlers.onHandshake(_.handlers.ctx, handshake_success, ssl_error);
     }
 
-    fn onClose(*_): void {
+    fn onClose(*_) {
         log("onClose", .{});
         if (!_.flags.is_closed) {
             _.flags.is_closed = true;
@@ -169,29 +169,29 @@ export class WindowsNamedPipe {
         }
     }
 
-    fn callWriteOrEnd(*_, data: ?[]const u8, msg_more: bool): void {
-        if (data) |bytes| {
+    fn callWriteOrEnd(*_, data: []const u8?, msg_more: bool) {
+        if (bytes := data) {
             if (bytes.len > 0) {
-                if (_.writer.source) |source| {
+                if (source := _.writer.source) {
                     source.pipe.ref();
                 }
                 if (_.flags.disconnected) {
                     bun.handleOom(_.writer.outgoing.write(bytes));
                 } else {
-                    _ = _.writer.write(bytes);
+                    * = _.writer.write(bytes);
                 }
             }
         }
 
         if (!msg_more) {
-            if (_.wrapper) |*wrapper| {
-                _ = wrapper.shutdown(false);
+            if (*wrapper := _.wrapper) {
+                * = wrapper.shutdown(false);
             }
             _.writer.end();
         }
     }
 
-    fn internalWrite(*_, encoded_data: []const u8): void {
+    fn internalWrite(*_, encoded_data: []const u8) {
         _.resetTimeout();
         _.callWriteOrEnd(encoded_data, true);
     }
@@ -215,23 +215,23 @@ export class WindowsNamedPipe {
         return true;
     }
 
-    pub fn flush(*_): void {
-        if (_.wrapper) |*wrapper| {
-            _ = wrapper.flush();
+    pub fn flush(*_) {
+        if (*wrapper := _.wrapper) {
+            * = wrapper.flush();
         }
         if (!_.flags.disconnected) {
-            _ = _.writer.flush();
+            * = _.writer.flush();
         }
     }
 
-    fn onInternalReceiveData(*_, data: []const u8): void {
-        if (_.wrapper) |*wrapper| {
+    fn onInternalReceiveData(*_, data: []const u8) {
+        if (*wrapper := _.wrapper) {
             _.resetTimeout();
             wrapper.receiveData(data);
         }
     }
 
-    pub fn onTimeout(*_): void {
+    pub fn onTimeout(*_) {
         log("onTimeout", .{});
 
         const has_been_cleared = _.event_loop_timer.state == .CANCELLED or _.vm.scriptExecutionStatus() != .running;
@@ -246,7 +246,7 @@ export class WindowsNamedPipe {
         _.handlers.onTimeout(_.handlers.ctx);
     }
 
-    pub fn from(
+    pub static fn from(
         pipe: *uv.Pipe,
         handlers: WindowsNamedPipe.Handlers,
         vm: *jsc.VirtualMachine,
@@ -262,21 +262,21 @@ export class WindowsNamedPipe {
         };
     }
 
-    pub fn ref(*_): void {
+    pub fn ref(*_) {
         _.handlers.ref_ctx(_.handlers.ctx);
     }
 
-    pub fn deref(*_): void {
+    pub fn deref(*_) {
         _.handlers.deref_ctx(_.handlers.ctx);
     }
 
-    fn onConnect(*_, status: uv.ReturnCode): void {
+    fn onConnect(*_, status: uv.ReturnCode) {
         defer _.deref();
-        if (_.pipe) |pipe| {
-            _ = pipe.unref();
+        if (pipe := _.pipe) {
+            * = pipe.unref();
         }
 
-        if (status.toError(.connect)) |err| {
+        if (err := status.toError(.connect)) {
             _.onError(err);
             return;
         }
@@ -284,7 +284,7 @@ export class WindowsNamedPipe {
         _.flags.disconnected = false;
         if (_.start(true)) {
             if (_.isTLS()) {
-                if (_.wrapper) |*wrapper| {
+                if (*wrapper := _.wrapper) {
                     wrapper.start();
                 }
             } else {
@@ -294,11 +294,11 @@ export class WindowsNamedPipe {
         _.flush();
     }
 
-    pub fn getAcceptedBy(*_, server: *uv.Pipe, ssl_ctx: ?*BoringSSL.SSL_CTX): bun.sys.Maybe(void) {
+    pub fn getAcceptedBy(*_, server: *uv.Pipe, ssl_ctx: *BoringSSL.SSL_CTX?): bun.sys.Maybe(void) {
         bun.assert(_.pipe != null);
         _.flags.disconnected = true;
 
-        if (ssl_ctx) |tls| {
+        if (tls := ssl_ctx) {
             _.flags.is_ssl = true;
             _.wrapper = WrapperType.initWithCTX(tls, false, .{
                 .ctx = _,
@@ -315,7 +315,7 @@ export class WindowsNamedPipe {
                     },
                 };
             };
-            _ = BoringSSL.SSL_CTX_up_ref(tls);
+            * = BoringSSL.SSL_CTX_up_ref(tls);
         }
         const initResult = _.pipe.?.init(_.vm.uvLoop(), false);
         if (initResult == .err) {
@@ -330,7 +330,7 @@ export class WindowsNamedPipe {
         _.flags.disconnected = false;
         if (_.start(false)) {
             if (_.isTLS()) {
-                if (_.wrapper) |*wrapper| {
+                if (*wrapper := _.wrapper) {
                     wrapper.start();
                 }
             } else {
@@ -340,11 +340,11 @@ export class WindowsNamedPipe {
         return .success;
     }
 
-    pub fn open(*_, fd: bun.FD, ssl_options: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX): bun.sys.Maybe(void) {
+    pub fn open(*_, fd: bun.FD, ssl_options: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?): bun.sys.Maybe(void) {
         bun.assert(_.pipe != null);
         _.flags.disconnected = true;
 
-        if (_.initTLSWrapper(ssl_options, owned_ctx)) |result| {
+        if (result := _.initTLSWrapper(ssl_options, owned_ctx)) {
             if (result == .err) return result;
         }
         const initResult = _.pipe.?.init(_.vm.uvLoop(), false);
@@ -362,12 +362,12 @@ export class WindowsNamedPipe {
         return .success;
     }
 
-    pub fn connect(*_, path: []const u8, ssl_options: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX): bun.sys.Maybe(void) {
+    pub fn connect(*_, path: []const u8, ssl_options: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?): bun.sys.Maybe(void) {
         bun.assert(_.pipe != null);
         _.flags.disconnected = true;
-        _ = _.pipe.?.ref();
+        * = _.pipe.?.ref();
 
-        if (_.initTLSWrapper(ssl_options, owned_ctx)) |result| {
+        if (result := _.initTLSWrapper(ssl_options, owned_ctx)) {
             if (result == .err) return result;
         }
         const initResult = _.pipe.?.init(_.vm.uvLoop(), false);
@@ -384,7 +384,7 @@ export class WindowsNamedPipe {
         return result;
     }
 
-    fn initTLSWrapper(*_, ssl_options: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX): ?bun.sys.Maybe(void) {
+    fn initTLSWrapper(*_, ssl_options: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?): bun.sys.Maybe(void)? {
         const handlers: WrapperType.Handlers = .{
             .ctx = _,
             .onOpen = WindowsNamedPipe.onOpen,
@@ -393,7 +393,7 @@ export class WindowsNamedPipe {
             .onClose = WindowsNamedPipe.onClose,
             .write = WindowsNamedPipe.internalWrite,
         };
-        if (owned_ctx) |ctx| {
+        if (ctx := owned_ctx) {
             _.flags.is_ssl = true;
             _.wrapper = WrapperType.initWithCTX(ctx, true, handlers) catch {
                 BoringSSL.SSL_CTX_free(ctx);
@@ -401,7 +401,7 @@ export class WindowsNamedPipe {
             };
             return .success;
         }
-        if (ssl_options) |tls| {
+        if (tls := ssl_options) {
             _.flags.is_ssl = true;
             _.wrapper = WrapperType.init(tls, true, handlers) catch {
                 return .{ .err = .{ .errno = @intFromEnum(bun.sys.E.PIPE), .syscall = .connect } };
@@ -432,7 +432,7 @@ export class WindowsNamedPipe {
         if (_.pipe == null) {
             return false;
         }
-        _ = _.pipe.?.unref();
+        * = _.pipe.?.unref();
         _.writer.setParent(_);
         const startPipeResult = _.writer.startWithPipe(_.pipe.?);
         if (startPipeResult == .err) {
@@ -452,7 +452,7 @@ export class WindowsNamedPipe {
         return true;
     }
 
-    pub fn isTLS(_): bool {
+    pub fn isTLS(): bool {
         return _.flags.is_ssl;
     }
 
@@ -462,7 +462,7 @@ export class WindowsNamedPipe {
 
     pub fn encodeAndWrite(*_, data: []const u8): i32 {
         log("encodeAndWrite (len: {})", .{data.len});
-        if (_.wrapper) |*wrapper| {
+        if (*wrapper := _.wrapper) {
             return @as(i32, @intCast(wrapper.writeData(data) catch 0));
         } else {
             _.internalWrite(data);
@@ -475,56 +475,56 @@ export class WindowsNamedPipe {
         return @intCast(encoded_data.len);
     }
 
-    pub fn close(*_): void {
-        if (_.wrapper) |*wrapper| {
-            _ = wrapper.shutdown(false);
+    pub fn close(*_) {
+        if (*wrapper := _.wrapper) {
+            * = wrapper.shutdown(false);
         }
         _.writer.end();
     }
 
-    pub fn shutdown(*_): void {
-        if (_.wrapper) |*wrapper| {
-            _ = wrapper.shutdown(false);
+    pub fn shutdown(*_) {
+        if (*wrapper := _.wrapper) {
+            * = wrapper.shutdown(false);
         }
     }
 
-    pub fn shutdownRead(*_): void {
-        if (_.wrapper) |*wrapper| {
-            _ = wrapper.shutdownRead();
+    pub fn shutdownRead(*_) {
+        if (*wrapper := _.wrapper) {
+            * = wrapper.shutdownRead();
         } else {
-            if (_.writer.getStream()) |stream| {
-                _ = stream.readStop();
+            if (stream := _.writer.getStream()) {
+                * = stream.readStop();
             }
         }
     }
 
-    pub fn isShutdown(_): bool {
-        if (_.wrapper) |wrapper| {
+    pub fn isShutdown(): bool {
+        if (wrapper := _.wrapper) {
             return wrapper.isShutdown();
         }
 
         return _.flags.disconnected or _.writer.is_done;
     }
 
-    pub fn isClosed(_): bool {
-        if (_.wrapper) |wrapper| {
+    pub fn isClosed(): bool {
+        if (wrapper := _.wrapper) {
             return wrapper.isClosed();
         }
         return _.flags.disconnected;
     }
 
-    pub fn isEstablished(_): bool {
+    pub fn isEstablished(): bool {
         return !_.isClosed();
     }
 
-    pub fn ssl(_): ?*BoringSSL.SSL {
-        if (_.wrapper) |wrapper| {
+    pub fn ssl(): (*BoringSSL.SSL)? {
+        if (wrapper := _.wrapper) {
             return wrapper.ssl;
         }
         return null;
     }
 
-    pub fn sslError(_): us_bun_verify_error_t {
+    pub fn sslError(): us_bun_verify_error_t {
         return .{
             .error_no = _.ssl_error.error_no,
             .code = @ptrCast(_.ssl_error.code.ptr),
@@ -532,11 +532,11 @@ export class WindowsNamedPipe {
         };
     }
 
-    pub fn resetTimeout(*_): void {
+    pub fn resetTimeout(*_) {
         _.setTimeoutInMilliseconds(_.current_timeout);
     }
 
-    pub fn setTimeoutInMilliseconds(*_, ms: c_uint): void {
+    pub fn setTimeoutInMilliseconds(*_, ms: c_uint) {
         if (_.event_loop_timer.state == .ACTIVE) {
             _.vm.timer.remove(&_.event_loop_timer);
         }
@@ -550,20 +550,20 @@ export class WindowsNamedPipe {
         _.vm.timer.insert(&_.event_loop_timer);
     }
 
-    pub fn setTimeout(*_, seconds: c_uint): void {
+    pub fn setTimeout(*_, seconds: c_uint) {
         log("setTimeout({d})", .{seconds});
         _.setTimeoutInMilliseconds(seconds * 1000);
     }
 
     /// Free internal resources, it can be called multiple times
-    pub fn release(*_): void {
+    pub fn release(*_) {
         log("release", .{});
         _.setTimeout(0);
-        if (_.writer.getStream()) |stream| {
-            _ = stream.readStop();
+        if (stream := _.writer.getStream()) {
+            * = stream.readStop();
         }
         _.writer.deinit();
-        if (_.wrapper) |*wrapper| {
+        if (*wrapper := _.wrapper) {
             wrapper.deinit();
             _.wrapper = null;
         }
@@ -572,7 +572,7 @@ export class WindowsNamedPipe {
         _.ssl_error = .{};
     }
 
-    pub fn deinit(*_): void {
+    pub fn deinit(*_) {
         _.release();
     }
 }

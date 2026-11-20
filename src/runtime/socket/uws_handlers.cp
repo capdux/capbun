@@ -28,72 +28,73 @@ pub fn PtrHandler(comptime T: type, comptime ssl: bool): type {
             return S.from(s);
         }
         pub fn onOpen(ext: Ext, s: *us_socket_t, _: bool, _: string) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onOpen")) {
-                swallow(this.onOpen(wrap(s)));
+                swallow(inst.onOpen(wrap(s)));
             }
         }
         pub fn onData(ext: Ext, s: *us_socket_t, data: string) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onData")) {
-                swallow(this.onData(wrap(s), data));
+                swallow(inst.onData(wrap(s), data));
             }
         }
         pub fn onWritable(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onWritable")) {
-                swallow(this.onWritable(wrap(s)));
+                swallow(inst.onWritable(wrap(s)));
             }
         }
-        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*anyopaque) void {
-            const this = ext.* orelse return;
+        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*void) void {
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onClose")) {
-                swallow(this.onClose(wrap(s), code, reason));
+                swallow(inst.onClose(wrap(s), code, reason));
             }
         }
         pub fn onTimeout(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onTimeout")) {
-                swallow(this.onTimeout(wrap(s)));
+                swallow(inst.onTimeout(wrap(s)));
             }
         }
         pub fn onLongTimeout(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onLongTimeout")) {
-                swallow(this.onLongTimeout(wrap(s)));
+                swallow(inst.onLongTimeout(wrap(s)));
             }
         }
         pub fn onEnd(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onEnd")) {
-                swallow(this.onEnd(wrap(s)));
+                swallow(inst.onEnd(wrap(s)));
             }
         }
         pub fn onConnectError(ext: Ext, s: *us_socket_t, code: i32) void {
-            const this = ext.*;
+            const inst = ext.*;
             s.close(.failure);
-            if (this) |t| {
+            if (inst) |t| {
                 if (@hasDecl(T, "onConnectError")) {
                     swallow(t.onConnectError(wrap(s), code));
                 }
             }
         }
         pub fn onConnectingError(c: *ConnectingSocket, code: i32) void {
-            const this = c.ext(?*T).* orelse return;
+            const OptT = ?*T;
+            const inst = c.ext(OptT).* orelse return;
             if (@hasDecl(T, "onConnectError")) {
-                swallow(this.onConnectError(S.fromConnecting(c), code));
+                swallow(inst.onConnectError(S.fromConnecting(c), code));
             }
         }
         pub fn onHandshake(ext: Ext, s: *us_socket_t, ok: bool, err: uws.us_bun_verify_error_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onHandshake")) {
-                swallow(this.onHandshake(wrap(s), @intFromBool(ok), err));
+                swallow(inst.onHandshake(wrap(s), @intFromBool(ok), err));
             }
         }
         pub fn onFd(ext: Ext, s: *us_socket_t, fd: i32) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(T, "onFd")) {
-                swallow(this.onFd(wrap(s), fd));
+                swallow(inst.onFd(wrap(s), fd));
             }
         }
     };
@@ -112,7 +113,7 @@ pub fn BunListener(comptime ssl: bool): type {
             const ns = api.Listener.onCreate(ssl, listener, S.from(s));
             swallow(ns.onOpen(S.from(s)));
         }
-        pub fn onClose(s: *us_socket_t, code: i32, reason: ?*anyopaque) void {
+        pub fn onClose(s: *us_socket_t, code: i32, reason: ?*void) void {
             if (s.ext(?*NS).*) |ns| {
                 swallow(ns.onClose(S.from(s), code, reason));
             }
@@ -153,66 +154,67 @@ pub fn NsHandler(comptime Owner: type, comptime H: type, comptime ssl: bool): ty
             return S.from(s);
         }
         pub fn onOpen(ext: Ext, s: *us_socket_t, _: bool, _: string) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onOpen")) {
-                swallow(H.onOpen(this, wrap(s)));
+                swallow(H.onOpen(inst, wrap(s)));
             }
         }
         pub fn onData(ext: Ext, s: *us_socket_t, data: string) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onData")) {
-                swallow(H.onData(this, wrap(s), data));
+                swallow(H.onData(inst, wrap(s), data));
             }
         }
         pub fn onWritable(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onWritable")) {
-                swallow(H.onWritable(this, wrap(s)));
+                swallow(H.onWritable(inst, wrap(s)));
             }
         }
-        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*anyopaque) void {
-            const this = ext.* orelse return;
+        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*void) void {
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onClose")) {
-                swallow(H.onClose(this, wrap(s), code, reason));
+                swallow(H.onClose(inst, wrap(s), code, reason));
             }
         }
         pub fn onTimeout(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onTimeout")) {
-                swallow(H.onTimeout(this, wrap(s)));
+                swallow(H.onTimeout(inst, wrap(s)));
             }
         }
         pub fn onLongTimeout(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onLongTimeout")) {
-                swallow(H.onLongTimeout(this, wrap(s)));
+                swallow(H.onLongTimeout(inst, wrap(s)));
             }
         }
         pub fn onEnd(ext: Ext, s: *us_socket_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onEnd")) {
-                swallow(H.onEnd(this, wrap(s)));
+                swallow(H.onEnd(inst, wrap(s)));
             }
         }
         pub fn onConnectError(ext: Ext, s: *us_socket_t, code: i32) void {
-            const this = ext.*;
+            const inst = ext.*;
             s.close(.failure);
-            if (this) |t| {
+            if (inst) |t| {
                 if (@hasDecl(H, "onConnectError")) {
                     swallow(H.onConnectError(t, wrap(s), code));
                 }
             }
         }
         pub fn onConnectingError(c: *ConnectingSocket, code: i32) void {
-            const this = c.ext(?*Owner).* orelse return;
+            const OptOwner = ?*Owner;
+            const inst = c.ext(OptOwner).* orelse return;
             if (@hasDecl(H, "onConnectError")) {
-                swallow(H.onConnectError(this, S.fromConnecting(c), code));
+                swallow(H.onConnectError(inst, S.fromConnecting(c), code));
             }
         }
         pub fn onHandshake(ext: Ext, s: *us_socket_t, ok: bool, err: uws.us_bun_verify_error_t) void {
-            const this = ext.* orelse return;
+            const inst = ext.* orelse return;
             if (@hasDecl(H, "onHandshake") and @TypeOf(H.onHandshake) != @TypeOf(null)) {
-                swallow(H.onHandshake(this, wrap(s), @intFromBool(ok), err));
+                swallow(H.onHandshake(inst, wrap(s), @intFromBool(ok), err));
             }
         }
     };
@@ -222,7 +224,7 @@ pub fn HTTPClient(comptime ssl: bool): type {
     const H = bun.http.NewHTTPContext(ssl).Handler;
     const S = uws.NewSocketHandler(ssl);
     return struct {
-        pub const Ext = *?*anyopaque;
+        pub const Ext = *?*void;
         inline fn wrap(s: *us_socket_t) S {
             return S.from(s);
         }
@@ -240,7 +242,7 @@ pub fn HTTPClient(comptime ssl: bool): type {
         pub fn onWritable(ext: Ext, s: *us_socket_t) void {
             fwd(ext, "onWritable", .{wrap(s)});
         }
-        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*anyopaque) void {
+        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*void) void {
             fwd(ext, "onClose", .{ wrap(s), code, reason });
         }
         pub fn onTimeout(ext: Ext, s: *us_socket_t) void {
@@ -261,7 +263,7 @@ pub fn HTTPClient(comptime ssl: bool): type {
         }
         pub fn onConnectingError(cs: *ConnectingSocket, code: i32) void {
             if (@hasDecl(H, "onConnectError")) {
-                swallow(H.onConnectError(cs.ext(?*anyopaque).* orelse return, S.fromConnecting(cs), code));
+                swallow(H.onConnectError(cs.ext(?*void).* orelse return, S.fromConnecting(cs), code));
             }
         }
         pub fn onHandshake(ext: Ext, s: *us_socket_t, ok: bool, err: uws.us_bun_verify_error_t) void {
@@ -295,29 +297,29 @@ pub struct SpawnIPC {
     const H = IPC.IPCHandlers.PosixSocket;
     const S = uws.NewSocketHandler(false);
     pub const Ext = *?*IPC.SendQueue;
-    pub static fn onOpen(_: *?*IPC.SendQueue, _: *us_socket_t, _: bool, _: string) {}
-    pub static fn onData(ext: *?*IPC.SendQueue, s: *us_socket_t, data: string) {
-        const this = ext.* orelse return;
-        H.onData(this, S.from(s), data);
+    pub static fn onOpen(_: **IPC.SendQueue?, _: *us_socket_t, _: bool, _: string) {}
+    pub static fn onData(ext: **IPC.SendQueue?, s: *us_socket_t, data: string) {
+        const inst = ext.* orelse return;
+        H.onData(inst, S.from(s), data);
     }
-    pub static fn onFd(ext: *?*IPC.SendQueue, s: *us_socket_t, fd: i32) {
-        const this = ext.* orelse return;
-        H.onFd(this, S.from(s), fd);
+    pub static fn onFd(ext: **IPC.SendQueue?, s: *us_socket_t, fd: i32) {
+        const inst = ext.* orelse return;
+        H.onFd(inst, S.from(s), fd);
     }
-    pub static fn onWritable(ext: *?*IPC.SendQueue, s: *us_socket_t) {
-        const this = ext.* orelse return;
-        H.onWritable(this, S.from(s));
+    pub static fn onWritable(ext: **IPC.SendQueue?, s: *us_socket_t) {
+        const inst = ext.* orelse return;
+        H.onWritable(inst, S.from(s));
     }
-    pub static fn onClose(ext: *?*IPC.SendQueue, s: *us_socket_t, code: i32, reason: ?*anyopaque) {
-        const this = ext.* orelse return;
-        H.onClose(this, S.from(s), code, reason);
+    pub static fn onClose(ext: **IPC.SendQueue?, s: *us_socket_t, code: i32, reason: *!?) {
+        const inst = ext.* orelse return;
+        H.onClose(inst, S.from(s), code, reason);
     }
-    pub static fn onTimeout(ext: *?*IPC.SendQueue, s: *us_socket_t) {
-        const this = ext.* orelse return;
-        H.onTimeout(this, S.from(s));
+    pub static fn onTimeout(ext: **IPC.SendQueue?, s: *us_socket_t) {
+        const inst = ext.* orelse return;
+        H.onTimeout(inst, S.from(s));
     }
-    pub static fn onEnd(ext: *?*IPC.SendQueue, s: *us_socket_t) {
-        const this = ext.* orelse return;
-        H.onEnd(this, S.from(s));
+    pub static fn onEnd(ext: **IPC.SendQueue?, s: *us_socket_t) {
+        const inst = ext.* orelse return;
+        H.onEnd(inst, S.from(s));
     }
 }

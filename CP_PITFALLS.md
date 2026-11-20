@@ -105,3 +105,7 @@
 - **多参 `.release(...)` 被截断**：`cpc` 会将 `obj.release(a, b)` 误按无参 RC `release()` 截断；改用 `const release_fn = Type.release; release_fn(obj, a, b)`。
 - **顶层可选函数指针类型别名**：拆为 `pub const FnType = *const fn (...) callconv(.c) Ret; pub type T = FnType?;` 避免 `?` 误 lower 为 `try` 或丢失 `callconv(.c)` 返回类型。
 - **表达式位裸指针泛参**：如 `bun.LinearFifo(*!?, .Dynamic)` 先声明 `type OpaquePtr = *!?;` 再传入。
+
+- **`cpc fix` 误修 `*this` 为 `**_`**：批量 `cpc fix` 后需检查并替换为 `*_`。
+- **非 Channel 对象的 `.send(...)` 误触发 E0305**：改用 `const send_fn = Type.send; send_fn(obj, ...)`。
+- **`switch` 分支含函数调用模式 `Ptr.case(T) =>`**：改用 `if / else if` 链判定。

@@ -315,8 +315,8 @@ pub fn DimensionPercentage(comptime D: type): type {
         }
 
         fn addImpl(this: This, allocator: std.mem.Allocator, other: This) This {
-            var a = this;
-            var b = other;
+            let a = this;
+            let b = other;
 
             if (a.isZero()) return b;
             if (b.isZero()) return a;

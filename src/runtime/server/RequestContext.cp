@@ -9,9 +9,9 @@
 ///    If it did, it would *overwrite* the user data context pointer (this
 ///    is what it did before), causing segfaults.
 pub const AdditionalOnAbortCallback = struct {
-    cb: *const fn (this: *anyopaque) void,
-    data: *anyopaque,
-    deref_fn: *const fn (this: *anyopaque) void,
+    cb: *const fn (this: *!) void,
+    data: *!,
+    deref_fn: *const fn (this: *!) void,
 
     pub fn deref(this: AdditionalOnAbortCallback) void {
         this.deref_fn(this.data);
@@ -782,21 +782,21 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             }
         }
 
-        fn onFileStreamComplete(ctx: *anyopaque, _: uws.AnyResponse) void {
+        fn onFileStreamComplete(ctx: *!, _: uws.AnyResponse) void {
             const this: *RequestContext = @ptrCast(@alignCast(ctx));
             this.detachResponse();
             this.endRequestStreamingAndDrain();
             this.deref();
         }
 
-        fn onFileStreamAbort(ctx: *anyopaque, resp: uws.AnyResponse) void {
+        fn onFileStreamAbort(ctx: *!, resp: uws.AnyResponse) void {
             const this: *RequestContext = @ptrCast(@alignCast(ctx));
             // Route through the real onAbort so flags.aborted, request.signal,
             // and additional_on_abort fire exactly as they did pre-consolidation.
             this.onAbort(if (comptime http3) resp.H3 else if (comptime ssl_enabled) resp.SSL else resp.TCP);
         }
 
-        fn onFileStreamError(ctx: *anyopaque, resp: uws.AnyResponse, _: bun.sys.Error) void {
+        fn onFileStreamError(ctx: *!, resp: uws.AnyResponse, _: bun.sys.Error) void {
             // FileResponseStream already force-closed the socket; just clean up.
             onFileStreamComplete(ctx, resp);
         }
@@ -1004,7 +1004,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             });
         }
 
-        pub fn doRenderWithBodyLocked(this: *anyopaque, value: *jsc.WebCore.Body.Value) void {
+        pub fn doRenderWithBodyLocked(this: *!, value: *jsc.WebCore.Body.Value) void {
             doRenderWithBody(bun.cast(*RequestContext, this), value, null);
         }
 
@@ -1077,7 +1077,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 globalThis,
                 stream.value,
                 response_stream,
-                @as(**anyopaque, @ptrCast(&signal.ptr)),
+                @as(**!, @ptrCast(&signal.ptr)),
             );
 
             assignment_result.ensureStillAlive();
@@ -2559,17 +2559,17 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             }
         }
 
-        pub fn onRequestBodyReadableStreamAvailable(ptr: *anyopaque, globalThis: *jsc.JSGlobalObject, readable: jsc.WebCore.ReadableStream) void {
+        pub fn onRequestBodyReadableStreamAvailable(ptr: *!, globalThis: *jsc.JSGlobalObject, readable: jsc.WebCore.ReadableStream) void {
             let this = bun.cast(*RequestContext, ptr);
             bun.debugAssert(this.request_body_readable_stream_ref.held.impl == null);
             this.request_body_readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis);
         }
 
-        pub fn onStartBufferingCallback(this: *anyopaque) void {
+        pub fn onStartBufferingCallback(this: *!) void {
             onStartBuffering(bun.cast(*RequestContext, this));
         }
 
-        pub fn onStartStreamingRequestBodyCallback(this: *anyopaque) jsc.WebCore.DrainResult {
+        pub fn onStartStreamingRequestBodyCallback(this: *!) jsc.WebCore.DrainResult {
             return onStartStreamingRequestBody(bun.cast(*RequestContext, this));
         }
 
@@ -2662,7 +2662,7 @@ fn NewFlags(comptime debug_mode: bool): type {
     };
 }
 
-fn getContentType(headers: ?*WebCore.FetchHeaders, blob: *const WebCore.Blob.Any, allocator: std.mem.Allocator): [MimeType, bool, bool] {
+fn getContentType(headers: *WebCore.FetchHeaders?, blob: *const WebCore.Blob.Any, allocator: std.mem.Allocator): [MimeType, bool, bool] {
     let needs_content_type = true;
     let content_type_needs_free = false;
 

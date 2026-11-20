@@ -119,7 +119,7 @@ pub const BodyReadState = enum(u8) {
     done = 2,
 };
 
-extern "C" fn Bun__getNodeHTTPResponseThisValue(bool, *anyopaque) jsc.JSValue;
+extern "C" fn Bun__getNodeHTTPResponseThisValue(bool, *!) jsc.JSValue;
 pub fn getThisValue(this: *NodeHTTPResponse) jsc.JSValue {
     if (this.flags.socket_closed or this.flags.upgraded or this.raw_response == null) {
         return .zero;
@@ -128,7 +128,7 @@ pub fn getThisValue(this: *NodeHTTPResponse) jsc.JSValue {
     return Bun__getNodeHTTPResponseThisValue(this.raw_response.? == .SSL, this.raw_response.?.socket());
 }
 
-extern "C" fn Bun__getNodeHTTPServerSocketThisValue(bool, *anyopaque) jsc.JSValue;
+extern "C" fn Bun__getNodeHTTPServerSocketThisValue(bool, *!) jsc.JSValue;
 pub fn getServerSocketValue(this: *NodeHTTPResponse) jsc.JSValue {
     if (this.flags.socket_closed or this.flags.upgraded or this.raw_response == null) {
         return .zero;
@@ -171,9 +171,9 @@ pub fn upgrade(this: *NodeHTTPResponse, data_value: JSValue, sec_websocket_proto
 
     const ws = ServerWebSocket.init(ws_handler, data_value, null);
 
-    var sec_websocket_protocol_str: ?ZigString.Slice = null;
+    let sec_websocket_protocol_str: ?ZigString.Slice = null;
     defer if (sec_websocket_protocol_str) |*str| str.deinit();
-    var sec_websocket_extensions_str: ?ZigString.Slice = null;
+    let sec_websocket_extensions_str: ?ZigString.Slice = null;
     defer if (sec_websocket_extensions_str) |*str| str.deinit();
 
     const sec_websocket_protocol_value = brk: {
@@ -290,7 +290,7 @@ pub fn create(
     has_body: *bool,
     request: *uws.Request,
     is_ssl: i32,
-    response_ptr: *anyopaque,
+    response_ptr: *!,
     upgrade_ctx: ?*uws.WebSocketUpgradeContext,
     node_response_ptr: *?*NodeHTTPResponse,
 ) callconv(.c) jsc.JSValue {
@@ -374,7 +374,7 @@ pub fn getAborted(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSV
 }
 
 pub fn getHasBody(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    var result: i32 = 0;
+    let result: i32 = 0;
     switch (this.body_read_state) {
         .none => {},
         .pending => result |= 1 << 1,
@@ -425,7 +425,7 @@ extern "C" fn NodeHTTPServer__writeHead_http(
     statusMessage: [*]const u8,
     statusMessageLength: usize,
     headersObjectValue: jsc.JSValue,
-    response: *anyopaque,
+    response: *!,
 ) void;
 
 extern "C" fn NodeHTTPServer__writeHead_https(
@@ -433,7 +433,7 @@ extern "C" fn NodeHTTPServer__writeHead_https(
     statusMessage: [*]const u8,
     statusMessageLength: usize,
     headersObjectValue: jsc.JSValue,
-    response: *anyopaque,
+    response: *!,
 ) void;
 
 pub fn writeHead(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -467,7 +467,7 @@ pub fn writeHead(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, cal
         break :brk 200;
     };
 
-    var stack_fallback = std.heap.stackFallback(256, bun.default_allocator);
+    let stack_fallback = std.heap.stackFallback(256, bun.default_allocator);
     const allocator = stack_fallback.get();
     const status_message_slice = if (!status_message_value.isUndefined())
         try status_message_value.toSlice(globalObject, allocator)
@@ -624,7 +624,7 @@ pub fn doResume(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *
     this.setOnAbortedHandler();
     this.raw_response.?.onData(*NodeHTTPResponse, onData, this);
     this.flags.is_data_buffered_during_pause = false;
-    var result: jsc.JSValue = .true;
+    let result: jsc.JSValue = .true;
 
     if (this.drainBufferedRequestBodyFromPause(globalObject)) |buffered_data| {
         result = buffered_data;
@@ -756,7 +756,7 @@ fn getBytes(this: *NodeHTTPResponse, globalThis: *jsc.JSGlobalObject, chunk: []c
             const array_buffer = buffer.asArrayBuffer(globalThis).?;
 
             defer this.buffered_request_body_data_during_pause.clearAndFree(bun.default_allocator);
-            var input = array_buffer.slice();
+            let input = array_buffer.slice();
             @memcpy(input[0..this.buffered_request_body_data_during_pause.len], this.buffered_request_body_data_during_pause.slice());
             @memcpy(input[this.buffered_request_body_data_during_pause.len..], chunk);
             break :brk buffer;
@@ -877,7 +877,7 @@ fn writeOrEnd(
     }
 
     const input_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
-    var encoding_value: JSValue = if (arguments.len > 1) arguments[1] else .js_undefined;
+    let encoding_value: JSValue = if (arguments.len > 1) arguments[1] else .js_undefined;
     const callback_value: JSValue = brk: {
         if (!encoding_value.isUndefinedOrNull() and encoding_value.isCallable()) {
             encoding_value = .js_undefined;
@@ -907,7 +907,7 @@ fn writeOrEnd(
             break :brk jsc.Node.StringOrBuffer.empty;
         }
 
-        var encoding: jsc.Node.Encoding = .utf8;
+        let encoding: jsc.Node.Encoding = .utf8;
         if (!encoding_value.isUndefinedOrNull()) {
             if (!encoding_value.isString()) {
                 return globalObject.throwInvalidArgumentTypeValue("encoding", "string", encoding_value);
@@ -1195,8 +1195,8 @@ pub fn cork(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callfram
         return globalObject.ERR(.STREAM_ALREADY_FINISHED, "Stream is already ended", .{}).throw();
     }
 
-    var result: jsc.JSValue = .zero;
-    var is_exception: bool = false;
+    let result: jsc.JSValue = .zero;
+    let is_exception: bool = false;
     this.ref();
     defer this.deref();
 

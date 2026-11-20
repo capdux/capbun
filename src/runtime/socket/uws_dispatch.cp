@@ -12,7 +12,7 @@ const SocketKind = uws.SocketKind;
 const us_socket_t = uws.us_socket_t;
 const VTable = uws.SocketGroup.VTable;
 
-type OptVTable = ?*const VTable;
+type OptVTable = *const VTable?;
 
 const tables = ({
     let t = std.EnumArray(SocketKind, OptVTable).initFill(null);
@@ -65,70 +65,70 @@ const tables = ({
     };
 }
 
-@export pub fn us_dispatch_open(s: *us_socket_t, is_client: i32, ip: [*c]u8, ip_len: i32): ?*us_socket_t {
+@export pub fn us_dispatch_open(s: *us_socket_t, is_client: i32, ip: [*c]u8, ip_len: i32): *us_socket_t? {
     if (f := vt(s).on_open) {
         return f(s, is_client, ip, ip_len);
     }
     return s;
 }
 
-@export pub fn us_dispatch_data(s: *us_socket_t, data: [*c]u8, len: i32): ?*us_socket_t {
+@export pub fn us_dispatch_data(s: *us_socket_t, data: [*c]u8, len: i32): *us_socket_t? {
     if (f := vt(s).on_data) {
         return f(s, data, len);
     }
     return s;
 }
 
-@export pub fn us_dispatch_fd(s: *us_socket_t, fd: i32): ?*us_socket_t {
+@export pub fn us_dispatch_fd(s: *us_socket_t, fd: i32): *us_socket_t? {
     if (f := vt(s).on_fd) {
         return f(s, fd);
     }
     return s;
 }
 
-@export pub fn us_dispatch_writable(s: *us_socket_t): ?*us_socket_t {
+@export pub fn us_dispatch_writable(s: *us_socket_t): *us_socket_t? {
     if (f := vt(s).on_writable) {
         return f(s);
     }
     return s;
 }
 
-@export pub fn us_dispatch_close(s: *us_socket_t, code: i32, reason: ?*anyopaque): ?*us_socket_t {
+@export pub fn us_dispatch_close(s: *us_socket_t, code: i32, reason: *!?): *us_socket_t? {
     if (f := vt(s).on_close) {
         return f(s, code, reason);
     }
     return s;
 }
 
-@export pub fn us_dispatch_timeout(s: *us_socket_t): ?*us_socket_t {
+@export pub fn us_dispatch_timeout(s: *us_socket_t): *us_socket_t? {
     if (f := vt(s).on_timeout) {
         return f(s);
     }
     return s;
 }
 
-@export pub fn us_dispatch_long_timeout(s: *us_socket_t): ?*us_socket_t {
+@export pub fn us_dispatch_long_timeout(s: *us_socket_t): *us_socket_t? {
     if (f := vt(s).on_long_timeout) {
         return f(s);
     }
     return s;
 }
 
-@export pub fn us_dispatch_end(s: *us_socket_t): ?*us_socket_t {
+@export pub fn us_dispatch_end(s: *us_socket_t): *us_socket_t? {
     if (f := vt(s).on_end) {
         return f(s);
     }
     return s;
 }
 
-@export pub fn us_dispatch_connect_error(s: *us_socket_t, code: i32): ?*us_socket_t {
+@export pub fn us_dispatch_connect_error(s: *us_socket_t, code: i32): *us_socket_t? {
     if (f := vt(s).on_connect_error) {
         return f(s, code);
     }
     return s;
 }
 
-@export pub fn us_dispatch_connecting_error(c: *ConnectingSocket, code: i32): ?*ConnectingSocket {
+@export pub fn us_dispatch_connecting_error(c: *ConnectingSocket, code: i32): *ConnectingSocket? {
     if (f := vtc(c).on_connecting_error) {
         return f(c, code);
     }
@@ -141,7 +141,7 @@ const tables = ({
     }
 }
 
-@export pub fn us_dispatch_ssl_raw_tap(s: *us_socket_t, data: [*c]u8, len: i32): ?*us_socket_t {
+@export pub fn us_dispatch_ssl_raw_tap(s: *us_socket_t, data: [*c]u8, len: i32): *us_socket_t? {
     bun.debugAssert(s.kind() == .bun_socket_tls);
     const TLSSocket = bun.jsc.API.NewSocket(true);
     const tls = s.ext(*TLSSocket).*;
@@ -152,16 +152,16 @@ const tables = ({
 }
 
 @{
-    _ = us_dispatch_open;
-    _ = us_dispatch_data;
-    _ = us_dispatch_fd;
-    _ = us_dispatch_writable;
-    _ = us_dispatch_close;
-    _ = us_dispatch_timeout;
-    _ = us_dispatch_long_timeout;
-    _ = us_dispatch_end;
-    _ = us_dispatch_connect_error;
-    _ = us_dispatch_connecting_error;
-    _ = us_dispatch_handshake;
-    _ = us_dispatch_ssl_raw_tap;
+    * = us_dispatch_open;
+    * = us_dispatch_data;
+    * = us_dispatch_fd;
+    * = us_dispatch_writable;
+    * = us_dispatch_close;
+    * = us_dispatch_timeout;
+    * = us_dispatch_long_timeout;
+    * = us_dispatch_end;
+    * = us_dispatch_connect_error;
+    * = us_dispatch_connecting_error;
+    * = us_dispatch_handshake;
+    * = us_dispatch_ssl_raw_tap;
 }

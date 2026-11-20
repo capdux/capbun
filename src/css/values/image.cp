@@ -111,7 +111,7 @@ pub const Image = union(enum) {
         // Determine which prefixes and color fallbacks are needed.
         const prefixes = this.getNecessaryPrefixes(targets);
         const fallbacks = this.getNecessaryFallbacks(targets);
-        var res = css.SmallList(Image, 6){};
+        let res = css.SmallList(Image, 6){};
 
         // Get RGB fallbacks if needed.
         const rgb = if (fallbacks.rgb)

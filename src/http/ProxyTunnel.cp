@@ -31,7 +31,7 @@ export @root @value struct ProxyTunnel {
     established_with_reject_unauthorized: bool = false,
     ref_count: RefCount,
 
-    static fn onOpen(client: *HTTPClient): void {
+    static fn onOpen(client: *HTTPClient) {
         bun.analytics.Features.http_client_proxy += 1;
         client.state.response_stage = .proxy_handshake;
         client.state.request_stage = .proxy_handshake;
@@ -45,8 +45,8 @@ export @root @value struct ProxyTunnel {
                 const ssl_ptr = wrapper.ssl ?? return;
                 const _hostname = client.hostname ?? client.url.hostname;
 
-                var hostname: [:0]const u8 = "";
-                var hostname_needs_free = false;
+                let hostname: [:0]const u8 = "";
+                let hostname_needs_free = false;
                 if (!bun.strings.isIPAddress(_hostname)) {
                     if (_hostname.len < bun.http.temp_hostname.len) {
                         bun.copy(u8, bun.http.temp_hostname[0.._hostname.len], _hostname);
@@ -88,8 +88,8 @@ export @root @value struct ProxyTunnel {
                 .body => {
                     if (decoded_data.len == 0) return;
 
-                    const report_progress = client.handleResponseBody(decoded_data, false) catch (err) {
-                        proxy.close(err);
+                    const report_progress = client.handleResponseBody(decoded_data, false) catch (e) {
+                        proxy.close(e);
                         return;
                     };
 
@@ -101,8 +101,8 @@ export @root @value struct ProxyTunnel {
                 .body_chunk => {
                     if (decoded_data.len == 0) return;
 
-                    const report_progress = client.handleResponseBodyChunkedEncoding(decoded_data) catch (err) {
-                        proxy.close(err);
+                    const report_progress = client.handleResponseBodyChunkedEncoding(decoded_data) catch (e) {
+                        proxy.close(e);
                         return;
                     };
 
@@ -140,11 +140,11 @@ export @root @value struct ProxyTunnel {
             client.state.request_stage = .proxy_headers;
             client.state.request_sent_len = 0;
 
-            var cert_code: [:0]const u8 = "";
+            let cert_code: [:0]const u8 = "";
             if (code := ssl_error.code) {
                 cert_code = code[0..bun.len(code):0];
             }
-            var cert_reason: [:0]const u8 = "";
+            let cert_reason: [:0]const u8 = "";
             if (reason := ssl_error.reason) {
                 cert_reason = reason[0..bun.len(reason):0];
             }
@@ -264,7 +264,7 @@ export @root @value struct ProxyTunnel {
         }
     }
 
-    static fn start(client: *HTTPClient, @comptime is_ssl: bool, socket: auto, ssl_options: auto, start_payload: string) {
+    static fn start(client: *HTTPClient, comptime is_ssl: bool, socket: auto, ssl_options: auto, start_payload: string) {
         let proxy_tunnel = bun.new(ProxyTunnel, {
             ref_count: RefCount.init(),
         });
@@ -277,8 +277,8 @@ export @root @value struct ProxyTunnel {
             onClose: ProxyTunnel.onClose,
             write: ProxyTunnel.writeEncrypted,
             ctx: client,
-        }) catch (err) {
-            if (err == error.OutOfMemory) {
+        }) catch (e) {
+            if (e == error.OutOfMemory) {
                 bun.outOfMemory();
             }
 
@@ -303,25 +303,25 @@ export @root @value struct ProxyTunnel {
         }
     }
 
-    fn close(*this, err: anyerror) {
+    fn close(*_, err: anyerror) {
         this.shutdown_err = err;
         this.shutdown();
     }
 
-    fn shutdown(*this) {
+    fn shutdown(*_) {
         if (*wrapper := this.wrapper) {
-            _ = wrapper.shutdown(true);
+            * = wrapper.shutdown(true);
         }
     }
 
-    fn onWritable(*this, @comptime is_ssl: bool, socket: auto) {
-        _ = is_ssl;
+    fn onWritable(*_, comptime is_ssl: bool, socket: auto) {
+        * = is_ssl;
         this.ref();
         defer this.deref();
 
         defer {
             if (*wrapper := this.wrapper) {
-                _ = wrapper.flush();
+                * = wrapper.flush();
             }
         }
 
@@ -339,7 +339,7 @@ export @root @value struct ProxyTunnel {
         }
     }
 
-    fn receive(*this, buf: string) {
+    fn receive(*_, buf: string) {
         this.ref();
         defer this.deref();
 
@@ -348,29 +348,29 @@ export @root @value struct ProxyTunnel {
         }
     }
 
-    fn write(*this, buf: string): !usize {
+    fn write(*_, buf: string): !usize {
         if (*wrapper := this.wrapper) {
             return wrapper.writeData(buf);
         }
         return error.ConnectionClosed;
     }
 
-    fn detachSocket(*this) {
+    fn detachSocket(*_) {
         this.socket = { none: {} };
     }
 
-    fn detachAndDeref(*this) {
+    fn detachAndDeref(*_) {
         this.detachSocket();
         this.deref();
     }
 
-    fn detachOwner(*this, client: *HTTPClient) {
+    fn detachOwner(*_, client: *HTTPClient) {
         this.socket = { none: {} };
         this.did_have_handshaking_error = client.flags.did_have_handshaking_error;
         this.established_with_reject_unauthorized = this.established_with_reject_unauthorized || client.flags.reject_unauthorized;
     }
 
-    fn adopt(*this, client: *HTTPClient, @comptime is_ssl: bool, socket: auto) {
+    fn adopt(*_, client: *HTTPClient, comptime is_ssl: bool, socket: auto) {
         this.write_buffer.reset();
 
         if (*wrapper := this.wrapper) {
@@ -390,7 +390,7 @@ export @root @value struct ProxyTunnel {
         client.state.request_sent_len = 0;
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.socket = { none: {} };
         if (*wrapper := this.wrapper) {
             wrapper.deinit();

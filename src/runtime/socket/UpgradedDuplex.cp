@@ -16,7 +16,7 @@ pub struct CertError {
     code: [:0]const u8 = "",
     reason: [:0]const u8 = "",
 
-    pub fn release(_: *CertError): void {
+    pub fn release(_: *CertError) {
         if (_.code.len > 0) {
             bun.default_allocator.free(_.code);
         }
@@ -25,29 +25,29 @@ pub struct CertError {
         }
     }
 
-    pub fn deinit(_: *CertError): void {
+    pub fn deinit(_: *CertError) {
         _.release();
     }
 }
 
 pub struct Handlers {
-    ctx: *anyopaque,
-    onOpen: *const fn (*anyopaque) void,
-    onHandshake: *const fn (*anyopaque, bool, uws.us_bun_verify_error_t) void,
-    onData: *const fn (*anyopaque, string) void,
-    onClose: *const fn (*anyopaque) void,
-    onEnd: *const fn (*anyopaque) void,
-    onWritable: *const fn (*anyopaque) void,
-    onError: *const fn (*anyopaque, jsc.JSValue) void,
-    onTimeout: *const fn (*anyopaque) void,
+    ctx: *!,
+    onOpen: *const fn (*!) void,
+    onHandshake: *const fn (*!, bool, uws.us_bun_verify_error_t) void,
+    onData: *const fn (*!, string) void,
+    onClose: *const fn (*!) void,
+    onEnd: *const fn (*!) void,
+    onWritable: *const fn (*!) void,
+    onError: *const fn (*!, jsc.JSValue) void,
+    onTimeout: *const fn (*!) void,
 }
 
 pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
 pub struct UpgradedDuplex {
-    wrapper: ?SSLWrapper(*UpgradedDuplex) = null,
+    wrapper: SSLWrapper(*UpgradedDuplex)? = null,
     origin: jsc.Strong.Optional = .empty,
-    global: ?*jsc.JSGlobalObject = null,
+    global: *jsc.JSGlobalObject? = null,
     ssl_error: CertError = .{},
     vm: *jsc.VirtualMachine,
     handlers: Handlers,
@@ -61,17 +61,17 @@ pub struct UpgradedDuplex {
     },
     current_timeout: u32 = 0,
 
-    fn onOpen(_: *UpgradedDuplex): void {
+    fn onOpen(_: *UpgradedDuplex) {
         log("onOpen", .{});
         _.handlers.onOpen(_.handlers.ctx);
     }
 
-    fn onData(_: *UpgradedDuplex, decoded_data: string): void {
+    fn onData(_: *UpgradedDuplex, decoded_data: string) {
         log("onData ({})", .{decoded_data.len});
         _.handlers.onData(_.handlers.ctx, decoded_data);
     }
 
-    fn onHandshake(_: *UpgradedDuplex, handshake_success: bool, ssl_error: uws.us_bun_verify_error_t): void {
+    fn onHandshake(_: *UpgradedDuplex, handshake_success: bool, ssl_error: uws.us_bun_verify_error_t) {
         log("onHandshake", .{});
         _.ssl_error = .{
             .error_no = ssl_error.error_no,
@@ -81,7 +81,7 @@ pub struct UpgradedDuplex {
         _.handlers.onHandshake(_.handlers.ctx, handshake_success, ssl_error);
     }
 
-    fn onClose(_: *UpgradedDuplex): void {
+    fn onClose(_: *UpgradedDuplex) {
         log("onClose", .{});
         defer _.release();
 
@@ -89,7 +89,7 @@ pub struct UpgradedDuplex {
         _.callWriteOrEnd(null, false);
     }
 
-    fn callWriteOrEnd(_: *UpgradedDuplex, data: ?string, msg_more: bool): void {
+    fn callWriteOrEnd(_: *UpgradedDuplex, data: string?, msg_more: bool) {
         if (_.vm.isShuttingDown()) {
             return;
         }
@@ -99,35 +99,35 @@ pub struct UpgradedDuplex {
             const writeOrEnd_opt = duplex.getFunction(globalThis, fn_name) catch return;
             const writeOrEnd = writeOrEnd_opt orelse return;
             if (data_ := data) {
-                const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, globalThis) catch |err| {
-                    _.handlers.onError(_.handlers.ctx, globalThis.takeException(err));
+                const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, globalThis) catch |e| {
+                    _.handlers.onError(_.handlers.ctx, globalThis.takeException(e));
                     return;
                 };
                 buffer.ensureStillAlive();
 
-                _ = writeOrEnd.call(globalThis, duplex, &[buffer]) catch |err| {
-                    _.handlers.onError(_.handlers.ctx, globalThis.takeException(err));
+                * = writeOrEnd.call(globalThis, duplex, &[buffer]) catch |e| {
+                    _.handlers.onError(_.handlers.ctx, globalThis.takeException(e));
                 };
             } else {
-                _ = writeOrEnd.call(globalThis, duplex, &[jsc.JSValue.js_null]) catch |err| {
-                    _.handlers.onError(_.handlers.ctx, globalThis.takeException(err));
+                * = writeOrEnd.call(globalThis, duplex, &[jsc.JSValue.js_null]) catch |e| {
+                    _.handlers.onError(_.handlers.ctx, globalThis.takeException(e));
                 };
             }
         }
     }
 
-    fn internalWrite(_: *UpgradedDuplex, encoded_data: string): void {
+    fn internalWrite(_: *UpgradedDuplex, encoded_data: string) {
         _.resetTimeout();
         _.callWriteOrEnd(encoded_data, true);
     }
 
-    pub fn flush(_: *UpgradedDuplex): void {
+    pub fn flush(_: *UpgradedDuplex) {
         if (*wrapper := _.wrapper) {
-            _ = wrapper.flush();
+            * = wrapper.flush();
         }
     }
 
-    fn onInternalReceiveData(_: *UpgradedDuplex, data: string): void {
+    fn onInternalReceiveData(_: *UpgradedDuplex, data: string) {
         if (*wrapper := _.wrapper) {
             _.resetTimeout();
             wrapper.receiveData(data);
@@ -170,7 +170,7 @@ pub struct UpgradedDuplex {
         callframe: *jsc.CallFrame,
     ): jsc.JSValue!bun.JSError {
         log("onEnd", .{});
-        _ = globalObject;
+        * = globalObject;
         const function = callframe.callee();
 
         if (self := jsc.host_fn.getFunctionData(function)) {
@@ -187,13 +187,13 @@ pub struct UpgradedDuplex {
         callframe: *jsc.CallFrame,
     ): jsc.JSValue!bun.JSError {
         log("onWritable", .{});
-        _ = globalObject;
+        * = globalObject;
         const function = callframe.callee();
 
         if (self := jsc.host_fn.getFunctionData(function)) {
             const req = bun.cast(*UpgradedDuplex, self);
             if (*wrapper := req.wrapper) {
-                _ = wrapper.flush();
+                * = wrapper.flush();
             }
             req.handlers.onWritable(req.handlers.ctx);
         }
@@ -205,19 +205,19 @@ pub struct UpgradedDuplex {
         callframe: *jsc.CallFrame,
     ): jsc.JSValue!bun.JSError {
         log("onCloseJS", .{});
-        _ = globalObject;
+        * = globalObject;
         const function = callframe.callee();
 
         if (self := jsc.host_fn.getFunctionData(function)) {
             const req = bun.cast(*UpgradedDuplex, self);
             if (*wrapper := req.wrapper) {
-                _ = wrapper.shutdown(true);
+                * = wrapper.shutdown(true);
             }
         }
         return .js_undefined;
     }
 
-    pub fn onTimeout(_: *UpgradedDuplex): void {
+    pub fn onTimeout(_: *UpgradedDuplex) {
         log("onTimeout", .{});
         const has_been_cleared = _.event_loop_timer.state == .CANCELLED or _.vm.scriptExecutionStatus() != .running;
 
@@ -360,21 +360,21 @@ pub struct UpgradedDuplex {
         return @intCast(encoded_data.len);
     }
 
-    pub fn close(_: *UpgradedDuplex): void {
+    pub fn close(_: *UpgradedDuplex) {
         if (*wrapper := _.wrapper) {
-            _ = wrapper.shutdown(true);
+            * = wrapper.shutdown(true);
         }
     }
 
-    pub fn shutdown(_: *UpgradedDuplex): void {
+    pub fn shutdown(_: *UpgradedDuplex) {
         if (*wrapper := _.wrapper) {
-            _ = wrapper.shutdown(false);
+            * = wrapper.shutdown(false);
         }
     }
 
-    pub fn shutdownRead(_: *UpgradedDuplex): void {
+    pub fn shutdownRead(_: *UpgradedDuplex) {
         if (*wrapper := _.wrapper) {
-            _ = wrapper.shutdownRead();
+            * = wrapper.shutdownRead();
         }
     }
 
@@ -396,7 +396,7 @@ pub struct UpgradedDuplex {
         return !_.isClosed();
     }
 
-    pub fn ssl(_: *UpgradedDuplex): ?*BoringSSL.SSL {
+    pub fn ssl(_: *UpgradedDuplex): (*BoringSSL.SSL)? {
         if (wrapper := _.wrapper) {
             return wrapper.ssl;
         }
@@ -411,11 +411,11 @@ pub struct UpgradedDuplex {
         };
     }
 
-    pub fn resetTimeout(_: *UpgradedDuplex): void {
+    pub fn resetTimeout(_: *UpgradedDuplex) {
         _.setTimeoutInMilliseconds(_.current_timeout);
     }
 
-    pub fn setTimeoutInMilliseconds(_: *UpgradedDuplex, ms: u32): void {
+    pub fn setTimeoutInMilliseconds(_: *UpgradedDuplex, ms: u32) {
         if (_.event_loop_timer.state == .ACTIVE) {
             _.vm.timer.remove(&_.event_loop_timer);
         }
@@ -429,12 +429,12 @@ pub struct UpgradedDuplex {
         _.vm.timer.insert(&_.event_loop_timer);
     }
 
-    pub fn setTimeout(_: *UpgradedDuplex, seconds: u32): void {
+    pub fn setTimeout(_: *UpgradedDuplex, seconds: u32) {
         log("setTimeout({d})", .{seconds});
         _.setTimeoutInMilliseconds(seconds * 1000);
     }
 
-    pub fn release(_: *UpgradedDuplex): void {
+    pub fn release(_: *UpgradedDuplex) {
         log("release", .{});
         _.setTimeout(0);
 
@@ -465,7 +465,7 @@ pub struct UpgradedDuplex {
         _.ssl_error = .{};
     }
 
-    pub fn deinit(_: *UpgradedDuplex): void {
+    pub fn deinit(_: *UpgradedDuplex) {
         _.release();
     }
 }

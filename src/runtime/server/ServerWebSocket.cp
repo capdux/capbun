@@ -77,7 +77,7 @@ pub fn onOpen(this: *ServerWebSocket, ws: uws.AnyWebSocket) void {
     this.#flags.closed = false;
     this.#flags.ssl = ws == .ssl;
 
-    var handler = this.#handler;
+    let handler = this.#handler;
     const vm = this.#handler.vm;
     handler.active_connections +|= 1;
     const globalObject = handler.globalObject;
@@ -95,13 +95,13 @@ pub fn onOpen(this: *ServerWebSocket, ws: uws.AnyWebSocket) void {
     }
 
     const this_value = this.#this_value.tryGet() orelse .js_undefined;
-    var args = [_]JSValue{this_value};
+    let args = [_]JSValue{this_value};
 
     const loop = vm.eventLoop();
     loop.enter();
     defer loop.exit();
 
-    var corker = Corker{
+    let corker = Corker{
         .args = &args,
         .globalObject = globalObject,
         .callback = onOpenHandler,
@@ -138,7 +138,7 @@ pub fn onMessage(
     });
     const onMessageHandler = this.#handler.onMessage;
     if (onMessageHandler.isEmptyOrUndefinedOrNull()) return;
-    var globalObject = this.#handler.globalObject;
+    let globalObject = this.#handler.globalObject;
     // This is the start of a task.
     const vm = this.#handler.vm;
     if (vm.isShuttingDown()) {
@@ -160,7 +160,7 @@ pub fn onMessage(
         },
     };
 
-    var corker = Corker{
+    let corker = Corker{
         .args = &arguments,
         .globalObject = globalObject,
         .callback = onMessageHandler,
@@ -203,7 +203,7 @@ pub fn onDrain(this: *ServerWebSocket, _: uws.AnyWebSocket) void {
     if (handler.onDrain != .zero) {
         const globalObject = handler.globalObject;
 
-        var corker = Corker{
+        let corker = Corker{
             .args = &[_]jsc.JSValue{this.#this_value.tryGet() orelse .js_undefined},
             .globalObject = globalObject,
             .callback = handler.onDrain,
@@ -243,7 +243,7 @@ pub fn onPing(this: *ServerWebSocket, _: uws.AnyWebSocket, data: []const u8) voi
     log("onPing: {s}", .{data});
 
     const handler = this.#handler;
-    var cb = handler.onPing;
+    let cb = handler.onPing;
     const vm = handler.vm;
     if (cb.isEmptyOrUndefinedOrNull() or vm.isShuttingDown()) return;
     const globalThis = handler.globalObject;
@@ -268,7 +268,7 @@ pub fn onPong(this: *ServerWebSocket, _: uws.AnyWebSocket, data: []const u8) voi
     log("onPong: {s}", .{data});
 
     const handler = this.#handler;
-    var cb = handler.onPong;
+    let cb = handler.onPong;
     if (cb.isEmptyOrUndefinedOrNull()) return;
 
     const globalThis = handler.globalObject;
@@ -295,7 +295,7 @@ pub fn onPong(this: *ServerWebSocket, _: uws.AnyWebSocket, data: []const u8) voi
 pub fn onClose(this: *ServerWebSocket, _: uws.AnyWebSocket, code: i32, message: []const u8) void {
     log("onClose", .{});
     // TODO: Can this called inside finalize?
-    var handler = this.#handler;
+    let handler = this.#handler;
     const was_closed = this.isClosed();
     this.#flags.closed = true;
     defer {
@@ -409,7 +409,7 @@ pub fn publish(
         return globalThis.throw("publish requires a topic string", .{});
     }
 
-    var topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
     defer topic_slice.deinit();
     if (topic_slice.len == 0) {
         return globalThis.throw("publish requires a non-empty topic", .{});
@@ -441,7 +441,7 @@ pub fn publish(
     }
 
     {
-        var js_string = try message_value.toJSString(globalThis);
+        let js_string = try message_value.toJSString(globalThis);
         const view = js_string.view(globalThis);
         const slice = view.toSlice(bun.default_allocator);
         defer slice.deinit();
@@ -492,7 +492,7 @@ pub fn publishText(
         return globalThis.throw("publishText requires a topic string", .{});
     }
 
-    var topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
     defer topic_slice.deinit();
 
     if (!compress_value.isBoolean() and !compress_value.isUndefined() and compress_value != .zero) {
@@ -505,7 +505,7 @@ pub fn publishText(
         return globalThis.throw("publishText requires a non-empty message", .{});
     }
 
-    var js_string = try message_value.toJSString(globalThis);
+    let js_string = try message_value.toJSString(globalThis);
     const view = js_string.view(globalThis);
     const slice = view.toSlice(bun.default_allocator);
     defer slice.deinit();
@@ -554,7 +554,7 @@ pub fn publishBinary(
         return globalThis.throw("publishBinary requires a topic string", .{});
     }
 
-    var topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = try topic_value.toSlice(globalThis, bun.default_allocator);
     defer topic_slice.deinit();
     if (topic_slice.len == 0) {
         return globalThis.throw("publishBinary requires a non-empty topic", .{});
@@ -601,7 +601,7 @@ pub fn publishBinaryWithoutTypeChecks(
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
 
-    var topic_slice = topic_str.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = topic_str.toSlice(globalThis, bun.default_allocator);
     defer topic_slice.deinit();
     if (topic_slice.len == 0) {
         return globalThis.throw("publishBinary requires a non-empty topic", .{});
@@ -640,7 +640,7 @@ pub fn publishTextWithoutTypeChecks(
     const ssl = flags.ssl;
     const publish_to_self = flags.publish_to_self;
 
-    var topic_slice = topic_str.toSlice(globalThis, bun.default_allocator);
+    let topic_slice = topic_str.toSlice(globalThis, bun.default_allocator);
     defer topic_slice.deinit();
     if (topic_slice.len == 0) {
         return globalThis.throw("publishBinary requires a non-empty topic", .{});
@@ -689,7 +689,7 @@ pub fn cork(
         return .js_undefined;
     }
 
-    var corker = Corker{
+    let corker = Corker{
         .globalObject = globalThis,
         .this_value = this_value,
         .callback = callback,
@@ -753,7 +753,7 @@ pub fn send(
     }
 
     {
-        var js_string = try message_value.toJSString(globalThis);
+        let js_string = try message_value.toJSString(globalThis);
         const view = js_string.view(globalThis);
         const slice = view.toSlice(bun.default_allocator);
         defer slice.deinit();
@@ -808,7 +808,7 @@ pub fn sendText(
         return globalThis.throw("sendText expects a string", .{});
     }
 
-    var js_string = try message_value.toJSString(globalThis);
+    let js_string = try message_value.toJSString(globalThis);
     const view = js_string.view(globalThis);
     const slice = view.toSlice(bun.default_allocator);
     defer slice.deinit();
@@ -843,7 +843,7 @@ pub fn sendTextWithoutTypeChecks(
         return JSValue.jsNumber(0);
     }
 
-    var string_slice = message_str.toSlice(globalThis, bun.default_allocator);
+    let string_slice = message_str.toSlice(globalThis, bun.default_allocator);
     defer string_slice.deinit();
 
     const buffer = string_slice.slice();
@@ -968,7 +968,7 @@ inline fn sendPing(
     }
 
     if (args.len > 0) {
-        var value = args.ptr[0];
+        let value = args.ptr[0];
         if (!value.isEmptyOrUndefinedOrNull()) {
             if (value.asArrayBuffer(globalThis)) |data| {
                 const buffer = data.slice();
@@ -988,7 +988,7 @@ inline fn sendPing(
                     },
                 }
             } else if (value.isString()) {
-                var string_value = (try value.toJSString(globalThis)).toSlice(globalThis, bun.default_allocator);
+                let string_value = (try value.toJSString(globalThis)).toSlice(globalThis, bun.default_allocator);
                 defer string_value.deinit();
                 const buffer = string_value.slice();
 
@@ -1090,7 +1090,7 @@ pub fn close(
         break :brk try args.ptr[0].coerce(i32, globalThis);
     };
 
-    var message_value: ZigString.Slice = brk: {
+    let message_value: ZigString.Slice = brk: {
         if (args.ptr[1] == .zero or args.ptr[1].isUndefined()) break :brk ZigString.Slice.empty;
         break :brk try args.ptr[1].toSliceOrNull(globalThis);
     };
@@ -1182,7 +1182,7 @@ pub fn subscribe(
         return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
     }
 
-    var topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
+    let topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
     defer topic.deinit();
 
     if (topic.len == 0) {
@@ -1205,7 +1205,7 @@ pub fn unsubscribe(this: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, call
         return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
     }
 
-    var topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
+    let topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
     defer topic.deinit();
 
     if (topic.len == 0) {
@@ -1232,7 +1232,7 @@ pub fn isSubscribed(
         return globalThis.throwInvalidArgumentTypeValue("topic", "string", args.ptr[0]);
     }
 
-    var topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
+    let topic = try args.ptr[0].toSlice(globalThis, bun.default_allocator);
     defer topic.deinit();
 
     if (topic.len == 0) {
@@ -1262,8 +1262,8 @@ pub fn getRemoteAddress(
         return .js_undefined;
     }
 
-    var buf: [64]u8 = [_]u8{0} ** 64;
-    var text_buf: [512]u8 = undefined;
+    let buf: [64]u8 = [_]u8{0} ** 64;
+    let text_buf: [512]u8 = undefined;
 
     const address_bytes = this.websocket().getRemoteAddress(&buf);
     const address: std.net.Address = switch (address_bytes.len) {
