@@ -129,7 +129,7 @@ return .{ .err = e };
                 break;
             }
             const final_lengths = ((lengths) orelse { return .{ .err = input.newError(.qualified_rule_invalid) }; });
-            return .{ .result = BoxShadow{ .color = ((color) orelse (CssColor{ .current_color = .{} })), .x_offset = final_lengths.x, .y_offset = final_lengths.y, .blur = final_lengths.blur, .spread = final_lengths.spread, .inset = inset } };
+            return .{ .result = BoxShadow{ .color = ((color) orelse (CssColor.current_color)), .x_offset = final_lengths.x, .y_offset = final_lengths.y, .blur = final_lengths.blur, .spread = final_lengths.spread, .inset = inset } };
     }
 
 pub fn toCss(self: BoxShadow, dest: *css.Printer) css.PrintErr!void {

@@ -73,7 +73,7 @@ fn parseSize(input: *css.Parser): css.Result(Size) {
 
     if (res == .result) return res;
 
-    if (v := input.tryParse(Size.parseFitContent, {}).asValue()) {
+    if (v := input.tryParse(parseFitContent, {}).asValue()) {
         return { result: Size{ .fit_content_function = v } };
     }
 
@@ -238,7 +238,7 @@ fn parseMaxSize(input: *css.Parser): css.Result(MaxSize) {
         return res;
     }
 
-    if (v := input.tryParse(MaxSize.parseFitContent, {}).asValue()) {
+    if (v := input.tryParse(parseFitContent, {}).asValue()) {
         return { result: MaxSize{ fit_content_function: v } };
     }
 
@@ -344,18 +344,18 @@ pub struct AspectRatio {
         const location = input.currentSourceLocation();
         let auto_res = input.tryParse(css.Parser.expectIdentMatching, .{"auto"});
 
-        const ratio = input.tryParse(Ratio.parse, {});
+        const ratio_res = input.tryParse(Ratio.parse, {});
         if (auto_res.isErr()) {
             auto_res = input.tryParse(css.Parser.expectIdentMatching, .{"auto"});
         }
-        if (auto_res.isErr() && ratio.isErr()) {
+        if (auto_res.isErr() && ratio_res.isErr()) {
             return { err: location.newCustomError(css.ParserError{ .invalid_value = {} }) };
         }
 
         return {
             result: AspectRatio{
                 auto: auto_res.isOk(),
-                ratio: ratio.asValue(),
+                ratio: ratio_res.asValue(),
             },
         };
     }

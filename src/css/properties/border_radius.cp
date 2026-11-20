@@ -259,7 +259,7 @@ pub struct BorderRadiusHandler {
         // If two vendor prefixes for the same property have different
         // values, we need to flush what we have immediately to preserve order.
         if (*existing := @field(_, prop)) {
-            if (!existing.*[0].eql(val) && !bun.bits.contains(VendorPrefix, existing.*[1], vp)) {
+            if (!existing[0].eql(val) && !bun.bits.contains(VendorPrefix, existing[1], vp)) {
                 _.flush(d, ctx);
             }
         }
@@ -274,11 +274,11 @@ pub struct BorderRadiusHandler {
             _.flush(d, ctx);
         }
 
-        maybeFlush(_, d, ctx, prop, val, vp);
+        _.maybeFlush(d, ctx, prop, val, vp);
 
         // Otherwise, update the value and add the prefix.
         if (*existing := @field(_, prop)) {
-            existing.* = .{ val.deepClone(ctx.allocator), vp };
+            existing = .{ val.deepClone(ctx.allocator), vp };
         } else {
             @field(_, prop) = .{ val.deepClone(ctx.allocator), vp };
             _.has_any = true;

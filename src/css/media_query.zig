@@ -181,7 +181,7 @@ pub const MediaCondition = union(enum) {
 
 pub fn toCss(self: *MediaCondition, dest: *Printer) PrintErr!void {
             switch (self) {
-.feature => |*f| {
+.feature => |f| {
 _ = try f.toCss(dest);
 },
 .not => |c| {
@@ -1035,7 +1035,7 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(QueryCondition)
             return QueryCondition.parseFeature(i);
     }
 
-pub fn tryParseFn(self: *@This(), i: *css.Parser) Result(QueryCondition) {
+pub fn tryParseFn(i: *css.Parser, self: *@This()) Result(QueryCondition) {
             return parseQueryCondition(QueryCondition, i, self.flags);
     }
 };

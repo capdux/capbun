@@ -231,7 +231,8 @@ pub struct Background {
     }
 
     inline fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -685,7 +686,7 @@ pub struct BackgroundHandler {
                 _.flushHelper(allocator, "color", CssColor, &color, dest, context);
                 let clips = SmallList(BackgroundClip, 1).initCapacity(allocator, val.len());
                 for (*b of val.slice()) {
-                    clips.appendAssumeCapacity(b.clip.deepClone(allocator));
+                    clips.appendAssumeCapacity(b.clip);
                 }
                 let clips_vp = VendorPrefix{ .none = true };
                 if (_.clips != null) {

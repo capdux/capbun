@@ -79,8 +79,8 @@ pub const LengthOrNumber = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn deinit(self: LengthOrNumber, allocator: std.mem.Allocator) void {
-            switch (self.*) {
+pub fn deinit(self: *LengthOrNumber, allocator: std.mem.Allocator) void {
+            switch (self) {
 .number => {
 
 },
@@ -90,8 +90,7 @@ _ = l.deinit(allocator);
 }
     }
 
-pub fn default(self: LengthOrNumber) LengthOrNumber {
-        _ = self;
+pub fn default() LengthOrNumber {
             return .{ .number = 0.0 };
     }
 
@@ -322,7 +321,7 @@ else => {
 
 },
 }
-            return .{ .err = .{} };
+            return .{ .err = undefined };
     }
 
 pub fn toUnitValue(self: LengthValue) struct { CSSNumber, []const u8 } {

@@ -94,14 +94,14 @@ pub fn parse(input: *css.Parser) css.Result(AspectRatio) {
             const location = input.currentSourceLocation();
             var auto_res = input.tryParse(css.Parser.expectIdentMatching, .{ "auto" });
             _ = &auto_res;
-            const ratio = input.tryParse(Ratio.parse, .{});
+            const ratio_res = input.tryParse(Ratio.parse, .{});
             if (auto_res.isErr()) {
                 auto_res = input.tryParse(css.Parser.expectIdentMatching, .{ "auto" });
             }
-            if ((auto_res.isErr() and (ratio).?.isErr())) {
+            if ((auto_res.isErr() and ratio_res.isErr())) {
                 return .{ .err = location.newCustomError(css.ParserError{ .invalid_value = .{} }) };
             }
-            return .{ .result = AspectRatio{ .auto = auto_res.isOk(), .ratio = (ratio).?.asValue() } };
+            return .{ .result = AspectRatio{ .auto = auto_res.isOk(), .ratio = ratio_res.asValue() } };
     }
 
 pub fn toCss(self: AspectRatio, dest: *css.Printer) css.PrintErr!void {
@@ -497,7 +497,7 @@ pub fn parseSize(input: *css.Parser) css.Result(Size) {
         if ((res == .result)) {
             return res;
         }
-        if (input.tryParse(Size.parseFitContent, .{}).asValue()) |v| {
+        if (input.tryParse(parseFitContent, .{}).asValue()) |v| {
             _ = &v;
             return .{ .result = Size{ .fit_content_function = v } };
         }
@@ -636,7 +636,7 @@ pub fn parseMaxSize(input: *css.Parser) css.Result(MaxSize) {
         if (res.isOk()) {
             return res;
         }
-        if (input.tryParse(MaxSize.parseFitContent, .{}).asValue()) |v| {
+        if (input.tryParse(parseFitContent, .{}).asValue()) |v| {
             _ = &v;
             return .{ .result = MaxSize{ .fit_content_function = v } };
         }

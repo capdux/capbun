@@ -248,7 +248,7 @@ pub fn default() FontVariantCaps {
     }
 
 pub fn isCss2(self: FontVariantCaps) bool {
-            return ((self.* == .normal) or (self.* == .@"small-caps"));
+            return ((self == .normal) or (self == .@"small-caps"));
     }
 
 pub fn parseCss2(input: *css.Parser) css.Result(FontVariantCaps) {

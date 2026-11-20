@@ -67,7 +67,7 @@ pub fn Rect(comptime T: type): type {
             };
         }
 
-        pub fn deinit(allocator: std.mem.Allocator) {
+        pub fn deinit(*_, allocator: std.mem.Allocator) {
             if (comptime needs_deinit) {
                 _.top.deinit(allocator);
                 _.right.deinit(allocator);

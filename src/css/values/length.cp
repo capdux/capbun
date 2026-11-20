@@ -17,14 +17,14 @@ pub enum LengthOrNumber {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn deinit(allocator: std.mem.Allocator) {
-        switch (_.*) {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
+        switch (_) {
             .number => {},
             .length => |*l| l.deinit(allocator),
         }
     }
 
-    pub fn default(): LengthOrNumber {
+    static fn default(): LengthOrNumber {
         return { number: 0.0 };
     }
 
@@ -374,7 +374,7 @@ pub enum LengthValue {
             },
             else => {},
         }
-        return .{ .err = {} };
+        return { err: undefined };
     }
 
     pub fn toUnitValue(): [CSSNumber, []const u8] {

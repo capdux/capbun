@@ -76,7 +76,8 @@ pub struct TransformList {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     static fn eql(lhs: *const @This(), other: *const @This()): bool {
@@ -1107,7 +1108,8 @@ pub struct Rotate {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -1217,7 +1219,7 @@ pub struct TransformHandler {
         const individualProperty = struct {
             fn individualProperty(handler: *TransformHandler, allocator: std.mem.Allocator, comptime field: []const u8, val: auto) {
                 if (*transform := handler.transform) {
-                    bun.handleOom(transform.*[0].v.append(allocator, val.toTransform(allocator)));
+                    bun.handleOom(transform[0].v.append(allocator, val.toTransform(allocator)));
                 } else {
                     @field(handler, field) = val.deepClone(allocator);
                     handler.has_any = true;

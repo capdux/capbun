@@ -381,7 +381,8 @@ pub fn getNecessaryFallbacks(self: Background, targets: css.targets.Targets) css
     }
 
 pub inline fn deepClone(self: Background, allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -728,7 +729,7 @@ var bg_images = SmallList(Image, 1).initCapacity(allocator, val.len());
             _ = &clips;
             for (cp_mut_slice(&val.slice())) |*b| {
                 _ = &b;
-                _ = clips.appendAssumeCapacity((b.*).clip.deepClone(allocator));
+                _ = clips.appendAssumeCapacity((b.*).clip);
             }
             var clips_vp = VendorPrefix{ .none = true };
             _ = &clips_vp;

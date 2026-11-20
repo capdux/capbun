@@ -181,11 +181,16 @@ pub struct todo_stuff {
     pub const FIELDS: []const []const u8 = &.{ "webkit", "moz", "ms", "o", "none" };
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        return switch (_.asBits()) {
-            VendorPrefix.asBits({ webkit: true }) => dest.writeStr("-webkit-"),
-            VendorPrefix.asBits({ moz: true }) => dest.writeStr("-moz-"),
-            VendorPrefix.asBits({ ms: true }) => dest.writeStr("-ms-"),
-            VendorPrefix.asBits({ o: true }) => dest.writeStr("-o-"),
+        const bits = _.asBits();
+        const wk = comptime VendorPrefix.asBits({ webkit: true });
+        const mz = comptime VendorPrefix.asBits({ moz: true });
+        const ms_b = comptime VendorPrefix.asBits({ ms: true });
+        const ob = comptime VendorPrefix.asBits({ o: true });
+        return switch (bits) {
+            wk => dest.writeStr("-webkit-"),
+            mz => dest.writeStr("-moz-"),
+            ms_b => dest.writeStr("-ms-"),
+            ob => dest.writeStr("-o-"),
             else => {},
         };
     }
@@ -221,7 +226,7 @@ pub struct todo_stuff {
         return _ == VendorPrefix{};
     }
 
-    pub fn bitwiseAnd(a: @This(), b: @This()): @This() {
+    static fn bitwiseAnd(a: @This(), b: @This()): @This() {
         return bun.bits.@"and"(@This(), a, b);
     }
 
@@ -693,7 +698,7 @@ pub fn DeriveParse(comptime T: type): type {
                 // to parsing the payload fields.
                 if (comptime first_void_index < first_payload_index) {
                     if (input.tryParse(Parser.expectIdentMatching, .{void_field.name}).isOk()) {
-                        if (comptime is_union_enum) { const ev: void = {}; return { result: @unionInit(T, void_field.name, ev) }; }
+                        if (comptime is_union_enum) { const ev: void = undefined; return { result: @unionInit(T, void_field.name, ev) }; }
                         return { result: @enumFromInt(void_field.value) };
                     }
 
@@ -723,7 +728,7 @@ pub fn DeriveParse(comptime T: type): type {
 
                     // We can generate this as the last statements of the function, avoiding the `input.tryParse` routine above
                     if (e := input.expectIdentMatching(void_field.name).asErr()) return { err: e };
-                    if (comptime is_union_enum) { const ev: void = {}; return { result: @unionInit(T, void_field.name, ev) }; }
+                    if (comptime is_union_enum) { const ev: void = undefined; return { result: @unionInit(T, void_field.name, ev) }; }
                     return { result: @enumFromInt(void_field.value) };
                 }
             } else if (comptime first_void_index < first_payload_index) {
@@ -733,7 +738,7 @@ pub fn DeriveParse(comptime T: type): type {
                     if (matched := Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) {
                         inline for (void_fields) |field| {
                             if (field.value == @intFromEnum(matched)) {
-                                if (comptime is_union_enum) { const ev: void = {}; return { result: @unionInit(T, field.name, ev) }; }
+                                if (comptime is_union_enum) { const ev: void = undefined; return { result: @unionInit(T, field.name, ev) }; }
                                 return { result: @enumFromInt(field.value) };
                             }
                         }
@@ -1822,7 +1827,8 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                                 .err => |e| return .{ .err = e },
                                 .result => |v| v,
                             };
-                            return .{ .result = .{ .property = .{property_name} } };
+                            const prop_tuple = PropertyPreludeTuple{ .name = property_name };
+                            return .{ .result = .{ .property = prop_tuple } };
                         },
                     }
                 }
@@ -1879,8 +1885,8 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                         return .success;
                     },
                     .custom_media => {
-                        const name = prelude.custom_media[0];
-                        const query = prelude.custom_media[1];
+                        const name = prelude.custom_media.name;
+                        const query = prelude.custom_media.query;
                         parser.state = State.body;
                         parser.rules.v.append(
                             parser.allocator,
@@ -1921,7 +1927,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                         let nested_parser = parser.nested();
                         return NestedRuleParser(AtRuleParserT).AtRuleParser.ruleWithoutBlock(&nested_parser, prelude, start);
                     },
-                    else => return .{ .err = {} },
+                    else => return .{ .err = undefined },
                 }
             }
         };
@@ -2196,7 +2202,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         },
                         .nest => {
                             if (parser.is_in_style_rule) {
-                                parser.options.warn(input.newCustomError(ParserError{ .deprecated_nest_rule = {} }));
+                                parser.options.warn(input.newCustomError(ParserError.deprecated_nest_rule));
                                 let selector_parser = selector.parser.SelectorParser{
                                     .is_nesting_allowed = true,
                                     .options = parser.options,
@@ -2453,7 +2459,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         return .success;
                     },
                     .property => {
-                        const name = prelude.property[0];
+                        const name = prelude.property.name;
                         parser.rules.v.append(input.allocator(), .{
                             .property = switch (css_rules.property.PropertyRule.parse(name, input, loc)) {
                                 .err => |e| return .{ .err = e },
@@ -2545,7 +2551,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                 switch (prelude) {
                     .layer => {
                         if (parser.is_in_style_rule or prelude.layer.len() == 0) {
-                            return .{ .err = {} };
+                            return .{ .err = undefined };
                         }
 
                         T.CustomAtRuleParser.onLayerRule(parser.at_rule_parser, &prelude.layer);
@@ -2589,7 +2595,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         }) catch |e| bun.handleOom(e);
                         return .success;
                     },
-                    else => return .{ .err = {} },
+                    else => return .{ .err = undefined },
                 }
             }
         };
@@ -6198,7 +6204,7 @@ pub union(TokenKind) Token {
 
     fn hash(hasher: *std.hash.Wyhash) {
         const _self = _;
-        return implementHash(@This(), &_self, hasher);
+        return implementHash(@This(), unsafe { &_self }, hasher);
     }
 
     /// Return whether this token represents a parse error.

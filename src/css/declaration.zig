@@ -417,7 +417,7 @@ pub fn parsefn(i: *css.Parser) Result(void) {
             _ = &e;
             return .{ .err = e };
         }
-        if (comptime (@TypeOf(composes_ctx) != void)) {
+        if (comptime ((@TypeOf(composes_ctx) != void) and (@TypeOf(composes_ctx) != @TypeOf(.{})))) {
             if ((input.flags.css_modules and (property == .composes))) {
                 switch (composes_ctx.composes_state) {
 .disallow_entirely => {
@@ -427,7 +427,8 @@ pub fn parsefn(i: *css.Parser) Result(void) {
 _ = composes_ctx.recordComposes(input.allocator(), (&property.composes));
 },
 .disallow_nested => |info| {
-_ = options.warnFmtWithNotes("\"composes\" is not allowed inside nested selectors", .{}, info.line, info.column, (&[0]bun.logger.Data), .{});
+const empty_notes: [0]bun.logger.Data = &.{};
+                _ = options.warnFmtWithNotes("\"composes\" is not allowed inside nested selectors", .{}, info.line, info.column, (&empty_notes));
 },
 .disallow_not_single_class => |info| {
 const err_data: [1]bun.logger.Data = .{ bun.logger.Data{ .text = bun.handleOom(options.allocator.dupe(u8, "The parent selector is not a single class selector because of the syntax here:")), .location = info.toLoggerLocation(options.filename) } };

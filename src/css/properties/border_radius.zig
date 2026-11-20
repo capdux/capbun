@@ -274,7 +274,7 @@ else => {
 pub fn maybeFlush(self: *BorderRadiusHandler, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext, comptime prop: []const u8, val: anytype, vp: css.VendorPrefix) void {
             if (@field(self, prop)) |*existing| {
                 _ = &existing;
-                if (((!(existing.*).*[0].eql(val)) and (!bun.bits.contains(VendorPrefix, (existing.*).*[1], vp)))) {
+                if (((!(existing.*)[0].eql(val)) and (!bun.bits.contains(VendorPrefix, (existing.*)[1], vp)))) {
                     _ = self.flush(d, ctx);
                 }
             }
@@ -287,10 +287,10 @@ pub fn propertyHelper(self: *BorderRadiusHandler, d: *css.DeclarationList, ctx: 
             if ((self.category != .physical)) {
                 _ = self.flush(d, ctx);
             }
-            _ = self.maybeFlush(self, d, ctx, prop, val, vp);
+            _ = self.maybeFlush(d, ctx, prop, val, vp);
             if (@field(self, prop)) |*existing| {
                 _ = &existing;
-                (existing.*).* = .{ val.deepClone(ctx.allocator), vp };
+                (existing.*) = .{ val.deepClone(ctx.allocator), vp };
             } else {
                 @field(self, prop) = .{ val.deepClone(ctx.allocator), vp };
                 self.has_any = true;

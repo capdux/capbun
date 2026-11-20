@@ -55,7 +55,7 @@ pub struct ImportDependency {
     /// The location of the dependency in the source file.
     loc: SourceRange,
 
-    static fn new(allocator: Allocator, rule: *const css.css_rules.@"import".ImportRule, filename: []const u8, local_names: (*const css.LocalsResultsMap)?, symbols: *const bun.ast.Symbol.Map): ImportDependency {
+    static fn new(allocator: Allocator, rule: *const css.css_rules.import_rule.ImportRule, filename: []const u8, local_names: (*const css.LocalsResultsMap)?, symbols: *const bun.ast.Symbol.Map): ImportDependency {
         let supports: ([]const u8)? = null;
         if (s_val := rule.supports) {
             supports = css.to_css.string(

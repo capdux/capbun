@@ -287,7 +287,7 @@ return .{ .err = e };
 }) } };
     }
 };
-            return input.parseNestedBlock(ContainerCondition, .{}, Fns.parseNestedBlockFn);
+            return input.parseNestedBlock(ContainerCondition, undefined, Fns.parseNestedBlockFn);
     }
 
 pub fn needsParens(self: @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {

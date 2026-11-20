@@ -629,13 +629,13 @@ f.* = f.getFallback(allocator, lowest_fallback);
 .@"var" => |*v| {
 if (v.fallback) |*fallback| {
                         _ = &fallback;
-                        (fallback.*).* = (fallback.*).getFallback(allocator, lowest_fallback);
+                        (fallback.*) = (fallback.*).getFallback(allocator, lowest_fallback);
                     }
 },
 .env => |*v| {
 if (v.fallback) |*fallback| {
                         _ = &fallback;
-                        (fallback.*).* = (fallback.*).getFallback(allocator, lowest_fallback);
+                        (fallback.*) = (fallback.*).getFallback(allocator, lowest_fallback);
                     }
 },
 else => {
@@ -930,7 +930,8 @@ pub fn withPropertyId(self: UnparsedProperty, allocator: Allocator, property_id:
     }
 
 pub fn deepClone(self: UnparsedProperty, allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
@@ -962,7 +963,8 @@ return .{ .err = e };
     }
 
 pub fn deepClone(self: CustomProperty, allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

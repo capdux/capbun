@@ -89,10 +89,10 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
     }
 
 pub fn isCompatible(self: BorderImageRepeatKeyword, browsers: css.targets.Browsers) bool {
-            if ((self.* == .round)) {
+            if ((self == .round)) {
                 return css.compat.Feature.border_image_repeat_round.isCompatible(browsers);
             }
-            if ((self.* == .space)) {
+            if ((self == .space)) {
                 return css.compat.Feature.border_image_repeat_space.isCompatible(browsers);
             }
             return true;
@@ -117,7 +117,7 @@ pub const BorderImage = struct {
     repeat: BorderImageRepeat,
 
 pub fn parse(input: *css.Parser) css.Result(BorderImage) {
-            return parseWithCallback(input, .{}, struct {
+            return parseWithCallback(input, undefined, struct {
 
 pub fn cb(_: void, _: *css.Parser) bool {
             return false;

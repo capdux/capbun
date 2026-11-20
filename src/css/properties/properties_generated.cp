@@ -2791,7 +2791,7 @@ pub union(PropertyIdTag) Property {
 .@"min-inline-size" => |*v| Property{ @"min-inline-size": v.deepClone(allocator) },
 .@"max-block-size" => |*v| Property{ @"max-block-size": v.deepClone(allocator) },
 .@"max-inline-size" => |*v| Property{ @"max-inline-size": v.deepClone(allocator) },
-.@"box-sizing" => |*v| Property{ @"box-sizing": .{ v[0].deepClone(allocator), v[1] } },
+.@"box-sizing" => |*v| Property{ @"box-sizing": .{ v[0], v[1] } },
 .@"aspect-ratio" => |*v| Property{ @"aspect-ratio": v.deepClone(allocator) },
 .overflow => |*v| Property{ overflow: v.deepClone(allocator) },
 .@"overflow-x" => |*v| Property{ @"overflow-x": v.deepClone(allocator) },
@@ -3024,7 +3024,7 @@ pub union(PropertyIdTag) Property {
   }
 
   inline fn __toCssHelper(): [[]const u8, VendorPrefix] {
-    return switch (_.*) {
+    return switch (_) {
       .@"background-color" =>  .{"background-color", VendorPrefix{ none: true }},
 .@"background-image" =>  .{"background-image", VendorPrefix{ none: true }},
 .@"background-position-x" =>  .{"background-position-x", VendorPrefix{ none: true }},
@@ -3285,7 +3285,7 @@ pub union(PropertyIdTag) Property {
 
   /// Serializes the value of a CSS property without its name or `!important` flag.
   fn valueToCss(dest: *css.Printer): PrintErr!void {
-    return switch(_.*) {
+    return switch(_) {
       .@"background-color" => |*value| value.toCss(dest),
 .@"background-image" => |*value| value.toCss(dest),
 .@"background-position-x" => |*value| value.toCss(dest),
@@ -8879,7 +8879,7 @@ pub union(PropertyIdTag) PropertyId {
 
   // Copy manually implemented functions.
   pub const toCss = properties_impl.property_id_mixin.toCss;
-  pub const parse = properties_impl.property_id_mixin.toCss;
+  pub const parse = properties_impl.property_id_mixin.parse;
   pub const fromString = properties_impl.property_id_mixin.fromString;
   pub const fromStr = fromString;
 
@@ -8892,7 +8892,7 @@ pub union(PropertyIdTag) PropertyId {
 
   /// Returns the vendor prefix for this property id.
   fn prefix(): VendorPrefix {
-    return switch (_.*) {
+    return switch (_) {
       .@"background-color" => VendorPrefix{},
 .@"background-image" => VendorPrefix{},
 .@"background-position-x" => VendorPrefix{},
@@ -10139,7 +10139,7 @@ pub union(PropertyIdTag) PropertyId {
   }
 
   fn withPrefix(pre: VendorPrefix): PropertyId {
-    return switch (_.*) {
+    return switch (_) {
       .@"background-color" => .@"background-color",
 .@"background-image" => .@"background-image",
 .@"background-position-x" => .@"background-position-x",
@@ -10386,7 +10386,7 @@ pub union(PropertyIdTag) PropertyId {
 .@"mask-box-image-outset" => PropertyId{ @"mask-box-image-outset": pre },
 .@"mask-box-image-repeat" => PropertyId{ @"mask-box-image-repeat": pre },
 .@"color-scheme" => .@"color-scheme",
-      else => _.*,
+      else => _,
     };
   }
 
@@ -10643,7 +10643,7 @@ pub union(PropertyIdTag) PropertyId {
   }
 
   inline fn deepClone(_: std.mem.Allocator): PropertyId {
-    return _.*;
+    return _;
   }
 
   static fn eql(lhs: *const PropertyId, rhs: *const PropertyId): bool {
@@ -11303,7 +11303,7 @@ mask,
     /// Helper function used in comptime code to know whether to access the underlying value
     /// with tuple indexing syntax because it may have a VendorPrefix associated with it.
     fn hasVendorPrefix(): bool {
-      return switch (_.*) {
+      return switch (_) {
         .@"background-color" => false,
 .@"background-image" => false,
 .@"background-position-x" => false,
@@ -11559,7 +11559,7 @@ mask,
     /// Helper function used in comptime code to know whether to access the underlying value
     /// with tuple indexing syntax because it may have a VendorPrefix associated with it.
     fn valueType(): type {
-      return switch (_.*) {
+      return switch (_) {
         .@"background-color" => CssColor,
 .@"background-image" => SmallList(Image, 1),
 .@"background-position-x" => SmallList(css_values.position.HorizontalPosition, 1),

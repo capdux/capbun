@@ -3180,7 +3180,7 @@ pub const PropertyIdTag = enum(u16) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
 pub fn hasVendorPrefix(self: PropertyIdTag) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => false,
 .@"background-image" => false,
 .@"background-position-x" => false,
@@ -3434,7 +3434,7 @@ pub fn hasVendorPrefix(self: PropertyIdTag) bool {
     }
 
 pub fn valueType(self: PropertyIdTag) type {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => CssColor,
 .@"background-image" => SmallList(Image, 1),
 .@"background-position-x" => SmallList(css_values.position.HorizontalPosition, 1),
@@ -6231,7 +6231,7 @@ pub fn deepClone(self: Property, allocator: std.mem.Allocator) Property {
 .@"min-inline-size" => |*v| Property{ .@"min-inline-size" = v.deepClone(allocator) },
 .@"max-block-size" => |*v| Property{ .@"max-block-size" = v.deepClone(allocator) },
 .@"max-inline-size" => |*v| Property{ .@"max-inline-size" = v.deepClone(allocator) },
-.@"box-sizing" => |*v| Property{ .@"box-sizing" = .{ v[0].deepClone(allocator), v[1] } },
+.@"box-sizing" => |*v| Property{ .@"box-sizing" = .{ v[0], v[1] } },
 .@"aspect-ratio" => |*v| Property{ .@"aspect-ratio" = v.deepClone(allocator) },
 .overflow => |*v| Property{ .overflow = v.deepClone(allocator) },
 .@"overflow-x" => |*v| Property{ .@"overflow-x" = v.deepClone(allocator) },
@@ -6466,7 +6466,7 @@ pub fn deinit(self: *Property, _: std.mem.Allocator) void {
     }
 
 pub inline fn __toCssHelper(self: Property) struct { []const u8, VendorPrefix } {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => .{ "background-color", VendorPrefix{ .none = true } },
 .@"background-image" => .{ "background-image", VendorPrefix{ .none = true } },
 .@"background-position-x" => .{ "background-position-x", VendorPrefix{ .none = true } },
@@ -6727,7 +6727,7 @@ pub inline fn __toCssHelper(self: Property) struct { []const u8, VendorPrefix } 
     }
 
 pub fn valueToCss(self: Property, dest: *css.Printer) PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => |*value| value.toCss(dest),
 .@"background-image" => |*value| value.toCss(dest),
 .@"background-position-x" => |*value| value.toCss(dest),
@@ -7675,7 +7675,7 @@ pub inline fn name(self: PropertyId) []const u8 {
     }
 
 pub fn prefix(self: PropertyId) VendorPrefix {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => VendorPrefix{  },
 .@"background-image" => VendorPrefix{  },
 .@"background-position-x" => VendorPrefix{  },
@@ -9414,7 +9414,7 @@ const allowed_prefixes = VendorPrefix{ .none = true };
     }
 
 pub fn withPrefix(self: PropertyId, pre: VendorPrefix) PropertyId {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => .@"background-color",
 .@"background-image" => .@"background-image",
 .@"background-position-x" => .@"background-position-x",
@@ -9661,7 +9661,7 @@ pub fn withPrefix(self: PropertyId, pre: VendorPrefix) PropertyId {
 .@"mask-box-image-outset" => PropertyId{ .@"mask-box-image-outset" = pre },
 .@"mask-box-image-repeat" => PropertyId{ .@"mask-box-image-repeat" = pre },
 .@"color-scheme" => .@"color-scheme",
-else => self.*,
+else => self,
 });
     }
 
@@ -10464,7 +10464,7 @@ else => {
     }
 
 pub inline fn deepClone(self: PropertyId, _: std.mem.Allocator) PropertyId {
-            return self.*;
+            return self;
     }
 
 pub fn eql(lhs: *const PropertyId, rhs: *const PropertyId) bool {
@@ -11240,7 +11240,7 @@ else => {
 }
     }
     pub const toCss = properties_impl.property_id_mixin.toCss;
-    pub const parse = properties_impl.property_id_mixin.toCss;
+    pub const parse = properties_impl.property_id_mixin.parse;
     pub const fromString = properties_impl.property_id_mixin.fromString;
     pub const fromStr = fromString;
 };

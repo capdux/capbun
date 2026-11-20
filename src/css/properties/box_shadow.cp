@@ -75,7 +75,7 @@ pub struct BoxShadow {
 
         const final_lengths = lengths ?? return { err: input.newError(.qualified_rule_invalid) };
         return { result: BoxShadow{
-            color: color ?? CssColor{ .current_color = {} },
+            color: color ?? CssColor.current_color,
             x_offset: final_lengths.x,
             y_offset: final_lengths.y,
             blur: final_lengths.blur,

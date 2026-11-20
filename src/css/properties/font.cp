@@ -556,7 +556,7 @@ pub enum FontVariantCaps {
     }
 
     fn isCss2(): bool {
-        return _.* == .normal || _.* == .@"small-caps";
+        return _ == .normal || _ == .@"small-caps";
     }
 
     static fn parseCss2(input: *css.Parser): css.Result(FontVariantCaps) {

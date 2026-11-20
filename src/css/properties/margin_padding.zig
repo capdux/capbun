@@ -549,7 +549,7 @@ pub inline fn logicalPropHelper(val: ?*Property, comptime logical: css.PropertyI
 
 pub inline fn logicalSideHelper(start: *OptProperty, end: *OptProperty, comptime start_name: []const u8, comptime end_name: []const u8, comptime shorthand_property: css.PropertyIdTag, comptime start_prop: css.PropertyIdTag, comptime end_prop: css.PropertyIdTag, logical_supported: bool, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) void {
             const shorthand_supported = (logical_supported and (if (comptime (shorthand_extra != null)) (!context.shouldCompileLogical(shorthand_extra.?.shorthand_feature)) else true));
-            if ((((((start.* != null) and ((if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(start.*.?)) else @as(PropertyIdTag, start.*.?)) == start_prop)) and (end.* != null)) and ((if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(end.*.?)) else @as(PropertyIdTag, end.*.?)) == end_prop)) and shorthand_supported)) {
+            if ((((((start.* != null) and (std.@"meta".activeTag(start.*.?) == start_prop)) and (end.* != null)) and (std.@"meta".activeTag(end.*.?) == end_prop)) and shorthand_supported)) {
                 const ValueType = shorthand_property.valueType();
                 var value: ValueType = undefined;
                 _ = &value;

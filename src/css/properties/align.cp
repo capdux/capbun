@@ -1354,7 +1354,7 @@ pub struct AlignHandler {
 
             if (prefix.none) {
                 if (comptime @TypeOf(prop_2009) != @TypeOf(null)) {
-                    const p2009 = comptime prop_2009.?;
+                    const p2009 = prop_2009;
                     // 2009 spec, implemented by webkit and firefox.
                     if (targets := context.targets.browsers) {
                         let prefixes_2009 = VendorPrefix{};
@@ -1384,7 +1384,7 @@ pub struct AlignHandler {
             // 2012 spec, implemented by microsoft.
             if (prefix.ms) {
                 if (comptime @TypeOf(prop_2012) != @TypeOf(null)) {
-                    const p2012 = comptime prop_2012.?;
+                    const p2012 = prop_2012;
                     const s = brk: {
                         const T = comptime p2012[0];
                         if (comptime T == css.css_properties.flex.BoxOrdinalGroup) break :brk @as(i32?, val);

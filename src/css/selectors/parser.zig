@@ -2647,9 +2647,7 @@ return .{ .err = e };
             return .{ .result = result.items };
     }
 };
-                const IdentSlice = &.{};
-                _ = Impl.SelectorImpl.Identifier;
-                const names = (switch (input.parseNestedBlock(IdentSlice, (&Closure{ .parser = parser }), Closure.parsefn)) {
+                const names = (switch (input.parseNestedBlock(&.{}, Impl.SelectorImpl.Identifier, (&Closure{ .parser = parser }), Closure.parsefn)) {
 .err => |e| {
 return .{ .err = e };
 },

@@ -389,7 +389,7 @@ pub enum MediaCondition {
 
     pub fn toCss(dest: *Printer): PrintErr!void {
         switch (_) {
-            .feature => |*f| {
+            .feature => |f| {
                 f.toCss(dest)?;
             },
             .not => |c| {
@@ -612,7 +612,7 @@ fn parseParenBlock(
             return QueryCondition.parseFeature(i);
         }
 
-        pub static fn tryParseFn(this: *@This(), i: *css.Parser): Result(QueryCondition) {
+        pub static fn tryParseFn(i: *css.Parser, this: *@This()): Result(QueryCondition) {
             return parseQueryCondition(QueryCondition, i, this.flags);
         }
     };

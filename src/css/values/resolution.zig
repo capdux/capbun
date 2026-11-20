@@ -125,7 +125,7 @@ const value = (if (@typeInfo(@TypeOf(dim.num)) == .@"enum") @intFromEnum(dim.num
             }
 },
 else => {
-return .{ .err = .{} };
+return .{ .err = undefined };
 },
 }
     }

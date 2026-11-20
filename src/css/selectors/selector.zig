@@ -245,7 +245,7 @@ else => .{ true, first_index },
                     const iter = compound;
                     var i: usize = 0;
                     _ = &i;
-                    if (((has_leading_nesting and should_compile_nesting) and isTypeSelector((if ((first_non_namespace < compound.len)) (&compound[@as(usize, @intCast(first_non_namespace))]) else null)))) {
+                    if (((has_leading_nesting and should_compile_nesting) and isTypeSelector((if ((first_non_namespace < compound.len)) compound[@as(usize, @intCast(first_non_namespace))] else null)))) {
                         const nesting = (&iter[@as(usize, @intCast(i))]);
                         i = (i + 1);
                         const local = (&iter[@as(usize, @intCast(i))]);
@@ -291,7 +291,7 @@ return serializeCombinator((&c), dest);
 },
 .attribute_in_no_namespace => |*v| {
 _ = try dest.writeChar(91);
-            _ = try css.css_values.ident.IdentFns.toCss((&v.local_name), dest);
+            _ = try css.css_values.ident.IdentFns.toCss(v.local_name, dest);
             _ = try v.operator.toCss(dest);
             if (dest.minify) {
                 var id = std.Io.Writer.Allocating.init(dest.allocator);
@@ -923,12 +923,12 @@ _ = try css.IdentFns.toCss(ns.prefix, dest);
 },
 .attribute_in_no_namespace_exists => |v| {
 _ = try dest.writeChar(91);
-            _ = try css.IdentFns.toCss((&v.local_name), dest);
+            _ = try css.IdentFns.toCss(v.local_name, dest);
             _ = try dest.writeChar(93);
 },
 .attribute_in_no_namespace => |v| {
 _ = try dest.writeChar(91);
-            _ = try css.IdentFns.toCss((&v.local_name), dest);
+            _ = try css.IdentFns.toCss(v.local_name, dest);
             _ = try v.operator.toCss(dest);
             _ = try css.CSSStringFns.toCss((&(if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value)), dest);
             switch (v.case_sensitivity) {

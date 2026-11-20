@@ -874,15 +874,25 @@ pub struct BorderHandler {
                 css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)
             else
                 css.generic.deepClone(@TypeOf(val), &val, f.ctx.allocator);
-            bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, cloned)));
+            const TargetType = std.@"meta".FieldType(css.Property, p);
+            const final_val: TargetType = if (comptime TargetType == @TypeOf(cloned))
+                cloned
+            else
+                TargetType{ width: cloned.width, style: cloned.style, color: cloned.color };
+            bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_val)));
         }
 
         inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: auto) {
             let val = _val;
+            const TargetType = std.@"meta".FieldType(css.Property, p);
             if (!bun.bits.contains(BorderProperty, f.self.flushed_properties, @field(BorderProperty, p))) {
                 const fbs = val.getFallbacks(f.ctx.allocator, f.ctx.targets);
                 for (css.generic.slice(@TypeOf(fbs), &fbs)) |fallback| {
-                    bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, fallback)));
+                    const final_fb: TargetType = if (comptime TargetType == @TypeOf(fallback))
+                        fallback
+                    else
+                        TargetType{ width: fallback.width, style: fallback.style, color: fallback.color };
+                    bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_fb)));
                 }
             }
             push(f, p, val);

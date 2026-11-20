@@ -651,12 +651,12 @@ pub struct TokenList {
                     },
                     .@"var" => |*v| {
                         if (*fallback := v.fallback) {
-                            fallback.* = fallback.getFallback(allocator, lowest_fallback);
+                            fallback = fallback.getFallback(allocator, lowest_fallback);
                         }
                     },
                     .env => |*v| {
                         if (*fallback := v.fallback) {
-                            fallback.* = fallback.getFallback(allocator, lowest_fallback);
+                            fallback = fallback.getFallback(allocator, lowest_fallback);
                         }
                     },
                     else => {},
@@ -1451,7 +1451,8 @@ pub struct UnparsedProperty {
     }
 
     fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -1499,7 +1500,8 @@ pub struct CustomProperty {
     }
 
     fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {

@@ -334,7 +334,7 @@ pub fn parse_declaration_impl(
     }.parsefn, {}).isOk();
     if (e := input.expectExhausted().asErr()) return { err: e };
 
-    if (comptime @TypeOf(composes_ctx) != void) {
+    if (comptime @TypeOf(composes_ctx) != void && @TypeOf(composes_ctx) != @TypeOf(.{})) {
         if (input.flags.css_modules && property == .composes) {
             switch (composes_ctx.composes_state) {
                 .disallow_entirely => {},
@@ -342,12 +342,13 @@ pub fn parse_declaration_impl(
                     composes_ctx.recordComposes(input.allocator(), &property.composes);
                 },
                 .disallow_nested => |info| {
+                    const empty_notes: [0]bun.logger.Data = [];
                     options.warnFmtWithNotes(
                         "\"composes\" is not allowed inside nested selectors",
                         {},
                         info.line,
                         info.column,
-                        &[0]bun.logger.Data{},
+                        &empty_notes,
                     );
                 },
                 .disallow_not_single_class => |info| {

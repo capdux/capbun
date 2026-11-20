@@ -64,7 +64,7 @@ pub struct BorderImage {
     };
 
     static fn parse(input: *css.Parser): css.Result(BorderImage) {
-        return parseWithCallback(input, {}, struct {
+        return parseWithCallback(input, undefined, struct {
             fn cb(_: void, _: *css.Parser): bool {
                 return false;
             }
@@ -331,8 +331,8 @@ pub enum BorderImageRepeatKeyword {
     pub const deepClone = css_impl.deepClone;
 
     fn isCompatible(browsers: css.targets.Browsers): bool {
-        if (_.* == .round) return css.compat.Feature.border_image_repeat_round.isCompatible(browsers);
-        if (_.* == .space) return css.compat.Feature.border_image_repeat_space.isCompatible(browsers);
+        if (_ == .round) return css.compat.Feature.border_image_repeat_round.isCompatible(browsers);
+        if (_ == .space) return css.compat.Feature.border_image_repeat_space.isCompatible(browsers);
         return true;
     }
 }

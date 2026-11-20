@@ -221,8 +221,8 @@ const PrefixClosure = struct {
             bun.handleOom(_.res.appendSlice(_.allocator, slice));
             const end = _.res.items.len;
             for (*c of _.res.items[start..end]) {
-                if (c.* == '.') {
-                    c.* = '-';
+                if (c == '.') {
+                    c = '-';
                 }
             }
             return;
@@ -241,8 +241,8 @@ const ToStringClosure = struct {
             bun.handleOom(_.res.appendSlice(_.allocator, slice));
             const end = _.res.items.len;
             for (*c of _.res.items[start..end]) {
-                if (c.* == '.') {
-                    c.* = '-';
+                if (c == '.') {
+                    c = '-';
                 }
             }
             return;
@@ -266,7 +266,7 @@ pub struct Pattern {
         comptime writefn: *const fn (@TypeOf(closure), []const u8, replace_dots: bool) void,
     ) {
         for (*segment of _.segments.slice()) {
-            switch (segment.*) {
+            switch (segment) {
                 .literal => |s| {
                     writefn(closure, s, false);
                 },

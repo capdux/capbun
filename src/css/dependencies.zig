@@ -78,7 +78,7 @@ pub const ImportDependency = struct {
     media: ?[]const u8,
     loc: SourceRange,
 
-pub fn new(allocator: Allocator, rule: *const css.css_rules.@"import".ImportRule, filename: []const u8, local_names: ?*const css.LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) ImportDependency {
+pub fn new(allocator: Allocator, rule: *const css.css_rules.import_rule.ImportRule, filename: []const u8, local_names: ?*const css.LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) ImportDependency {
             var supports: ?[]const u8 = null;
             _ = &supports;
             if (rule.supports) |s_val| {

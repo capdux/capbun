@@ -191,7 +191,7 @@ pub const Pattern = struct {
 pub fn write(self: Pattern, hash_: []const u8, path: []const u8, local: []const u8, closure: anytype, comptime writefn: *const fn (@TypeOf(closure), []const u8, bool) void) void {
             for (cp_mut_slice(&self.segments.slice())) |*segment| {
                 _ = &segment;
-                switch ((segment.*).*) {
+                switch ((segment.*)) {
 .literal => |s| {
 _ = writefn(closure, s, false);
 },
@@ -255,8 +255,8 @@ pub fn writefn(self: *@This(), slice: []const u8, replace_dots: bool) void {
                 const end = self.res.items.len;
                 for (cp_mut_slice(&self.res.items[start..end])) |*c| {
                     _ = &c;
-                    if (((c.*).* == 46)) {
-                        (c.*).* = 45;
+                    if (((c.*) == 46)) {
+                        (c.*) = 45;
                     }
                 }
                 return;
@@ -275,8 +275,8 @@ pub fn writefn(self: *@This(), slice: []const u8, replace_dots: bool) void {
                 const end = self.res.items.len;
                 for (cp_mut_slice(&self.res.items[start..end])) |*c| {
                     _ = &c;
-                    if (((c.*).* == 46)) {
-                        (c.*).* = 45;
+                    if (((c.*) == 46)) {
+                        (c.*) = 45;
                     }
                 }
                 return;

@@ -788,7 +788,7 @@ pub fn flushLegacyProperty(self: *AlignHandler, dest: *css.DeclarationList, cont
                 prefix = context.targets.prefixes(prefix, feature);
                 if (prefix.none) {
                     if (comptime (@TypeOf(prop_2009) != @TypeOf(null))) {
-                        const p2009 = (comptime prop_2009.?);
+                        const p2009 = prop_2009;
                         if (context.targets.browsers) |targets| {
                             _ = &targets;
                             var prefixes_2009 = VendorPrefix{  };
@@ -817,7 +817,7 @@ pub fn flushLegacyProperty(self: *AlignHandler, dest: *css.DeclarationList, cont
                 }
                 if (prefix.ms) {
                     if (comptime (@TypeOf(prop_2012) != @TypeOf(null))) {
-                        const p2012 = (comptime prop_2012.?);
+                        const p2012 = prop_2012;
                         const s = brk: {
                         const T = (comptime p2012[0]);
                         if (comptime (T == css.css_properties.flex.BoxOrdinalGroup)) {

@@ -293,12 +293,18 @@ pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
             return .{ .err = undefined };
 }));
             _ = &text;
-            const _tmp_v0 = consumeHex(text);
+            const _tmp_v0 = consumeHex((blk: {
+            break :blk text;
+
+}));
             var first_hex_value = cp_unpack_elem(_tmp_v0, 0);
             _ = &first_hex_value;
             var hex_digit_count = cp_unpack_elem(_tmp_v0, 1);
             _ = &hex_digit_count;
-            const question_marks = consumeQuestionMarks(text);
+            const question_marks = consumeQuestionMarks((blk: {
+            break :blk text;
+
+}));
             const consumed = (hex_digit_count + question_marks);
             if (((consumed == 0) or (consumed > 6))) {
                 return .{ .err = undefined };
@@ -497,7 +503,10 @@ _ = try dest.writeStr(self.string);
 
 pub fn deepClone(self: FontFormat, allocator: std.mem.Allocator) @This() {
             const s = self;
-            return css.implementDeepClone(@This(), s, allocator);
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk s;
+
+}), allocator);
     }
 };
 
@@ -550,7 +559,10 @@ _ = try dest.writeStr("local(");
 
 pub fn deepClone(self: Source, allocator: std.mem.Allocator) @This() {
             const s = self;
-            return css.implementDeepClone(@This(), (&s), allocator);
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
 };
 
@@ -618,7 +630,10 @@ pub fn toCss(self: UrlSource, dest: *Printer) PrintErr!void {
 
 pub fn deepClone(self: UrlSource, allocator: std.mem.Allocator) @This() {
             const s = self;
-            return css.implementDeepClone(@This(), (&s), allocator);
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
 };
 
@@ -650,7 +665,10 @@ pub fn toCss(self: FontFaceRule, dest: *Printer) PrintErr!void {
 
 pub fn deepClone(self: FontFaceRule, allocator: std.mem.Allocator) This {
             const s = self;
-            return css.implementDeepClone(@This(), (&s), allocator);
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
     }
     const This = @This();
 };

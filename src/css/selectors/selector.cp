@@ -717,7 +717,7 @@ pub const serialize = struct {
                 let i: usize = 0;
                 if (has_leading_nesting &&
                     should_compile_nesting &&
-                    isTypeSelector(if (first_non_namespace < compound.len) &compound[first_non_namespace] else null))
+                    isTypeSelector(if (first_non_namespace < compound.len) compound[first_non_namespace] else null))
                 {
                     // Swap nesting && type selector (e.g. &div -> div&).
                     // This ensures that the compiled selector is valid. e.g. (div.foo is valid, .foodiv is not).
@@ -785,7 +785,7 @@ pub const serialize = struct {
             .combinator c => return serializeCombinator(&c, dest),
             .attribute_in_no_namespace => |*v| {
                 try dest.writeChar('[');
-                try css.css_values.ident.IdentFns.toCss(&v.local_name, dest);
+                try css.css_values.ident.IdentFns.toCss(v.local_name, dest);
                 try v.operator.toCss(dest);
 
                 if (dest.minify) {
@@ -1409,12 +1409,12 @@ pub const tocss_servo = struct {
             },
             .attribute_in_no_namespace_exists v => {
                 try dest.writeChar('[');
-                try css.IdentFns.toCss(&v.local_name, dest);
+                try css.IdentFns.toCss(v.local_name, dest);
                 try dest.writeChar(']');
             },
             .attribute_in_no_namespace v => {
                 try dest.writeChar('[');
-                try css.IdentFns.toCss(&v.local_name, dest);
+                try css.IdentFns.toCss(v.local_name, dest);
                 try v.operator.toCss(dest);
                 try css.CSSStringFns.toCss(&v.value, dest);
                 switch (v.case_sensitivity) {

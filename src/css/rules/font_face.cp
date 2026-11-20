@@ -228,8 +228,8 @@ pub struct UnicodeRange {
         let text = if (_text.len > 0 && _text[0] == '+') _text[1..] else {
             return { err: undefined };
         };
-        let [first_hex_value, hex_digit_count] = consumeHex(&text);
-        const question_marks = consumeQuestionMarks(&text);
+        let [first_hex_value, hex_digit_count] = consumeHex(unsafe { &text });
+        const question_marks = consumeQuestionMarks(unsafe { &text });
         const consumed = hex_digit_count + question_marks;
 
         if (consumed == 0 || consumed > 6) {
@@ -419,7 +419,7 @@ pub union(enum) FontFormat {
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
         const s = _;
-        return css.implementDeepClone(@This(), &s, allocator);
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -469,7 +469,7 @@ pub union(enum) Source {
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
         const s = _;
-        return css.implementDeepClone(@This(), &s, allocator);
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -598,7 +598,7 @@ pub struct UrlSource {
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
         const s = _;
-        return css.implementDeepClone(@This(), &s, allocator);
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 
@@ -636,7 +636,7 @@ pub struct FontFaceRule {
 
     fn deepClone(allocator: std.mem.Allocator): This {
         const s = _;
-        return css.implementDeepClone(@This(), &s, allocator);
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 }
 

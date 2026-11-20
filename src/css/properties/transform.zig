@@ -190,7 +190,8 @@ pub fn toCssBase(self: TransformList, dest: *Printer) PrintErr!void {
     }
 
 pub fn deepClone(self: TransformList, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 
 pub fn eql(lhs: *const @This(), other: *const @This()) bool {
@@ -309,7 +310,8 @@ pub fn eql(lhs: *const @This(), other: *const @This()) bool {
     }
 
 pub fn deepClone(self: Rotate, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 };
 
@@ -326,7 +328,7 @@ pub fn handleProperty(self: *TransformHandler, property: *const css.Property, de
 pub fn individualProperty(handler: *TransformHandler, allocator: std.mem.Allocator, comptime field: []const u8, val: anytype) void {
             if (handler.transform) |*transform| {
                 _ = &transform;
-                _ = bun.handleOom((transform.*).*[0].v.append(allocator, val.toTransform(allocator)));
+                _ = bun.handleOom((transform.*)[0].v.append(allocator, val.toTransform(allocator)));
             } else {
                 @field(handler, field) = val.deepClone(allocator);
                 handler.has_any = true;

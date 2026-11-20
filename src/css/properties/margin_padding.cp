@@ -788,8 +788,8 @@ fn NewSizeHandler(
         ) {
             const shorthand_supported = logical_supported && if (comptime shorthand_extra != null) !context.shouldCompileLogical(shorthand_extra.?.shorthand_feature) else true;
 
-            if (start.* != null && @as(PropertyIdTag, start.*.?) == start_prop &&
-                end.* != null && @as(PropertyIdTag, end.*.?) == end_prop &&
+            if (start.* != null && std.@"meta".activeTag(start.*.?) == start_prop &&
+                end.* != null && std.@"meta".activeTag(end.*.?) == end_prop &&
                 shorthand_supported)
             {
                 const ValueType = shorthand_property.valueType();

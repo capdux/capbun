@@ -276,7 +276,7 @@ pub const ContainerCondition = union(enum) {
                 } };
             }
         };
-        return input.parseNestedBlock(ContainerCondition, {}, Fns.parseNestedBlockFn);
+        return input.parseNestedBlock(ContainerCondition, undefined, Fns.parseNestedBlockFn);
     }
 
     pub fn needsParens(

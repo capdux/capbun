@@ -61,7 +61,7 @@ pub const Resolution = union(enum) {
                     return { err: undefined };
                 }
             },
-            else => return { err: {} },
+            else => return { err: undefined },
         }
     }
 
