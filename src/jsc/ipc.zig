@@ -69,6 +69,31 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 pub const bun = @import("bun");
 pub const node_cluster_binding = @import("../runtime/node/node_cluster_binding.zig");
 pub const json_line_buf = @import("./JSONLineBuffer.zig");
+pub const IncomingBuffer = union(enum) {
+    advanced: bun.ByteList,
+    json: JSONLineBuffer,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+
+pub fn init(mode: Mode) IncomingBuffer {
+            return (switch (mode) {
+.advanced => IncomingBuffer{ .advanced = .{} },
+.json => IncomingBuffer{ .json = .{} },
+});
+    }
+
+pub fn deinit(self: *IncomingBuffer) void {
+            switch (self.*) {
+.advanced => |*b| {
+_ = b.deinit(bun.default_allocator);
+},
+.json => |*b| {
+_ = b.deinit();
+},
+}
+    }
+};
+
 pub const IsInternal = enum {
     internal,
     external,
@@ -103,6 +128,13 @@ pub const Mode = enum {
     pub const fromString = Map.get;
 };
 
+pub const IPCSerializationError = error{
+    SerializationFailed,
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+};
+
 pub const AdvancedIPCMessageType = enum(u8) {
     Version = 1,
     SerializedMessage = 2,
@@ -123,6 +155,90 @@ pub const JsonKind = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const CallbackList = union(enum) {
+    ack_nack: void,
+    none: void,
+    callback: jsc.JSValue,
+    callback_array: jsc.JSValue,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+
+pub fn init(callback: jsc.JSValue) CallbackList {
+            if (callback.isCallable()) {
+                _ = callback.protect();
+                return CallbackList{ .callback = callback };
+            }
+            return .none;
+    }
+
+pub fn push(self: *CallbackList, callback: jsc.JSValue, global: *jsc.JSGlobalObject) bun.JSError!void {
+            switch (self.*) {
+.ack_nack => {
+_ = unreachable;
+},
+.none => {
+_ = callback.protect();
+            self.* = CallbackList{ .callback = callback };
+},
+.callback => {
+const prev = self.callback;
+            const arr = try jsc.JSValue.createEmptyArray(global, 2);
+            _ = arr.protect();
+            _ = try arr.putIndex(global, 0, prev);
+            _ = try arr.putIndex(global, 1, callback);
+            _ = prev.unprotect();
+            self.* = CallbackList{ .callback_array = arr };
+},
+.callback_array => |arr| {
+_ = try arr.push(global, callback);
+},
+}
+    }
+
+pub fn callNextTick(self: *CallbackList, global: *jsc.JSGlobalObject) bun.JSError!void {
+            switch (self.*) {
+.ack_nack => {
+
+},
+.none => {
+
+},
+.callback => {
+_ = try self.callback.callNextTick(global, .{ JSValue.null });
+            _ = self.callback.unprotect();
+            self.* = .none;
+},
+.callback_array => {
+var iter = try self.callback_array.arrayIterator(global);
+            _ = &iter;
+            while (try iter.next()) |item| {
+                _ = try item.callNextTick(global, .{ JSValue.null });
+            }
+            _ = self.callback_array.unprotect();
+            self.* = .none;
+},
+}
+    }
+
+pub fn deinit(self: *CallbackList) void {
+            switch (self.*) {
+.ack_nack => {
+
+},
+.none => {
+
+},
+.callback => {
+_ = self.callback.unprotect();
+},
+.callback_array => {
+_ = self.callback_array.unprotect();
+},
+}
+            self.* = .none;
+    }
+};
+
 pub const FromEnum = enum {
     subprocess_exited,
     subprocess,
@@ -131,29 +247,6 @@ pub const FromEnum = enum {
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
-};
-
-pub const IncomingBuffer = union(enum) {
-    advanced: bun.ByteList,
-    json: JSONLineBuffer,
-
-pub fn init(mode: Mode) *IncomingBuffer {
-            return (switch (mode) {
-.advanced => IncomingBuffer{ .advanced = .{} },
-.json => IncomingBuffer{ .json = .{} },
-});
-    }
-
-pub fn deinit(self: *IncomingBuffer) void {
-            switch (self.*) {
-.advanced => |*b| {
-_ = b.deinit(bun.default_allocator);
-},
-.json => |*b| {
-_ = b.deinit();
-},
-}
-    }
 };
 
 pub const DecodedIPCMessage = union(enum) {
@@ -354,92 +447,10 @@ pub fn deinit(self: *Handle) void {
     }
 };
 
-pub const CallbackList = union(enum) {
-    ack_nack: void,
-    none: void,
-    callback: jsc.JSValue,
-    callback_array: jsc.JSValue,
-
-pub fn init(callback: jsc.JSValue) *CallbackList {
-            if (callback.isCallable()) {
-                _ = callback.protect();
-                return CallbackList{ .callback = callback };
-            }
-            return .none;
-    }
-
-pub fn push(self: *CallbackList, callback: jsc.JSValue, global: *jsc.JSGlobalObject) bun.JSError!void {
-            switch (self.*) {
-.ack_nack => {
-_ = unreachable;
-},
-.none => {
-_ = callback.protect();
-            self.* = CallbackList{ .callback = callback };
-},
-.callback => {
-const prev = self.callback;
-            const arr = try jsc.JSValue.createEmptyArray(global, 2);
-            _ = arr.protect();
-            _ = try arr.putIndex(global, 0, prev);
-            _ = try arr.putIndex(global, 1, callback);
-            _ = prev.unprotect();
-            self.* = CallbackList{ .callback_array = arr };
-},
-.callback_array => |arr| {
-_ = try arr.push(global, callback);
-},
-}
-    }
-
-pub fn callNextTick(self: *CallbackList, global: *jsc.JSGlobalObject) bun.JSError!void {
-            switch (self.*) {
-.ack_nack => {
-
-},
-.none => {
-
-},
-.callback => {
-_ = try self.callback.callNextTick(global, .{ JSValue.null });
-            _ = self.callback.unprotect();
-            self.* = .none;
-},
-.callback_array => {
-var iter = try self.callback_array.arrayIterator(global);
-            _ = &iter;
-            while (try iter.next()) |item| {
-                _ = try item.callNextTick(global, .{ JSValue.null });
-            }
-            _ = self.callback_array.unprotect();
-            self.* = .none;
-},
-}
-    }
-
-pub fn deinit(self: *CallbackList) void {
-            switch (self.*) {
-.ack_nack => {
-
-},
-.none => {
-
-},
-.callback => {
-_ = self.callback.unprotect();
-},
-.callback_array => {
-_ = self.callback_array.unprotect();
-},
-}
-            self.* = .none;
-    }
-};
-
 pub const SendHandle = struct {
     data: bun.io.StreamBuffer = .{},
     handle: ?Handle,
-    callbacks: *CallbackList,
+    callbacks: CallbackList,
 
 pub fn isAckNack(self: *SendHandle) bool {
             return (self.callbacks == .ack_nack);
@@ -496,7 +507,7 @@ pub const SendQueue = struct {
     has_written_version: if (Environment.allow_assert) u1 else u0 = 0,
     mode: Mode,
     internal_msg_queue: node_cluster_binding.InternalMsgHolder = .{},
-    incoming: *IncomingBuffer,
+    incoming: IncomingBuffer,
     incoming_fd: ?bun.FD = null,
     socket: IPCSocketUnion,
     owner: IPCSendQueueOwner,
@@ -552,28 +563,24 @@ pub fn closeSocket(self: *SendQueue, reason: CloseSocketReason, origin: CloseSoc
             _ = log("SendQueue#closeSocket {s}", .{ @tagName(origin) });
             switch (self.socket) {
 .open => |s| {
-switch (Environment.isWindows) {
-true => {
-const pipe: *uv.Pipe = s;
-            const stream: *uv.uv_stream_t = pipe.asStream();
-            _ = stream.readStop();
-            if (((self.windows.windows_write != null) and (origin != .deinit))) {
-                _ = log("SendQueue#closeSocket -> mark ready for close", .{});
-                self.windows.try_close_after_write = true;
+if (comptime Environment.isWindows) {
+                const pipe: *uv.Pipe = s;
+                const stream: *uv.uv_stream_t = pipe.asStream();
+                _ = stream.readStop();
+                if (((self.windows.windows_write != null) and (origin != .deinit))) {
+                    _ = log("SendQueue#closeSocket -> mark ready for close", .{});
+                    self.windows.try_close_after_write = true;
+                } else {
+                    _ = log("SendQueue#closeSocket -> close now", .{});
+                    _ = self._windowsClose();
+                }
             } else {
-                _ = log("SendQueue#closeSocket -> close now", .{});
-                _ = self._windowsClose();
-            }
-},
-false => {
-_ = s.close((switch (reason) {
+                _ = s.close((switch (reason) {
 .normal => .normal,
 .failure => .failure,
 }));
-            _ = self._socketClosed();
-},
-else => unreachable,
-}
+                _ = self._socketClosed();
+            }
 },
 else => {
 _ = self._socketClosed();
@@ -741,15 +748,11 @@ pub fn shouldRef(self: *SendQueue) bool {
     }
 
 pub fn updateRef(self: *SendQueue, global: *JSGlobalObject) void {
-            switch (self.shouldRef()) {
-true => {
-_ = self.keep_alive.ref(global.bunVM());
-},
-false => {
-_ = self.keep_alive.unref(global.bunVM());
-},
-else => unreachable,
-}
+            if (self.shouldRef()) {
+                _ = self.keep_alive.ref(global.bunVM());
+            } else {
+                _ = self.keep_alive.unref(global.bunVM());
+            }
     }
 
 pub fn continueSend(self: *SendQueue, global: *jsc.JSGlobalObject, reason: ContinueSendReason) void {
@@ -894,32 +897,28 @@ pub fn _write(self: *SendQueue, data: []const u8, fd: ?bun.FD) void {
                 return;
             }
             const socket = socket_opt.?;
-            switch (Environment.isWindows) {
-true => {
-if ((fd != null)) {
-            }
-            const pipe: *uv.Pipe = socket;
-            const write_len = @min(data.len, std.math.maxInt(i32));
-            const write_req_slice = bun.handleOom(bun.default_allocator.dupe(u8, data[0..write_len]));
-            const write_req = bun.new(WindowsWrite, WindowsWrite{ .owner = self, .write_slice = write_req_slice, .write_req = std.mem.zeroes(uv.uv_write_t), .write_buffer = uv.uv_buf_t.init(write_req_slice) });
-            _ = bun.assert((self.windows.windows_write == null));
-            self.windows.windows_write = write_req;
-            _ = pipe.ref();
-            if (self.windows.windows_write.?.write_req.write(pipe.asStream(), (&self.windows.windows_write.?.write_buffer), write_req, (&_windowsOnWriteComplete)).asErr()) |err| {
-                _ = &err;
-                _ = SendQueue._windowsOnWriteComplete(write_req, @enumFromInt((0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(err.errno)) else @as(c_int, err.errno)))));
-            }
-},
-false => {
-if (fd) |fd_unwrapped| {
-                _ = &fd_unwrapped;
-                _ = self._onWriteComplete(socket.writeFd(data, fd_unwrapped));
+            if (comptime Environment.isWindows) {
+                if ((fd != null)) {
+                }
+                const pipe: *uv.Pipe = socket;
+                const write_len = @min(data.len, std.math.maxInt(i32));
+                const write_req_slice = bun.handleOom(bun.default_allocator.dupe(u8, data[0..write_len]));
+                const write_req = bun.new(WindowsWrite, WindowsWrite{ .owner = self, .write_slice = write_req_slice, .write_req = std.mem.zeroes(uv.uv_write_t), .write_buffer = uv.uv_buf_t.init(write_req_slice) });
+                _ = bun.assert((self.windows.windows_write == null));
+                self.windows.windows_write = write_req;
+                _ = pipe.ref();
+                if (self.windows.windows_write.?.write_req.write(pipe.asStream(), (&self.windows.windows_write.?.write_buffer), write_req, (&_windowsOnWriteComplete)).asErr()) |err| {
+                    _ = &err;
+                    _ = SendQueue._windowsOnWriteComplete(write_req, @enumFromInt((0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(err.errno)) else @as(c_int, err.errno)))));
+                }
             } else {
-                _ = self._onWriteComplete(socket.write(data));
+                if (fd) |fd_unwrapped| {
+                    _ = &fd_unwrapped;
+                    _ = self._onWriteComplete(socket.writeFd(data, fd_unwrapped));
+                } else {
+                    _ = self._onWriteComplete(socket.write(data));
+                }
             }
-},
-else => unreachable,
-}
     }
 
 pub fn _windowsOnWriteComplete(write_req: *WindowsWrite, status: uv.ReturnCode) void {
@@ -1197,10 +1196,6 @@ pub const IPCDecodeError = (error{
     NotEnoughBytes,
     /// Format could not be recognized. Report an error and close the socket.
     InvalidFormat,
-} or bun.JSError);
-pub const IPCSerializationError = (error{
-    /// Value could not be serialized.
-    SerializationFailed,
 } or bun.JSError);
 pub const AdvancedVersionPacket = extern struct {
     type: AdvancedIPCMessageType align(1) = .Version,

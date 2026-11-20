@@ -118,7 +118,7 @@ pub struct SubprocSpawnArgs {
             env_array: .empty,
             cwd: event_loop.topLevelDir(),
             stdio: [
-                { ignore: {} },
+                .ignore,
                 { pipe: {} },
                 .inherit,
             ],
@@ -130,7 +130,7 @@ pub struct SubprocSpawnArgs {
 
         if (comptime is_sync) {
             out.stdio = [
-                { ignore: {} },
+                .ignore,
                 { pipe: {} },
                 { pipe: {} },
             ];
@@ -384,9 +384,7 @@ pub struct ShellSubprocess {
                 },
                 else => {},
             }
-            _.* = {
-                ignore: {},
-            };
+            _.* = .ignore;
         }
         fn onReady(_: *Writable, _: jsc.WebCore.Blob.SizeType?, _: jsc.WebCore.Blob.SizeType?) void {}
         fn onStart(_: *Writable) void {}
@@ -501,7 +499,7 @@ pub struct ShellSubprocess {
                 .memfd, .ignore => .js_undefined,
                 .buffer, .inherit => .js_undefined,
                 .pipe => |pipe| {
-                    _.* = { ignore: {} };
+                    _.* = .ignore;
                     if (subprocess.process.hasExited() && !subprocess.flags.has_stdin_destructor_called) {
                         pipe.onAttachedProcessExit(&subprocess.process.status);
                         return pipe.toJS(globalThis);
@@ -529,7 +527,7 @@ pub struct ShellSubprocess {
                 .pipe => |pipe| {
                     pipe.deref();
 
-                    _.* = { ignore: {} };
+                    _.* = .ignore;
                 },
                 .buffer => {
                     _.buffer.updateRef(false);
@@ -537,7 +535,7 @@ pub struct ShellSubprocess {
                 },
                 .memfd => |fd| {
                     fd.close();
-                    _.* = { ignore: {} };
+                    _.* = .ignore;
                 },
                 .ignore => {},
                 .fd, .inherit => {},
@@ -551,7 +549,7 @@ pub struct ShellSubprocess {
                 },
                 inline .memfd, .fd => |fd| {
                     fd.close();
-                    _.* = { ignore: {} };
+                    _.* = .ignore;
                 },
                 .buffer => {
                     _.buffer.close();
@@ -669,13 +667,13 @@ pub struct ShellSubprocess {
         fn close(*_) {
             switch (_.*) {
                 .memfd => |fd| {
-                    _.* = { closed: {} };
+                    _.* = .closed;
                     fd.close();
                 },
                 // .fd is borrowed from the shell's IOWriter (see IO.OutKind.to_subproc_stdio) or
                 // a CowFd redirect; the owner closes it.
                 .fd => {
-                    _.* = { closed: {} };
+                    _.* = .closed;
                 },
                 .pipe => {
                     _.pipe.close();
@@ -687,17 +685,17 @@ pub struct ShellSubprocess {
         fn finalize(*_) {
             switch (_.*) {
                 .memfd => |fd| {
-                    _.* = { closed: {} };
+                    _.* = .closed;
                     fd.close();
                 },
                 // .fd is borrowed from the shell's IOWriter (see IO.OutKind.to_subproc_stdio) or
                 // a CowFd redirect; the owner closes it.
                 .fd => {
-                    _.* = { closed: {} };
+                    _.* = .closed;
                 },
                 .pipe => |pipe| {
                     defer pipe.detach();
-                    _.* = { closed: {} };
+                    _.* = .closed;
                 },
                 else => {},
             }
@@ -811,13 +809,13 @@ pub struct ShellSubprocess {
                     .pipe => |pipe| {
                         pipe.signal.clear();
                         pipe.deref();
-                        _.stdin = { ignore: {} };
+                        _.stdin = .ignore;
                     },
                     .buffer => {
                         _.onStaticPipeWriterDone();
                         _.stdin.buffer.source.detach();
                         _.stdin.buffer.deref();
-                        _.stdin = { ignore: {} };
+                        _.stdin = .ignore;
                     },
                     else => {},
                 }
@@ -830,7 +828,7 @@ pub struct ShellSubprocess {
                             out.* = { buffer: pipe.state.done };
                             pipe.state = { done: [] };
                         } else {
-                            out.* = { ignore: {} };
+                            out.* = .ignore;
                         }
                         pipe.deref();
                     },
@@ -845,7 +843,7 @@ pub struct ShellSubprocess {
                             out.* = { buffer: pipe.state.done };
                             pipe.state = { done: [] };
                         } else {
-                            out.* = { ignore: {} };
+                            out.* = .ignore;
                         }
                         pipe.deref();
                     },
@@ -1288,9 +1286,10 @@ pub const PipeReader = struct {
             }
             const e: jsc.SystemError? = brk: {
                 if (_.state != .err) break :brk null;
-                if (*e := _.state.err) {
-                    e.ref();
-                    break :brk e.*;
+                if (_.state.err != null) {
+                    let e_ptr = &_.state.err.?;
+                    e_ptr.ref();
+                    break :brk e_ptr.*;
                 }
                 break :brk null;
             };

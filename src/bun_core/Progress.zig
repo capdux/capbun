@@ -419,14 +419,12 @@ pub fn unlock_stderr(self: *Progress) void {
 }
 
 pub fn bufWrite(self: *Progress, end: *usize, comptime format: []const u8, args: anytype) void {
-        const written = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint(self.output_buffer[end.*..], format, args)) catch |e| { _ = &e; switch (e) {
-.NoSpaceLeft => {
-self.columns_written = (self.columns_written + (self.output_buffer.len - end.*));
-        end.* = self.output_buffer.len;
-        const suffix: []const u8 = "... ";
-        _ = @memcpy(self.output_buffer[(self.output_buffer.len - suffix.len)..], suffix);
-},
-}
+        const written = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint(self.output_buffer[end.*..], format, args)) catch |e| { _ = &e; if ((e == error.NoSpaceLeft)) {
+            self.columns_written = (self.columns_written + (self.output_buffer.len - end.*));
+            end.* = self.output_buffer.len;
+            const suffix: []const u8 = "... ";
+            _ = @memcpy(self.output_buffer[(self.output_buffer.len - suffix.len)..], suffix);
+        }
         return; }); });
         const amt = written.len;
         end.* = (end.* + amt);

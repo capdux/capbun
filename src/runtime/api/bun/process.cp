@@ -263,7 +263,7 @@ pub struct Process {
             pidfd: posix.pidfd ?? 0,
             event_loop: jsc.EventLoopHandle.init(event_loop),
             sync: sync_,
-            poller: { detached: {} },
+            poller: .detached,
             status: brk: {
                 if (posix.has_exited) {
                     let rusage = std.mem.zeroes(Rusage);
@@ -325,7 +325,7 @@ pub struct Process {
         }
         if (_.poller == .waiter_thread) {
             _.poller.waiter_thread.unref(_.event_loop);
-            _.poller = { detached: {} };
+            _.poller = .detached;
         }
         _.onWaitPid(waitpid_result, rusage);
         _.deref();
@@ -621,7 +621,7 @@ pub const Status = union(enum) {
     @"err": bun.sys.Error,
 
     pub fn isOK(): bool {
-        return _.* == .exited && _.exited.code == 0;
+        return _ == .exited && _.exited.code == 0;
     }
 
     pub const Exited = struct {
@@ -1037,7 +1037,7 @@ struct WaiterThreadPosix {
 
                 // Consume the pending eventfd
                 let buf: [8]u8 = undefined;
-                if (bun.sys.read(inst.eventfd, &buf).unwrap() catch 0 > 0) {
+                if ((bun.sys.read(inst.eventfd, &buf).unwrap() catch 0) > 0) {
                     continue :outer;
                 }
 

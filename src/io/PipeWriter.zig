@@ -73,13 +73,6 @@ pub const WriteStatus = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
-pub const WriteResult = union(enum) {
-    done: usize,
-    wrote: usize,
-    pending: usize,
-    err: bun.sys.Error,
-};
-
 const Source = @import("./source.zig").Source;
 const FileType = @import("./pipes.zig").FileType;
 const PollOrFd = @import("./pipes.zig").PollOrFd;
@@ -89,6 +82,12 @@ const OOM = bun.OOM;
 const jsc = bun.jsc;
 const uv = bun.windows.libuv;
 const log = bun.Output.scoped(.PipeWriter, .hidden);
+pub const WriteResult = union(enum) {
+    done: usize,
+    wrote: usize,
+    pending: usize,
+    err: bun.sys.Error,
+};
 pub const StreamBuffer = struct {
     list: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(bun.default_allocator),
     cursor: usize = 0,
@@ -223,7 +222,7 @@ pub fn deinit(self: *@This()) void {
 pub const BufferedWriter = (if (bun.Environment.isPosix) PosixBufferedWriter else WindowsBufferedWriter);
 pub const StreamingWriter = (if (bun.Environment.isPosix) PosixStreamingWriter else WindowsStreamingWriter);
 
-pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bun.FD, comptime getBuffer: *const fn (*This) []const u8, comptime onWrite: *const fn (*This, usize, WriteStatus) void, comptime registerPoll: anytype, comptime onError: *const fn (*This, bun.sys.Error) void, comptime _unused: *const fn (*This) void, comptime getFileType: *const fn (*This) FileType) type {
+pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bun.FD, comptime getBuffer: *const fn (*This) []const u8, comptime onWrite: *const fn (*This, usize, WriteStatus) void, comptime registerPoll: ?*const fn (*This) void, comptime onError: *const fn (*This, bun.sys.Error) void, comptime _unused: *const fn (*This) void, comptime getFileType: *const fn (*This) FileType) type {
         _ = &_unused;
         return struct {
         fn tryWrite(this: *This, force_sync: bool, buf_: []const u8) WriteResult {
@@ -232,7 +231,7 @@ pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bu
             };
         }
 
-        fn tryWriteWithWriteFn(this: *This, buf: []const u8, comptime write_fn: *const *const fn(bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
+        fn tryWriteWithWriteFn(this: *This, buf: []const u8, comptime write_fn: *const fn(bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
             const fd = getFd(this);
 
             var offset: usize = 0;
@@ -259,7 +258,7 @@ pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bu
             return .{ .wrote = offset };
         }
 
-        fn writeToFileType(comptime file_type: FileType) *const (*const fn(bun.FD, []const u8) bun.sys.Maybe(usize)) {
+        fn writeToFileType(comptime file_type: FileType) *const fn(bun.FD, []const u8) bun.sys.Maybe(usize) {
             comptime return switch (file_type) {
                 .nonblocking_pipe, .file => &bun.sys.write,
                 .pipe => &writeToBlockingPipe,
@@ -646,7 +645,7 @@ _ = onError(self.parent, err);
 }
     }
 
-pub fn writeUTF16(self: *@This(), buf: []const u16) *WriteResult {
+pub fn writeUTF16(self: *@This(), buf: []const u16) WriteResult {
             if ((self.is_done or self.closed_without_reporting)) {
                 return .{ .done = 0 };
             }
@@ -656,7 +655,7 @@ pub fn writeUTF16(self: *@This(), buf: []const u16) *WriteResult {
             return self.maybeWriteNewlyBufferedData(buf_len);
     }
 
-pub fn writeLatin1(self: *@This(), buf: []const u8) *WriteResult {
+pub fn writeLatin1(self: *@This(), buf: []const u8) WriteResult {
             if ((self.is_done or self.closed_without_reporting)) {
                 return .{ .done = 0 };
             }
@@ -670,7 +669,7 @@ pub fn writeLatin1(self: *@This(), buf: []const u8) *WriteResult {
             return self.maybeWriteNewlyBufferedData(buf_len);
     }
 
-pub fn maybeWriteNewlyBufferedData(self: *@This(), buf_len: usize) *WriteResult {
+pub fn maybeWriteNewlyBufferedData(self: *@This(), buf_len: usize) WriteResult {
             _ = bun.assert((!self.is_done));
             if (self.shouldBuffer(0)) {
                 _ = onWrite(self.parent, buf_len, .drained);
@@ -680,7 +679,7 @@ pub fn maybeWriteNewlyBufferedData(self: *@This(), buf_len: usize) *WriteResult 
             return self.tryWriteNewlyBufferedData(self.outgoing.slice());
     }
 
-pub fn tryWriteNewlyBufferedData(self: *@This(), buf: []const u8) *WriteResult {
+pub fn tryWriteNewlyBufferedData(self: *@This(), buf: []const u8) WriteResult {
             _ = bun.assert((!self.is_done));
             const tryWriteFn = internals.tryWrite;
             const rc = tryWriteFn(self, self.force_sync, buf);
@@ -712,7 +711,7 @@ return r;
             return rc;
     }
 
-pub fn write(self: *@This(), buf: []const u8) *WriteResult {
+pub fn write(self: *@This(), buf: []const u8) WriteResult {
             if ((self.is_done or self.closed_without_reporting)) {
                 return .{ .done = 0 };
             }
@@ -756,7 +755,7 @@ else => {
             return rc;
     }
 
-pub fn flush(self: *@This()) *WriteResult {
+pub fn flush(self: *@This()) WriteResult {
             if ((self.closed_without_reporting or self.is_done)) {
                 return .{ .done = 0 };
             }
@@ -1189,7 +1188,7 @@ pub fn WindowsStreamingWriter(comptime Parent: type, comptime function_table: an
     write_buffer: uv.uv_buf_t = uv.uv_buf_t.init(""),
     outgoing: StreamBuffer = .{},
     current_payload: StreamBuffer = .{},
-    last_write_result: *WriteResult = .{ .wrote = 0 },
+    last_write_result: WriteResult = .{ .wrote = 0 },
     closed_without_reporting: bool = false,
 
 pub fn memoryCost(self: *const @This()) usize {
@@ -1346,7 +1345,7 @@ pub fn deinit(self: *@This()) void {
             _ = self.current_payload.deinit();
     }
 
-pub fn writeInternal(self: *@This(), buffer: anytype, comptime writeFn: anytype) *WriteResult {
+pub fn writeInternal(self: *@This(), buffer: anytype, comptime writeFn: anytype) WriteResult {
             if (self.is_done) {
                 return .{ .done = 0 };
             }
@@ -1386,19 +1385,19 @@ remain = remain[wrote..];
             return self.last_write_result;
     }
 
-pub fn writeUTF16(self: *@This(), buf: []const u16) *WriteResult {
+pub fn writeUTF16(self: *@This(), buf: []const u16) WriteResult {
             return writeInternal(self, buf, (&StreamBuffer.writeUTF16));
     }
 
-pub fn writeLatin1(self: *@This(), buffer: []const u8) *WriteResult {
+pub fn writeLatin1(self: *@This(), buffer: []const u8) WriteResult {
             return writeInternal(self, buffer, (&StreamBuffer.writeLatin1));
     }
 
-pub fn write(self: *@This(), buffer: []const u8) *WriteResult {
+pub fn write(self: *@This(), buffer: []const u8) WriteResult {
             return writeInternal(self, buffer, (&StreamBuffer.write));
     }
 
-pub fn flush(self: *@This()) *WriteResult {
+pub fn flush(self: *@This()) WriteResult {
             if (self.is_done) {
                 return .{ .done = 0 };
             }

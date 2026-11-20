@@ -32,7 +32,8 @@ pub struct ScanOpts {
 
             // If its absolute return as is
             if (ResolvePath.Platform.auto.isAbsolute(cwd_utf8.slice())) {
-                break :cwd_str ((cwd_utf8.cloneIfBorrowed(allocator))?).slice();
+                const cloned = cwd_utf8.cloneIfBorrowed(allocator)?;
+                break :cwd_str cloned.slice();
             }
 
             defer cwd_utf8.deinit();
@@ -326,7 +327,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         };
         if (globWalkerOpt == null) {
             arena_alloc.deinit();
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         const globWalker = globWalkerOpt.?;
 
@@ -356,7 +357,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         };
         if (globWalkerOpt == null) {
             arena_alloc.deinit();
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         let globWalker = globWalkerOpt.?;
         defer {

@@ -407,13 +407,11 @@ export @root struct Progress {
 
     fn bufWrite(*_, end: *usize, comptime format: []const u8, args: auto) {
         const written = std.fmt.bufPrint(_.output_buffer[end.*..], format, args) catch e => {
-            switch (e) {
-                .NoSpaceLeft => {
-                    _.columns_written += _.output_buffer.len - end.*;
-                    end.* = _.output_buffer.len;
-                    const suffix = "... ";
-                    @memcpy(_.output_buffer[_.output_buffer.len - suffix.len ..], suffix);
-                },
+            if (e == error.NoSpaceLeft) {
+                _.columns_written += _.output_buffer.len - end.*;
+                end.* = _.output_buffer.len;
+                const suffix = "... ";
+                @memcpy(_.output_buffer[_.output_buffer.len - suffix.len ..], suffix);
             }
             return;
         };

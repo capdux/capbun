@@ -2904,8 +2904,8 @@ pub struct BundleV2 {
             bundle.graph.ast.items(.import_records)[source_index.get()] = result.ast.import_records;
 
             parse_result.value = {
-                e: {
-                    e: e,
+                @"err": {
+                    @"err": e,
                     step: .resolve,
                     log: Logger.Log.init(bun.default_allocator),
                     source_index: source_index,
@@ -2956,7 +2956,7 @@ pub struct BundleV2 {
             estimated_resolve_queue_count += @as(usize, @intFromBool(!(import_record.flags.is_internal || import_record.flags.is_unused || import_record.source_index.isValid())));
         }
         let resolve_queue = ResolveQueue.init(_.allocator());
-        bun.handleOom(resolve_queue.ensureTotalCapacity(i32(estimated_resolve_queue_count)));
+        bun.handleOom(resolve_queue.ensureTotalCapacity(@intCast(estimated_resolve_queue_count)));
 
         let last_error: anyerror? = null;
 

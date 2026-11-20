@@ -237,11 +237,11 @@ enum DrainMicrotasksResult: u8 {
         } else {
             if (delta > 0) {
                 const d: u32 = @intCast(delta);
-                loop.num_polls += d;
+                loop.num_polls += @as(i32, @intCast(delta));
                 loop.active = std.math.add(u32, loop.active, d) catch std.math.maxInt(u32);
             } else {
                 const d: u32 = @intCast(-delta);
-                loop.num_polls -= d;
+                loop.num_polls -= @as(i32, @intCast(-delta));
                 loop.active = std.math.sub(u32, loop.active, d) catch 0;
             }
         }

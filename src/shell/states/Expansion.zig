@@ -138,7 +138,9 @@ if (matched_path) |path| {
 
 pub fn runFromMainThread(self: *ShellGlobTask) void {
             _ = debug("runFromJS", .{});
-            _ = self.expansion.onGlobWalkDone(self).run();
+            var y = self.expansion.onGlobWalkDone(self);
+            _ = &y;
+            _ = y.run();
             _ = self.ref.unref(self.event_loop);
     }
 
@@ -453,27 +455,24 @@ pub fn postSubshellExpansion(self: *Expansion, stdout_: []u8) void {
         _ = &a;
         var b: usize = 1;
         _ = &b;
-        {
-            var i: i32 = 0;
-            _ = &i;
-            const __end_4 = stdout.len;
-            while (i < __end_4) : (i += 1) {
-                const c = stdout[@as(usize, @intCast(i))];
-                if (prev_whitespace) {
-                    if ((c != 32)) {
-                        a = i;
-                        b = (i + 1);
-                        prev_whitespace = false;
-                    }
-                    continue;
+        var i: usize = 0;
+        _ = &i;
+        while ((i < stdout.len)) : (i = (i + 1)) {
+            const c = stdout[@as(usize, @intCast(i))];
+            if (prev_whitespace) {
+                if ((c != 32)) {
+                    a = i;
+                    b = (i + 1);
+                    prev_whitespace = false;
                 }
-                b = (i + 1);
-                if ((c == 32)) {
-                    b = i;
-                    prev_whitespace = true;
-                    _ = bun.handleOom(self.current_out.appendSlice(stdout[a..b]));
-                    _ = self.pushCurrentOut();
-                }
+                continue;
+            }
+            b = (i + 1);
+            if ((c == 32)) {
+                b = i;
+                prev_whitespace = true;
+                _ = bun.handleOom(self.current_out.appendSlice(stdout[a..b]));
+                _ = self.pushCurrentOut();
             }
         }
         _ = bun.handleOom(self.current_out.appendSlice(stdout[a..b]));
@@ -512,14 +511,11 @@ pub fn convertNewlinesToSpaces(stdout_: []u8) []u8 {
 }
 
 pub fn convertNewlinesToSpacesSlow(i: usize, stdout: []u8) void {
-        {
-            var j: i32 = i;
-            _ = &j;
-            const __end_5 = stdout.len;
-            while (j < __end_5) : (j += 1) {
-                if ((stdout[@as(usize, @intCast(j))] == 10)) {
-                    stdout[cp_cast_int(usize, j)] = 32;
-                }
+        var j: usize = i;
+        _ = &j;
+        while ((j < stdout.len)) : (j = (j + 1)) {
+            if ((stdout[@as(usize, @intCast(j))] == 10)) {
+                stdout[cp_cast_int(usize, j)] = 32;
             }
         }
 }
@@ -556,9 +552,9 @@ pub fn onGlobWalkDone(self: *Expansion, task: *ShellGlobTask) Yield {
         if (comptime bun.Environment.allow_assert) {
             _ = assert((self.child_state == .glob));
         }
-        if (task.err) |*e| {
+        if (task.err) |e| {
             _ = &e;
-            switch ((e.*).*) {
+            switch (e) {
 .syscall => {
 _ = self.base.throw((&bun.shell.ShellErr.newSys(task.err.?.syscall)));
 },

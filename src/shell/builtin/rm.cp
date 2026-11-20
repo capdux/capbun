@@ -162,7 +162,8 @@ pub struct ShellDirTask {
 
     pub fn runFromMainThread(*_) {
         debug("DirTask(0x{x}, path={s}) runFromMainThread", .{ @intFromPtr(_), _.path });
-        _.task_manager.rm.writeVerbose(_).run();
+        let y = _.task_manager.rm.writeVerbose(_);
+        y.run();
     }
 
     pub fn runFromMainThreadMini(*_, _: *void) {
@@ -570,16 +571,16 @@ pub struct ShellRmTask {
         const flags = bun.O.DIRECTORY | bun.O.RDONLY;
         const fd = switch (ShellSyscall.openat(dirfd, path, flags, 0)) {
             .result => |fd| fd,
-            .err => |e| {
-                switch (e.getErrno()) {
+            .err => |sys_err| {
+                switch (sys_err.getErrno()) {
                     .NOENT => {
                         if (_.opts.force) return _.verboseDeleted(dir_task, path);
-                        return { err: _.errorWithPath(e, path) };
+                        return { err: _.errorWithPath(sys_err, path) };
                     },
                     .NOTDIR => {
                         return _.removeEntryFile(dir_task, dir_task.path, is_absolute, buf, &DummyRemoveFile.dummy);
                     },
-                    else => return { err: _.errorWithPath(e, path) },
+                    else => return { err: _.errorWithPath(sys_err, path) },
                 }
             },
         };
@@ -756,7 +757,7 @@ pub struct ShellRmTask {
                                                 .NOTEMPTY => {
                                                     return RmHandler.onDirNotEmpty(VTable, vtable, parent_dir_task, path, is_absolute, buf);
                                                 },
-                                                .NOTDIR => return { err: _.errorWithPath(e, path) },
+                                                .NOTDIR => return { err: _.errorWithPath(sys_err, path) },
                                                 else => return { err: _.errorWithPath(e2, path) },
                                             }
                                         },
@@ -768,9 +769,9 @@ pub struct ShellRmTask {
                             else => {},
                         }
 
-                        return { err: _.errorWithPath(e, path) };
+                        return { err: _.errorWithPath(sys_err, path) };
                     },
-                    else => return { err: _.errorWithPath(e, path) },
+                    else => return { err: _.errorWithPath(sys_err, path) },
                 }
             },
         }
@@ -1112,7 +1113,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
 
     pub fn onShellRmTaskDone(*_, task: *ShellRmTask) {
         defer task.decrPendingAndMaybeDeinit();
-        let exec = &*_.state.exec;
+        let exec = &_.state.exec;
         let tasks_done: usize = 0;
         switch (exec.state) {
             .idle => @panic("Invalid state"),

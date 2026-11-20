@@ -83,7 +83,8 @@ pub fn parseCWD(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, cwdVa
             const cwd_str: []const u8 = cwd_str: {
             const cwd_utf8 = cwd_string.toUTF8WithoutRef(allocator);
             if (ResolvePath.Platform.auto.isAbsolute(cwd_utf8.slice())) {
-                break :cwd_str try cwd_utf8.cloneIfBorrowed(allocator).slice();
+                const cloned = try cwd_utf8.cloneIfBorrowed(allocator);
+                break :cwd_str cloned.slice();
             }
             defer {
             _ = cwd_utf8.deinit();
@@ -325,7 +326,7 @@ pub fn __scan(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFr
         return e; }); });
         if ((globWalkerOpt == null)) {
             _ = arena_alloc.deinit();
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         const globWalker = globWalkerOpt.?;
         _ = incrPendingActivityFlag((&client.has_pending_activity));
@@ -358,7 +359,7 @@ pub fn __scanSync(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.Ca
         return e; }); });
         if ((globWalkerOpt == null)) {
             _ = arena_alloc.deinit();
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         var globWalker = globWalkerOpt.?;
         _ = &globWalker;

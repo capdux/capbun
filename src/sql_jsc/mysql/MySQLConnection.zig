@@ -111,14 +111,6 @@ pub const CachingSha2State = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
-pub const AuthState = union {
-    pending: void,
-    native_password: void,
-    caching_sha2: CachingSha2State,
-    ok: void,
-    pub const CachingSha2 = CachingSha2State;
-};
-
 pub const Writer = struct {
     connection: *MySQLConnection,
 
@@ -215,7 +207,7 @@ statements: PreparedStatementsMap = PreparedStatementsMap{  },
 @"#character_set": CharacterSet = CharacterSet.default,
 @"#status_flags": StatusFlags = StatusFlags{  },
 @"#auth_plugin": ?AuthMethod = null,
-@"#auth_state": *AuthState = AuthState{ .pending = .{} },
+@"#auth_state": AuthState = .pending,
 @"#auth_data": ManagedByteList = ManagedByteList.init(bun.default_allocator),
 @"#database": []const u8 = "",
 @"#user": []const u8 = "",
@@ -372,7 +364,11 @@ pub fn upgradeToTLS(self: *MySQLConnection) FlushQueueError!void {
         if ((self.@"#socket" == .SocketTCP)) {
             const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
             const tls_group = vm.rareData().mysqlGroup(vm, true);
-            const new_socket = ((self.@"#socket".SocketTCP.socket.connected.adoptTLS(tls_group, .mysql_tls, self.@"#secure".?, self.@"#tls_config".server_name, @sizeOf(*JSMySQLConnection), @sizeOf(*JSMySQLConnection))) orelse { return .{ .ok = error.AuthenticationFailed }; });
+            const new_socket_opt = self.@"#socket".SocketTCP.socket.connected.adoptTLS(tls_group, .mysql_tls, self.@"#secure".?, self.@"#tls_config".server_name, @sizeOf(*JSMySQLConnection), @sizeOf(*JSMySQLConnection));
+            if ((new_socket_opt == null)) {
+                return error.AuthenticationFailed;
+            }
+            const new_socket = new_socket_opt.?;
             {
                 (new_socket.ext(*JSMySQLConnection)).* = self.getJSConnection();
             }
@@ -490,7 +486,11 @@ pub fn readAndProcessData(self: *MySQLConnection, data: []const u8) anyerror!voi
 pub fn processPackets(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
         while (true) {
             _ = reader.markMessageStart();
-            const header = ((PacketHeader.decode(reader.peek())) orelse { return .{ .ok = AnyMySQLError.Error.ShortRead }; });
+            const header_opt = PacketHeader.decode(reader.peek());
+            if ((header_opt == null)) {
+                return AnyMySQLError.Error.ShortRead;
+            }
+            const header = header_opt.?;
             const header_length = header.length;
             const packet_length: usize = (header_length + PacketHeader.size);
             _ = debug("sequence_id: {d} header: {d}", .{ self.@"#sequence_id", header_length });
@@ -1119,3 +1119,10 @@ pub const PreparedStatementsMapGetOrPutResult = PreparedStatementsMap.GetOrPutRe
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const debug = bun.Output.scoped(.MySQLConnection, .visible);
 const empty_columns: [0]ColumnDefinition41 = &.{};
+pub const AuthState = union(enum) {
+    pending: void,
+    native_password: void,
+    caching_sha2: CachingSha2State,
+    ok: void,
+    pub const CachingSha2 = CachingSha2State;
+};

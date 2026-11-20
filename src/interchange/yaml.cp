@@ -1952,7 +1952,7 @@ pub union(enum) ParserNodeScalar<const enc: Encoding> {
     string: String,
 
     pub fn toExpr(pos: Pos, input: []const enc.unit()): Expr {
-        return switch (_.*) {
+        return switch (_) {
             .null => .init(E.Null, {}, pos.loc()),
             .boolean => |value| .init(E.Boolean, { value: value }, pos.loc()),
             .number => |value| .init(E.Number, { value: value }, pos.loc()),
@@ -2237,7 +2237,8 @@ pub struct Parser<const enc: Encoding> {
             _.trySkipChar('!')?;
             _.trySkipSWhite()?;
 
-            _.tag_handles.put(handle.slice(_.input), {})?;
+            const unit_val: void = undefined;
+            _.tag_handles.put(handle.slice(_.input), unit_val)?;
 
             const prefix = _.parseDirectiveTagPrefix()?;
             _.trySkipToNewLine()?;
@@ -2466,7 +2467,7 @@ pub struct Parser<const enc: Encoding> {
 
         let seq: std.array_list.Managed(Expr) = .init(_.allocator);
 
-        let prev_line: Line = .@"from"(0);
+        let prev_line = Line.@"from"(0);
 
         while (_.token.data == .sequence_entry && _.token.indent == sequence_indent) {
             const entry_line = _.token.line;
@@ -3165,7 +3166,8 @@ pub struct Parser<const enc: Encoding> {
         }
     }
 
-    const ScanPlainScalarError = OOM || error{
+    const ScanPlainScalarError = error{
+        OutOfMemory,
         UnexpectedCharacter,
         // ScalarTypeMismatch,
     };
@@ -5165,7 +5167,7 @@ pub struct Parser<const enc: Encoding> {
         _.skipNsUriChars();
     }
 
-    fn stringRange(): String.Range.Start {
+    fn stringRange(*_): String.Range.Start {
         return {
             off: _.pos,
             parser: _,

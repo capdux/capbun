@@ -148,7 +148,7 @@ opts: Opts = .{},
 state: State = .idle,
 
 pub fn format(self: Touch, writer: anytype) !void {
-        _ = try writer.print("Touch(0x{x}, state={s})", .{ @intFromPtr(self), @tagName(self.state) });
+        _ = try writer.print("Touch(0x{x}, state={s})", .{ @intFromPtr((&self)), @tagName(self.state) });
 }
 
 pub fn deinit(self: *Touch) void {
@@ -183,7 +183,7 @@ pub fn next(self: *Touch) Yield {
 _ = @panic("Invalid state");
 },
 .exec => {
-var exec = (&(&self.state.exec));
+var exec = (&self.state.exec);
         _ = &exec;
         if (exec.started) {
             if (((self.state.exec.tasks_done >= self.state.exec.tasks_count) and (self.state.exec.output_done >= self.state.exec.output_waiting))) {
@@ -254,10 +254,14 @@ pub fn onShellTouchTaskDone(self: *Touch, task: *ShellTouchTask) void {
                 _ = prev.deref();
             }
             self.state.exec.err = e;
-            _ = output_task.start(error_string).run();
+            var y_err = output_task.start(error_string);
+            _ = &y_err;
+            _ = y_err.run();
             return;
         }
-        _ = self.next().run();
+        var y_next = self.next();
+        _ = &y_next;
+        _ = y_next.run();
 }
 
 pub inline fn bltn(self: *Touch) *Builtin {
@@ -375,38 +379,38 @@ task_self.err = e.withPath(filepath).toShellSystemError();
 };
 const ShellTouchOutputTaskVTable = struct {
 
-pub fn writeErr(self: *@This(), childptr: anytype, errbuf: []const u8) ?Yield {
-            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
-            if (self.bltn().stderr.needsIO()) |safeguard| {
+pub fn writeErr(parent: *Touch, childptr: anytype, errbuf: []const u8) ?Yield {
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stderr.needsIO()) |safeguard| {
                 _ = &safeguard;
-                return self.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+                return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
             }
-            _ = self.bltn().writeNoIO(.stderr, errbuf);
+            _ = parent.bltn().writeNoIO(.stderr, errbuf);
             return null;
     }
 
-pub fn onWriteErr(self: *@This()) void {
-            self.state.exec.output_done = (self.state.exec.output_done + 1);
+pub fn onWriteErr(parent: *Touch) void {
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
     }
 
-pub fn writeOut(self: *@This(), childptr: anytype, output: *OutputSrc) ?Yield {
-            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
-            if (self.bltn().stdout.needsIO()) |safeguard| {
+pub fn writeOut(parent: *Touch, childptr: anytype, output: *OutputSrc) ?Yield {
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stdout.needsIO()) |safeguard| {
                 _ = &safeguard;
                 const slice = output.slice();
                 _ = log("THE SLICE: {d} {s}", .{ slice.len, slice });
-                return self.bltn().stdout.enqueue(childptr, slice, safeguard);
+                return parent.bltn().stdout.enqueue(childptr, slice, safeguard);
             }
-            _ = self.bltn().writeNoIO(.stdout, output.slice());
+            _ = parent.bltn().writeNoIO(.stdout, output.slice());
             return null;
     }
 
-pub fn onWriteOut(self: *@This()) void {
-            self.state.exec.output_done = (self.state.exec.output_done + 1);
+pub fn onWriteOut(parent: *Touch) void {
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
     }
 
-pub fn onDone(self: *@This()) Yield {
-            return self.next();
+pub fn onDone(parent: *Touch) Yield {
+            return parent.next();
     }
 };
 pub const ShellTouchOutputTask = OutputTask(Touch, .{ .writeErr = ShellTouchOutputTaskVTable.writeErr, .onWriteErr = ShellTouchOutputTaskVTable.onWriteErr, .writeOut = ShellTouchOutputTaskVTable.writeOut, .onWriteOut = ShellTouchOutputTaskVTable.onWriteOut, .onDone = ShellTouchOutputTaskVTable.onDone });

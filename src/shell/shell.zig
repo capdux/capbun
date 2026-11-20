@@ -4144,7 +4144,8 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                     _ = try handleTemplateValue(globalThis, arr, out_jsobjs, out_script, jsstrings, jsobjref_buf, marked_argument_buffer);
                     if ((i < last)) {
                         const str = bun.String.static(" ");
-                        if (try (!builder.appendBunStr(str, false))) {
+                        const ok = try builder.appendBunStr(str, false);
+                        if ((!ok)) {
                             return globalThis.throw("Shell script string contains invalid UTF-16", .{});
                         }
                     }
@@ -4461,7 +4462,7 @@ pub inline fn sliceMutable(self: *@This()) []T {
     }
 
 pub inline fn slice(self: @This()) []const T {
-            return (switch (self.*) {
+            return (switch (self) {
 .inlined => {
 {
                 if ((self.inlined.len == 0)) {

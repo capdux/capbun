@@ -1975,7 +1975,7 @@ pub fn ParserNodeScalar(comptime enc: Encoding) type {
         string: String,
 
 pub fn toExpr(self: @This(), pos: Pos, input: []const enc.unit()) Expr {
-                return (switch (self.*) {
+                return (switch (self) {
 .null => .init(E.Null, .{}, pos.loc()),
 .boolean => |value| .init(E.Boolean, .{ .value = value }, pos.loc()),
 .number => |value| .init(E.Number, .{ .value = value }, pos.loc()),
@@ -2170,7 +2170,8 @@ pub fn parseDirective(self: *@This()) ParseError!Directive {
                     const handle = range.end();
                     _ = try self.trySkipChar(33);
                     _ = try self.trySkipSWhite();
-                    _ = try self.tag_handles.put(handle.slice(self.input), .{});
+                    const unit_val: void = undefined;
+                    _ = try self.tag_handles.put(handle.slice(self.input), unit_val);
                     const prefix = try self.parseDirectiveTagPrefix();
                     _ = try self.trySkipToNewLine();
                     return .{ .tag = .{ .handle = .{ .named = handle }, .prefix = prefix } };
@@ -2370,7 +2371,7 @@ pub fn parseBlockSequence(self: *@This()) ParseError!Expr {
                 }
                 var seq: std.array_list.Managed(Expr) = .init(self.allocator);
                 _ = &seq;
-                var prev_line: Line = .{ .@"from" = 0 };
+                var prev_line = Line.@"from"(0);
                 _ = &prev_line;
                 while (((self.token.data == .sequence_entry) and (self.token.indent == sequence_indent))) {
                     const entry_line = self.token.line;
@@ -4577,7 +4578,7 @@ pub fn trySkipNsUriChars(self: *@This()) UnexpectedCharacterError!void {
                 _ = self.skipNsUriChars();
         }
 
-pub fn stringRange(self: @This()) String.Range.Start {
+pub fn stringRange(self: *@This()) String.Range.Start {
                 return .{ .off = self.pos, .parser = self };
         }
 
@@ -4611,10 +4612,11 @@ pub fn stringBuilder(self: *@This()) String.Builder {
         const MappingProps = ParserMappingProps;
         const NodeProperties = ParserNodeProperties(enc);
         const ParseNodeOptions = ParserParseNodeOptions(enc);
-        const ScanPlainScalarError = (OOM or error{
+        const ScanPlainScalarError = error{
+                OutOfMemory,
                 UnexpectedCharacter,
                 // ScalarTypeMismatch,
-            });
+            };
         const ScalarResolverCtx = ParserScalarResolverCtx(enc);
         const ScanBlockHeaderError = error{UnexpectedCharacter};
         const ScanLiteralScalarError = (OOM or error{

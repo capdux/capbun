@@ -256,7 +256,8 @@ pub const CryptoHasher = union(enum) {
             BoringSSL.ERR_clear_error();
             return globalThis.throwValue(instance);
         };
-        return encoding.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
+        var enc = encoding;
+        return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
     }
 
     fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
@@ -450,11 +451,7 @@ pub const CryptoHasher = union(enum) {
                     return throwHmacConsumed(globalObject);
                 };
                 break :brk .{
-                    .hmac = hmac.copy() catch {
-                        const e = createCryptoError(globalObject, BoringSSL.ERR_get_error());
-                        BoringSSL.ERR_clear_error();
-                        return globalObject.throwValue(e);
-                    },
+                    .hmac = hmac.copy(),
                 };
             },
             .zig => .{ .zig = this.zig.copy() },
@@ -512,7 +509,8 @@ pub const CryptoHasher = union(enum) {
         if (globalThis.hasException()) {
             return error.JSError;
         }
-        return encoding.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, out);
+        var enc = encoding;
+        return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, out);
     }
 
     fn final(this: *CryptoHasher, globalThis: *JSGlobalObject, output_digest_slice: []u8) bun.JSError![]u8 {
@@ -609,11 +607,15 @@ pub fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: 
             var __h_moved = false; _ = &__h_moved;
             defer if (!__h_moved) { const __T = @TypeOf(h); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = h.release() catch {}; } else { h.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = h; _drop_val.release(); } };
             _ = h.update(input.slice());
-            var out: struct { digestLength(Algorithm) } = undefined;
+            const digest_len = (comptime digestLength(Algorithm));
+            var __digest_len_moved = false; _ = &__digest_len_moved;
+            defer if (!__digest_len_moved) { const __T = @TypeOf(digest_len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = digest_len.release() catch {}; } else { digest_len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = digest_len; _drop_val.release(); } };
+            var out: [digest_len]u8 = undefined;
             _ = &out;
-            u8 = undefined;
             _ = h.final((&out));
-            return encoding.encodeWithSize(globalThis, digestLength(Algorithm), (&out));
+            var enc = encoding;
+            _ = &enc;
+            return enc.encodeWithSize(globalThis, digest_len, (&out));
     }
 
 pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
@@ -641,9 +643,11 @@ pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: t
                 _ = h.final(output_buf.slice()[0..digest_length_comptime]);
                 return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);
             } else {
-                var out: struct { digestLength(Algorithm) } = undefined;
+                const digest_len = (comptime digestLength(Algorithm));
+                var __digest_len_moved = false; _ = &__digest_len_moved;
+                defer if (!__digest_len_moved) { const __T = @TypeOf(digest_len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = digest_len.release() catch {}; } else { digest_len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = digest_len; _drop_val.release(); } };
+                var out: [digest_len]u8 = undefined;
                 _ = &out;
-                u8 = undefined;
                 _ = h.final((&out));
                 return jsc.ArrayBuffer.createBuffer(globalThis, (&out));
             }
@@ -767,7 +771,9 @@ pub fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringO
             } else {
                 _ = Hasher.hash(input.slice(), (&output_digest_buf));
             }
-            return encoding.encodeWithSize(globalThis, Hasher.digest, (&output_digest_buf));
+            var enc = encoding;
+            _ = &enc;
+            return enc.encodeWithSize(globalThis, Hasher.digest, (&output_digest_buf));
     }
 
 pub fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
@@ -856,7 +862,10 @@ pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             const input = callframe.argument(0);
             var __input_moved = false; _ = &__input_moved;
             defer if (!__input_moved) { const __T = @TypeOf(input); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = input.release() catch {}; } else { input.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = input; _drop_val.release(); } };
-            const buffer = try ((jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input)) orelse {
+            const buffer_opt = try jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input);
+            var __buffer_opt_moved = false; _ = &__buffer_opt_moved;
+            defer if (!__buffer_opt_moved) { const __T = @TypeOf(buffer_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buffer_opt.release() catch {}; } else { buffer_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffer_opt; _drop_val.release(); } };
+            const buffer = ((buffer_opt) orelse {
             return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
 });
             var __buffer_moved = false; _ = &__buffer_moved;
@@ -928,7 +937,9 @@ pub fn digestToEncoding(self: *@This(), globalThis: *JSGlobalObject, encoding: j
             _ = &output_digest_buf;
             _ = self.hashing.final((&output_digest_buf));
             self.digested = true;
-            return encoding.encodeWithSize(globalThis, Hasher.digest, (&output_digest_buf));
+            var enc = encoding;
+            _ = &enc;
+            return enc.encodeWithSize(globalThis, Hasher.digest, (&output_digest_buf));
     }
 
 pub fn release(self: *@This()) void {

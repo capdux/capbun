@@ -169,7 +169,9 @@ pub fn takeDeletedEntries(self: *ShellDirTask) std.array_list.Managed(u8) {
 
 pub fn runFromMainThread(self: *ShellDirTask) void {
             _ = debug("DirTask(0x{x}, path={s}) runFromMainThread", .{ @intFromPtr(self), self.path });
-            _ = self.task_manager.rm.writeVerbose(self).run();
+            var y = self.task_manager.rm.writeVerbose(self);
+            _ = &y;
+            _ = y.run();
     }
 
 pub fn runFromMainThreadMini(self: *ShellDirTask, _: *void) void {
@@ -575,20 +577,20 @@ return .{ .err = self.errorWithPath(sys_err, path) };
             const flags = (bun.O.DIRECTORY | bun.O.RDONLY);
             const fd = (switch (ShellSyscall.openat(dirfd, path, flags, 0)) {
 .result => |fd| fd,
-.err => |e| (switch ((e).?.getErrno()) {
+.err => |sys_err| (switch (sys_err.getErrno()) {
 .NOENT => {
 {
                 if (self.opts.force) {
                     return self.verboseDeleted(dir_task, path);
                 }
-                return .{ .err = self.errorWithPath(e, path) };
+                return .{ .err = self.errorWithPath(sys_err, path) };
             }
 },
 .NOTDIR => {
 return self.removeEntryFile(dir_task, dir_task.path, is_absolute, buf, (&DummyRemoveFile.dummy));
 },
 else => {
-return .{ .err = self.errorWithPath(e, path) };
+return .{ .err = self.errorWithPath(sys_err, path) };
 },
 }),
 });
@@ -785,7 +787,7 @@ switch (e2.getErrno()) {
 return RmHandler.onDirNotEmpty(VTable, vtable, parent_dir_task, path, is_absolute, buf);
 },
 .NOTDIR => {
-return .{ .err = self.errorWithPath(self.e, path) };
+return .{ .err = self.errorWithPath(sys_err, path) };
 },
 else => {
 return .{ .err = self.errorWithPath(e2, path) };
@@ -800,10 +802,10 @@ else => {
 
 },
 }
-            return .{ .err = self.errorWithPath(self.e, path) };
+            return .{ .err = self.errorWithPath(sys_err, path) };
 },
 else => {
-return .{ .err = self.errorWithPath(self.e, path) };
+return .{ .err = self.errorWithPath(sys_err, path) };
 },
 }
 },
@@ -1073,7 +1075,7 @@ pub fn onShellRmTaskDone(self: *Rm, task: *ShellRmTask) void {
         defer {
         _ = task.decrPendingAndMaybeDeinit();
         }
-        var exec = (&(&self.state.exec));
+        var exec = (&self.state.exec);
         _ = &exec;
         var tasks_done: usize = 0;
         _ = &tasks_done;

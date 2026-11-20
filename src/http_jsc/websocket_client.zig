@@ -1113,12 +1113,14 @@ pub fn sendData(self: *@This(), bytes: Copy, do_write: bool, opcode: Opcode) boo
     }
 
 pub fn sendDataUncompressed(self: *@This(), bytes: Copy, do_write: bool, opcode: Opcode) bool {
+            var mut_bytes = bytes;
+            _ = &mut_bytes;
             var content_byte_len: usize = 0;
             _ = &content_byte_len;
-            const write_len = bytes.len((&content_byte_len));
+            const write_len = mut_bytes.len((&content_byte_len));
             _ = bun.assert((write_len > 0));
             const writable = ((self.send_buffer.writableWithSize(write_len)) catch unreachable);
-            _ = bytes.copy(self.globalThis, writable[0..write_len], content_byte_len, opcode);
+            _ = mut_bytes.copy(self.globalThis, writable[0..write_len], content_byte_len, opcode);
             _ = self.send_buffer.update(write_len);
             if (do_write) {
                 if (comptime Environment.allow_assert) {
@@ -1288,7 +1290,8 @@ pub fn writeBinaryData(self: *@This(), ptr: [*]const u8, len: usize, op: u8) cal
             break :blk ptr[0..len];
 
 });
-            const bytes: Copy = .{ .bytes = slice };
+            var bytes: Copy = .{ .bytes = slice };
+            _ = &bytes;
             const frame_size = WebsocketHeader.frameSizeIncludingMask(len);
             if (((!self.hasBackpressure()) and (frame_size < stack_frame_size))) {
                 var inline_buf: [stack_frame_size]u8 = undefined;
@@ -1325,7 +1328,8 @@ pub fn writeBlob(self: *@This(), blob_value: jsc.JSValue, op: u8) callconv(.c) v
                     _ = self.sendData(bytes, (!self.hasBackpressure()), opcode);
                     return;
                 }
-                const bytes: Copy = .{ .bytes = data };
+                var bytes: Copy = .{ .bytes = data };
+                _ = &bytes;
                 const frame_size = WebsocketHeader.frameSizeIncludingMask(data.len);
                 if (((!self.hasBackpressure()) and (frame_size < stack_frame_size))) {
                     var inline_buf: [stack_frame_size]u8 = undefined;
@@ -1359,7 +1363,8 @@ pub fn writeString(self: *@This(), str_: *const jsc.ZigString, op: u8) callconv(
                 var inline_buf: [stack_frame_size]u8 = undefined;
                 _ = &inline_buf;
                 if (((!str.is16Bit()) and (str.len < stack_frame_size))) {
-                    const bytes: Copy = .{ .latin1 = str.slice() };
+                    var bytes: Copy = .{ .latin1 = str.slice() };
+                    _ = &bytes;
                     var byte_len: usize = 0;
                     _ = &byte_len;
                     const frame_size = bytes.len((&byte_len));
@@ -1370,7 +1375,8 @@ pub fn writeString(self: *@This(), str_: *const jsc.ZigString, op: u8) callconv(
                     }
                 } else {
                     if ((((str.len * 4) < stack_frame_size) and (!self.hasBackpressure()))) {
-                        const bytes: Copy = .{ .utf16 = str.utf16SliceAligned() };
+                        var bytes: Copy = .{ .utf16 = str.utf16SliceAligned() };
+                        _ = &bytes;
                         var byte_len: usize = 0;
                         _ = &byte_len;
                         const frame_size = bytes.len((&byte_len));
@@ -1441,7 +1447,7 @@ pub fn init(outgoing: *CppWebSocket, input_socket: *anyopaque, globalThis: *jsc.
 
 });
             const vm = globalThis.bunVM();
-            var ws = bun.@"new"(WebSocket, .{ .ref_count = .init(), .tcp = .{ .socket = .{ .detached = .{} } }, .outgoing_websocket = outgoing, .globalThis = globalThis, .send_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .receive_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .event_loop = vm.eventLoop(), .secure = (if ((secure_ptr != null)) (blk: {
+            var ws = bun.@"new"(WebSocket, .{ .ref_count = .init(), .tcp = .{ .socket = .{ .detached = @as(void, undefined) } }, .outgoing_websocket = outgoing, .globalThis = globalThis, .send_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .receive_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .event_loop = vm.eventLoop(), .secure = (if ((secure_ptr != null)) (blk: {
             break :blk @ptrCast(@alignCast(secure_ptr.?));
 
 }) else null) });
@@ -1486,7 +1492,7 @@ pub fn initWithTunnel(outgoing: *CppWebSocket, tunnel_ptr: *anyopaque, globalThi
             break :blk @ptrCast(@alignCast(tunnel_ptr));
 
 });
-            var ws = bun.@"new"(WebSocket, .{ .ref_count = .init(), .tcp = .{ .socket = .{ .detached = .{} } }, .outgoing_websocket = outgoing, .globalThis = globalThis, .send_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .receive_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .event_loop = globalThis.bunVM().eventLoop(), .proxy_tunnel = tunnel });
+            var ws = bun.@"new"(WebSocket, .{ .ref_count = .init(), .tcp = .{ .socket = .{ .detached = @as(void, undefined) } }, .outgoing_websocket = outgoing, .globalThis = globalThis, .send_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .receive_buffer = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator), .event_loop = globalThis.bunVM().eventLoop(), .proxy_tunnel = tunnel });
             _ = &ws;
             _ = tunnel.ref();
             if (deflate_params) |params| {

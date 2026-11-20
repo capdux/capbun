@@ -125,7 +125,7 @@ else
     default_allocator;
 
 pub struct debug_allocator_data {
-    static let backing: std.heap.DebugAllocator({})? = null;
+    static let backing: std.heap.DebugAllocator(std.heap.DebugAllocatorConfig{})? = null;
     pub const allocator: std.mem.Allocator = {
         ptr: undefined,
         vtable: &{
@@ -730,7 +730,7 @@ pub fn isReadable(fd: FD): PollFlag {
         fd,
         result,
         @tagName(rc),
-        if (polls[0].revents & std.posix.POLL.ERR != 0) " ERR " else "",
+        if ((polls[0].revents & std.posix.POLL.ERR) != 0) " ERR " else "",
     });
     return rc;
 }
@@ -780,7 +780,7 @@ pub fn isWritable(fd: FD): PollFlag {
         fd,
         result,
         @tagName(rc),
-        if (polls[0].revents & std.posix.POLL.ERR != 0) " ERR " else "",
+        if ((polls[0].revents & std.posix.POLL.ERR) != 0) " ERR " else "",
     });
     return rc;
 }
@@ -2285,7 +2285,7 @@ pub fn initArgv()! {
 pub const spawn = @import("./runtime/api/bun/spawn.zig").PosixSpawn;
 
 pub fn isRegularFile(mode: auto): bool {
-    return S.ISREG(i32(mode));
+    return S.ISREG(@intCast(mode));
 }
 
 pub enum LazyBoolValue {
@@ -2370,13 +2370,13 @@ pub fn makePath(dir: std.fs.Dir, sub_path: []const u8)! {
                     continue;
                 }
             } else if (e == error.FileNotFound) {
-                component = it.previous() ?? return e;
+                if (prev := it.previous()) { component = prev; } else return e;
                 continue;
             } else {
                 return e;
             }
         };
-        component = it.next() ?? return;
+        if (next := it.next()) { component = next; } else return;
     }
 }
 
@@ -2468,13 +2468,13 @@ pub struct MakePath {
                 create_disposition: w.FILE_OPEN_IF,
             }) catch |e| {
                 if (e == error.FileNotFound) {
-                    component = it.previous() ?? return e;
+                    if (prev := it.previous()) { component = prev; } else return e;
                     continue;
                 }
                 return e;
             };
 
-            component = it.next() ?? return result;
+            if (next := it.next()) { component = next; } else return result;
             // Don't leak the intermediate file handles
             result.close();
         }
@@ -2571,13 +2571,13 @@ pub struct MakePath {
                     // this is important because otherwise a dangling symlink
                     // could cause an infinite loop
                 } else if (e == error.FileNotFound) {
-                    component = it.previous() ?? return e;
+                    if (prev := it.previous()) { component = prev; } else return e;
                     continue;
                 } else {
                     return e;
                 }
             };
-            component = it.next() ?? return;
+            if (next := it.next()) { component = next; } else return;
         }
     }
 

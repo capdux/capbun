@@ -214,7 +214,8 @@ pub struct ShellGlobTask {
 
     fn runFromMainThread(*_) {
         debug("runFromJS", .{});
-        _.expansion.onGlobWalkDone(_).run();
+        let y = _.expansion.onGlobWalkDone(_);
+        y.run();
         _.ref.unref(_.event_loop);
     }
 
@@ -567,7 +568,8 @@ pub struct ShellGlobTask {
         let prev_whitespace: bool = false;
         let a: usize = 0;
         let b: usize = 1;
-        for (i of 0..stdout.len) {
+        let i: usize = 0;
+        while (i < stdout.len) : (i += 1) {
             const c = stdout[i];
             if (prev_whitespace) {
                 if (c != ' ') {
@@ -619,7 +621,8 @@ pub struct ShellGlobTask {
     }
 
     static fn convertNewlinesToSpacesSlow(i: usize, stdout: []u8) {
-        for (j of i..stdout.len) {
+        let j: usize = i;
+        while (j < stdout.len) : (j += 1) {
             if (stdout[j] == '\n') {
                 stdout[j] = ' ';
             }
@@ -667,8 +670,8 @@ pub struct ShellGlobTask {
             assert(_.child_state == .glob);
         }
 
-        if (*e := task.err) {
-            switch (e.*) {
+        if (e := task.err) {
+            switch (e) {
                 .syscall => {
                     _.base.throw(&bun.shell.ShellErr.newSys(task.err.?.syscall));
                 },

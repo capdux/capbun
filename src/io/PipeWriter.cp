@@ -11,12 +11,12 @@ const jsc = bun.jsc;
 const uv = bun.windows.libuv;
 const log = bun.Output.scoped(.PipeWriter, .hidden);
 
-export union(enum) WriteResult {
+pub const WriteResult = union(enum) {
     done: usize,
     wrote: usize,
     pending: usize,
     err: bun.sys.Error,
-}
+};
 
 export enum WriteStatus {
     end_of_file,
@@ -29,7 +29,7 @@ pub fn PosixPipeWriter(
     comptime getFd: fn (*This) bun.FD,
     comptime getBuffer: fn (*This) []const u8,
     comptime onWrite: fn (*This, written: usize, status: WriteStatus) void,
-    comptime registerPoll: auto,
+    comptime registerPoll: (fn (*This) void)?,
     comptime onError: fn (*This, bun.sys.Error) void,
     comptime _unused: fn (*This) void,
     comptime getFileType: *const fn (*This) FileType,
@@ -42,7 +42,7 @@ pub fn PosixPipeWriter(
             };
         }
 
-        fn tryWriteWithWriteFn(this: *This, buf: []const u8, comptime write_fn: *const fn (bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
+        fn tryWriteWithWriteFn(this: *This, buf: []const u8, comptime write_fn: fn (bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
             const fd = getFd(this);
 
             let offset: usize = 0;
@@ -69,7 +69,7 @@ pub fn PosixPipeWriter(
             return .{ .wrote = offset };
         }
 
-        fn writeToFileType(comptime file_type: FileType) *const (fn (bun.FD, []const u8) bun.sys.Maybe(usize)) {
+        fn writeToFileType(comptime file_type: FileType) fn (bun.FD, []const u8) bun.sys.Maybe(usize) {
             comptime return switch (file_type) {
                 .nonblocking_pipe, .file => &bun.sys.write,
                 .pipe => &writeToBlockingPipe,

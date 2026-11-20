@@ -176,10 +176,10 @@ pub fn default(arena_alloc: *bun.ArenaAllocator, cmd_parent: *ShellCmd, event_lo
                 _ = &p;
                 path_val = p;
             }
-            var out: SubprocSpawnArgs = SubprocSpawnArgs{ .@"arena" = arena_alloc, .override_env = false, .env_array = .empty, .cwd = event_loop.topLevelDir(), .stdio = .{ .{ .ignore = .{} }, .{ .pipe = .{} }, .inherit }, .lazy = false, .PATH = path_val, .detached = false, .cmd_parent = cmd_parent };
+            var out: SubprocSpawnArgs = SubprocSpawnArgs{ .@"arena" = arena_alloc, .override_env = false, .env_array = .empty, .cwd = event_loop.topLevelDir(), .stdio = .{ .ignore, .{ .pipe = .{} }, .inherit }, .lazy = false, .PATH = path_val, .detached = false, .cmd_parent = cmd_parent };
             _ = &out;
             if (comptime is_sync) {
-                out.stdio = .{ .{ .ignore = .{} }, .{ .pipe = .{} }, .{ .pipe = .{} } };
+                out.stdio = .{ .ignore, .{ .pipe = .{} }, .{ .pipe = .{} } };
             }
             return out;
     }
@@ -436,13 +436,13 @@ const s = self.stdin;
 .pipe => |pipe| {
 _ = pipe.signal.clear();
             _ = pipe.deref();
-            self.stdin = .{ .ignore = .{} };
+            self.stdin = .ignore;
 },
 .buffer => {
 _ = self.onStaticPipeWriterDone();
             _ = self.stdin.buffer.source.detach();
             _ = self.stdin.buffer.deref();
-            self.stdin = .{ .ignore = .{} };
+            self.stdin = .ignore;
 },
 else => {
 
@@ -458,7 +458,7 @@ if ((pipe.state == .done)) {
                 out.* = .{ .buffer = pipe.state.done };
                 pipe.state = .{ .done = &.{} };
             } else {
-                out.* = .{ .ignore = .{} };
+                out.* = .ignore;
             }
             _ = pipe.deref();
 },
@@ -476,7 +476,7 @@ if ((pipe.state == .done)) {
                 out.* = .{ .buffer = pipe.state.done };
                 pipe.state = .{ .done = &.{} };
             } else {
-                out.* = .{ .ignore = .{} };
+                out.* = .ignore;
             }
             _ = pipe.deref();
 },
@@ -741,7 +741,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     
     },
     }
-                self.* = .{ .ignore = .{} };
+                self.* = .ignore;
         }
     
     pub fn onReady(self: *@This(), _: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {
@@ -838,7 +838,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     .buffer, .inherit => .js_undefined,
     .pipe => |pipe| {
     {
-                    self.* = .{ .ignore = .{} };
+                    self.* = .ignore;
                     if ((subprocess.process.hasExited() and (!subprocess.flags.has_stdin_destructor_called))) {
                         _ = pipe.onAttachedProcessExit((&subprocess.process.status));
                         return pipe.toJS(globalThis);
@@ -864,7 +864,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     .pipe => |pipe| {
     {
                     _ = pipe.deref();
-                    self.* = .{ .ignore = .{} };
+                    self.* = .ignore;
                 }
     },
     .buffer => {
@@ -876,7 +876,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     .memfd => |fd| {
     {
                     _ = fd.close();
-                    self.* = .{ .ignore = .{} };
+                    self.* = .ignore;
                 }
     },
     .ignore => {
@@ -897,7 +897,7 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     },
     inline .memfd, .fd => |fd| {
     _ = fd.close();
-                self.* = .{ .ignore = .{} };
+                self.* = .ignore;
     },
     .buffer => {
     _ = self.buffer.close();
@@ -1018,11 +1018,11 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     pub fn close(self: *@This()) void {
                 switch (self.*) {
     .memfd => |fd| {
-    self.* = .{ .closed = .{} };
+    self.* = .closed;
                 _ = fd.close();
     },
     .fd => {
-    self.* = .{ .closed = .{} };
+    self.* = .closed;
     },
     .pipe => {
     _ = self.pipe.close();
@@ -1036,17 +1036,17 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
     pub fn finalize(self: *@This()) void {
                 switch (self.*) {
     .memfd => |fd| {
-    self.* = .{ .closed = .{} };
+    self.* = .closed;
                 _ = fd.close();
     },
     .fd => {
-    self.* = .{ .closed = .{} };
+    self.* = .closed;
     },
     .pipe => |pipe| {
     defer {
                 _ = pipe.detach();
                 }
-                self.* = .{ .closed = .{} };
+                self.* = .closed;
     },
     else => {
     
@@ -1223,10 +1223,11 @@ pub fn trySignalDoneToCmd(self: *@This()) Yield {
                 if ((self.state != .err)) {
                     break :brk null;
                 }
-                if (self.state.err) |*e| {
-                    _ = &e;
-                    _ = (e.*).ref();
-                    break :brk (e.*).*;
+                if ((self.state.err != null)) {
+                    var e_ptr = (&self.state.err.?);
+                    _ = &e_ptr;
+                    _ = e_ptr.ref();
+                    break :brk e_ptr.*;
                 }
                 break :brk null;
 };

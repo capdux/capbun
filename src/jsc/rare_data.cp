@@ -288,8 +288,7 @@ pub struct EntropyCache {
 
     pub fn slice(*_, len: usize): []u8 {
         if (len > _.cache.len) {
-            let empty: [0]u8 = [];
-            return empty[0..0];
+            return "";
         }
 
         if (_.index + len > _.cache.len) {
@@ -488,11 +487,14 @@ pub enum StdinFdType: i32 {
         return &_.hot_map.?;
     }
 
-    pub fn mimeTypeFromString(*_, allocator: std.mem.Allocator, str: []const u8): bun.http.MimeType {
+    pub fn mimeTypeFromString(*_, allocator: std.mem.Allocator, str: []const u8): bun.http.MimeType? {
         if (_.mime_types == null) {
-            _.mime_types = bun.http.MimeType.Map.init(allocator);
+            _.mime_types = bun.http.MimeType.createHashTable(allocator) catch |e| bun.handleOom(e);
         }
-        return _.mime_types.?.get(str);
+        if (entry := _.mime_types.?.get(str)) {
+            return bun.http.MimeType.Compact.from(entry).toMimeType();
+        }
+        return null;
     }
 
     pub fn filePolls(*_, vm: *jsc.VirtualMachine): *Async.FilePoll.Store {
@@ -550,7 +552,7 @@ pub enum StdinFdType: i32 {
         if (e := _.boring_ssl_engine) {
             return e;
         }
-        _.boring_ssl_engine = bun.BoringSSL.loadEngine() catch unreachable;
+        _.boring_ssl_engine = BoringSSL.ENGINE_new();
         return _.boring_ssl_engine.?;
     }
 
@@ -569,7 +571,7 @@ pub enum StdinFdType: i32 {
             .err => {},
         }
 
-        const store = Blob.Store.new(.{
+        const store = bun.@"new"(Blob.Store, .{
             ref_count: std.atomic.Value(u32).init(2),
             allocator: default_allocator,
             data: .{
@@ -601,7 +603,7 @@ pub enum StdinFdType: i32 {
             },
             .err => {},
         }
-        const store = Blob.Store.new(.{
+        const store = bun.@"new"(Blob.Store, .{
             ref_count: std.atomic.Value(u32).init(2),
             allocator: default_allocator,
             data: .{
@@ -636,7 +638,7 @@ pub enum StdinFdType: i32 {
         if (valid := fd.unwrapValid()) {
             is_atty = std.posix.isatty(valid.native());
         }
-        const store = Blob.Store.new(.{
+        const store = bun.@"new"(Blob.Store, .{
             allocator: default_allocator,
             ref_count: std.atomic.Value(u32).init(2),
             data: .{
@@ -687,7 +689,7 @@ pub enum StdinFdType: i32 {
     fn lazyGroup(*_, vm: *jsc.VirtualMachine, comptime field: []const u8): *uws.SocketGroup {
         let group: *uws.SocketGroup = &@field(_, field);
         if (group.loop == null) {
-            group.* = uws.SocketGroup.init(vm.eventLoop().uwsLoop());
+            group.init(vm.uwsLoop(), null, null);
         }
         return group;
     }
@@ -733,7 +735,7 @@ pub enum StdinFdType: i32 {
 
     pub fn defaultClientSslCtx(*_): *uws.SslCtx {
         if (_.default_client_ssl_ctx == null) {
-            let e = bun.api.SSLContextCache.GetOrCreateError.init();
+            let e: uws.create_bun_socket_error_t = .none;
             const ctx = _.ssl_ctx_cache.getOrCreateOpts(.{}, &e);
             if (ctx == null) {
                 let msg = "unknown";
@@ -758,22 +760,42 @@ pub enum StdinFdType: i32 {
         return &_.global_dns_data.?.resolver;
     }
 
-    pub fn nodeFSStatWatcherScheduler(*_, vm: *jsc.VirtualMachine): *StatWatcherScheduler {
+    pub fn nodeFSStatWatcherScheduler(*_, vm: *jsc.VirtualMachine): bun.ptr.RefPtr(StatWatcherScheduler) {
         if (_.node_fs_stat_watcher_scheduler == null) {
-            const scheduler = bun.ptr.RefPtr(StatWatcherScheduler).create(vm.allocator, .{ vm.loop() });
-            scheduler.ref(); // live forever
-            _.node_fs_stat_watcher_scheduler = scheduler;
+            _.node_fs_stat_watcher_scheduler = StatWatcherScheduler.init(vm);
         }
-        return _.node_fs_stat_watcher_scheduler.?.get();
+        return _.node_fs_stat_watcher_scheduler.?.dupeRef();
     }
 
     pub fn s3DefaultClient(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
         if (client := _.s3_default_client.get()) {
             return client;
         }
-        const client = jsc.API.S3Client.createDefault(globalThis);
-        _.s3_default_client.set(globalThis, client);
-        return client;
+        const vm = globalThis.bunVM();
+        let aws_options = bun.S3.S3Credentials.getCredentialsWithOptions(
+            vm.transpiler.env.getS3Credentials(),
+            .{},
+            null,
+            null,
+            null,
+            false,
+            globalThis,
+        ) catch |e| {
+            if (e == error.OutOfMemory) bun.outOfMemory();
+            globalThis.reportActiveExceptionAsUnhandled(e);
+            return jsc.JSValue.js_undefined;
+        };
+        defer aws_options.deinit();
+        const client = bun.@"new"(jsc.WebCore.S3Client, .{
+            credentials: aws_options.credentials.dupe(),
+            options: aws_options.options,
+            acl: aws_options.acl,
+            storage_class: aws_options.storage_class,
+        });
+        const js_client = client.toJS(globalThis);
+        js_client.ensureStillAlive();
+        _.s3_default_client = .create(js_client, globalThis);
+        return js_client;
     }
 
     pub fn tlsDefaultCiphers(*_): [:0]const u8 {
@@ -794,7 +816,9 @@ pub enum StdinFdType: i32 {
 
     pub fn defaultCSRFSecret(*_): []const u8 {
         if (_.default_csrf_secret.len == 0) {
-            _.default_csrf_secret = bun.default_allocator.dupe(u8, &bun.CSRF.generateSecret()) catch unreachable;
+            const secret = bun.handleOom(bun.default_allocator.alloc(u8, 16));
+            bun.csprng(secret);
+            _.default_csrf_secret = secret;
         }
         return _.default_csrf_secret;
     }
@@ -821,7 +845,7 @@ pub enum StdinFdType: i32 {
         inline for (f of socket_group_fields) {
             let group: *uws.SocketGroup = &@field(_, f);
             if (group.loop != null) {
-                group.closeAll(vm.eventLoop().uwsLoop());
+                group.closeAll();
             }
         }
     }

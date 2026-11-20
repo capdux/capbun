@@ -248,7 +248,7 @@ pub fn updateStatusOnWindows(self: *Process) void {
     }
 
 pub fn initPosix(posix: PosixSpawnResult, event_loop: anytype, sync_: bool) *Process {
-            return bun.new(Process, .{ .ref_count = .init(), .pid = posix.pid, .pidfd = ((posix.pidfd) orelse (0)), .event_loop = jsc.EventLoopHandle.init(event_loop), .sync = sync_, .poller = .{ .detached = .{} }, .status = brk: {
+            return bun.new(Process, .{ .ref_count = .init(), .pid = posix.pid, .pidfd = ((posix.pidfd) orelse (0)), .event_loop = jsc.EventLoopHandle.init(event_loop), .sync = sync_, .poller = .detached, .status = brk: {
             if (posix.has_exited) {
                 var rusage = std.mem.zeroes(Rusage);
                 _ = &rusage;
@@ -310,7 +310,7 @@ pub fn onWaitPidFromWaiterThread(self: *Process, waitpid_result: *const bun.sys.
             }
             if ((self.poller == .waiter_thread)) {
                 _ = self.poller.waiter_thread.unref(self.event_loop);
-                self.poller = .{ .detached = .{} };
+                self.poller = .detached;
             }
             _ = self.onWaitPid(waitpid_result, rusage);
             _ = self.deref();
@@ -751,7 +751,7 @@ pub fn loop() void {
                     _ = &polls;
                     var buf: [8]u8 = undefined;
                     _ = &buf;
-                    if ((blk_catch_3: { break :blk_catch_3 ((bun.sys.read(inst.eventfd, (&buf)).unwrap()) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 (0 > 0); }); })) {
+                    if (((blk_catch_3: { break :blk_catch_3 ((bun.sys.read(inst.eventfd, (&buf)).unwrap()) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 0; }); }) > 0)) {
                         continue :outer;
                     }
                     _ = (blk_catch_4: { break :blk_catch_4 ((std.posix.poll((&polls), std.math.maxInt(i32))) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); });
@@ -1829,7 +1829,7 @@ pub const Status = union(enum) {
     @"err": bun.sys.Error,
 
 pub fn isOK(self: @This()) bool {
-            return ((self.* == .exited) and (self.exited.code == 0));
+            return ((self == .exited) and (self.exited.code == 0));
     }
 
 pub fn @"from"(pid: pid_t, waitpid_result: *const Maybe(PosixSpawn.WaitPidResult)) ?Status {

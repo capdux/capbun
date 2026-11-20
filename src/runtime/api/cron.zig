@@ -256,7 +256,7 @@ pub fn startLinux(self: *CronRegisterJob) void {
                 return;
             }
             const crontab_path = crontab_path_opt.?;
-            const argv: [3]?[*:0]u8 = .{ crontab_path, "-l".ptr, null };
+            const argv: [3]?ConstCString = .{ crontab_path, "-l".ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .buffer);
     }
 
@@ -302,7 +302,7 @@ pub fn processCrontabAndInstall(self: *CronRegisterJob) void {
                 return;
             }
             const crontab_path = crontab_path_opt.?;
-            const argv: [3]?[*:0]u8 = .{ crontab_path, tmp_path.ptr, null };
+            const argv: [3]?ConstCString = .{ crontab_path, tmp_path.ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
 
@@ -384,7 +384,7 @@ pub fn spawnBootout(self: *CronRegisterJob) void {
             defer {
             _ = bun.default_allocator.free(uid_str);
             }
-            const argv: [4]?[*:0]u8 = .{ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null };
+            const argv: [4]?ConstCString = .{ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
 
@@ -403,7 +403,7 @@ pub fn spawnBootstrap(self: *CronRegisterJob) void {
             defer {
             _ = bun.default_allocator.free(uid_str);
             }
-            const argv: [5]?[*:0]u8 = .{ "/bin/launchctl".ptr, "bootstrap".ptr, uid_str.ptr, plist_path.ptr, null };
+            const argv: [5]?ConstCString = .{ "/bin/launchctl".ptr, "bootstrap".ptr, uid_str.ptr, plist_path.ptr, null };
             self.tmp_path = null;
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
@@ -521,7 +521,7 @@ pub fn startWindows(self: *CronRegisterJob) void {
             _ = (blk_catch_29: { break :blk_catch_29 ((file.writeAll(xml).unwrap()) catch |__ce_29| { _ = &__ce_29; _ = self.setErr("Failed to write temp XML file", .{});
             _ = self.finish();
             return; }); });
-            const argv: [9]?[*:0]u8 = .{ "schtasks".ptr, "/create".ptr, "/xml".ptr, xml_path.ptr, "/tn".ptr, task_name.ptr, "/np".ptr, "/f".ptr, null };
+            const argv: [9]?ConstCString = .{ "schtasks".ptr, "/create".ptr, "/xml".ptr, xml_path.ptr, "/tn".ptr, task_name.ptr, "/np".ptr, "/f".ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
     const State = enum { reading_crontab, installing_crontab, writing_plist, booting_out, bootstrapping, done, failed };
@@ -696,7 +696,7 @@ pub fn startLinux(self: *CronRemoveJob) void {
                 return;
             }
             const crontab_path = crontab_path_opt.?;
-            const argv: [3]?[*:0]u8 = .{ crontab_path, "-l".ptr, null };
+            const argv: [3]?ConstCString = .{ crontab_path, "-l".ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .buffer);
     }
 
@@ -733,7 +733,7 @@ pub fn removeCrontabEntry(self: *CronRemoveJob) void {
                 return;
             }
             const crontab_path = crontab_path_opt.?;
-            const argv: [3]?[*:0]u8 = .{ crontab_path, tmp_path.ptr, null };
+            const argv: [3]?ConstCString = .{ crontab_path, tmp_path.ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
 
@@ -745,7 +745,7 @@ pub fn startMac(self: *CronRemoveJob) void {
             defer {
             _ = bun.default_allocator.free(uid_str);
             }
-            const argv: [4]?[*:0]u8 = .{ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null };
+            const argv: [4]?ConstCString = .{ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
 
@@ -789,7 +789,7 @@ pub fn startWindows(self: *CronRemoveJob) void {
             defer {
             _ = bun.default_allocator.free(task_name);
             }
-            const argv: [6]?[*:0]u8 = .{ "schtasks".ptr, "/delete".ptr, "/tn".ptr, task_name.ptr, "/f".ptr, null };
+            const argv: [6]?ConstCString = .{ "schtasks".ptr, "/delete".ptr, "/tn".ptr, task_name.ptr, "/f".ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
     const State = enum { reading_crontab, installing_crontab, booting_out, done, failed };
@@ -1090,6 +1090,7 @@ pub fn register(globalObject: *jsc.JSGlobalObject, schedule_arg: jsc.JSValue, ca
     pub const Bun__CronJob__onPromiseReject = jsc.toJSHostFn(onPromiseReject);
 };
 
+const ConstCString = [*:0]u8;
 pub const CronClearMode = enum { reload, teardown };
 const ScheduleMonthInfo = struct {
     cron: CronExpression,
@@ -1225,7 +1226,7 @@ pub fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: anytype, stdin_opt
         defer {
         _ = envp_arena.deinit();
         }
-        const envp: ?[*:null][*:0]u8 = (if (comptime bun.Environment.isPosix) @ptrCast(@constCast(std.c.environ)) else @ptrCast((blk_catch_45: { break :blk_catch_45 ((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator())) catch |__ce_45| { _ = &__ce_45; _ = job.setErr("Failed to create environment block", .{});
+        const envp: ?[*:null]ConstCString = (if (comptime bun.Environment.isPosix) @ptrCast(@constCast(std.c.environ)) else @ptrCast((blk_catch_45: { break :blk_catch_45 ((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator())) catch |__ce_45| { _ = &__ce_45; _ = job.setErr("Failed to create environment block", .{});
         _ = job.finish();
         return; }); }).ptr));
         var spawned = (blk_catch_48: { break :blk_catch_48 (((blk_catch_46: { break :blk_catch_46 ((bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), envp)) catch |e| { _ = &e; _ = job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });
@@ -1284,7 +1285,7 @@ if ((!process.hasExited())) {
 }
 }
 
-pub fn findCrontab() ?[*:0]u8 {
+pub fn findCrontab() ?ConstCString {
         if (comptime bun.Environment.isWindows) {
             return null;
         }

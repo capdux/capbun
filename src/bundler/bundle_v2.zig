@@ -1768,7 +1768,7 @@ pub fn runResolutionForParseTask(parse_result: *ParseTask.Result, bundle: *Bundl
                 _ = debug("failed with error: {s}", .{ @errorName(e) });
                 _ = resolve_result.resolve_queue.clearAndFree();
                 bundle.graph.ast.items(.import_records)[cp_cast_int(usize, source_index.get())] = result.ast.import_records;
-                (if (@typeInfo(@TypeOf(parse_result)) == .@"enum") @intFromEnum(parse_result) else parse_result.value) = .{ .e = .{ .e = e, .step = .resolve, .log = Logger.Log.init(bun.default_allocator), .source_index = source_index, .target = target } };
+                (if (@typeInfo(@TypeOf(parse_result)) == .@"enum") @intFromEnum(parse_result) else parse_result.value) = .{ .@"err" = .{ .@"err" = e, .step = .resolve, .log = Logger.Log.init(bun.default_allocator), .source_index = source_index, .target = target } };
             }
             return resolve_result.resolve_queue;
     }
@@ -1792,7 +1792,7 @@ pub fn resolveImportRecords(self: *BundleV2, ctx: ResolveImportRecordCtx) Resolv
             }
             var resolve_queue = ResolveQueue.init(self.allocator());
             _ = &resolve_queue;
-            _ = bun.handleOom(resolve_queue.ensureTotalCapacity((if (comptime @typeInfo(@TypeOf(estimated_resolve_queue_count)) == .@"enum") cp_cast_int(i32, @intFromEnum(estimated_resolve_queue_count)) else cp_cast_int(i32, estimated_resolve_queue_count))));
+            _ = bun.handleOom(resolve_queue.ensureTotalCapacity(@intCast(estimated_resolve_queue_count)));
             var last_error: ?anyerror = null;
             _ = &last_error;
             outer: for (ctx.import_records.slice(), 0..) |*import_record, i| {

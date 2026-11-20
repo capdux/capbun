@@ -222,36 +222,36 @@ pub const ShellTouchTask = struct {
 };
 
 const ShellTouchOutputTaskVTable = struct {
-    pub fn writeErr(this: *Touch, childptr: auto, errbuf: []const u8): Yield? {
-        this.state.exec.output_waiting += 1;
-        if (safeguard := this.bltn().stderr.needsIO()) {
-            return this.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+    static fn writeErr(parent: *Touch, childptr: auto, errbuf: []const u8): Yield? {
+        parent.state.exec.output_waiting += 1;
+        if (safeguard := parent.bltn().stderr.needsIO()) {
+            return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
         }
-        * = this.bltn().writeNoIO(.stderr, errbuf);
+        * = parent.bltn().writeNoIO(.stderr, errbuf);
         return null;
     }
 
-    pub fn onWriteErr(this: *Touch) {
-        this.state.exec.output_done += 1;
+    static fn onWriteErr(parent: *Touch) {
+        parent.state.exec.output_done += 1;
     }
 
-    pub fn writeOut(this: *Touch, childptr: auto, output: *OutputSrc): Yield? {
-        this.state.exec.output_waiting += 1;
-        if (safeguard := this.bltn().stdout.needsIO()) {
+    static fn writeOut(parent: *Touch, childptr: auto, output: *OutputSrc): Yield? {
+        parent.state.exec.output_waiting += 1;
+        if (safeguard := parent.bltn().stdout.needsIO()) {
             const slice = output.slice();
             log("THE SLICE: {d} {s}", .{ slice.len, slice });
-            return this.bltn().stdout.enqueue(childptr, slice, safeguard);
+            return parent.bltn().stdout.enqueue(childptr, slice, safeguard);
         }
-        * = this.bltn().writeNoIO(.stdout, output.slice());
+        * = parent.bltn().writeNoIO(.stdout, output.slice());
         return null;
     }
 
-    pub fn onWriteOut(this: *Touch) {
-        this.state.exec.output_done += 1;
+    static fn onWriteOut(parent: *Touch) {
+        parent.state.exec.output_done += 1;
     }
 
-    pub fn onDone(this: *Touch): Yield {
-        return this.next();
+    static fn onDone(parent: *Touch): Yield {
+        return parent.next();
     }
 };
 
@@ -268,7 +268,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
     state: State = .idle,
 
     pub fn format(writer: auto)! {
-        (writer.print("Touch(0x{x}, state={s})", .{ @intFromPtr(_), @tagName(_.state) }))?;
+        (writer.print("Touch(0x{x}, state={s})", .{ @intFromPtr(&_), @tagName(_.state) }))?;
     }
 
     pub fn deinit(*_) {
@@ -307,7 +307,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
         switch (_.state) {
             .idle => @panic("Invalid state"),
             .exec => {
-                let exec = &*_.state.exec;
+                let exec = &_.state.exec;
                 if (exec.started) {
                     if (_.state.exec.tasks_done >= _.state.exec.tasks_count && _.state.exec.output_done >= _.state.exec.output_waiting) {
                         const exit_code: ExitCode = if (_.state.exec.err != null) @as(ExitCode, 1) else @as(ExitCode, 0);
@@ -370,11 +370,13 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
             const error_string = _.bltn().taskErrorToString(.touch, e);
             if (prev := _.state.exec.err) prev.deref();
             _.state.exec.err = e;
-            output_task.start(error_string).run();
+            let y_err = output_task.start(error_string);
+            y_err.run();
             return;
         }
 
-        _.next().run();
+        let y_next = _.next();
+        y_next.run();
     }
 
     pub inline fn bltn(*_): *Builtin {

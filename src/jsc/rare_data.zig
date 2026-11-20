@@ -324,9 +324,7 @@ pub fn fill(self: *EntropyCache) void {
 
 pub fn slice(self: *EntropyCache, len: usize) []u8 {
             if ((len > self.cache.len)) {
-                var empty: [0]u8 = &.{};
-                _ = &empty;
-                return empty[0..0];
+                return "";
             }
             if (((self.index + len) > self.cache.len)) {
                 _ = self.fill();
@@ -506,11 +504,15 @@ pub fn hotMap(self: *RareData, allocator: std.mem.Allocator) *HotMap {
         return (&self.hot_map.?);
 }
 
-pub fn mimeTypeFromString(self: *RareData, allocator: std.mem.Allocator, str: []const u8) bun.http.MimeType {
+pub fn mimeTypeFromString(self: *RareData, allocator: std.mem.Allocator, str: []const u8) ?bun.http.MimeType {
         if ((self.mime_types == null)) {
-            self.mime_types = bun.http.MimeType.Map.init(allocator);
+            self.mime_types = (blk_catch_3: { break :blk_catch_3 ((bun.http.MimeType.createHashTable(allocator)) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
         }
-        return self.mime_types.?.get(str);
+        if (self.mime_types.?.get(str)) |entry| {
+            _ = &entry;
+            return bun.http.MimeType.Compact.from(entry).toMimeType();
+        }
+        return null;
 }
 
 pub fn filePolls(self: *RareData, vm: *jsc.VirtualMachine) *Async.FilePoll.Store {
@@ -564,7 +566,7 @@ pub fn boringEngine(self: *RareData) *BoringSSL.ENGINE {
             _ = &e;
             return e;
         }
-        self.boring_ssl_engine = ((bun.BoringSSL.loadEngine()) catch unreachable);
+        self.boring_ssl_engine = BoringSSL.ENGINE_new;
         return self.boring_ssl_engine.?;
 }
 
@@ -585,7 +587,7 @@ mode = @intCast(stat.mode);
 
 },
 }
-        const store = Blob.Store.new(.{ .ref_count = std.atomic.Value(u32).init(2), .allocator = default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (Output.stderr_descriptor_type == .terminal), .mode = mode } } });
+        const store = bun.@"new"(Blob.Store, .{ .ref_count = std.atomic.Value(u32).init(2), .allocator = default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (Output.stderr_descriptor_type == .terminal), .mode = mode } } });
         self.stderr_store = store;
         return store;
 }
@@ -607,7 +609,7 @@ mode = @intCast(stat.mode);
 
 },
 }
-        const store = Blob.Store.new(.{ .ref_count = std.atomic.Value(u32).init(2), .allocator = default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (Output.stdout_descriptor_type == .terminal), .mode = mode } } });
+        const store = bun.@"new"(Blob.Store, .{ .ref_count = std.atomic.Value(u32).init(2), .allocator = default_allocator, .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .is_atty = (Output.stdout_descriptor_type == .terminal), .mode = mode } } });
         self.stdout_store = store;
         return store;
 }
@@ -635,7 +637,7 @@ mode = @intCast(stat.mode);
             _ = &valid;
             is_atty = std.posix.isatty(valid.native());
         }
-        const store = Blob.Store.new(.{ .allocator = default_allocator, .ref_count = std.atomic.Value(u32).init(2), .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .mode = mode, .is_atty = is_atty } } });
+        const store = bun.@"new"(Blob.Store, .{ .allocator = default_allocator, .ref_count = std.atomic.Value(u32).init(2), .data = .{ .file = .{ .pathlike = .{ .fd = fd }, .mode = mode, .is_atty = is_atty } } });
         self.stdin_store = store;
         return store;
 }
@@ -674,7 +676,7 @@ pub fn lazyGroup(self: *RareData, vm: *jsc.VirtualMachine, comptime field: []con
         var group: *uws.SocketGroup = (&@field(self, field));
         _ = &group;
         if ((group.loop == null)) {
-            group.* = uws.SocketGroup.init(vm.eventLoop().uwsLoop());
+            _ = group.init(vm.uwsLoop(), null, null);
         }
         return group;
 }
@@ -705,7 +707,7 @@ pub fn sslCtxCache(self: *RareData) *bun.api.SSLContextCache {
 
 pub fn defaultClientSslCtx(self: *RareData) *uws.SslCtx {
         if ((self.default_client_ssl_ctx == null)) {
-            var e = bun.api.SSLContextCache.GetOrCreateError.init();
+            var e: uws.create_bun_socket_error_t = .none;
             _ = &e;
             const ctx = self.ssl_ctx_cache.getOrCreateOpts(.{}, (&e));
             if ((ctx == null)) {
@@ -730,13 +732,11 @@ pub fn globalDNSResolver(self: *RareData, vm: *jsc.VirtualMachine) *api.dns.Reso
         return (&self.global_dns_data.?.resolver);
 }
 
-pub fn nodeFSStatWatcherScheduler(self: *RareData, vm: *jsc.VirtualMachine) *StatWatcherScheduler {
+pub fn nodeFSStatWatcherScheduler(self: *RareData, vm: *jsc.VirtualMachine) bun.ptr.RefPtr(StatWatcherScheduler) {
         if ((self.node_fs_stat_watcher_scheduler == null)) {
-            const scheduler = bun.ptr.RefPtr(StatWatcherScheduler).create(vm.allocator, .{ vm.loop() });
-            _ = scheduler.ref();
-            self.node_fs_stat_watcher_scheduler = scheduler;
+            self.node_fs_stat_watcher_scheduler = StatWatcherScheduler.init(vm);
         }
-        return self.node_fs_stat_watcher_scheduler.?.get();
+        return self.node_fs_stat_watcher_scheduler.?.dupeRef();
 }
 
 pub fn s3DefaultClient(self: *RareData, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
@@ -744,9 +744,21 @@ pub fn s3DefaultClient(self: *RareData, globalThis: *jsc.JSGlobalObject) jsc.JSV
             _ = &client;
             return client;
         }
-        const client = jsc.API.S3Client.createDefault(globalThis);
-        _ = self.s3_default_client.set(globalThis, client);
-        return client;
+        const vm = globalThis.bunVM();
+        var aws_options = (blk_catch_8: { break :blk_catch_8 ((bun.S3.S3Credentials.getCredentialsWithOptions(vm.transpiler.env.getS3Credentials(), .{}, null, null, null, false, globalThis)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+            _ = bun.outOfMemory();
+        }
+        _ = globalThis.reportActiveExceptionAsUnhandled(e);
+        return jsc.JSValue.js_undefined; }); });
+        _ = &aws_options;
+        defer {
+        _ = aws_options.deinit();
+        }
+        const client = bun.@"new"(jsc.WebCore.S3Client, .{ .credentials = aws_options.credentials.dupe(), .options = aws_options.options, .acl = aws_options.acl, .storage_class = aws_options.storage_class });
+        const js_client = client.toJS(globalThis);
+        _ = js_client.ensureStillAlive();
+        self.s3_default_client = .create(js_client, globalThis);
+        return js_client;
 }
 
 pub fn tlsDefaultCiphers(self: *RareData) [:0]const u8 {
@@ -769,7 +781,9 @@ pub fn setTLSDefaultCiphers(self: *RareData, ciphers: []const u8) void {
 
 pub fn defaultCSRFSecret(self: *RareData) []const u8 {
         if ((self.default_csrf_secret.len == 0)) {
-            self.default_csrf_secret = ((bun.default_allocator.dupe(u8, (&bun.CSRF.generateSecret()))) catch unreachable);
+            const secret = bun.handleOom(bun.default_allocator.alloc(u8, 16));
+            _ = bun.csprng(secret);
+            self.default_csrf_secret = secret;
         }
         return self.default_csrf_secret;
 }
@@ -795,11 +809,12 @@ pub fn deinit(self: *RareData) void {
 }
 
 pub fn closeAllSocketGroups(self: *RareData, vm: *jsc.VirtualMachine) void {
+    _ = vm;
         inline for (socket_group_fields) |f| {
             var group: *uws.SocketGroup = (&@field(self, f));
             _ = &group;
             if ((group.loop != null)) {
-                _ = group.closeAll(vm.eventLoop().uwsLoop());
+                _ = group.closeAll();
             }
         }
 }

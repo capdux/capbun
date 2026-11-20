@@ -1030,7 +1030,9 @@ pub fn executeCustomMatcher(globalThis: *JSGlobalObject, matcher_name: bun.Strin
             _ = matcher_context_jsvalue.ensureStillAlive();
             var result = try matcher_fn.call(globalThis, matcher_context_jsvalue, args);
             _ = &result;
-            if (result.asAnyPromise()) |promise| {
+            if (result.asAnyPromise()) |promise_val| {
+                _ = &promise_val;
+                var promise = promise_val;
                 _ = &promise;
                 const vm = globalThis.vm();
                 _ = promise.setHandled(vm);
@@ -1163,7 +1165,11 @@ pub fn hasAssertions(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSE
             }
             const buntest = buntest_strong.get();
             const state_data = buntest.getCurrentStateData();
-            const execution = ((state_data.sequence(buntest)) orelse { return .{ .ok = globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{}) }; });
+            const execution_opt = state_data.sequence(buntest);
+            if ((execution_opt == null)) {
+                return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
+            }
+            const execution = execution_opt.?;
             if ((execution.expect_assertions != .exact)) {
                 execution.expect_assertions = .at_least_one;
             }
@@ -1203,7 +1209,11 @@ pub fn assertions(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSErro
             }
             const buntest2 = buntest_strong2.get();
             const state_data2 = buntest2.getCurrentStateData();
-            const execution = ((state_data2.sequence(buntest2)) orelse { return .{ .ok = globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{}) }; });
+            const execution_opt = state_data2.sequence(buntest2);
+            if ((execution_opt == null)) {
+                return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
+            }
+            const execution = execution_opt.?;
             execution.expect_assertions = .{ .exact = unsigned_expected_assertions };
             return JSValue.js_undefined;
     }

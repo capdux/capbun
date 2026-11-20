@@ -19,7 +19,7 @@ pub const log = Output.scoped(.IPC, .visible);
 
 /// Union type that switches between simple ByteList (for advanced mode)
 /// and JSONLineBuffer (for JSON mode with optimized newline tracking).
-pub union(enum) IncomingBuffer {
+pub enum IncomingBuffer {
     /// For advanced mode - uses length-prefix, no scanning needed
     advanced: bun.ByteList,
     /// For JSON mode - tracks newline positions to avoid O(n²) scanning
@@ -83,10 +83,13 @@ pub const IPCDecodeError = error{
     InvalidFormat,
 } || bun.JSError;
 
-pub const IPCSerializationError = error{
+pub err IPCSerializationError {
     /// Value could not be serialized.
     SerializationFailed,
-} || bun.JSError;
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+}
 
 pub enum AdvancedIPCMessageType: u8 {
     Version = 1,
@@ -365,7 +368,7 @@ pub struct Handle {
     }
 }
 
-pub union(enum) CallbackList {
+pub enum CallbackList {
     ack_nack: void,
     none: void,
     /// js callable
@@ -578,8 +581,8 @@ pub struct SendQueue {
     fn closeSocket(*_, reason: CloseSocketReason, origin: CloseSocketFrom) {
         log("SendQueue#closeSocket {s}", .{ @tagName(origin) });
         switch (_.socket) {
-            .open => |s| switch (Environment.isWindows) {
-                true => {
+            .open => |s| {
+                if (comptime Environment.isWindows) {
                     const pipe: *uv.Pipe = s;
                     const stream: *uv.uv_stream_t = pipe.asStream();
                     stream.readStop();
@@ -592,14 +595,13 @@ pub struct SendQueue {
                         log("SendQueue#closeSocket -> close now", .{});
                         _._windowsClose();
                     }
-                },
-                false => {
+                } else {
                     s.close(switch (reason) {
                         .normal => .normal,
                         .failure => .failure,
                     });
                     _._socketClosed();
-                },
+                }
             },
             else => {
                 _._socketClosed();
@@ -764,9 +766,10 @@ pub struct SendQueue {
     }
 
     pub fn updateRef(*_, global: *JSGlobalObject) {
-        switch (_.shouldRef()) {
-            true => _.keep_alive.ref(global.bunVM()),
-            false => _.keep_alive.unref(global.bunVM()),
+        if (_.shouldRef()) {
+            _.keep_alive.ref(global.bunVM());
+        } else {
+            _.keep_alive.unref(global.bunVM());
         }
     }
 
@@ -916,38 +919,35 @@ pub struct SendQueue {
             return;
         }
         const socket = socket_opt.?;
-        switch (Environment.isWindows) {
-            true => {
-                if (fd != null) {
-                    // TODO: send fd on windows
-                }
-                const pipe: *uv.Pipe = socket;
-                const write_len = @min(data.len, std.math.maxInt(i32));
+        if (comptime Environment.isWindows) {
+            if (fd != null) {
+                // TODO: send fd on windows
+            }
+            const pipe: *uv.Pipe = socket;
+            const write_len = @min(data.len, std.math.maxInt(i32));
 
-                // create write request
-                const write_req_slice = bun.handleOom(bun.default_allocator.dupe(u8, data[0..write_len]));
-                const write_req = bun.new(WindowsWrite, WindowsWrite{
-                    owner: _,
-                    write_slice: write_req_slice,
-                    write_req: std.mem.zeroes(uv.uv_write_t),
-                    write_buffer: uv.uv_buf_t.init(write_req_slice),
-                });
-                bun.assert(_.windows.windows_write == null);
-                _.windows.windows_write = write_req;
+            // create write request
+            const write_req_slice = bun.handleOom(bun.default_allocator.dupe(u8, data[0..write_len]));
+            const write_req = bun.new(WindowsWrite, WindowsWrite{
+                owner: _,
+                write_slice: write_req_slice,
+                write_req: std.mem.zeroes(uv.uv_write_t),
+                write_buffer: uv.uv_buf_t.init(write_req_slice),
+            });
+            bun.assert(_.windows.windows_write == null);
+            _.windows.windows_write = write_req;
 
-                pipe.ref(); // ref on write
-                if (err := _.windows.windows_write.?.write_req.write(pipe.asStream(), &_.windows.windows_write.?.write_buffer, write_req, &_windowsOnWriteComplete).asErr()) {
-                    _windowsOnWriteComplete(write_req, @enumFromInt(-@as(c_int, err.errno)));
-                }
-                // write request is queued. it will call _onWriteComplete when it completes.
-            },
-            false => {
-                if (fd_unwrapped := fd) {
-                    _._onWriteComplete(socket.writeFd(data, fd_unwrapped));
-                } else {
-                    _._onWriteComplete(socket.write(data));
-                }
-            },
+            pipe.ref(); // ref on write
+            if (err := _.windows.windows_write.?.write_req.write(pipe.asStream(), &_.windows.windows_write.?.write_buffer, write_req, &_windowsOnWriteComplete).asErr()) {
+                _windowsOnWriteComplete(write_req, @enumFromInt(-@as(c_int, err.errno)));
+            }
+            // write request is queued. it will call _onWriteComplete when it completes.
+        } else {
+            if (fd_unwrapped := fd) {
+                _._onWriteComplete(socket.writeFd(data, fd_unwrapped));
+            } else {
+                _._onWriteComplete(socket.write(data));
+            }
         }
     }
 

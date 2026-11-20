@@ -72,14 +72,14 @@ export enum CachingSha2State {
     waiting_key,
 }
 
-export union AuthState {
+pub const AuthState = union(enum) {
     pending: void,
     native_password: void,
     caching_sha2: CachingSha2State,
     ok: void,
 
     pub const CachingSha2 = CachingSha2State;
-}
+};
 
 export struct Writer {
     connection: *MySQLConnection,
@@ -185,7 +185,7 @@ export struct Reader {
     @"#status_flags": StatusFlags = StatusFlags{},
 
     @"#auth_plugin": AuthMethod? = null,
-    @"#auth_state": AuthState = AuthState{ pending: {} },
+    @"#auth_state": AuthState = .pending,
 
     @"#auth_data": ManagedByteList = ManagedByteList.init(bun.default_allocator),
     @"#database": []const u8 = "",
@@ -358,14 +358,16 @@ export struct Reader {
         if (this.@"#socket" == .SocketTCP) {
             const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
             const tls_group = vm.rareData().mysqlGroup(vm, true);
-            const new_socket = this.@"#socket".SocketTCP.socket.connected.adoptTLS(
+            const new_socket_opt = this.@"#socket".SocketTCP.socket.connected.adoptTLS(
                 tls_group,
                 .mysql_tls,
                 this.@"#secure".?,
                 this.@"#tls_config".server_name,
                 @sizeOf(*JSMySQLConnection),
                 @sizeOf(*JSMySQLConnection),
-            ) orelse return error.AuthenticationFailed;
+            );
+            if (new_socket_opt == null) return error.AuthenticationFailed;
+            const new_socket = new_socket_opt.?;
             unsafe {
                 new_socket.ext(*JSMySQLConnection).* = this.getJSConnection();
             }
@@ -490,7 +492,9 @@ export struct Reader {
         while (true) {
             reader.markMessageStart();
 
-            const header = PacketHeader.decode(reader.peek()) orelse return AnyMySQLError.Error.ShortRead;
+            const header_opt = PacketHeader.decode(reader.peek());
+            if (header_opt == null) return AnyMySQLError.Error.ShortRead;
+            const header = header_opt.?;
             const header_length = header.length;
             const packet_length: usize = header_length + PacketHeader.size;
             debug("sequence_id: {d} header: {d}", .{ this.@"#sequence_id", header_length });

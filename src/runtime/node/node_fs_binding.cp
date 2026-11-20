@@ -23,7 +23,9 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
             defer slice.deinit();
 
             const args = if (Arguments != void)
-                Arguments.fromJS(globalObject, &slice)?;
+                (Arguments.fromJS(globalObject, &slice)?)
+            else
+                @as(void, undefined);
 
             defer if (comptime Arguments != void && @hasDecl(Arguments, "deinit"))
                 args.deinit();
@@ -50,13 +52,17 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
                 Arguments.fromJS(globalObject, &slice) catch |e| {
                     deinit = true;
                     return e;
-                };
+                }
+            else
+                @as(void, undefined);
 
-            defer if (deinit) args.deinit();
+            defer if (comptime Arguments != void && @hasDecl(Arguments, "deinit")) {
+                if (deinit) args.deinit();
+            };
 
             if (globalObject.hasException()) {
                 deinit = true;
-                return .zero;
+                return jsc.JSValue.zero;
             }
 
             const have_abort_signal = @hasField(Arguments, "signal");

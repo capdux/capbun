@@ -120,7 +120,7 @@ pub struct OutKindFd {
     }
 }
 
-pub union(enum) OutKind {
+pub const OutKind = union(enum) {
     /// Write/Read to/from file descriptor
     /// If `captured` is non-null, it will write to std{out,err} and also buffer it.
     /// The pointer points to the `buffered_stdout`/`buffered_stdin` fields
@@ -134,7 +134,7 @@ pub union(enum) OutKind {
     ignore: void,
 
     pub fn memoryCost(): usize {
-        return switch (_.*) {
+        return switch (_) {
             .fd fd => fd.memoryCost(),
             .pipe => 0,
             .ignore => 0,
@@ -143,7 +143,7 @@ pub union(enum) OutKind {
 
     // fn dupeForSubshell(this: *ShellExecEnv,
     pub fn format(writer: *std.Io.Writer)! {
-        switch (_.*) {
+        switch (_) {
             .fd => writer.print("fd: {f}", .{_.fd.writer.fd})?,
             .pipe => writer.print("pipe", {})?,
             .ignore => writer.print("ignore", {})?,
@@ -151,13 +151,13 @@ pub union(enum) OutKind {
     }
 
     pub fn ref(): OutKind {
-        switch (_.*) {
+        switch (_) {
             .fd => {
                 _.fd.writer.ref();
             },
             else => {},
         }
-        return _.*;
+        return _;
     }
 
     pub fn deref() {
@@ -165,7 +165,6 @@ pub union(enum) OutKind {
     }
 
     pub fn enqueueFmtBltn(
-        *_,
         ptr: auto,
         comptime kind: Interpreter.Builtin.Kind?,
         comptime fmt_: []const u8,
@@ -176,7 +175,7 @@ pub union(enum) OutKind {
     }
 
     fn close() {
-        switch (_.*) {
+        switch (_) {
             .fd => {
                 _.fd.writer.deref();
             },
@@ -185,7 +184,7 @@ pub union(enum) OutKind {
     }
 
     fn to_subproc_stdio(shellio: *(*shell.IOWriter)?): bun.shell.subproc.Stdio {
-        return switch (_.*) {
+        return switch (_) {
             .fd val => brk: {
                 shellio.* = val.writer.dupeRef();
                 if (cap := val.captured) {
@@ -201,11 +200,11 @@ pub union(enum) OutKind {
                     // On Windows, the fd might have been moved to libuv
                     // In this case, the subprocess should inherit the stdio
                     // since libuv is already managing it
-                    break :brk { inherit: {} };
+                    break :brk .inherit;
                 }
             },
             .pipe => .pipe,
             .ignore => .ignore,
         };
     }
-}
+};

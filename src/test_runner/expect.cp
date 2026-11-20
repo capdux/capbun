@@ -1143,7 +1143,8 @@ pub struct Expect {
         // call the custom matcher implementation
         let result = matcher_fn.call(globalThis, matcher_context_jsvalue, args)?;
         // support for async matcher results
-        if (promise := result.asAnyPromise()) {
+        if (promise_val := result.asAnyPromise()) {
+            let promise = promise_val;
             const vm = globalThis.vm();
             promise.setHandled(vm);
 
@@ -1287,7 +1288,9 @@ pub struct Expect {
         defer buntest_strong.deinit();
         const buntest = buntest_strong.get();
         const state_data = buntest.getCurrentStateData();
-        const execution = state_data.sequence(buntest) orelse return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
+        const execution_opt = state_data.sequence(buntest);
+        if (execution_opt == null) return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
+        const execution = execution_opt.?;
         if (execution.expect_assertions != .exact) {
             execution.expect_assertions = .at_least_one;
         }
@@ -1328,7 +1331,9 @@ pub struct Expect {
         defer buntest_strong2.deinit();
         const buntest2 = buntest_strong2.get();
         const state_data2 = buntest2.getCurrentStateData();
-        const execution = state_data2.sequence(buntest2) orelse return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
+        const execution_opt = state_data2.sequence(buntest2);
+        if (execution_opt == null) return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
+        const execution = execution_opt.?;
         execution.expect_assertions = { exact: unsigned_expected_assertions };
 
         return JSValue.js_undefined;

@@ -372,11 +372,11 @@ pub fn callImplWithType(self: *Builtin, comptime BuiltinImpl: type, comptime Ret
         const args = brk: {
         var args: std.@"meta".ArgsTuple(@TypeOf(@field(BuiltinImpl,field))) = undefined;
         _ = &args;
-        args[cp_cast_int(usize, 0)] = impl_self;
-        var i: usize = 1;
+        @field(args, "0") = impl_self;
+        comptime var i: usize = 1;
         _ = &i;
         inline for (args_) |a| {
-            args[cp_cast_int(usize, i)] = a;
+            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = a;
             i = (i + 1);
         }
         break :brk args;

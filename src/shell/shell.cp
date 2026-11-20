@@ -3964,7 +3964,8 @@ pub fn handleTemplateValue(
                 handleTemplateValue(globalThis, arr, out_jsobjs, out_script, jsstrings, jsobjref_buf, marked_argument_buffer)?;
                 if (i < last) {
                     const str = bun.String.static(" ");
-                    if (!builder.appendBunStr(str, false)?) {
+                    const ok = builder.appendBunStr(str, false)?;
+                    if (!ok) {
                         return globalThis.throw("Shell script string contains invalid UTF-16", {});
                     }
                 }
@@ -4429,7 +4430,7 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
         }
 
         pub inline fn slice(): []const T {
-            return switch (_.*) {
+            return switch (_) {
                 .inlined => {
                     if (_.inlined.len == 0) return empty_slice[0..0];
                     return _.inlined.items[0.._.inlined.len];

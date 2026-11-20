@@ -47,7 +47,7 @@ global: *JSGlobalObject,
 allocator: std.mem.Allocator,
 has_loaded_constructors: bool = false,
 transpiler: Transpiler,
-bun_watcher: ImportWatcher = ImportWatcher{ none: {} },
+bun_watcher: ImportWatcher = ImportWatcher{ none: @as(void, undefined) },
 console: *ConsoleObject,
 log: *logger.Log,
 main: []const u8 = "",
@@ -183,7 +183,7 @@ entry_point_result: EntryPointResult = {},
 
 auto_install_dependencies: bool = false,
 
-onUnhandledRejection: *const OnUnhandledRejection = defaultOnUnhandledRejection,
+onUnhandledRejection: OnUnhandledRejection = defaultOnUnhandledRejection,
 onUnhandledRejectionCtx: *!? = null,
 onUnhandledRejectionExceptionList: (*ExceptionList)? = null,
 unhandled_error_counter: usize = 0,
@@ -475,7 +475,7 @@ pub @tls let is_main_thread_vm: bool = false;
 
 pub struct UnhandledRejectionScope {
     ctx: *!? = null,
-    onUnhandledRejection: *const OnUnhandledRejection = undefined,
+    onUnhandledRejection: OnUnhandledRejection = undefined,
     count: usize = 0,
 
     fn apply(*_, vm: *jsc.VirtualMachine) {
@@ -3020,7 +3020,7 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
                     cached = .none;
                     client.source_mappings.unlock();
                     table_locked = false;
-                    client.remapOneFrameSlow(frame, path);
+                    client.remapOneFrameSlow(unsafe { &frame }, path);
                     client.source_mappings.lock();
                     table_locked = true;
                     continue;
@@ -3030,7 +3030,7 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
                 cached = .none;
                 client.source_mappings.unlock();
                 table_locked = false;
-                client.remapOneFrameSlow(frame, path);
+                client.remapOneFrameSlow(unsafe { &frame }, path);
                 client.source_mappings.lock();
                 table_locked = true;
                 continue;

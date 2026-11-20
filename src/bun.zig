@@ -382,7 +382,7 @@ pub const UseSystemCAError = error{
 };
 
 pub const debug_allocator_data = struct {
-    pub var backing: ?std.heap.DebugAllocator({}) = null;
+    pub var backing: ?std.heap.DebugAllocator(std.heap.DebugAllocatorConfig{}) = null;
 
 pub fn alloc(_: *anyopaque, new_len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
             return backing.?.allocator().rawAlloc(new_len, alignment, ret_addr);
@@ -839,12 +839,22 @@ pub fn makeOpenPathAccessMaskW(self: MakePath, comptime T: type, sub_path: []con
             while (true) {
                 const sub_path_w = (if (comptime (T == u16)) try w.wToPrefixedFileW(self.fd, @ptrCast(component.path)) else try w.sliceToPrefixedFileW(self.fd, component.path));
                 var result = (blk_catch_0: { break :blk_catch_0 ((self.makeOpenDirAccessMaskW(self, sub_path_w.span().ptr, access_mask, .{ .no_follow = no_follow, .create_disposition = w.FILE_OPEN_IF })) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
-                    if (component == null) { component = return e; }
+                    if (it.previous()) |prev| {
+                        _ = &prev;
+                        component = prev;
+                    } else {
+                        return e;
+                    }
                     continue;
                 }
                 return e; }); });
                 _ = &result;
-                if (component == null) { component = return result; }
+                if (it.next()) |next| {
+                    _ = &next;
+                    component = next;
+                } else {
+                    return result;
+                }
                 _ = result.close();
             }
     }
@@ -914,13 +924,23 @@ pub fn makePath(comptime T: type, self: std.fs.Dir, sub_path: []const T) !void {
                 _ = (blk_catch_1: { break :blk_catch_1 ((std.fs.Dir.makeDir(self, component.path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
                 } else {
                     if ((e == error.FileNotFound)) {
-                        if (component == null) { component = return e; }
+                        if (it.previous()) |prev| {
+                            _ = &prev;
+                            component = prev;
+                        } else {
+                            return e;
+                        }
                         continue;
                     } else {
                         return e;
                     }
                 } }); });
-                if (component == null) { component = return; }
+                if (it.next()) |next| {
+                    _ = &next;
+                    component = next;
+                } else {
+                    return;
+                }
             }
     }
 
@@ -1817,7 +1837,7 @@ pub fn isReadable(fd: FD) PollFlag {
         _ = &polls;
         const result = ((blk_catch_9: { break :blk_catch_9 ((std.posix.poll((&polls), 0)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); }) != 0);
         const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
-        _ = global_scope_log("poll({f}, .readable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if ((polls[0].revents & (std.posix.POLL.ERR != 0))) " ERR " else "") });
+        _ = global_scope_log("poll({f}, .readable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if (((polls[0].revents & std.posix.POLL.ERR) != 0)) " ERR " else "") });
         return rc;
 }
 
@@ -1848,7 +1868,7 @@ pub fn isWritable(fd: FD) PollFlag {
         _ = &polls;
         const result = ((blk_catch_10: { break :blk_catch_10 ((std.posix.poll((&polls), 0)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); }) != 0);
         const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
-        _ = global_scope_log("poll({f}, .writable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if ((polls[0].revents & (std.posix.POLL.ERR != 0))) " ERR " else "") });
+        _ = global_scope_log("poll({f}, .writable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if (((polls[0].revents & std.posix.POLL.ERR) != 0)) " ERR " else "") });
         return rc;
 }
 
@@ -2764,7 +2784,7 @@ return error.Unknown;
 }
 
 pub fn isRegularFile(mode: anytype) bool {
-        return S.ISREG((if (comptime @typeInfo(@TypeOf(mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(mode)) else cp_cast_int(i32, mode)));
+        return S.ISREG(@intCast(mode));
 }
 
 pub fn LazyBool(comptime Getter: anytype, comptime Parent: type, comptime field: []const u8) type {
@@ -2837,13 +2857,23 @@ pub fn makePath(dir: std.fs.Dir, sub_path: []const u8) !void {
                 }
             } else {
                 if ((e == error.FileNotFound)) {
-                    if (component == null) { component = return e; }
+                    if (it.previous()) |prev| {
+                        _ = &prev;
+                        component = prev;
+                    } else {
+                        return e;
+                    }
                     continue;
                 } else {
                     return e;
                 }
             } }); });
-            if (component == null) { component = return; }
+            if (it.next()) |next| {
+                _ = &next;
+                component = next;
+            } else {
+                return;
+            }
         }
 }
 

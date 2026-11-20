@@ -228,7 +228,7 @@ pub struct CronRegisterJob {
             return;
         }
         const crontab_path = crontab_path_opt.?;
-        const argv: [3]([*:0]const u8)? = [ crontab_path, "-l".ptr, null ];
+        const argv: [3]ConstCString? = [ crontab_path, "-l".ptr, null ];
         _.spawnCmd(&argv, .ignore, .buffer);
     }
 
@@ -287,7 +287,7 @@ pub struct CronRegisterJob {
             return;
         }
         const crontab_path = crontab_path_opt.?;
-        const argv: [3]([*:0]const u8)? = [ crontab_path, tmp_path.ptr, null ];
+        const argv: [3]ConstCString? = [ crontab_path, tmp_path.ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 
@@ -410,7 +410,7 @@ pub struct CronRegisterJob {
             return;
         };
         defer bun.default_allocator.free(uid_str);
-        const argv: [4]([*:0]const u8)? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null ];
+        const argv: [4]ConstCString? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 
@@ -429,7 +429,7 @@ pub struct CronRegisterJob {
             return;
         };
         defer bun.default_allocator.free(uid_str);
-        const argv: [5]([*:0]const u8)? = [ "/bin/launchctl".ptr, "bootstrap".ptr, uid_str.ptr, plist_path.ptr, null ];
+        const argv: [5]ConstCString? = [ "/bin/launchctl".ptr, "bootstrap".ptr, uid_str.ptr, plist_path.ptr, null ];
         _.tmp_path = null; // don't delete the installed plist
         _.spawnCmd(&argv, .ignore, .ignore);
     }
@@ -564,7 +564,7 @@ pub struct CronRegisterJob {
             return;
         };
 
-        const argv: [9]([*:0]const u8)? = [ "schtasks".ptr, "/create".ptr, "/xml".ptr, xml_path.ptr, "/tn".ptr, task_name.ptr, "/np".ptr, "/f".ptr, null ];
+        const argv: [9]ConstCString? = [ "schtasks".ptr, "/create".ptr, "/xml".ptr, xml_path.ptr, "/tn".ptr, task_name.ptr, "/np".ptr, "/f".ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 }
@@ -733,7 +733,7 @@ pub struct CronRemoveJob {
             return;
         }
         const crontab_path = crontab_path_opt.?;
-        const argv: [3]([*:0]const u8)? = [ crontab_path, "-l".ptr, null ];
+        const argv: [3]ConstCString? = [ crontab_path, "-l".ptr, null ];
         _.spawnCmd(&argv, .ignore, .buffer);
     }
 
@@ -777,7 +777,7 @@ pub struct CronRemoveJob {
             return;
         }
         const crontab_path = crontab_path_opt.?;
-        const argv: [3]([*:0]const u8)? = [ crontab_path, tmp_path.ptr, null ];
+        const argv: [3]ConstCString? = [ crontab_path, tmp_path.ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 
@@ -789,7 +789,7 @@ pub struct CronRemoveJob {
             return;
         };
         defer bun.default_allocator.free(uid_str);
-        const argv: [4]([*:0]const u8)? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null ];
+        const argv: [4]ConstCString? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 
@@ -831,7 +831,7 @@ pub struct CronRemoveJob {
             return;
         };
         defer bun.default_allocator.free(task_name);
-        const argv: [6]([*:0]const u8)? = [ "schtasks".ptr, "/delete".ptr, "/tn".ptr, task_name.ptr, "/f".ptr, null ];
+        const argv: [6]ConstCString? = [ "schtasks".ptr, "/delete".ptr, "/tn".ptr, task_name.ptr, "/f".ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 }
@@ -1242,7 +1242,7 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
 
     let envp_arena = std.heap.ArenaAllocator.init(bun.default_allocator);
     defer envp_arena.deinit();
-    const envp: [*:null]([*:0]const u8)? = if (comptime bun.Environment.isPosix)
+    const envp: [*:null]ConstCString? = if (comptime bun.Environment.isPosix)
         @ptrCast(@constCast(std.c.environ))
     else
         @ptrCast((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator()) catch {
@@ -1306,8 +1306,10 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
     }
 }
 
+type ConstCString = [*:0]const u8;
+
 /// Find crontab binary using bun.which (searches PATH).
-fn findCrontab(): [*:0]const u8? {
+fn findCrontab(): ConstCString? {
     if (comptime bun.Environment.isWindows) return null;
     const path_env = bun.env_var.PATH.get() ?? "/usr/bin:/bin";
     const which_res = bun.which(&crontab_buf, path_env, "", "crontab");

@@ -571,7 +571,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             let task = bun.new(
                 ThisAsyncCpTask,
                 ThisAsyncCpTask{
-                    promise: if (comptime enable_promise) jsc.JSPromise.Strong.init(globalObject) else {},
+                    promise: if (comptime enable_promise) jsc.JSPromise.Strong.init(globalObject) else jsc.JSPromise.Strong.empty,
                     args: cp_args,
                     has_result: { raw: false },
                     result: undefined,
@@ -801,7 +801,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
                 return;
             }
 
-            * = ThisAsyncCpTask._cpAsyncDirectory(nodefs, args.flags, this_, &src_buf, i32(src.len), &dest_buf, i32(dest.len));
+            * = ThisAsyncCpTask._cpAsyncDirectory(nodefs, args.flags, this_, &src_buf, @intCast(src.len), &dest_buf, @intCast(dest.len));
         }
 
         // returns boolean `should_continue`
@@ -1368,7 +1368,7 @@ pub struct Arguments {
         buffers: jsc.Node.VectorArrayBuffer,
         position: u52? = 0,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
 
         static fn deinitAndUnprotect(this: *const @This()) {
             this.buffers.value.unprotect();
@@ -1527,7 +1527,8 @@ pub struct Arguments {
             };
 
             const gid: gid_t = brk: {
-                const gid_value = arguments.next() ?? return ctx.throwInvalidArguments("gid is required", {});
+                let gid_value: jsc.JSValue = undefined;
+                if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
                 arguments.eat();
                 break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
             };
@@ -1541,7 +1542,7 @@ pub struct Arguments {
         uid: uid_t,
         gid: gid_t,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
 
         fn toThreadSafe(_: *const @This()) void {}
 
@@ -1560,7 +1561,8 @@ pub struct Arguments {
             };
 
             const gid: gid_t = brk: {
-                const gid_value = arguments.next() ?? return ctx.throwInvalidArguments("gid is required", {});
+                let gid_value: jsc.JSValue = undefined;
+                if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
                 arguments.eat();
                 break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
             };
@@ -1656,7 +1658,7 @@ pub struct Arguments {
         fd: FD,
         mode: Mode = 0x777,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
 
         fn toThreadSafe(_: *const @This()) void {}
 
@@ -1770,7 +1772,7 @@ pub struct Arguments {
         fd: FD,
         big_int: bool = false,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
 
         fn toThreadSafe(_: *@This()) void {}
 
@@ -2092,7 +2094,7 @@ pub struct Arguments {
                     }
 
                     if (retries := val.get(ctx, "maxRetries")?) {
-                        max_retries = i32(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
+                        max_retries = @intCast(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
                     }
                 } else if (!val.isUndefined()) {
                     return ctx.throwInvalidArguments("The \"options\" argument must be of type object.", {});
@@ -2291,7 +2293,7 @@ pub struct Arguments {
     pub const Close = struct {
         fd: FD,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
         fn toThreadSafe(_: Close) void {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Close {
@@ -2344,11 +2346,11 @@ pub struct Arguments {
                 } else if (val != .zero) {
                     if (!val.isUndefinedOrNull()) {
                         // error is handled below
-                        flags = FileSystemFlags.fromJS(ctx, val) ?? flags?;
+                        if (f := FileSystemFlags.fromJS(ctx, val)?) { flags = f; }
                     }
 
                     if (next := arguments.nextEat()) {
-                        mode = jsc.Node.modeFromJS(ctx, next) ?? mode?;
+                        if (m := jsc.Node.modeFromJS(ctx, next)?) { mode = m; }
                     }
                 }
             }
@@ -2375,7 +2377,7 @@ pub struct Arguments {
         atime: TimeLike,
         mtime: TimeLike,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
 
         static fn toThreadSafe(self: *const @This()) {
             * = self;
@@ -2529,7 +2531,7 @@ pub struct Arguments {
                                     { field_name: "length", min: 0, max: i32(max_len) },
                                 );
                             }
-                            args.length = i32(length);
+                            args.length = @intCast(length);
 
                             arguments.eat();
                             if (next_cur := arguments.next()) {
@@ -2558,7 +2560,7 @@ pub struct Arguments {
         length: u64,
         position: ReadPosition? = null,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
 
         fn toThreadSafe() {
             _.buffer.buffer.value.protect();
@@ -2593,7 +2595,7 @@ pub struct Arguments {
             const offset: u64 = if (offset_value.isUndefinedOrNull())
                 0
             else
-                i32(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER));
+                @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER));
 
             // length |= 0;
             let length_float: f64 = 0;
@@ -3020,7 +3022,7 @@ pub struct Arguments {
     pub const FdataSync = struct {
         fd: FD,
 
-        fn deinit() {}
+        static fn deinit(self: *const @This()) { * = self; }
         static fn toThreadSafe(self: *const @This()) {
             * = self;
         }
@@ -3172,7 +3174,7 @@ pub struct Arguments {
     pub const Fsync = struct {
         fd: FD,
 
-        fn deinit(_: Fsync) void {}
+        static fn deinit(self: *const @This()) { * = self; }
         fn toThreadSafe(_: *const @This()) void {}
 
         static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Fsync {
@@ -3198,7 +3200,7 @@ pub const StatOrNotFound = union(enum) {
     }
 
     pub fn toJSNewlyCreated(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        return switch (_.*) {
+        return switch (_) {
             .stats => _.stats.toJSNewlyCreated(globalObject),
             .not_found => .js_undefined,
         };
@@ -3341,11 +3343,11 @@ struct Return {
                 },
                 .buffers => {
                     defer bun.default_allocator.free(_.buffers);
-                    return .fromAny(globalObject, []Buffer, _.buffers);
+                    return jsc.JSValue.fromAny(globalObject, []Buffer, _.buffers);
                 },
                 .files => {
                     // automatically freed
-                    return .fromAny(globalObject, []const bun.String, _.files);
+                    return jsc.JSValue.fromAny(globalObject, []const bun.String, _.files);
                 },
             }
         }
@@ -4845,7 +4847,7 @@ pub struct NodeFS {
         entries: *std.array_list.Managed(ExpectedType),
     ): Maybe(void) {
         let iterator_stack = std.heap.stackFallback(128, bun.default_allocator);
-        let stack = bun.LinearFifo([:0]const u8, { Dynamic: {} }).init(iterator_stack.get());
+        let stack = bun.LinearFifo([:0]const u8, .Dynamic).init(iterator_stack.get());
         let basename_stack = std.heap.stackFallback(8192 * 2, bun.default_allocator);
         const basename_allocator = basename_stack.get();
         defer {
@@ -6175,7 +6177,7 @@ pub struct NodeFS {
         const src = args.src.osPath(&src_buf);
         const dest = args.dest.osPath(&dest_buf);
 
-        return _.cpSyncInner(&src_buf, i32(src.len), &dest_buf, i32(dest.len), args);
+        return _.cpSyncInner(&src_buf, @intCast(src.len), &dest_buf, @intCast(dest.len), args);
     }
 
     fn osPathIntoSyncErrorBuf(*_, slice: auto): []const u8 {
@@ -6341,7 +6343,7 @@ pub struct NodeFS {
                 .directory => {
                     const r = _.cpSyncInner(
                         src_buf,
-                        src_dir_len + @as(PathString.PathInt, i32(1 + name_slice.len)),
+                        src_dir_len + @as(PathString.PathInt, @intCast(1 + name_slice.len)),
                         dest_buf,
                         dest_dir_len + @as(PathString.PathInt, i32(1 + name_slice.len)),
                         args,

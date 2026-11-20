@@ -730,7 +730,8 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
     let column: string? = null;
 
     if (file_path_ := arguments.nextEat()) {
-        path = ((file_path_.toSlice(globalThis, arguments.@"arena".allocator()))?).slice();
+        const slice_val = file_path_.toSlice(globalThis, arguments.@"arena".allocator())?;
+        path = slice_val.slice();
     }
 
     if (opts := arguments.nextEat()) {
@@ -974,10 +975,10 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
 }
 
 export fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool): jsc.JSValue {
-    const specifier_str = specifier.toBunString(global) catch return .zero;
+    const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
     defer specifier_str.deref();
 
-    const source_str = source.toBunString(global) catch return .zero;
+    const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
     defer source_str.deref();
 
     const value = doResolveWithArgs(global, specifier_str, source_str, is_esm, true, false) catch {
@@ -989,14 +990,14 @@ export fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSVa
 }
 
 export fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
-    const specifier_str = specifier.toBunString(global) catch return .zero;
+    const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
     defer specifier_str.deref();
 
     if (specifier_str.length() == 0) {
         return global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() catch .zero;
     }
 
-    const source_str = source.toBunString(global) catch return .zero;
+    const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
     defer source_str.deref();
 
     return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source_str, is_esm, true, is_user_require_resolve });
@@ -1013,14 +1014,14 @@ export fn Bun__resolveSyncWithPaths(
 ): jsc.JSValue {
     const paths: []const bun.String = if (paths_len == 0) [] else paths_ptr.?[0..paths_len];
 
-    const specifier_str = specifier.toBunString(global) catch return .zero;
+    const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
     defer specifier_str.deref();
 
     if (specifier_str.length() == 0) {
         return global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() catch .zero;
     }
 
-    const source_str = source.toBunString(global) catch return .zero;
+    const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
     defer source_str.deref();
 
     const bun_vm = global.bunVM();
@@ -1037,7 +1038,7 @@ export fn Bun__resolveSyncWithStrings(global: *JSGlobalObject, specifier: *bun.S
 }
 
 export fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSValue, source: *bun.String, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
-    const specifier_str = specifier.toBunString(global) catch return .zero;
+    const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
     defer specifier_str.deref();
     if (specifier_str.length() == 0) {
         return global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() catch .zero;
@@ -1162,24 +1163,18 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
         inline else => |has_ssl_config| {
             switch (config.isDevelopment()) {
                 inline else => |development| {
-                    const ServerType = comptime switch (development) {
-                        true => switch (has_ssl_config) {
-                            true => jsc.API.DebugHTTPSServer,
-                            false => jsc.API.DebugHTTPServer,
-                        },
-                        false => switch (has_ssl_config) {
-                            true => jsc.API.HTTPSServer,
-                            false => jsc.API.HTTPServer,
-                        },
-                    };
+                    const ServerType = comptime if (development)
+                        (if (has_ssl_config) jsc.API.DebugHTTPSServer else jsc.API.DebugHTTPServer)
+                    else
+                        (if (has_ssl_config) jsc.API.HTTPSServer else jsc.API.HTTPServer);
 
                     let server = ServerType.init(&config, globalObject)?;
                     if (globalObject.hasException()) {
-                        return .zero;
+                        return jsc.JSValue.zero;
                     }
                     const route_list_object = server.listen();
                     if (globalObject.hasException()) {
-                        return .zero;
+                        return jsc.JSValue.zero;
                     }
                     const obj = server.toJS(globalObject);
                     if (route_list_object != .zero) {
@@ -1214,7 +1209,7 @@ pub export fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: 
     assert(len > 0);
     const input_slice = ptr[0..len];
     const escaped = strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice) catch {
-        return globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) catch return .zero;
+        return globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) catch return jsc.JSValue.zero;
     };
 
     switch (escaped) {
@@ -1239,7 +1234,7 @@ pub export fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: J
     const allocator = if (input_slice.len <= 32) stack_allocator.get() else stack_allocator.fallback_allocator;
 
     const escaped = strings.escapeHTMLForLatin1Input(allocator, input_slice) catch {
-        return globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) catch return .zero;
+        return globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) catch return jsc.JSValue.zero;
     };
 
     switch (escaped) {
@@ -1770,7 +1765,7 @@ pub struct JSZlib {
                         return globalThis.throw("Zlib error: Invalid argument", .{});
                     }
 
-                    return globalThis.throwError(e, "Zlib error") catch return .zero;
+                    return globalThis.throwError(e, "Zlib error");
                 };
 
                 reader.readAll(true) catch {
@@ -2097,7 +2092,7 @@ pub struct JSZstd {
             }
         }
 
-        fn runFromJS(*_): bun.JSTerminated! {
+        fn runFromJS(*_): bun.JSTerminated!void {
             defer _.deinit();
 
             if (_.vm.isShuttingDown()) {

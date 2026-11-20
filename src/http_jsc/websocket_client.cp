@@ -160,31 +160,31 @@ enum Copy {
     raw: []const u8,
 
     pub fn len(byte_len: *usize): usize {
-        switch (this) {
+        switch (_) {
             .utf16 => {
-                unsafe { byte_len.* = strings.elementLengthUTF16IntoUTF8(this.utf16); }
+                unsafe { byte_len.* = strings.elementLengthUTF16IntoUTF8(_.utf16); }
                 return WebsocketHeader.frameSizeIncludingMask(unsafe { byte_len.* });
             },
             .latin1 => {
-                unsafe { byte_len.* = strings.elementLengthLatin1IntoUTF8(this.latin1); }
+                unsafe { byte_len.* = strings.elementLengthLatin1IntoUTF8(_.latin1); }
                 return WebsocketHeader.frameSizeIncludingMask(unsafe { byte_len.* });
             },
             .bytes => {
-                unsafe { byte_len.* = this.bytes.len; }
+                unsafe { byte_len.* = _.bytes.len; }
                 return WebsocketHeader.frameSizeIncludingMask(unsafe { byte_len.* });
             },
             .raw => {
-                unsafe { byte_len.* = this.raw.len; }
-                return this.raw.len;
+                unsafe { byte_len.* = _.raw.len; }
+                return _.raw.len;
             },
         }
     }
 
     pub fn copy(globalThis: *jsc.JSGlobalObject, buf: []u8, content_byte_len: usize, opcode: Opcode) {
-        if (this == .raw) {
-            bun.assert(buf.len >= this.raw.len);
-            bun.assert(buf.ptr != this.raw.ptr);
-            @memcpy(buf[0..this.raw.len], this.raw);
+        if (_ == .raw) {
+            bun.assert(buf.len >= _.raw.len);
+            bun.assert(buf.ptr != _.raw.ptr);
+            @memcpy(buf[0.._.raw.len], _.raw);
             return;
         }
 
@@ -1046,12 +1046,13 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
         }
 
         fn sendDataUncompressed(*this, bytes: Copy, do_write: bool, opcode: Opcode): bool {
+            let mut_bytes = bytes;
             let content_byte_len: usize = 0;
-            const write_len = bytes.len(&content_byte_len);
+            const write_len = mut_bytes.len(&content_byte_len);
             bun.assert(write_len > 0);
 
             const writable = this.send_buffer.writableWithSize(write_len) catch unreachable;
-            bytes.copy(this.globalThis, writable[0..write_len], content_byte_len, opcode);
+            mut_bytes.copy(this.globalThis, writable[0..write_len], content_byte_len, opcode);
             this.send_buffer.update(write_len);
 
             if (do_write) {
@@ -1218,7 +1219,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
             const opcode: Opcode = @enumFromInt(op);
             const slice = unsafe { ptr[0..len] };
-            const bytes: Copy = .bytes(slice);
+            let bytes: Copy = .bytes(slice);
             const frame_size = WebsocketHeader.frameSizeIncludingMask(len);
             if (!this.hasBackpressure() && frame_size < stack_frame_size) {
                 let inline_buf: [stack_frame_size]u8 = undefined;
@@ -1258,7 +1259,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     return;
                 }
 
-                const bytes: Copy = .bytes(data);
+                let bytes: Copy = .bytes(data);
 
                 const frame_size = WebsocketHeader.frameSizeIncludingMask(data.len);
                 if (!this.hasBackpressure() && frame_size < stack_frame_size) {
@@ -1294,7 +1295,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                 let inline_buf: [stack_frame_size]u8 = undefined;
 
                 if (!str.is16Bit() && str.len < stack_frame_size) {
-                    const bytes: Copy = .latin1(str.slice());
+                    let bytes: Copy = .latin1(str.slice());
                     let byte_len: usize = 0;
                     const frame_size = bytes.len(&byte_len);
                     if (!this.hasBackpressure() && frame_size < stack_frame_size) {
@@ -1303,7 +1304,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                         return;
                     }
                 } else if ((str.len * 4) < stack_frame_size && !this.hasBackpressure()) {
-                    const bytes: Copy = .utf16(str.utf16SliceAligned());
+                    let bytes: Copy = .utf16(str.utf16SliceAligned());
                     let byte_len: usize = 0;
                     const frame_size = bytes.len(&byte_len);
                     bun.assert(frame_size <= stack_frame_size);
@@ -1374,7 +1375,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const vm = globalThis.bunVM();
             let ws = bun.@"new"(WebSocket, {
                 ref_count: .init(),
-                tcp: { socket: { detached: {} } },
+                tcp: { socket: { detached: @as(void, undefined) } },
                 outgoing_websocket: outgoing,
                 globalThis: globalThis,
                 send_buffer: bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator),
@@ -1436,7 +1437,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
             let ws = bun.@"new"(WebSocket, {
                 ref_count: .init(),
-                tcp: { socket: { detached: {} } },
+                tcp: { socket: { detached: @as(void, undefined) } },
                 outgoing_websocket: outgoing,
                 globalThis: globalThis,
                 send_buffer: bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator),

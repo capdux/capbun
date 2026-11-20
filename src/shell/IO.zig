@@ -74,8 +74,8 @@ pub const bun = @import("bun");
 pub const IO = @This();
 
 stdin: InKind,
-stdout: *OutKind,
-stderr: *OutKind,
+stdout: OutKind,
+stderr: OutKind,
 
 pub fn format(self: IO, writer: *std.Io.Writer) !void {
         _ = try writer.print("stdin: {f}\nstdout: {f}\nstderr: {f}", .{ self.stdin, self.stdout, self.stderr });
@@ -206,21 +206,26 @@ pub fn memoryCost(self: OutKindFd) usize {
     }
 };
 
+const shell = bun.shell;
+const Interpreter = bun.shell.Interpreter;
+const OutputNeedsIOSafeGuard = bun.shell.interpret.OutputNeedsIOSafeGuard;
+const stderr_no = bun.shell.interpret.stderr_no;
+const stdout_no = bun.shell.interpret.stdout_no;
 pub const OutKind = union(enum) {
     fd: OutKindFd,
     pipe: void,
     ignore: void,
 
-pub fn memoryCost(self: *const OutKind) usize {
-            return (switch (self.*) {
+pub fn memoryCost(self: @This()) usize {
+            return (switch (self) {
 .fd => |fd| fd.memoryCost(),
 .pipe => 0,
 .ignore => 0,
 });
     }
 
-pub fn format(self: *OutKind, writer: *std.Io.Writer) !void {
-            switch (self.*) {
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+            switch (self) {
 .fd => {
 _ = try writer.print("fd: {f}", .{ self.fd.writer.fd });
 },
@@ -233,8 +238,8 @@ _ = try writer.print("ignore", .{});
 }
     }
 
-pub fn ref(self: *const OutKind) *OutKind {
-            switch (self.*) {
+pub fn ref(self: @This()) OutKind {
+            switch (self) {
 .fd => {
 _ = self.fd.writer.ref();
 },
@@ -242,19 +247,19 @@ else => {
 
 },
 }
-            return self.*;
+            return self;
     }
 
-pub fn deref(self: *const OutKind) void {
+pub fn deref(self: @This()) void {
             _ = self.close();
     }
 
-pub fn enqueueFmtBltn(self: *OutKind, ptr: anytype, comptime kind: ?Interpreter.Builtin.Kind, comptime fmt_: []const u8, args: anytype, _: OutputNeedsIOSafeGuard) void {
+pub fn enqueueFmtBltn(self: @This(), ptr: anytype, comptime kind: ?Interpreter.Builtin.Kind, comptime fmt_: []const u8, args: anytype, _: OutputNeedsIOSafeGuard) void {
             _ = self.fd.writer.enqueueFmtBltn(ptr, self.fd.captured, kind, fmt_, args);
     }
 
-pub fn close(self: *const OutKind) void {
-            switch (self.*) {
+pub fn close(self: @This()) void {
+            switch (self) {
 .fd => {
 _ = self.fd.writer.deref();
 },
@@ -264,8 +269,8 @@ else => {
 }
     }
 
-pub fn to_subproc_stdio(self: *OutKind, shellio: *?*shell.IOWriter) bun.shell.subproc.Stdio {
-            return (switch (self.*) {
+pub fn to_subproc_stdio(self: @This(), shellio: *?*shell.IOWriter) bun.shell.subproc.Stdio {
+            return (switch (self) {
 .fd => |val| brk: {
             shellio.* = val.writer.dupeRef();
             if (val.captured) |cap| {
@@ -276,7 +281,7 @@ pub fn to_subproc_stdio(self: *OutKind, shellio: *?*shell.IOWriter) bun.shell.su
                     _ = &fd;
                     break :brk .{ .fd = fd };
                 } else {
-                    break :brk .{ .inherit = .{} };
+                    break :brk .inherit;
                 }
             }
 },
@@ -285,9 +290,3 @@ pub fn to_subproc_stdio(self: *OutKind, shellio: *?*shell.IOWriter) bun.shell.su
 });
     }
 };
-
-const shell = bun.shell;
-const Interpreter = bun.shell.Interpreter;
-const OutputNeedsIOSafeGuard = bun.shell.interpret.OutputNeedsIOSafeGuard;
-const stderr_no = bun.shell.interpret.stderr_no;
-const stdout_no = bun.shell.interpret.stdout_no;

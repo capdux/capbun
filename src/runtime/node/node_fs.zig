@@ -864,7 +864,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         buffers: jsc.Node.VectorArrayBuffer,
         position: ?u52 = 0,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn deinitAndUnprotect(self: *const @This()) void {
@@ -1008,7 +1009,14 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
     };
                 const gid: gid_t = brk: {
-                const gid_value = ((arguments.next()) orelse { return .{ .ok = ctx.throwInvalidArguments("gid is required", .{}) }; });
+                var gid_value: jsc.JSValue = undefined;
+                _ = &gid_value;
+                if (arguments.next()) |v| {
+                    _ = &v;
+                    gid_value = v;
+                } else {
+                    return ctx.throwInvalidArguments("gid is required", .{});
+                }
                 _ = arguments.eat();
                 break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
     };
@@ -1020,7 +1028,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         uid: uid_t,
         gid: gid_t,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -1045,7 +1054,14 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                 break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
     };
                 const gid: gid_t = brk: {
-                const gid_value = ((arguments.next()) orelse { return .{ .ok = ctx.throwInvalidArguments("gid is required", .{}) }; });
+                var gid_value: jsc.JSValue = undefined;
+                _ = &gid_value;
+                if (arguments.next()) |v| {
+                    _ = &v;
+                    gid_value = v;
+                } else {
+                    return ctx.throwInvalidArguments("gid is required", .{});
+                }
                 _ = arguments.eat();
                 break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
     };
@@ -1129,7 +1145,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         fd: FD,
         mode: Mode = 1911,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -1247,7 +1264,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         fd: FD,
         big_int: bool = false,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: *@This()) void {
@@ -1555,7 +1573,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                         }
                         if (try val.get(ctx, "maxRetries")) |retries| {
                             _ = &retries;
-                            max_retries = (if (comptime @typeInfo(@TypeOf(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)))) == .@"enum") cp_cast_int(i32, @intFromEnum(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)))) else cp_cast_int(i32, try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32))));
+                            max_retries = @intCast(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
                         }
                     } else {
                         if ((!val.isUndefined())) {
@@ -1730,7 +1748,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
     pub const Close = struct {
         fd: FD,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: @This(), _: Close) void {
@@ -1794,11 +1813,17 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                     } else {
                         if ((val != .zero)) {
                             if ((!val.isUndefinedOrNull())) {
-                                if (flags == null) { flags = try flags; }
+                                if (try FileSystemFlags.fromJS(ctx, val)) |f| {
+                                    _ = &f;
+                                    flags = f;
+                                }
                             }
                             if (arguments.nextEat()) |next| {
                                 _ = &next;
-                                if (mode == null) { mode = try mode; }
+                                if (try jsc.Node.modeFromJS(ctx, next)) |m| {
+                                    _ = &m;
+                                    mode = m;
+                                }
                             }
                         }
                     }
@@ -1812,7 +1837,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         atime: TimeLike,
         mtime: TimeLike,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -1932,7 +1958,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                         if (((length > max_len) or (length < 0))) {
                             return ctx.throwRangeError(@as(f64, @floatFromInt(length)), .{ .field_name = "length", .min = 0, .max = (if (comptime @typeInfo(@TypeOf(max_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_len)) else cp_cast_int(i32, max_len)) });
                         }
-                        args.length = (if (comptime @typeInfo(@TypeOf(length)) == .@"enum") cp_cast_int(i32, @intFromEnum(length)) else cp_cast_int(i32, length));
+                        args.length = @intCast(length);
                         _ = arguments.eat();
                         if (arguments.next()) |next_cur| {
                             _ = &next_cur;
@@ -1964,7 +1990,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
         length: u64,
         position: ?ReadPosition = null,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: @This()) void {
@@ -1997,7 +2024,7 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
                     return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value);
                 }
                 const offset_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
-                const offset: u64 = (if (offset_value.isUndefinedOrNull()) 0 else (if (comptime @typeInfo(@TypeOf(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER))) == .@"enum") cp_cast_int(i32, @intFromEnum(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER))) else cp_cast_int(i32, try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER))));
+                const offset: u64 = (if (offset_value.isUndefinedOrNull()) 0 else @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER)));
                 var length_float: f64 = 0;
                 _ = &length_float;
                 if (arguments.nextEat()) |arg| {
@@ -2381,7 +2408,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
     pub const FdataSync = struct {
         fd: FD,
     
-    pub fn deinit() void {
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -2520,8 +2548,8 @@ pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, defau
     pub const Fsync = struct {
         fd: FD,
     
-    pub fn deinit(self: @This(), _: Fsync) void {
-            _ = self;
+    pub fn deinit(self: *const @This()) void {
+                _ = &self;
         }
     
     pub fn toThreadSafe(self: *const @This()) void {
@@ -2645,7 +2673,7 @@ pub const Return = struct {
     defer {
                 _ = bun.default_allocator.free(self.buffers);
                 }
-                return error.fromAny;
+                return jsc.JSValue.fromAny(globalObject, &.{}, Buffer, self.buffers);
     },
     .files => {
     
@@ -3953,7 +3981,7 @@ else => {
 pub fn readdirWithEntriesRecursiveSync(buf: *bun.PathBuffer, args: Arguments.Readdir, root_basename: [:0]const u8, comptime ExpectedType: type, entries: *std.array_list.Managed(ExpectedType)) Maybe(void) {
             var iterator_stack = std.heap.stackFallback(128, bun.default_allocator);
             _ = &iterator_stack;
-            var stack = bun.LinearFifo([:0]const u8, .{ .Dynamic = .{} }).init(iterator_stack.get());
+            var stack = bun.LinearFifo([:0]const u8, .Dynamic).init(iterator_stack.get());
             _ = &stack;
             var basename_stack = std.heap.stackFallback((8192 * 2), bun.default_allocator);
             _ = &basename_stack;
@@ -4880,7 +4908,7 @@ pub fn cp(self: *NodeFS, args: Arguments.Cp, _: Flavor) Maybe(Return.Cp) {
             _ = &dest_buf;
             const src = args.src.osPath((&src_buf));
             const dest = args.dest.osPath((&dest_buf));
-            return self.cpSyncInner((&src_buf), (if (comptime @typeInfo(@TypeOf(src.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(src.len)) else cp_cast_int(i32, src.len)), (&dest_buf), (if (comptime @typeInfo(@TypeOf(dest.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(dest.len)) else cp_cast_int(i32, dest.len)), args);
+            return self.cpSyncInner((&src_buf), @intCast(src.len), (&dest_buf), @intCast(dest.len), args);
     }
 
 pub fn osPathIntoSyncErrorBuf(self: *NodeFS, slice: anytype) []const u8 {
@@ -5005,7 +5033,7 @@ return .{ .err = e.withPath(self.osPathIntoSyncErrorBuf(src)) };
                 dest_buf[cp_cast_int(usize, ((dest_dir_len + 1) + name_slice.len))] = 0;
                 switch (current.kind) {
 .directory => {
-const r = self.cpSyncInner(src_buf, (src_dir_len + (if (comptime @typeInfo(PathString.PathInt) == .@"enum") @as(PathString.PathInt, @enumFromInt((if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len))))) else @as(PathString.PathInt, (if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len)))))), dest_buf, (dest_dir_len + (if (comptime @typeInfo(PathString.PathInt) == .@"enum") @as(PathString.PathInt, @enumFromInt((if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len))))) else @as(PathString.PathInt, (if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len)))))), args);
+const r = self.cpSyncInner(src_buf, (src_dir_len + @as(PathString.PathInt, @intCast((1 + name_slice.len)))), dest_buf, (dest_dir_len + (if (comptime @typeInfo(PathString.PathInt) == .@"enum") @as(PathString.PathInt, @enumFromInt((if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len))))) else @as(PathString.PathInt, (if (comptime @typeInfo(@TypeOf((1 + name_slice.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((1 + name_slice.len))) else cp_cast_int(i32, (1 + name_slice.len)))))), args);
                 switch (r) {
 .err => {
 return r;
@@ -5569,7 +5597,7 @@ pub fn toJS(self: *@This(), globalObject: *jsc.JSGlobalObject) jsc.JSValue {
     }
 
 pub fn toJSNewlyCreated(self: @This(), globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-            return (switch (self.*) {
+            return (switch (self) {
 .stats => self.stats.toJSNewlyCreated(globalObject),
 .not_found => .js_undefined,
 });
@@ -5659,8 +5687,7 @@ pub fn create(globalObject: *jsc.JSGlobalObject, _: *jsc.Node.fs.Binding, cp_arg
     }
 
 pub fn createWithShellTask(globalObject: *jsc.JSGlobalObject, cp_args: Arguments.Cp, vm: *jsc.VirtualMachine, arena_: bun.ArenaAllocator, shelltask: ShellTaskT, comptime enable_promise: bool) *ThisAsyncCpTask {
-            var task = bun.new(ThisAsyncCpTask, ThisAsyncCpTask{ .promise = (if (comptime enable_promise) jsc.JSPromise.Strong.init(globalObject) else ({
-})), .args = cp_args, .has_result = .{ .raw = false }, .result = undefined, .evtloop = .{ .js = vm.event_loop }, .tracker = jsc.Debugger.AsyncTaskTracker.init(vm), .@"arena" = arena_, .subtask_count = .{ .raw = 1 }, .shelltask = shelltask });
+            var task = bun.new(ThisAsyncCpTask, ThisAsyncCpTask{ .promise = (if (comptime enable_promise) jsc.JSPromise.Strong.init(globalObject) else jsc.JSPromise.Strong.empty), .args = cp_args, .has_result = .{ .raw = false }, .result = undefined, .evtloop = .{ .js = vm.event_loop }, .tracker = jsc.Debugger.AsyncTaskTracker.init(vm), .@"arena" = arena_, .subtask_count = .{ .raw = 1 }, .shelltask = shelltask });
             _ = &task;
             if (comptime (!is_shell)) {
                 _ = task.ref.ref(vm);
@@ -5826,7 +5853,7 @@ pub fn cpAsync(nodefs: *NodeFS, this_: *ThisAsyncCpTask) void {
                 _ = this_.finishConcurrently(.{ .err = .{ .errno = @intFromEnum(E.ISDIR), .syscall = .copyfile, .path = nodefs.osPathIntoSyncErrorBuf(src) } });
                 return;
             }
-            _ = ThisAsyncCpTask._cpAsyncDirectory(nodefs, args.flags, this_, (&src_buf), (if (comptime @typeInfo(@TypeOf(src.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(src.len)) else cp_cast_int(i32, src.len)), (&dest_buf), (if (comptime @typeInfo(@TypeOf(dest.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(dest.len)) else cp_cast_int(i32, dest.len)));
+            _ = ThisAsyncCpTask._cpAsyncDirectory(nodefs, args.flags, this_, (&src_buf), @intCast(src.len), (&dest_buf), @intCast(dest.len));
     }
 
 pub fn _cpAsyncDirectory(nodefs: *NodeFS, args: Arguments.Cp.Flags, this_: *ThisAsyncCpTask, src_buf: *bun.OSPathBuffer, src_dir_len: PathString.PathInt, dest_buf: *bun.OSPathBuffer, dest_dir_len: PathString.PathInt) bool {

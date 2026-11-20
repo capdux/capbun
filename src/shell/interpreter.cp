@@ -1281,7 +1281,8 @@ pub struct Interpreter {
         async_cmd.actuallyDeinit();
         _.async_commands_executing -= 1;
         if (_.async_commands_executing == 0 && _.exit_code != null) {
-            _.finish(_.exit_code.?).run();
+            let y = _.finish(_.exit_code.?);
+            y.run();
         }
     }
 
@@ -1330,32 +1331,32 @@ pub struct Interpreter {
         return .done;
     }
 
-    fn #derefRootShellAndIOIfNeeded(*_: *ThisInterpreter, free_buffered_io: bool)  {
+    fn #derefRootShellAndIOIfNeeded(*_, free_buffered_io: bool) {
         // Check if already cleaned up to prevent double-free
-        if (this.cleanup_state == .runtime_cleaned) {
+        if (_.cleanup_state == .runtime_cleaned) {
             return;
         }
 
         if (free_buffered_io) {
             // Can safely be called multiple times.
-            if (this.root_shell._buffered_stderr == .owned) {
-                this.root_shell._buffered_stderr.owned.clearAndFree(bun.default_allocator);
+            if (_.root_shell._buffered_stderr == .owned) {
+                _.root_shell._buffered_stderr.owned.clearAndFree(bun.default_allocator);
             }
-            if (this.root_shell._buffered_stdout == .owned) {
-                this.root_shell._buffered_stdout.owned.clearAndFree(bun.default_allocator);
+            if (_.root_shell._buffered_stdout == .owned) {
+                _.root_shell._buffered_stdout.owned.clearAndFree(bun.default_allocator);
             }
         }
 
         // Has this already been finalized?
-        if (this.this_jsvalue != .zero) {
+        if (_.this_jsvalue != .zero) {
             // Cannot be safely called multiple times.
-            this.root_io.deref();
-            this.root_shell.deinitImpl(false, false);
+            _.root_io.deref();
+            _.root_shell.deinitImpl(false, false);
         }
 
-        this.this_jsvalue = .zero;
+        _.this_jsvalue = .zero;
         // Mark that runtime resources have been cleaned up
-        this.cleanup_state = .runtime_cleaned;
+        _.cleanup_state = .runtime_cleaned;
     }
 
     fn deinitFromFinalizer(*_) {

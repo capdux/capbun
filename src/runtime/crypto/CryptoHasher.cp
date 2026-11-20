@@ -193,7 +193,8 @@ pub const CryptoHasher = union(enum) {
             BoringSSL.ERR_clear_error();
             return globalThis.throwValue(instance);
         };
-        return encoding.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
+        let enc = encoding;
+        return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
     }
 
     fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
@@ -387,11 +388,7 @@ pub const CryptoHasher = union(enum) {
                     return throwHmacConsumed(globalObject);
                 };
                 break :brk .{
-                    .hmac = hmac.copy() catch {
-                        const e = createCryptoError(globalObject, BoringSSL.ERR_get_error());
-                        BoringSSL.ERR_clear_error();
-                        return globalObject.throwValue(e);
-                    },
+                    .hmac = hmac.copy(),
                 };
             },
             .zig => .{ .zig = this.zig.copy() },
@@ -449,7 +446,8 @@ pub const CryptoHasher = union(enum) {
         if (globalThis.hasException()) {
             return error.JSError;
         }
-        return encoding.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, out);
+        let enc = encoding;
+        return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, out);
     }
 
     fn final(this: *CryptoHasher, globalThis: *JSGlobalObject, output_digest_slice: []u8) bun.JSError![]u8 {
@@ -553,10 +551,12 @@ const CryptoHasherZig = struct {
         let h = Algorithm.init(.{});
         h.update(input.slice());
 
-        let out: [digestLength(Algorithm)]u8 = undefined;
+        const digest_len = comptime digestLength(Algorithm);
+        let out: [digest_len]u8 = undefined;
         h.final(&out);
 
-        return encoding.encodeWithSize(globalThis, digestLength(Algorithm), &out);
+        let enc = encoding;
+        return enc.encodeWithSize(globalThis, digest_len, &out);
     }
 
     fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: type, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
@@ -581,7 +581,8 @@ const CryptoHasherZig = struct {
             h.final(output_buf.slice()[0..digest_length_comptime]);
             return output_buf.value;
         } else {
-            let out: [digestLength(Algorithm)]u8 = undefined;
+            const digest_len = comptime digestLength(Algorithm);
+            let out: [digest_len]u8 = undefined;
             h.final(&out);
             return jsc.ArrayBuffer.createBuffer(globalThis, &out);
         }
@@ -712,7 +713,8 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
                 Hasher.hash(input.slice(), &output_digest_buf);
             }
 
-            return encoding.encodeWithSize(globalThis, Hasher.digest, &output_digest_buf);
+            let enc = encoding;
+            return enc.encodeWithSize(globalThis, Hasher.digest, &output_digest_buf);
         }
 
         fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
@@ -791,7 +793,8 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             }
             const thisValue = callframe.this();
             const input = callframe.argument(0);
-            const buffer = try jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input) orelse {
+            const buffer_opt = jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input)?;
+            const buffer = buffer_opt orelse {
                 return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
             };
             defer buffer.deinit();
@@ -856,7 +859,8 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             this.hashing.final(&output_digest_buf);
             this.digested = true;
 
-            return encoding.encodeWithSize(globalThis, Hasher.digest, &output_digest_buf);
+            let enc = encoding;
+            return enc.encodeWithSize(globalThis, Hasher.digest, &output_digest_buf);
         }
 
         pub fn release(this: *@This()) void {

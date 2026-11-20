@@ -107,7 +107,7 @@ global: *JSGlobalObject,
 allocator: std.mem.Allocator,
 has_loaded_constructors: bool = false,
 transpiler: Transpiler,
-bun_watcher: ImportWatcher = ImportWatcher{ .none = .{} },
+bun_watcher: ImportWatcher = ImportWatcher{ .none = @as(void, undefined) },
 console: *ConsoleObject,
 log: *logger.Log,
 main: []const u8 = "",
@@ -179,7 +179,7 @@ pending_internal_promise_reported_at: u32 = std.math.maxInt(u32),
 hot_reload_deferred: bool = false,
 entry_point_result: EntryPointResult = .{},
 auto_install_dependencies: bool = false,
-onUnhandledRejection: *const OnUnhandledRejection = defaultOnUnhandledRejection,
+onUnhandledRejection: OnUnhandledRejection = defaultOnUnhandledRejection,
 onUnhandledRejectionCtx: ?*anyopaque = null,
 onUnhandledRejectionExceptionList: ?*ExceptionList = null,
 unhandled_error_counter: usize = 0,
@@ -277,7 +277,7 @@ pub fn onChunk(self: *SourceMapHandlerGetter, chunk: SourceMap.Chunk, source: *c
 
 pub const UnhandledRejectionScope = struct {
     ctx: ?*anyopaque = null,
-    onUnhandledRejection: *const OnUnhandledRejection = undefined,
+    onUnhandledRejection: OnUnhandledRejection = undefined,
     count: usize = 0,
 
 pub fn apply(self: *UnhandledRejectionScope, vm: *jsc.VirtualMachine) void {
@@ -2531,7 +2531,10 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
                             cached = .none;
                             _ = client.source_mappings.unlock();
                             table_locked = false;
-                            _ = client.remapOneFrameSlow((frame.*), path);
+                            _ = client.remapOneFrameSlow((blk: {
+                            break :blk (&(frame.*));
+
+}), path);
                             _ = client.source_mappings.lock();
                             table_locked = true;
                             continue;
@@ -2542,7 +2545,10 @@ pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStack
                         cached = .none;
                         _ = client.source_mappings.unlock();
                         table_locked = false;
-                        _ = client.remapOneFrameSlow((frame.*), path);
+                        _ = client.remapOneFrameSlow((blk: {
+                        break :blk (&(frame.*));
+
+}), path);
                         _ = client.source_mappings.lock();
                         table_locked = true;
                         continue;

@@ -582,11 +582,12 @@ pub fn MapIterator(comptime Writer: type, comptime enable_ansi_colors: bool) typ
     formatter: *JestPrettyFormat.Formatter,
     writer: Writer,
 
-pub fn forEach(self: *@This(), _: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+pub fn forEach(self: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
             if ((ctx == null)) {
                 return;
             }
-            var this: *@This() = bun.cast((&@This()), ctx.?);
+            const SelfPtr = (&@This());
+            var this: SelfPtr = bun.cast(SelfPtr, ctx.?);
             _ = &this;
             if (self.formatter.failed) {
                 return;
@@ -610,11 +611,12 @@ pub fn SetIterator(comptime Writer: type, comptime enable_ansi_colors: bool) typ
     formatter: *JestPrettyFormat.Formatter,
     writer: Writer,
 
-pub fn forEach(self: *@This(), _: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+pub fn forEach(self: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
             if ((ctx == null)) {
                 return;
             }
-            var this: *@This() = bun.cast((&@This()), ctx.?);
+            const SelfPtr = (&@This());
+            var this: SelfPtr = bun.cast(SelfPtr, ctx.?);
             _ = &this;
             if (self.formatter.failed) {
                 return;

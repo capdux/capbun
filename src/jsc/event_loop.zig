@@ -265,11 +265,11 @@ pub fn updateCounts(self: *EventLoop) void {
         } else {
             if ((delta > 0)) {
                 const d: u32 = @intCast(delta);
-                loop.num_polls = (loop.num_polls + d);
+                loop.num_polls = (loop.num_polls + @as(i32, @intCast(delta)));
                 loop.active = (blk_catch_5: { break :blk_catch_5 ((std.math.add(u32, loop.active, d)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 std.math.maxInt(u32); }); });
             } else {
                 const d: u32 = @intCast((0 - delta));
-                loop.num_polls = (loop.num_polls - d);
+                loop.num_polls = (loop.num_polls - @as(i32, @intCast((0 - delta))));
                 loop.active = (blk_catch_6: { break :blk_catch_6 ((std.math.sub(u32, loop.active, d)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 0; }); });
             }
         }

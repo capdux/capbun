@@ -662,7 +662,9 @@ pub fn asyncCmdDone(self: *Interpreter, async_cmd: *Async) void {
             _ = async_cmd.actuallyDeinit();
             self.async_commands_executing = (self.async_commands_executing - 1);
             if (((self.async_commands_executing == 0) and (self.exit_code != null))) {
-                _ = self.finish(self.exit_code.?).run();
+                var y = self.finish(self.exit_code.?);
+                _ = &y;
+                _ = y.run();
             }
     }
 
@@ -710,7 +712,7 @@ pub fn finish(self: *Interpreter, exit_code: ExitCode) Yield {
             return .done;
     }
 
-pub fn #derefRootShellAndIOIfNeeded(self: *Interpreter, _: *ThisInterpreter, free_buffered_io: bool) void {
+pub fn #derefRootShellAndIOIfNeeded(self: *Interpreter, free_buffered_io: bool) void {
             if ((self.cleanup_state == .runtime_cleaned)) {
                 return;
             }

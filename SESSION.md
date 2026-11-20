@@ -3098,3 +3098,5 @@ Options:
 - **[2026-11-20 20:34] Wave 14 Batch D+F 验收提交（39 模块全绿）**：完成 D 组 34 模块（含 `uws_sys/WebSocket.cp` 补 `publishWithOptions` 与 `AnyTask.cp` 升 `@root struct`）及 F 组 5 上游根因（`SignalCode`/`AnyTaskWithExtraContext`/`FileSink`/`cron`/`lifecycle_script_runner`，5/5 PASS）独立验收并原子提交；静待 G 组（`e85250d5`）3 模块完成后跑 Wave 15 `zig:check`。
 
 - **[2026-11-20 20:42] Wave 14 Batch G 验收提交（`StaticRoute`/`SystemError`/`Blob` 3 根因全绿）+ Wave 15 `zig:check` 穿透**：3 模块全部 PASS（ratio 0.457x~1.017x）；Wave 15 `bun run zig:check` 穿透至最终主干运行时层（`RequestContext`/`server`/`CryptoHasher`/`AutoFlusher`/`rare_data`/`VirtualMachine`/`DevServer`），共 714 错 / 203 文件。
+
+- **[2026-11-20 21:01] Wave 15 Batch B+C 验收提交（29 模块全绿）**：完成 B 组 13 模块（NodeFS/Crypto/JSC/Core，~165 错）与 C 组 16 模块（Shell/PipeWriter/YAML/SQL/Test，~95 错）独立验收（29/29 PASS，ratio 0.860x~1.038x）并原子提交；已按用户指令收缩并发上限为 `<= 2`（当前仅 A 组 1 路收尾中）。
