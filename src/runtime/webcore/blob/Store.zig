@@ -221,10 +221,12 @@ pub fn resolve(result: S3ListObjectsResult, opaque_self: ?*anyopaque) !void {
             const globalObject = wrap.global;
             switch (result) {
 .success => |list_result| {
-defer {
-            _ = list_result.deinit();
+var list_result_mut = list_result;
+            _ = &list_result_mut;
+            defer {
+            _ = list_result_mut.deinit();
             }
-            const list_result_js = (blk_catch_0: { break :blk_catch_0 ((list_result.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return wrap.promise.reject(globalObject, error.JSError); }); });
+            const list_result_js = (blk_catch_0: { break :blk_catch_0 ((list_result_mut.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return wrap.promise.reject(globalObject, error.JSError); }); });
             _ = try wrap.promise.resolve(globalObject, list_result_js);
 },
 inline .not_found, .failure => |err| {

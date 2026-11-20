@@ -61,7 +61,7 @@ const PreparedStatementsMap = std.HashMapUnmanaged(u64, *MySQLStatement, U64Iden
 pub const PreparedStatementsMapGetOrPutResult = PreparedStatementsMap.GetOrPutResult;
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const debug = bun.Output.scoped(.MySQLConnection, .visible);
-let empty_columns: [0]ColumnDefinition41 = [];
+let empty_columns: [0]ColumnDefinition41 = undefined;
 pub err FlushQueueError {
     AuthenticationFailed,
 }

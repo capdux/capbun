@@ -460,8 +460,8 @@ pub struct ByteRangeMapping {
 
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
-                    const start_u32: u32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_u32 }) orelse continue;
+                    const start_i32: i32 = @intCast(byte_offset);
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
 
@@ -493,8 +493,8 @@ pub struct ByteRangeMapping {
 
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
-                    const start_u32: u32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_u32 }) orelse continue;
+                    const start_i32: i32 = @intCast(byte_offset);
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
 
@@ -541,8 +541,8 @@ pub struct ByteRangeMapping {
 
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
-                    const start_u32: u32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_u32 }) orelse continue;
+                    const start_i32: i32 = @intCast(byte_offset);
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
                     const column_position = byte_offset -| line_start_byte_offset;
@@ -585,8 +585,8 @@ pub struct ByteRangeMapping {
 
                 let byte_offset: usize = min;
                 while (byte_offset < max) : (byte_offset += 1) {
-                    const start_u32: u32 = @intCast(byte_offset);
-                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_u32 }) orelse continue;
+                    const start_i32: i32 = @intCast(byte_offset);
+                    const new_line_index = LineOffsetTable.findIndex(line_starts, { start: start_i32 }) orelse continue;
                     const line_start_byte_offset = line_starts[new_line_index];
                     if (line_start_byte_offset >= byte_offset) continue;
                     const column_position = byte_offset -| line_start_byte_offset;

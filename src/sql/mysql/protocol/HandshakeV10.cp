@@ -10,7 +10,7 @@ const Data = DataMod.Data;
 const StatusFlags = StatusFlagsMod.StatusFlags;
 const NewReader = NewReaderMod.NewReader;
 const decoderWrap = NewReaderMod.decoderWrap;
-const empty_u8: [0]u8 = [];
+const empty_u8: [0]u8 = undefined;
 
 @root struct HandshakeV10 {
     protocol_version: u8 = 10,

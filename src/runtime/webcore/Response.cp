@@ -815,7 +815,7 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
         let body: Body = undefined;
         if (arguments[0].isUndefinedOrNull()) {
             body = Body{
-                value: Body.Value{ .Null = {} },
+                value: Body.Value.Null,
             };
         } else {
             body = Body.extract(globalThis, arguments[0])?;

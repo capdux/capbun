@@ -10,7 +10,7 @@ fn toInt32Slice(comptime Int: type, slice: []const u8): []align(1) const Int {
 }
 
 @root struct ParameterDescription {
-    parameters: []int4 = &[],
+    parameters: []int4 = [],
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         let remaining_bytes = reader.length()?;

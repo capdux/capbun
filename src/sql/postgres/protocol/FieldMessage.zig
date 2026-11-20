@@ -84,7 +84,7 @@ pub const FieldMessage = union(FieldType) {
     line: String,
     routine: String,
 
-pub fn format(self: *FieldMessage, writer: *std.Io.Writer) !void {
+pub fn format(self: FieldMessage, writer: *std.Io.Writer) !void {
             switch (self) {
 inline else => |str| {
 _ = try writer.print("{f}", .{ str });
@@ -125,7 +125,7 @@ pub fn decodeList(comptime Context: type, reader: NewReader(Context)) !std.Array
             return messages;
     }
 
-pub fn init(tag: FieldType, message: []const u8) !*FieldMessage {
+pub fn init(tag: FieldType, message: []const u8) !InitRet {
             return (switch (tag) {
 .severity => FieldMessage{ .severity = String.cloneUTF8(message) },
 .code => FieldMessage{ .code = String.cloneUTF8(message) },
@@ -149,4 +149,5 @@ else => error.UnknownFieldType,
     }
 };
 
+const InitRet = FieldMessage;
 const String = bun.String;

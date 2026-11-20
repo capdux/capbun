@@ -150,7 +150,7 @@ export @opaque class Request {
         let s = bun.String.init(value.?);
         defer s.deref();
         let ms = try s.parseDate(bun.jsc.VirtualMachine.get().global);
-        if (!bun.math.isNan(ms) && bun.math.isFinite(ms) && ms >= 0.0) return ms as u64;
+        if (!std.math.isNan(ms) && std.math.isFinite(ms) && ms >= 0.0) return ms as u64;
         return null;
     }
 

@@ -124,7 +124,7 @@ else => true,
         if ((cmd_count > 1)) {
             var pipes_set: u32 = 0;
             _ = &pipes_set;
-            if (Pipeline.initializePipes((&pipes), (&pipes_set)).asErr()) |err_val| {
+            if (Pipeline.initializePipes(pipes, (&pipes_set)).asErr()) |err_val| {
                 _ = &err_val;
                 for (cp_mut_slice(&pipes[0..pipes_set])) |*pipe| {
                     _ = &pipe;
@@ -343,7 +343,7 @@ pub fn initializePipes(pipes: []Pipe, set_count: *u32) Maybe(void) {
             const __end_8 = pipes.len;
             while (i < __end_8) : (i += 1) {
                 if (bun.Environment.isWindows) {
-                    pipes.*[cp_cast_int(usize, i)] = (switch (bun.sys.pipe()) {
+                    pipes[cp_cast_int(usize, i)] = (switch (bun.sys.pipe()) {
 .result => |p| p,
 .err => |e| {
 return .{ .err = e };

@@ -52,7 +52,8 @@ pub const Timer = struct {
 
     pub fn as(this: *Timer, comptime Type: type) Type {
         @setRuntimeSafety(false);
-        const ptr: *?Type = @ptrCast(@alignCast(c.us_timer_ext(this)));
+        const OptType = Type?;
+        const ptr: *OptType = @ptrCast(@alignCast(c.us_timer_ext(this)));
         return ptr.*.?;
     }
 };

@@ -10,7 +10,7 @@ pub enum AuthMethod {
 
     pub fn scramble(password: []const u8, auth_data: []const u8, buf: *[32]u8): ([]u8)! {
         if (password.len == 0) {
-            let empty: [0]u8 = [];
+            let empty: [0]u8 = undefined;
             return empty[0..0];
         }
 

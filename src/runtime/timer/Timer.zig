@@ -153,7 +153,7 @@ pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try al
 })); self_ptr.event_loop_delay = .{}; self_ptr.fake_timers = .{}; self_ptr.maps = .{}; self_ptr.date_header_timer = .{}; return self_ptr; }
 
 pub fn init() *All {
-            return .{ .thread_id = std.Thread.getCurrentId() };
+            return All{ .thread_id = std.Thread.getCurrentId() };
     }
 
 pub fn insert(self: *All, timer: *EventLoopTimer) void {

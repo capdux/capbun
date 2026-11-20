@@ -62,6 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const Output = @import("bun").Output;
 const S3 = @import("bun").S3;
 const strings = @import("bun").strings;
@@ -603,7 +604,7 @@ pub fn getPresignUrlFrom(self: *Blob, globalThis: *JSGlobalObject, extra_options
         defer {
         _ = result.deinit();
         }
-        return jsc.BunString.createUTF8ForJS(globalThis, result.url);
+        return bun.String.createUTF8ForJS(globalThis, result.url);
 }
 
 pub fn getBucketName(self: *const Blob) ?[]const u8 {
@@ -635,7 +636,7 @@ pub fn getBucketName(self: *const Blob) ?[]const u8 {
 pub fn getBucket(self: *Blob, globalThis: *JSGlobalObject) callconv(.c) JSValue {
         if (getBucketName(self)) |name| {
             _ = &name;
-            return (blk_catch_1: { break :blk_catch_1 ((jsc.BunString.createUTF8ForJS(globalThis, name)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
+            return (blk_catch_1: { break :blk_catch_1 ((bun.String.createUTF8ForJS(globalThis, name)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
         }
         return .js_undefined;
 }

@@ -536,7 +536,7 @@ pub fn spawnMaybeSyncImpl(event_loop: jsc.EventLoopHandle, allocator: Allocator,
             defer {
             {
                 if ((!stdio_consumed)) {
-                    for (cp_mut_slice(&(&spawn_args.stdio))) |*s| {
+                    for (cp_mut_slice(&spawn_args.stdio)) |*s| {
                         _ = &s;
                         _ = (s.*).deinit();
                     }

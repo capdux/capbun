@@ -1118,7 +1118,7 @@ const PreparedStatementsMap = std.HashMapUnmanaged(u64, *MySQLStatement, U64Iden
 pub const PreparedStatementsMapGetOrPutResult = PreparedStatementsMap.GetOrPutResult;
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const debug = bun.Output.scoped(.MySQLConnection, .visible);
-var empty_columns: [0]ColumnDefinition41 = &.{};
+var empty_columns: [0]ColumnDefinition41 = undefined;
 pub const AuthState = union(enum) {
     pending: void,
     native_password: void,

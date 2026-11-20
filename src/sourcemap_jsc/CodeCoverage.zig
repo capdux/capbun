@@ -466,8 +466,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                         var byte_offset: usize = min;
                         _ = &byte_offset;
                         while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
-                            const start_u32: u32 = @intCast(byte_offset);
-                            const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                            const start_i32: i32 = @intCast(byte_offset);
+                            const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_i32 })) orelse continue);
                             const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
                             if ((line_start_byte_offset >= byte_offset)) {
                                 continue;
@@ -507,8 +507,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                         var byte_offset: usize = min;
                         _ = &byte_offset;
                         while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
-                            const start_u32: u32 = @intCast(byte_offset);
-                            const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                            const start_i32: i32 = @intCast(byte_offset);
+                            const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_i32 })) orelse continue);
                             const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
                             if ((line_start_byte_offset >= byte_offset)) {
                                 continue;
@@ -573,8 +573,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             var byte_offset: usize = min;
                             _ = &byte_offset;
                             while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
-                                const start_u32: u32 = @intCast(byte_offset);
-                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                                const start_i32: i32 = @intCast(byte_offset);
+                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_i32 })) orelse continue);
                                 const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
                                 if ((line_start_byte_offset >= byte_offset)) {
                                     continue;
@@ -631,8 +631,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             var byte_offset: usize = min;
                             _ = &byte_offset;
                             while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
-                                const start_u32: u32 = @intCast(byte_offset);
-                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                                const start_i32: i32 = @intCast(byte_offset);
+                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_i32 })) orelse continue);
                                 const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
                                 if ((line_start_byte_offset >= byte_offset)) {
                                     continue;

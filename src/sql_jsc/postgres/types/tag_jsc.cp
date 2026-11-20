@@ -56,26 +56,26 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!Ta
     if (value.isCell()) {
         const tag = value.jsType();
         if (tag.isStringLike()) {
-            return .text;
+            return Tag.text;
         }
 
         if (tag == .JSDate) {
-            return .timestamptz;
+            return Tag.timestamptz;
         }
 
         if (tag.isTypedArrayOrArrayBuffer()) {
             if (tag == .Int32Array) {
-                return .int4_array;
+                return Tag.int4_array;
             }
-            return .bytea;
+            return Tag.bytea;
         }
 
         if (tag == .HeapBigInt) {
-            return .int8;
+            return Tag.int8;
         }
 
         if (tag.isArrayLike()) {
-            return .json;
+            return Tag.json;
         }
 
         if (tag == .NumberObject) {
@@ -91,29 +91,29 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!Ta
         }
 
         if (tag.isObject()) {
-            return .json;
+            return Tag.json;
         }
     }
 
     if (value.isInt32()) {
-        return .int4;
+        return Tag.int4;
     }
 
     if (value.isAnyInt()) {
         const int = value.toInt64();
         if (int >= std.math.minInt(i32) && int <= std.math.maxInt(i32)) {
-            return .int4;
+            return Tag.int4;
         }
-        return .int8;
+        return Tag.int8;
     }
 
     if (value.isNumber()) {
-        return .float8;
+        return Tag.float8;
     }
 
     if (value.isBoolean()) {
-        return .@"bool";
+        return Tag.@"bool";
     }
 
-    return .numeric;
+    return Tag.numeric;
 }

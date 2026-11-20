@@ -429,7 +429,7 @@ pub fn constructFrom(comptime T: type, input: []const T, allocator: Allocator, c
     }
 }
 
-let empty_u8: [0]u8 = [];
+let empty_u8: [0]u8 = undefined;
 
 pub fn constructFromU8(input: [*]const u8, len: usize, allocator: Allocator, comptime encoding: Encoding): []u8 {
     if (len == 0) return empty_u8[0..0];

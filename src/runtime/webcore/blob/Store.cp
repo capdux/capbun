@@ -191,8 +191,9 @@ pub struct StoreS3 {
                 const globalObject = wrap.global;
                 switch (result) {
                     .success => |list_result| {
-                        defer list_result.deinit();
-                        const list_result_js = list_result.toJS(globalObject) catch return wrap.promise.reject(globalObject, error.JSError);
+                        let list_result_mut = list_result;
+                        defer list_result_mut.deinit();
+                        const list_result_js = list_result_mut.toJS(globalObject) catch return wrap.promise.reject(globalObject, error.JSError);
                         try wrap.promise.resolve(globalObject, list_result_js);
                     },
                     inline .not_found, .failure => |err| {

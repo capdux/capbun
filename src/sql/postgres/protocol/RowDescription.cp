@@ -4,7 +4,7 @@ import { DecoderWrap } from "./DecoderWrap.zig";
 import { NewReader } from "./NewReader.zig";
 
 @root struct RowDescription {
-    fields: []FieldDescription = &[],
+    fields: []FieldDescription = [],
 
     pub fn deinit(*_) {
         for (i of 0..this.fields.len) {

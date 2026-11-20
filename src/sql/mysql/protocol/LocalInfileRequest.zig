@@ -50,7 +50,7 @@ pub const DataMod = @import("../../shared/Data.zig");
 pub const NewReaderMod = @import("./NewReader.zig");
 pub const LocalInfileRequest = @This();
 
-filename: Data = Data{ .empty = .{} },
+filename: Data = Data.empty,
 packet_size: u24,
 
 pub fn deinit(self: *LocalInfileRequest) void {

@@ -782,7 +782,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, j
         var body: Body = undefined;
         _ = &body;
         if (arguments[0].isUndefinedOrNull()) {
-            body = Body{ .value = Body.Value{ .Null = .{} } };
+            body = Body{ .value = Body.Value.Null };
         } else {
             body = try Body.extract(globalThis, arguments[0]);
         }

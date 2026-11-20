@@ -61,21 +61,21 @@ pub fn fieldTypeFromJS(globalObject: *JSC.JSGlobalObject, value: JSValue, unsign
     if (value.isCell()) {
         const tag = value.jsType();
         if (tag.isStringLike()) {
-            return .MYSQL_TYPE_STRING;
+            return FieldType.MYSQL_TYPE_STRING;
         }
         if (tag == .JSDate) {
-            return .MYSQL_TYPE_DATETIME;
+            return FieldType.MYSQL_TYPE_DATETIME;
         }
         if (tag.isTypedArrayOrArrayBuffer()) {
-            return .MYSQL_TYPE_BLOB;
+            return FieldType.MYSQL_TYPE_BLOB;
         }
         if (tag == .HeapBigInt) {
             if (value.isBigIntInInt64Range(std.math.minInt(i64), std.math.maxInt(i64))) {
-                return .MYSQL_TYPE_LONGLONG;
+                return FieldType.MYSQL_TYPE_LONGLONG;
             }
             if (value.isBigIntInUInt64Range(0, std.math.maxInt(u64))) {
                 unsafe { unsigned.* = true; }
-                return .MYSQL_TYPE_LONGLONG;
+                return FieldType.MYSQL_TYPE_LONGLONG;
             }
             return globalObject.ERR(.OUT_OF_RANGE, "The value is out of range. It must be >= {d} and <= {d}.", .{ std.math.minInt(i64), std.math.maxInt(u64) }).throw();
         }
@@ -92,7 +92,7 @@ pub fn fieldTypeFromJS(globalObject: *JSC.JSGlobalObject, value: JSValue, unsign
             return globalObject.throwInvalidArguments("Cannot bind this type to query parameter", .{});
         }
         if (tag.isObject()) {
-            return .MYSQL_TYPE_JSON;
+            return FieldType.MYSQL_TYPE_JSON;
         }
     }
 
@@ -100,31 +100,31 @@ pub fn fieldTypeFromJS(globalObject: *JSC.JSGlobalObject, value: JSValue, unsign
         const int = value.toInt64();
         if (int >= 0) {
             if (int <= std.math.maxInt(i32)) {
-                return .MYSQL_TYPE_LONG;
+                return FieldType.MYSQL_TYPE_LONG;
             }
             if (int <= std.math.maxInt(u32)) {
                 unsafe { unsigned.* = true; }
-                return .MYSQL_TYPE_LONG;
+                return FieldType.MYSQL_TYPE_LONG;
             }
             if (int >= std.math.maxInt(i64)) {
                 unsafe { unsigned.* = true; }
-                return .MYSQL_TYPE_LONGLONG;
+                return FieldType.MYSQL_TYPE_LONGLONG;
             }
-            return .MYSQL_TYPE_LONGLONG;
+            return FieldType.MYSQL_TYPE_LONGLONG;
         }
         if (int >= std.math.minInt(i32)) {
-            return .MYSQL_TYPE_LONG;
+            return FieldType.MYSQL_TYPE_LONG;
         }
-        return .MYSQL_TYPE_LONGLONG;
+        return FieldType.MYSQL_TYPE_LONGLONG;
     }
 
     if (value.isNumber()) {
-        return .MYSQL_TYPE_DOUBLE;
+        return FieldType.MYSQL_TYPE_DOUBLE;
     }
     if (value.isBoolean()) {
-        return .MYSQL_TYPE_TINY;
+        return FieldType.MYSQL_TYPE_TINY;
     }
-    return .MYSQL_TYPE_VARCHAR;
+    return FieldType.MYSQL_TYPE_VARCHAR;
 }
 
 pub struct ValueBytes {

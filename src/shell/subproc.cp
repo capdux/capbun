@@ -936,7 +936,7 @@ pub struct ShellSubprocess {
         let stdio_consumed = false;
         defer {
             if (!stdio_consumed) {
-                for (*s of &spawn_args.stdio) s.deinit();
+                for (*s of spawn_args.stdio) s.deinit();
             }
         }
 

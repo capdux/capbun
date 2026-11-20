@@ -1,3 +1,4 @@
+import bun from "bun";
 import { Output, S3, strings, http, jsc, JSError, JSTerminated, default_allocator, handleOom, destroy, TrivialNew } from "bun";
 import { S3Client } from "./S3Client.zig";
 import * as S3ClientNS from "./S3Client.zig";
@@ -543,7 +544,7 @@ pub fn getPresignUrlFrom(*_: *Blob, globalThis: *JSGlobalObject, extra_options: 
         return S3.throwSignError(sign_err, globalThis);
     };
     defer result.deinit();
-    return jsc.BunString.createUTF8ForJS(globalThis, result.url);
+    return bun.String.createUTF8ForJS(globalThis, result.url);
 }
 
 pub fn getBucketName(_: *const Blob): ([]const u8)? {
@@ -570,7 +571,7 @@ pub fn getBucketName(_: *const Blob): ([]const u8)? {
 
 @c fn getBucket(*_: *Blob, globalThis: *JSGlobalObject): JSValue {
     if (name := getBucketName(this)) {
-        return jsc.BunString.createUTF8ForJS(globalThis, name) catch .zero;
+        return bun.String.createUTF8ForJS(globalThis, name) catch .zero;
     }
     return .js_undefined;
 }

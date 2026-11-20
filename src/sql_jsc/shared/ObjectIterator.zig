@@ -99,7 +99,8 @@ pub fn next(self: *ObjectIterator) ?jsc.JSValue {
         const value = self.current_row.getOwnByValue(globalObject, property);
         if (((value == .zero) or ((value != null) and value.?.isUndefined()))) {
             if ((!globalObject.hasException())) {
-                return (blk_catch_2: { break :blk_catch_2 ((globalObject.throw("Expected a value at index {d} in row {d}", .{ cell_i, row_i })) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); });
+                if ((globalObject.throw("Expected a value at index {d} in row {d}", .{ cell_i, row_i }) == error.JSError)) {
+                }
             }
             self.any_failed = true;
             return null;

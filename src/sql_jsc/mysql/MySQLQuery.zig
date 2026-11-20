@@ -132,7 +132,7 @@ pub fn bindAndExecute(self: *MySQLQuery, writer: anytype, statement: *MySQLState
             return error.WrongNumberOfParametersProvided;
         }
         const Ctx = BindAndExecuteCtx(@TypeOf(writer));
-        var ctx = Ctx{ .query_ptr = self, .writer = writer, .statement = statement, .globalObject = globalObject, .binding_value = binding_value, .columns_value = columns_value, .result = .{} };
+        var ctx = Ctx{ .query_ptr = self, .writer = writer, .statement = statement, .globalObject = globalObject, .binding_value = binding_value, .columns_value = columns_value, .result = undefined };
         _ = &ctx;
         _ = bun.jsc.MarkedArgumentBuffer.run(Ctx, (&ctx), (&Ctx.run));
         return ctx.result;

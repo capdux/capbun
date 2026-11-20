@@ -644,15 +644,15 @@ self.phase = .execution;
             _ = afterall_order.setFailureSkipTo((&order));
             _ = try self.execution.loadFromOrder((&order));
             _ = try debug.dumpOrder((&self.execution));
-            return error.cont;
+            return AdvanceResult.cont;
 },
 .execution => {
 self.in_run_loop = false;
             self.phase = .done;
-            return error.exit;
+            return AdvanceResult.exit;
 },
 .done => {
-return error.exit;
+return AdvanceResult.exit;
 },
 }
     }

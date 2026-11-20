@@ -6,7 +6,7 @@ const NewReader = NewReaderMod.NewReader;
 const decoderWrap = NewReaderMod.decoderWrap;
 
 @root struct LocalInfileRequest {
-    filename: Data = Data{ empty: {} },
+    filename: Data = Data.empty,
     packet_size: u24,
 
     pub fn deinit(*_)  {

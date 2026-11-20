@@ -208,7 +208,7 @@ pub fn step(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject
             }
             return .{ .waiting = .{} };
         }
-        return error.complete;
+        return bun_test.StepResult.complete;
 }
 
 pub fn handleUncaughtException(self: *Collection, _: bun_test.BunTest.RefDataValue) bun_test.HandleUncaughtExceptionResult {

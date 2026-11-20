@@ -130,7 +130,7 @@ pub const PipelineState = union(enum) {
 
         if (cmd_count > 1) {
             let pipes_set: u32 = 0;
-            if (err_val := Pipeline.initializePipes(&pipes, &pipes_set).asErr()) {
+            if (err_val := Pipeline.initializePipes(pipes, &pipes_set).asErr()) {
                 for (*pipe of pipes[0..pipes_set]) {
                     closefd(pipe[0]);
                     closefd(pipe[1]);
@@ -309,10 +309,10 @@ pub const PipelineState = union(enum) {
         _.parent.destroy(_);
     }
 
-    static fn initializePipes(pipes: *[]Pipe, set_count: *u32): Maybe(void) {
+    static fn initializePipes(pipes: []Pipe, set_count: *u32): Maybe(void) {
         for (i of 0..pipes.len) {
             if (bun.Environment.isWindows) {
-                pipes.*[i] = switch (bun.sys.pipe()) {
+                pipes[i] = switch (bun.sys.pipe()) {
                     .result => |p| p,
                     .err => |e| return .{ .err = e },
                 };

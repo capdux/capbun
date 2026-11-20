@@ -50,7 +50,7 @@ pub fn writeBind(
         const tag: types.Tag = if (is_custom_type) .text else @enumFromInt(@as(short, @intCast(parameter_field)));
 
         const force_text = is_custom_type || (tag.isBinaryFormatSupported() && brk: {
-            iter.to(@truncate(i));
+            iter.to(@intCast(i));
             if (value := iter.next()?) {
                 break :brk value.isString();
             }

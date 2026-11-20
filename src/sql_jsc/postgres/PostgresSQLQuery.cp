@@ -16,6 +16,7 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSRef = jsc.JSRef;
 const JSValue = jsc.JSValue;
 const debug = bun.Output.scoped(.Postgres, .visible);
+type PostgresSQLStatementPtr = *PostgresSQLStatement;
 
 @packed(u8) pub struct QueryFlags {
     is_done: bool = false,
@@ -358,7 +359,7 @@ pub enum QueryStatus: u8 {
         const has_params = signature.fields.len > 0;
         let did_write = false;
         enqueue: {
-            let connection_entry_value: (**PostgresSQLStatement)? = null;
+            let connection_entry_value: (*PostgresSQLStatementPtr)? = null;
             const signature_hash: u64 = bun.hash(signature.name);
             if (!connection.flags.use_unnamed_prepared_statements) {
                 const entry = connection.statements.getOrPut(bun.default_allocator, signature_hash) catch |e| {

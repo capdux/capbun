@@ -52,7 +52,7 @@ const DecoderWrap = @import("./DecoderWrap.zig").DecoderWrap;
 const NewReader = @import("./NewReader.zig").NewReader;
 pub const RowDescription = @This();
 
-fields: []FieldDescription = (&&.{}),
+fields: []FieldDescription = &.{},
 
 pub fn deinit(self: *RowDescription) void {
         {

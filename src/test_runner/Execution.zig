@@ -486,7 +486,7 @@ else => .pass,
                 if (vm.debugger) |*debugger| {
                     _ = &debugger;
                     if ((debugger.*).test_reporter_agent.isEnabled()) {
-                        const test_end_status = (switch (sequence.result) {
+                        const test_end_status: jsc.Debugger.TestReporterAgent.TestStatus = (switch (sequence.result) {
 .pass => .pass,
 .fail => .fail,
 .skip => .skip,

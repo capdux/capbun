@@ -353,4 +353,4 @@ const bun = @import("bun");
 const jsc = bun.jsc;
 const strings = bun.strings;
 const log = bun.Output.scoped(.S3, .hidden);
-var empty_u8: [0]u8 = &.{};
+var empty_u8: [0]u8 = undefined;

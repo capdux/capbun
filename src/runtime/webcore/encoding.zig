@@ -83,7 +83,7 @@ pub const Types = struct {
     pub const U16SliceAligned = []u16;
     pub const U16Ptr = [*]align(1) u16;
 };
-var empty_u8: [0]u8 = &.{};
+var empty_u8: [0]u8 = undefined;
 
 pub export fn Bun__encoding__writeLatin1(input: [*]const u8, len: usize, to: [*]u8, to_len: usize, encoding: u8) callconv(.c) usize {
         return (blk_catch_0: { break :blk_catch_0 (((switch (@as(Encoding, @enumFromInt(encoding))) {

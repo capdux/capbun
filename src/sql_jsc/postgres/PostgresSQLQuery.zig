@@ -389,7 +389,7 @@ pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfra
         var did_write = false;
         _ = &did_write;
         _ = enqueue: {
-        var connection_entry_value: ?*PostgresSQLStatement = null;
+        var connection_entry_value: ?*PostgresSQLStatementPtr = null;
         _ = &connection_entry_value;
         const signature_hash: u64 = bun.hash((if (@typeInfo(@TypeOf(signature)) == .@"enum" or @typeInfo(@TypeOf(signature)) == .@"union") @tagName(signature) else signature.name));
         if ((!connection.flags.use_unnamed_prepared_statements)) {
@@ -540,6 +540,7 @@ pub const js = jsc.Codegen.JSPostgresSQLQuery;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 pub const toJS = js.toJS;
+const PostgresSQLStatementPtr = *PostgresSQLStatement;
 const PostgresSQLQueryResultMode = SQLQueryResultModeMod.SQLQueryResultMode;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;

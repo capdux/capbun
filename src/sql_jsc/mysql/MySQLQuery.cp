@@ -96,7 +96,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
             globalObject: globalObject,
             binding_value: binding_value,
             columns_value: columns_value,
-            result: {},
+            result: undefined,
         };
         bun.jsc.MarkedArgumentBuffer.run(Ctx, &ctx, &Ctx.run);
         return ctx.result;

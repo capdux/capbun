@@ -12,7 +12,7 @@ const zCount = zHelpers.zCount;
 @root struct Parse {
     name: []const u8 = "",
     query: []const u8 = "",
-    params: []const int4 = &[],
+    params: []const int4 = [],
 
     pub fn deinit(*_) {
         const self_ref = _; * = self_ref;

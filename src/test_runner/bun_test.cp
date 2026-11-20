@@ -739,15 +739,15 @@ pub struct BunTest {
 
                 _.execution.loadFromOrder(&order)?;
                 debug.dumpOrder(&_.execution)?;
-                return .cont;
+                return AdvanceResult.cont;
             },
             .execution => {
                 _.in_run_loop = false;
                 _.phase = .done;
 
-                return .exit;
+                return AdvanceResult.exit;
             },
-            .done => return .exit,
+            .done => return AdvanceResult.exit,
         }
     }
 

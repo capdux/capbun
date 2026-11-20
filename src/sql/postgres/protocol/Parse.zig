@@ -56,7 +56,7 @@ pub const Parse = @This();
 
 name: []const u8 = "",
 query: []const u8 = "",
-params: []const int4 = (&&.{}),
+params: []const int4 = &.{},
 
 pub fn deinit(self: *Parse) void {
         const self_ref = self;

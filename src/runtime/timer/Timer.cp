@@ -102,9 +102,9 @@ export class All {
 
     date_header_timer: DateHeaderTimer = .{};
 
-    pub fn init(): All {
-        return .{
-            .thread_id = std.Thread.getCurrentId(),
+    pub static fn init(): All {
+        return All{
+            thread_id: std.Thread.getCurrentId(),
         };
     }
 

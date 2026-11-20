@@ -103,7 +103,7 @@ pub fn writeBind(name: []const u8, cursor_name: bun.String, globalObject: *jsc.J
                 const is_custom_type = (std.math.maxInt(short) < parameter_field);
                 const tag: types.Tag = (if (is_custom_type) .text else @enumFromInt(@as(short, @intCast(parameter_field))));
                 const force_text = (is_custom_type or (tag.isBinaryFormatSupported() and brk: {
-                _ = iter.to(@truncate(i));
+                _ = iter.to(@intCast(i));
                 if (try iter.next()) |value| {
                     _ = &value;
                     break :brk value.isString();

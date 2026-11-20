@@ -163,7 +163,7 @@ pub struct QueuedDescribe {
 
             return { waiting: {} };
         }
-        return .complete;
+        return bun_test.StepResult.complete;
     }
 
     fn handleUncaughtException(*_, _: bun_test.BunTest.RefDataValue): bun_test.HandleUncaughtExceptionResult {

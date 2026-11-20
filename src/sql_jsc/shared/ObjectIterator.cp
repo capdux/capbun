@@ -60,7 +60,7 @@ const JSValue = jsc.JSValue;
         const value = this.current_row.getOwnByValue(globalObject, property);
         if (value == .zero || (value != null && value.?.isUndefined())) {
             if (!globalObject.hasException()) {
-                return globalObject.throw("Expected a value at index {d} in row {d}", .{ cell_i, row_i }) catch null;
+                if (globalObject.throw("Expected a value at index {d} in row {d}", .{ cell_i, row_i }) == error.JSError) {}
             }
             this.any_failed = true;
             return null;

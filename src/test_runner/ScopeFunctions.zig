@@ -659,7 +659,7 @@ pub fn createUnbound(globalThis: *JSGlobalObject, mode: Mode, each: jsc.JSValue,
         defer {
         _ = groupLog.end();
         }
-        var client = try VirtualMachine.get().allocator.create(ScopeFunctions);
+        var client = bun.handleOom(VirtualMachine.get().allocator.create(ScopeFunctions));
         _ = &client;
         client.* = .{ .mode = mode, .each = each, .cfg = cfg };
         const value = client.toJS(globalThis);

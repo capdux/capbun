@@ -53,7 +53,7 @@ const NewReader = @import("./NewReader.zig").NewReader;
 pub const types = @import("../PostgresTypes.zig");
 pub const ParameterDescription = @This();
 
-parameters: []int4 = (&&.{}),
+parameters: []int4 = &.{},
 
 pub fn decodeInternal(self: *ParameterDescription, comptime Container: type, reader: NewReader(Container)) !void {
         var remaining_bytes = try reader.length();

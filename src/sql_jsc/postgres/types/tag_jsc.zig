@@ -125,22 +125,22 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue) bun.JSError!Tag
         if (value.isCell()) {
             const tag = value.jsType();
             if (tag.isStringLike()) {
-                return error.text;
+                return Tag.text;
             }
             if ((tag == .JSDate)) {
-                return error.timestamptz;
+                return Tag.timestamptz;
             }
             if (tag.isTypedArrayOrArrayBuffer()) {
                 if ((tag == .Int32Array)) {
-                    return error.int4_array;
+                    return Tag.int4_array;
                 }
-                return error.bytea;
+                return Tag.bytea;
             }
             if ((tag == .HeapBigInt)) {
-                return error.int8;
+                return Tag.int8;
             }
             if (tag.isArrayLike()) {
-                return error.json;
+                return Tag.json;
             }
             if ((tag == .NumberObject)) {
                 return globalObject.ERR(.INVALID_ARG_TYPE, "Number object is ambiguous and cannot be used as a PostgreSQL type", .{}).throw();
@@ -152,24 +152,24 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue) bun.JSError!Tag
                 return globalObject.ERR(.INVALID_ARG_TYPE, "Unknown object is not a valid PostgreSQL type", .{}).throw();
             }
             if (tag.isObject()) {
-                return error.json;
+                return Tag.json;
             }
         }
         if (value.isInt32()) {
-            return error.int4;
+            return Tag.int4;
         }
         if (value.isAnyInt()) {
             const int = value.toInt64();
             if (((int >= std.math.minInt(i32)) and (int <= std.math.maxInt(i32)))) {
-                return error.int4;
+                return Tag.int4;
             }
-            return error.int8;
+            return Tag.int8;
         }
         if (value.isNumber()) {
-            return error.float8;
+            return Tag.float8;
         }
         if (value.isBoolean()) {
-            return error.@"bool";
+            return Tag.@"bool";
         }
-        return error.numeric;
+        return Tag.numeric;
 }

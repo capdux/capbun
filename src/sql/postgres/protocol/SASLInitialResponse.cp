@@ -27,7 +27,7 @@ const toBytes = std.mem.toBytes;
         const header: [5]u8 = ['p', b[0], b[1], b[2], b[3]];
         writer.write(&header)?;
         writer.@"string"(mechanism)?;
-        writer.int4(@truncate(@as(isize, @intCast(data.len))))?;
+        writer.int4(@intCast(data.len))?;
         writer.write(data)?;
     }
 

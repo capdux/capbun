@@ -23,7 +23,7 @@ pub @opaque struct BakeSourceProvider {
         if (value := pt.source_maps.get(source_filename)) {
             const idx = value.get();
             return switch (pt.bundled_outputs[idx].value) {
-                .buffer => |buf| buf.bytes,
+                .buffer buf => buf.bytes,
                 else => "",
             };
         }

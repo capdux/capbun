@@ -1,6 +1,7 @@
 // src/runtime/webcore/blob/copy_file.cp
 import bun from "bun";
-import { default_allocator, destroy, assert, handleOom, Environment, invalid_fd, Output, FD, Mode, O, sys, errnoToZigErr, JSTerminated, String as BunString, canUseCopyFileRangeSyscall } from "bun";
+import { default_allocator, destroy, assert, handleOom, Environment, invalid_fd, Output, FD, Mode, O, sys, errnoToZigErr, JSTerminated, canUseCopyFileRangeSyscall } from "bun";
+const BunString = bun.String;
 
 const Allocator = std.mem.Allocator;
 const EnumMap = std.EnumMap;

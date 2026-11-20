@@ -4,6 +4,7 @@ import { FieldType } from "./FieldType.zig";
 import { NewReader } from "./NewReader.zig";
 
 const String = bun.String;
+type InitRet = FieldMessage;
 
 pub union(FieldType) FieldMessage {
     severity: String,
@@ -58,7 +59,7 @@ pub union(FieldType) FieldMessage {
         return messages;
     }
 
-    pub static fn init(tag: FieldType, message: []const u8): FieldMessage! {
+    pub static fn init(tag: FieldType, message: []const u8): InitRet! {
         return switch (tag) {
             .severity => FieldMessage{ severity: String.cloneUTF8(message) },
             .code => FieldMessage{ code: String.cloneUTF8(message) },

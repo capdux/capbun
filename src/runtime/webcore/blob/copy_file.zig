@@ -76,9 +76,6 @@ const O = @import("bun").O;
 const sys = @import("bun").sys;
 const errnoToZigErr = @import("bun").errnoToZigErr;
 const JSTerminated = @import("bun").JSTerminated;
-const String = @import("bun").String;
-const as = @import("bun").as;
-const BunString = @import("bun").BunString;
 const canUseCopyFileRangeSyscall = @import("bun").canUseCopyFileRangeSyscall;
 pub const CopyFile = struct {
     destination_file_store: Store.File,
@@ -953,6 +950,7 @@ pub fn deinit(self: *CopyFileWindows) void {
     pub const ReadWriteLoop = CopyFileWindowsReadWriteLoop;
 };
 
+const BunString = bun.String;
 const Allocator = std.mem.Allocator;
 const EnumMap = std.EnumMap;
 const posix = std.posix;

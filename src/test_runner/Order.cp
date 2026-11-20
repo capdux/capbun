@@ -10,6 +10,28 @@ const Execution = bun_test.Execution;
 const ConcurrentGroup = bun_test.Execution.ConcurrentGroup;
 const ExecutionSequence = bun_test.Execution.ExecutionSequence;
 
+const EntryList = struct {
+    first: (*ExecutionEntry)? = null,
+    last: (*ExecutionEntry)? = null,
+    pub fn prepend(*_, current: *ExecutionEntry) {
+        current.next = _.first;
+        _.first = current;
+        if (_.last == null) _.last = current;
+    }
+    pub fn append(*_, current: *ExecutionEntry) {
+        if (bun.Environment.ci_assert && current.added_in_phase != .preload) bun.assert(current.next == null);
+        current.next = null;
+        if (last := _.last) {
+            if (bun.Environment.ci_assert && last.added_in_phase != .preload) bun.assert(last.next == null);
+            last.next = current;
+            _.last = current;
+        } else {
+            _.first = current;
+            _.last = current;
+        }
+    }
+};
+
 pub struct Config {
     always_use_hooks: bool,
     randomize: std.Random?,
@@ -99,7 +121,7 @@ pub struct AllOrderResult {
     }
 
     pub fn generateOrderTest(*_, current: *ExecutionEntry): bun.JSError!void {
-        let list: ExecutionEntry.LinkedList = .{};
+        let list: EntryList = .{};
         current.next = null;
         current.failure_skip_past = null;
 

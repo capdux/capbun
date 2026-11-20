@@ -10,7 +10,7 @@ const strings = bun.strings;
 
 const log = bun.Output.scoped(.S3, .hidden);
 
-let empty_u8: [0]u8 = [];
+let empty_u8: [0]u8 = undefined;
 
 export class S3HttpDownloadStreamingTask {
     pub const new = bun.TrivialNew(S3HttpDownloadStreamingTask);
