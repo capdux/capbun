@@ -99,7 +99,7 @@ struct PoolDataStruct<LinkedList, MaxCountInt> {
 
 pub fn ObjectPool(
     comptime Type: type,
-    comptime Init: (*const fn (allocator: std.mem.Allocator) anyerror!Type?),
+    comptime Init: (fn (allocator: std.mem.Allocator) anyerror!Type)?,
     comptime threadsafe: bool,
     comptime max_count: comptime_int,
 ): type {

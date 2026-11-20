@@ -1332,3 +1332,6 @@
 
 ### 2026-11-20 06:05:27 UTC - zig:check 第 2 轮 Runtime 簇修复经验
 - `SSLConfig.cp` 改 `@root struct SSLConfig`、`path.cp` 规避 `pub fn join` 静默跳过（改 `joinImpl` + `pub const join`）、`encoding.cp` 改索引解包消除 `cp_unpack_elem`。
+
+### 2026-11-20 06:05:50 UTC - 跨模块根因修复经验（pool/VM/fs）
+- `ObjectPool` 的 `Init` 改 `(fn (...) anyerror!Type)?`；`VM.throwError` 返回纯错误集 `ThrowError`；`FileSystem.instance` 放回结构体内 `pub static let`。

@@ -1534,6 +1534,8 @@ pub const FileSystem = struct {
     pub threadlocal var tmpdir_handle: ?std.fs.Dir = null;
     pub var tmpname_id_number: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
     pub var max_fd: std.posix.fd_t = 0;
+    pub var instance_loaded: bool = false;
+    pub var instance: FileSystem = undefined;
 
 pub fn topLevelDirWithoutTrailingSlash(self: FileSystem) []const u8 {
             if (((self.top_level_dir.len > 1) and (self.top_level_dir[@as(usize, @intCast((self.top_level_dir.len - 1)))] == std.fs.path.sep))) {
@@ -1586,7 +1588,7 @@ pub fn initWithForce(top_level_dir_: ?[:0]const u8, comptime force: bool) !*File
                 instance_loaded = true;
                 _ = Fs.DirEntry.EntryStore.init(allocator);
             }
-            return (&instance);
+            return (&FileSystem.instance);
     }
 
 pub fn deinit(self: FileSystem) void {
@@ -1697,8 +1699,6 @@ pub fn printLimits() void {
     pub const Implementation = Fs.RealFS;
 };
 
-pub var instance_loaded: bool = false;
-pub var instance: FileSystem = undefined;
 var get_platform_tempdir = bun.once(RealFS.#platformTempDir);
 var _entries_option_map: *EntriesOption.Map = undefined;
 var _entries_option_map_loaded: bool = false;

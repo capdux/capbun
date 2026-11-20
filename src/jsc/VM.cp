@@ -5,6 +5,7 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
 const APILockCallback = *const fn (ctx: *!?) callconv(.c) void;
+err ThrowError { JSError }
 
 @c {
     fn JSC__VM__create(heap_type: u8): *VM;
@@ -170,7 +171,7 @@ pub struct VMLock {
         JSC__VM__clearHasTerminationRequest(_);
     }
 
-    pub fn throwError(*_, global_object: *JSGlobalObject, value: JSValue)! {
+    pub fn throwError(*_, global_object: *JSGlobalObject, value: JSValue): ThrowError {
         let scope: bun.jsc.ExceptionValidationScope = undefined;
         scope.init(global_object, @src());
         defer scope.deinit();

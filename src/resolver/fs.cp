@@ -1,5 +1,3 @@
-pub let instance_loaded: bool = false;
-pub let instance: FileSystem = undefined;
 let get_platform_tempdir = bun.once(RealFS.#platformTempDir);
 let _entries_option_map: *EntriesOption.Map = undefined;
 let _entries_option_map_loaded: bool = false;
@@ -1853,6 +1851,9 @@ pub struct FileSystem {
         max_fd = @max(fd, max_fd);
     }
 
+    pub static let instance_loaded: bool = false;
+    pub static let instance: FileSystem = undefined;
+
     pub const DirnameStore = allocators.BSSStringList(Preallocate.Counts.dir_entry, 128);
     pub const FilenameStore = allocators.BSSStringList(Preallocate.Counts.files, 64);
 
@@ -1885,7 +1886,7 @@ pub struct FileSystem {
             * = Fs.DirEntry.EntryStore.init(allocator);
         }
 
-        return &instance;
+        return &FileSystem.instance;
     }
 
     fn deinit() {

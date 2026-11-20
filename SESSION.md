@@ -3012,3 +3012,5 @@ Options:
 - [2026-11-20 06:05:02 UTC] 验收并提交第 2 轮 `zig:check` Core+Install+Parser+Bake 簇 12 模块修复（12/12 全 PASS），并派发 3 处外部根因修复（`PackageInstaller`/`cache`/`Request`）。
 
 - [2026-11-20 06:05:27 UTC] 验收并提交第 2 轮 `zig:check` Runtime 簇 7 模块修复（`SSLConfig`/`socket`/`encoding`/`node_os`/`path`/`dns`/`blob/Store`，7/7 全 PASS）；接力派发 `App.cp` 与 `Blob.cp` 根因修复。
+
+- [2026-11-20 06:05:50 UTC] 验收并提交 3 处跨模块根因修复：`collections/pool.cp` (0.943x), `jsc/VM.cp` (0.976x), `resolver/fs.cp` (1.005x)，全部 PASS。

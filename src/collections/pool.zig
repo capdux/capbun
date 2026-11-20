@@ -161,7 +161,7 @@ pub fn PoolDataStruct(comptime LinkedList: type, comptime MaxCountInt: type) typ
 
 const log_allocations = false;
 
-pub fn ObjectPool(comptime Type: type, comptime Init: *const fn (std.mem.Allocator) anyerror!?Type, comptime threadsafe: bool, comptime max_count: comptime_int) type {
+pub fn ObjectPool(comptime Type: type, comptime Init: ?*const fn (std.mem.Allocator) anyerror!Type, comptime threadsafe: bool, comptime max_count: comptime_int) type {
         return struct {
     pub threadlocal var data_threadlocal: DataStructThreadLocal = DataStructThreadLocal{  };
     pub var data__: DataStructNonThreadLocal = DataStructNonThreadLocal{  };
