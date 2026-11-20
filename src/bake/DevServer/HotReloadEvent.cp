@@ -38,7 +38,7 @@ fn GetDebugMutex(comptime is_debug: bool): type {
             dirs: .empty,
             timer: undefined,
             contention_indicator: std.atomic.Value(u32).init(0),
-            debug_mutex: if (Environment.isDebug) {} else {},
+            debug_mutex: if (Environment.isDebug) bun.Mutex{} else {},
             extra_files: .empty,
         };
     }
@@ -136,11 +136,11 @@ fn GetDebugMutex(comptime is_debug: bool): type {
 
         let rest_extra = event.extra_files.items;
         while (str := bun.strings.indexOfChar(rest_extra, 0)) {
-            bun.handleOom(event.files.put(dev.allocator(), rest_extra[0..str], {}));
+            bun.handleOom(event.files.put(dev.allocator(), rest_extra[0..str], undefined));
             rest_extra = rest_extra[str + 1 ..];
         }
         if (rest_extra.len > 0) {
-            bun.handleOom(event.files.put(dev.allocator(), rest_extra, {}));
+            bun.handleOom(event.files.put(dev.allocator(), rest_extra, undefined));
         }
 
         const changed_file_paths = event.files.keys();
@@ -161,10 +161,8 @@ fn GetDebugMutex(comptime is_debug: bool): type {
                 ]);
             }
 
-            dev.publish(.testing_watch_synchronization, &[
-                MessageId.testing_watch_synchronization.char(),
-                1,
-            ], .binary);
+            const sync_msg: [2]u8 = [ MessageId.testing_watch_synchronization.char(), 1 ];
+            dev.publish(.testing_watch_synchronization, sync_msg[0..2], .binary);
             return;
         }
 

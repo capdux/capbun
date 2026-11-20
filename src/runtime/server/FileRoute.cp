@@ -155,87 +155,128 @@ pub const FileRoute = struct {
         }
     }
 
-    pub fn on(this: *FileRoute, req: *uws.Request, resp: AnyResponse) void {
-        this.ref();
+    pub fn onHEADRequest(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
+        bun.debugAssert(this.server != null);
 
-        const method = req.method();
-        if (method != .GET and method != .HEAD) {
-            resp.endWithoutBody(resp.shouldCloseConnection());
-            this.deref();
+        this.on(req, resp, .HEAD);
+    }
+
+    pub fn onRequest(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
+        this.on(req, resp, bun.http.Method.find(req.method()) orelse .GET);
+    }
+
+    pub fn on(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse, method: bun.http.Method) void {
+        bun.debugAssert(this.server != null);
+        this.ref();
+        if (this.server) |server| {
+            server.onPendingRequest();
+            resp.timeout(server.config().idleTimeout);
+        }
+        const path = this.blob.store.?.getPath() orelse {
+            req.setYield(true);
+            this.onResponseComplete(resp);
+            return;
+        };
+
+        const open_flags = bun.O.RDONLY | bun.O.CLOEXEC | bun.O.NONBLOCK;
+
+        const fd_result = brk: {
+            if (bun.Environment.isWindows) {
+                let path_buffer: bun.PathBuffer = undefined;
+                @memcpy(path_buffer[0..path.len], path);
+                path_buffer[path.len] = 0;
+                break :brk bun.sys.open(
+                    path_buffer[0..path.len :0],
+                    open_flags,
+                    0,
+                );
+            }
+            break :brk bun.sys.openA(
+                path,
+                open_flags,
+                0,
+            );
+        };
+
+        if (fd_result == .err) {
+            req.setYield(true);
+            this.onResponseComplete(resp);
             return;
         }
 
-        const store = this.blob.store.?;
-        bun.assert(store.data.file.pathlike == .path);
-        _ = store.data.file.pathlike.path;
+        const fd = fd_result.result;
 
-        let pollable: bool = false;
-        let file_type: bun.schema.common.BlobFileType = .file;
-        const open_result = this.blob.openFileForReading() catch |err| {
-            switch (err) {
-                error.FileNotFound => {
-                    this.writeStatusCode(404, resp);
-                    resp.endWithoutBody(resp.shouldCloseConnection());
-                    this.deref();
-                    return;
-                },
-                else => {
-                    this.writeStatusCode(500, resp);
-                    resp.endWithoutBody(resp.shouldCloseConnection());
-                    this.deref();
-                    return;
-                },
-            }
-        };
-
-        const fd = open_result.fd;
-        let fd_owned: bool = true;
+        // `fd_owned` tracks whether this function is still responsible for
+        // closing the file descriptor and releasing the route ref. Every
+        // non-streaming return — bodiless status codes (304/204/205/307/308),
+        // HEAD, non-streamable files, and the two JS-exception `catch return`
+        // paths below — hits this defer, so neither the fd nor the route ref
+        // (or the server's pending_requests counter) can leak regardless of
+        // which branch runs. The streaming path clears `fd_owned` right
+        // before handing ownership to `FileResponseStream`.
+        let fd_owned = true;
         defer if (fd_owned) {
-            bun.Async.Closer.close(fd, if (comptime bun.Environment.isWindows) bun.windows.libuv.Loop.get());
+            bun.Async.Closer.close(fd, if (bun.Environment.isWindows) bun.windows.libuv.Loop.get());
+            this.onResponseComplete(resp);
         };
 
-        pollable = open_result.pollable;
-        file_type = open_result.file_type;
+        const input_if_modified_since_date: ?u64 = req.dateForHeader("if-modified-since") catch return; // TODO: properly propagate exception upwards
 
-        let size = this.blob.size;
-        let stat_hash: bun.fs.StatHash = .{};
-
-        if (this.blob.reported_estimated_size == 0) {
-            const stat = bun.sys.fstat(fd).unwrap() catch {
-                this.writeStatusCode(500, resp);
-                resp.endWithoutBody(resp.shouldCloseConnection());
-                this.deref();
-                return;
+        const can_serve_file: bool, const size: u64, const file_type: bun.io.FileType, const pollable: bool = brk: {
+            const stat = switch (bun.sys.fstat(fd)) {
+                .result => |s| s,
+                .err => break :brk .{ false, 0, undefined, false },
             };
 
-            size = @intCast(stat.size);
-            stat_hash = bun.fs.StatHash.init(stat);
-        } else {
-            stat_hash = this.stat_hash;
-        }
+            const stat_size: u64 = @intCast(@max(stat.size, 0));
+            const _size: u64 = @min(stat_size, @as(u64, this.blob.size));
 
-        const range = if (file_type == .file and !this.has_content_range_header)
-            RangeRequest.parse(req.header("range"), size)
-        else
-            RangeRequest.Result.none;
-
-        const input_if_modified_since_date = if (req.header("if-modified-since")) |if_modified_since|
-            bun.String.parseDate(&bun.String.init(if_modified_since), bun.jsc.VirtualMachine.get().global) catch null
-        else
-            null;
-
-        const status_code: u16 = brk: {
-            if (req.header("if-none-match")) |if_none_match| {
-                if (stat_hash.etag()) |etag| {
-                    if (std.mem.eql(u8, if_none_match, etag)) {
-                        break :brk 304;
-                    }
-                }
+            if (bun.S.ISDIR(@intCast(stat.mode))) {
+                break :brk .{ false, 0, undefined, false };
             }
 
+            this.stat_hash.hash(stat, path);
+
+            if (bun.S.ISFIFO(@intCast(stat.mode)) or bun.S.ISCHR(@intCast(stat.mode))) {
+                break :brk .{ true, _size, .pipe, true };
+            }
+
+            if (bun.S.ISSOCK(@intCast(stat.mode))) {
+                break :brk .{ true, _size, .socket, true };
+            }
+
+            break :brk .{ true, _size, .file, false };
+        };
+
+        if (!can_serve_file) {
+            req.setYield(true);
+            return;
+        }
+
+        // Range applies to the slice the route was configured with, not the
+        // underlying file: a Bun.file(p).slice(a,b) route exposes only [a,b).
+        // RFC 9110 §14.2: Range is only defined for GET (HEAD mirrors GET's
+        // headers). Skip if the route has a non-200 status or the user already
+        // set Content-Range — they're managing partial responses themselves.
+        const range: RangeRequest.Result = if ((method == .GET or method == .HEAD) and file_type == .file and this.status_code == 200 and !this.has_content_range_header)
+            RangeRequest.fromRequest(req, size)
+        else
+            .none;
+
+        const status_code: u16 = brk: {
+            // RFC 9110 §13.2.2: conditional preconditions are evaluated before
+            // Range. If-Modified-Since on an unmodified resource yields 304 even
+            // when a Range header is present (without If-Range).
+            // Unlike If-Unmodified-Since, If-Modified-Since can only be used with a
+            // GET or HEAD. When used in combination with If-None-Match, it is
+            // ignored, unless the server doesn't support If-None-Match.
             if (input_if_modified_since_date) |requested_if_modified_since| {
                 if (method == .HEAD or method == .GET) {
-                    if (this.lastModifiedDate() catch return) |actual_last_modified_at| {
+                    if (this.lastModifiedDate() catch return) |actual_last_modified_at| { // TODO: properly propagate exception upwards
+                        // Compare at second precision: the Last-Modified header we
+                        // emit is second-granular (HTTP-date), so a sub-second
+                        // mtime would otherwise never satisfy `<=` against the
+                        // client's echoed value.
                         if (actual_last_modified_at / 1000 <= requested_if_modified_since / 1000) {
                             break :brk 304;
                         }
@@ -259,6 +300,9 @@ pub const FileRoute = struct {
         resp.writeMark();
         this.writeHeaders(resp);
 
+        // Bodiless statuses end here — before the range switch, so a 304 (which
+        // can win over a satisfiable Range per RFC 9110 §13.2.2) doesn't emit
+        // Content-Range.
         switch (status_code) {
             204, 205, 304, 307, 308 => {
                 resp.endWithoutBody(resp.shouldCloseConnection());
@@ -297,6 +341,8 @@ pub const FileRoute = struct {
             return;
         }
 
+        // Hand ownership of the fd to FileResponseStream; disable the defer close.
+        // The route ref taken at the top of on() is released in onStreamComplete.
         fd_owned = false;
         FileResponseStream.start(.{
             .fd = fd,

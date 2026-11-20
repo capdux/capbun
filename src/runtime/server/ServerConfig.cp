@@ -231,17 +231,13 @@ pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(
     entry.server = server;
     const handler_wrap = struct {
         pub fn handler(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
-            route.onRequest(.{ .h1 = req }, switch (comptime ssl) {
-                true => .{ .SSL = resp },
-                false => .{ .TCP = resp },
-            });
+            const any_resp: uws.AnyResponse = if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp };
+            route.onRequest(.{ .h1 = req }, any_resp);
         }
 
         pub fn HEAD(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
-            route.onHEADRequest(.{ .h1 = req }, switch (comptime ssl) {
-                true => .{ .SSL = resp },
-                false => .{ .TCP = resp },
-            });
+            const any_resp: uws.AnyResponse = if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp };
+            route.onHEADRequest(.{ .h1 = req }, any_resp);
         }
     };
     app.head(path, entry, handler_wrap.HEAD);
@@ -541,7 +537,9 @@ pub fn fromJS(
             }
 
             while (key := try iter.next()) {
-                const [path, is_ascii] = bun.handleOom(key.toOwnedSliceReturningAllASCII(bun.default_allocator));
+                const path_pair = bun.handleOom(key.toOwnedSliceReturningAllASCII(bun.default_allocator));
+                const path = path_pair[0];
+                const is_ascii = path_pair[1];
                 errdefer bun.default_allocator.free(path);
 
                 const value: jsc.JSValue = iter.value;
@@ -577,7 +575,7 @@ pub fn fromJS(
                     bun.default_allocator.free(path);
                     continue;
                 } else if (value.isObject()) {
-                    const methods = .{
+                    const methods: [9]HTTP.Method = [
                         HTTP.Method.CONNECT,
                         HTTP.Method.DELETE,
                         HTTP.Method.GET,
@@ -587,7 +585,7 @@ pub fn fromJS(
                         HTTP.Method.POST,
                         HTTP.Method.PUT,
                         HTTP.Method.TRACE,
-                    };
+                    ];
                     let found = false;
                     inline for (method of methods) {
                         if (function := try value.getOwn(global, @tagName(method))) {
@@ -623,7 +621,8 @@ pub fn fromJS(
                     }
                 }
 
-                const route = try AnyRoute.fromJS(global, path, value, init_ctx) orelse {
+                const route_opt = try AnyRoute.fromJS(global, path, value, init_ctx);
+                const route = route_opt orelse {
                     return global.throwInvalidArguments(
                         "'routes' expects a Record<string, Response | HTMLBundle | {[method: string]: (req: BunRequest) => Response|Promise<Response>}>\n\nTo bundle frontend apps on-demand with Bun.serve(), import HTML files.\n\nExample:\n\n```js\nimport { serve } from \"bun\";\nimport app from \"./app.html\";\n\nserve({\n  routes: {\n    \"/index.json\": Response.json({ message: \"Hello World\" }),\n    \"/app\": app,\n    \"/path/:param\": (req) => {\n      const param = req.params.param;\n      return Response.json({ message: `Hello ${param}` });\n    },\n    \"/path\": {\n      GET(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n      POST(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n    },\n  },\n\n  fetch(request) {\n    return new Response(\"fallback response\");\n  },\n});\n```\n\nSee https://bun.com/docs/api/http for more information."
                     ,

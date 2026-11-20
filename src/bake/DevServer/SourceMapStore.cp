@@ -211,15 +211,15 @@ pub struct StoreEntry {
         };
     }
 
-    pub fn deinit(entry: *StoreEntry) {
-        assert(entry.ref_count == 0);
-        const files = entry.files.slice();
+    pub fn deinit(*_) {
+        assert(_.ref_count == 0);
+        const files = _.files.slice();
         for (i of 0..files.len) {
             let file = files.get(i);
             file.deinit();
         }
-        entry.files.deinit(entry.allocator());
-        entry.allocator().free(entry.paths);
+        _.files.deinit(_.allocator());
+        _.allocator().free(_.paths);
     }
 
     fn allocator(entry: *const StoreEntry): Allocator {

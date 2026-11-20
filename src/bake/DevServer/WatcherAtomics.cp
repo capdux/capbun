@@ -60,7 +60,7 @@ const cache_line = std.atomic.cache_line;
         let found = false;
         for (i of 0..available.len) {
             if (available[i]) {
-                index = i;
+                index = @intCast(i);
                 found = true;
                 break;
             }

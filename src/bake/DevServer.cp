@@ -1006,7 +1006,8 @@ fn onAssetRequest(dev: *DevServer, req: *Request, resp: AnyResponse) {
     if (param.len < @sizeOf(u64) * 2)
         return notFound(resp);
     const hex = param[0 .. @sizeOf(u64) * 2];
-    let out: [@sizeOf(u64)]u8 = undefined;
+    const out_len = @sizeOf(u64);
+    let out: [out_len]u8 = undefined;
     assert((std.fmt.hexToBytes(&out, hex) catch
         return notFound(resp)).len == @sizeOf(u64));
     const hash: u64 = @bitCast(out);
@@ -1018,7 +1019,8 @@ fn onAssetRequest(dev: *DevServer, req: *Request, resp: AnyResponse) {
 }
 
 pub fn parseHexToInt(comptime T: type, slice: []const u8): T? {
-    let out: [@sizeOf(T)]u8 = undefined;
+    const out_len = @sizeOf(T);
+    let out: [out_len]u8 = undefined;
     assert((std.fmt.hexToBytes(&out, slice) catch return null).len == @sizeOf(T));
     return @bitCast(out);
 }
@@ -1089,7 +1091,7 @@ struct RequestEnsureRouteBundledCtx {
 
     fn onDefer(*_, bundle_field: BundleQueueType): bun.JSError!void {
         const requests_array: *DeferredRequest.List = switch (bundle_field) {
-            .current_bundle => &mut _.dev.current_bundle.unwrap().requests,
+            .current_bundle => &mut _.dev.current_bundle.?.requests,
             .next_bundle => &mut _.dev.next_bundle.requests,
         };
         _.dev.deferRequest(requests_array, _.route_bundle_index, _.kind, _.req, _.resp)?;
@@ -1176,7 +1178,7 @@ fn ensureRouteIsBundled(
                         }
                         dev.has_tailwind_plugin_hack = tailwind_hack;
 
-                        switch (dev.server.unwrap().getOrLoadPlugins(.{ dev_server: dev })) {
+                        switch (dev.server.?.getOrLoadPlugins(.{ dev_server: dev })) {
                             .pending => {
                                 dev.plugin_state = .pending;
                                 continue;
@@ -1307,19 +1309,19 @@ fn deferRequest(
         dev: dev,
         handler: switch (kind) {
             .bundled_html_page => brk: {
-                resp.onAborted(&deferred.data, DeferredRequest.onAbort);
+                resp.onAborted(*DeferredRequest, DeferredRequest.onAbort, &deferred.data);
                 break :brk { bundled_html_page: { response: resp, method: method } };
             },
             .server_handler => brk: {
                 let server_handler: bun.jsc.API.SavedRequest = undefined;
                 switch (req) {
                     .req => |r| {
-                        const opt_handler = try dev.server.unwrap().prepareAndSaveJsRequestContext(r, resp, dev.vm.global, method);
+                        const opt_handler = try dev.server.?.prepareAndSaveJsRequestContext(r, resp, dev.vm.global, method);
                         if (opt_handler == null) {
                             dev.deferred_request_pool.put(deferred);
                             return;
                         }
-                        server_handler = opt_handler.unwrap();
+                        server_handler = opt_handler.?;
                     },
                     .saved => |saved| {
                         server_handler = saved;
@@ -1421,7 +1423,7 @@ fn appendRouteEntryPointsIfNotStale(dev: *DevServer, entry_points: *EntryPointLi
         for (abs_path of map.keys()) {
             const opt_bf = dev.client_graph.bundled_files.get(abs_path);
             if (opt_bf == null) continue;
-            const file = opt_bf.unwrap().unpack();
+            const file = opt_bf.?.unpack();
             if (file.kind() == .css)
                 bun.handleOom(entry_points.appendCss(alloc, abs_path));
         }
@@ -1731,7 +1733,7 @@ fn generateJavaScriptCodeForHTMLFile(
             // Find the in-graph import.
             const opt_bf = dev.client_graph.bundled_files.get(rec.path.text);
             if (opt_bf == null) continue;
-            const file = opt_bf.unwrap().unpack();
+            const file = opt_bf.?.unpack();
             if (file.content != .js)
                 continue;
         }
@@ -3162,7 +3164,7 @@ fn startNextBundleIfPresent(dev: *DevServer) {
                 current.processFileList(dev, &entry_points, temp_alloc);
                 const next_event = dev.watcher_atomics.recycleEventFromDevServer(current);
                 if (next_event == null) break;
-                current = next_event.unwrap();
+                current = next_event.?;
                 if (comptime Environment.isDebug) {
                     assert(current.debug_mutex.tryLock());
                 }
@@ -3380,11 +3382,8 @@ pub fn respondForHTMLBundle(dev: *DevServer, html: *HTMLBundle.HTMLBundleRoute, 
         RequestEnsureRouteBundledCtx,
         &ctx,
     ) catch |e| {
-        if (e == error.JSError || e == error.JSTerminated) {
-            dev.vm.global.reportActiveExceptionAsUnhandled(e);
-        } else {
-            return e;
-        }
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        dev.vm.global.reportActiveExceptionAsUnhandled(e);
     };
 }
 

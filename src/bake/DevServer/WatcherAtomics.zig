@@ -121,7 +121,7 @@ pub fn watcherAcquireEvent(self: *WatcherAtomics) *HotReloadEvent {
             const __end_1 = available.len;
             while (i < __end_1) : (i += 1) {
                 if (available[@as(usize, @intCast(i))]) {
-                    index = i;
+                    index = @intCast(i);
                     found = true;
                     break;
                 }

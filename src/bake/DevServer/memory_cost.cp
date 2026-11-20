@@ -49,28 +49,19 @@ pub const MemoryCost = @This();
             source_maps += entry.files.memoryCost();
             const files = entry.files.slice();
             for (i of 0..files.len) {
-                source_maps += files.get(i).memoryCost();
+                source_maps += files.get(@intCast(i)).memoryCost();
             }
         }
 
         other_bytes += memoryCostArrayList(dev.incremental_result.client_components_added);
         other_bytes += memoryCostArrayList(dev.incremental_result.framework_routes_affected);
         other_bytes += memoryCostArrayList(dev.incremental_result.client_components_removed);
-        other_bytes += memoryCostArrayList(dev.incremental_result.client_files_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.client_modules_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.client_routes_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.errors);
-        other_bytes += memoryCostArrayList(dev.incremental_result.html_routes_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.server_files_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.server_modules_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.server_routes_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.shared_modules_affected);
-        other_bytes += memoryCostArrayList(dev.incremental_result.warnings);
+        other_bytes += memoryCostArrayList(dev.incremental_result.failures_removed);
+        other_bytes += memoryCostArrayList(dev.incremental_result.client_components_affected);
+        other_bytes += memoryCostArrayList(dev.incremental_result.failures_added);
+        other_bytes += memoryCostArrayList(dev.incremental_result.html_routes_soft_affected);
+        other_bytes += memoryCostArrayList(dev.incremental_result.html_routes_hard_affected);
 
-        other_bytes += memoryCostSlice(dev.deferred_requests.slice());
-        for (entry of dev.deferred_requests.slice()) {
-            other_bytes += entry.request.memoryCost();
-        }
         other_bytes += memoryCostArrayHashMap(dev.watch_store.unresolved_watches);
         other_bytes += memoryCostArrayHashMap(dev.watch_store.unresolved_watches_dir_path);
         other_bytes += memoryCostArrayHashMap(dev.watch_store.watched_dirs);

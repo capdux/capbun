@@ -78,8 +78,7 @@ contention_indicator: std.atomic.Value(u32),
 debug_mutex: GetDebugMutex(Environment.isDebug),
 
 pub fn initEmpty(owner: *DevServer) HotReloadEvent {
-        return HotReloadEvent{ .owner = owner, .concurrent_task = undefined, .files = .empty, .dirs = .empty, .timer = undefined, .contention_indicator = std.atomic.Value(u32).init(0), .debug_mutex = (if (Environment.isDebug) ({
-}) else ({
+        return HotReloadEvent{ .owner = owner, .concurrent_task = undefined, .files = .empty, .dirs = .empty, .timer = undefined, .contention_indicator = std.atomic.Value(u32).init(0), .debug_mutex = (if (Environment.isDebug) bun.Mutex{  } else ({
 })), .extra_files = .empty };
 }
 
@@ -163,11 +162,11 @@ pub fn processFileList(event: *HotReloadEvent, dev: *DevServer, entry_points: *E
         var rest_extra = event.extra_files.items;
         _ = &rest_extra;
         while (bun.strings.indexOfChar(rest_extra, 0)) |str| {
-            _ = bun.handleOom(event.files.put(dev.allocator(), rest_extra[0..str], .{}));
+            _ = bun.handleOom(event.files.put(dev.allocator(), rest_extra[0..str], undefined));
             rest_extra = rest_extra[(str + 1)..];
         }
         if ((rest_extra.len > 0)) {
-            _ = bun.handleOom(event.files.put(dev.allocator(), rest_extra, .{}));
+            _ = bun.handleOom(event.files.put(dev.allocator(), rest_extra, undefined));
         }
         const changed_file_paths = event.files.keys();
         _ = bun.handleOom(dev.server_graph.invalidate(changed_file_paths, entry_points, temp_alloc));
@@ -180,7 +179,8 @@ pub fn processFileList(event: *HotReloadEvent, dev: *DevServer, entry_points: *E
             if ((event.dirs.count() > 0)) {
                 _ = Output.debugWarn("modified dirs: {f}", .{ bun.fmt.fmtSlice(event.dirs.keys(), ", ") });
             }
-            _ = dev.publish(.testing_watch_synchronization, (&.{ MessageId.testing_watch_synchronization.char(), 1 }), .binary);
+            const sync_msg: [2]u8 = .{ MessageId.testing_watch_synchronization.char(), 1 };
+            _ = dev.publish(.testing_watch_synchronization, sync_msg[0..2], .binary);
             return;
         }
         if (dev.has_tailwind_plugin_hack) |map| {
