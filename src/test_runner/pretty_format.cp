@@ -14,6 +14,7 @@ const JSPromise = jsc.JSPromise;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const empty_jsvalues: [0]JSValue = undefined;
+@tls let formatter_name_buf: [512]u8 = undefined;
 
 pub struct VisitedInit {
     static fn init(allocator: std.mem.Allocator): anyerror!std.AutoHashMap(JSValue, void) {
@@ -440,7 +441,7 @@ pub struct JestPrettyFormat {
                         let reactElement = ZigString.init("react.element");
                         let react_fragment = ZigString.init("react.fragment");
 
-                        if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) || (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
+                        if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) or (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
                             return .{ .tag = .JSX, .cell = js_type };
                         }
                     }
@@ -520,7 +521,6 @@ pub struct JestPrettyFormat {
         };
 
         const CellType = CAPI.CellType;
-        @tls pub let name_buf: [512]u8 = undefined;
 
         static fn WrappedWriter(comptime Writer: type): type {
             return struct {
@@ -1114,7 +1114,7 @@ pub struct JestPrettyFormat {
                     return;
                 },
                 .Class => {
-                    let printable = ZigString.init(&name_buf);
+                    let printable = ZigString.init(&formatter_name_buf);
                     value.getClassName(_.globalThis, &printable)?;
                     _.addForNewLine(printable.len);
 
@@ -1125,7 +1125,7 @@ pub struct JestPrettyFormat {
                     }
                 },
                 .Function => {
-                    let printable = ZigString.init(&name_buf);
+                    let printable = ZigString.init(&formatter_name_buf);
                     value.getNameProperty(_.globalThis, &printable)?;
 
                     if (printable.len == 0) {
@@ -1295,7 +1295,7 @@ pub struct JestPrettyFormat {
                     } else if (resolve_log := value.@"as"(bun.api.ResolveMessage)) {
                         resolve_log.msg.writeFormat(writer_, enable_ansi_colors) catch {};
                         return;
-                    } else if (printAsymmetricMatcher(_, Format, &writer, writer_, name_buf, value, enable_ansi_colors) catch false) {
+                    } else if (printAsymmetricMatcher(_, Format, &writer, writer_, formatter_name_buf, value, enable_ansi_colors) catch false) {
                         return;
                     } else if (jsType != .DOMWrapper) {
                         if (value.isCallable()) {

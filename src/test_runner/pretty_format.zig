@@ -401,7 +401,6 @@ pub fn printAsymmetricMatcher(fmt: anytype, comptime Format: anytype, writer: an
         failed: bool = false,
         estimated_line_length: usize = 0,
         always_newline_scope: bool = false,
-        pub threadlocal var name_buf: [512]u8 = undefined;
     
     pub fn goodTimeForANewLine(self: *@This()) bool {
                 if ((self.estimated_line_length > 80)) {
@@ -650,7 +649,7 @@ pub fn printAsymmetricMatcher(fmt: anytype, comptime Format: anytype, writer: an
                                 var reactElement = ZigString.init("react.element");
                                 var react_fragment = ZigString.init("react.fragment");
         
-                                if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) || (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
+                                if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) or (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
                                     return .{ .tag = .JSX, .cell = js_type };
                                 }
                             }
@@ -743,6 +742,7 @@ const JSPromise = jsc.JSPromise;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const empty_jsvalues: [0]JSValue = undefined;
+threadlocal var formatter_name_buf: [512]u8 = undefined;
 pub const EventType = enum(u8) {
     Event,
     MessageEvent,

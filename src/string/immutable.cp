@@ -809,7 +809,7 @@ pub fn startsWithGeneric(comptime T: type, self: []const T, str: []const T): boo
 }
 
 pub fn endsWith(client: string, str: string): bool {
-    return str.len == 0 || @call(bun.callmod_inline, std.mem.endsWith, { u8, client, str });
+    return str.len == 0 || std.mem.endsWith(u8, client, str);
 }
 
 pub fn endsWithComptime(client: string, comptime str: auto): bool {
@@ -1419,9 +1419,10 @@ pub fn indexOfNotChar(slice: []const u8, char: u8): u32? {
         }
     }
 
-    for (*current of remaining) {
-        if (current.* != char) {
-            return @as(u32, @truncate(@intFromPtr(current) - @intFromPtr(slice.ptr)));
+    let idx: usize = 0;
+    while (idx < remaining.len) : (idx += 1) {
+        if (remaining[idx] != char) {
+            return @as(u32, @truncate(@intFromPtr(&remaining[idx]) - @intFromPtr(slice.ptr)));
         }
     }
 

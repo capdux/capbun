@@ -129,15 +129,20 @@ pub fn spaceDeinit(this_space: *Space) {
     }
 }
 
+err StringifyError {
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+    StackOverflow,
+}
+
 struct Stringifier {
     stack_check: bun.StackCheck,
-    builder: wtf.StringBuilder,
+    builder: wtf.StringBuilder.StringBuilder,
     indent: usize,
     space: Space,
     visiting: std.AutoHashMapUnmanaged(JSValue, void),
     allocator: std.mem.Allocator,
-
-    const StringifyError = bun.JSError || bun.StackOverflow;
 
     static fn init(global: *jsc.JSGlobalObject, space_value: JSValue): bun.JSError!Stringifier {
         return {

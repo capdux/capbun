@@ -306,7 +306,7 @@ pub fn shellEscape(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 
     const jsval = arguments.ptr[0];
     const bunstr = jsval.toBunString(globalThis)?;
-    if (globalThis.hasException()) return .zero;
+    if (globalThis.hasException()) return JSValue.zero;
     defer bunstr.deref();
 
     let outbuf = std.array_list.Managed(u8).init(bun.default_allocator);
@@ -418,7 +418,7 @@ pub fn which(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
     bin_str = path_arg.toSlice(globalThis, globalThis.bunVM().allocator)?;
     if (globalThis.hasException()) {
-        return .zero;
+        return JSValue.zero;
     }
 
     if (bin_str.len >= bun.MAX_PATH_BYTES) {
@@ -643,7 +643,7 @@ pub fn registerMacro(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFram
     arguments[1].protect();
     get_or_put_result.value_ptr.* = arguments[1].asObjectRef();
 
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getCWD(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
@@ -785,7 +785,7 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
         return globalThis.throw("Opening editor failed {s}", .{ @errorName(e) });
     };
 
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getPublicPath(to: string, origin: URL, comptime Writer: type, writer: Writer) {
@@ -859,7 +859,7 @@ pub fn sleepSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     }
 
     std.Thread.sleep(@as(u64, i32(milliseconds)) * std.time.ns_per_ms);
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 @callconv("c")
@@ -871,7 +871,7 @@ pub const gc = Bun__gc;
 
 pub fn shrink(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     globalObject.vm().shrinkFootprint();
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 fn doResolve(globalThis: *jsc.JSGlobalObject, arguments: []const JSValue): bun.JSError!jsc.JSValue {
@@ -1423,16 +1423,16 @@ pub fn getTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): 
 
 pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, ciphers: jsc.JSValue): jsc.JSValue {
     globalThis.bunVM().rareData().setTLSDefaultCiphers(ciphers);
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
     let valkey = jsc.API.Valkey.createNoJsNoPubsub(globalThis, &.{ .js_undefined }) catch |e| {
         if (e != error.JSError) {
-            * = globalThis.throwError(e, "Failed to create Redis client") catch {};
-            return .zero;
+            * = globalThis.throwError(e, "Failed to create Redis client");
+            return JSValue.zero;
         }
-        return .zero;
+        return JSValue.zero;
     };
 
     const as_js = valkey.toJS(globalThis);
@@ -1440,10 +1440,10 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
     valkey.this_value = jsc.JSRef.initWeak(as_js);
     valkey._subscription_ctx = SubscriptionCtx.init(valkey) catch |e| {
         if (e != error.JSError) {
-            * = globalThis.throwError(e, "Failed to create Redis client") catch {};
-            return .zero;
+            * = globalThis.throwError(e, "Failed to create Redis client");
+            return JSValue.zero;
         }
-        return .zero;
+        return JSValue.zero;
     };
 
     return as_js;
@@ -1741,7 +1741,7 @@ pub struct JSZlib {
             }
         }
 
-        if (globalThis.hasException()) return .zero;
+        if (globalThis.hasException()) return JSValue.zero;
 
         const compressed = buffer.slice();
         const allocator = jsc.VirtualMachine.get().allocator;

@@ -149,7 +149,7 @@ pub union(Tag) Angle {
         }
     }
 
-    pub fn zero(): Angle {
+    static fn zero(): Angle {
         return { deg: 0.0 };
     }
 

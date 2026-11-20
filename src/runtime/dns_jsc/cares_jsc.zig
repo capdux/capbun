@@ -597,7 +597,7 @@ pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: []const
         return ErrorDeferred.init(err, syscall, host_string, promise.*);
 }
 
-pub fn caresErrorCode(err_val: c_ares.Error) []const u8 {
+pub fn caresErrorCode(err_val: c_ares.Error) [:0]const u8 {
         return (switch (err_val) {
 .ENODATA => "DNS_ENODATA",
 .EFORMERR => "DNS_EFORMERR",

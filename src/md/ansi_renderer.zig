@@ -800,7 +800,7 @@ self.span_flags = (self.span_flags | SPAN_CODE);
 .a => {
 self.link_depth = (self.link_depth + 1);
             if ((self.link_depth == 1)) {
-                self.link_href = (blk_catch_15: { break :blk_catch_15 ((resolveHref(detail, self.allocator)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 @as([]u8, null); }); });
+                self.link_href = resolveHrefOpt(detail, self.allocator);
                 if ((self.theme.colors and self.theme.hyperlinks)) {
                     if (self.link_href) |href| {
                         _ = &href;
@@ -816,8 +816,8 @@ self.link_depth = (self.link_depth + 1);
 .img => {
 self.image_depth = (self.image_depth + 1);
             if ((self.image_depth == 1)) {
-                self.image_src = (blk_catch_16: { break :blk_catch_16 ((self.allocator.dupe(u8, detail.href)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
-                self.image_title = (blk_catch_17: { break :blk_catch_17 ((self.allocator.dupe(u8, detail.title)) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 null; }); });
+                self.image_src = (blk_catch_15: { break :blk_catch_15 ((self.allocator.dupe(u8, detail.href)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 null; }); });
+                self.image_title = (blk_catch_16: { break :blk_catch_16 ((self.allocator.dupe(u8, detail.title)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
                 _ = self.image_alt.clearRetainingCapacity();
             }
 },
@@ -950,23 +950,23 @@ _ = self.writeContent(content);
 
 pub fn writeContent(self: *AnsiRenderer, data: []const u8) void {
             if ((self.image_depth > 0)) {
-                _ = (blk_catch_18: { break :blk_catch_18 ((self.image_alt.appendSlice(self.allocator, data)) catch |__ce_18| { _ = &__ce_18; self.out.oom = true;
-                break :blk_catch_18 {}; }); });
+                _ = (blk_catch_17: { break :blk_catch_17 ((self.image_alt.appendSlice(self.allocator, data)) catch |__ce_17| { _ = &__ce_17; self.out.oom = true;
+                break :blk_catch_17 {}; }); });
                 return;
             }
             if (self.in_code_block) {
-                _ = (blk_catch_19: { break :blk_catch_19 ((self.code_buf.appendSlice(self.allocator, data)) catch |__ce_19| { _ = &__ce_19; self.out.oom = true;
-                break :blk_catch_19 {}; }); });
+                _ = (blk_catch_18: { break :blk_catch_18 ((self.code_buf.appendSlice(self.allocator, data)) catch |__ce_18| { _ = &__ce_18; self.out.oom = true;
+                break :blk_catch_18 {}; }); });
                 return;
             }
             if ((self.heading_level > 0)) {
-                _ = (blk_catch_20: { break :blk_catch_20 ((self.heading_buf.appendSlice(self.allocator, data)) catch |__ce_20| { _ = &__ce_20; self.out.oom = true;
-                break :blk_catch_20 {}; }); });
+                _ = (blk_catch_19: { break :blk_catch_19 ((self.heading_buf.appendSlice(self.allocator, data)) catch |__ce_19| { _ = &__ce_19; self.out.oom = true;
+                break :blk_catch_19 {}; }); });
                 return;
             }
             if (self.in_cell) {
-                _ = (blk_catch_21: { break :blk_catch_21 ((self.table_cell_buf.appendSlice(self.allocator, data)) catch |__ce_21| { _ = &__ce_21; self.out.oom = true;
-                break :blk_catch_21 {}; }); });
+                _ = (blk_catch_20: { break :blk_catch_20 ((self.table_cell_buf.appendSlice(self.allocator, data)) catch |__ce_20| { _ = &__ce_20; self.out.oom = true;
+                break :blk_catch_20 {}; }); });
                 return;
             }
             _ = self.writeWrapped(data);
@@ -1119,19 +1119,19 @@ pub fn emitInline(self: *AnsiRenderer, bytes: []const u8) void {
                     const start = i;
                     while (((i < bytes.len) and (bytes[@as(usize, @intCast(i))] != 27))) : (i = (i + 1)) {
                     }
-                    _ = (blk_catch_22: { break :blk_catch_22 ((self.image_alt.appendSlice(self.allocator, bytes[start..i])) catch |__ce_22| { _ = &__ce_22; self.out.oom = true;
+                    _ = (blk_catch_21: { break :blk_catch_21 ((self.image_alt.appendSlice(self.allocator, bytes[start..i])) catch |__ce_21| { _ = &__ce_21; self.out.oom = true;
                     return; }); });
                 }
                 return;
             }
             if (self.in_cell) {
-                _ = (blk_catch_23: { break :blk_catch_23 ((self.table_cell_buf.appendSlice(self.allocator, bytes)) catch |__ce_23| { _ = &__ce_23; self.out.oom = true;
-                break :blk_catch_23 {}; }); });
+                _ = (blk_catch_22: { break :blk_catch_22 ((self.table_cell_buf.appendSlice(self.allocator, bytes)) catch |__ce_22| { _ = &__ce_22; self.out.oom = true;
+                break :blk_catch_22 {}; }); });
                 return;
             }
             if ((self.heading_level > 0)) {
-                _ = (blk_catch_24: { break :blk_catch_24 ((self.heading_buf.appendSlice(self.allocator, bytes)) catch |__ce_24| { _ = &__ce_24; self.out.oom = true;
-                break :blk_catch_24 {}; }); });
+                _ = (blk_catch_23: { break :blk_catch_23 ((self.heading_buf.appendSlice(self.allocator, bytes)) catch |__ce_23| { _ = &__ce_23; self.out.oom = true;
+                break :blk_catch_23 {}; }); });
                 return;
             }
             _ = self.out.write(bytes);
@@ -1255,13 +1255,13 @@ pub fn writeRawNoColor(self: *AnsiRenderer, data: []const u8) void {
                 return;
             }
             if (self.in_cell) {
-                _ = (blk_catch_25: { break :blk_catch_25 ((self.table_cell_buf.appendSlice(self.allocator, data)) catch |__ce_25| { _ = &__ce_25; self.out.oom = true;
-                break :blk_catch_25 {}; }); });
+                _ = (blk_catch_24: { break :blk_catch_24 ((self.table_cell_buf.appendSlice(self.allocator, data)) catch |__ce_24| { _ = &__ce_24; self.out.oom = true;
+                break :blk_catch_24 {}; }); });
                 return;
             }
             if ((self.heading_level > 0)) {
-                _ = (blk_catch_26: { break :blk_catch_26 ((self.heading_buf.appendSlice(self.allocator, data)) catch |__ce_26| { _ = &__ce_26; self.out.oom = true;
-                break :blk_catch_26 {}; }); });
+                _ = (blk_catch_25: { break :blk_catch_25 ((self.heading_buf.appendSlice(self.allocator, data)) catch |__ce_25| { _ = &__ce_25; self.out.oom = true;
+                break :blk_catch_25 {}; }); });
                 return;
             }
             _ = self.out.write(data);
@@ -1575,7 +1575,7 @@ pub fn writeHighlightedJs(self: *AnsiRenderer, line: []const u8) void {
             defer {
             _ = aw.deinit();
             }
-            _ = (blk_catch_27: { break :blk_catch_27 ((highlighter.format((&aw.writer))) catch |__ce_27| { _ = &__ce_27; _ = self.out.write(line);
+            _ = (blk_catch_26: { break :blk_catch_26 ((highlighter.format((&aw.writer))) catch |__ce_26| { _ = &__ce_26; _ = self.out.write(line);
             return; }); });
             _ = self.out.write(aw.written());
     }
@@ -1593,14 +1593,14 @@ pub fn flushTable(self: *AnsiRenderer) void {
             if ((col_count == 0)) {
                 return;
             }
-            var widths = (blk_catch_28: { break :blk_catch_28 ((self.allocator.alloc(usize, col_count)) catch |__ce_28| { _ = &__ce_28; self.out.oom = true;
+            var widths = (blk_catch_27: { break :blk_catch_27 ((self.allocator.alloc(usize, col_count)) catch |__ce_27| { _ = &__ce_27; self.out.oom = true;
             return; }); });
             _ = &widths;
             defer {
             _ = self.allocator.free(widths);
             }
             _ = @memset(widths, 3);
-            var aligns = (blk_catch_29: { break :blk_catch_29 ((self.allocator.alloc(types.Align, col_count)) catch |__ce_29| { _ = &__ce_29; self.out.oom = true;
+            var aligns = (blk_catch_28: { break :blk_catch_28 ((self.allocator.alloc(types.Align, col_count)) catch |__ce_28| { _ = &__ce_28; self.out.oom = true;
             return; }); });
             _ = &aligns;
             defer {
@@ -1754,7 +1754,7 @@ pub fn lastWordBreakOutsideEscapes(bytes: []const u8) ?usize {
 
 pub fn writeRowCells(self: *AnsiRenderer, row: TableRow, widths: []const usize, aligns: []const types.Align) void {
             const chars = self.boxChars();
-            var segments = (blk_catch_30: { break :blk_catch_30 ((self.allocator.alloc(SliceList, widths.len)) catch |__ce_30| { _ = &__ce_30; self.out.oom = true;
+            var segments = (blk_catch_29: { break :blk_catch_29 ((self.allocator.alloc(SliceList, widths.len)) catch |__ce_29| { _ = &__ce_29; self.out.oom = true;
             return; }); });
             _ = &segments;
             defer {
@@ -1768,7 +1768,7 @@ pub fn writeRowCells(self: *AnsiRenderer, row: TableRow, widths: []const usize, 
             }
             }
             _ = @memset(segments, .{});
-            var state_at = (blk_catch_31: { break :blk_catch_31 ((self.allocator.alloc(std.ArrayListUnmanaged(CellAnsiState), widths.len)) catch |__ce_31| { _ = &__ce_31; self.out.oom = true;
+            var state_at = (blk_catch_30: { break :blk_catch_30 ((self.allocator.alloc(std.ArrayListUnmanaged(CellAnsiState), widths.len)) catch |__ce_30| { _ = &__ce_30; self.out.oom = true;
             return; }); });
             _ = &state_at;
             defer {
@@ -1808,9 +1808,9 @@ pub fn writeRowCells(self: *AnsiRenderer, row: TableRow, widths: []const usize, 
                     if ((cut == 0)) {
                         cut = @min(rest.len, (if (comptime @typeInfo(@TypeOf(bun.strings.wtf8ByteSequenceLengthWithInvalid(rest[0]))) == .@"enum") cp_cast_int(usize, @intFromEnum(bun.strings.wtf8ByteSequenceLengthWithInvalid(rest[0]))) else cp_cast_int(usize, bun.strings.wtf8ByteSequenceLengthWithInvalid(rest[0]))));
                     }
-                    _ = (blk_catch_32: { break :blk_catch_32 ((state_at[@as(usize, @intCast(i))].append(self.allocator, state)) catch |__ce_32| { _ = &__ce_32; self.out.oom = true;
+                    _ = (blk_catch_31: { break :blk_catch_31 ((state_at[@as(usize, @intCast(i))].append(self.allocator, state)) catch |__ce_31| { _ = &__ce_31; self.out.oom = true;
                     return; }); });
-                    _ = (blk_catch_33: { break :blk_catch_33 ((segments[@as(usize, @intCast(i))].append(self.allocator, rest[0..cut])) catch |__ce_33| { _ = &__ce_33; self.out.oom = true;
+                    _ = (blk_catch_32: { break :blk_catch_32 ((segments[@as(usize, @intCast(i))].append(self.allocator, rest[0..cut])) catch |__ce_32| { _ = &__ce_32; self.out.oom = true;
                     return; }); });
                     _ = state.scan(rest[0..cut]);
                     rest = rest[cut..];
@@ -1843,8 +1843,7 @@ pub fn writeRowCells(self: *AnsiRenderer, row: TableRow, widths: []const usize, 
                     const w = widths[@as(usize, @intCast(col_idx))];
                     const i = col_idx;
                     const seg: []const u8 = (if ((line < segments[@as(usize, @intCast(i))].items.len)) segments[@as(usize, @intCast(i))].items[@as(usize, @intCast(line))] else "");
-                    const opens: CellAnsiState = (if ((line < state_at[@as(usize, @intCast(i))].items.len)) state_at[@as(usize, @intCast(i))].items[@as(usize, @intCast(line))] else ({
-}));
+                    const opens: CellAnsiState = (if ((line < state_at[@as(usize, @intCast(i))].items.len)) state_at[@as(usize, @intCast(i))].items[@as(usize, @intCast(line))] else CellAnsiState{  });
                     _ = self.out.writeByte(32);
                     if ((row.is_header and self.theme.colors)) {
                         _ = self.out.write("\x1b[1m");
@@ -1990,7 +1989,7 @@ pub fn emitImage(self: *AnsiRenderer) void {
 
 pub fn emitKittyImageFile(self: *AnsiRenderer, path: []const u8) void {
             const encoded_len = bun.base64.encodeLen(path);
-            const encoded = (blk_catch_34: { break :blk_catch_34 ((self.allocator.alloc(u8, encoded_len)) catch |__ce_34| { _ = &__ce_34; self.out.oom = true;
+            const encoded = (blk_catch_33: { break :blk_catch_33 ((self.allocator.alloc(u8, encoded_len)) catch |__ce_33| { _ = &__ce_33; self.out.oom = true;
             return; }); });
             defer {
             _ = self.allocator.free(encoded);
@@ -2078,8 +2077,12 @@ pub fn visibleIndexAt(s: []const u8, max_cols: usize) usize {
         return bun.strings.visible.width.exclude_ansi_colors.utf8IndexAtWidth(s, max_cols);
 }
 
+pub fn resolveHrefOpt(detail: SpanDetail, allocator: Allocator) ?[]u8 {
+        return (blk_catch_34: { break :blk_catch_34 ((resolveHref(detail, allocator)) catch |__ce_34| { _ = &__ce_34; return null; }); });
+}
+
 pub fn isJsLang(lang: []const u8) bool {
-        const names: [][]const u8 = .{ "js", "javascript", "jsx", "mjs", "cjs", "ts", "typescript", "tsx", "mts", "cts" };
+        const names: [10][]const u8 = .{ "js", "javascript", "jsx", "mjs", "cjs", "ts", "typescript", "tsx", "mts", "cts" };
         for (cp_iter_slice(names)) |n| {
             _ = &n;
             if (bun.strings.eqlCaseInsensitiveASCII(lang, n, true)) {

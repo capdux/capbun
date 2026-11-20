@@ -193,9 +193,9 @@ pub fn deinit(self: *HTTPClient) void {
             _ = self.allocator.free(auth);
             self.proxy_authorization = null;
         }
-        if (self.proxy_headers) |hdrs| {
+        if (self.proxy_headers) |*hdrs| {
             _ = &hdrs;
-            _ = hdrs.deinit();
+            _ = (hdrs.*).deinit();
             self.proxy_headers = null;
         }
         if (self.proxy_tunnel) |tunnel| {
@@ -2374,15 +2374,11 @@ pub fn checkServerIdentity(client: *HTTPClient, comptime is_ssl: bool, socket: N
 
 pub fn registerAbortTracker(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) void {
         if ((client.signals.aborted != null)) {
-            switch (is_ssl) {
-true => {
-_ = (blk_catch_58: { break :blk_catch_58 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket })) catch |__ce_58| { _ = &__ce_58; @panic("unreachable"); }); });
-},
-false => {
-_ = (blk_catch_59: { break :blk_catch_59 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket })) catch |__ce_59| { _ = &__ce_59; @panic("unreachable"); }); });
-},
-else => unreachable,
-}
+            if (is_ssl) {
+                _ = (blk_catch_58: { break :blk_catch_58 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket })) catch |__ce_58| { _ = &__ce_58; @panic("unreachable"); }); });
+            } else {
+                _ = (blk_catch_59: { break :blk_catch_59 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket })) catch |__ce_59| { _ = &__ce_59; @panic("unreachable"); }); });
+            }
         }
 }
 

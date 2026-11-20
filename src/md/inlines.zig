@@ -373,17 +373,14 @@ pub fn emitText(p: *Parser, text_type: TextType, content: []const u8) bun.JSErro
 }
 
 pub fn emitEmphOpenTags(p: *Parser, sizes: []const u2) bun.JSError!void {
-        {
-            var idx: i32 = 0;
-            _ = &idx;
-            const __end_1 = sizes.len;
-            while (idx < __end_1) : (idx += 1) {
-                const j = ((sizes.len - 1) - idx);
-                if ((sizes[@as(usize, @intCast(j))] == 2)) {
-                    _ = p.enterSpan(.strong);
-                } else {
-                    _ = try try p.enterSpan(.em);
-                }
+        var idx: usize = 0;
+        _ = &idx;
+        while ((idx < sizes.len)) : (idx = (idx + 1)) {
+            const j = ((sizes.len - 1) - idx);
+            if ((sizes[@as(usize, @intCast(j))] == 2)) {
+                _ = try p.enterSpan(.strong);
+            } else {
+                _ = try p.enterSpan(.em);
             }
         }
 }
@@ -392,9 +389,9 @@ pub fn emitEmphCloseTags(p: *Parser, sizes: []const u2) bun.JSError!void {
         for (cp_iter_slice(sizes)) |size| {
             _ = &size;
             if ((size == 2)) {
-                _ = p.leaveSpan(.strong);
+                _ = try p.leaveSpan(.strong);
             } else {
-                _ = try try p.leaveSpan(.em);
+                _ = try p.leaveSpan(.em);
             }
         }
 }

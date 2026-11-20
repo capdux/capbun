@@ -3070,3 +3070,5 @@ Options:
 - **[2026-11-20 19:13] `html_renderer.cp` 与 `yaml.cp`（5,743 行完整恢复迁移）验收提交 + Wave 10 `zig:check`**：两模块均通过 4 项硬门禁（`html_renderer` 1.008x，`yaml` 1.020x）；Wave 10 `bun run zig:check` 穿透进入 Socket/HTTP2/Expect 子系统，共 493 处错误（其中 Socket 链路 5 文件集中占 211 处）。
 
 - **[2026-11-20 19:22] Wave 10 Batch A 验收提交（Socket+HTTP2+uws+WebCore 11 模块全绿，覆盖 ~255 错）**：完成 `uws_handlers`/`Handlers`/`UpgradedDuplex`/`socket`/`tls_socket_functions`/`h2_frame_parser`/`h3`/`vtable`/`Blob`/`Body`/`ResumableSink` 11 模块独立验收（11/11 PASS，ratio 0.106x~1.136x）并原子提交；静待专家 B 组（`4880dc8d`，23 文件）完成后跑 Wave 11 `zig:check`。
+
+- **[2026-11-20 19:28] Wave 10 Batch B 验收提交（23 模块全绿）+ Wave 11 `zig:check` 体检**：完成 Expect/CSS/DNS/Node/Valkey/SQL/MD/BunObject 23 模块独立验收（23/23 PASS，ratio 0.869x~1.124x）；Wave 11 `bun run zig:check` 总错误由 **493 暴跌至 257**（Socket/HTTP2/uws_sys/Valkey/SQL 全链路清零，剩余仅 19 个多错文件 + 100 个单错文件）。

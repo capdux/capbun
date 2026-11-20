@@ -973,7 +973,7 @@ pub struct AsyncReaddirRecursiveTask {
     /// A lockless queue of result lists.
     ///
     /// Using a lockless queue instead of mutex + joining the lists as we go was a meaningful performance improvement
-    result_list_queue: ResultListEntry.Queue = ResultListEntry.Queue{},
+    result_list_queue: ResultListEntry.Queue = {},
 
     /// All the subtasks will use this fd to open files
     root_fd: FD = bun.invalid_fd,
@@ -4051,7 +4051,7 @@ pub struct NodeFS {
             syscall: .mkdir,
             path: "",
         } };
-        return if (args.recursive) mkdirRecursive(_, args) else mkdirNonRecursive(_, args);
+        return if (args.recursive) _.mkdirRecursive(args) else _.mkdirNonRecursive(args);
     }
 
     // Node doesn't absolute the path so we don't have to either
@@ -4294,7 +4294,7 @@ pub struct NodeFS {
         // c.getErrno(rc) returns SUCCESS if rc is -1 so we call std.c._errno() directly
         const errno = @as(std.c.E, @enumFromInt(std.c._errno().*));
         return {
-            e: Syscall.Error{
+            err: Syscall.Error{
                 errno: @as(Syscall.Error.Int, @truncate(@intFromEnum(errno))),
                 syscall: .mkdtemp,
                 path: prefix_buf[0 .. len + 6],
@@ -4683,7 +4683,7 @@ pub struct NodeFS {
         comptime is_root: bool,
     ): Maybe(void) {
         const root_basename = async_task.root_path.slice();
-        let flags = bun.O.DIRECTORY | bun.O.RDONLY;
+        const flags = bun.O.DIRECTORY | bun.O.RDONLY;
         const atfd = if (comptime is_root) bun.FD.cwd() else async_task.root_fd;
         const fd = switch (switch (Environment.os) {
             else => Syscall.openat(atfd, basename, flags, 0),
@@ -4864,7 +4864,7 @@ pub struct NodeFS {
                 }
             }
 
-            let flags = bun.O.DIRECTORY | bun.O.RDONLY;
+            const flags = bun.O.DIRECTORY | bun.O.RDONLY;
             const fd = switch (Syscall.openat(if (root_fd == bun.invalid_fd) bun.FD.cwd() else root_fd, basename, flags, 0)) {
                 .err => |e| {
                     if (root_fd == bun.invalid_fd) {
@@ -5060,7 +5060,7 @@ pub struct NodeFS {
             @panic("This code path should never be reached. It should only go through readdirWithEntriesRecursiveAsync.");
         }
 
-        let flags = bun.O.DIRECTORY | bun.O.RDONLY;
+        const flags = bun.O.DIRECTORY | bun.O.RDONLY;
         const fd = switch (switch (Environment.os) {
             else => Syscall.open(path, flags, 0),
             // windows bun.sys.open does not pass iterable=true,
@@ -5089,7 +5089,7 @@ pub struct NodeFS {
     };
 
     fn readFile(*_, args: Arguments.ReadFile, comptime flavor: Flavor): Maybe(Return.ReadFile) {
-        const ret = readFileWithOptions(_, args, flavor, .default);
+        const ret = _.readFileWithOptions(args, flavor, .default);
         return switch (ret) {
             .err => .{ .err = ret.err },
             .result => |result| switch (result) {
@@ -5248,7 +5248,7 @@ pub struct NodeFS {
                             result: {
                                 buffer: Buffer.fromBytes(
                                     bun.default_allocator.dupe(u8, temporary_read_buffer) catch return {
-                                        e: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
+                                        err: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
                                     },
                                     bun.default_allocator,
                                     .Uint8Array,
@@ -5267,7 +5267,7 @@ pub struct NodeFS {
                             return {
                                 result: {
                                     null_terminated: bun.default_allocator.dupeZ(u8, temporary_read_buffer) catch return {
-                                        e: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
+                                        err: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
                                     },
                                 },
                             };
@@ -5325,7 +5325,7 @@ pub struct NodeFS {
         ) catch return { err: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) };
         if (temporary_read_buffer_before_stat_call.len > 0) {
             buf.appendSlice(temporary_read_buffer_before_stat_call) catch return {
-                e: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
+                err: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
             };
         }
         buf.expandToCapacity();
@@ -5437,7 +5437,7 @@ pub struct NodeFS {
                         result: {
                             null_terminated: buf.toOwnedSliceSentinel(0) catch return { 
                                 // Since we are expecting a null-terminated string, we can't just ignore the resize failure.
-                                e: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
+                                err: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path),
                             },
                         },
                     };

@@ -2886,11 +2886,11 @@ pub const ExternalFreeFunctionAllocator = struct {
     context: *anyopaque,
 
 pub fn create(free_callback: ExternalFreeCallback, context: *anyopaque) std.mem.Allocator {
-            return .{ .ptr = bun.create(bun.default_allocator, ExternalFreeFunctionAllocator, .{ .free_callback = free_callback, .context = context }), .vtable = *const vtable };
+            const vt = (&ExternalFreeFunctionAllocator.vtable);
+            return .{ .ptr = bun.create(bun.default_allocator, ExternalFreeFunctionAllocator, .{ .free_callback = free_callback, .context = context }), .vtable = vt };
     }
 
-pub fn alloc(self: *ExternalFreeFunctionAllocator, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
-        _ = self;
+pub fn alloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
             return null;
     }
 
@@ -2899,7 +2899,7 @@ pub fn free(ext_free_function: *anyopaque, _: []u8, _: std.mem.Alignment, _: usi
             break :blk @ptrCast(@alignCast(ext_free_function));
 
 });
-            _ = info.free_callback.?(info.context);
+            _ = @call(.auto, info.free_callback, .{ info.context });
             _ = bun.default_allocator.destroy(info);
     }
     const vtable: std.mem.Allocator.VTable = .{ .alloc = (&alloc), .free = (&free), .resize = (&std.mem.Allocator.noResize), .remap = (&std.mem.Allocator.noRemap) };
@@ -2965,7 +2965,7 @@ inline else => |*r| r.source_index,
     pub const empty = CompileResult{ .javascript = .{ .source_index = 0, .result = js_printer.PrintResult{ .result = .{ .code = "" } } } };
 };
 pub const AstBuilder = @import("./AstBuilder.zig").AstBuilder;
-pub const ExternalFreeCallback = *const *const fn(*anyopaque) callconv(.c) void;
+pub const ExternalFreeCallback = @typeInfo(@FieldType(CacheEntry.ExternalFreeFunction, "function")).optional.child;
 pub const Part = js_ast.Part;
 pub const js_ast = bun.ast;
 pub const SourceMap = bun.SourceMap;

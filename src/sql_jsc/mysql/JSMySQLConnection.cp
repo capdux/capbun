@@ -527,7 +527,7 @@ fn hasNullByte(s: []const u8): bool {
         if (value := js.onconnectGetCached(thisValue)) {
             return value;
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
@@ -541,7 +541,7 @@ fn hasNullByte(s: []const u8): bool {
         if (value := js.oncloseGetCached(thisValue)) {
             return value;
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
@@ -553,21 +553,21 @@ fn hasNullByte(s: []const u8): bool {
         * = globalObject;
         * = callframe;
         this.#poll_ref.ref(this.#vm);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doUnref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         * = callframe;
         this.#poll_ref.unref(this.#vm);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doFlush(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         * = callframe;
         this.registerAutoFlusher();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doClose(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
@@ -577,7 +577,7 @@ fn hasNullByte(s: []const u8): bool {
 
         defer this.updateReferenceType();
         this.#connection.cleanQueueAndClose(null, this.getQueriesArray());
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn consumeOnConnectCallback(_: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
@@ -605,7 +605,7 @@ fn hasNullByte(s: []const u8): bool {
         if (value := this.#js_value.tryGet()) {
             return js.queriesGetCached(value) orelse .js_undefined;
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub inline fn isAbleToWrite(_: *const @This()): bool {

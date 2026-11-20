@@ -1133,7 +1133,7 @@ pub fn startsWithGeneric(comptime T: type, self: []const T, str: []const T) bool
 }
 
 pub fn endsWith(client: []const u8, str: []const u8) bool {
-        return ((str.len == 0) or @call(bun.callmod_inline, std.mem.endsWith, .{ .u8 = u8, .client = client, .str = str }));
+        return ((str.len == 0) or std.mem.endsWith(u8, client, str));
 }
 
 pub fn endsWithComptime(client: []const u8, comptime str: anytype) bool {
@@ -1686,10 +1686,11 @@ pub fn indexOfNotChar(slice: []const u8, char: u8) ?u32 {
                 remaining = remaining[ascii_vector_size..];
             }
         }
-        for (cp_mut_slice(&remaining)) |*current| {
-            _ = &current;
-            if (((current.*).* != char)) {
-                return @as(u32, @truncate((@intFromPtr((current.*)) - @intFromPtr(slice.ptr))));
+        var idx: usize = 0;
+        _ = &idx;
+        while ((idx < remaining.len)) : (idx = (idx + 1)) {
+            if ((remaining[@as(usize, @intCast(idx))] != char)) {
+                return @as(u32, @truncate((@intFromPtr((&remaining[@as(usize, @intCast(idx))])) - @intFromPtr(slice.ptr))));
             }
         }
         return null;
@@ -1977,8 +1978,8 @@ pub fn firstNonASCII16(slice: []const u16) ?u32 {
                             {
                                 var i: i32 = 0;
                                 _ = &i;
-                                const __end_16 = index_of_first_nonascii_in_vector;
-                                while (i < __end_16) : (i += 1) {
+                                const __end_15 = index_of_first_nonascii_in_vector;
+                                while (i < __end_15) : (i += 1) {
                                     if ((vec[@as(usize, @intCast(i))] > 127)) {
                                         _ = bun.Output.panic("firstNonASCII16: found non-ASCII character in ASCII vector before the first non-ASCII character", .{});
                                     }

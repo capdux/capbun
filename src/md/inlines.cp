@@ -318,9 +318,14 @@ pub fn emitText(p: *Parser, text_type: TextType, content: []const u8): void ! bu
 /// Emit emphasis opening tags (outermost to innermost).
 pub fn emitEmphOpenTags(p: *Parser, sizes: []const u2): void ! bun.JSError {
     // First match = innermost, so emit in reverse (outermost first in HTML)
-    for (idx of 0..sizes.len) {
+    let idx: usize = 0;
+    while (idx < sizes.len) : (idx += 1) {
         const j = sizes.len - 1 - idx;
-        if (sizes[j] == 2) p.enterSpan(.strong) else try p.enterSpan(.em)?;
+        if (sizes[j] == 2) {
+            p.enterSpan(.strong)?;
+        } else {
+            p.enterSpan(.em)?;
+        }
     }
 }
 
@@ -328,7 +333,11 @@ pub fn emitEmphOpenTags(p: *Parser, sizes: []const u2): void ! bun.JSError {
 /// First entry in sizes was matched first (innermost), emit in forward order.
 pub fn emitEmphCloseTags(p: *Parser, sizes: []const u2): void ! bun.JSError {
     for (size of sizes) {
-        if (size == 2) p.leaveSpan(.strong) else try p.leaveSpan(.em)?;
+        if (size == 2) {
+            p.leaveSpan(.strong)?;
+        } else {
+            p.leaveSpan(.em)?;
+        }
     }
 }
 

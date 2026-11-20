@@ -14,21 +14,17 @@ const valkey = bun.valkey;
 const Command = valkey.Command;
 const protocol = valkey.protocol;
 
-let empty_args: [0]JSArgument = [];
+let empty_args: [0]JSArgument = undefined;
 
 fn requireNotSubscriber(client: *JSValkeyClient, function_name: []const u8): bun.JSError!void {
-    const fmt_string = "RedisClient.prototype.{s} cannot be called while in subscriber mode.";
-
     if (client.isSubscriber()) {
-        return client.globalObject.ERR(.REDIS_INVALID_STATE, fmt_string, .{function_name}).throw();
+        return client.globalObject.ERR(.REDIS_INVALID_STATE, "RedisClient.prototype.{s} cannot be called while in subscriber mode.", .{function_name}).throw();
     }
 }
 
 fn requireSubscriber(client: *JSValkeyClient, function_name: []const u8): bun.JSError!void {
-    const fmt_string = "RedisClient.prototype.{s} can only be called while in subscriber mode.";
-
     if (!client.isSubscriber()) {
-        return client.globalObject.ERR(.REDIS_INVALID_STATE, fmt_string, .{function_name}).throw();
+        return client.globalObject.ERR(.REDIS_INVALID_STATE, "RedisClient.prototype.{s} can only be called while in subscriber mode.", .{function_name}).throw();
     }
 }
 
@@ -801,12 +797,16 @@ pub fn hsetnx(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
 pub fn hexists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     try requireNotSubscriber(client, "hexists");
 
-    const key = (try fromJS(globalObject, callframe.argument(0))) orelse
-        return globalObject.throwInvalidArgumentType("hexists", "key", "string or buffer");
+    let key: JSArgument = undefined;
+    if (k := fromJS(globalObject, callframe.argument(0))?) {
+        key = k;
+    } else return globalObject.throwInvalidArgumentType("hexists", "key", "string or buffer");
     defer key.deinit();
 
-    const field = (try fromJS(globalObject, callframe.argument(1))) orelse
-        return globalObject.throwInvalidArgumentType("hexists", "field", "string or buffer");
+    let field: JSArgument = undefined;
+    if (f := fromJS(globalObject, callframe.argument(1))?) {
+        field = f;
+    } else return globalObject.throwInvalidArgumentType("hexists", "field", "string or buffer");
     defer field.deinit();
 
     const promise = valkeySend(client, 
@@ -1132,7 +1132,7 @@ fn sendUnsubscribeRequestAndCleanup(
     this_js: jsc.JSValue,
     globalObject: *jsc.JSGlobalObject,
     redis_channels: []JSArgument,
-) !jsc.JSValue {
+): bun.JSError!jsc.JSValue {
     // Send UNSUBSCRIBE command
     const command: Command = Command{
         command: "UNSUBSCRIBE",

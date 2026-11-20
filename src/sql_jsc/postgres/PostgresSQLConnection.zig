@@ -314,7 +314,7 @@ password: []const u8 = "",
 path: []const u8 = "",
 options: []const u8 = "",
 options_buf: []const u8 = "",
-authentication_state: AuthenticationState = .{ .pending = .{} },
+authentication_state: AuthenticationState = .pending,
 secure: ?*uws.SslCtx = null,
 tls_config: jsc.API.ServerConfig.SSLConfig = .{},
 tls_status: TLSStatus = .none,
@@ -410,7 +410,7 @@ pub fn getOnConnect(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *js
             _ = &value;
             return value;
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setOnConnect(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
@@ -425,7 +425,7 @@ pub fn getOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.
             _ = &value;
             return value;
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
@@ -437,10 +437,10 @@ pub fn setOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalOb
 pub fn setupTLS(self: *PostgresSQLConnection) void {
         _ = debug("setupTLS", .{});
         const tls_group = self.vm.rareData().postgresGroup(self.vm, true);
-        const new_socket = ((self.socket.SocketTCP.socket.connected.adoptTLS(tls_group, .postgres_tls, self.secure.?, self.tls_config.server_name, @sizeOf(*PostgresSQLConnection), @sizeOf(*PostgresSQLConnection))) orelse (({
+        const new_socket = ((self.socket.SocketTCP.socket.connected.adoptTLS(tls_group, .postgres_tls, self.secure.?, self.tls_config.server_name, @sizeOf(*PostgresSQLConnection), @sizeOf(*PostgresSQLConnection))) orelse {
         _ = self.fail("Failed to upgrade to TLS", error.TLSUpgradeFailed);
         return;
-})));
+});
         {
             (new_socket.ext(*PostgresSQLConnection)).* = self;
         }
@@ -989,18 +989,18 @@ pub fn SocketHandler(comptime ssl: bool) type {
 pub fn doRef(self: *PostgresSQLConnection, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
         _ = self.poll_ref.ref(self.vm);
         _ = self.updateHasPendingActivity();
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doUnref(self: *PostgresSQLConnection, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
         _ = self.poll_ref.unref(self.vm);
         _ = self.updateHasPendingActivity();
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doFlush(self: *PostgresSQLConnection, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         _ = self.registerAutoFlusher();
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn close(self: *PostgresSQLConnection) void {
@@ -1012,7 +1012,7 @@ pub fn close(self: *PostgresSQLConnection) void {
 pub fn doClose(self: *PostgresSQLConnection, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
         _ = &globalObject;
         _ = self.close();
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn stopTimers(self: *PostgresSQLConnection) void {
@@ -1241,7 +1241,7 @@ _ = debug("stmt failed", .{});
                     continue;
 },
 .prepared => {
-const thisValue = ((req.thisValue.tryGet()) orelse (({
+const thisValue = ((req.thisValue.tryGet()) orelse {
                     _ = bun.assertf(false, "query value was freed earlier than expected", .{});
                     if ((offset == 0)) {
                         _ = req.deref();
@@ -1251,7 +1251,7 @@ const thisValue = ((req.thisValue.tryGet()) orelse (({
                         offset = (offset + 1);
                     }
                     continue;
-})));
+});
                     const binding_value = ((PostgresSQLQuery.js.bindingGetCached(thisValue)) orelse (.zero));
                     const columns_value = ((PostgresSQLQuery.js.columnsGetCached(thisValue)) orelse (.zero));
                     req.flags.binary = (statement.fields.len > 0);
@@ -1318,7 +1318,7 @@ if ((!self.canPrepareQuery())) {
                     }
                     const has_params = (statement.signature.fields.len > 0);
                     if ((!has_params)) {
-                        const thisValue = ((req.thisValue.tryGet()) orelse (({
+                        const thisValue = ((req.thisValue.tryGet()) orelse {
                         _ = bun.assertf(false, "query value was freed earlier than expected", .{});
                         if ((offset == 0)) {
                             _ = req.deref();
@@ -1328,7 +1328,7 @@ if ((!self.canPrepareQuery())) {
                             offset = (offset + 1);
                         }
                         continue;
-})));
+});
                         const binding_value = ((PostgresSQLQuery.js.bindingGetCached(thisValue)) orelse (.zero));
                         _ = debug("prepareAndQueryWithSignature", .{});
                         _ = (blk_catch_16: { break :blk_catch_16 ((PostgresRequest.prepareAndQueryWithSignature(self.globalObject, query_str.slice(), binding_value, Writer, self.writer(), (&statement.signature))) catch |e| { _ = &e; if (self.globalObject.tryTakeException()) |err_| {
@@ -1355,13 +1355,13 @@ if ((!self.canPrepareQuery())) {
                         return;
                     }
                     if (self.flags.use_unnamed_prepared_statements) {
-                        const thisValue = ((req.thisValue.tryGet()) orelse (({
+                        const thisValue = ((req.thisValue.tryGet()) orelse {
                         _ = bun.assertf(false, "query value was freed earlier than expected", .{});
                         _ = bun.assert((offset == 0));
                         _ = req.deref();
                         _ = self.requests.discard(1);
                         continue;
-})));
+});
                         const binding_value = ((PostgresSQLQuery.js.bindingGetCached(thisValue)) orelse (.zero));
                         const columns_value = ((PostgresSQLQuery.js.columnsGetCached(thisValue)) orelse (.zero));
                         _ = debug("parseAndBindAndExecute (unnamed, first execution)", .{});
@@ -1469,7 +1469,7 @@ if ((offset > 0)) {
 
 pub fn getQueriesArray(self: *const PostgresSQLConnection) JSValue {
         if (self.js_value.isEmptyOrUndefinedOrNull()) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         return ((js.queriesGetCached(self.js_value)) orelse (.js_undefined));
 }
@@ -1529,10 +1529,10 @@ cached_structure = statement.structure(self.js_value, self.globalObject);
         } else {
             _ = try protocol.DataRow.decode((&putter), Context, reader, DataCell.Putter.put);
         }
-        const thisValue = ((request.thisValue.tryGet()) orelse (({
+        const thisValue = ((request.thisValue.tryGet()) orelse {
         _ = bun.assertf(false, "query value was freed earlier than expected", .{});
         return error.ExpectedRequest;
-})));
+});
         const pending_value = ((PostgresSQLQuery.js.pendingValueGetCached(thisValue)) orelse (.zero));
         _ = pending_value.ensureStillAlive();
         const result = try putter.toJS(self.globalObject, pending_value, structure, statement.fields_flags, request.flags.result_mode, cached_structure);
@@ -1829,10 +1829,10 @@ var err_resp: protocol.ErrorResponse = undefined;
             _ = bun.assert((self.requests.count == 0));
             return;
         }
-        var request = ((self.current()) orelse (({
+        var request = ((self.current()) orelse {
         _ = debug("ErrorResponse: {f}", .{ err_resp });
         return error.ExpectedRequest;
-})));
+});
         _ = &request;
         var is_error_owned = true;
         _ = &is_error_owned;

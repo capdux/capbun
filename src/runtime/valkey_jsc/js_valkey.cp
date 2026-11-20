@@ -722,10 +722,10 @@ pub struct JSValkeyClient {
 
     pub fn jsDisconnect(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): JSValue ! bun.JSError {
         if (this.client.status == .disconnected) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         this.client.disconnect();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn getOnConnect(*_, thisValue: JSValue, _: *jsc.JSGlobalObject): JSValue {
@@ -1027,7 +1027,10 @@ pub struct JSValkeyClient {
             this.deref();
         }
 
-        const this_jsvalue = this.this_value.tryGet() orelse return;
+        let this_jsvalue: JSValue = undefined;
+        if (v := this.this_value.tryGet()) {
+            this_jsvalue = v;
+        } else return;
         this_jsvalue.ensureStillAlive();
 
         // Create an error value
@@ -1089,7 +1092,7 @@ pub struct JSValkeyClient {
             ctx: this,
             task: undefined,
         };
-        holder.task = jsc.AnyTask.New(Holder, Holder.run).init(holder);
+        holder.task = jsc.AnyTask.AnyTask.New(Holder, Holder.run).init(holder);
 
         this.client.vm.enqueueTask(jsc.Task.init(&holder.task));
     }

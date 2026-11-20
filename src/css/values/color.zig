@@ -348,6 +348,22 @@ pub const LAB = struct {
     b: f32,
     alpha: f32,
 
+pub fn adjustPowerlessComponents(self: *LAB) void {
+            _ = AdjustPowerlessLAB(LAB).adjustPowerlessComponents(self);
+    }
+
+pub fn premultiply(self: *LAB) void {
+            _ = RecangularPremultiply(LAB, "l", "a", "b").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *LAB, a: f32) void {
+            _ = RecangularPremultiply(LAB, "l", "a", "b").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: LAB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(LAB, .LAB)(self, allocator);
+    }
+
 pub fn adjustHue(self: *LAB, _: *@This(), _: HueInterpolationMethod) void {
         _ = self;
     }
@@ -366,15 +382,10 @@ pub fn adjustHue(self: *LAB, _: *@This(), _: HueInterpolationMethod) void {
     const gamut_impl = UnboundedColorGamut(@This());
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
-    pub const adjustPowerlessComponents = AdjustPowerlessLAB(@This()).adjustPowerlessComponents;
     const interpolate_impl = DeriveInterpolate(@This(), "l", "a", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "l", "a", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .LAB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .LAB);
     pub const ChannelTypeMap = .{ .l = ChannelType{ .percentage = true }, .a = ChannelType{ .number = true }, .b = ChannelType{ .number = true } };
 };
 
@@ -383,6 +394,18 @@ pub const SRGB = struct {
     g: f32,
     b: f32,
     alpha: f32,
+
+pub fn premultiply(self: *SRGB) void {
+            _ = RecangularPremultiply(SRGB, "r", "g", "b").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *SRGB, a: f32) void {
+            _ = RecangularPremultiply(SRGB, "r", "g", "b").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: SRGB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(SRGB, .SRGB)(self, allocator);
+    }
 
 pub fn adjustPowerlessComponents(self: *SRGB) void {
         _ = self;
@@ -414,11 +437,7 @@ pub fn intoRGBA(_rgb: *const SRGB) RGBA {
     const interpolate_impl = DeriveInterpolate(@This(), "r", "g", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "r", "g", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .SRGB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .SRGB);
     pub const ChannelTypeMap = .{ .r = ChannelType{ .percentage = true }, .g = ChannelType{ .percentage = true }, .b = ChannelType{ .percentage = true } };
 };
 
@@ -427,6 +446,14 @@ pub const HSL = struct {
     s: f32,
     l: f32,
     alpha: f32,
+
+pub fn premultiply(self: *HSL) void {
+            _ = PolarPremultiply(HSL, "s", "l").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *HSL, a: f32) void {
+            _ = PolarPremultiply(HSL, "s", "l").unpremultiply(self, a);
+    }
 
 pub fn adjustPowerlessComponents(self: *HSL) void {
             if ((@abs(self.s) < std.math.floatEps(f32))) {
@@ -439,7 +466,9 @@ pub fn adjustPowerlessComponents(self: *HSL) void {
     }
 
 pub fn adjustHue(self: *HSL, other: *HSL, method: HueInterpolationMethod) void {
-            _ = method.interpolate((&self.h), (&other.h));
+            var m = method;
+            _ = &m;
+            _ = m.interpolate((&self.h), (&other.h));
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -456,9 +485,6 @@ pub fn adjustHue(self: *HSL, other: *HSL, method: HueInterpolationMethod) void {
     const gamut_impl = HslHwbColorGamut(@This(), "s", "l");
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
-    const polar_impl = PolarPremultiply(@This(), "s", "l");
-    pub const premultiply = polar_impl.premultiply;
-    pub const unpremultiply = polar_impl.unpremultiply;
     const interpolate_impl = DeriveInterpolate(@This(), "h", "s", "l");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
@@ -473,6 +499,14 @@ pub const HWB = struct {
     b: f32,
     alpha: f32,
 
+pub fn premultiply(self: *HWB) void {
+            _ = PolarPremultiply(HWB, "w", "b").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *HWB, a: f32) void {
+            _ = PolarPremultiply(HWB, "w", "b").unpremultiply(self, a);
+    }
+
 pub fn adjustPowerlessComponents(self: *HWB) void {
             if ((@abs(((self.w + self.b) - 1.0)) < std.math.floatEps(f32))) {
                 self.h = std.math.nan(f32);
@@ -480,7 +514,9 @@ pub fn adjustPowerlessComponents(self: *HWB) void {
     }
 
 pub fn adjustHue(self: *HWB, other: *HWB, method: HueInterpolationMethod) void {
-            _ = method.interpolate((&self.h), (&other.h));
+            var m = method;
+            _ = &m;
+            _ = m.interpolate((&self.h), (&other.h));
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -497,9 +533,6 @@ pub fn adjustHue(self: *HWB, other: *HWB, method: HueInterpolationMethod) void {
     const gamut_impl = HslHwbColorGamut(@This(), "w", "b");
     pub const inGamut = gamut_impl.inGamut;
     pub const clip = gamut_impl.clip;
-    const polar_impl = PolarPremultiply(@This(), "w", "b");
-    pub const premultiply = polar_impl.premultiply;
-    pub const unpremultiply = polar_impl.unpremultiply;
     const interpolate_impl = DeriveInterpolate(@This(), "h", "w", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
@@ -513,6 +546,18 @@ pub const SRGBLinear = struct {
     g: f32,
     b: f32,
     alpha: f32,
+
+pub fn premultiply(self: *SRGBLinear) void {
+            _ = RecangularPremultiply(SRGBLinear, "r", "g", "b").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *SRGBLinear, a: f32) void {
+            _ = RecangularPremultiply(SRGBLinear, "r", "g", "b").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: SRGBLinear, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(self, allocator);
+    }
 
 pub fn adjustPowerlessComponents(self: *SRGBLinear) void {
         _ = self;
@@ -539,11 +584,7 @@ pub fn adjustHue(self: *SRGBLinear, _: *@This(), _: HueInterpolationMethod) void
     const interpolate_impl = DeriveInterpolate(@This(), "r", "g", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "r", "g", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .SRGBLinear).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .SRGBLinear);
     pub const ChannelTypeMap = .{ .r = ChannelType{ .angle = true }, .g = ChannelType{ .percentage = true }, .b = ChannelType{ .percentage = true } };
 };
 
@@ -684,6 +725,18 @@ pub const XYZd65 = struct {
     z: f32,
     alpha: f32,
 
+pub fn premultiply(self: *XYZd65) void {
+            _ = RecangularPremultiply(XYZd65, "x", "y", "z").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *XYZd65, a: f32) void {
+            _ = RecangularPremultiply(XYZd65, "x", "y", "z").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: XYZd65, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(XYZd65, .XYZd65)(self, allocator);
+    }
+
 pub fn adjustPowerlessComponents(self: *XYZd65) void {
         _ = self;
     }
@@ -709,11 +762,7 @@ pub fn adjustHue(self: *XYZd65, _: *@This(), _: HueInterpolationMethod) void {
     const interpolate_impl = DeriveInterpolate(@This(), "x", "y", "z");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "x", "y", "z");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .XYZd65).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .XYZd65);
     pub const ChannelTypeMap = .{ .x = ChannelType{ .percentage = true }, .y = ChannelType{ .percentage = true }, .z = ChannelType{ .percentage = true } };
 };
 
@@ -722,6 +771,26 @@ pub const LCH = struct {
     c: f32,
     h: f32,
     alpha: f32,
+
+pub fn adjustPowerlessComponents(self: *LCH) void {
+            _ = AdjustPowerlessLCH(LCH).adjustPowerlessComponents(self);
+    }
+
+pub fn adjustHue(self: *LCH, other: *LCH, method: HueInterpolationMethod) void {
+            _ = AdjustPowerlessLCH(LCH).adjustHue(self, other, method);
+    }
+
+pub fn premultiply(self: *LCH) void {
+            _ = RecangularPremultiply(LCH, "l", "c", "h").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *LCH, a: f32) void {
+            _ = RecangularPremultiply(LCH, "l", "c", "h").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: LCH, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(LCH, .LCH)(self, allocator);
+    }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
     pub const channels = colorspace_impl.channels;
@@ -737,17 +806,10 @@ pub const LCH = struct {
     const gamut_impl = UnboundedColorGamut(@This());
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
-    const powerless_lch_impl = AdjustPowerlessLCH(@This());
-    pub const adjustPowerlessComponents = powerless_lch_impl.adjustPowerlessComponents;
-    pub const adjustHue = powerless_lch_impl.adjustHue;
     const interpolate_impl = DeriveInterpolate(@This(), "l", "c", "h");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "l", "c", "h");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .LCH).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .LCH);
     pub const ChannelTypeMap = .{ .l = ChannelType{ .percentage = true }, .c = ChannelType{ .number = true }, .h = ChannelType{ .angle = true } };
 };
 
@@ -756,6 +818,22 @@ pub const OKLAB = struct {
     a: f32,
     b: f32,
     alpha: f32,
+
+pub fn adjustPowerlessComponents(self: *OKLAB) void {
+            _ = AdjustPowerlessLAB(OKLAB).adjustPowerlessComponents(self);
+    }
+
+pub fn premultiply(self: *OKLAB) void {
+            _ = RecangularPremultiply(OKLAB, "l", "a", "b").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *OKLAB, a: f32) void {
+            _ = RecangularPremultiply(OKLAB, "l", "a", "b").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: OKLAB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(OKLAB, .OKLAB)(self, allocator);
+    }
 
 pub fn adjustHue(self: *OKLAB, _: *@This(), _: HueInterpolationMethod) void {
         _ = self;
@@ -775,15 +853,10 @@ pub fn adjustHue(self: *OKLAB, _: *@This(), _: HueInterpolationMethod) void {
     const gamut_impl = UnboundedColorGamut(@This());
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
-    pub const adjustPowerlessComponents = AdjustPowerlessLAB(@This()).adjustPowerlessComponents;
     const interpolate_impl = DeriveInterpolate(@This(), "l", "a", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "l", "a", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .OKLAB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .OKLAB);
     pub const ChannelTypeMap = .{ .l = ChannelType{ .percentage = true }, .a = ChannelType{ .number = true }, .b = ChannelType{ .number = true } };
 };
 
@@ -792,6 +865,26 @@ pub const OKLCH = struct {
     c: f32,
     h: f32,
     alpha: f32,
+
+pub fn adjustPowerlessComponents(self: *OKLCH) void {
+            _ = AdjustPowerlessLCH(OKLCH).adjustPowerlessComponents(self);
+    }
+
+pub fn adjustHue(self: *OKLCH, other: *OKLCH, method: HueInterpolationMethod) void {
+            _ = AdjustPowerlessLCH(OKLCH).adjustHue(self, other, method);
+    }
+
+pub fn premultiply(self: *OKLCH) void {
+            _ = RecangularPremultiply(OKLCH, "l", "c", "h").premultiply(self);
+    }
+
+pub fn unpremultiply(self: *OKLCH, a: f32) void {
+            _ = RecangularPremultiply(OKLCH, "l", "c", "h").unpremultiply(self, a);
+    }
+
+pub fn intoCssColor(self: OKLCH, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(OKLCH, .OKLCH)(self, allocator);
+    }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
     pub const channels = colorspace_impl.channels;
@@ -807,17 +900,10 @@ pub const OKLCH = struct {
     const gamut_impl = UnboundedColorGamut(@This());
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
-    const powerless_lch_impl = AdjustPowerlessLCH(@This());
-    pub const adjustPowerlessComponents = powerless_lch_impl.adjustPowerlessComponents;
-    pub const adjustHue = powerless_lch_impl.adjustHue;
     const interpolate_impl = DeriveInterpolate(@This(), "l", "c", "h");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "l", "c", "h");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
     pub const into = ColorIntoMixin(@This(), .OKLCH).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .OKLCH);
     pub const ChannelTypeMap = .{ .l = ChannelType{ .percentage = true }, .c = ChannelType{ .number = true }, .h = ChannelType{ .angle = true } };
 };
 
@@ -2609,8 +2695,7 @@ pub fn parseFn(_: @TypeOf(.{}), i: *css.Parser) Result(CssColor) {
 }.parseFn),
 .@"light-dark" => input.parseNestedBlock(CssColor, .{}, struct {
 
-pub fn callback(self: @This(), _: @TypeOf(.{}), i: *css.Parser) Result(CssColor) {
-        _ = self;
+pub fn callback(_: @TypeOf(.{}), i: *css.Parser) Result(CssColor) {
             const light = (switch ((switch (CssColor.parse(i)) {
 .result => |v| v,
 .err => |e| {
@@ -3577,7 +3662,9 @@ pub fn adjustPowerlessComponents(self: *@This()) void {
     }
 
 pub fn adjustHue(self: *@This(), other: *T, method: HueInterpolationMethod) void {
-            _ = method.interpolate((&self.h), (&other.h));
+            var m = method;
+            _ = &m;
+            _ = m.interpolate((&self.h), (&other.h));
     }
 };
 }

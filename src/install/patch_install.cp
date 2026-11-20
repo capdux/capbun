@@ -236,7 +236,7 @@ pub struct PatchTask {
 
         let absolute_patchfile_path_buf: bun.PathBuffer = undefined;
         // 1. Parse the patch file
-        const patch_parts = [dir, patchfile_path];
+        const patch_parts: [2][]const u8 = [dir, patchfile_path];
         const absolute_patchfile_path = bun.path.joinZBuf(&absolute_patchfile_path_buf, patch_parts[0..], .auto);
         // TODO: can the patch file be anything other than utf-8?
 
@@ -396,7 +396,7 @@ pub struct PatchTask {
 
         let absolute_patchfile_path_buf: bun.PathBuffer = undefined;
         // parse the patch file
-        const hash_parts = [dir, patchfile_path];
+        const hash_parts: [2][]const u8 = [dir, patchfile_path];
         const absolute_patchfile_path = bun.path.joinZBuf(&absolute_patchfile_path_buf, hash_parts[0..], .auto);
 
         const stat: bun.Stat = switch (bun.sys.stat(absolute_patchfile_path)) {

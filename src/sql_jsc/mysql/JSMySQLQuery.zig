@@ -95,12 +95,12 @@ pub fn createInstance(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         defer {
         _ = args.deinit();
         }
-        const query = ((args.nextEat()) orelse (({
+        const query = ((args.nextEat()) orelse {
         return globalThis.throw("query must be a string", .{});
-})));
-        const values = ((args.nextEat()) orelse (({
+});
+        const values = ((args.nextEat()) orelse {
         return globalThis.throw("values must be an array", .{});
-})));
+});
         if ((!query.isString())) {
             return globalThis.throw("query must be a string", .{});
         }
@@ -148,9 +148,9 @@ pub fn doRun(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: 
         if ((arguments.len < 2)) {
             return globalObject.throwInvalidArguments("run must be called with 2 arguments connection and target", .{});
         }
-        const connection = ((arguments[0].as(MySQLConnection)) orelse (({
+        const connection = ((arguments[0].as(MySQLConnection)) orelse {
         return globalObject.throw("connection must be a MySQLConnection", .{});
-})));
+});
         var target = arguments[1];
         _ = &target;
         if ((!target.isObject())) {
@@ -162,7 +162,7 @@ pub fn doRun(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: 
         }
         return error.JSError; }); });
         _ = connection.enqueueRequest(self);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doCancel(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -170,7 +170,7 @@ pub fn doCancel(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callfram
         _ = &__unused_self;
         _ = &globalObject;
         _ = &callframe;
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doDone(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -178,7 +178,7 @@ pub fn doDone(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe:
         _ = &__unused_self;
         _ = &globalObject;
         _ = &callframe;
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setModeFromJS(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -189,14 +189,14 @@ pub fn setModeFromJS(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, cal
         const mode_value = try js_mode.coerce(i32, globalObject);
         const mode = (blk_catch_1: { break :blk_catch_1 ((std.meta.intToEnum(SQLQueryResultMode, mode_value)) catch |__ce_1| { _ = &__ce_1; return globalObject.throwInvalidArgumentTypeValue("mode", "Number", js_mode); }); });
         _ = self.#query.setResultMode(mode);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setPendingValueFromJS(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = &globalObject;
         const result = callframe.argument(0);
         _ = self.setPendingValue(result);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn resolve(self: *JSMySQLQuery, queries_array: JSValue, result: MySQLQueryResult) void {

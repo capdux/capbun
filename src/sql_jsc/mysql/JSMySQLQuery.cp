@@ -131,21 +131,21 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
             return err.JSError;
         };
         connection.enqueueRequest(this);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doCancel(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         const __unused_self = _; * = __unused_self;
         * = globalObject;
         * = callframe;
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doDone(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         const __unused_self = _; * = __unused_self;
         * = globalObject;
         * = callframe;
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setModeFromJS(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
@@ -159,14 +159,14 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
             return globalObject.throwInvalidArgumentTypeValue("mode", "Number", js_mode);
         };
         this.#query.setResultMode(mode);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setPendingValueFromJS(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         const result = callframe.argument(0);
         this.setPendingValue(result);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn resolve(*_, queries_array: JSValue, result: MySQLQueryResult) {

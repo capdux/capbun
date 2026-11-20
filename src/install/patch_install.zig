@@ -285,7 +285,7 @@ pub fn apply(self: *PatchTask) bun.OOM!void {
             const patchfile_path = patch.patchfilepath;
             var absolute_patchfile_path_buf: bun.PathBuffer = undefined;
             _ = &absolute_patchfile_path_buf;
-            const patch_parts: [][]const u8 = .{ dir, patchfile_path };
+            const patch_parts: [2][]const u8 = .{ dir, patchfile_path };
             const absolute_patchfile_path = bun.path.joinZBuf((&absolute_patchfile_path_buf), patch_parts[0..], .auto);
             const patchfile_txt = (switch (bun.sys.File.readFrom(bun.FD.cwd(), absolute_patchfile_path, self.manager.allocator)) {
 .result => |txt| txt,
@@ -378,7 +378,7 @@ pub fn calcHash(self: *PatchTask) ?u64 {
             const patchfile_path = self.callback.calc_hash.patchfile_path;
             var absolute_patchfile_path_buf: bun.PathBuffer = undefined;
             _ = &absolute_patchfile_path_buf;
-            const hash_parts: [][]const u8 = .{ dir, patchfile_path };
+            const hash_parts: [2][]const u8 = .{ dir, patchfile_path };
             const absolute_patchfile_path = bun.path.joinZBuf((&absolute_patchfile_path_buf), hash_parts[0..], .auto);
             const stat: bun.Stat = (switch (bun.sys.stat(absolute_patchfile_path)) {
 .err => |e| {

@@ -4436,7 +4436,7 @@ pub fn generateUniqueKey(): u64 {
     return key;
 }
 
-pub const ExternalFreeCallback = *const fn (*!) callconv(.c) void;
+pub const ExternalFreeCallback = @typeInfo(@FieldType(CacheEntry.ExternalFreeFunction, "function")).optional.child;
 
 pub struct ExternalFreeFunctionAllocator {
     free_callback: ExternalFreeCallback,
@@ -4450,22 +4450,23 @@ pub struct ExternalFreeFunctionAllocator {
     };
 
     static fn create(free_callback: ExternalFreeCallback, context: *!): std.mem.Allocator {
+        const vt = &ExternalFreeFunctionAllocator.vtable;
         return {
             ptr: bun.create(bun.default_allocator, ExternalFreeFunctionAllocator, {
                 free_callback: free_callback,
                 context: context,
             }),
-            vtable: &vtable,
+            vtable: vt,
         };
     }
 
-    fn alloc(_: *!, _: usize, _: std.mem.Alignment, _: usize): [*]u8? {
+    static fn alloc(_: *!, _: usize, _: std.mem.Alignment, _: usize): [*]u8? {
         return null;
     }
 
     static fn free(ext_free_function: *!, _: []u8, _: std.mem.Alignment, _: usize) {
         const info: *ExternalFreeFunctionAllocator = unsafe { @ptrCast(@alignCast(ext_free_function)) };
-        info.free_callback.?(info.context);
+        @call(.auto, info.free_callback, .{ info.context });
         bun.default_allocator.destroy(info);
     }
 }

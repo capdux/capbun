@@ -488,7 +488,7 @@ pub const AsyncReaddirRecursiveTask = struct {
     subtask_count: std.atomic.Value(usize),
     result_list: ResultListEntry.Value = undefined,
     result_list_count: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
-    result_list_queue: ResultListEntry.Queue = ResultListEntry.Queue,
+    result_list_queue: ResultListEntry.Queue = .{},
     root_fd: FD = bun.invalid_fd,
     root_path: PathString = PathString.empty,
     pending_err: ?Syscall.Error = null,
@@ -3287,7 +3287,7 @@ pub fn mkdir(self: *NodeFS, args: Arguments.Mkdir, _: Flavor) Maybe(Return.Mkdir
             if ((args.path.slice().len == 0)) {
                 return .{ .err = .{ .errno = @intFromEnum(bun.sys.E.NOENT), .syscall = .mkdir, .path = "" } };
             }
-            return (if (args.recursive) self.mkdirRecursive(self, args) else self.mkdirNonRecursive(self, args));
+            return (if (args.recursive) self.mkdirRecursive(args) else self.mkdirNonRecursive(args));
     }
 
 pub fn mkdirNonRecursive(self: *NodeFS, args: Arguments.Mkdir) Maybe(Return.Mkdir) {
@@ -3481,7 +3481,7 @@ pub fn mkdtemp(self: *NodeFS, args: Arguments.MkdirTemp, _: Flavor) Maybe(Return
                 return .initResult(bun.handleOom(jsc.ZigString.dupeForJS(bun.sliceTo(ptr, 0), bun.default_allocator)));
             }
             const errno = @as(std.c.E, @enumFromInt((std.c._errno()).*));
-            return .{ .e = Syscall.Error{ .errno = @as(Syscall.Error.Int, @truncate(@intFromEnum(errno))), .syscall = .mkdtemp, .path = prefix_buf[0..(len + 6)] } };
+            return .{ .err = Syscall.Error{ .errno = @as(Syscall.Error.Int, @truncate(@intFromEnum(errno))), .syscall = .mkdtemp, .path = prefix_buf[0..(len + 6)] } };
     }
 
 pub fn open(self: *NodeFS, args: Arguments.Open, _: Flavor) Maybe(Return.Open) {
@@ -3778,8 +3778,7 @@ const utf8_path = bun.strings.fromWPath(re_encoding_buffer.?, utf16_name);
 
 pub fn readdirWithEntriesRecursiveAsync(buf: *bun.PathBuffer, args: Arguments.Readdir, async_task: *AsyncReaddirRecursiveTask, basename: [:0]const u8, comptime ExpectedType: type, entries: *std.array_list.Managed(ExpectedType), comptime is_root: bool) Maybe(void) {
             const root_basename = async_task.root_path.slice();
-            var flags = (bun.O.DIRECTORY | bun.O.RDONLY);
-            _ = &flags;
+            const flags = (bun.O.DIRECTORY | bun.O.RDONLY);
             const atfd = (if (comptime is_root) bun.FD.cwd() else async_task.root_fd);
             const fd = (switch ((switch (Environment.os) {
 else => Syscall.openat(atfd, basename, flags, 0),
@@ -3942,8 +3941,7 @@ pub fn readdirWithEntriesRecursiveSync(buf: *bun.PathBuffer, args: Arguments.Rea
                     }
                 }
                 }
-                var flags = (bun.O.DIRECTORY | bun.O.RDONLY);
-                _ = &flags;
+                const flags = (bun.O.DIRECTORY | bun.O.RDONLY);
                 const fd = (switch (Syscall.openat((if ((root_fd == bun.invalid_fd)) bun.FD.cwd() else root_fd), basename, flags, 0)) {
 .err => |e| {
 {
@@ -4111,8 +4109,7 @@ pub fn readdirInner(buf: *bun.PathBuffer, args: Arguments.Readdir, comptime Expe
             if (comptime recursive) {
                 _ = @panic("This code path should never be reached. It should only go through readdirWithEntriesRecursiveAsync.");
             }
-            var flags = (bun.O.DIRECTORY | bun.O.RDONLY);
-            _ = &flags;
+            const flags = (bun.O.DIRECTORY | bun.O.RDONLY);
             const fd = (switch ((switch (Environment.os) {
 else => Syscall.open(path, flags, 0),
 .windows => bun.sys.openDirAtWindowsA(bun.FD.cwd(), path, .{ .iterable = true, .read_only = true }),
@@ -4136,7 +4133,7 @@ return .{ .e = e };
     }
 
 pub fn readFile(self: *NodeFS, args: Arguments.ReadFile, comptime flavor: Flavor) Maybe(Return.ReadFile) {
-            const ret = self.readFileWithOptions(self, args, flavor, .default);
+            const ret = self.readFileWithOptions(args, flavor, .default);
             return (switch (ret) {
 .err => .{ .err = ret.err },
 .result => |result| (switch (result) {
@@ -4257,13 +4254,13 @@ if (comptime ((flavor == .sync) and (string_type == .default))) {
                         return .{ .result = .{ .buffer = jsc.MarkedArrayBuffer{ .buffer = ab } } };
                     }
                 }
-                return .{ .result = .{ .buffer = Buffer.fromBytes((blk_catch_15: { break :blk_catch_15 ((bun.default_allocator.dupe(u8, temporary_read_buffer)) catch |__ce_15| { _ = &__ce_15; return .{ .e = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }), bun.default_allocator, .Uint8Array) } };
+                return .{ .result = .{ .buffer = Buffer.fromBytes((blk_catch_15: { break :blk_catch_15 ((bun.default_allocator.dupe(u8, temporary_read_buffer)) catch |__ce_15| { _ = &__ce_15; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }), bun.default_allocator, .Uint8Array) } };
 },
 else => {
 if (comptime (string_type == .default)) {
                     return .{ .result = .{ .transcoded_string = jsc.WebCore.encoding.toBunString(temporary_read_buffer, args.encoding) } };
                 } else {
-                    return .{ .result = .{ .null_terminated = (blk_catch_16: { break :blk_catch_16 ((bun.default_allocator.dupeZ(u8, temporary_read_buffer)) catch |__ce_16| { _ = &__ce_16; return .{ .e = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }) } };
+                    return .{ .result = .{ .null_terminated = (blk_catch_16: { break :blk_catch_16 ((bun.default_allocator.dupeZ(u8, temporary_read_buffer)) catch |__ce_16| { _ = &__ce_16; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }) } };
                 }
 },
 }
@@ -4297,7 +4294,7 @@ return .{ .e = e };
             }
             _ = (blk_catch_17: { break :blk_catch_17 ((buf.ensureTotalCapacityPrecise(@min((@max(temporary_read_buffer_before_stat_call.len, size) + 16), max_size, (((1024 * 1024) * 1024) * 8)))) catch |__ce_17| { _ = &__ce_17; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
             if ((temporary_read_buffer_before_stat_call.len > 0)) {
-                _ = (blk_catch_18: { break :blk_catch_18 ((buf.appendSlice(temporary_read_buffer_before_stat_call)) catch |__ce_18| { _ = &__ce_18; return .{ .e = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
+                _ = (blk_catch_18: { break :blk_catch_18 ((buf.appendSlice(temporary_read_buffer_before_stat_call)) catch |__ce_18| { _ = &__ce_18; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
             }
             _ = buf.expandToCapacity();
             while ((total < size)) {
@@ -4378,7 +4375,7 @@ else => brk: {
             if (comptime (string_type == .default)) {
                 break :brk .{ .result = .{ .string = buf.items } };
             } else {
-                break :brk .{ .result = .{ .null_terminated = (blk_catch_21: { break :blk_catch_21 ((buf.toOwnedSliceSentinel(0)) catch |__ce_21| { _ = &__ce_21; return .{ .e = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }) } };
+                break :brk .{ .result = .{ .null_terminated = (blk_catch_21: { break :blk_catch_21 ((buf.toOwnedSliceSentinel(0)) catch |__ce_21| { _ = &__ce_21; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }) } };
             }
 },
 });

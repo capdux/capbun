@@ -573,7 +573,7 @@ pub fn getOnConnect(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObje
             _ = &value;
             return value;
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setOnConnect(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
@@ -590,7 +590,7 @@ pub fn getOnClose(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject
             _ = &value;
             return value;
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setOnClose(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
@@ -603,21 +603,21 @@ pub fn doRef(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject, callfr
         _ = &globalObject;
         _ = &callframe;
         _ = self.#poll_ref.ref(self.#vm);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doUnref(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = &globalObject;
         _ = &callframe;
         _ = self.#poll_ref.unref(self.#vm);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doFlush(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = &globalObject;
         _ = &callframe;
         _ = self.registerAutoFlusher();
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doClose(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -628,7 +628,7 @@ pub fn doClose(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject, call
         _ = self.updateReferenceType();
         }
         _ = self.#connection.cleanQueueAndClose(null, self.getQueriesArray());
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn consumeOnConnectCallback(self: *const JSMySQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
@@ -665,7 +665,7 @@ pub fn getQueriesArray(self: *JSMySQLConnection) JSValue {
             _ = &value;
             return ((js.queriesGetCached(value)) orelse (.js_undefined));
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub inline fn isAbleToWrite(self: *const JSMySQLConnection) bool {

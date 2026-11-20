@@ -331,9 +331,10 @@ pub fn registerAbortTracker(
     socket: NewHTTPContext(is_ssl).HTTPSocket,
 )  {
     if (client.signals.aborted != null) {
-        switch (is_ssl) {
-            true => socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket }) catch @panic("unreachable"),
-            false => socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket }) catch @panic("unreachable"),
+        if (is_ssl) {
+            socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket }) catch @panic("unreachable");
+        } else {
+            socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket }) catch @panic("unreachable");
         }
     }
 }
@@ -669,7 +670,7 @@ export @root @value struct HTTPClient {
             this.allocator.free(auth);
             this.proxy_authorization = null;
         }
-        if (hdrs := this.proxy_headers) {
+        if (*hdrs := this.proxy_headers) {
             hdrs.deinit();
             this.proxy_headers = null;
         }

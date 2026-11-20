@@ -68,14 +68,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-const Message = anyopaque;
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const diff_format_mod = @import("./diff_format.zig");
@@ -196,7 +188,14 @@ return globalThis.throw("Cannot chain .rejects() after .resolves()", .{});
     }
 
 pub fn getValue(self: *Expect, globalThis: *JSGlobalObject, thisValue: JSValue, matcher_name: []const u8, comptime matcher_params_fmt: []const u8) bun.JSError!JSValue {
-            const value = ((js.capturedValueGetCached(thisValue)) orelse { return .{ .ok = globalThis.throw("Internal error: the expect(value) was garbage collected but it should not have been!", .{}) }; });
+            var value: JSValue = undefined;
+            _ = &value;
+            if (js.capturedValueGetCached(thisValue)) |v| {
+                _ = &v;
+                value = v;
+            } else {
+                return globalThis.throw("Internal error: the expect(value) was garbage collected but it should not have been!", .{});
+            }
             _ = value.ensureStillAlive();
             const matcher_params = (switch (Output.enable_ansi_colors_stderr) {
 inline else => |colors| (comptime Output.prettyFmt(matcher_params_fmt, colors)),
@@ -433,7 +432,7 @@ pub fn call(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSVa
                 if ((arguments[1].isString() or try arguments[1].implementsToString(globalThis))) {
                     const label = try arguments[1].toBunString(globalThis);
                     if (globalThis.hasException()) {
-                        return error.zero;
+                        return JSValue.zero;
                     }
                     custom_label = label;
                 }
@@ -467,11 +466,37 @@ pub fn call(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSVa
             return expect_js_value;
     }
 
+pub fn ArgsTupleType(comptime T: type) type {
+            const ti = @typeInfo(T);
+            if (((ti == .@"struct") and (!ti.@"struct".is_tuple))) {
+                return std.meta.Tuple(ti.@"struct".field_types);
+            }
+            return T;
+    }
+
+pub fn argsToTuple(args: anytype) ArgsTupleType(@TypeOf(args)) {
+            const T = @TypeOf(args);
+            const ti = @typeInfo(T);
+            if (comptime ((ti == .@"struct") and (!ti.@"struct".is_tuple))) {
+                const fields = ti.@"struct".fields;
+                var tup: ArgsTupleType(T) = undefined;
+                _ = &tup;
+                comptime var i: usize = 0;
+                _ = &i;
+                inline while ((i < fields.len)) : (i = (i + 1)) {
+                    tup[cp_cast_int(usize, i)] = @field(args, (if (@typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"union") @tagName(fields[@as(usize, @intCast(i))]) else fields[@as(usize, @intCast(i))].name));
+                }
+                return tup;
+            }
+            return args;
+    }
+
 pub fn throw(self: *Expect, globalThis: *JSGlobalObject, comptime signature: [:0]const u8, comptime fmt: [:0]const u8, args: anytype) bun.JSError {
+            const tup_args = Expect.argsToTuple(args);
             if (self.custom_label.isEmpty()) {
-                return globalThis.throwPretty((signature ++ fmt), args);
+                return globalThis.throwPretty((signature ++ fmt), tup_args);
             } else {
-                return globalThis.throwPretty(("{f}" ++ fmt), (.{ self.custom_label } ++ args));
+                return globalThis.throwPretty(("{f}" ++ fmt), (.{ self.custom_label } ++ tup_args));
             }
     }
 
@@ -505,7 +530,7 @@ pub fn _pass(self: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame) 
                 pass = (!pass);
             }
             if (pass) {
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             var msg = _msg.toSlice(default_allocator);
             _ = &msg;
@@ -516,7 +541,7 @@ pub fn _pass(self: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame) 
                 const signature = (comptime Expect.getSignature("pass", "", true));
                 return self.throw(globalThis, signature, "\n\n{s}\n", .{ msg.slice() });
             }
-            return error.zero;
+            return JSValue.zero;
     }
 
 pub fn fail(self: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
@@ -545,7 +570,7 @@ pub fn fail(self: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame) b
                 pass = (!pass);
             }
             if (pass) {
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             var msg = _msg.toSlice(default_allocator);
             _ = &msg;
@@ -607,11 +632,9 @@ _ = unreachable;
     }
 
 pub fn fnToErrStringOrUndefined(self: *Expect, globalThis: *JSGlobalObject, value: JSValue) !?JSValue {
-            const _tmp_v0 = try self.getValueAsToThrow(globalThis, value);
-            const err_value = cp_unpack_elem(_tmp_v0, 0);
-            _ = &err_value;
-            const _ret = cp_unpack_elem(_tmp_v0, 1);
-            _ = &_ret;
+            const err_pair = try self.getValueAsToThrow(globalThis, value);
+            const err_value = err_pair[0];
+            _ = err_pair[1];
             var err_value_res = ((err_value) orelse { return null; });
             _ = &err_value_res;
             if (err_value_res.isAnyError()) {
@@ -750,7 +773,7 @@ pub fn inlineSnapshot(self: *Expect, globalThis: *JSGlobalObject, callFrame: *Ca
                 const trim_res = Expect.trimLeadingWhitespaceForInlineSnapshot(saved_value, buf);
                 if (strings.eqlLong(pretty_value.written(), trim_res.trimmed, true)) {
                     runner.snapshots.passed = (runner.snapshots.passed + 1);
-                    return error.js_undefined;
+                    return JSValue.js_undefined;
                 } else {
                     if (update) {
                         runner.snapshots.passed = (runner.snapshots.passed + 1);
@@ -810,7 +833,7 @@ pub fn inlineSnapshot(self: *Expect, globalThis: *JSGlobalObject, callFrame: *Ca
                 }
                 _ = try runner.snapshots.addInlineSnapshotToWrite(file_id, .{ .line = srcloc.line, .col = srcloc.column, .value = try pretty_value.toOwnedSlice(), .has_matchers = (property_matchers != null), .is_added = (result == null), .kind = fn_name, .start_indent = start_indent_dup, .end_indent = end_indent_dup });
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn matchAndFmtSnapshot(self: *Expect, globalThis: *JSGlobalObject, value: JSValue, property_matchers: ?JSValue, pretty_value: *std.Io.Writer, comptime fn_name: []const u8) bun.JSError!void {
@@ -859,7 +882,7 @@ pub fn snapshot(self: *Expect, globalThis: *JSGlobalObject, value: JSValue, prop
             const buntest = buntest_strong.get();
             const test_file_path = Jest.runner.?.files.get(buntest.file_id).source.path.text;
             const runner = Jest.runner.?;
-            return (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .FailedToOpenSnapshotFile)) {  break :__sw_blk_6 cp_val(globalThis.throw("Failed to open snapshot file for test file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .FailedToMakeSnapshotDirectory)) {  break :__sw_blk_6 cp_val(globalThis.throw("Failed to make snapshot directory for test file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .FailedToWriteSnapshotFile)) {  break :__sw_blk_6 cp_val(globalThis.throw("Failed write to snapshot file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if ((cp_match_tag(__err_v_6, .SyntaxError) or cp_match_tag(__err_v_6, .ParseError))) {  break :__sw_blk_6 cp_val(globalThis.throw("Failed to parse snapshot file for: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .SnapshotCreationNotAllowedInCI)) {  break :__sw_blk_6 cp_val(blk: {
+            return (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .FailedToOpenSnapshotFile)) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed to open snapshot file for test file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .FailedToMakeSnapshotDirectory)) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed to make snapshot directory for test file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .FailedToWriteSnapshotFile)) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed write to snapshot file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if ((cp_match_tag(__err_v_5, .SyntaxError) or cp_match_tag(__err_v_5, .ParseError))) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed to parse snapshot file for: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .SnapshotCreationNotAllowedInCI)) {  break :__sw_blk_5 cp_val(blk: {
             const snapshot_name = runner.snapshots.last_error_snapshot_name;
             defer {
             {
@@ -876,7 +899,7 @@ pub fn snapshot(self: *Expect, globalThis: *JSGlobalObject, value: JSValue, prop
             } else {
                 break :blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.written() });
             }
-}); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .SnapshotInConcurrentGroup)) {  break :__sw_blk_6 cp_val(globalThis.throw("Snapshot matchers are not supported in concurrent tests", .{})); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .TestNotActive)) {  break :__sw_blk_6 cp_val(globalThis.throw("Snapshot matchers are not supported after the test has finished executing", .{})); } } {  break :__sw_blk_6 cp_val(blk: {
+}); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .SnapshotInConcurrentGroup)) {  break :__sw_blk_5 cp_val(globalThis.throw("Snapshot matchers are not supported in concurrent tests", .{})); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .TestNotActive)) {  break :__sw_blk_5 cp_val(globalThis.throw("Snapshot matchers are not supported after the test has finished executing", .{})); } } {  break :__sw_blk_5 cp_val(blk: {
             var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis };
             _ = &formatter;
             defer {
@@ -888,7 +911,7 @@ pub fn snapshot(self: *Expect, globalThis: *JSGlobalObject, value: JSValue, prop
                 _ = &saved_value;
                 if (strings.eqlLong(pretty_value.written(), saved_value, true)) {
                     Jest.runner.?.snapshots.passed = (Jest.runner.?.snapshots.passed + 1);
-                    return error.js_undefined;
+                    return JSValue.js_undefined;
                 }
                 Jest.runner.?.snapshots.failed = (Jest.runner.?.snapshots.failed + 1);
                 const signature = (comptime Expect.getSignature(fn_name, "<green>expected<r>", false));
@@ -896,7 +919,7 @@ pub fn snapshot(self: *Expect, globalThis: *JSGlobalObject, value: JSValue, prop
                 const diff_format = DiffFormatter{ .received_string = pretty_value.written(), .expected_string = saved_value, .globalThis = globalThis };
                 return globalThis.throwPretty(fmt, .{ diff_format });
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn getStaticNot(globalThis: *JSGlobalObject, _: JSValue, _: JSValue) bun.JSError!JSValue {
@@ -957,20 +980,21 @@ pub fn extend(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JS
                 defer {
                 _ = iter.deinit();
                 }
-                while (try iter.next()) |*matcher_name| {
+                while (try iter.next()) |matcher_name_val| {
+                    const matcher_name = (&matcher_name_val);
                     const matcher_fn: JSValue = (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value);
                     if ((!matcher_fn.jsType().isFunction())) {
                         const type_name = (if (matcher_fn.isNull()) bun.String.static("null") else bun.String.init(matcher_fn.jsTypeString(globalThis).getZigString(globalThis)));
-                        return globalThis.throwInvalidArguments("expect.extend: `{f}` is not a valid matcher. Must be a function, is \"{f}\"", .{ .matcher_name = (matcher_name.*), .type_name = type_name });
+                        return globalThis.throwInvalidArguments("expect.extend: `{f}` is not a valid matcher. Must be a function, is \"{f}\"", .{ .matcher_name = matcher_name, .type_name = type_name });
                     }
-                    const wrapper_fn = Bun__JSWrappingFunction__create(globalThis, (matcher_name.*), jsc.toJSHostFn(Expect.applyCustomMatcher), matcher_fn, true);
-                    _ = try expect_proto.putMayBeIndex(globalThis, (matcher_name.*), wrapper_fn);
-                    _ = try expect_constructor.putMayBeIndex(globalThis, (matcher_name.*), wrapper_fn);
-                    _ = try expect_static_proto.putMayBeIndex(globalThis, (matcher_name.*), wrapper_fn);
+                    const wrapper_fn = Bun__JSWrappingFunction__create(globalThis, matcher_name, jsc.toJSHostFn(Expect.applyCustomMatcher), matcher_fn, true);
+                    _ = try expect_proto.putMayBeIndex(globalThis, matcher_name, wrapper_fn);
+                    _ = try expect_constructor.putMayBeIndex(globalThis, matcher_name, wrapper_fn);
+                    _ = try expect_static_proto.putMayBeIndex(globalThis, matcher_name, wrapper_fn);
                 }
             }
             _ = globalThis.bunVM().autoGarbageCollect();
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn throwInvalidMatcherError(globalThis: *JSGlobalObject, matcher_name: bun.String, result: JSValue) bun.JSError {
@@ -1132,7 +1156,7 @@ pub fn hasAssertions(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSE
             if ((execution.expect_assertions != .exact)) {
                 execution.expect_assertions = .at_least_one;
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn assertions(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
@@ -1170,7 +1194,7 @@ pub fn assertions(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSErro
             const state_data2 = buntest2.getCurrentStateData();
             const execution = ((state_data2.sequence(buntest2)) orelse { return .{ .ok = globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{}) }; });
             execution.expect_assertions = .{ .exact = unsigned_expected_assertions };
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn notImplementedJSCFn(self: *Expect, globalThis: *JSGlobalObject, _: *CallFrame) bun.JSError!JSValue {
@@ -1206,7 +1230,8 @@ pub fn doUnreachable(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSE
                 return globalThis.throwValue(error_value);
             }
             if (arg.isString()) {
-                const error_value = try arg.toBunString(globalThis).toErrorInstance(globalThis);
+                const arg_str = try arg.toBunString(globalThis);
+                const error_value = arg_str.toErrorInstance(globalThis);
                 _ = error_value.put(globalThis, ZigString.static("name"), try bun.String.init("UnreachableError").toJS(globalThis));
                 return globalThis.throwValue(error_value);
             }

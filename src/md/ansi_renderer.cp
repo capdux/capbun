@@ -658,7 +658,7 @@ pub struct AnsiRenderer {
                     // Resolve final href (prefixes for autolinks). On OOM
                     // we leave link_href null so leaveSpan doesn't try to
                     // free a literal.
-                    _.link_href = resolveHref(detail, _.allocator) catch null;
+                    _.link_href = resolveHrefOpt(detail, _.allocator);
                     if (_.theme.colors && _.theme.hyperlinks) {
                         if (href := _.link_href) {
                             // OSC 8 hyperlink start
@@ -1672,7 +1672,7 @@ pub struct AnsiRenderer {
                 const w = widths[col_idx];
                 const i = col_idx;
                 const seg: []const u8 = if (line < segments[i].items.len) segments[i].items[line] else "";
-                const opens: CellAnsiState = if (line < state_at[i].items.len) state_at[i].items[line] else {};
+                const opens: CellAnsiState = if (line < state_at[i].items.len) state_at[i].items[line] else CellAnsiState{};
                 _.out.writeByte(' ');
                 if (row.is_header && _.theme.colors) _.out.write("\x1b[1m");
                 // Re-emit any SGR + OSC 8 that was active at the start
@@ -1981,8 +1981,12 @@ fn visibleIndexAt(s: []const u8, max_cols: usize): usize {
     return bun.strings.visible.width.exclude_ansi_colors.utf8IndexAtWidth(s, max_cols);
 }
 
+fn resolveHrefOpt(detail: SpanDetail, allocator: Allocator): ([]u8)? {
+    return resolveHref(detail, allocator) catch return null;
+}
+
 fn isJsLang(lang: []const u8): bool {
-    const names = [
+    const names: [10][]const u8 = [
         "js", "javascript", "jsx", "mjs", "cjs",
         "ts", "typescript", "tsx", "mts", "cts",
     ];

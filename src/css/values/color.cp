@@ -652,28 +652,28 @@ pub fn parseColorFunction(location: css.SourceLocation, function: []const u8, in
     if (val := Map.getASCIIICaseInsensitive(function)) {
         return switch (val) {
             .lab => parseLab(LAB, input, &parser, struct {
-                fn callback(l: f32, a: f32, b: f32, alpha: f32): LABColor {
+                static fn callback(l: f32, a: f32, b: f32, alpha: f32): LABColor {
                     return { lab: { l: l, a: a, b: b, alpha: alpha } };
                 }
             }.callback),
             .oklab => parseLab(OKLAB, input, &parser, struct {
-                fn callback(l: f32, a: f32, b: f32, alpha: f32): LABColor {
+                static fn callback(l: f32, a: f32, b: f32, alpha: f32): LABColor {
                     return { oklab: { l: l, a: a, b: b, alpha: alpha } };
                 }
             }.callback),
             .lch => parseLch(LCH, input, &parser, struct {
-                fn callback(l: f32, c: f32, h: f32, alpha: f32): LABColor {
+                static fn callback(l: f32, c: f32, h: f32, alpha: f32): LABColor {
                     return { lch: { l: l, c: c, h: h, alpha: alpha } };
                 }
             }.callback),
             .oklch => parseLch(OKLCH, input, &parser, struct {
-                fn callback(l: f32, c: f32, h: f32, alpha: f32): LABColor {
+                static fn callback(l: f32, c: f32, h: f32, alpha: f32): LABColor {
                     return { oklch: { l: l, c: c, h: h, alpha: alpha } };
                 }
             }.callback),
             .color => parsePredefined(input, &parser),
             .hsl, .hsla => parseHslHwb(HSL, input, &parser, true, struct {
-                fn callback(allocator: Allocator, h: f32, s: f32, l: f32, a: f32): CssColor {
+                static fn callback(allocator: Allocator, h: f32, s: f32, l: f32, a: f32): CssColor {
                     const hsl = HSL{ .h = h, .s = s, .l = l, .alpha = a };
                     if (!std.math.isNan(h) && !std.math.isNan(s) && !std.math.isNan(l) && !std.math.isNan(a)) {
                         return CssColor{ .rgba = hsl.into(.RGBA) };
@@ -683,7 +683,7 @@ pub fn parseColorFunction(location: css.SourceLocation, function: []const u8, in
                 }
             }.callback),
             .hwb => parseHslHwb(HWB, input, &parser, false, struct {
-                fn callback(allocator: Allocator, h: f32, w: f32, b: f32, a: f32): CssColor {
+                static fn callback(allocator: Allocator, h: f32, w: f32, b: f32, a: f32): CssColor {
                     const hwb = HWB{ .h = h, .w = w, .b = b, .alpha = a };
                     if (!std.math.isNan(h) && !std.math.isNan(w) && !std.math.isNan(b) && !std.math.isNan(a)) {
                         return CssColor{ .rgba = hwb.into(.RGBA) };
@@ -699,7 +699,7 @@ pub fn parseColorFunction(location: css.SourceLocation, function: []const u8, in
                 }
             }.parseFn),
             .@"light-dark" => input.parseNestedBlock(CssColor, {}, struct {
-                fn callback(_: @TypeOf(.{}), i: *css.Parser): Result(CssColor) {
+                static fn callback(_: @TypeOf(.{}), i: *css.Parser): Result(CssColor) {
                     const light = switch (switch (CssColor.parse(i)) {
                         .result => |v| v,
                         .err => |e| return { err: e },
@@ -1649,17 +1649,16 @@ pub struct LAB {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
 
-    pub const adjustPowerlessComponents = AdjustPowerlessLAB(@This()).adjustPowerlessComponents;
+    fn adjustPowerlessComponents(*_) { AdjustPowerlessLAB(LAB).adjustPowerlessComponents(_); }
     const interpolate_impl = DeriveInterpolate(@This(), "l", "a", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "l", "a", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
+    fn premultiply(*_) { RecangularPremultiply(LAB, "l", "a", "b").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { RecangularPremultiply(LAB, "l", "a", "b").unpremultiply(_, a); }
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .LAB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .LAB);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LAB, .LAB)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -1700,13 +1699,12 @@ pub struct SRGB {
     const interpolate_impl = DeriveInterpolate(@This(), "r", "g", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "r", "g", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
+    fn premultiply(*_) { RecangularPremultiply(SRGB, "r", "g", "b").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { RecangularPremultiply(SRGB, "r", "g", "b").unpremultiply(_, a); }
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .SRGB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .SRGB);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGB, .SRGB)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -1755,9 +1753,8 @@ pub struct HSL {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
 
-    const polar_impl = PolarPremultiply(@This(), "s", "l");
-    pub const premultiply = polar_impl.premultiply;
-    pub const unpremultiply = polar_impl.unpremultiply;
+    fn premultiply(*_) { PolarPremultiply(HSL, "s", "l").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { PolarPremultiply(HSL, "s", "l").unpremultiply(_, a); }
     const interpolate_impl = DeriveInterpolate(@This(), "h", "s", "l");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
@@ -1786,7 +1783,8 @@ pub struct HSL {
     }
 
     fn adjustHue(*_, other: *HSL, method: HueInterpolationMethod) {
-        * = method.interpolate(&_.h, &other.h);
+        let m = method;
+        * = m.interpolate(&_.h, &other.h);
     }
 }
 
@@ -1817,9 +1815,8 @@ pub struct HWB {
     pub const inGamut = gamut_impl.inGamut;
     pub const clip = gamut_impl.clip;
 
-    const polar_impl = PolarPremultiply(@This(), "w", "b");
-    pub const premultiply = polar_impl.premultiply;
-    pub const unpremultiply = polar_impl.unpremultiply;
+    fn premultiply(*_) { PolarPremultiply(HWB, "w", "b").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { PolarPremultiply(HWB, "w", "b").unpremultiply(_, a); }
     const interpolate_impl = DeriveInterpolate(@This(), "h", "w", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
@@ -1843,7 +1840,8 @@ pub struct HWB {
     }
 
     fn adjustHue(*_, other: *HWB, method: HueInterpolationMethod) {
-        * = method.interpolate(&_.h, &other.h);
+        let m = method;
+        * = m.interpolate(&_.h, &other.h);
     }
 }
 
@@ -1877,13 +1875,12 @@ pub struct SRGBLinear {
     const interpolate_impl = DeriveInterpolate(@This(), "r", "g", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "r", "g", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
+    fn premultiply(*_) { RecangularPremultiply(SRGBLinear, "r", "g", "b").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { RecangularPremultiply(SRGBLinear, "r", "g", "b").unpremultiply(_, a); }
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .SRGBLinear).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .SRGBLinear);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .angle = true },
@@ -2122,13 +2119,12 @@ pub struct XYZd65 {
     const interpolate_impl = DeriveInterpolate(@This(), "x", "y", "z");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "x", "y", "z");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
+    fn premultiply(*_) { RecangularPremultiply(XYZd65, "x", "y", "z").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { RecangularPremultiply(XYZd65, "x", "y", "z").unpremultiply(_, a); }
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .XYZd65).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .XYZd65);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd65, .XYZd65)(_, allocator); }
 
     pub const ChannelTypeMap = {
         x: ChannelType{ .percentage = true },
@@ -2167,19 +2163,17 @@ pub struct LCH {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
 
-    const powerless_lch_impl = AdjustPowerlessLCH(@This());
-    pub const adjustPowerlessComponents = powerless_lch_impl.adjustPowerlessComponents;
-    pub const adjustHue = powerless_lch_impl.adjustHue;
+    fn adjustPowerlessComponents(*_) { AdjustPowerlessLCH(LCH).adjustPowerlessComponents(_); }
+    fn adjustHue(*_, other: *LCH, method: HueInterpolationMethod) { AdjustPowerlessLCH(LCH).adjustHue(_, other, method); }
     const interpolate_impl = DeriveInterpolate(@This(), "l", "c", "h");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "l", "c", "h");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
+    fn premultiply(*_) { RecangularPremultiply(LCH, "l", "c", "h").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { RecangularPremultiply(LCH, "l", "c", "h").unpremultiply(_, a); }
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .LCH).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .LCH);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LCH, .LCH)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -2215,17 +2209,16 @@ pub struct OKLAB {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
 
-    pub const adjustPowerlessComponents = AdjustPowerlessLAB(@This()).adjustPowerlessComponents;
+    fn adjustPowerlessComponents(*_) { AdjustPowerlessLAB(OKLAB).adjustPowerlessComponents(_); }
     const interpolate_impl = DeriveInterpolate(@This(), "l", "a", "b");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
-    const recangular_impl = RecangularPremultiply(@This(), "l", "a", "b");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
+    fn premultiply(*_) { RecangularPremultiply(OKLAB, "l", "a", "b").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { RecangularPremultiply(OKLAB, "l", "a", "b").unpremultiply(_, a); }
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .OKLAB).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .OKLAB);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLAB, .OKLAB)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -2263,20 +2256,18 @@ pub struct OKLCH {
     pub const clip = gamut_impl.clip;
     pub const inGamut = gamut_impl.inGamut;
 
-    const powerless_lch_impl = AdjustPowerlessLCH(@This());
-    pub const adjustPowerlessComponents = powerless_lch_impl.adjustPowerlessComponents;
-    pub const adjustHue = powerless_lch_impl.adjustHue;
+    fn adjustPowerlessComponents(*_) { AdjustPowerlessLCH(OKLCH).adjustPowerlessComponents(_); }
+    fn adjustHue(*_, other: *OKLCH, method: HueInterpolationMethod) { AdjustPowerlessLCH(OKLCH).adjustHue(_, other, method); }
     const interpolate_impl = DeriveInterpolate(@This(), "l", "c", "h");
     pub const fillMissingComponents = interpolate_impl.fillMissingComponents;
     pub const interpolate = interpolate_impl.interpolate;
 
-    const recangular_impl = RecangularPremultiply(@This(), "l", "c", "h");
-    pub const premultiply = recangular_impl.premultiply;
-    pub const unpremultiply = recangular_impl.unpremultiply;
+    fn premultiply(*_) { RecangularPremultiply(OKLCH, "l", "c", "h").premultiply(_); }
+    fn unpremultiply(*_, a: f32) { RecangularPremultiply(OKLCH, "l", "c", "h").unpremultiply(_, a); }
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .OKLCH).into;
-    pub const intoCssColor = ImplementIntoCssColor(@This(), .OKLCH);
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLCH, .OKLCH)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -3479,7 +3470,8 @@ pub fn AdjustPowerlessLCH(comptime T: type): type {
         }
 
         pub fn adjustHue(*_, other: *T, method: HueInterpolationMethod) {
-            * = method.interpolate(&_.h, &other.h);
+            let m = method;
+            * = m.interpolate(&_.h, &other.h);
         }
     };
 }

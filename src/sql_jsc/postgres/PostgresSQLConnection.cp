@@ -282,7 +282,7 @@ export struct SocketHandlerSSL {
     options: []const u8 = "",
     options_buf: []const u8 = "",
 
-    authentication_state: AuthenticationState = { pending: {} },
+    authentication_state: AuthenticationState = .pending,
 
     secure: (*uws.SslCtx)? = null,
     tls_config: jsc.API.ServerConfig.SSLConfig = .{},
@@ -400,7 +400,7 @@ export struct SocketHandlerSSL {
             return value;
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)  {
@@ -413,7 +413,7 @@ export struct SocketHandlerSSL {
             return value;
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn setOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)  {
@@ -996,18 +996,18 @@ export struct SocketHandlerSSL {
     pub fn doRef(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         this.poll_ref.ref(this.vm);
         this.updateHasPendingActivity();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doUnref(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         this.poll_ref.unref(this.vm);
         this.updateHasPendingActivity();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doFlush(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         this.registerAutoFlusher();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn close(*_)  {
@@ -1019,7 +1019,7 @@ export struct SocketHandlerSSL {
     pub fn doClose(*_, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         this.close();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn stopTimers(*_)  {
@@ -1473,7 +1473,7 @@ export struct SocketHandlerSSL {
 
     pub fn getQueriesArray(_: *const PostgresSQLConnection): JSValue {
         if (this.js_value.isEmptyOrUndefinedOrNull()) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
         return js.queriesGetCached(this.js_value) orelse .js_undefined;
     }

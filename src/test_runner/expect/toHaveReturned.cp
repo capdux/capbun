@@ -48,7 +48,7 @@ inline fn toHaveReturnedTimesFn(client: *Expect, globalThis: *JSGlobalObject, ca
 
     const not = client.flags.not;
     if (not) pass = !pass;
-    if (pass) return .js_undefined;
+    if (pass) return JSValue.js_undefined;
 
     const signature = if (not)
         comptime getSignature(@tagName(mode), "<green>expected<r>", true)

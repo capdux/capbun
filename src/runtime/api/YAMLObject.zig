@@ -93,6 +93,13 @@ pub const AnchorOrigin = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const StringifyError = error{
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+    StackOverflow,
+};
+
 pub const PropValue = struct {
     prop_name: String,
     counter: usize,
@@ -114,7 +121,7 @@ pub fn init(origin: ValueOrigin) AnchorAlias {
 
 pub const Stringifier = struct {
     stack_check: bun.StackCheck,
-    builder: wtf.StringBuilder,
+    builder: wtf.StringBuilder.StringBuilder,
     indent: usize,
     known_collections: std.AutoHashMap(JSValue,AnchorAlias),
     array_item_counter: usize,
@@ -822,7 +829,6 @@ pub const Space = union(enum) {
     pub const init = spaceInit;
     pub const deinit = spaceDeinit;
 };
-pub const StringifyError = (JSError or bun.StackOverflow);
 pub const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
 const Environment = bun.Environment;
 const JSError = bun.JSError;

@@ -147,12 +147,17 @@ pub const Space = union(enum) {
     pub const deinit = spaceDeinit;
 };
 
-pub const StringifyError = JSError || bun.StackOverflow;
+pub err StringifyError {
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+    StackOverflow,
+}
 pub const PropIter = jsc.JSPropertyIterator({ skip_empty_name: false, include_value: true });
 
 pub struct Stringifier {
     stack_check: bun.StackCheck,
-    builder: wtf.StringBuilder,
+    builder: wtf.StringBuilder.StringBuilder,
     indent: usize,
 
     known_collections: std.AutoHashMap(JSValue, AnchorAlias),

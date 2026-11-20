@@ -309,7 +309,7 @@ pub fn Calc(comptime V: type): type {
         pub fn parseWith(
             input: *css.Parser,
             ctx: anytype,
-            comptime parseIdent: *const fn (@TypeOf(ctx), []const u8) ?This,
+            comptime parseIdent: anytype,
         ): Result(This) {
             const location = input.currentSourceLocation();
             const f = switch (input.expectFunction()) {

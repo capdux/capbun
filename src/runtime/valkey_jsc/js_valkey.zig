@@ -293,17 +293,17 @@ pub fn createNoJsNoPubsub(globalObject: *jsc.JSGlobalObject, arguments: []const 
                 return globalObject.throwInvalidArguments("Invalid URL format", .{});
             }
             if (bun.strings.contains(url_byte_slice, "://")) {
-                break :get_url ((URL.get(url_str)) orelse (({
+                break :get_url ((URL.get(url_str)) orelse {
                 return globalObject.throwInvalidArguments("Invalid URL format", .{});
-})));
+});
             }
             const corrected_url = get_url_slice: {
             const written = (blk_catch_1: { break :blk_catch_1 ((std.fmt.bufPrintZ((&fallback_url_buf), "valkey://{s}", .{ url_byte_slice })) catch |__ce_1| { _ = &__ce_1; return globalObject.throwInvalidArguments("URL is too long.", .{}); }); });
             break :get_url_slice fallback_url_buf[0..written.len];
 };
-            break :get_url ((URL.fromUTF8(corrected_url)) orelse (({
+            break :get_url ((URL.fromUTF8(corrected_url)) orelse {
             return globalObject.throwInvalidArguments("Invalid URL format", .{});
-})));
+});
 };
             defer {
             _ = parsed_url.deinit();
@@ -542,10 +542,10 @@ pub fn jsConnect(self: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
 
 pub fn jsDisconnect(self: *JSValkeyClient, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.client.status == .disconnected)) {
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             _ = self.client.disconnect();
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn getOnConnect(self: *JSValkeyClient, thisValue: JSValue, _: *jsc.JSGlobalObject) JSValue {
@@ -791,7 +791,14 @@ pub fn onValkeyClose(self: *JSValkeyClient) bun.JSTerminated!void {
                 _ = self.deref();
             }
             }
-            const this_jsvalue = ((self.this_value.tryGet()) orelse { return .{ .ok = {} }; });
+            var this_jsvalue: JSValue = undefined;
+            _ = &this_jsvalue;
+            if (self.this_value.tryGet()) |v| {
+                _ = &v;
+                this_jsvalue = v;
+            } else {
+                return;
+            }
             _ = this_jsvalue.ensureStillAlive();
             const error_value = protocol.valkeyErrorToJS(globalObject, "Connection closed", protocol.RedisError.ConnectionClosed);
             const loop = self.client.vm.eventLoop();
@@ -843,7 +850,7 @@ pub fn closeSocketNextTick(self: *JSValkeyClient) void {
             var holder = bun.handleOom(bun.default_allocator.create(Holder));
             _ = &holder;
             holder.* = Holder{ .ctx = self, .task = undefined };
-            holder.task = jsc.AnyTask.New(Holder, Holder.run).init(holder);
+            holder.task = jsc.AnyTask.AnyTask.New(Holder, Holder.run).init(holder);
             _ = self.client.vm.enqueueTask(jsc.Task.init((&holder.task)));
     }
 

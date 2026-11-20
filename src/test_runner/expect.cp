@@ -190,7 +190,10 @@ pub struct Expect {
     }
 
     fn getValue(*_, globalThis: *JSGlobalObject, thisValue: JSValue, matcher_name: string, comptime matcher_params_fmt: string): bun.JSError!JSValue {
-        const value = js.capturedValueGetCached(thisValue) orelse return globalThis.throw("Internal error: the expect(value) was garbage collected but it should not have been!", .{});
+        let value: JSValue = undefined;
+        if (v := js.capturedValueGetCached(thisValue)) {
+            value = v;
+        } else return globalThis.throw("Internal error: the expect(value) was garbage collected but it should not have been!", .{});
         value.ensureStillAlive();
 
         const matcher_params = switch (Output.enable_ansi_colors_stderr) {
@@ -370,7 +373,7 @@ pub struct Expect {
         if (arguments.len > 1) {
             if (arguments[1].isString() || try arguments[1].implementsToString(globalThis)) {
                 const label = arguments[1].toBunString(globalThis)?;
-                if (globalThis.hasException()) return .zero;
+                if (globalThis.hasException()) return JSValue.zero;
                 custom_label = label;
             }
         }
@@ -401,11 +404,35 @@ pub struct Expect {
         return expect_js_value;
     }
 
+    static fn ArgsTupleType(comptime T: type): type {
+        const ti = @typeInfo(T);
+        if (ti == .@"struct" && !ti.@"struct".is_tuple) {
+            return std.meta.Tuple(ti.@"struct".field_types);
+        }
+        return T;
+    }
+
+    static fn argsToTuple(args: auto): ArgsTupleType(@TypeOf(args)) {
+        const T = @TypeOf(args);
+        const ti = @typeInfo(T);
+        if (comptime ti == .@"struct" && !ti.@"struct".is_tuple) {
+            const fields = ti.@"struct".fields;
+            let tup: ArgsTupleType(T) = undefined;
+            comptime let i: usize = 0;
+            inline while (i < fields.len) : (i += 1) {
+                tup[i] = @field(args, fields[i].name);
+            }
+            return tup;
+        }
+        return args;
+    }
+
     fn throw(*_, globalThis: *JSGlobalObject, comptime signature: [:0]const u8, comptime fmt: [:0]const u8, args: auto): bun.JSError {
+        const tup_args = Expect.argsToTuple(args);
         if (_.custom_label.isEmpty()) {
-            return globalThis.throwPretty(signature ++ fmt, args);
+            return globalThis.throwPretty(signature ++ fmt, tup_args);
         } else {
-            return globalThis.throwPretty("{f}" ++ fmt, .{ _.custom_label } ++ args);
+            return globalThis.throwPretty("{f}" ++ fmt, .{ _.custom_label } ++ tup_args);
         }
     }
 
@@ -445,7 +472,7 @@ pub struct Expect {
         let pass = true;
 
         if (not) pass = !pass;
-        if (pass) return .js_undefined;
+        if (pass) return JSValue.js_undefined;
 
         let msg = _msg.toSlice(default_allocator);
         defer msg.deinit();
@@ -456,7 +483,7 @@ pub struct Expect {
         }
 
         // should never reach here
-        return .zero;
+        return JSValue.zero;
     }
 
     fn fail(
@@ -490,7 +517,7 @@ pub struct Expect {
         let pass = false;
 
         if (not) pass = !pass;
-        if (pass) return .js_undefined;
+        if (pass) return JSValue.js_undefined;
 
         let msg = _msg.toSlice(default_allocator);
         defer msg.deinit();
@@ -632,7 +659,9 @@ pub struct Expect {
         return [return_value.toError() ?? return_value_from_function.toError(), return_value_from_function];
     }
     fn fnToErrStringOrUndefined(*_, globalThis: *JSGlobalObject, value: JSValue): !JSValue? {
-        const [err_value, _ret] = try _.getValueAsToThrow(globalThis, value);
+        const err_pair = _.getValueAsToThrow(globalThis, value)?;
+        const err_value = err_pair[0];
+        * = err_pair[1];
 
         let err_value_res = err_value orelse return null;
         if (err_value_res.isAnyError()) {
@@ -766,7 +795,7 @@ pub struct Expect {
 
             if (strings.eqlLong(pretty_value.written(), trim_res.trimmed, true)) {
                 runner.snapshots.passed += 1;
-                return .js_undefined;
+                return JSValue.js_undefined;
             } else if (update) {
                 runner.snapshots.passed += 1;
                 needs_write = true;
@@ -846,7 +875,7 @@ pub struct Expect {
             })?;
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
     fn matchAndFmtSnapshot(*_, globalThis: *JSGlobalObject, value: JSValue, property_matchers: JSValue?, pretty_value: *std.Io.Writer, comptime fn_name: []const u8): bun.JSError!void {
         if (_prop_matchers := property_matchers) {
@@ -922,7 +951,7 @@ pub struct Expect {
         if (saved_value := existing_value) {
             if (strings.eqlLong(pretty_value.written(), saved_value, true)) {
                 Jest.runner.?.snapshots.passed += 1;
-                return .js_undefined;
+                return JSValue.js_undefined;
             }
 
             Jest.runner.?.snapshots.failed += 1;
@@ -937,7 +966,7 @@ pub struct Expect {
             return globalThis.throwPretty(fmt, .{ diff_format });
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     static fn getStaticNot(globalThis: *JSGlobalObject, _: JSValue, _: JSValue): bun.JSError!JSValue {
@@ -1002,7 +1031,8 @@ pub struct Expect {
             }).init(globalThis, matchers_to_register);
             defer iter.deinit();
 
-            while (*matcher_name := iter.next()?) {
+            while (matcher_name_val := iter.next()?) {
+                const matcher_name = &matcher_name_val;
                 const matcher_fn: JSValue = iter.value;
 
                 if (!matcher_fn.jsType().isFunction()) {
@@ -1024,7 +1054,7 @@ pub struct Expect {
 
         globalThis.bunVM().autoGarbageCollect();
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     const CustomMatcherParamsFormatter = struct {
@@ -1254,7 +1284,7 @@ pub struct Expect {
             execution.expect_assertions = .at_least_one;
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     static fn assertions(globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
@@ -1293,7 +1323,7 @@ pub struct Expect {
         const execution = state_data2.sequence(buntest2) orelse return globalThis.throw("expect.assertions() is not supported in the describe phase, in concurrent tests, between tests, or after test execution has completed", .{});
         execution.expect_assertions = { exact: unsigned_expected_assertions };
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn notImplementedJSCFn(_: *Expect, globalThis: *JSGlobalObject, _: *CallFrame): bun.JSError!JSValue {
@@ -1327,7 +1357,8 @@ pub struct Expect {
         }
 
         if (arg.isString()) {
-            const error_value = (try arg.toBunString(globalThis)).toErrorInstance(globalThis);
+            const arg_str = arg.toBunString(globalThis)?;
+            const error_value = arg_str.toErrorInstance(globalThis);
             error_value.put(globalThis, ZigString.static("name"), try bun.String.init("UnreachableError").toJS(globalThis));
             return globalThis.throwValue(error_value);
         }
