@@ -71,7 +71,7 @@ pub const _ExternColumnIdentifier = extern struct {
 
 pub fn string(self: *_ExternColumnIdentifier) ?*bun.String {
             return (switch (self.tag) {
-2 => (&(if (@typeInfo(@TypeOf(self.value)) == .@"enum" or @typeInfo(@TypeOf(self.value)) == .@"union") @tagName(self.value) else self.value.name)),
+2 => (&@field(self.value, "name")),
 else => null,
 });
     }
@@ -183,6 +183,7 @@ pub fn getCodePropertyVMInquiry(obj: *JSObject, global: *JSGlobalObject) ?JSValu
     pub const ExternColumnIdentifier = _ExternColumnIdentifier;
 };
 
+const InitializeCallback = *const @TypeOf(_initCbProto);
 const JSError = bun.JSError;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
@@ -192,7 +193,9 @@ pub const ExternColumnIdentifierValue = extern union {
     index: u32,
     name: bun.String,
 };
-const InitializeCallback = *const *const fn(ctx: *anyopaque, obj: *JSObject, global: *JSGlobalObject) callconv(.c) void;
+
+pub fn _initCbProto(_: *anyopaque, _: *JSObject, _: *JSGlobalObject) callconv(.c) void {
+}
 
 extern "c" fn JSC__JSObject__getIndex(val: JSValue, globalThis: *JSGlobalObject, i: u32) callconv(.c) JSValue;
 

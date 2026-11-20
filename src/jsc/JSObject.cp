@@ -17,7 +17,7 @@ pub const ExternColumnIdentifierValue = extern union {
 
     pub fn string(*_): (*bun.String)? {
         return switch (_.tag) {
-            2 => &_.value.name,
+            2 => &@field(_.value, "name"),
             else => null,
         };
     }
@@ -29,7 +29,9 @@ pub const ExternColumnIdentifierValue = extern union {
     }
 }
 
-const InitializeCallback = *const fn (ctx: *!, obj: *JSObject, global: *JSGlobalObject) callconv(.c) void;
+@callconv("c")
+fn _initCbProto(_: *!, _: *JSObject, _: *JSGlobalObject) {}
+type InitializeCallback = *const @TypeOf(_initCbProto);
 
 @c {
     const JSC__JSObject__maxInlineCapacity: c_uint;

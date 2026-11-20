@@ -1371,10 +1371,11 @@ pub struct InternalGlobalCache {
     pub fn tryPush(_: *This, entry: *InternalRequest): bool {
         if (_.len >= _.cache.len) {
             let slice = _.cache[0.._.len];
-            for (*e of slice) {
+            for (idx of 0..slice.len) {
+                const e = slice[idx];
                 if (e.refcount == 0) {
                     e.deinit();
-                    e.* = entry;
+                    slice[idx] = entry;
                     return true;
                 }
             }
@@ -1450,12 +1451,12 @@ pub struct internal {
             results[i].info = ai.*;
             if (addr := ai.addr) {
                 if (ai.family == std.c.AF.INET) {
-                    let addr_in: *std.c.sockaddr.in = @ptrCast(&results[i].addr);
-                    let in_ptr: *std.c.sockaddr.in = @ptrCast(addr);
+                    let addr_in: *std.c.sockaddr.in = @ptrCast(@alignCast(&results[i].addr));
+                    let in_ptr: *std.c.sockaddr.in = @ptrCast(@alignCast(addr));
                     addr_in.* = in_ptr.*;
                 } else if (ai.family == std.c.AF.INET6) {
-                    let addr_in: *std.c.sockaddr.in6 = @ptrCast(&results[i].addr);
-                    let in_ptr: *std.c.sockaddr.in6 = @ptrCast(addr);
+                    let addr_in: *std.c.sockaddr.in6 = @ptrCast(@alignCast(&results[i].addr));
+                    let in_ptr: *std.c.sockaddr.in6 = @ptrCast(@alignCast(addr));
                     addr_in.* = in_ptr.*;
                 }
             } else {
@@ -3090,9 +3091,9 @@ pub struct Resolver {
             const family = current.family;
 
             const ip = if (family == std.posix.AF.INET6)
-                c_ares.ares_inet_ntop(family, &current.addr.addr6, buf[1..], @sizeOf(@TypeOf(buf)) - 1)
+                c_ares.ares_inet_ntop(family, @ptrCast(&current.addr.addr6), buf[1..], @sizeOf(@TypeOf(buf)) - 1)
             else
-                c_ares.ares_inet_ntop(family, &current.addr.addr4, buf[1..], @sizeOf(@TypeOf(buf)) - 1);
+                c_ares.ares_inet_ntop(family, @ptrCast(&current.addr.addr4), buf[1..], @sizeOf(@TypeOf(buf)) - 1);
 
             if (ip == null) {
                 return globalThis.throwValue(globalThis.createErrorInstance("ares_inet_ntop error: no more space to convert a network format address", .{}));

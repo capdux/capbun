@@ -81,7 +81,7 @@ const alloc = (&bun.brotli.BrotliAllocator.alloc);
             const free = (&bun.brotli.BrotliAllocator.free);
             const state = c.BrotliEncoderCreateInstance(alloc, free, null);
             if ((state == null)) {
-                return Error.init("Could not initialize Brotli instance", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                return Error.init(@constCast("Could not initialize Brotli instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
             }
             self.state = @ptrCast(state.?);
             return Error.ok;
@@ -91,7 +91,7 @@ const alloc = (&bun.brotli.BrotliAllocator.alloc);
             const free = (&bun.brotli.BrotliAllocator.free);
             const state = c.BrotliDecoderCreateInstance(alloc, free, null);
             if ((state == null)) {
-                return Error.init("Could not initialize Brotli instance", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                return Error.init(@constCast("Could not initialize Brotli instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
             }
             self.state = @ptrCast(state.?);
             return Error.ok;
@@ -106,13 +106,13 @@ pub fn setParams(self: *Context, key: c_uint, value: u32) Error {
             switch (self.mode) {
 .BROTLI_ENCODE => {
 if ((c.BrotliEncoderSetParameter(@ptrCast(self.state), key, value) == 0)) {
-                return Error.init("Setting parameter failed", -1, "ERR_BROTLI_PARAM_SET_FAILED");
+                return Error.init(@constCast("Setting parameter failed"), -1, @constCast("ERR_BROTLI_PARAM_SET_FAILED"));
             }
             return Error.ok;
 },
 .BROTLI_DECODE => {
 if ((c.BrotliDecoderSetParameter(@ptrCast(self.state), key, value) == 0)) {
-                return Error.init("Setting parameter failed", -1, "ERR_BROTLI_PARAM_SET_FAILED");
+                return Error.init(@constCast("Setting parameter failed"), -1, @constCast("ERR_BROTLI_PARAM_SET_FAILED"));
             }
             return Error.ok;
 },
@@ -209,16 +209,16 @@ pub fn getErrorInfo(self: *Context) Error {
             switch (self.mode) {
 .BROTLI_ENCODE => {
 if ((self.last_result.e == 0)) {
-                return Error.init("Compression failed", -1, "ERR_BROTLI_COMPRESSION_FAILED");
+                return Error.init(@constCast("Compression failed"), -1, @constCast("ERR_BROTLI_COMPRESSION_FAILED"));
             }
             return Error.ok;
 },
 .BROTLI_DECODE => {
 if ((self.error_ != .NO_ERROR)) {
-                return Error.init("Decompression failed", @intFromEnum(self.error_), Context.code_for_error(self.error_));
+                return Error.init(@constCast("Decompression failed"), @intFromEnum(self.error_), @constCast(Context.code_for_error(self.error_).ptr));
             } else {
                 if (((self.flush == .finish) and (self.last_result.d == .needs_more_input))) {
-                    return Error.init("unexpected end of file", @intFromEnum(bun.zlib.ReturnCode.BufError), "Z_BUF_ERROR");
+                    return Error.init(@constCast("unexpected end of file"), @intFromEnum(bun.zlib.ReturnCode.BufError), @constCast("Z_BUF_ERROR"));
                 }
             }
             return Error.ok;

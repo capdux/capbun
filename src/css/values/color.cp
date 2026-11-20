@@ -11,7 +11,8 @@ const PrintErr = css.PrintErr;
 
 pub fn UnboundedColorGamut(comptime T: type): type {
     return struct {
-        pub fn inGamut(_: *const T): bool {
+        pub fn inGamut(unused_color: *const T): bool {
+            * = unused_color;
             return true;
         }
 
@@ -693,7 +694,7 @@ pub fn parseColorFunction(location: css.SourceLocation, function: []const u8, in
             }.callback),
             .rgb, .rgba => parseRgb(input, &parser),
             .@"color-mix" => input.parseNestedBlock(CssColor, {}, struct {
-                pub fn parseFn(_: @TypeOf(.{}), i: *css.Parser): Result(CssColor) {
+                pub static fn parseFn(_: @TypeOf(.{}), i: *css.Parser): Result(CssColor) {
                     return parseColorMix(i);
                 }
             }.parseFn),
@@ -958,11 +959,11 @@ pub fn parseLch(
     const Closure = struct {
         parser: *ComponentParser,
 
-        pub fn parseNestedBlockFn(this: *@This(), i: *css.Parser): Result(CssColor) {
+        pub static fn parseNestedBlockFn(this: *@This(), i: *css.Parser): Result(CssColor) {
             return this.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{this});
         }
 
-        pub fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
+        pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
             * = this.parser;
             if (*@"from" := p.@"from") {
                 // Relative angles should be normalized.
@@ -1034,11 +1035,11 @@ pub fn parseHslHwb(
         parser: *ComponentParser,
         allows_legacy: bool,
 
-        pub fn parseNestedBlockFn(this: *@This(), i: *css.Parser): Result(CssColor) {
+        pub static fn parseNestedBlockFn(this: *@This(), i: *css.Parser): Result(CssColor) {
             return this.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{this});
         }
 
-        pub fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
+        pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
             const _t3 = switch (parseHslHwbComponents(T, i, p, this.allows_legacy)) {
                 .result => |vv| vv,
                 .err => |e| return { err: e },
@@ -1128,7 +1129,7 @@ fn parseRgb(input: *css.Parser, parser: *ComponentParser): Result(CssColor) {
             return this.p.parseRelative(i, SRGB, CssColor, @This().parseRelativeFn, .{this});
         }
 
-        pub fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
+        pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
             * = this.p;
             const _t4 = switch (parseRGBComponents(i, p)) {
                 .result => |vv| vv,
@@ -2351,8 +2352,8 @@ pub struct ComponentParser {
     }
 
     fn parseNumberOrPercentage(input: *css.Parser): Result(NumberOrPercentage) {
-        if (*from_val := _.@"from") {
-            if (res := input.tryParse(RelativeComponentParser.parseNumberOrPercentage, .{from_val}).asValue()) {
+        if (_.@"from" != null) {
+            if (res := input.tryParse(RelativeComponentParser.parseNumberOrPercentage, .{&_.@"from".?}).asValue()) {
                 return { result: res };
             }
         }
@@ -2378,8 +2379,8 @@ pub struct ComponentParser {
     }
 
     fn parseAngleOrNumber(input: *css.Parser): Result(css.color.AngleOrNumber) {
-        if (*from_val := _.@"from") {
-            if (res := input.tryParse(RelativeComponentParser.parseAngleOrNumber, .{from_val}).asValue()) {
+        if (_.@"from" != null) {
+            if (res := input.tryParse(RelativeComponentParser.parseAngleOrNumber, .{&_.@"from".?}).asValue()) {
                 return { result: res };
             }
         }
@@ -2415,8 +2416,8 @@ pub struct ComponentParser {
     }
 
     fn parsePercentage(input: *css.Parser): Result(f32) {
-        if (*from_val := _.@"from") {
-            if (res := input.tryParse(RelativeComponentParser.parsePercentage, .{from_val}).asValue()) {
+        if (_.@"from" != null) {
+            if (res := input.tryParse(RelativeComponentParser.parsePercentage, .{&_.@"from".?}).asValue()) {
                 return { result: res };
             }
         }
@@ -2432,8 +2433,8 @@ pub struct ComponentParser {
     }
 
     fn parseNumber(input: *css.Parser): Result(f32) {
-        if (*from_val := _.@"from") {
-            if (res := input.tryParse(RelativeComponentParser.parseNumber, .{from_val}).asValue()) {
+        if (_.@"from" != null) {
+            if (res := input.tryParse(RelativeComponentParser.parseNumber, .{&_.@"from".?}).asValue()) {
                 return { result: res };
             }
         }
@@ -2798,7 +2799,10 @@ pub fn parsePredefined(input: *css.Parser, parser: *ComponentParser): Result(Css
                 }
             }
 
-            return parsePredefinedRelative(i, c.p, colorspace, if (@"from") |*f| f else null);
+            if (@"from" != null) {
+                return parsePredefinedRelative(i, c.p, colorspace, &@"from".?);
+            }
+            return parsePredefinedRelative(i, c.p, colorspace, null);
         }
     }.parseFn)) {
         .result => |vv| vv,
@@ -3354,30 +3358,30 @@ pub fn DeriveInterpolate(
     if (!@hasField(T, c)) @compileError("Missing field: " ++ c);
 
     return struct {
-        pub fn fillMissingComponents(*_, other: *T) {
-            if (std.math.isNan(@field(_, a))) {
-                @field(_, a) = @field(other, a);
+        pub fn fillMissingComponents(color_val: *T, other: *T) {
+            if (std.math.isNan(@field(color_val, a))) {
+                @field(color_val, a) = @field(other, a);
             }
 
-            if (std.math.isNan(@field(_, b))) {
-                @field(_, b) = @field(other, b);
+            if (std.math.isNan(@field(color_val, b))) {
+                @field(color_val, b) = @field(other, b);
             }
 
-            if (std.math.isNan(@field(_, c))) {
-                @field(_, c) = @field(other, c);
+            if (std.math.isNan(@field(color_val, c))) {
+                @field(color_val, c) = @field(other, c);
             }
 
-            if (std.math.isNan(_.alpha)) {
-                _.alpha = other.alpha;
+            if (std.math.isNan(color_val.alpha)) {
+                color_val.alpha = other.alpha;
             }
         }
 
-        pub fn interpolate(p1: f32, other: *const T, p2: f32): T {
+        pub fn interpolate(color_val: *const T, p1: f32, other: *const T, p2: f32): T {
             let result: T = undefined;
-            @field(result, a) = @field(_, a) * p1 + @field(other, a) * p2;
-            @field(result, b) = @field(_, b) * p1 + @field(other, b) * p2;
-            @field(result, c) = @field(_, c) * p1 + @field(other, c) * p2;
-            result.alpha = _.alpha * p1 + other.alpha * p2;
+            @field(result, a) = @field(color_val, a) * p1 + @field(other, a) * p2;
+            @field(result, b) = @field(color_val, b) * p1 + @field(other, b) * p2;
+            @field(result, c) = @field(color_val, c) * p1 + @field(other, c) * p2;
+            result.alpha = color_val.alpha * p1 + other.alpha * p2;
             return result;
         }
     };

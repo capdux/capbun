@@ -285,9 +285,12 @@ pub noinline fn wait(self: *ThreadPool, _is_waking: bool) !bool {
                 if ((sync.state == .signaled)) {
                     new_sync.state = .waking;
                 }
-                if (sync == null) { sync = ({
-                return (is_waking or (sync.state == .signaled));
-}); }
+                if (self.sync.cmpxchgWeak(sync, new_sync, .acquire, .monotonic)) |next_sync| {
+                    _ = &next_sync;
+                    sync = next_sync;
+                } else {
+                    return (is_waking or (sync.state == .signaled));
+                }
             } else {
                 if ((!is_idle)) {
                     var new_sync = sync;
@@ -296,11 +299,14 @@ pub noinline fn wait(self: *ThreadPool, _is_waking: bool) !bool {
                     if (is_waking) {
                         new_sync.state = .pending;
                     }
-                    if (sync == null) { sync = ({
-                    is_waking = false;
-                    is_idle = true;
-                    continue;
-}); }
+                    if (self.sync.cmpxchgWeak(sync, new_sync, .monotonic, .monotonic)) |next_sync| {
+                        _ = &next_sync;
+                        sync = next_sync;
+                    } else {
+                        is_waking = false;
+                        is_idle = true;
+                        continue;
+                    }
                 } else {
                     if (Thread.current) |current| {
                         _ = &current;
@@ -322,12 +328,15 @@ pub noinline fn shutdown(self: *ThreadPool) void {
             new_sync.notified = true;
             new_sync.state = .shutdown;
             new_sync.idle = 0;
-            if (sync == null) { sync = ({
-            if ((sync.idle > 0)) {
-                _ = self.idle_event.shutdown();
+            if (self.sync.cmpxchgWeak(sync, new_sync, .acq_rel, .monotonic)) |next_sync| {
+                _ = &next_sync;
+                sync = next_sync;
+            } else {
+                if ((sync.idle > 0)) {
+                    _ = self.idle_event.shutdown();
+                }
+                return;
             }
-            return;
-}); }
         }
 }
 
@@ -336,7 +345,12 @@ pub fn register(self: *ThreadPool, worker: *Thread) void {
         _ = &threads;
         while (true) {
             worker.next = threads;
-            if (threads == null) { threads = break; }
+            if (self.threads.cmpxchgWeak(threads, worker, .release, .monotonic)) |next_threads| {
+                _ = &next_threads;
+                threads = next_threads;
+            } else {
+                break;
+            }
         }
 }
 
@@ -347,10 +361,14 @@ pub fn unregister(self: *ThreadPool, maybe_thread: ?*Thread) void {
         if (((sync.state == .shutdown) and (sync.spawned == 1))) {
             _ = self.join_event.notify();
         }
-        const thread = ((maybe_thread) orelse { return; });
-        _ = (thread).?.join_event.wait();
-        const next_thread = (((thread).?.next) orelse { return; });
-        _ = next_thread.join_event.notify();
+        if (maybe_thread) |thread| {
+            _ = &thread;
+            _ = thread.join_event.wait();
+            if (thread.next) |next_thread| {
+                _ = &next_thread;
+                _ = next_thread.join_event.notify();
+            }
+        }
 }
 
 pub fn join(self: *ThreadPool) void {

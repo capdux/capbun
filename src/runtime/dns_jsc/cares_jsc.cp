@@ -515,7 +515,8 @@ export struct ErrorDeferred {
 
     pub fn reject(*_, globalThis: *jsc.JSGlobalObject): !void {
         const syscall_arg = this.syscall;
-        const code_arg = this.errno.code()[4..];
+        const code_full = caresErrorCode(this.errno);
+        const code_arg = code_full[4..];
         const msg = if (this.hostname != null) blk: {
             const host_arg = this.hostname.?;
             break :blk bun.handleOom(bun.String.createFormat("{s} {s} {f}", .{ syscall_arg, code_arg, host_arg }));
@@ -525,7 +526,7 @@ export struct ErrorDeferred {
 
         const system_error = jsc.SystemError{
             .errno = @intFromEnum(this.errno),
-            .code = bun.String.static(this.errno.code()),
+            .code = bun.String.static(code_full),
             .message = msg,
             .syscall = bun.String.cloneUTF8(this.syscall),
             .hostname = this.hostname orelse bun.String.empty,
@@ -574,8 +575,39 @@ pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: []const
     return ErrorDeferred.init(err, syscall, host_string, promise.*);
 }
 
+fn caresErrorCode(err_val: c_ares.Error): []const u8 {
+    return switch (err_val) {
+        .ENODATA => "DNS_ENODATA",
+        .EFORMERR => "DNS_EFORMERR",
+        .ESERVFAIL => "DNS_ESERVFAIL",
+        .ENOTFOUND => "DNS_ENOTFOUND",
+        .ENOTIMP => "DNS_ENOTIMP",
+        .EREFUSED => "DNS_EREFUSED",
+        .EBADQUERY => "DNS_EBADQUERY",
+        .EBADNAME => "DNS_ENOTFOUND",
+        .EBADFAMILY => "DNS_EBADFAMILY",
+        .EBADRESP => "DNS_EBADRESP",
+        .ECONNREFUSED => "DNS_ECONNREFUSED",
+        .ETIMEOUT => "DNS_ETIMEOUT",
+        .EOF => "DNS_EOF",
+        .EFILE => "DNS_EFILE",
+        .ENOMEM => "DNS_ENOMEM",
+        .EDESTRUCTION => "DNS_EDESTRUCTION",
+        .EBADSTR => "DNS_EBADSTR",
+        .EBADFLAGS => "DNS_EBADFLAGS",
+        .ENONAME => "DNS_ENONAME",
+        .EBADHINTS => "DNS_EBADHINTS",
+        .ENOTINITIALIZED => "DNS_ENOTINITIALIZED",
+        .ELOADIPHLPAPI => "DNS_ELOADIPHLPAPI",
+        .EADDRGETNETWORKPARAMS => "DNS_EADDRGETNETWORKPARAMS",
+        .ECANCELLED => "DNS_ECANCELLED",
+        .ESERVICE => "DNS_ESERVICE",
+        .ENOSERVER => "DNS_ENOSERVER",
+    };
+}
+
 pub fn errorToJSWithSyscall(err: c_ares.Error, globalThis: *jsc.JSGlobalObject, comptime syscall: cstring): !jsc.JSValue {
-    const err_code = err.code()[4..];
+    const err_code = caresErrorCode(err)[4..];
     const sys_err = jsc.SystemError{
         .errno = @intFromEnum(err),
         .code = bun.String.static(err_code),
@@ -589,10 +621,11 @@ pub fn errorToJSWithSyscall(err: c_ares.Error, globalThis: *jsc.JSGlobalObject, 
 }
 
 pub fn errorToJSWithSyscallAndHostname(err: c_ares.Error, globalThis: *jsc.JSGlobalObject, comptime syscall: cstring, hostname: []const u8): !jsc.JSValue {
-    const err_code = err.code()[4..];
+    const code_full = caresErrorCode(err);
+    const err_code = code_full[4..];
     const sys_err = jsc.SystemError{
         .errno = @intFromEnum(err),
-        .code = bun.String.static(err.code()),
+        .code = bun.String.static(code_full),
         .message = bun.handleOom(bun.String.createFormat("{s} {s} {s}", .{ syscall, err_code, hostname })),
         .syscall = bun.String.static(syscall),
         .hostname = bun.String.cloneUTF8(hostname),
@@ -643,7 +676,7 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
             return .js_undefined;
         }
     }
-    if (c_ares.ares_inet_ntop(af, &ip_binary, &ip_addr, @sizeOf(@TypeOf(ip_addr))) == null) {
+    if (c_ares.ares_inet_ntop(af, @ptrCast(&ip_binary), &ip_addr, @sizeOf(@TypeOf(ip_addr))) == null) {
         return .js_undefined;
     }
     const slice = bun.sliceTo(ip_addr[0..], 0);

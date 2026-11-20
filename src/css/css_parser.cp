@@ -4500,8 +4500,7 @@ pub struct Parser {
                 start_position: token_start_position,
                 end_state: _.input.tokenizer.state(),
             };
-            const tok_ptr = &_.input.cached_token.?.token;
-            break :token tok_ptr;
+            break :token &_.input.cached_token.?.token;
         };
 
         if (block_type := BlockType.opening(token)) {
@@ -5905,7 +5904,7 @@ struct Tokenizer {
             let i: usize = 0;
             while (i < n) : (i += 1) {
                 const b = _.byteAt(i);
-                std.debug.assert(std.ascii.isAscii(b) || (b & 0xF0 != 0xF0 && b & 0xC0 != 0x80));
+                std.debug.assert(std.ascii.isAscii(b) || (((b & 0xF0) != 0xF0) && ((b & 0xC0) != 0x80)));
                 std.debug.assert(b != '\r' && b != '\n' && b != '\x0C');
             }
         }
@@ -6993,7 +6992,7 @@ pub struct serializer {
     }
 
     static fn charEscape(ascii_byte: u8, writer: auto)! {
-        const bytes = [ '\\', ascii_byte ];
+        const bytes: [2]u8 = [ @as(u8, '\\'), ascii_byte ];
         return writer.writeAll(&bytes);
     }
 

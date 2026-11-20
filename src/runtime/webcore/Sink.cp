@@ -180,7 +180,7 @@ type MaybeSyscallErr = Syscall.Error?;
 
     pub fn writeLatin1(*_, data: streams.Result): streams.Result.Writable {
         if (_.status == .closed) {
-            return .{ .done = {} };
+            return .done;
         }
 
         const res = _.vtable.writeLatin1(_.ptr, data);
@@ -194,7 +194,7 @@ type MaybeSyscallErr = Syscall.Error?;
 
     pub fn writeBytes(*_, data: streams.Result): streams.Result.Writable {
         if (_.status == .closed) {
-            return .{ .done = {} };
+            return .done;
         }
 
         const res = _.vtable.write(_.ptr, data);
@@ -208,7 +208,7 @@ type MaybeSyscallErr = Syscall.Error?;
 
     pub fn writeUTF16(*_, data: streams.Result): streams.Result.Writable {
         if (_.status == .closed) {
-            return .{ .done = {} };
+            return .done;
         }
 
         const res = _.vtable.writeUTF16(_.ptr, data);
@@ -263,13 +263,13 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return @sizeOf(ThisSink) + this.sink.memoryCost();
         }
 
-        const AssignToStreamFn = *const fn (*JSGlobalObject, JSValue, *!, **void) callconv(.c) JSValue;
-        const OnCloseFn = *const fn (JSValue, JSValue) callconv(.c) void;
-        const OnReadyFn = *const fn (JSValue, JSValue, JSValue) callconv(.c) void;
-        const OnStartFn = *const fn (JSValue, *JSGlobalObject) callconv(.c) void;
-        const CreateObjectFn = *const fn (*JSGlobalObject, *!, usize) callconv(.c) JSValue;
-        const SetDestroyCallbackFn = *const fn (JSValue, usize) callconv(.c) void;
-        const DetachPtrFn = *const fn (JSValue) callconv(.c) void;
+        const AssignToStreamFn = fn (*JSGlobalObject, JSValue, *!, **void) callconv(.c) JSValue;
+        const OnCloseFn = fn (JSValue, JSValue) callconv(.c) void;
+        const OnReadyFn = fn (JSValue, JSValue, JSValue) callconv(.c) void;
+        const OnStartFn = fn (JSValue, *JSGlobalObject) callconv(.c) void;
+        const CreateObjectFn = fn (*JSGlobalObject, *!, usize) callconv(.c) JSValue;
+        const SetDestroyCallbackFn = fn (JSValue, usize) callconv(.c) void;
+        const DetachPtrFn = fn (JSValue) callconv(.c) void;
 
         const assignToStreamExtern = @extern(AssignToStreamFn, .{ .name = abi_name ++ "__assignToStream" });
         const onCloseExtern = @extern(OnCloseFn, .{ .name = abi_name ++ "__onClose" });

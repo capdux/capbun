@@ -104,7 +104,7 @@ fn readVarint(bytes: []const u8, pos: *usize!): i32 {
         if (i >= bytes.len || shift > 28) break;
         const byte = bytes[i];
         i += 1;
-        result |= ((byte & 0x7f) as u32) << (shift as u5);
+        result |= @as(u32, byte & 0x7f) << @as(u5, @intCast(shift));
         if ((byte & 0x80) == 0) break;
         shift += 7;
     }
@@ -113,7 +113,7 @@ fn readVarint(bytes: []const u8, pos: *usize!): i32 {
 }
 
 @inline fn testBit(base: [*]const u8!, idx: usize): bool {
-    return unsafe { ((base[idx >> 3] >> ((idx & 7) as u3)) & 1) != 0 };
+    return unsafe { ((base[idx >> 3] >> @as(u3, @intCast(idx & 7))) & 1) != 0 };
 }
 
 static struct win_hdr {

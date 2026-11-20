@@ -277,7 +277,7 @@ pub struct Buffered {
             },
 
             .@"UTF-16LE" => {
-                let bom = "\xff\xfe";
+                const bom = "\xff\xfe";
                 let input = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, bom))
                     buffer_slice[2..]
                 else
@@ -300,7 +300,7 @@ pub struct Buffered {
                 return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
             },
             .@"UTF-16BE" => {
-                let bom = "\xfe\xff";
+                const bom = "\xfe\xff";
                 let input = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, bom))
                     buffer_slice[2..]
                 else

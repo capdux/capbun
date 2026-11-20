@@ -1394,8 +1394,7 @@ return .{ .err = self.newError(BasicParseErrorKind.end_of_input) };
 },
 });
             self.input.cached_token = CachedToken{ .token = new_token, .start_position = token_start_position, .end_state = self.input.tokenizer.state() };
-            const tok_ptr = self.input.cached_token.?.token;
-            break :token tok_ptr;
+            break :token self.input.cached_token.?.token;
 });
             if (BlockType.opening(token)) |block_type| {
                 _ = &block_type;
@@ -2733,7 +2732,7 @@ pub fn advance(self: *Tokenizer, n: usize) void {
                 _ = &i;
                 while ((i < n)) : (i = (i + 1)) {
                     const b = self.byteAt(i);
-                    _ = std.debug.assert((std.ascii.isAscii(b) or ((b & (240 != 240)) and (b & (192 != 128)))));
+                    _ = std.debug.assert((std.ascii.isAscii(b) or (((b & 240) != 240) and ((b & 192) != 128))));
                     _ = std.debug.assert((((b != 13) and (b != 10)) and (b != 12)));
                 }
             }
@@ -3426,7 +3425,7 @@ pub fn hexEscape(ascii_byte: u8, writer: anytype) !void {
     }
 
 pub fn charEscape(ascii_byte: u8, writer: anytype) !void {
-            const bytes: []i32 = .{ 92, ascii_byte };
+            const bytes: [2]u8 = .{ (if (comptime @typeInfo(@TypeOf(92)) == .@"enum") cp_cast_int(u8, @intFromEnum(92)) else cp_cast_int(u8, 92)), ascii_byte };
             return writer.writeAll((&bytes));
     }
 

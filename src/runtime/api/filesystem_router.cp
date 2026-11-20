@@ -94,7 +94,8 @@ pub struct FileSystemRouter {
                 return globalThis.throwInvalidArguments("Expected assetPrefix to be a string", {});
             }
 
-            asset_prefix_slice = asset_prefix.toSlice(globalThis, allocator)?.cloneIfBorrowed(allocator)?;
+            const asset_slice = asset_prefix.toSlice(globalThis, allocator)?;
+            asset_prefix_slice = asset_slice.cloneIfBorrowed(allocator)?;
         }
         const orig_log = vm.transpiler.resolver.log;
         let log = Log.Log.init(allocator);
@@ -281,7 +282,8 @@ pub struct FileSystemRouter {
 
         let path: ZigString.Slice = brk: {
             if (argument.isString()) {
-                break :brk argument.toSlice(globalThis, globalThis.allocator())?.cloneIfBorrowed(globalThis.allocator())?;
+                const arg_slice = argument.toSlice(globalThis, globalThis.allocator())?;
+                break :brk arg_slice.cloneIfBorrowed(globalThis.allocator())?;
             }
 
             if (argument.isCell()) {
@@ -670,8 +672,8 @@ pub struct MatchedRoute {
         }
 
         // If it's still null, the query string has no names.
-        if (*map := _.query_string_map) {
-            return createQueryObject(globalThis, map);
+        if (_.query_string_map != null) {
+            return createQueryObject(globalThis, &_.query_string_map.?);
         }
 
         return JSValue.createEmptyObject(globalThis, 0);

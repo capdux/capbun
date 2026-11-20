@@ -102,7 +102,9 @@ return JSValue.jsNumber(@as(Blob.SizeType, @intCast(chunk)));
 return globalThis.throwValue(try err.toJS(globalThis));
 },
 .owned_and_done => |list| {
-return ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis);
+var ab = ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
+            _ = &ab;
+            return ab.toJS(globalThis);
 },
 .done => |list| {
 return ArrayBuffer.create(globalThis, list.slice(), .Uint8Array);
@@ -249,17 +251,6 @@ var r = reason;
 pub const ResultIntoArray = struct {
     value: JSValue = JSValue.zero,
     len: Blob.SizeType = std.math.maxInt(Blob.SizeType),
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.value = JSValue.zero; self_ptr.len = std.math.maxInt(Blob.SizeType); return self_ptr; }
-
-pub fn init(self: *ResultIntoArray, value: JSValue, len: Blob.SizeType) void {
-        var __value_moved = false; _ = &__value_moved;
-        defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
-        var __len_moved = false; _ = &__len_moved;
-        defer if (!__len_moved) { const __T = @TypeOf(len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = len.release() catch {}; } else { len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = len; _drop_val.release(); } };
-            self.value = value;
-            self.len = len;
-    }
 };
 
 pub const WritablePendingHandler = struct {
@@ -415,8 +406,7 @@ pub fn run(self: *ResultPending) void {
             self.state = .used;
             switch (self.future) {
 .promise => |p| {
-const res_ptr = self.result;
-            _ = Result.fulfillPromise(res_ptr, p.promise, p.globalThis);
+_ = self.result.fulfillPromise(p.promise, p.globalThis);
 },
 .handler => |h| {
 if (h.handler) |handler_fn| {
@@ -458,8 +448,8 @@ pub const Result = union(enum) {
     owned_and_done: ByteList,
     temporary_and_done: ByteList,
     temporary: ByteList,
-    into_array: *ResultIntoArray,
-    into_array_and_done: *ResultIntoArray,
+    into_array: ResultIntoArray,
+    into_array_and_done: ResultIntoArray,
 
 pub fn deinit(self: *Result) void {
             switch (self.*) {
@@ -518,7 +508,8 @@ return false;
 }
     }
 
-pub fn fulfillPromise(result: *Result, promise: *JSPromise, globalThis: *JSGlobalObject) void {
+pub fn fulfillPromise(self: *Result, promise: *JSPromise, globalThis: *JSGlobalObject) void {
+            const result = self;
             var vm = globalThis.bunVM();
             _ = &vm;
             var loop = vm.eventLoop();
@@ -573,7 +564,9 @@ pub fn toJS(self: *const Result, globalThis: *JSGlobalObject) JSError!JSValue {
 return ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis);
 },
 .owned_and_done => |list| {
-return ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis);
+var ab = ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
+            _ = &ab;
+            return ab.toJS(globalThis);
 },
 .temporary => |temp| {
 var array = try JSValue.createUninitializedUint8Array(globalThis, temp.len);
@@ -745,7 +738,7 @@ pub fn flush(self: *NetworkSink) sys.Maybe(void) {
 
 pub fn flushFromJS(self: *NetworkSink, globalThis: *JSGlobalObject, _: bool) sys.Maybe(JSValue) {
             if (self.flushPromise.hasValue()) {
-                return .{ .result = (if (@typeInfo(@TypeOf(self.flushPromise)) == .@"enum") @intFromEnum(self.flushPromise) else self.flushPromise.value)() };
+                return .{ .result = self.flushPromise.value() };
             }
             if (self.done) {
                 return .{ .result = JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0)) };
@@ -754,7 +747,7 @@ pub fn flushFromJS(self: *NetworkSink, globalThis: *JSGlobalObject, _: bool) sys
                 _ = &task;
                 if ((!task.isQueueEmpty())) {
                     self.flushPromise = JSPromise.Strong.init(globalThis);
-                    return .{ .result = (if (@typeInfo(@TypeOf(self.flushPromise)) == .@"enum") @intFromEnum(self.flushPromise) else self.flushPromise.value)() };
+                    return .{ .result = self.flushPromise.value() };
                 }
             }
             return .{ .result = JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0)) };
@@ -832,12 +825,12 @@ pub fn end(self: *NetworkSink, err: ?sys.Error) sys.Maybe(void) {
 pub fn endFromJS(self: *NetworkSink, _: *JSGlobalObject) sys.Maybe(JSValue) {
             _ = self.end(null);
             if (self.endPromise.hasValue()) {
-                return .{ .result = (if (@typeInfo(@TypeOf(self.endPromise)) == .@"enum") @intFromEnum(self.endPromise) else self.endPromise.value)() };
+                return .{ .result = self.endPromise.value() };
             }
             if (self.task) |task| {
                 _ = &task;
                 self.endPromise = JSPromise.Strong.init(self.globalThis);
-                var value = (if (@typeInfo(@TypeOf(self.endPromise)) == .@"enum") @intFromEnum(self.endPromise) else self.endPromise.value)();
+                var value = self.endPromise.value();
                 _ = &value;
                 if ((!self.ended)) {
                     self.ended = true;
@@ -886,7 +879,13 @@ pub fn resolve(self: *BufferAction, global: *JSGlobalObject, result: JSValue) bu
 
 pub fn value(self: *BufferAction) JSValue {
             return (switch (self.*) {
-inline else => |promise| (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)(),
+inline else => |promise| promise.value(),
+});
+    }
+
+pub fn getValue(self: *BufferAction) JSValue {
+            return (switch (self.*) {
+inline else => |promise| promise.value(),
 });
     }
 

@@ -603,11 +603,11 @@ pub fn NewLexer(comptime encoding: Encoding) type {
     tokens: ArrayList(Token),
     contains_nested: bool = false,
 
-pub fn tokenize(self: @This(), alloc: Allocator, src: []const u8) BraceLexerError!Output {
-            var this = Self{ .chars = Chars.init(src), .tokens = ArrayList(Token).init(alloc), .alloc = alloc };
-            _ = &this;
-            const contains_nested = try self.tokenize_impl();
-            return Output{ .tokens = self.tokens, .contains_nested = contains_nested };
+pub fn tokenize(alloc: Allocator, src: []const u8) BraceLexerError!Output {
+            var lexer = Self{ .chars = Chars.init(src), .tokens = ArrayList(Token).init(alloc), .alloc = alloc };
+            _ = &lexer;
+            const contains_nested = try lexer.tokenize_impl();
+            return Output{ .tokens = lexer.tokens, .contains_nested = contains_nested };
     }
 
 pub fn tokenize_impl(self: *@This()) BraceLexerError!bool {

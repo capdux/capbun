@@ -203,7 +203,7 @@ pub fn lookup(self: *LibInfo, _: *Resolver, query: GetAddrInfo, globalThis: *jsc
                 var __dns_lookup_moved = false; _ = &__dns_lookup_moved;
                 defer if (!__dns_lookup_moved) { const __T = @TypeOf(dns_lookup); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = dns_lookup.release() catch {}; } else { dns_lookup.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dns_lookup; _drop_val.release(); } };
                 _ = cache.inflight.append(dns_lookup);
-                return (if (@typeInfo(@TypeOf(dns_lookup.promise)) == .@"enum") @intFromEnum(dns_lookup.promise) else dns_lookup.promise.value)();
+                return dns_lookup.promise.value();
             }
             var stack_fallback = std.heap.stackFallback(1024, bun.default_allocator);
             var __stack_fallback_moved = false; _ = &__stack_fallback_moved;
@@ -219,7 +219,7 @@ pub fn lookup(self: *LibInfo, _: *Resolver, query: GetAddrInfo, globalThis: *jsc
             }
             var request = (blk_catch_0: { break :blk_catch_0 ((GetAddrInfoRequest.init(cache, .{ .libinfo = undefined }, self, query, globalThis, "pending_host_cache_native")) catch |e| { _ = &e; break :blk_catch_0 @as(*GetAddrInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
-            const promise_value = (if (@typeInfo(@TypeOf(request.head.promise)) == .@"enum") @intFromEnum(request.head.promise) else request.head.promise.value)();
+            const promise_value = request.head.promise.value();
             var __promise_value_moved = false; _ = &__promise_value_moved;
             defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
             const hints = query.options.toLibC();
@@ -308,14 +308,14 @@ pub fn lookup(self: *LibC, _: *Resolver, query_init: GetAddrInfo, globalThis: *j
                 var __dns_lookup_moved = false; _ = &__dns_lookup_moved;
                 defer if (!__dns_lookup_moved) { const __T = @TypeOf(dns_lookup); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = dns_lookup.release() catch {}; } else { dns_lookup.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dns_lookup; _drop_val.release(); } };
                 _ = cache.inflight.append(dns_lookup);
-                return (if (@typeInfo(@TypeOf(dns_lookup.promise)) == .@"enum") @intFromEnum(dns_lookup.promise) else dns_lookup.promise.value)();
+                return dns_lookup.promise.value();
             }
             const query = query_init.clone();
             var __query_moved = false; _ = &__query_moved;
             defer if (!__query_moved) { const __T = @TypeOf(query); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = query.release() catch {}; } else { query.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = query; _drop_val.release(); } };
             var request = (blk_catch_2: { break :blk_catch_2 ((GetAddrInfoRequest.init(cache, .{ .libc = .{ .query = query } }, self, query, globalThis, "pending_host_cache_native")) catch |e| { _ = &e; break :blk_catch_2 @as(*GetAddrInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
-            const promise_value = (if (@typeInfo(@TypeOf(request.head.promise)) == .@"enum") @intFromEnum(request.head.promise) else request.head.promise.value)();
+            const promise_value = request.head.promise.value();
             var __promise_value_moved = false; _ = &__promise_value_moved;
             defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
             var io = GetAddrInfoRequest.Task.createOnJSThread(self.vm.allocator, globalThis, request);
@@ -365,7 +365,7 @@ pub fn lookup(self: *LibUVBackend, _: *Resolver, query: GetAddrInfo, globalThis:
                 var __dns_lookup_moved = false; _ = &__dns_lookup_moved;
                 defer if (!__dns_lookup_moved) { const __T = @TypeOf(dns_lookup); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = dns_lookup.release() catch {}; } else { dns_lookup.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dns_lookup; _drop_val.release(); } };
                 _ = cache.inflight.append(dns_lookup);
-                return (if (@typeInfo(@TypeOf(dns_lookup.promise)) == .@"enum") @intFromEnum(dns_lookup.promise) else dns_lookup.promise.value)();
+                return dns_lookup.promise.value();
             }
             var request = (blk_catch_3: { break :blk_catch_3 ((GetAddrInfoRequest.init(cache, .{ .libc = .{ .uv = undefined } }, self, query, globalThis, "pending_host_cache_native")) catch |e| { _ = &e; break :blk_catch_3 @as(*GetAddrInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
@@ -387,7 +387,7 @@ pub fn lookup(self: *LibUVBackend, _: *Resolver, query: GetAddrInfo, globalThis:
             hostname[cp_cast_int(usize, copied.len)] = 0;
             const host = hostname[0..copied.len :0];
             request.backend.libc.uv.data = @as(?*anyopaque, @ptrCast(request));
-            const promise = (if (@typeInfo(@TypeOf(request.head.promise)) == .@"enum") @intFromEnum(request.head.promise) else request.head.promise.value)();
+            const promise = request.head.promise.value();
             var __promise_moved = false; _ = &__promise_moved;
             defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
             const rc = libuv.uv_getaddrinfo(self.vm.uvLoop(), (&request.backend.libc.uv), (&onRawLibUVComplete), host.ptr, portZ.ptr, (if ((hints != null)) (&hints.?) else null));
@@ -1239,12 +1239,19 @@ pub fn tryPush(self: *InternalGlobalCache, entry: *InternalRequest) bool {
             if ((self.len >= self.cache.len)) {
                 var slice = self.cache[0..self.len];
                 _ = &slice;
-                for (cp_mut_slice(&slice)) |*e| {
-                    _ = &e;
-                    if (((e.*).refcount == 0)) {
-                        _ = (e.*).deinit();
-                        (e.*).* = entry;
-                        return true;
+                {
+                    var idx: i32 = 0;
+                    _ = &idx;
+                    const __end_0 = slice.len;
+                    while (idx < __end_0) : (idx += 1) {
+                        const e = slice[@as(usize, @intCast(idx))];
+                        var __e_moved = false; _ = &__e_moved;
+                        defer if (!__e_moved) { const __T = @TypeOf(e); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = e.release() catch {}; } else { e.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = e; _drop_val.release(); } };
+                        if ((e.refcount == 0)) {
+                            _ = e.deinit();
+                            slice[cp_cast_int(usize, idx)] = entry;
+                            return true;
+                        }
                     }
                 }
                 return false;
@@ -1326,16 +1333,16 @@ pub fn processResults(info: *std.c.addrinfo) []InternalResultEntry {
                 if (ai.addr) |addr| {
                     _ = &addr;
                     if ((ai.family == std.c.AF.INET)) {
-                        var addr_in: *std.c.sockaddr.in = @ptrCast((&results[@as(usize, @intCast(i))].addr));
+                        var addr_in: *std.c.sockaddr.in = @ptrCast(@alignCast((&results[@as(usize, @intCast(i))].addr)));
                         _ = &addr_in;
-                        var in_ptr: *std.c.sockaddr.in = @ptrCast(addr);
+                        var in_ptr: *std.c.sockaddr.in = @ptrCast(@alignCast(addr));
                         _ = &in_ptr;
                         addr_in.* = in_ptr.*;
                     } else {
                         if ((ai.family == std.c.AF.INET6)) {
-                            var addr_in: *std.c.sockaddr.in6 = @ptrCast((&results[@as(usize, @intCast(i))].addr));
+                            var addr_in: *std.c.sockaddr.in6 = @ptrCast(@alignCast((&results[@as(usize, @intCast(i))].addr)));
                             _ = &addr_in;
-                            var in_ptr: *std.c.sockaddr.in6 = @ptrCast(addr);
+                            var in_ptr: *std.c.sockaddr.in6 = @ptrCast(@alignCast(addr));
                             _ = &in_ptr;
                             addr_in.* = in_ptr.*;
                         }
@@ -2430,11 +2437,11 @@ return globalThis.throwValue(try err.toJSWithSyscallAndHostname(globalThis, "get
                 var __cares_reverse_moved = false; _ = &__cares_reverse_moved;
                 defer if (!__cares_reverse_moved) { const __T = @TypeOf(cares_reverse); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cares_reverse.release() catch {}; } else { cares_reverse.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cares_reverse; _drop_val.release(); } };
                 _ = cache.inflight.append(cares_reverse);
-                return (if (@typeInfo(@TypeOf(cares_reverse.promise)) == .@"enum") @intFromEnum(cares_reverse.promise) else cares_reverse.promise.value)();
+                return cares_reverse.promise.value();
             }
             var request = (blk_catch_26: { break :blk_catch_26 ((GetHostByAddrInfoRequest.init(cache, self, ip, globalThis, "pending_addr_cache_cares")) catch |e| { _ = &e; break :blk_catch_26 @as(*@This(), bun.handleOom(e)); }); });
             _ = &request;
-            const promise = (if (@typeInfo(@TypeOf(request.tail.promise)) == .@"enum") @intFromEnum(request.tail.promise) else request.tail.promise.value)();
+            const promise = request.tail.promise.value();
             var __promise_moved = false; _ = &__promise_moved;
             defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
             _ = channel.getHostByAddr(ip, GetHostByAddrInfoRequest, request, GetHostByAddrInfoRequest.onCaresComplete);
@@ -2511,7 +2518,7 @@ pub fn doLookup(self: *Resolver, name: []const u8, port: u16, options: GetAddrIn
                 var promise = jsc.JSPromise.Strong.init(globalThis);
                 var __promise_moved = false; _ = &__promise_moved;
                 defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
-                const promise_value = (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+                const promise_value = promise.value();
                 var __promise_value_moved = false; _ = &__promise_value_moved;
                 defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
                 _ = c_ares.Error.ENOTFOUND.toDeferred("getaddrinfo", name, (&promise)).rejectLater(globalThis);
@@ -2884,12 +2891,12 @@ pub fn doResolveCAres(self: *Resolver, comptime cares_type: type, comptime type_
                 var __cares_lookup_moved = false; _ = &__cares_lookup_moved;
                 defer if (!__cares_lookup_moved) { const __T = @TypeOf(cares_lookup); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cares_lookup.release() catch {}; } else { cares_lookup.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cares_lookup; _drop_val.release(); } };
                 _ = cache.inflight.append(cares_lookup);
-                return (if (@typeInfo(@TypeOf(cares_lookup.promise)) == .@"enum") @intFromEnum(cares_lookup.promise) else cares_lookup.promise.value)();
+                return cares_lookup.promise.value();
             }
             var request = (blk_catch_28: { break :blk_catch_28 ((ResolveInfoRequest(cares_type, type_name).init(cache, self, name, globalThis, cache_name)) catch |e| { _ = &e; break :blk_catch_28 bun.handleOom(e); }); });
             var __request_moved = false; _ = &__request_moved;
             defer if (!__request_moved) { const __T = @TypeOf(request); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = request.release() catch {}; } else { request.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = request; _drop_val.release(); } };
-            const promise = (if (@typeInfo(@TypeOf(request.tail.promise)) == .@"enum") @intFromEnum(request.tail.promise) else request.tail.promise.value)();
+            const promise = request.tail.promise.value();
             var __promise_moved = false; _ = &__promise_moved;
             defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
             _ = channel.resolve(name, type_name, ResolveInfoRequest(cares_type, type_name), request, cares_type, ResolveInfoRequest(cares_type, type_name).onCaresComplete);
@@ -2925,14 +2932,14 @@ pub fn c_aresLookupWithNormalizedName(self: *Resolver, query: GetAddrInfo, globa
                 var __dns_lookup_moved = false; _ = &__dns_lookup_moved;
                 defer if (!__dns_lookup_moved) { const __T = @TypeOf(dns_lookup); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = dns_lookup.release() catch {}; } else { dns_lookup.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dns_lookup; _drop_val.release(); } };
                 _ = cache.inflight.append(dns_lookup);
-                return (if (@typeInfo(@TypeOf(dns_lookup.promise)) == .@"enum") @intFromEnum(dns_lookup.promise) else dns_lookup.promise.value)();
+                return dns_lookup.promise.value();
             }
             const hints_buf = .{ query.toCAres() };
             var __hints_buf_moved = false; _ = &__hints_buf_moved;
             defer if (!__hints_buf_moved) { const __T = @TypeOf(hints_buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hints_buf.release() catch {}; } else { hints_buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hints_buf; _drop_val.release(); } };
             var request = (blk_catch_29: { break :blk_catch_29 ((GetAddrInfoRequest.init(cache, .{ .c_ares = .{} }, self, query, globalThis, "pending_host_cache_cares")) catch |e| { _ = &e; break :blk_catch_29 @as(*GetAddrInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
-            const promise = (if (@typeInfo(@TypeOf(request.tail.promise)) == .@"enum") @intFromEnum(request.tail.promise) else request.tail.promise.value)();
+            const promise = request.tail.promise.value();
             var __promise_moved = false; _ = &__promise_moved;
             defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
             _ = channel.getAddrInfo((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name), query.port, (&hints_buf), GetAddrInfoRequest, request, GetAddrInfoRequest.onCaresComplete);
@@ -2972,7 +2979,7 @@ pub fn getChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObje
                 const family = current.family;
                 var __family_moved = false; _ = &__family_moved;
                 defer if (!__family_moved) { const __T = @TypeOf(family); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = family.release() catch {}; } else { family.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = family; _drop_val.release(); } };
-                const ip = (if ((family == std.posix.AF.INET6)) c_ares.ares_inet_ntop(family, (&current.addr.addr6), buf[1..], (@sizeOf(@TypeOf(buf)) - 1)) else c_ares.ares_inet_ntop(family, (&current.addr.addr4), buf[1..], (@sizeOf(@TypeOf(buf)) - 1)));
+                const ip = (if ((family == std.posix.AF.INET6)) c_ares.ares_inet_ntop(family, @ptrCast((&current.addr.addr6)), buf[1..], (@sizeOf(@TypeOf(buf)) - 1)) else c_ares.ares_inet_ntop(family, @ptrCast((&current.addr.addr4)), buf[1..], (@sizeOf(@TypeOf(buf)) - 1)));
                 var __ip_moved = false; _ = &__ip_moved;
                 defer if (!__ip_moved) { const __T = @TypeOf(ip); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ip.release() catch {}; } else { ip.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ip; _drop_val.release(); } };
                 if ((ip == null)) {
@@ -3268,11 +3275,11 @@ pub fn globalLookupService(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
                 var __info_moved = false; _ = &__info_moved;
                 defer if (!__info_moved) { const __T = @TypeOf(info); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = info.release() catch {}; } else { info.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = info; _drop_val.release(); } };
                 _ = cache.inflight.append(info);
-                return (if (@typeInfo(@TypeOf(info.promise)) == .@"enum") @intFromEnum(info.promise) else info.promise.value)();
+                return info.promise.value();
             }
             var request = (blk_catch_32: { break :blk_catch_32 ((GetNameInfoRequest.init(cache, resolver, cache_name, globalThis, "pending_nameinfo_cache_cares")) catch |e| { _ = &e; break :blk_catch_32 @as(*@This(), bun.handleOom(e)); }); });
             _ = &request;
-            const promise = (if (@typeInfo(@TypeOf(request.tail.promise)) == .@"enum") @intFromEnum(request.tail.promise) else request.tail.promise.value)();
+            const promise = request.tail.promise.value();
             var __promise_moved = false; _ = &__promise_moved;
             defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
             _ = (channel).?.getNameInfo(@ptrCast((&sa)), GetNameInfoRequest, request, GetNameInfoRequest.onCaresComplete);

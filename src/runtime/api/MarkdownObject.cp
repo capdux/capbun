@@ -92,7 +92,7 @@ pub fn renderToAnsi(
         if (cols := theme_value.get(globalThis, "columns")?) {
             if (cols.isNumber()) {
                 const n = cols.toInt32();
-                theme.columns = if (n <= 0) 0 else i32(@min(n, std.math.maxInt(u16)));
+                theme.columns = if (n <= 0) 0 else @as(u16, @intCast(@min(n, std.math.maxInt(u16))));
             }
         }
     }
@@ -261,7 +261,9 @@ pub fn render(
     // Run parser with the JS callback renderer
     md.renderWithRenderer(input, arena_.allocator(), options, js_renderer.renderer()) catch |e| {
         if (e == error.StackOverflow) return globalThis.throwStackOverflow();
-        return e;
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.JSTerminated) return error.JSTerminated;
+        return error.JSError;
     };
 
     // Return accumulated result
@@ -336,7 +338,9 @@ fn renderAST(
 
     md.renderWithRenderer(input, arena_.allocator(), options, renderer.renderer()) catch |e| {
         if (e == error.StackOverflow) return globalThis.throwStackOverflow();
-        return e;
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.JSTerminated) return error.JSTerminated;
+        return error.JSError;
     };
 
     return renderer.getResult();
@@ -491,7 +495,8 @@ struct ParseRenderer {
     }
 
     fn renderer(*_): md.Renderer {
-        return { ptr: _, vtable: &vtable };
+        const vt = &ParseRenderer.vtable;
+        return md.Renderer{ ptr: _, vtable: vt };
     }
 
     fn getResult(*_): JSValue {
@@ -729,7 +734,7 @@ struct ParseRenderer {
                 let alt_buf: std.ArrayListUnmanaged(u8) = {};
                 defer alt_buf.deinit(bun.default_allocator);
                 for (i of 0..len) {
-                    const child = entry.children.getIndex(g, @truncate(i))?;
+                    const child = entry.children.getIndex(g, @as(u32, @intCast(i)))?;
                     if (child.isString()) {
                         const str = child.toSlice(g, bun.default_allocator)?;
                         defer str.deinit();
@@ -884,7 +889,8 @@ struct JsCallbackRenderer {
     }
 
     fn renderer(*_): md.Renderer {
-        return { ptr: _, vtable: &vtable };
+        const vt = &JsCallbackRenderer.vtable;
+        return md.Renderer{ ptr: _, vtable: vt };
     }
 
     const vtable: md.Renderer.VTable = {
@@ -907,7 +913,7 @@ struct JsCallbackRenderer {
 
     fn popAndCallback(*_, callback: JSValue, meta_val: JSValue?): bun.JSError!void {
         if (_.#stack.items.len <= 1) return; // don't pop root
-        let entry = _.#stack.pop() ?? return;
+        let entry = _.#stack.pop().?;
         defer entry.buffer.deinit(_.#allocator);
 
         const children = entry.buffer.items;

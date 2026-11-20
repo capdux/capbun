@@ -78,21 +78,21 @@ pub fn init(self: *Context, pledged_src_size: u64) Error {
 self.pledged_src_size = pledged_src_size;
             const state = c.ZSTD_createCCtx();
             if ((state == null)) {
-                return .init("Could not initialize zstd instance", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
             }
             self.state = @ptrCast(state.?);
             const result = c.ZSTD_CCtx_setPledgedSrcSize(state, pledged_src_size);
             if ((c.ZSTD_isError(result) > 0)) {
                 _ = c.ZSTD_freeCCtx(state);
                 self.state = null;
-                return .init("Could not set pledged src size", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                return .init(@constCast("Could not set pledged src size"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
             }
             return .ok;
 },
 .ZSTD_DECOMPRESS => {
 const state = c.ZSTD_createDCtx();
             if ((state == null)) {
-                return .init("Could not initialize zstd instance", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
             }
             self.state = @ptrCast(state.?);
             return .ok;
@@ -108,14 +108,14 @@ pub fn setParams(self: *Context, key: c_uint, value: u32) Error {
 .ZSTD_COMPRESS => {
 const result = c.ZSTD_CCtx_setParameter(@ptrCast(self.state), key, @bitCast(value));
             if ((c.ZSTD_isError(result) > 0)) {
-                return .init("Setting parameter failed", -1, "ERR_ZSTD_PARAM_SET_FAILED");
+                return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
             }
             return .ok;
 },
 .ZSTD_DECOMPRESS => {
 const result = c.ZSTD_DCtx_setParameter(@ptrCast(self.state), key, @bitCast(value));
             if ((c.ZSTD_isError(result) > 0)) {
-                return .init("Setting parameter failed", -1, "ERR_ZSTD_PARAM_SET_FAILED");
+                return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
             }
             return .ok;
 },
@@ -193,7 +193,7 @@ pub fn getErrorInfo(self: *Context) Error {
             if ((e == 0)) {
                 return .ok;
             }
-            return Error{ .e = @intCast(e), .msg = c.ZSTD_getErrorString(e), .code = (switch (e) {
+            const code_str: [:0]const u8 = (switch (e) {
 c.ZSTD_error_no_error => "ZSTD_error_no_error",
 c.ZSTD_error_GENERIC => "ZSTD_error_GENERIC",
 c.ZSTD_error_prefix_unknown => "ZSTD_error_prefix_unknown",
@@ -223,7 +223,8 @@ c.ZSTD_error_dstBuffer_null => "ZSTD_error_dstBuffer_null",
 c.ZSTD_error_noForwardProgress_destFull => "ZSTD_error_noForwardProgress_destFull",
 c.ZSTD_error_noForwardProgress_inputEmpty => "ZSTD_error_noForwardProgress_inputEmpty",
 else => "ZSTD_error_GENERIC",
-}) };
+});
+            return Error{ .e = @intCast(e), .msg = @constCast(c.ZSTD_getErrorString(e)), .code = @constCast(code_str.ptr) };
     }
 
 pub fn close(self: *Context) void {

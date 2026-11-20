@@ -155,7 +155,8 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
                     _ = globalThis.allocator().destroy(arena_);
                     return globalThis.throwInvalidArguments("Expected assetPrefix to be a string", .{});
                 }
-                asset_prefix_slice = try (blk_oc_3: { const __o_3 = asset_prefix.toSlice(globalThis, allocator); const __R_3 = CpOptType(@TypeOf(cp_opt_unwrap(__o_3).cloneIfBorrowed(allocator))); if (cp_opt_is_null(__o_3)) break :blk_oc_3 @as(__R_3, null); break :blk_oc_3 @as(__R_3, cp_opt_unwrap(__o_3).cloneIfBorrowed(allocator)); });
+                const asset_slice = try asset_prefix.toSlice(globalThis, allocator);
+                asset_prefix_slice = try asset_slice.cloneIfBorrowed(allocator);
             }
             const orig_log = vm.transpiler.resolver.log;
             var log = Log.Log.init(allocator);
@@ -165,7 +166,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
             vm.transpiler.resolver.log = orig_log;
             }
             const path_to_use = ((root_dir_path.cloneWithTrailingSlash(allocator)) catch unreachable).slice();
-            var maybe_root_dir_info = (blk_catch_6: { break :blk_catch_6 ((vm.transpiler.resolver.readDirInfo(path_to_use)) catch |__ce_6| { _ = &__ce_6; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
+            var maybe_root_dir_info = (blk_catch_5: { break :blk_catch_5 ((vm.transpiler.resolver.readDirInfo(path_to_use)) catch |__ce_5| { _ = &__ce_5; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
             _ = origin_str.deinit();
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
@@ -180,7 +181,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
             const root_dir_info = maybe_root_dir_info.?;
             var router = ((Router.init(vm.transpiler.fs, allocator, .{ .dir = path_to_use, .extensions = (if ((extensions.items.len > 0)) extensions.items else default_extensions), .asset_prefix_path = asset_prefix_slice.slice() })) catch unreachable);
             _ = &router;
-            _ = (blk_catch_8: { break :blk_catch_8 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_8| { _ = &__ce_8; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
+            _ = (blk_catch_7: { break :blk_catch_7 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_7| { _ = &__ce_7; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
             _ = origin_str.deinit();
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
@@ -262,7 +263,7 @@ pub fn reload(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfram
             vm.transpiler.resolver.log = orig_log;
             }
             _ = self.bustDirCache(self, globalThis);
-            const maybe_root_dir_info = (blk_catch_11: { break :blk_catch_11 ((vm.transpiler.resolver.readDirInfo(self.router.config.dir)) catch |__ce_11| { _ = &__ce_11; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
+            const maybe_root_dir_info = (blk_catch_10: { break :blk_catch_10 ((vm.transpiler.resolver.readDirInfo(self.router.config.dir)) catch |__ce_10| { _ = &__ce_10; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
             return globalThis.throwValue(try err_value); }); });
@@ -274,7 +275,7 @@ pub fn reload(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfram
             const root_dir_info = maybe_root_dir_info.?;
             var router = ((Router.init(vm.transpiler.fs, allocator, .{ .dir = ((allocator.dupe(u8, self.router.config.dir)) catch unreachable), .extensions = ((allocator.dupe(string, self.router.config.extensions)) catch unreachable), .asset_prefix_path = self.router.config.asset_prefix_path })) catch unreachable);
             _ = &router;
-            _ = (blk_catch_15: { break :blk_catch_15 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_15| { _ = &__ce_15; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
+            _ = (blk_catch_14: { break :blk_catch_14 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_14| { _ = &__ce_14; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
             return globalThis.throwValue(try err_value); }); });
@@ -299,7 +300,8 @@ pub fn @"match"(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfr
             }
             var path: ZigString.Slice = brk: {
             if (argument.isString()) {
-                break :brk try (blk_oc_16: { const __o_16 = argument.toSlice(globalThis, globalThis.allocator()); const __R_16 = CpOptType(@TypeOf(cp_opt_unwrap(__o_16).cloneIfBorrowed(globalThis.allocator()))); if (cp_opt_is_null(__o_16)) break :blk_oc_16 @as(__R_16, null); break :blk_oc_16 @as(__R_16, cp_opt_unwrap(__o_16).cloneIfBorrowed(globalThis.allocator())); });
+                const arg_slice = try argument.toSlice(globalThis, globalThis.allocator());
+                break :brk try arg_slice.cloneIfBorrowed(globalThis.allocator());
             }
             if (argument.isCell()) {
                 if (argument.@"as"(jsc.WebCore.Request)) |req| {
@@ -326,7 +328,7 @@ pub fn @"match"(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfr
                 }
                 path = try ZigString.Slice.initDupe(globalThis.allocator(), URL.parse(path.slice()).pathname);
             }
-            const url_path = (blk_catch_18: { break :blk_catch_18 ((URLPath.parse(path.slice())) catch |e| { _ = &e; return globalThis.throw("{s} parsing path: {s}", .{ @errorName(e), path.slice() }); }); });
+            const url_path = (blk_catch_16: { break :blk_catch_16 ((URLPath.parse(path.slice())) catch |e| { _ = &e; return globalThis.throw("{s} parsing path: {s}", .{ @errorName(e), path.slice() }); }); });
             var params = Router.Param.List{  };
             _ = &params;
             defer {
@@ -606,9 +608,8 @@ pub fn getQuery(self: *MatchedRoute, globalThis: *jsc.JSGlobalObject) bun.JSErro
                     self.query_string_map = try QueryStringMap.init(globalThis.allocator(), self.route.query_string);
                 }
             }
-            if (self.query_string_map) |*map| {
-                _ = &map;
-                return MatchedRoute.createQueryObject(globalThis, (map.*));
+            if ((self.query_string_map != null)) {
+                return MatchedRoute.createQueryObject(globalThis, (&self.query_string_map.?));
             }
             return JSValue.createEmptyObject(globalThis, 0);
     }

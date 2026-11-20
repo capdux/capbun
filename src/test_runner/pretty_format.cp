@@ -13,7 +13,7 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSPromise = jsc.JSPromise;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
-const empty_jsvalues: [0]JSValue = [];
+const empty_jsvalues: [0]JSValue = undefined;
 
 pub struct VisitedInit {
     static fn init(allocator: std.mem.Allocator): anyerror!std.AutoHashMap(JSValue, void) {
@@ -114,7 +114,7 @@ pub struct JestPrettyFormat {
                 globalThis: global,
                 quote_strings: options.quote_strings,
             };
-            const tag = Formatter.Tag.get(vals[0].*, global)?;
+            const tag = Formatter.Tag.get(vals[0], global)?;
 
             if (tag.tag == .String) {
                 if (options.enable_colors) {

@@ -1395,3 +1395,5 @@
 - **[2026-11-20] Wave 8 里程碑：`codegen/ZigGeneratedClasses.zig` 清零**：全仓所有 JSC 生成类绑定（`ZigGeneratedClasses.zig`）从最初 91 处错误降至 **0**；`c_ares.cp`/`WebSocket.cp` 全部 C 回调 typedef 统一改用 `*const @TypeOf(_sigs.*)` 彻底消除双层 `*const *const fn`。
 
 - **[2026-11-20] Wave 9 Batch B 单错收尾经验**：`Global.cp` 用 `&@field(Global, ...)` 避开大写符号误解析；`c_ares.cp` 用 `ChannelPtr = *Channel` 防二级指针压平；`JSONCObject`/`TOMLObject` 提取 `const log_ptr: *logger.Log = &log;` 防实参取址被剥离；`patch_install.cp` 补 `@value` 恢复值类型存储。
+
+- **[2026-11-20] Wave 9 Batch A 典型修复**：`color.cp` 闭包方法补 `static` 同步清零 `meta.zig` 6 错；`uws_sys/Response.cp` 4 处 `SelfPtr` 提结构体级；`Blob.cp` 补全 `initWithStore`/`constructBunFile` 与 `toJSByParseJSON`；`braces.cp` `tokenize` 补 `static`；`ReadableStream.NewSource.deinit` 改实例方法同步修复 `ByteStream`/`ByteBlobLoader`。

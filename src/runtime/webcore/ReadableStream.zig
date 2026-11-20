@@ -368,6 +368,10 @@ pub fn NewSource(comptime Context: type, comptime name_: []const u8, comptime on
     this_jsvalue: jsc.JSValue = .zero,
     is_closed: bool = false,
 
+pub fn deinit(self: *@This()) void {
+            _ = bun.destroy(self);
+    }
+
 pub fn pull(self: *@This(), buf: []u8) streams.Result {
             return onPull((&self.context), buf, JSValue.zero);
     }
@@ -517,7 +521,6 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
     const This = @This();
     const ReadableStreamSourceType = @This();
     pub const new = bun.TrivialNew(@This());
-    pub const deinit = bun.TrivialDeinit(@This());
     const supports_ref = (setRefUnrefFn != null);
     pub const js = @field(jsc.Codegen, (("JS" ++ name_) ++ "InternalReadableStreamSource"));
     pub const toJS = js.toJS;
@@ -589,7 +592,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
     pub fn processResult(this_jsvalue: jsc.JSValue, globalThis: *JSGlobalObject, flags: JSValue, result: streams.Result) bun.JSError!jsc.JSValue {
                 switch (result) {
     .err => |e| {
-    if ((e == .Error)) {
+    if ((e.* == .Error)) {
                     return globalThis.throwValue(try e.Error.toJS(globalThis));
                 } else {
                     const js_err = e.JSValue;

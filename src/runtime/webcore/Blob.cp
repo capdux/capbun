@@ -78,7 +78,9 @@ pub union(enum) BlobAny {
 
     fn toJSONShare(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
         const bytes = _.slice();
-        return JSValue.parseJSON(globalObject, bytes);
+        let str = String.createUTF8(bytes);
+        defer str.deref();
+        return str.toJSByParseJSON(globalObject);
     }
 
     fn toStringTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
@@ -285,12 +287,72 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     static fn init(data: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObject): Blob {
-        const store = BlobStore.createFromBytes(data, allocator);
+        const store = BlobStore.init(data, allocator);
         return Blob{
             size: @as(SizeType, @truncate(data.len)),
             store: store,
             globalThis: globalThis,
         };
+    }
+
+    static fn initWithStore(store: *BlobStore, globalThis: *JSGlobalObject): Blob {
+        return Blob{
+            size: store.size(),
+            store: store,
+            content_type: if (store.data == .file) store.data.file.mime_type.value else "",
+            globalThis: globalThis,
+        };
+    }
+
+    static fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
+        const vm = globalObject.bunVM();
+        const arguments = callframe.arguments_old(2).slice();
+        let args = CallFrame.ArgumentsSlice.init(vm, arguments);
+        defer args.deinit();
+
+        const path_opt = jsc.Node.PathOrFileDescriptor.fromJS(globalObject, &args, default_allocator)?;
+        if (path_opt == null) {
+            return globalObject.throwInvalidArguments("Expected file path string or file descriptor", .{});
+        }
+        let path = path_opt.?;
+        const options: JSValue? = if (arguments.len >= 2) arguments[1] else null;
+
+        if (path == .path) {
+            if (strings.hasPrefixComptime(path.path.slice(), "s3://")) {
+                return jsc.WebCore.S3File.constructInternalJS(globalObject, path.path, options);
+            }
+        }
+        defer path.deinitAndUnprotect();
+
+        let blob = Blob.initWithStore(bun.handleOom(BlobStore.initFile(path, null, default_allocator)), globalObject);
+
+        if (opts := options) {
+            if (opts.isObject()) {
+                if (file_type := opts.getTruthy(globalObject, "type")?) {
+                    if (file_type.isString()) {
+                        let str = file_type.toSlice(globalObject, default_allocator)?;
+                        defer str.deinit();
+                        const slice = str.slice();
+                        if (strings.isAllASCII(slice)) {
+                            blob.content_type_was_set = true;
+                            if (entry := vm.mimeType(slice)) {
+                                blob.content_type = entry.value;
+                            } else {
+                                const buf = bun.handleOom(default_allocator.alloc(u8, slice.len));
+                                blob.content_type = strings.copyLowercase(slice, buf);
+                                blob.content_type_allocated = true;
+                            }
+                        }
+                    }
+                }
+                if (last_modified := opts.getTruthy(globalObject, "lastModified")?) {
+                    blob.last_modified = last_modified.coerce(f64, globalObject)?;
+                }
+            }
+        }
+
+        const ptr_ = Blob.new(blob);
+        return ptr_.toJS(globalObject);
     }
 
     static fn initEmpty(globalThis: *JSGlobalObject): Blob {
@@ -364,7 +426,9 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn getJSON(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.parseJSON(globalThis, _.sharedView())?);
+        let str = String.createUTF8(_.sharedView());
+        defer str.deref();
+        return JSPromise.resolvedPromiseValue(globalThis, str.toJSByParseJSON(globalThis)?);
     }
 
     fn getLastModified(*_, _: *JSGlobalObject): JSValue {

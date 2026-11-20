@@ -85,10 +85,10 @@ const streams = webcore.streams;
         array.ensureStillAlive();
         defer array.ensureStillAlive();
         _.pulled = true;
-        if (_.store == null) return .{ .done = {} };
+        if (_.store == null) return .done;
         const store = _.store.?;
         if (_.done) {
-            return .{ .done = {} };
+            return .done;
         }
 
         let temporary = store.sharedView();
@@ -98,7 +98,7 @@ const streams = webcore.streams;
         if (temporary.len == 0) {
             _.clearData();
             _.done = true;
-            return .{ .done = {} };
+            return .done;
         }
 
         const copied = @as(Blob.SizeType, @intCast(temporary.len));

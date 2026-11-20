@@ -444,7 +444,9 @@ static fn NewSource(
         const ReadableStreamSourceType = @This();
 
         pub const new = bun.TrivialNew(@This());
-        pub const deinit = bun.TrivialDeinit(@This());
+        pub fn deinit(*_) {
+            bun.destroy(_);
+        }
 
         pub fn pull(*_, buf: []u8): streams.Result {
             return onPull(&_.context, buf, JSValue.zero);
@@ -663,7 +665,7 @@ static fn NewSource(
             static fn processResult(this_jsvalue: jsc.JSValue, globalThis: *JSGlobalObject, flags: JSValue, result: streams.Result): bun.JSError!jsc.JSValue {
                 switch (result) {
                     .err => |e| {
-                        if (e == .Error) {
+                        if (e.* == .Error) {
                             return globalThis.throwValue(try e.Error.toJS(globalThis));
                         } else {
                             const js_err = e.JSValue;

@@ -168,10 +168,11 @@ pub fn parameter(self: *Request, idx: u16) []const u8 {
 
 pub fn forEachHeader(self: *Request, ctx: anytype, comptime cb: anytype) void {
             var Wrap = struct {
-            pub fn each(n: [*c]const u8, nl: usize, v: [*c]const u8, vl: usize, ud: ?*anyopaque) callconv(.c) void {
-                cb(@ptrCast(ud), n[0..nl], v[0..vl]);
-            }
-        };
+
+pub fn each(n: [*c]const u8, nl: usize, v: [*c]const u8, vl: usize, ud: ?*anyopaque) callconv(.c) void {
+            _ = cb(@ptrCast(ud), n[0..nl], v[0..vl]);
+    }
+};
             _ = &Wrap;
             _ = uws_h3_req_for_each_header(self, Wrap.each, @ptrCast(ctx));
     }
@@ -202,7 +203,7 @@ pub fn endSendFile(self: *Response, write_offset: u64, close_connection: bool) v
 pub fn write(self: *Response, data: []const u8) WriteResult {
             var len: usize = data.len;
             _ = &len;
-            return (if (uws_h3_res_write(self, data.ptr, (&len))) WriteResult.want_more(len) else WriteResult.backpressure(len));
+            return (if (uws_h3_res_write(self, data.ptr, (&len))) WriteResult{ .want_more = len } else WriteResult{ .backpressure = len });
     }
 
 pub fn writeStatus(self: *Response, status: []const u8) void {
@@ -318,12 +319,12 @@ pub fn forceClose(self: *Response) void {
     }
 
 pub fn onWritable(self: *Response, ud: anytype, comptime handler: anytype) void {
-            var W = struct {
-            pub fn cb(r: *Response, off: u64, p: ?*anyopaque) callconv(.c) bool {
-                return handler(@ptrCast(p), off, r);
-            }
-        };
-            _ = &W;
+            const W = struct {
+
+pub fn cb(r: *Response, off: u64, p: ?*anyopaque) callconv(.c) bool {
+            return handler(@ptrCast(p), off, r);
+    }
+};
             _ = uws_h3_res_on_writable(self, W.cb, @ptrCast(ud));
     }
 
@@ -332,12 +333,12 @@ pub fn clearOnWritable(self: *Response) void {
     }
 
 pub fn onAborted(self: *Response, ud: anytype, comptime handler: anytype) void {
-            var W = struct {
-            pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
-                handler(@ptrCast(p), r);
-            }
-        };
-            _ = &W;
+            const W = struct {
+
+pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
+            _ = handler(@ptrCast(p), r);
+    }
+};
             _ = uws_h3_res_on_aborted(self, W.cb, @ptrCast(ud));
     }
 
@@ -346,12 +347,12 @@ pub fn clearAborted(self: *Response) void {
     }
 
 pub fn onTimeout(self: *Response, ud: anytype, comptime handler: anytype) void {
-            var W = struct {
-            pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
-                handler(@ptrCast(p), r);
-            }
-        };
-            _ = &W;
+            const W = struct {
+
+pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
+            _ = handler(@ptrCast(p), r);
+    }
+};
             _ = uws_h3_res_on_timeout(self, W.cb, @ptrCast(ud));
     }
 
@@ -360,12 +361,12 @@ pub fn clearTimeout(self: *Response) void {
     }
 
 pub fn onData(self: *Response, ud: anytype, comptime handler: anytype) void {
-            var W = struct {
-            pub fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: ?*anyopaque) callconv(.c) void {
-                handler(@ptrCast(p), r, if (len > 0) ptr[0..len] else "", last);
-            }
-        };
-            _ = &W;
+            const W = struct {
+
+pub fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: ?*anyopaque) callconv(.c) void {
+            _ = handler(@ptrCast(p), r, (if ((len > 0)) ptr[0..len] else ""), last);
+    }
+};
             _ = uws_h3_res_on_data(self, W.cb, @ptrCast(ud));
     }
 
@@ -380,12 +381,12 @@ pub fn corked(self: *Response, comptime handler: anytype, args: anytype) void {
     }
 
 pub fn runCorkedWithType(self: *Response, ud: anytype, comptime handler: anytype) void {
-            var W = struct {
-            pub fn cb(p: ?*anyopaque) callconv(.c) void {
-                handler(@ptrCast(p));
-            }
-        };
-            _ = &W;
+            const W = struct {
+
+pub fn cb(p: ?*anyopaque) callconv(.c) void {
+            _ = handler(@ptrCast(p));
+    }
+};
             _ = uws_h3_res_cork(self, @ptrCast(ud), W.cb);
     }
 };
@@ -415,12 +416,12 @@ pub fn clearRoutes(self: *App) void {
     }
 
 pub fn route(self: *App, comptime f: anytype, pattern: []const u8, ud: anytype, comptime handler: anytype) void {
-            var W = struct {
-            pub fn cb(res: *Response, req: *Request, p: ?*anyopaque) callconv(.c) void {
-                handler(@ptrCast(p), req, res);
-            }
-        };
-            _ = &W;
+            const W = struct {
+
+pub fn cb(res: *Response, req: *Request, p: ?*anyopaque) callconv(.c) void {
+            _ = handler(@ptrCast(p), req, res);
+    }
+};
             _ = f(self, pattern.ptr, pattern.len, W.cb, @ptrCast(ud));
     }
 
@@ -492,12 +493,12 @@ else => {
     }
 
 pub fn listenWithConfig(self: *App, ud: anytype, comptime handler: anytype, config: ListenConfig) void {
-            var W = struct {
-            pub fn cb(ls: ?*ListenSocket, p: ?*anyopaque) callconv(.c) void {
-                handler(@ptrCast(p), ls);
-            }
-        };
-            _ = &W;
+            const W = struct {
+
+pub fn cb(ls: ?*ListenSocket, p: ?*anyopaque) callconv(.c) void {
+            _ = handler(@ptrCast(p), ls);
+    }
+};
             _ = uws_h3_app_listen_with_config(self, config.host, config.port, config.options, W.cb, @ptrCast(ud));
     }
 };

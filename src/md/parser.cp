@@ -58,7 +58,7 @@ pub struct Parser {
 
     // Table column alignments
     table_col_count: u32 = 0,
-    table_alignments: [TABLE_MAXCOLCOUNT]Align = [Align.default] ** TABLE_MAXCOLCOUNT,
+    table_alignments: [TABLE_MAXCOLCOUNT]Align = @splat(Align.default),
 
     // Ref defs
     ref_defs: std.ArrayListUnmanaged(RefDef) = {},

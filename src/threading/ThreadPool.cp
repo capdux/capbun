@@ -428,30 +428,34 @@ pub fn warm(*_, count: u14) {
 
             // Acquire barrier synchronizes with notify()
             // to ensure that pushes to run queue are observed after wait() returns.
-            sync = this.sync.cmpxchgWeak(
+            if (next_sync := this.sync.cmpxchgWeak(
                 sync,
                 new_sync,
                 .acquire,
                 .monotonic,
-            ) orelse {
+            )) {
+                sync = next_sync;
+            } else {
                 return is_waking or (sync.state == .signaled);
-            };
+            }
         } else if (!is_idle) {
             let new_sync = sync;
             new_sync.idle += 1;
             if (is_waking)
                 new_sync.state = .pending;
 
-            sync = this.sync.cmpxchgWeak(
+            if (next_sync := this.sync.cmpxchgWeak(
                 sync,
                 new_sync,
                 .monotonic,
                 .monotonic,
-            ) orelse {
+            )) {
+                sync = next_sync;
+            } else {
                 is_waking = false;
                 is_idle = true;
                 continue;
-            };
+            }
         } else {
             if (current := Thread.current) {
                 current.drainIdleEvents();
@@ -473,17 +477,19 @@ pub fn warm(*_, count: u14) {
         new_sync.idle = 0;
 
         // Full barrier to synchronize with both wait() and notify()
-        sync = this.sync.cmpxchgWeak(
+        if (next_sync := this.sync.cmpxchgWeak(
             sync,
             new_sync,
             .acq_rel,
             .monotonic,
-        ) orelse {
+        )) {
+            sync = next_sync;
+        } else {
             // Wake up any threads sleeping on the idle_event.
             // TODO: I/O polling notification here.
             if (sync.idle > 0) this.idle_event.shutdown();
             return;
-        };
+        }
     }
 }
 
@@ -492,16 +498,20 @@ fn register(*_, worker: *Thread) {
     let threads = this.threads.load(.monotonic);
     while (true) {
         worker.next = threads;
-        threads = this.threads.cmpxchgWeak(
+        if (next_threads := this.threads.cmpxchgWeak(
             threads,
             worker,
             .release,
             .monotonic,
-        ) orelse break;
+        )) {
+            threads = next_threads;
+        } else {
+            break;
+        }
     }
 }
 
-fn unregister(*_, maybe_thread: *Thread?) {
+fn unregister(*_, maybe_thread: (*Thread)?) {
     // Un-spawn one thread, either due to a failed OS thread spawning or the thread is exiting.
     const one_spawned: Sync = .{ .spawned = 1 };
     const sync = this.sync.fetchSub(one_spawned, .release);
@@ -514,14 +524,16 @@ fn unregister(*_, maybe_thread: *Thread?) {
     }
 
     // If this is a thread pool thread, wait for a shutdown signal by the thread pool join()er.
-    const thread = maybe_thread orelse return;
-    thread.join_event.wait();
+    if (thread := maybe_thread) {
+        thread.join_event.wait();
 
-    // After receiving the shutdown signal, shutdown the next thread in the pool.
-    // We have to do that without touching the thread pool itself since its memory is invalidated by now.
-    // So just follow our .next link.
-    const next_thread = thread.next orelse return;
-    next_thread.join_event.notify();
+        // After receiving the shutdown signal, shutdown the next thread in the pool.
+        // We have to do that without touching the thread pool itself since its memory is invalidated by now.
+        // So just follow our .next link.
+        if (next_thread := thread.next) {
+            next_thread.join_event.notify();
+        }
+    }
 }
 
 fn join(*_) {

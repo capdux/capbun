@@ -68,7 +68,7 @@ const log = Output.scoped(.ByteStream, .visible);
         }
 
         if (_.highWaterMark == 0) {
-            return .{ .ready = {} };
+            return .ready;
         }
 
         const page_size: Blob.SizeType = @intCast(std.heap.pageSize());
@@ -439,6 +439,6 @@ const log = Output.scoped(.ByteStream, .visible);
             .text => .{ .text = .init(globalThis) },
         };
 
-        return _.buffer_action.?.value();
+        return _.buffer_action.?.getValue();
     }
 }

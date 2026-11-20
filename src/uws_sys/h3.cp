@@ -188,7 +188,7 @@ export @opaque class Response {
 
     pub fn write(*_, data: string): WriteResult {
         let len: usize = data.len;
-        return if (uws_h3_res_write(this, data.ptr, &len)) WriteResult.want_more(len) else WriteResult.backpressure(len);
+        return if (uws_h3_res_write(this, data.ptr, &len)) WriteResult{ want_more: len } else WriteResult{ backpressure: len };
     }
 
     pub fn writeStatus(*_, status: string) {
@@ -295,7 +295,7 @@ export @opaque class Response {
         ud: anytype,
         comptime handler: anytype,
     ) {
-        let W = struct {
+        const W = struct {
             pub fn cb(r: *Response, off: u64, p: *!?) callconv(.c) bool {
                 return handler(@ptrCast(p), off, r);
             }
@@ -312,7 +312,7 @@ export @opaque class Response {
         ud: anytype,
         comptime handler: anytype,
     ) {
-        let W = struct {
+        const W = struct {
             pub fn cb(r: *Response, p: *!?) callconv(.c) void {
                 handler(@ptrCast(p), r);
             }
@@ -329,7 +329,7 @@ export @opaque class Response {
         ud: anytype,
         comptime handler: anytype,
     ) {
-        let W = struct {
+        const W = struct {
             pub fn cb(r: *Response, p: *!?) callconv(.c) void {
                 handler(@ptrCast(p), r);
             }
@@ -346,7 +346,7 @@ export @opaque class Response {
         ud: anytype,
         comptime handler: anytype,
     ) {
-        let W = struct {
+        const W = struct {
             pub fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: *!?) callconv(.c) void {
                 handler(@ptrCast(p), r, if (len > 0) ptr[0..len] else "", last);
             }
@@ -364,7 +364,7 @@ export @opaque class Response {
     }
 
     pub fn runCorkedWithType(*_, ud: anytype, comptime handler: anytype) {
-        let W = struct {
+        const W = struct {
             pub fn cb(p: *!?) callconv(.c) void {
                 handler(@ptrCast(p));
             }
@@ -401,7 +401,7 @@ export @opaque class App {
         ud: anytype,
         comptime handler: anytype,
     ) {
-        let W = struct {
+        const W = struct {
             pub fn cb(res: *Response, req: *Request, p: *!?) callconv(.c) void {
                 handler(@ptrCast(p), req, res);
             }
@@ -468,7 +468,7 @@ export @opaque class App {
         comptime handler: anytype,
         config: ListenConfig,
     ) {
-        let W = struct {
+        const W = struct {
             pub fn cb(ls: ?*ListenSocket, p: *!?) callconv(.c) void {
                 handler(@ptrCast(p), ls);
             }

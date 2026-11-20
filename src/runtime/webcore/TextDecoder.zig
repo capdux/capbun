@@ -301,8 +301,7 @@ var maybe_without_bom = (if (((!self.ignore_bom) and strings.hasPrefixComptime(b
         return ZigString.init(input).toJS(globalThis);
 },
 .@"UTF-16LE" => {
-var bom: []const u8 = "\xff\xfe";
-        _ = &bom;
+const bom: []const u8 = "\xff\xfe";
         var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
         _ = &input;
         const res_le = try self.decodeUTF16(input, false, flush);
@@ -319,8 +318,7 @@ var bom: []const u8 = "\xff\xfe";
         return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
 },
 .@"UTF-16BE" => {
-var bom: []const u8 = "\xfe\xff";
-        _ = &bom;
+const bom: []const u8 = "\xfe\xff";
         var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
         _ = &input;
         const res_be = try self.decodeUTF16(input, true, flush);

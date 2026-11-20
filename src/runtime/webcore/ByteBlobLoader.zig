@@ -106,11 +106,11 @@ pub fn onPull(self: *ByteBlobLoader, buffer: []u8, array: JSValue) streams.Resul
         }
         self.pulled = true;
         if ((self.store == null)) {
-            return .{ .done = .{} };
+            return .done;
         }
         const store = self.store.?;
         if (self.done) {
-            return .{ .done = .{} };
+            return .done;
         }
         var temporary = store.sharedView();
         _ = &temporary;
@@ -119,7 +119,7 @@ pub fn onPull(self: *ByteBlobLoader, buffer: []u8, array: JSValue) streams.Resul
         if ((temporary.len == 0)) {
             _ = self.clearData();
             self.done = true;
-            return .{ .done = .{} };
+            return .done;
         }
         const copied = @as(Blob.SizeType, @intCast(temporary.len));
         self.remain = (self.remain - copied);

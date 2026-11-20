@@ -208,8 +208,9 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         return uws_res_has_responded(ssl_flag, this.downcast());
     }
 
+    type SelfPtr = *@This();
+
     pub fn onWritable(this: *@This(), ud: anytype, comptime handler: anytype): void {
-        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, offset: u64, user_data: *!?) callconv(.c) bool {
                 return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast(SelfPtr, res_));
@@ -223,7 +224,6 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     }
 
     pub fn onAborted(this: *@This(), ud: anytype, comptime handler: anytype): void {
-        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, user_data: *!?) callconv(.c) void {
                 handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
@@ -237,7 +237,6 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     }
 
     pub fn onTimeout(this: *@This(), ud: anytype, comptime handler: anytype): void {
-        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, user_data: *!?) callconv(.c) void {
                 handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
@@ -251,7 +250,6 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
     }
 
     pub fn onData(this: *@This(), ud: anytype, comptime handler: anytype): void {
-        const SelfPtr = *@This();
         const wrapper = struct {
             pub fn callback(res_: *uws_res, data: [*c]const u8, length: usize, last: bool, user_data: *!?) callconv(.c) void {
                 handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_), if (length > 0) data[0..length] else "", last);

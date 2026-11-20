@@ -89,7 +89,7 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
             }
             if ((len == 1)) {
                 fmt = Formatter{ .remaining_values = &.{}, .globalThis = global, .quote_strings = options.quote_strings };
-                const tag = try Formatter.Tag.get((vals[0]).*, global);
+                const tag = try Formatter.Tag.get(vals[0], global);
                 if ((tag.tag == .String)) {
                     if (options.enable_colors) {
                         if ((level == .Error)) {
@@ -742,7 +742,7 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSPromise = jsc.JSPromise;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
-const empty_jsvalues: [0]JSValue = &.{};
+const empty_jsvalues: [0]JSValue = undefined;
 pub const EventType = enum(u8) {
     Event,
     MessageEvent,

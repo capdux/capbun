@@ -512,17 +512,17 @@ pub fn NewLexer(comptime encoding: Encoding): type {
         };
 
         const Self = @This();
-        pub fn tokenize(alloc: Allocator, src: []const u8): BraceLexerError!Output {
-            let this = Self{
+        pub static fn tokenize(alloc: Allocator, src: []const u8): BraceLexerError!Output {
+            let lexer = Self{
                 chars: Chars.init(src),
                 tokens: ArrayList(Token).init(alloc),
                 alloc: alloc,
             };
 
-            const contains_nested = try this.tokenize_impl();
+            const contains_nested = try lexer.tokenize_impl();
 
             return Output{
-                tokens: this.tokens,
+                tokens: lexer.tokens,
                 contains_nested: contains_nested,
             };
         }

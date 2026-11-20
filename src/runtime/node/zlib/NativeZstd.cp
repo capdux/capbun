@@ -25,19 +25,19 @@ pub struct Context {
             .ZSTD_COMPRESS => {
                 _.pledged_src_size = pledged_src_size;
                 const state = c.ZSTD_createCCtx();
-                if (state == null) return .init("Could not initialize zstd instance", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                if (state == null) return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
                 _.state = @ptrCast(state.?);
                 const result = c.ZSTD_CCtx_setPledgedSrcSize(state, pledged_src_size);
                 if (c.ZSTD_isError(result) > 0) {
                     * = c.ZSTD_freeCCtx(state);
                     _.state = null;
-                    return .init("Could not set pledged src size", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                    return .init(@constCast("Could not set pledged src size"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
                 }
                 return .ok;
             },
             .ZSTD_DECOMPRESS => {
                 const state = c.ZSTD_createDCtx();
-                if (state == null) return .init("Could not initialize zstd instance", -1, "ERR_ZLIB_INITIALIZATION_FAILED");
+                if (state == null) return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
                 _.state = @ptrCast(state.?);
                 return .ok;
             },
@@ -49,12 +49,12 @@ pub struct Context {
         switch (_.mode) {
             .ZSTD_COMPRESS => {
                 const result = c.ZSTD_CCtx_setParameter(@ptrCast(_.state), key, @bitCast(value));
-                if (c.ZSTD_isError(result) > 0) return .init("Setting parameter failed", -1, "ERR_ZSTD_PARAM_SET_FAILED");
+                if (c.ZSTD_isError(result) > 0) return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
                 return .ok;
             },
             .ZSTD_DECOMPRESS => {
                 const result = c.ZSTD_DCtx_setParameter(@ptrCast(_.state), key, @bitCast(value));
-                if (c.ZSTD_isError(result) > 0) return .init("Setting parameter failed", -1, "ERR_ZSTD_PARAM_SET_FAILED");
+                if (c.ZSTD_isError(result) > 0) return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
                 return .ok;
             },
             else => @panic("unreachable"),
@@ -121,40 +121,41 @@ pub struct Context {
         if (e == 0) {
             return .ok;
         }
+        const code_str: [:0]const u8 = switch (e) {
+            c.ZSTD_error_no_error => "ZSTD_error_no_error",
+            c.ZSTD_error_GENERIC => "ZSTD_error_GENERIC",
+            c.ZSTD_error_prefix_unknown => "ZSTD_error_prefix_unknown",
+            c.ZSTD_error_version_unsupported => "ZSTD_error_version_unsupported",
+            c.ZSTD_error_frameParameter_unsupported => "ZSTD_error_frameParameter_unsupported",
+            c.ZSTD_error_frameParameter_windowTooLarge => "ZSTD_error_frameParameter_windowTooLarge",
+            c.ZSTD_error_corruption_detected => "ZSTD_error_corruption_detected",
+            c.ZSTD_error_checksum_wrong => "ZSTD_error_checksum_wrong",
+            c.ZSTD_error_literals_headerWrong => "ZSTD_error_literals_headerWrong",
+            c.ZSTD_error_dictionary_corrupted => "ZSTD_error_dictionary_corrupted",
+            c.ZSTD_error_dictionary_wrong => "ZSTD_error_dictionary_wrong",
+            c.ZSTD_error_dictionaryCreation_failed => "ZSTD_error_dictionaryCreation_failed",
+            c.ZSTD_error_parameter_unsupported => "ZSTD_error_parameter_unsupported",
+            c.ZSTD_error_parameter_combination_unsupported => "ZSTD_error_parameter_combination_unsupported",
+            c.ZSTD_error_parameter_outOfBound => "ZSTD_error_parameter_outOfBound",
+            c.ZSTD_error_tableLog_tooLarge => "ZSTD_error_tableLog_tooLarge",
+            c.ZSTD_error_maxSymbolValue_tooLarge => "ZSTD_error_maxSymbolValue_tooLarge",
+            c.ZSTD_error_maxSymbolValue_tooSmall => "ZSTD_error_maxSymbolValue_tooSmall",
+            c.ZSTD_error_stabilityCondition_notRespected => "ZSTD_error_stabilityCondition_notRespected",
+            c.ZSTD_error_stage_wrong => "ZSTD_error_stage_wrong",
+            c.ZSTD_error_init_missing => "ZSTD_error_init_missing",
+            c.ZSTD_error_memory_allocation => "ZSTD_error_memory_allocation",
+            c.ZSTD_error_workSpace_tooSmall => "ZSTD_error_workSpace_tooSmall",
+            c.ZSTD_error_dstSize_tooSmall => "ZSTD_error_dstSize_tooSmall",
+            c.ZSTD_error_srcSize_wrong => "ZSTD_error_srcSize_wrong",
+            c.ZSTD_error_dstBuffer_null => "ZSTD_error_dstBuffer_null",
+            c.ZSTD_error_noForwardProgress_destFull => "ZSTD_error_noForwardProgress_destFull",
+            c.ZSTD_error_noForwardProgress_inputEmpty => "ZSTD_error_noForwardProgress_inputEmpty",
+            else => "ZSTD_error_GENERIC",
+        };
         return Error{
             e: @intCast(e),
-            msg: c.ZSTD_getErrorString(e),
-            code: switch (e) {
-                c.ZSTD_error_no_error => "ZSTD_error_no_error",
-                c.ZSTD_error_GENERIC => "ZSTD_error_GENERIC",
-                c.ZSTD_error_prefix_unknown => "ZSTD_error_prefix_unknown",
-                c.ZSTD_error_version_unsupported => "ZSTD_error_version_unsupported",
-                c.ZSTD_error_frameParameter_unsupported => "ZSTD_error_frameParameter_unsupported",
-                c.ZSTD_error_frameParameter_windowTooLarge => "ZSTD_error_frameParameter_windowTooLarge",
-                c.ZSTD_error_corruption_detected => "ZSTD_error_corruption_detected",
-                c.ZSTD_error_checksum_wrong => "ZSTD_error_checksum_wrong",
-                c.ZSTD_error_literals_headerWrong => "ZSTD_error_literals_headerWrong",
-                c.ZSTD_error_dictionary_corrupted => "ZSTD_error_dictionary_corrupted",
-                c.ZSTD_error_dictionary_wrong => "ZSTD_error_dictionary_wrong",
-                c.ZSTD_error_dictionaryCreation_failed => "ZSTD_error_dictionaryCreation_failed",
-                c.ZSTD_error_parameter_unsupported => "ZSTD_error_parameter_unsupported",
-                c.ZSTD_error_parameter_combination_unsupported => "ZSTD_error_parameter_combination_unsupported",
-                c.ZSTD_error_parameter_outOfBound => "ZSTD_error_parameter_outOfBound",
-                c.ZSTD_error_tableLog_tooLarge => "ZSTD_error_tableLog_tooLarge",
-                c.ZSTD_error_maxSymbolValue_tooLarge => "ZSTD_error_maxSymbolValue_tooLarge",
-                c.ZSTD_error_maxSymbolValue_tooSmall => "ZSTD_error_maxSymbolValue_tooSmall",
-                c.ZSTD_error_stabilityCondition_notRespected => "ZSTD_error_stabilityCondition_notRespected",
-                c.ZSTD_error_stage_wrong => "ZSTD_error_stage_wrong",
-                c.ZSTD_error_init_missing => "ZSTD_error_init_missing",
-                c.ZSTD_error_memory_allocation => "ZSTD_error_memory_allocation",
-                c.ZSTD_error_workSpace_tooSmall => "ZSTD_error_workSpace_tooSmall",
-                c.ZSTD_error_dstSize_tooSmall => "ZSTD_error_dstSize_tooSmall",
-                c.ZSTD_error_srcSize_wrong => "ZSTD_error_srcSize_wrong",
-                c.ZSTD_error_dstBuffer_null => "ZSTD_error_dstBuffer_null",
-                c.ZSTD_error_noForwardProgress_destFull => "ZSTD_error_noForwardProgress_destFull",
-                c.ZSTD_error_noForwardProgress_inputEmpty => "ZSTD_error_noForwardProgress_inputEmpty",
-                else => "ZSTD_error_GENERIC",
-            },
+            msg: @constCast(c.ZSTD_getErrorString(e)),
+            code: @constCast(code_str.ptr),
         };
     }
 

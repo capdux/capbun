@@ -1246,17 +1246,19 @@ pub struct ValueBufferer {
     static fn onResolveStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         * = globalObject;
         const args = callframe.arguments_old(2);
-        const sink = bun.api.NativePromiseContext.take(@This(), args.ptr[args.len - 1]) ?? return .js_undefined;
-        sink.handleResolveStream(true);
+        if (sink := bun.api.NativePromiseContext.take(@This(), args.ptr[args.len - 1])) {
+            sink.handleResolveStream(true);
+        }
         return .js_undefined;
     }
 
     static fn onRejectStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         * = globalObject;
         const args = callframe.arguments_old(2);
-        const sink = bun.api.NativePromiseContext.take(@This(), args.ptr[args.len - 1]) ?? return .js_undefined;
-        const e = args.ptr[0];
-        sink.handleRejectStream(e, true);
+        if (sink := bun.api.NativePromiseContext.take(@This(), args.ptr[args.len - 1])) {
+            const e = args.ptr[0];
+            sink.handleRejectStream(e, true);
+        }
         return .js_undefined;
     }
 

@@ -333,17 +333,21 @@ _ = unreachable;
 pub fn onResolveStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = &globalObject;
             const args = callframe.arguments_old(2);
-            const sink = ((bun.api.NativePromiseContext.take(@This(), args.ptr[@as(usize, @intCast((args.len - 1)))])) orelse { return .{ .ok = .js_undefined }; });
-            _ = sink.handleResolveStream(true);
+            if (bun.api.NativePromiseContext.take(@This(), args.ptr[@as(usize, @intCast((args.len - 1)))])) |sink| {
+                _ = &sink;
+                _ = sink.handleResolveStream(true);
+            }
             return error.js_undefined;
     }
 
 pub fn onRejectStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = &globalObject;
             const args = callframe.arguments_old(2);
-            const sink = ((bun.api.NativePromiseContext.take(@This(), args.ptr[@as(usize, @intCast((args.len - 1)))])) orelse { return .{ .ok = .js_undefined }; });
-            const e = args.ptr[0];
-            _ = sink.handleRejectStream(e, true);
+            if (bun.api.NativePromiseContext.take(@This(), args.ptr[@as(usize, @intCast((args.len - 1)))])) |sink| {
+                _ = &sink;
+                const e = args.ptr[0];
+                _ = sink.handleRejectStream(e, true);
+            }
             return error.js_undefined;
     }
 

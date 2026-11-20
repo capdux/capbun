@@ -259,7 +259,12 @@ _ = try writer.print("{d}", .{ value });
                             }
                         } else {
                             if (row_value.isObject()) {
-                                if (value == null) { value = try JSValue.zero; }
+                                if (try row_value.getOwn(self.globalObject, (if (@typeInfo(@TypeOf(col)) == .@"enum" or @typeInfo(@TypeOf(col)) == .@"union") @tagName(col) else col.name))) |v| {
+                                    _ = &v;
+                                    value = v;
+                                } else {
+                                    value = JSValue.zero;
+                                }
                             }
                         }
                     }
@@ -2803,8 +2808,7 @@ pub fn TablePrinterSecondPassContext(comptime Writer: type, comptime enable_ansi
     idx: u32 = 0,
     e: bool = false,
 
-pub fn callback(self: *@This(), _: *jsc.VM, _: *JSGlobalObject, ctx: *@This(), value: JSValue) callconv(.c) void {
-        _ = self;
+pub fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *@This(), value: JSValue) callconv(.c) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((ctx.printer.printRow(Writer, ctx.writer, enable_ansi_colors, ctx.columns, .{ .num = ctx.idx }, value)) catch |__ce_0| { _ = &__ce_0; ctx.e = true;
             break :blk_catch_0 {}; }); });
             ctx.idx = (ctx.idx + 1);
@@ -2914,7 +2918,7 @@ pub fn format2(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVa
                 has_printed_any = true;
                 tag = try ConsoleObject.Formatter.Tag.get(this_value, global);
                 if (((tag.tag == .String) and (fmt.remaining_values.len > 0))) {
-                    tag.tag = .{ .StringPossiblyFormatted = .{} };
+                    tag.tag = .StringPossiblyFormatted;
                 }
                 _ = try fmt.format(tag, *std.Io.Writer, writer, this_value, global, true);
                 if ((fmt.remaining_values.len == 0)) {
@@ -2934,7 +2938,7 @@ pub fn format2(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVa
                 has_printed_any = true;
                 tag = try ConsoleObject.Formatter.Tag.get(this_value, global);
                 if (((tag.tag == .String) and (fmt.remaining_values.len > 0))) {
-                    tag.tag = .{ .StringPossiblyFormatted = .{} };
+                    tag.tag = .StringPossiblyFormatted;
                 }
                 _ = try fmt.format(tag, *std.Io.Writer, writer, this_value, global, false);
                 if ((fmt.remaining_values.len == 0)) {

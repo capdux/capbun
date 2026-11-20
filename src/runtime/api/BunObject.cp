@@ -1628,12 +1628,14 @@ export fn Bun__reportError(globalObject: *JSGlobalObject, e: jsc.JSValue) {
 }
 
 pub struct JSZlib {
-    export fn reader_deallocator(_: *!?, ctx: *!?) {
+    @callconv("c")
+    static fn reader_deallocator(_: *!?, ctx: *!?) {
         let reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
         reader.list.deinit(reader.allocator);
         reader.deinit();
     }
-    export fn global_deallocator(_: *!?, ctx: *!?) {
+    @callconv("c")
+    static fn global_deallocator(_: *!?, ctx: *!?) {
         bun.allocators.freeWithoutSize(ctx);
     }
     export fn compressor_deallocator(_: *!?, ctx: *!?) {

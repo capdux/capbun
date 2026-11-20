@@ -3062,3 +3062,5 @@ Options:
 - **[2026-11-20 18:41] Wave 8 Batch B 验收提交（24 模块全绿）+ Wave 9 `zig:check` 体检**：完成中频 2~4 错 24 模块独立验收（24/24 PASS，ratio 0.747x~1.152x）；Wave 9 `bun run zig:check` 总错误降至 **196**（**`codegen/ZigGeneratedClasses.zig` 彻底归 0**，`std/fmt.zig` 彻底归 0，剩余 75% 文件仅为 1 处错误）。
 
 - **[2026-11-20 18:49] Wave 9 Batch B 验收提交（27 单错模块全绿）**：完成前 36 单错模块中的 27 项独立验收（27/27 PASS，ratio 0.847x~1.160x）并精准定位 7 个外部根因 + `src/interchange/yaml.cp` 自循环 stub；已派发全新子智能体 C 组并行攻坚剩余 34 单错 + 7 外部根因（共 41 模块）。
+
+- **[2026-11-20 18:56] Wave 9 Batch A 验收提交（全部 27 个多错模块全绿）**：完成 `color`/`cares_jsc`/`uws_sys/Response`/`MarkdownObject`/`css_parser`/`h3`/`dns`/`ByteStream`/`Sink`/`ConsoleObject`/`BunObject`/`braces`/`NativeBrotli`/`NativeZstd`/`Blob`/`ByteBlobLoader`/`JSObject`/`md/parser`/`filesystem_router`/`Body`/`ReadableStream`/`TextDecoder`/`streams`/`InternalSourceMap`/`pretty_format`/`snapshot`/`ThreadPool` 27 模块独立验收（27/27 PASS，ratio 0.104x~1.124x）并原子提交；静待专家 C 组（`8c1117a0`）完成后跑 Wave 10 `zig:check`。

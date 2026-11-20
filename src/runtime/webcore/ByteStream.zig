@@ -100,7 +100,7 @@ pub fn onStart(self: *ByteStream) streams.Start {
             return .{ .owned_and_done = ByteList.moveFromList((&self.buffer)) };
         }
         if ((self.highWaterMark == 0)) {
-            return .{ .ready = .{} };
+            return .ready;
         }
         const page_size: Blob.SizeType = @intCast(std.heap.pageSize());
         return .{ .chunk_size = @min(((512 * 1024) + page_size), @max(self.highWaterMark, page_size)) };
@@ -425,7 +425,7 @@ pub fn toBufferedValue(self: *ByteStream, globalThis: *JSGlobalObject, action: s
 .json => .{ .json = .init(globalThis) },
 .text => .{ .text = .init(globalThis) },
 });
-        return (if (@typeInfo(@TypeOf(self.buffer_action.?)) == .@"enum") @intFromEnum(self.buffer_action.?) else self.buffer_action.?.value)();
+        return self.buffer_action.?.getValue();
 }
 pub const Source = webcore.ReadableStream.NewSource(ByteStream, "Bytes", onStart, onPull, onCancel, deinit, null, drain, memoryCost, toBufferedValue);
 pub const tag = webcore.ReadableStream.Tag.Bytes;

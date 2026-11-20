@@ -387,16 +387,14 @@ pub fn getEnvValue(globalObject: *jsc.JSGlobalObject, name: ZigString) ?ZigStrin
 
 pub const JSZlib = struct {
 
-pub fn reader_deallocator(self: JSZlib, _: ?*anyopaque, ctx: ?*anyopaque) void {
-        _ = self;
+pub fn reader_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
             var reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
             _ = &reader;
             _ = reader.list.deinit(reader.allocator);
             _ = reader.deinit();
     }
 
-pub fn global_deallocator(self: JSZlib, _: ?*anyopaque, ctx: ?*anyopaque) void {
-        _ = self;
+pub fn global_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
             _ = bun.allocators.freeWithoutSize(ctx);
     }
 
@@ -770,7 +768,7 @@ pub fn compress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSEr
             const vm = globalThis.bunVM();
             var job = ZstdJob.create(vm, globalThis, buffer, true, level);
             _ = &job;
-            return (if (@typeInfo(@TypeOf(job.promise)) == .@"enum") @intFromEnum(job.promise) else job.promise.value)();
+            return job.promise.value();
     }
 
 pub fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -779,7 +777,7 @@ pub fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
             const vm = globalThis.bunVM();
             var job = ZstdJob.create(vm, globalThis, buffer, false, 0);
             _ = &job;
-            return (if (@typeInfo(@TypeOf(job.promise)) == .@"enum") @intFromEnum(job.promise) else job.promise.value)();
+            return job.promise.value();
     }
     pub const ZstdJob = struct {
         buffer: jsc.Node.StringOrBuffer = jsc.Node.StringOrBuffer.empty,
@@ -1236,7 +1234,7 @@ pub fn registerMacro(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFram
         }
         const get_or_put_result = ((VirtualMachine.get().macros.getOrPut(id)) catch unreachable);
         if (get_or_put_result.found_existing) {
-            _ = (if (@typeInfo(@TypeOf(get_or_put_result.value_ptr.*.?)) == .@"enum") @intFromEnum(get_or_put_result.value_ptr.*.?) else get_or_put_result.value_ptr.*.?.value)().unprotect();
+            _ = get_or_put_result.value_ptr.*.?.value().unprotect();
         }
         _ = arguments[1].protect();
         get_or_put_result.value_ptr.* = arguments[1].asObjectRef();

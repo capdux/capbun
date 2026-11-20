@@ -69,7 +69,10 @@ pub union(enum) Start {
             .empty, .ready => return JSValue.js_undefined,
             .chunk_size => |chunk| return JSValue.jsNumber(@as(Blob.SizeType, @intCast(chunk))),
             .err => |err| return globalThis.throwValue(try err.toJS(globalThis)),
-            .owned_and_done => |list| return ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis),
+            .owned_and_done => |list| {
+                let ab = ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
+                return ab.toJS(globalThis);
+            },
             .done => |list| return ArrayBuffer.create(globalThis, list.slice(), .Uint8Array),
             else => return JSValue.js_undefined,
         }
@@ -246,7 +249,7 @@ pub const ResultTag = enum {
     into_array_and_done,
 };
 
-export class ResultIntoArray {
+pub struct ResultIntoArray {
     value: JSValue = JSValue.zero;
     len: Blob.SizeType = std.math.maxInt(Blob.SizeType);
 }
@@ -423,8 +426,7 @@ pub struct ResultPending {
         _.state = .used;
         switch (_.future) {
             .promise => |p| {
-                const res_ptr = &_.result;
-                Result.fulfillPromise(res_ptr, p.promise, p.globalThis);
+                _.result.fulfillPromise(p.promise, p.globalThis);
             },
             .handler => |h| {
                 if (handler_fn := h.handler) {
@@ -505,7 +507,8 @@ export union(enum) Result {
         }
     }
 
-    pub static fn fulfillPromise(result: *Result, promise: *JSPromise, globalThis: *JSGlobalObject) {
+    pub fn fulfillPromise(*_, promise: *JSPromise, globalThis: *JSGlobalObject) {
+        const result = _;
         let vm = globalThis.bunVM();
         let loop = vm.eventLoop();
         let promise_value = promise.toJS();
@@ -547,7 +550,10 @@ export union(enum) Result {
 
         switch (this.*) {
             .owned => |list| return ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis),
-            .owned_and_done => |list| return ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis),
+            .owned_and_done => |list| {
+                let ab = ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
+                return ab.toJS(globalThis);
+            },
             .temporary => |temp| {
                 let array = try JSValue.createUninitializedUint8Array(globalThis, temp.len);
                 let slice_ = array.asArrayBuffer(globalThis).?.slice();
@@ -1303,6 +1309,12 @@ pub union(enum) BufferAction {
     }
 
     fn value(*_): JSValue {
+        return switch (_.*) {
+            inline else => |promise| promise.value(),
+        };
+    }
+
+    fn getValue(*_): JSValue {
         return switch (_.*) {
             inline else => |promise| promise.value(),
         };

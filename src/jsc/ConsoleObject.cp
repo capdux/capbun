@@ -277,7 +277,7 @@ fn TablePrinterSecondPassContext(comptime Writer: type, comptime enable_ansi_col
         e: bool = false,
 
         @callconv("c")
-        fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *@This(), value: JSValue) {
+        static fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *@This(), value: JSValue) {
             ctx.printer.printRow(Writer, ctx.writer, enable_ansi_colors, ctx.columns, { num: ctx.idx }, value) catch {
                 ctx.e = true;
             };
@@ -514,7 +514,11 @@ pub struct TablePrinter {
                     value = row_value;
                 }
             } else if (row_value.isObject()) {
-                value = row_value.getOwn(_.globalObject, col.name) ?? JSValue.zero?;
+                if (v := row_value.getOwn(_.globalObject, col.name)?) {
+                    value = v;
+                } else {
+                    value = JSValue.zero;
+                }
             }
 
             if (value == .zero) {
@@ -984,7 +988,7 @@ pub fn format2(
 
             tag = ConsoleObject.Formatter.Tag.get(this_value, global)?;
             if (tag.tag == .String && fmt.remaining_values.len > 0) {
-                tag.tag = { StringPossiblyFormatted: {} };
+                tag.tag = .StringPossiblyFormatted;
             }
 
             fmt.format(tag, *std.Io.Writer, writer, this_value, global, true)?;
@@ -1006,7 +1010,7 @@ pub fn format2(
             has_printed_any = true;
             tag = ConsoleObject.Formatter.Tag.get(this_value, global)?;
             if (tag.tag == .String && fmt.remaining_values.len > 0) {
-                tag.tag = { StringPossiblyFormatted: {} };
+                tag.tag = .StringPossiblyFormatted;
             }
 
             fmt.format(tag, *std.Io.Writer, writer, this_value, global, false)?;

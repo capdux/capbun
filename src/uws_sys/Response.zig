@@ -922,7 +922,6 @@ pub fn hasResponded(self: *@This()) bool {
     }
 
 pub fn onWritable(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, offset: u64, user_data: ?*anyopaque) callconv(.c) bool {
@@ -937,7 +936,6 @@ pub fn clearOnWritable(self: *@This()) void {
     }
 
 pub fn onAborted(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, user_data: ?*anyopaque) callconv(.c) void {
@@ -952,7 +950,6 @@ pub fn clearAborted(self: *@This()) void {
     }
 
 pub fn onTimeout(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, user_data: ?*anyopaque) callconv(.c) void {
@@ -967,7 +964,6 @@ pub fn clearTimeout(self: *@This()) void {
     }
 
 pub fn onData(self: *@This(), ud: anytype, comptime handler: anytype) void {
-            const SelfPtr = (&@This());
             const wrapper = struct {
 
 pub fn callback(res_: *uws_res, data: [*c]const u8, length: usize, last: bool, user_data: ?*anyopaque) callconv(.c) void {
@@ -1058,5 +1054,6 @@ pub fn markNeedsMore(self: *@This()) void {
                 _ = us_socket_mark_needs_more_not_ssl(self.downcast());
             }
     }
+    const SelfPtr = *@This();
 };
 }

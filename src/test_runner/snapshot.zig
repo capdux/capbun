@@ -93,7 +93,7 @@ pub fn lessThanFn(_: void, a: SnapshotInlineSnapshotToWrite, b: SnapshotInlineSn
 };
 
 pub const SnapshotFile = struct {
-    id: jest.File.ID,
+    id: TestRunner.File.ID,
     file: std.fs.File,
 };
 
@@ -120,7 +120,7 @@ pub const Snapshots = struct {
     counts: *bun.StringHashMap(usize),
     _current_file: ?SnapshotFile = null,
     snapshot_dir_path: ?[]const u8 = null,
-    inline_snapshots_to_write: *std.AutoArrayHashMap(jest.File.ID,std.array_list.Managed(SnapshotInlineSnapshotToWrite)),
+    inline_snapshots_to_write: *std.AutoArrayHashMap(TestRunner.File.ID,std.array_list.Managed(SnapshotInlineSnapshotToWrite)),
     last_error_snapshot_name: ?[]const u8 = null,
 
 pub fn resetCounts(self: *Snapshots) void {
@@ -313,7 +313,7 @@ pub fn writeSnapshotFile(self: *Snapshots) !void {
             }
     }
 
-pub fn addInlineSnapshotToWrite(self: *Snapshots, file_id: jest.File.ID, value: SnapshotInlineSnapshotToWrite) !void {
+pub fn addInlineSnapshotToWrite(self: *Snapshots, file_id: TestRunner.File.ID, value: SnapshotInlineSnapshotToWrite) !void {
             const gpres = try self.inline_snapshots_to_write.getOrPut(file_id);
             if ((!gpres.found_existing)) {
                 gpres.value_ptr.* = std.array_list.Managed(SnapshotInlineSnapshotToWrite).init(self.allocator);
@@ -357,7 +357,7 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
 .result => |r| r,
 .err => |e| {
 {
-                    _ = (blk_catch_2: { break :blk_catch_2 ((log.addErrorFmt((&bun.logger.Source.initEmptyFile(test_filename)), .{ .start = 0 }, arena_, "Failed to update inline snapshot: Failed to open file: {s}", .{ (if (@typeInfo(@TypeOf(e)) == .@"enum" or @typeInfo(@TypeOf(e)) == .@"union") @tagName(e) else e.name)() })) catch |__ce_2| { _ = &__ce_2;  }); });
+                    _ = (blk_catch_2: { break :blk_catch_2 ((log.addErrorFmt((&bun.logger.Source.initEmptyFile(test_filename)), .{ .start = 0 }, arena_, "Failed to update inline snapshot: Failed to open file: {s}", .{ e.name() })) catch |__ce_2| { _ = &__ce_2;  }); });
                     continue;
                 }
 },
@@ -600,7 +600,7 @@ else => {
             return success;
     }
 
-pub fn getSnapshotFile(self: *Snapshots, file_id: jest.File.ID) !bun.sys.Maybe(void) {
+pub fn getSnapshotFile(self: *Snapshots, file_id: TestRunner.File.ID) !bun.sys.Maybe(void) {
             if (((self._current_file == null) or (self._current_file.?.id != file_id))) {
                 _ = try self.writeSnapshotFile();
                 const test_file = Jest.runner.?.files.get(file_id);

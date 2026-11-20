@@ -1028,7 +1028,7 @@ pub fn readVarint(bytes: []const u8, pos: *usize) i32 {
             }
             const byte = bytes[@as(usize, @intCast(i))];
             i = (i + 1);
-            result = (result | cp_shl((if (comptime @typeInfo(@TypeOf((byte & 127))) == .@"enum") cp_cast_int(u32, @intFromEnum((byte & 127))) else cp_cast_int(u32, (byte & 127))), (if (comptime @typeInfo(u5) == .@"enum") @as(u5, @enumFromInt(shift)) else @as(u5, shift))));
+            result = (result | cp_shl((if (comptime @typeInfo(@TypeOf((byte & 127))) == .@"enum") cp_cast_int(u32, @intFromEnum((byte & 127))) else cp_cast_int(u32, (byte & 127))), @as(u5, @intCast(shift))));
             if (((byte & 128) == 0)) {
                 break;
             }
@@ -1042,7 +1042,7 @@ pub fn readVarint(bytes: []const u8, pos: *usize) i32 {
 
 pub inline fn testBit(base: [*]const u8, idx: usize) bool {
         return (blk: {
-        break :blk ((cp_shr(base[@as(usize, @intCast(cp_shr(idx, 3)))], (if (comptime @typeInfo(u3) == .@"enum") @as(u3, @enumFromInt((idx & 7))) else @as(u3, (idx & 7)))) & 1) != 0);
+        break :blk ((cp_shr(base[@as(usize, @intCast(cp_shr(idx, 3)))], @as(u3, @intCast((idx & 7)))) & 1) != 0);
 
 });
 }
