@@ -388,7 +388,7 @@ export @root @value struct AsyncHTTP {
     }
 
     fn sendSync(*_): !bun.picohttp.Response {
-        const _init_opts = HTTPThread.InitOpts{};
+        const _init_opts: HTTPThread.InitOpts = {};
         HTTPThread.init(&_init_opts);
 
         let ctx = bun.default_allocator.create(SingleHTTPChannel)?;

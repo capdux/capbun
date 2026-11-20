@@ -352,7 +352,7 @@ pub fn schedule(self: *AsyncHTTP, _allocator: std.mem.Allocator, batch: *bun.Thr
 }
 
 pub fn sendSync(self: *AsyncHTTP) !bun.picohttp.Response {
-        const _init_opts = HTTPThread.InitOpts;
+        const _init_opts: HTTPThread.InitOpts = .{};
         _ = HTTPThread.init((&_init_opts));
         var ctx = try bun.default_allocator.create(SingleHTTPChannel);
         _ = &ctx;

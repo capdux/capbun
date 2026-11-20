@@ -174,10 +174,8 @@ pub fn reject(self: *CopyFile, promise: *JSPromise) !void {
             var instance = system_error.toErrorInstanceWithAsyncStack(self.globalThis, promise);
             _ = &instance;
             if ((self.store != null)) {
-                if (self.store) |s| {
-                    _ = &s;
-                    _ = (s).?.deref();
-                }
+                const st: *Store = self.store.?;
+                _ = st.deref();
             }
             _ = try promise.reject(globalThis, instance);
     }

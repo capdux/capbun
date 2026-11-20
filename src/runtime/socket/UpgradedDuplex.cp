@@ -109,7 +109,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                         _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                     };
                 } else {
-                    * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.js_null]) catch |e| {
+                    * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.@"null"]) catch |e| {
                         _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                     };
                 }

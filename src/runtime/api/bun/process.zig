@@ -2188,7 +2188,7 @@ pub fn spawnProcessPosix(options: *const PosixSpawnOptions, argv: [*:null]OptCSt
         defer {
         _ = to_close_on_error.clearAndFree();
         }
-        _ = (blk_catch_12: { break :blk_catch_12 ((attr.set((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) catch |__ce_12| { _ = &__ce_12;  }); });
+        _ = (blk_catch_12: { break :blk_catch_12 ((attr.set(@intCast(flags))) catch |__ce_12| { _ = &__ce_12;  }); });
         _ = (blk_catch_13: { break :blk_catch_13 ((attr.resetSignals()) catch |__ce_13| { _ = &__ce_13;  }); });
         if (options.ipc) |ipc| {
             _ = &ipc;

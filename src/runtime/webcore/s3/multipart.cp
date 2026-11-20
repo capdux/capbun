@@ -65,7 +65,7 @@ export struct UploadPart {
     retry: u8 = 0;
     index: u8 = 0;
 
-    fn sortEtags(_: *MultiPartUpload, a: UploadPartResult, b: UploadPartResult): bool {
+    static fn sortEtags(_: *MultiPartUpload, a: UploadPartResult, b: UploadPartResult): bool {
         return a.number < b.number;
     }
 
@@ -307,8 +307,8 @@ export class MultiPartUpload {
         this.available.unset(index);
         defer this.currentPartNumber += 1;
         if (this.queue == null) {
-            let queue = handleOom(default_allocator.alloc(UploadPart, queueSize));
-            @memset(queue, UploadPart {
+            let new_queue = handleOom(default_allocator.alloc(UploadPart, queueSize));
+            @memset(new_queue, UploadPart {
                 data = "",
                 ctx = this,
                 allocated_size = 0,
@@ -317,7 +317,7 @@ export class MultiPartUpload {
                 retry = 0,
                 index = 0,
             });
-            this.queue = queue;
+            this.queue = new_queue;
         }
         let data = if (needs_clone) handleOom(default_allocator.dupe(u8, chunk)) else chunk;
         let allocated_len = if (needs_clone) data.len else allocated_size;
@@ -536,7 +536,9 @@ export class MultiPartUpload {
     }
 
     fn enqueuePart(*_, chunk: string, allocated_size: usize, needs_clone: bool): JSTerminatedError!bool {
-        let part = this.getCreatePart(chunk, allocated_size, needs_clone) ?? return false;
+        let part_opt = this.getCreatePart(chunk, allocated_size, needs_clone);
+        if (part_opt == null) return false;
+        let part = part_opt.?;
 
         if (this.state == .not_started) {
             this.state = .multipart_started;

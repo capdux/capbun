@@ -3202,3 +3202,5 @@ Options:
 - **[2026-11-20 23:39] Wave 26 D 组验收提交（3 根因全绿）**：完成 `repository.shared_env`、`VM.APILockCallback`（单层函数指针）与 `postgres/DataCell.putRaw`（推断错误集 `!bool`）独立验收（3/3 PASS）并原子提交；静待 E 组（`3bff2edb`）完成即跑 Wave 27 `zig:check`。
 
 - **[2026-11-20 23:40] Wave 26 E 组验收提交（4 根因全绿，Wave 26 清仓）**：完成 `AsyncHTTP`（`.{}`）、`toml`/`parsePrefix`（`std.mem.zeroes(...)`）与 `immutable.NewGlobLengthSorter.lessThan`（`static fn`）独立验收（4/4 PASS）并原子提交；随即运行 Wave 27 全仓 `bun run zig:check`。
+
+- **[2026-11-20 23:43] Wave 27 C 组验收提交（14 模块全绿）**：完成 Runtime/HTTP/Libarchive/Shell/String/Watcher 14 模块独立验收（14/14 PASS，ratio 0.644x~1.022x）并原子提交；静待 A/B 组完成。

@@ -112,9 +112,8 @@ export class CopyFile {
         }
         let instance = system_error.toErrorInstanceWithAsyncStack(this.globalThis, promise);
         if (this.store != null) {
-            if (s := _.store) {
-            s.deref();
-        }
+            const st: *Store = _.store.?;
+            st.deref();
         }
         try promise.reject(globalThis, instance);
     }

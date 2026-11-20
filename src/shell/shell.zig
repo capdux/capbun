@@ -1935,7 +1935,8 @@ const txt = self.text(range);
                         }
                         const arg = arg_opt.?;
                         if ((!self.matchTok(.DoubleBracketClose))) {
-                            _ = try self.add_error("Expected \"]]\" but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
+                            const bad_tok: Token = self.peek();
+                            _ = try self.add_error("Expected \"]]\" but got: {s}", .{ bad_tok.asHumanReadable(self.strpool) });
                             return ParseError.Expected;
                         }
                         return .{ .op = @enumFromInt((if (@typeInfo(@TypeOf(single_arg_op)) == .@"enum") @intFromEnum(single_arg_op) else single_arg_op.value)), .args = AST.CondExpr.ArgList.initWith(arg) };

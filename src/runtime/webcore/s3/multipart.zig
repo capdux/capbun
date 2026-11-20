@@ -127,8 +127,7 @@ pub const UploadPart = struct {
     retry: u8 = 0,
     index: u8 = 0,
 
-pub fn sortEtags(self: *UploadPart, _: *MultiPartUpload, a: UploadPartResult, b: UploadPartResult) bool {
-        _ = self;
+pub fn sortEtags(_: *MultiPartUpload, a: UploadPartResult, b: UploadPartResult) bool {
             return (a.number < b.number);
     }
 
@@ -393,10 +392,10 @@ pub fn getCreatePart(self: *MultiPartUpload, chunk: []const u8, allocated_size: 
             self.currentPartNumber = (self.currentPartNumber + 1);
             }
             if ((self.queue == null)) {
-                var queue = handleOom(default_allocator.alloc(UploadPart, queueSize));
-                _ = &queue;
-                _ = @memset(self.queue, UploadPart{ .data = "", .ctx = self, .allocated_size = 0, .state = .not_assigned, .partNumber = 0, .retry = 0, .index = 0 });
-                self.queue = self.queue;
+                var new_queue = handleOom(default_allocator.alloc(UploadPart, queueSize));
+                _ = &new_queue;
+                _ = @memset(new_queue, UploadPart{ .data = "", .ctx = self, .allocated_size = 0, .state = .not_assigned, .partNumber = 0, .retry = 0, .index = 0 });
+                self.queue = new_queue;
             }
             var data = (if (needs_clone) handleOom(default_allocator.dupe(u8, chunk)) else chunk);
             _ = &data;
@@ -604,7 +603,12 @@ pub fn rollbackMultiPartRequest(self: *MultiPartUpload) JSTerminatedError!void {
     }
 
 pub fn enqueuePart(self: *MultiPartUpload, chunk: []const u8, allocated_size: usize, needs_clone: bool) JSTerminatedError!bool {
-            var part = ((self.getCreatePart(chunk, allocated_size, needs_clone)) orelse { return .{ .ok = false }; });
+            var part_opt = self.getCreatePart(chunk, allocated_size, needs_clone);
+            _ = &part_opt;
+            if ((part_opt == null)) {
+                return false;
+            }
+            var part = part_opt.?;
             _ = &part;
             if ((self.state == .not_started)) {
                 self.state = .multipart_started;

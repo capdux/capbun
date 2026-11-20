@@ -249,7 +249,7 @@ pub fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitCon
             return html_route;
     }
 
-pub fn fromOptions(global: *jsc.JSGlobalObject, headers: ?*jsc.WebCore.FetchHeaders, path: *jsc.Node.PathOrFileDescriptor) AnyRoute!void {
+pub fn fromOptions(global: *jsc.JSGlobalObject, headers: ?*jsc.WebCore.FetchHeaders, path: *jsc.Node.PathOrFileDescriptor) !AnyRoute {
             var blob = Blob.findOrCreateFileFromPath(path, global, false);
             _ = &blob;
             if (blob.needsToReadFile()) {

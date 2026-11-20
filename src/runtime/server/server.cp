@@ -171,7 +171,7 @@ pub const AnyRoute = union(enum) {
         return html_route;
     }
 
-    pub fn fromOptions(global: *jsc.JSGlobalObject, headers: ?*jsc.WebCore.FetchHeaders, path: *jsc.Node.PathOrFileDescriptor) !AnyRoute {
+    static fn fromOptions(global: *jsc.JSGlobalObject, headers: (*jsc.WebCore.FetchHeaders)?, path: *jsc.Node.PathOrFileDescriptor): AnyRoute! {
         // The file/static route doesn't ref it.
         let blob = Blob.findOrCreateFileFromPath(path, global, false);
 

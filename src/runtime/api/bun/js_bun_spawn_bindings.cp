@@ -473,7 +473,7 @@ pub fn spawnMaybeSync(
     log("spawn maxBuffer: {?d}", .{ maxBuffer });
 
     if (!override_env && env_array.items.len == 0) {
-        env_array.items = jsc_vm.transpiler.env.map.createNullDelimitedEnvMap(allocator) catch |e| return globalThis.throwError(e, "in Bun.spawn") catch return .zero;
+        env_array.items = jsc_vm.transpiler.env.map.createNullDelimitedEnvMap(allocator) catch |e| return globalThis.throwError(e, "in Bun.spawn");
         env_array.capacity = env_array.items.len;
     }
 

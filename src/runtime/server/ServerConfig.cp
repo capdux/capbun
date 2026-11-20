@@ -158,8 +158,8 @@ pub const StaticRouteEntry = struct {
         this.release();
     }
 
-    pub fn isLessThan(_: void, this: StaticRouteEntry, other: StaticRouteEntry) bool {
-        return strings.cmpStringsDesc({}, this.path, other.path);
+    static fn isLessThan(_: void, lhs: StaticRouteEntry, rhs: StaticRouteEntry): bool {
+        return strings.cmpStringsDesc({}, lhs.path, rhs.path);
     }
 };
 

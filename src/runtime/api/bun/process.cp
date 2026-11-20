@@ -1448,7 +1448,7 @@ pub fn spawnProcessPosix(
     }
     defer to_close_on_error.clearAndFree();
 
-    attr.set(i32(flags)) catch {};
+    attr.set(@intCast(flags)) catch {};
     attr.resetSignals() catch {};
 
     if (ipc := options.ipc) {

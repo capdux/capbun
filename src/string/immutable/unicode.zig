@@ -427,7 +427,7 @@ pub fn peek(it: *Iterator, n: usize) []const u8 {
 pub fn containsNonBmpCodePoint(text: []const u8) bool {
         var iter = CodepointIterator.init(text);
         _ = &iter;
-        var curs = CodepointIterator.Cursor;
+        var curs: CodepointIterator.Cursor = .{};
         _ = &curs;
         while (iter.next((&curs))) {
             if ((curs.c > 65535)) {
@@ -440,7 +440,7 @@ pub fn containsNonBmpCodePoint(text: []const u8) bool {
 pub fn containsNonBmpCodePointOrIsInvalidIdentifier(text: []const u8) bool {
         var iter = CodepointIterator.init(text);
         _ = &iter;
-        var curs = CodepointIterator.Cursor;
+        var curs: CodepointIterator.Cursor = .{};
         _ = &curs;
         if ((!iter.next((&curs)))) {
             return true;

@@ -1796,3 +1796,5 @@
 - **[2026-11-20] Wave 26 D 组 (3 跨模块根因)**：更新 `install/repository`, `jsc/VM`, `sql_jsc/postgres/DataCell`。
 
 - **[2026-11-20] Wave 26 E 组 (4 跨模块根因)**：更新 `http/AsyncHTTP`, `interchange/toml`, `js_parser/ast/parsePrefix`, `string/immutable`。
+
+- **[2026-11-20] Wave 27 C 组 (14 模块)**：更新 `http/AsyncHTTP`, `libarchive/libarchive`, `runtime/{api/{Archive,JSTranspiler,bun/{js_bun_spawn_bindings,process}},server/{ServerConfig,server},socket/UpgradedDuplex,webcore/{blob/copy_file,s3/multipart}}`, `shell/shell`, `string/immutable/unicode`, `watcher/INotifyWatcher`。

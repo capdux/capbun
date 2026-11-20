@@ -201,7 +201,7 @@ export struct ArchiverPlucker {
     }
 }
 
-let EMPTY_PLUCKERS: [0]ArchiverPlucker = [];
+let EMPTY_PLUCKERS: [0]ArchiverPlucker = undefined;
 const EMPTY_PLUCKERS_SLICE: []ArchiverPlucker = EMPTY_PLUCKERS[0..0];
 
 export struct ArchiverContext {

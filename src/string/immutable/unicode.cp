@@ -238,7 +238,7 @@ pub const UnsignedCodepointIterator = NewCodePointIterator(u32, 0);
 
 pub fn containsNonBmpCodePoint(text: string): bool {
     let iter = CodepointIterator.init(text);
-    let curs = CodepointIterator.Cursor{};
+    let curs: CodepointIterator.Cursor = {};
 
     while (iter.next(&curs)) {
         if (curs.c > 0xFFFF) {
@@ -251,7 +251,7 @@ pub fn containsNonBmpCodePoint(text: string): bool {
 
 pub fn containsNonBmpCodePointOrIsInvalidIdentifier(text: string): bool {
     let iter = CodepointIterator.init(text);
-    let curs = CodepointIterator.Cursor{};
+    let curs: CodepointIterator.Cursor = {};
 
     if (!iter.next(&curs)) return true;
 

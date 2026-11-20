@@ -143,7 +143,7 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
                     _ = buffer.ensureStillAlive();
                     _ = (blk_catch_3: { break :blk_catch_3 ((writeOrEnd.call(global_obj, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_3 self.handlers.onError(self.handlers.ctx, global_obj.takeException(e)); }); });
                 } else {
-                    _ = (blk_catch_4: { break :blk_catch_4 ((writeOrEnd.call(global_obj, duplex, (&.{ jsc.JSValue.js_null }))) catch |e| { _ = &e; break :blk_catch_4 self.handlers.onError(self.handlers.ctx, global_obj.takeException(e)); }); });
+                    _ = (blk_catch_4: { break :blk_catch_4 ((writeOrEnd.call(global_obj, duplex, (&.{ jsc.JSValue.@"null" }))) catch |e| { _ = &e; break :blk_catch_4 self.handlers.onError(self.handlers.ctx, global_obj.takeException(e)); }); });
                 }
             }
         }

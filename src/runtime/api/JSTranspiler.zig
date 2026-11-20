@@ -392,7 +392,7 @@ pub fn fromJS(self: *Config, globalThis: *jsc.JSGlobalObject, object: jsc.JSValu
                                 const name_slice = buf.items.ptr[buf.items.len..][0..name.len];
                                 buf.items.len = (buf.items.len + name.len);
                                 if ((name.len > 0)) {
-                                    _ = replacements.putAssumeCapacity(name_slice, .{ .delete = .{} });
+                                    _ = replacements.putAssumeCapacity(name_slice, .{ .delete = undefined });
                                 }
                             }
                         }
@@ -555,19 +555,16 @@ pub fn then(self: *TransformTask, promise: *jsc.JSPromise) bun.JSTerminated!void
             _ = self.deinit();
             }
             if ((self.log.hasAny() or (self.e != null))) {
-                var error_value: bun.JSError!JSValue = .{ .ok = error.JSError };
-                _ = &error_value;
                 if (self.e) |e| {
                     _ = &e;
                     if ((!self.log.hasAny())) {
-                        error_value = bun.api.BuildMessage.create(self.global, bun.default_allocator, logger.Msg{ .data = logger.Data{ .text = bun.asByteSlice(@errorName(e)) } });
-                    } else {
-                        error_value = self.log.toJS(self.global, bun.default_allocator, "Transform failed");
+                        const err_val = bun.api.BuildMessage.create(self.global, bun.default_allocator, logger.Msg{ .data = logger.Data{ .text = bun.asByteSlice(@errorName(e)) } });
+                        _ = try promise.rejectWithAsyncStack(self.global, err_val);
+                        return;
                     }
-                } else {
-                    error_value = self.log.toJS(self.global, bun.default_allocator, "Transform failed");
                 }
-                _ = try promise.rejectWithAsyncStack(self.global, error_value);
+                const err_val = self.log.toJS(self.global, bun.default_allocator, "Transform failed");
+                _ = try promise.rejectWithAsyncStack(self.global, err_val);
                 return;
             }
             _ = try self.finish(self, promise);

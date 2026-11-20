@@ -1044,8 +1044,8 @@ pub fn deinit(self: *@This()) void {
             _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
     }
 
-pub fn isLessThan(self: @This(), _: void, other: StaticRouteEntry) bool {
-            return strings.cmpStringsDesc(.{}, self.path, other.path);
+pub fn isLessThan(_: void, lhs: StaticRouteEntry, rhs: StaticRouteEntry) bool {
+            return strings.cmpStringsDesc(.{}, lhs.path, rhs.path);
     }
 };
 pub const FromJSOptions = struct {
