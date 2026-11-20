@@ -62,7 +62,7 @@ pub fn generateChunksInParallel(
                         chunk: &chunks[u_idx],
                         linker: c,
                     };
-                    batch.push(.@"from"(&tasks[i].task));
+                    batch.push(ThreadPoolLib.Batch.from(&tasks[i].task));
                     i += 1;
                 }
             }
@@ -143,7 +143,7 @@ pub fn generateChunksInParallel(
                                 },
                                 ctx: chunk_ctx,
                             };
-                            batch.push(.@"from"(&remaining_part_ranges[0].task));
+                            batch.push(ThreadPoolLib.Batch.from(&remaining_part_ranges[0].task));
 
                             remaining_part_ranges = remaining_part_ranges[1..];
                         }
@@ -158,7 +158,7 @@ pub fn generateChunksInParallel(
                                 },
                                 ctx: chunk_ctx,
                             };
-                            batch.push(.@"from"(&remaining_part_ranges[0].task));
+                            batch.push(ThreadPoolLib.Batch.from(&remaining_part_ranges[0].task));
 
                             remaining_part_ranges = remaining_part_ranges[1..];
                         }
@@ -173,7 +173,7 @@ pub fn generateChunksInParallel(
                             ctx: chunk_ctx,
                         };
 
-                        batch.push(.@"from"(&remaining_part_ranges[0].task));
+                        batch.push(ThreadPoolLib.Batch.from(&remaining_part_ranges[0].task));
                         remaining_part_ranges = remaining_part_ranges[1..];
                     },
                 }

@@ -288,7 +288,7 @@ if (((expr.data == .e_identifier) and expr.data.e_identifier.ref.eql(r.old))) {
 },
 .replace_this => |r| {
 if ((expr.data == .e_this)) {
-                expr.* = useRef(p, r.ref, r.loc);
+                expr.* = useRef(p, r.sym_ref, r.loc);
                 return;
             }
 },
@@ -980,10 +980,8 @@ pub fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
             _ = &private_lowered_map;
             var accessor_storage_counter: usize = 0;
             _ = &accessor_storage_counter;
-            var emitted_private_adds = std.AutoHashMapUnmanaged(u32, void);
+            var emitted_private_adds: std.AutoHashMapUnmanaged(u32,void) = .{};
             _ = &emitted_private_adds;
-            {
-            }
             var static_private_add_blocks = ListManaged(Property).init(p.allocator);
             _ = &static_private_add_blocks;
             var lower_all_private = false;

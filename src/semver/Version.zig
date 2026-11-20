@@ -302,7 +302,7 @@ pub fn VersionType(comptime IntType: type) type {
             ///
             /// The goal of this function is to avoid a complete parse of semver that's unused
             pub fn whichVersionIsPinned(input: string) PinnedVersion {
-                const version = strings.trim(input, &strings.whitespace_chars);
+                const version = strings.trim(input, strings.whitespace_chars);
 
                 var i: usize = 0;
 
@@ -437,7 +437,7 @@ pub fn VersionType(comptime IntType: type) type {
             }
 
             pub fn isTaggedVersionOnly(input: []const u8) bool {
-                const version = strings.trim(input, &strings.whitespace_chars);
+                const version = strings.trim(input, strings.whitespace_chars);
 
                 // first needs to be a-z
                 if (version.len == 0 or !std.ascii.isAlphabetic(version[0])) return false;

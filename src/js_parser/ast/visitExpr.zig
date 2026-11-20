@@ -1236,17 +1236,17 @@ pub fn e_arrow(p: *P, expr: Expr, unused_in: ExprIn) Expr {
             _ = p.popScope();
             p.fn_only_data_visit.is_inside_async_arrow_fn = old_inside_async_arrow_fn;
             p.fn_or_arrow_data_visit = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_visit), (&old_fn_or_arrow_data));
-            if (react_hook_data) |*hook| {
-                _ = &hook;
+            if ((react_hook_data != null)) {
                 _ = try_mark_hook: {
+                const hook = (&react_hook_data.?);
                 if ((p.nearest_stmt_list == null)) {
                     break :try_mark_hook;
                 }
                 const stmts = p.nearest_stmt_list.?;
-                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl((hook.*).signature_cb)));
-                _ = p.handleReactRefreshPostVisitFunctionBody((&stmts_list), (hook.*));
+                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));
+                _ = p.handleReactRefreshPostVisitFunctionBody((&stmts_list), hook);
                 e_.body.stmts = stmts_list.items;
-                return p.getReactRefreshHookSignalInit((hook.*), expr);
+                return p.getReactRefreshHookSignalInit(hook, expr);
 };
             }
             return expr;
@@ -1271,15 +1271,15 @@ pub fn e_function(p: *P, expr: Expr, unused_in: ExprIn) Expr {
             }
             var final_expr = expr;
             _ = &final_expr;
-            if (react_hook_data) |*hook| {
-                _ = &hook;
+            if ((react_hook_data != null)) {
                 _ = try_mark_hook: {
+                const hook = (&react_hook_data.?);
                 if ((p.nearest_stmt_list == null)) {
                     break :try_mark_hook;
                 }
                 const stmts = p.nearest_stmt_list.?;
-                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl((hook.*).signature_cb)));
-                final_expr = p.getReactRefreshHookSignalInit((hook.*), expr);
+                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));
+                final_expr = p.getReactRefreshHookSignalInit(hook, expr);
                 break :try_mark_hook;
 };
             }

@@ -227,7 +227,7 @@ pub fn createExportsForFile(
     let properties = bun.handleOom(std.array_list.Managed(js_ast.G.Property)
         .initCapacity(allocator, export_aliases.len));
 
-    let ns_export_symbol_uses = Part.SymbolUseMap{};
+    let ns_export_symbol_uses: Part.SymbolUseMap = .{};
     bun.handleOom(ns_export_symbol_uses.ensureTotalCapacity(allocator, export_aliases.len));
 
     const initial_flags = c.graph.meta.items(.flags)[id];

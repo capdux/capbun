@@ -184,7 +184,7 @@ pub fn generateChunksInParallel(c: *LinkerContext, chunks: []Chunk, comptime is_
                         const u_idx = @as(usize, @intCast(idx));
                         if ((chunks[@as(usize, @intCast(u_idx))].content == .css)) {
                             tasks[cp_cast_int(usize, i)] = LinkerContext.PrepareCssAstTask{ .task = ThreadPoolLib.Task{ .callback = (&LinkerContext.prepareCssAstsForChunk) }, .chunk = (&chunks[@as(usize, @intCast(u_idx))]), .linker = c };
-                            _ = batch.push(.{ .@"from" = (&tasks[@as(usize, @intCast(i))].task) });
+                            _ = batch.push(ThreadPoolLib.Batch.from((&tasks[@as(usize, @intCast(i))].task)));
                             i = (i + 1);
                         }
                     }
@@ -261,7 +261,7 @@ var i: usize = 0;
                             _ = debugPartRanges("Part Range: {s} {s} ({d}..{d})", .{ c.parse_graph.input_files.items(.source)[@as(usize, @intCast(part_range.source_index.get()))].path.pretty, @tagName(c.parse_graph.ast.items(.target)[@as(usize, @intCast(part_range.source_index.get()))].bakeGraph()), part_range.part_index_begin, part_range.part_index_end });
                         }
                         remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = part_range, .i = @as(i32, @intCast(i)), .task = .{ .callback = (&generateCompileResultForJSChunk) }, .ctx = chunk_ctx };
-                        _ = batch.push(.{ .@"from" = (&remaining_part_ranges[0].task) });
+                        _ = batch.push(ThreadPoolLib.Batch.from((&remaining_part_ranges[0].task)));
                         remaining_part_ranges = remaining_part_ranges[1..];
                     }
 },
@@ -272,14 +272,14 @@ var i: usize = 0;
                         const __end_3 = chunk.content.css.imports_in_chunk_in_order.len;
                         while (i < __end_3) : (i += 1) {
                             remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = @as(i32, @intCast(i)), .task = .{ .callback = (&generateCompileResultForCssChunk) }, .ctx = chunk_ctx };
-                            _ = batch.push(.{ .@"from" = (&remaining_part_ranges[0].task) });
+                            _ = batch.push(ThreadPoolLib.Batch.from((&remaining_part_ranges[0].task)));
                             remaining_part_ranges = remaining_part_ranges[1..];
                         }
                     }
 },
 .html => {
 remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .task = .{ .callback = (&generateCompileResultForHtmlChunk) }, .ctx = chunk_ctx };
-                    _ = batch.push(.{ .@"from" = (&remaining_part_ranges[0].task) });
+                    _ = batch.push(ThreadPoolLib.Batch.from((&remaining_part_ranges[0].task)));
                     remaining_part_ranges = remaining_part_ranges[1..];
 },
 }

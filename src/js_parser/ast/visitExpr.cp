@@ -1627,7 +1627,8 @@ fn VisitExprVisitors(
             p.fn_only_data_visit.is_inside_async_arrow_fn = old_inside_async_arrow_fn;
             p.fn_or_arrow_data_visit = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_visit), &old_fn_or_arrow_data);
 
-            if (*hook := react_hook_data) try_mark_hook: {
+            if (react_hook_data != null) try_mark_hook: {
+                const hook = &react_hook_data.?;
                 if (p.nearest_stmt_list == null) break :try_mark_hook;
                 const stmts = p.nearest_stmt_list.?;
                 bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));
@@ -1666,7 +1667,8 @@ fn VisitExprVisitors(
 
             let final_expr = expr;
 
-            if (*hook := react_hook_data) try_mark_hook: {
+            if (react_hook_data != null) try_mark_hook: {
+                const hook = &react_hook_data.?;
                 if (p.nearest_stmt_list == null) break :try_mark_hook;
                 const stmts = p.nearest_stmt_list.?;
                 bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));

@@ -6133,7 +6133,7 @@ pub fn NewParser_(
                 const entry = p.ref_to_ts_namespace_member.getEntry(sym_ref).?;
                 const namespace = entry.value_ptr.namespace;
                 let inner_map: bun.StringHashMapUnmanaged(InlinedEnumValue) = {};
-                inner_map.ensureTotalCapacity(allocator, i32(namespace.count()))?;
+                inner_map.ensureTotalCapacity(allocator, @as(u32, @intCast(namespace.count())))?;
                 for (namespace.keys(), namespace.values()) |key, val| {
                     switch (val.data) {
                         .enum_number => |num| inner_map.putAssumeCapacityNoClobber(

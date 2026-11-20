@@ -168,9 +168,9 @@ pub fn visitFunc(p: *P, _func: G.Fn, open_parens_loc: logger.Loc) G.Fn {
             _ = ((p.visitStmtsAndPrependTempRefs((&stmts), (&temp_opts))) catch unreachable);
             if (p.options.features.react_fast_refresh) {
                 const hook_storage = ((p.react_refresh.hook_ctx_storage) orelse (unreachable));
-                if (hook_storage.*) |*hook| {
-                    _ = &hook;
-                    _ = p.handleReactRefreshPostVisitFunctionBody((&stmts), (hook.*));
+                if ((hook_storage.* != null)) {
+                    const hook = (&hook_storage.*.?);
+                    _ = p.handleReactRefreshPostVisitFunctionBody((&stmts), hook);
                 }
             }
             func.body = G.FnBody{ .stmts = stmts.items, .loc = body.loc };
@@ -269,7 +269,7 @@ pub fn visitDecls(p: *P, decls: []G.Decl, was_const: bool, comptime is_possibly_
                             if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data.@"as"(.e_call)) |call| {
                                 _ = &call;
                                 if ((last_hook == call)) {
-                                    const hook_ctx = (p.react_refresh.hook_ctx_storage.?).*.?;
+                                    const hook_ctx = (&(p.react_refresh.hook_ctx_storage.?).*.?);
                                     _ = (decl.*).binding.data.writeToHasher((&hook_ctx.hasher), p.symbols.items);
                                 }
                             }

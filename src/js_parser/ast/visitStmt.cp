@@ -358,7 +358,8 @@ fn VisitStmtVisitors(
                             data.default_name = createDefaultName(p, stmt.loc) catch unreachable;
                         }
 
-                        if (*hook := react_hook_data) {
+                        if (react_hook_data != null) {
+                            const hook = &react_hook_data.?;
                             bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));
 
                             data.value = {
@@ -586,7 +587,8 @@ fn VisitStmtVisitors(
             }
 
             if (p.options.features.react_fast_refresh) {
-                if (*hook := react_hook_data) {
+                if (react_hook_data != null) {
+                    const hook = &react_hook_data.?;
                     stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb))?;
                     try stmts.append(p.s(S.SExpr{
                         value: p.getReactRefreshHookSignalInit(hook, Expr.initIdentifier(name_ref, logger.Loc.Empty)),

@@ -391,10 +391,10 @@ var name: []const u8 = js_ast.ClauseItem.default_alias;
             if (data.default_name.ref.?.isSourceContentsSlice()) {
                 data.default_name = ((createDefaultName(p, stmt.loc)) catch unreachable);
             }
-            if (react_hook_data) |*hook| {
-                _ = &hook;
-                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl((hook.*).signature_cb)));
-                (if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value) = .{ .expr = p.getReactRefreshHookSignalInit((hook.*), p.newExpr(E.Function{ .func = func.func }, stmt.loc)) };
+            if ((react_hook_data != null)) {
+                const hook = (&react_hook_data.?);
+                _ = bun.handleOom(stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb)));
+                (if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value) = .{ .expr = p.getReactRefreshHookSignalInit(hook, p.newExpr(E.Function{ .func = func.func }, stmt.loc)) };
             }
             if (mark_for_replace) {
                 const entry = (p.options.features.replace_exports.getPtr("default")).?;
@@ -544,10 +544,10 @@ pub fn s_function(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.Functi
                 }
             }
             if (p.options.features.react_fast_refresh) {
-                if (react_hook_data) |*hook| {
-                    _ = &hook;
-                    _ = try stmts.append(p.getReactRefreshHookSignalDecl((hook.*).signature_cb));
-                    _ = try stmts.append(p.s(S.SExpr{ .value = p.getReactRefreshHookSignalInit((hook.*), Expr.initIdentifier(name_ref, logger.Loc.Empty)) }, logger.Loc.Empty));
+                if ((react_hook_data != null)) {
+                    const hook = (&react_hook_data.?);
+                    _ = try stmts.append(p.getReactRefreshHookSignalDecl(hook.signature_cb));
+                    _ = try stmts.append(p.s(S.SExpr{ .value = p.getReactRefreshHookSignalInit(hook, Expr.initIdentifier(name_ref, logger.Loc.Empty)) }, logger.Loc.Empty));
                 }
                 if ((p.current_scope == p.module_scope)) {
                     _ = try p.handleReactRefreshRegister(stmts, original_name, name_ref, .named);

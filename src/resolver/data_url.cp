@@ -143,7 +143,7 @@ pub struct DataURL {
 
         use_base64: {
             let counter = CountingBuf{};
-            const success = encodeStringAsPercentEscapedDataURL(&counter, mime_type, text) catch unreachable;
+            const success = encodeStringAsPercentEscapedDataURL(unsafe { &counter }, mime_type, text) catch unreachable;
             if (!success) {
                 break :use_base64;
             }

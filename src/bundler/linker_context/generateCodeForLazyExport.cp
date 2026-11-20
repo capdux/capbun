@@ -74,7 +74,7 @@ pub struct Visitor {
         if (from_this_file) {
             _.inner_visited.set(css_ref.innerIndex());
         } else {
-            _.composes_visited.put(css_ref.toRealRef(idx), {}) catch unreachable;
+            _.composes_visited.put(css_ref.toRealRef(idx), undefined) catch unreachable;
         }
     }
 
@@ -367,7 +367,7 @@ pub fn generateCodeForLazyExport(c: *LinkerContext, source_index: Index.Int): vo
                     // happened yet). So we need to wait until after tree shaking happens.
                     const generated = c.generateNamedExportInFile(source_index, module_ref, name, name)?;
                     parts.ptr[generated[1]].stmts = c.allocator().alloc(Stmt, 1)?;
-                    const decls = [{
+                    const decls: [1]G.Decl = [{
                         binding: Binding.alloc(
                             c.allocator(),
                             B.Identifier{

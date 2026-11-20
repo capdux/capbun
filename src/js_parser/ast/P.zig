@@ -4138,7 +4138,7 @@ pub fn computeTsEnumsMap(p: *const P, allocator: Allocator) !js_ast.Ast.TsEnumsM
                 const namespace = entry.value_ptr.namespace;
                 var inner_map: bun.StringHashMapUnmanaged(InlinedEnumValue) = .{};
                 _ = &inner_map;
-                _ = try inner_map.ensureTotalCapacity(allocator, (if (comptime @typeInfo(@TypeOf(namespace.count())) == .@"enum") cp_cast_int(i32, @intFromEnum(namespace.count())) else cp_cast_int(i32, namespace.count())));
+                _ = try inner_map.ensureTotalCapacity(allocator, @as(u32, @intCast(namespace.count())));
                 for (namespace.keys(), namespace.values()) |key, val| {
                     _ = &key;
                     _ = &val;

@@ -1385,7 +1385,7 @@ pub struct BundleV2 {
             kind: .k_const,
             decls: G.Decl.List.fromSlice(alloc, &server_manifest_decls)?,
             is_export: true,
-        });
+        })?;
         const ssr_manifest_decls: [1]G.Decl = [ {
             binding: Binding.alloc(alloc, B.Identifier{
                 ref: server.newSymbol(.other, "ssrManifest")?,
@@ -1398,7 +1398,7 @@ pub struct BundleV2 {
             kind: .k_const,
             decls: G.Decl.List.fromSlice(alloc, &ssr_manifest_decls)?,
             is_export: true,
-        });
+        })?;
 
         _.graph.ast.set(Index.bake_server_data.get(), server.toBundledAst(.bun)?);
         _.graph.ast.set(Index.bake_client_data.get(), client.toBundledAst(.browser)?);

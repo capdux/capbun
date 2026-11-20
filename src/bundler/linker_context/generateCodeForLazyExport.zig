@@ -93,7 +93,7 @@ pub fn visitName(self: *Visitor, ast: *bun.css.BundlerStyleSheet, css_ref: bun.c
             if (from_this_file) {
                 _ = self.inner_visited.set(css_ref.innerIndex());
             } else {
-                _ = ((self.composes_visited.put(css_ref.toRealRef(idx), .{})) catch unreachable);
+                _ = ((self.composes_visited.put(css_ref.toRealRef(idx), undefined)) catch unreachable);
             }
     }
 
@@ -305,7 +305,7 @@ part.stmts.len = 0;
                 }
                 const generated = try c.generateNamedExportInFile(source_index, module_ref, name, name);
                 parts.ptr[@as(usize, @intCast(generated[1]))].stmts = try c.allocator().alloc(Stmt, 1);
-                const decls: []__CpObj_binding__anyopaque_value__anyopaque = .{ .{ .binding = Binding.alloc(c.allocator(), B.Identifier{ .ref = generated[0] }, expr.loc), .value = (if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).? } };
+                const decls: [1]G.Decl = .{ .{ .binding = Binding.alloc(c.allocator(), B.Identifier{ .ref = generated[0] }, expr.loc), .value = (if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value).? } };
                 parts.ptr[@as(usize, @intCast(generated[1]))].stmts[cp_cast_int(usize, 0)] = Stmt.alloc(S.Local, S.Local{ .is_export = true, .decls = try js_ast.G.Decl.List.fromSlice(c.allocator(), (&decls)) }, property.key.?.loc);
             }
         }
@@ -318,4 +318,3 @@ part.stmts.len = 0;
 },
 }
 }
-pub const __CpObj_binding__anyopaque_value__anyopaque = struct { binding: *anyopaque, value: *anyopaque };

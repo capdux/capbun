@@ -209,7 +209,7 @@ pub fn LowerDecorators(
                 },
                 .replace_this => |r| {
                     if (expr.data == .e_this) {
-                        expr.* = useRef(p, r.ref, r.loc);
+                        expr.* = useRef(p, r.sym_ref, r.loc);
                         return;
                     }
                 },
@@ -739,7 +739,7 @@ pub fn LowerDecorators(
             let prefix_stmts = ListManaged(Stmt).init(p.allocator);
             let private_lowered_map = PrivateLoweredMap{};
             let accessor_storage_counter: usize = 0;
-            let emitted_private_adds = std.AutoHashMapUnmanaged(u32, void){};
+            let emitted_private_adds: std.AutoHashMapUnmanaged(u32, void) = .{};
             let static_private_add_blocks = ListManaged(Property).init(p.allocator);
 
             // Pre-scan: determine if all private members need lowering

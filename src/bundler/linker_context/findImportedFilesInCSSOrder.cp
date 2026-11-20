@@ -80,7 +80,7 @@ pub struct Visitor {
         // Iterate over the top-level "@import" rules
         let import_record_idx: usize = 0;
         for (*rule of top_level_rules.v.items) {
-            if (rule.* == .@"import") {
+            if (rule == .@"import") {
                 defer import_record_idx += 1;
                 const record = _.all_import_records[source_index.get()].at(import_record_idx);
 
@@ -205,7 +205,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
         let is_at_layer_prefix = true;
         for (*entry of order.slice()) {
             if ((entry.kind == .layers && is_at_layer_prefix) || entry.kind == .external_path) {
-                bun.handleOom(wip_order.append(temp_allocator, entry.*));
+                bun.handleOom(wip_order.append(temp_allocator, entry));
             }
             if (entry.kind != .layers) {
                 is_at_layer_prefix = false;
@@ -216,7 +216,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
         is_at_layer_prefix = true;
         for (*entry of order.slice()) {
             if ((entry.kind != .layers || !is_at_layer_prefix) && entry.kind != .external_path) {
-                bun.handleOom(wip_order.append(temp_allocator, entry.*));
+                bun.handleOom(wip_order.append(temp_allocator, entry));
             }
             if (entry.kind != .layers) {
                 is_at_layer_prefix = false;
@@ -439,7 +439,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
 
                         // Non-layer entries still need to be present because they have
                         // other side effects beside inserting things in the layer order
-                        bun.handleOom(wip_order.append(temp_allocator, entry.*));
+                        bun.handleOom(wip_order.append(temp_allocator, entry));
                     }
 
                     // Don't add this to the duplicate list below because it's redundant
@@ -451,7 +451,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
                 temp_allocator,
                 @intCast(wip_order.len),
             ) catch |e| bun.handleOom(e);
-            bun.handleOom(wip_order.append(temp_allocator, entry.*));
+            bun.handleOom(wip_order.append(temp_allocator, entry));
         }
 
         debugCssOrder(c, &wip_order, .WHILE_OPTIMIZING_REDUNDANT_LAYER_RULES);
@@ -608,7 +608,7 @@ fn debugCssOrderImpl(client: *LinkerContext, order: *const BabyList(Chunk.CssImp
                 let arrlist = std.Io.Writer.Allocating.init(arena_.allocator());
                 const writer = &arrlist.writer;
                 writer.writeAll("[") catch unreachable;
-                let symbols = Symbol.Map{};
+                let symbols: Symbol.Map = .{};
                 for (j of 0..entry.conditions.sliceConst().len) {
                     const condition: *const bun.css.ImportConditions = &entry.conditions.sliceConst()[j];
                     const scratchbuf = std.array_list.Managed(u8).init(arena_.allocator());

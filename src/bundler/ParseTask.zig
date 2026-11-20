@@ -1017,15 +1017,17 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
             }
         }
         if ((!done)) {
-            var maybe_ast: ?ResultSuccess = (blk_catch_16: { break :blk_catch_16 ((runWithSourceCode(client, worker, (&step), (&log), (&client.stage.needs_parse))) catch |e| { _ = &e; break :blk_catch_16 @as(ResultSuccess, blk: {
-            if ((e == error.EmptyAST)) {
+            var maybe_ast: ?ResultSuccess = blk: {
+            const ast = (blk_catch_16: { break :blk_catch_16 ((runWithSourceCode(client, worker, (&step), (&log), (&client.stage.needs_parse))) catch |e| { _ = &e; if ((e == error.EmptyAST)) {
                 _ = log.deinit();
                 value = .{ .empty = .{ .source_index = client.source_index } };
+                break :blk null;
             } else {
                 value = .{ .e = .{ .e = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
-            }
-            break :blk @as(?ResultSuccess, null);
-}); }); });
+                break :blk null;
+            } }); });
+            break :blk ast;
+};
             _ = &maybe_ast;
             if (maybe_ast) |ast| {
                 _ = &ast;

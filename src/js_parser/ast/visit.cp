@@ -89,7 +89,8 @@ pub fn Visit(
                 const hook_storage = p.react_refresh.hook_ctx_storage ??
                     unreachable; // caller did not init hook storage. any function can have react hooks!
 
-                if (*hook := hook_storage.*) {
+                if (hook_storage.* != null) {
+                    const hook = &hook_storage.*.?;
                     p.handleReactRefreshPostVisitFunctionBody(&stmts, hook);
                 }
             }
@@ -203,7 +204,7 @@ pub fn Visit(
                         if (last_hook := p.react_refresh.last_hook_seen) {
                             if (call := decl.value.?.data.@"as"(.e_call)) {
                                 if (last_hook == call) {
-                                    const hook_ctx = p.react_refresh.hook_ctx_storage.?.*.?;
+                                    const hook_ctx = &p.react_refresh.hook_ctx_storage.?.*.?;
                                     decl.binding.data.writeToHasher(&hook_ctx.hasher, p.symbols.items);
                                 }
                             }

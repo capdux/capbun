@@ -1415,22 +1415,26 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
     }
 
     if (!done) {
-        let maybe_ast: ResultSuccess? = runWithSourceCode(client, worker, &step, &log, &client.stage.needs_parse) catch e => blk: {
-            if (e == error.EmptyAST) {
-                log.deinit();
-                value = { empty: {
-                    source_index: client.source_index,
-                } };
-            } else {
-                value = { e: {
-                    e: e,
-                    step: step,
-                    log: log,
-                    source_index: client.source_index,
-                    target: client.known_target,
-                } };
-            }
-            break :blk @as(ResultSuccess?, null);
+        let maybe_ast: ResultSuccess? = blk: {
+            const ast = runWithSourceCode(client, worker, &step, &log, &client.stage.needs_parse) catch e => {
+                if (e == error.EmptyAST) {
+                    log.deinit();
+                    value = { empty: {
+                        source_index: client.source_index,
+                    } };
+                    break :blk null;
+                } else {
+                    value = { e: {
+                        e: e,
+                        step: step,
+                        log: log,
+                        source_index: client.source_index,
+                        target: client.known_target,
+                    } };
+                    break :blk null;
+                }
+            };
+            break :blk ast;
         };
         if (ast := maybe_ast) {
             // When using HMR, always flag asts with errors as parse failures.

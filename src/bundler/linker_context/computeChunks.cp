@@ -252,7 +252,7 @@ pub noinline fn computeChunks(
         for (source_index of ctx.graph.reachable_files) {
             if (ctx.graph.files_live.isSet(source_index.get())) {
                 if (ctx.graph.ast.items(.css)[source_index.get()] == null) {
-                    const entry_bits: *const AutoBitSet = &file_entry_bits[source_index.get()];
+                    const entry_bits: *AutoBitSet = &file_entry_bits[source_index.get()];
                     if (css_reprs[source_index.get()] != null) continue;
 
                     if (ctx.graph.code_splitting) {

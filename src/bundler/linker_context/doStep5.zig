@@ -236,7 +236,7 @@ pub fn createExportsForFile(c: *LinkerContext, allocator: std.mem.Allocator, id:
         }
         var properties = bun.handleOom(std.array_list.Managed(js_ast.G.Property).initCapacity(allocator, export_aliases.len));
         _ = &properties;
-        var ns_export_symbol_uses = Part.SymbolUseMap;
+        var ns_export_symbol_uses: Part.SymbolUseMap = .{};
         _ = &ns_export_symbol_uses;
         _ = bun.handleOom(ns_export_symbol_uses.ensureTotalCapacity(allocator, export_aliases.len));
         const initial_flags = c.graph.meta.items(.flags)[@as(usize, @intCast(id))];

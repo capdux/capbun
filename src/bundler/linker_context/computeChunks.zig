@@ -266,7 +266,7 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
                 _ = &source_index;
                 if (ctx.graph.files_live.isSet(source_index.get())) {
                     if ((ctx.graph.ast.items(.css)[@as(usize, @intCast(source_index.get()))] == null)) {
-                        const entry_bits: *const AutoBitSet = (&file_entry_bits[@as(usize, @intCast(source_index.get()))]);
+                        const entry_bits: *AutoBitSet = (&file_entry_bits[@as(usize, @intCast(source_index.get()))]);
                         if ((css_reprs[@as(usize, @intCast(source_index.get()))] != null)) {
                             continue;
                         }
