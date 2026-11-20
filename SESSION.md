@@ -2972,3 +2972,5 @@ Options:
 - [2026-11-20 04:50:57 UTC] 验收并提交 `src/runtime/webcore/` 最后 10 模块存量净化（CookieMap, Sink, blob 4, s3 4），膨胀率 0.635x~1.142x，10/10 全 PASS。
 
 - [2026-11-20 04:52:27 UTC] 【全仓 1293 模块 100% 静态零违例达成】验收并提交 `src/sys/sys.cp` (1.012x，闭合 `src/sys/`) 及最后 14 个杂项存量净化模块（15/15 全 PASS，膨胀率 0.704x~1.021x），补全 5 个缺失 `_.zig` 备份。
+
+- [2026-11-20 04:56:55 UTC] 验收并提交 `src/sql/` 54 模块新版 `cpc` 语法升级（54/54 全 PASS，膨胀率 0.667x~1.182x）；接力派发 4 组（http/unicode/bun_alloc/md/http_jsc/string 共 64 文件）。

@@ -26,7 +26,7 @@ pub enum Data {
         return .owned(bun.ByteList.fromOwnedSlice(allocator.dupe(u8, possibly_inline_bytes)?));
     }
 
-    pub fn toOwned(this): bun.ByteList! {
+    pub fn toOwned(): bun.ByteList! {
         return switch (this) {
             .owned => this.owned,
             .temporary => bun.ByteList.fromOwnedSlice(
@@ -39,7 +39,7 @@ pub enum Data {
         };
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         switch (unsafe { this.* }) {
             .owned => |*owned| owned.clearAndFree(bun.default_allocator),
             .temporary => {},
@@ -48,7 +48,7 @@ pub enum Data {
         }
     }
 
-    pub fn zdeinit(*this) {
+    pub fn zdeinit(*_) {
         switch (unsafe { this.* }) {
             .owned => |*owned| {
                 bun.freeSensitive(bun.default_allocator, owned.slice());
@@ -60,7 +60,7 @@ pub enum Data {
         }
     }
 
-    pub fn slice(this: *const Data): []const u8 {
+    pub fn slice(_: *const Data): []const u8 {
         return switch (unsafe { this.* }) {
             .owned => this.owned.slice(),
             .temporary => this.temporary,
@@ -69,7 +69,7 @@ pub enum Data {
         };
     }
 
-    pub fn substring(this: *const Data, start_index: usize, end_index: usize): Data {
+    pub fn substring(_: *const Data, start_index: usize, end_index: usize): Data {
         return switch (unsafe { this.* }) {
             .owned => .temporary(this.owned.slice()[start_index..end_index]),
             .temporary => .temporary(this.temporary[start_index..end_index]),
@@ -78,7 +78,7 @@ pub enum Data {
         };
     }
 
-    pub fn sliceZ(this: *const Data): [:0]const u8 {
+    pub fn sliceZ(_: *const Data): [:0]const u8 {
         return switch (unsafe { this.* }) {
             .owned => this.owned.slice()[0..this.owned.len :0],
             .temporary => this.temporary[0..this.temporary.len :0],

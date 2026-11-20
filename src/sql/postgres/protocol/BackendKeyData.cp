@@ -6,7 +6,7 @@ import { NewReader } from "./NewReader.zig";
     secret_key: u32 = 0,
     pub const decode = DecoderWrap(@This(), decodeInternal).decode;
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         if (!reader.expectInt(u32, 12)?) {
             return err.InvalidBackendKeyData;
         }

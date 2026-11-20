@@ -12,12 +12,12 @@ const decoderWrap = NewReaderMod.decoderWrap;
     plugin_data: Data = Data{ empty: {} },
     packet_size: u24,
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.plugin_name.deinit();
         this.plugin_data.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         this.header = reader.int(u8)?;
         if (this.header != 0xfe) {
             return error.InvalidAuthSwitchRequest;

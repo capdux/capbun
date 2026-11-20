@@ -8,12 +8,12 @@ import { NewReader } from "./NewReader.zig";
     offset: *usize,
     message_start: *usize,
 
-    pub fn markMessageStart(this) {
-        unsafe { this.message_start.* = this.offset.*; }
+    pub fn markMessageStart(*_) {
+        unsafe { _.message_start.* = _.offset.*; }
     }
 
-    pub fn ensureLength(this, length: usize): bool {
-        return this.buffer.len >= (unsafe { this.offset.* } + length);
+    pub fn ensureLength(length: usize): bool {
+        return _.buffer.len >= (unsafe { _.offset.* } + length);
     }
 
     pub static fn init(buffer: []const u8, offset: *usize, message_start: *usize): NewReader(@This()) {
@@ -27,38 +27,38 @@ import { NewReader } from "./NewReader.zig";
         };
     }
 
-    pub fn peek(this): []const u8 {
-        return this.buffer[unsafe { this.offset.* }..];
+    pub fn peek(): []const u8 {
+        return _.buffer[unsafe { _.offset.* }..];
     }
 
-    pub fn skip(this, count: usize) {
-        const cur = unsafe { this.offset.* };
-        if (cur + count > this.buffer.len) {
-            unsafe { this.offset.* = this.buffer.len; }
+    pub fn skip(*_, count: usize) {
+        const cur = unsafe { _.offset.* };
+        if (cur + count > _.buffer.len) {
+            unsafe { _.offset.* = _.buffer.len; }
             return;
         }
 
-        unsafe { this.offset.* = cur + count; }
+        unsafe { _.offset.* = cur + count; }
     }
 
-    pub fn ensureCapacity(this, count: usize): bool {
-        return this.buffer.len >= (unsafe { this.offset.* } + count);
+    pub fn ensureCapacity(count: usize): bool {
+        return _.buffer.len >= (unsafe { _.offset.* } + count);
     }
 
-    pub fn read(this, count: usize): AnyPostgresError!Data {
-        const offset = unsafe { this.offset.* };
-        if (!this.ensureCapacity(count)) {
+    pub fn read(*_, count: usize): AnyPostgresError!Data {
+        const offset = unsafe { _.offset.* };
+        if (!_.ensureCapacity(count)) {
             return err.ShortRead;
         }
 
-        this.skip(count);
-        return Data{ temporary: this.buffer[offset..unsafe { this.offset.* }] };
+        _.skip(count);
+        return Data{ temporary: _.buffer[offset..unsafe { _.offset.* }] };
     }
 
-    pub fn readZ(this): AnyPostgresError!Data {
-        const remaining = this.peek();
+    pub fn readZ(*_): AnyPostgresError!Data {
+        const remaining = _.peek();
         if (zero := bun.strings.indexOfChar(remaining, 0)) {
-            this.skip(zero + 1);
+            _.skip(zero + 1);
             return Data{ temporary: remaining[0..zero] };
         }
 

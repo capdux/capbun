@@ -19,7 +19,7 @@ pub struct SASLContinueAuth {
     s: []const u8,
     i: []const u8,
 
-    pub fn iterationCount(this: *const @This()): u32! {
+    pub fn iterationCount(_: *const @This()): u32! {
         return std.fmt.parseInt(u32, this.i, 0)?;
     }
 }
@@ -38,7 +38,7 @@ pub union(enum) Authentication {
     SASLFinal: DataAuth,
     Unknown: void,
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         switch (unsafe { this.* }) {
             .MD5Password => {},
             .SASL => {},
@@ -52,7 +52,7 @@ pub union(enum) Authentication {
         }
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         const message_length = reader.length()?;
 
         switch (reader.int4()?) {

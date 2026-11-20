@@ -4,7 +4,7 @@
 
     pub const size = 4;
 
-    pub static fn decode(bytes: []const u8) ?PacketHeader {
+    pub static fn decode(bytes: []const u8): PacketHeader? {
         if (bytes.len < 4) return null;
 
         return PacketHeader{
@@ -15,7 +15,7 @@
         };
     }
 
-    pub fn encode(this) [4]u8 {
+    pub fn encode(): [4]u8 {
         return [
             @intCast(this.length & 0xff),
             @intCast((this.length >> 8) & 0xff),

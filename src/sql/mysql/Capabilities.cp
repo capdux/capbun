@@ -67,7 +67,7 @@ import std from "std";
     const _CLIENT_SSL_VERIFY_SERVER_CERT = 1073741824;
     const _CLIENT_REMEMBER_OPTIONS = 2147483648;
 
-    pub fn reject(*this) {
+    pub fn reject(*_) {
         this.CLIENT_ZSTD_COMPRESSION_ALGORITHM = false;
         this.MULTI_FACTOR_AUTHENTICATION = false;
         this.CLIENT_CAPABILITY_EXTENSION = false;
@@ -83,7 +83,7 @@ import std from "std";
         this.CLIENT_QUERY_ATTRIBUTES = false;
     }
 
-    pub fn format(this: Capabilities, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(_: Capabilities, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         let first = true;
         @for (field of comptime std.meta.fieldNames(Capabilities)) {
             if (@TypeOf(@field(this, field)) == bool) {
@@ -98,7 +98,7 @@ import std from "std";
         }
     }
 
-    pub fn toInt(this: Capabilities): u32 {
+    pub fn toInt(_: Capabilities): u32 {
         let value: u32 = 0;
 
         const fields = [
@@ -152,7 +152,7 @@ import std from "std";
         return res;
     }
 
-    pub fn intersect(this: Capabilities, other: Capabilities): Capabilities {
+    pub fn intersect(_: Capabilities, other: Capabilities): Capabilities {
         return fromInt(this.toInt() & other.toInt());
     }
 

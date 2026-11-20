@@ -9,11 +9,11 @@ const decoderWrap = NewReaderMod.decoderWrap;
     filename: Data = Data{ empty: {} },
     packet_size: u24,
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.filename.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         const header = reader.int(u8)?;
         if (header != 0xFB) {
             return error.InvalidLocalInfileRequest;

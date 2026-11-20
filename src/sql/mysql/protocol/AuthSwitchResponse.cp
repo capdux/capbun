@@ -8,11 +8,11 @@ const writeWrap = NewWriterMod.writeWrap;
 @root struct AuthSwitchResponse {
     auth_response: Data = Data{ empty: {} },
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.auth_response.deinit();
     }
 
-    pub fn writeInternal(this: *const AuthSwitchResponse, comptime Context: type, writer: NewWriter(Context)) anyerror!void {
+    pub fn writeInternal(_: *const AuthSwitchResponse, comptime Context: type, writer: NewWriter(Context)): anyerror!void {
         writer.write(this.auth_response.slice())?;
     }
 

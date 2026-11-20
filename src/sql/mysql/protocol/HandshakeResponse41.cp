@@ -24,7 +24,7 @@ const debug = bun.Output.scoped(.MySQLConnection, .hidden);
     connect_attrs: AttrMap = AttrMap{},
     sequence_id: u8,
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.username.deinit();
         this.auth_response.deinit();
         this.database.deinit();
@@ -40,7 +40,7 @@ const debug = bun.Output.scoped(.MySQLConnection, .hidden);
         this.connect_attrs.deinit(bun.default_allocator);
     }
 
-    pub fn writeInternal(*this, comptime Context: type, writer: NewWriter(Context)) anyerror!void {
+    pub fn writeInternal(*_, comptime Context: type, writer: NewWriter(Context)): anyerror!void {
         let packet = writer.start(this.sequence_id)?;
 
         this.capability_flags.CLIENT_CONNECT_ATTRS = this.connect_attrs.count() > 0;

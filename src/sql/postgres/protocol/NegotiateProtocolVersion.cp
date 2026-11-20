@@ -11,7 +11,7 @@ const String = bun.String;
     unrecognized_options: std.ArrayListUnmanaged(String) = .{},
 
     pub fn decodeInternal(
-        *this,
+        *_,
         comptime Container: type,
         reader: NewReader(Container),
     ): void! {

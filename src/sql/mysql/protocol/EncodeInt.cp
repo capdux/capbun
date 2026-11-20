@@ -7,7 +7,7 @@ export struct DecodeLengthIntResult {
     bytes_read: usize,
 }
 
-pub fn encodeLengthInt(value: u64) BoundedArrayU8_9 {
+pub fn encodeLengthInt(value: u64): BoundedArrayU8_9 {
     let array = BoundedArrayU8_9{};
     if (value < 0xfb) {
         array.len = 1;
@@ -38,7 +38,7 @@ pub fn encodeLengthInt(value: u64) BoundedArrayU8_9 {
     return array;
 }
 
-pub fn decodeLengthInt(bytes: []const u8) ?DecodeLengthIntResult {
+pub fn decodeLengthInt(bytes: []const u8): DecodeLengthIntResult? {
     if (bytes.len == 0) return null;
 
     const first_byte = bytes[0];

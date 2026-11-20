@@ -6,7 +6,7 @@ import { TransactionStatusIndicator } from "./TransactionStatusIndicator.zig";
 @root struct ReadyForQuery {
     status: TransactionStatusIndicator = .I,
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         const length = reader.length()?;
         bun.assert(length >= 4);
 

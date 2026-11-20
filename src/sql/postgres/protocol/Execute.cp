@@ -10,7 +10,7 @@ const int4 = int_types.int4;
     p: PortalOrPreparedStatement,
 
     pub fn writeInternal(
-        this: *const @This(),
+        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {

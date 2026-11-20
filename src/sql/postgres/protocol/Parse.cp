@@ -14,25 +14,24 @@ const zCount = zHelpers.zCount;
     query: []const u8 = "",
     params: []const int4 = &[],
 
-    pub fn deinit(*this) {
-        _ = this;
+    pub fn deinit(*_) {
+        const self_ref = _; * = self_ref;
     }
 
     pub fn writeInternal(
-        this: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
-        const parameters = this.params;
+        const parameters = _.params;
         if (parameters.len > std.math.maxInt(u16)) {
             return err.TooManyParameters;
         }
-        const count: usize = @sizeOf(u32) + @sizeOf(u16) + (parameters.len * @sizeOf(u32)) + @max(zCount(this.name), 1) + @max(zCount(this.query), 1);
+        const count: usize = @sizeOf(u32) + @sizeOf(u16) + (parameters.len * @sizeOf(u32)) + @max(zCount(_.name), 1) + @max(zCount(_.query), 1);
         const b = toBytes(Int32(count));
         const header: [5]u8 = ['P', b[0], b[1], b[2], b[3]];
         writer.write(&header)?;
-        writer.@"string"(this.name)?;
-        writer.@"string"(this.query)?;
+        writer.@"string"(_.name)?;
+        writer.@"string"(_.query)?;
         writer.short(parameters.len)?;
         for (parameter of parameters) {
             writer.int4(parameter)?;

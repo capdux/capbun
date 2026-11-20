@@ -6,7 +6,7 @@ import { WriteWrap } from "./WriteWrap.zig";
     p: PortalOrPreparedStatement,
 
     pub fn writeInternal(
-        this: *const @This(),
+        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {

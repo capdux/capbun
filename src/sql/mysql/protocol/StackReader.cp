@@ -11,23 +11,23 @@ const NewReader = NewReaderMod.NewReader;
     offset: *usize,
     message_start: *usize,
 
-    pub fn markMessageStart(this) void {
+    pub fn markMessageStart(*_)  {
         unsafe {
-            this.message_start.* = this.offset.*;
+            _.message_start.* = _.offset.*;
         }
     }
 
-    pub fn setOffsetFromStart(this, offset: usize) void {
+    pub fn setOffsetFromStart(*_, offset: usize)  {
         unsafe {
-            this.offset.* = this.message_start.* + offset;
+            _.offset.* = _.message_start.* + offset;
         }
     }
 
-    pub fn ensureCapacity(this, length: usize) bool {
-        return this.buffer.len >= (unsafe { this.offset.* } + length);
+    pub fn ensureCapacity(length: usize): bool {
+        return _.buffer.len >= (unsafe { _.offset.* } + length);
     }
 
-    pub static fn init(buffer: []const u8, offset: *usize, message_start: *usize) NewReader(StackReader) {
+    pub static fn init(buffer: []const u8, offset: *usize, message_start: *usize): NewReader(StackReader) {
         const Wrapped = NewReader(StackReader);
         return Wrapped{
             wrapped: StackReader{
@@ -38,48 +38,48 @@ const NewReader = NewReaderMod.NewReader;
         };
     }
 
-    pub fn peek(this) []const u8 {
-        return this.buffer[unsafe { this.offset.* }..];
+    pub fn peek(): []const u8 {
+        return _.buffer[unsafe { _.offset.* }..];
     }
 
-    pub fn skip(this, count: isize) void {
+    pub fn skip(*_, count: isize)  {
         unsafe {
             if (count < 0) {
                 const abs_count = @abs(count);
-                if (abs_count > this.offset.*) {
-                    this.offset.* = 0;
+                if (abs_count > _.offset.*) {
+                    _.offset.* = 0;
                     return;
                 }
-                this.offset.* -= @as(usize, @intCast(abs_count));
+                _.offset.* -= @as(usize, @intCast(abs_count));
                 return;
             }
 
             const ucount: usize = @intCast(count);
-            if (this.offset.* + ucount > this.buffer.len) {
-                this.offset.* = this.buffer.len;
+            if (_.offset.* + ucount > _.buffer.len) {
+                _.offset.* = _.buffer.len;
                 return;
             }
 
-            this.offset.* += ucount;
+            _.offset.* += ucount;
         }
     }
 
-    pub fn read(this, count: usize) AnyMySQLError.Error!Data {
-        const offset = unsafe { this.offset.* };
-        if (!this.ensureCapacity(count)) {
+    pub fn read(*_, count: usize): AnyMySQLError.Error!Data {
+        const offset = unsafe { _.offset.* };
+        if (!_.ensureCapacity(count)) {
             return AnyMySQLError.Error.ShortRead;
         }
 
-        this.skip(@intCast(count));
+        _.skip(@intCast(count));
         return Data{
-            temporary: this.buffer[offset..unsafe { this.offset.* }],
+            temporary: _.buffer[offset..unsafe { _.offset.* }],
         };
     }
 
-    pub fn readZ(this) AnyMySQLError.Error!Data {
-        const remaining = this.peek();
+    pub fn readZ(*_): AnyMySQLError.Error!Data {
+        const remaining = _.peek();
         if (zero := bun.strings.indexOfChar(remaining, 0)) {
-            this.skip(@intCast(zero + 1));
+            _.skip(@intCast(zero + 1));
             return Data{
                 temporary: remaining[0..zero],
             };

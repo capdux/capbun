@@ -1546,3 +1546,6 @@
 
 ### 2026-11-20 04:52:27 UTC - src/sys/ 100% 闭环 & 全仓最后 14 个存量违例模块清零入库
 - 完成：`src/sys/sys.cp` (1.012x) + `glob`/`uws_sys/quic`/`sys/{fd,tmp}`/`cares_sys`/`csrf`/`errno`/`bun_alloc`/`cli/run_command`/`s3_signing`/`dotenv`/`ini` 共 15 模块全 PASS。
+
+### 2026-11-20 04:56:55 UTC - src/sql/ 54 模块新版 cpc 语法升级全绿入库
+- 完成：`src/sql/` 54/54 全部通过新版 `cpc --lib` + `zig ast-check` 及 4 项硬门禁。

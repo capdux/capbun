@@ -6,7 +6,7 @@ pub enum Status: u8 {
     success,
     fail,
 
-    pub fn isRunning(this): bool {
+    pub fn isRunning(): bool {
         return @intFromEnum(this) > @intFromEnum(Status.pending) && @intFromEnum(this) < @intFromEnum(Status.success);
     }
 }

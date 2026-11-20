@@ -27,11 +27,11 @@ export @packed struct ColumnFlags {
     ON_UPDATE_NOW: bool = false,
     _padding: u2 = 0,
 
-    pub fn toInt(this) u16 {
+    pub fn toInt(): u16 {
         return @bitCast(this);
     }
 
-    pub static fn fromInt(flags: u16) ColumnFlags {
+    pub static fn fromInt(flags: u16): ColumnFlags {
         return @bitCast(flags);
     }
 }
@@ -53,7 +53,7 @@ export @packed struct ColumnFlags {
         name: Data{ empty: {} },
     },
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.catalog.deinit();
         this.schema.deinit();
         this.table.deinit();
@@ -63,7 +63,7 @@ export @packed struct ColumnFlags {
         this.name_or_index.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         this.catalog = reader.encodeLenString()?;
         debug("catalog: {s}", .{this.catalog.slice()});
 

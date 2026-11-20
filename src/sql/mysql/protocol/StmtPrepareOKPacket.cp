@@ -11,7 +11,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
     warning_count: u16 = 0,
     packet_length: u24,
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         this.status = reader.int(u8)?;
         if (this.status != 0) {
             return error.InvalidPrepareOKPacket;
@@ -20,7 +20,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
         this.statement_id = reader.int(u32)?;
         this.num_columns = reader.int(u16)?;
         this.num_params = reader.int(u16)?;
-        _ = reader.int(u8)?;
+        * = reader.int(u8)?;
         if (this.packet_length >= 12) {
             this.warning_count = reader.int(u16)?;
         }

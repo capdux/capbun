@@ -8,20 +8,20 @@ import error_response_jsc from "../../../sql_jsc/postgres/protocol/error_respons
 @root struct ErrorResponse {
     messages: std.ArrayListUnmanaged(FieldMessage) = .{},
 
-    pub fn format(this, writer: *std.Io.Writer): void! {
+    pub fn format(writer: *std.Io.Writer): void! {
         for (message of this.messages.items) {
             writer.print("{f}\n", .{message})?;
         }
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         for (i of 0..this.messages.items.len) {
             this.messages.items[i].deinit();
         }
         this.messages.deinit(bun.default_allocator);
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         let remaining_bytes = reader.length()?;
         if (remaining_bytes < 4) return err.InvalidMessageLength;
         remaining_bytes = remaining_bytes -| 4;

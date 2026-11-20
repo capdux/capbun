@@ -24,7 +24,7 @@ export struct PrepareOK {
     num_params: u16,
     warning_count: u16,
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         this.status = reader.int(u8)?;
         if (this.status != 0) {
             return error.InvalidPrepareOKPacket;
@@ -33,7 +33,7 @@ export struct PrepareOK {
         this.statement_id = reader.int(u32)?;
         this.num_columns = reader.int(u16)?;
         this.num_params = reader.int(u16)?;
-        _ = reader.int(u8)?;
+        * = reader.int(u8)?;
         this.warning_count = reader.int(u16)?;
     }
 
@@ -48,7 +48,7 @@ export struct Execute {
     param_types: []const Param,
     new_params_bind_flag: bool,
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         let i: usize = 0;
         while (i < this.params.len) {
             this.params[i].deinit(bun.default_allocator);
@@ -59,7 +59,7 @@ export struct Execute {
         }
     }
 
-    fn writeNullBitmap(this: *const Execute, comptime Context: type, writer: NewWriter(Context)) AnyMySQLError.Error!void {
+    fn writeNullBitmap(_: *const Execute, comptime Context: type, writer: NewWriter(Context)): AnyMySQLError.Error!void {
         const MYSQL_MAX_PARAMS = (std.math.maxInt(u16) / 8) + 1;
 
         let null_bitmap_buf: [MYSQL_MAX_PARAMS]u8 = undefined;
@@ -78,7 +78,7 @@ export struct Execute {
         writer.write(null_bitmap)?;
     }
 
-    pub fn writeInternal(this: *const Execute, comptime Context: type, writer: NewWriter(Context)) AnyMySQLError.Error!void {
+    pub fn writeInternal(_: *const Execute, comptime Context: type, writer: NewWriter(Context)): AnyMySQLError.Error!void {
         writer.int1(@intFromEnum(CommandType.COM_STMT_EXECUTE))?;
         writer.int4(this.statement_id)?;
         writer.int1(this.flags)?;
@@ -91,7 +91,7 @@ export struct Execute {
 
             if (this.new_params_bind_flag) {
                 const param_types = this.param_types;
-                for (param_types) |param_type| {
+                for (param_type of param_types) {
                     debug("New params bind flag {s} unsigned? {}", .{ @tagName(param_type.type), param_type.flags.UNSIGNED });
                     writer.int1(@intFromEnum(param_type.type))?;
                     writer.int1(if (param_type.flags.UNSIGNED) 0x80 else 0)?;

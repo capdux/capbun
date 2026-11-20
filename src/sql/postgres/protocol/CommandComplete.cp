@@ -6,11 +6,11 @@ import { NewReader } from "./NewReader.zig";
 @root struct CommandComplete {
     command_tag: Data = .empty,
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.command_tag.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         const length = reader.length()?;
         bun.assert(length >= 4);
 

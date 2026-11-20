@@ -10,7 +10,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
     warnings: u16 = 0,
     status_flags: StatusFlags = StatusFlags{},
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         this.header = reader.int(u8)?;
         if (this.header != 0xfe) {
             return error.InvalidEOFPacket;

@@ -3,9 +3,9 @@ import { DecoderWrap } from "./DecoderWrap.zig";
 import { NewReader } from "./NewReader.zig";
 
 @root struct CopyOutResponse {
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
-        _ = reader;
-        _ = this;
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
+        * = reader;
+        const self_ref = _; * = self_ref;
         bun.Output.panic("TODO: not implemented {s}", .{bun.meta.typeBaseName(@typeName(@This()))});
     }
 

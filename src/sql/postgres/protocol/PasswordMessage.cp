@@ -9,12 +9,12 @@ const toBytes = std.mem.toBytes;
 @root struct PasswordMessage {
     password: Data = .empty,
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.password.deinit();
     }
 
     pub fn writeInternal(
-        this: *const @This(),
+        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {

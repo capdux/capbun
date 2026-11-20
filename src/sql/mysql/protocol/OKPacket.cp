@@ -17,12 +17,12 @@ const decoderWrap = NewReaderMod.decoderWrap;
     session_state_changes: Data = Data{ empty: {} },
     packet_size: u24,
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.info.deinit();
         this.session_state_changes.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         let read_size: usize = 5;
         this.header = reader.int(u8)?;
         if (this.header != 0x00 && this.header != 0xfe) {

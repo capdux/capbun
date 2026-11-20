@@ -13,7 +13,7 @@ const jsc = bun.jsc;
 const debug = bun.Output.scoped(.Auth, .hidden);
 
 export struct mysql_native_password {
-    pub static fn scramble(password: []const u8, nonce: []const u8) anyerror![20]u8 {
+    pub static fn scramble(password: []const u8, nonce: []const u8): anyerror![20]u8 {
         let stage1: [20]u8 = [0; 20];
         let stage2: [20]u8 = [0; 20];
         let stage3: [20]u8 = [0; 20];
@@ -56,18 +56,18 @@ export struct AuthResponse {
     status: AuthFastStatus = .success,
     data: Data = Data{ empty: {} },
 
-    pub fn deinit(*this) void {
-        this.data.deinit();
+    pub fn deinit(*_)  {
+        _.data.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         const status = reader.int(u8)?;
         debug("FastAuthStatus: {d}", .{status});
-        this.status = @enumFromInt(status);
+        _.status = @enumFromInt(status);
 
         const remaining = reader.peek();
         if (remaining.len > 0) {
-            this.data = reader.read(remaining.len)?;
+            _.data = reader.read(remaining.len)?;
         }
     }
 
@@ -80,16 +80,16 @@ export struct AuthEncryptedPassword {
     nonce: []const u8,
     sequence_id: u8,
 
-    pub fn writeInternal(this: *const AuthEncryptedPassword, comptime Context: type, writer: NewWriter(Context)) anyerror!void {
-        if (this.nonce.len == 0) {
+    pub fn writeInternal(comptime Context: type, writer: NewWriter(Context)): anyerror!void {
+        if (_.nonce.len == 0) {
             return error.MissingAuthData;
         }
-        if (this.public_key.len == 0) {
+        if (_.public_key.len == 0) {
             return error.InvalidPublicKey;
         }
         let password_buf: [1024]u8 = undefined;
         let needs_to_free_password = false;
-        const needed_len = this.password.len + 1;
+        const needed_len = _.password.len + 1;
         let plain_password: []u8 = password_buf[0..0];
         if (needed_len > password_buf.len) {
             needs_to_free_password = true;
@@ -97,19 +97,19 @@ export struct AuthEncryptedPassword {
         } else {
             plain_password = password_buf[0..needed_len];
         }
-        @memcpy(plain_password[0..this.password.len], this.password);
-        plain_password[this.password.len] = 0;
+        @memcpy(plain_password[0.._.password.len], _.password);
+        plain_password[_.password.len] = 0;
         defer if (needs_to_free_password) bun.default_allocator.free(plain_password);
 
         let i: usize = 0;
         while (i < plain_password.len) {
-            plain_password[i] ^= this.nonce[i % this.nonce.len];
+            plain_password[i] ^= _.nonce[i % _.nonce.len];
             i += 1;
         }
         BoringSSL.load();
         BoringSSL.c.ERR_clear_error();
-        const bio = BoringSSL.c.BIO_new_mem_buf(&this.public_key[0], @intCast(this.public_key.len)) orelse return error.InvalidPublicKey;
-        defer _ = BoringSSL.c.BIO_free(bio);
+        const bio = BoringSSL.c.BIO_new_mem_buf(&_.public_key[0], @intCast(_.public_key.len)) orelse return error.InvalidPublicKey;
+        defer * = BoringSSL.c.BIO_free(bio);
 
         const rsa_opt = BoringSSL.c.PEM_read_bio_RSA_PUBKEY(bio, null, null, null);
         if (rsa_opt == null) {
@@ -148,7 +148,7 @@ export struct AuthEncryptedPassword {
         }
         const encrypted_password_slice = encrypted_password[0..@intCast(encrypted_password_len)];
 
-        let packet = writer.start(this.sequence_id)?;
+        let packet = writer.start(_.sequence_id)?;
         writer.write(encrypted_password_slice)?;
         packet.end()?;
     }
@@ -159,14 +159,14 @@ export struct AuthEncryptedPassword {
 export struct AuthPublicKeyResponse {
     data: Data = Data{ empty: {} },
 
-    pub fn deinit(*this) void {
-        this.data.deinit();
+    pub fn deinit(*_)  {
+        _.data.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         const remaining = reader.peek();
         if (remaining.len > 0) {
-            this.data = reader.read(remaining.len)?;
+            _.data = reader.read(remaining.len)?;
         }
     }
 
@@ -174,8 +174,8 @@ export struct AuthPublicKeyResponse {
 }
 
 export struct AuthPublicKeyRequest {
-    pub fn writeInternal(this: *const AuthPublicKeyRequest, comptime Context: type, writer: NewWriter(Context)) anyerror!void {
-        _ = this;
+    pub fn writeInternal(comptime Context: type, writer: NewWriter(Context)): anyerror!void {
+        const self_ref = _; * = self_ref;
         writer.int1(0x02)?;
     }
 
@@ -183,7 +183,7 @@ export struct AuthPublicKeyRequest {
 }
 
 export struct caching_sha2_password {
-    pub static fn scramble(password: []const u8, nonce: []const u8) anyerror![32]u8 {
+    pub static fn scramble(password: []const u8, nonce: []const u8): anyerror![32]u8 {
         let digest1: [32]u8 = [0; 32];
         let digest2: [32]u8 = [0; 32];
         let digest3: [32]u8 = [0; 32];

@@ -8,7 +8,7 @@ pub enum AuthMethod {
     caching_sha2_password,
     sha256_password,
 
-    pub fn scramble(this, password: []const u8, auth_data: []const u8, buf: *[32]u8): ([]u8)! {
+    pub fn scramble(password: []const u8, auth_data: []const u8, buf: *[32]u8): ([]u8)! {
         if (password.len == 0) {
             return &([]);
         }
@@ -24,7 +24,7 @@ pub enum AuthMethod {
         return buf[0..len];
     }
 
-    pub fn scrambleLength(this): usize {
+    pub fn scrambleLength(): usize {
         return switch (this) {
             .mysql_native_password => 20,
             .caching_sha2_password => 32,

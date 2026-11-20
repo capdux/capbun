@@ -14,21 +14,21 @@ const debug = bun.Output.scoped(.MySQLConnection, .hidden);
     character_set: CharacterSet = CharacterSet.default,
     has_connection_attributes: bool = false,
 
-    pub fn deinit(*this) void {
-        _ = this;
+    pub fn deinit(*_)  {
+        const self_ref = _; * = self_ref;
     }
 
-    pub fn writeInternal(*this, comptime Context: type, writer: NewWriter(Context)) anyerror!void {
+    pub fn writeInternal(*_, comptime Context: type, writer: NewWriter(Context)): anyerror!void {
         let packet = writer.start(1)?;
 
-        this.capability_flags.CLIENT_CONNECT_ATTRS = this.has_connection_attributes;
+        _.capability_flags.CLIENT_CONNECT_ATTRS = _.has_connection_attributes;
 
-        const caps = this.capability_flags.toInt();
+        const caps = _.capability_flags.toInt();
         writer.int4(caps)?;
-        debug("Client capabilities: [{f}] 0x{x:0>8}", .{ this.capability_flags, caps });
+        debug("Client capabilities: [{f}] 0x{x:0>8}", .{ _.capability_flags, caps });
 
-        writer.int4(this.max_packet_size)?;
-        writer.int1(@intFromEnum(this.character_set))?;
+        writer.int4(_.max_packet_size)?;
+        writer.int1(@intFromEnum(_.character_set))?;
 
         const padding: [23]u8 = [0; 23];
         writer.write(padding[0..])?;

@@ -7,7 +7,7 @@ pub struct Close {
     p: PortalOrPreparedStatement,
 
     fn writeInternal(
-        this: *const @This(),
+        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {

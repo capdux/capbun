@@ -7,12 +7,12 @@ import { NewReader } from "./NewReader.zig";
     name: Data = .empty,
     value: Data = .empty,
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.name.deinit();
         this.value.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         const length = reader.length()?;
         bun.assert(length >= 4);
 

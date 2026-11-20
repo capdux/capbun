@@ -12,8 +12,8 @@ const Int32 = int_types.Int32;
 @root struct CopyFail {
     message: Data = .empty,
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
-        _ = reader.int4()?;
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
+        * = reader.int4()?;
         const message = reader.readZ()?;
         unsafe {
             this.* = { message: message };
@@ -23,7 +23,7 @@ const Int32 = int_types.Int32;
     pub const decode = DecoderWrap(@This(), decodeInternal).decode;
 
     pub fn writeInternal(
-        *this,
+        *_,
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {

@@ -8,14 +8,14 @@ import notice_response_jsc from "../../../sql_jsc/postgres/protocol/notice_respo
 @root struct NoticeResponse {
     messages: std.ArrayListUnmanaged(FieldMessage) = .{},
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         for (i of 0..this.messages.items.len) {
             this.messages.items[i].deinit();
         }
         this.messages.deinit(bun.default_allocator);
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         let remaining_bytes = reader.length()?;
         remaining_bytes = remaining_bytes -| 4;
 

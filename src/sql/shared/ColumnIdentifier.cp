@@ -34,7 +34,7 @@ pub union(enum) ColumnIdentifier {
         return { name: Data{ owned: name.toOwned()? } };
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         switch (unsafe { this.* }) {
             .name => |*name| name.deinit(),
             else => {},

@@ -10,13 +10,13 @@ const toBytes = std.mem.toBytes;
     mechanism: Data = .empty,
     data: Data = .empty,
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.mechanism.deinit();
         this.data.deinit();
     }
 
     pub fn writeInternal(
-        this: *const @This(),
+        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {

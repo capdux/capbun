@@ -10,12 +10,12 @@ const int4 = types.int4;
     channel: bun.ByteList = .{},
     payload: bun.ByteList = .{},
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.channel.clearAndFree(bun.default_allocator);
         this.payload.clearAndFree(bun.default_allocator);
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         const length = reader.length()?;
         bun.assert(length >= 4);
 

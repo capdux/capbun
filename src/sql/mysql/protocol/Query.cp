@@ -18,7 +18,7 @@ export struct Execute {
     params: []Data = empty_data[0..0],
     param_types: []const Param,
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         let i: usize = 0;
         while (i < this.params.len) {
             this.params[i].deinit();
@@ -26,7 +26,7 @@ export struct Execute {
         }
     }
 
-    pub fn writeInternal(this: *const Execute, comptime Context: type, writer: NewWriter(Context)) anyerror!void {
+    pub fn writeInternal(_: *const Execute, comptime Context: type, writer: NewWriter(Context)): anyerror!void {
         let packet = writer.start(0)?;
         writer.int1(@intFromEnum(CommandType.COM_QUERY))?;
         writer.write(this.query)?;
@@ -70,7 +70,7 @@ export struct Execute {
     pub const write = writeWrap(Execute, writeInternal).write;
 }
 
-pub fn execute(query: []const u8, writer: anytype) anyerror!void {
+pub fn execute(query: []const u8, writer: anytype): anyerror!void {
     let packet = writer.start(0)?;
     writer.int1(@intFromEnum(CommandType.COM_QUERY))?;
     writer.write(query)?;

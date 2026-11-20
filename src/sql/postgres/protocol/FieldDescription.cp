@@ -16,15 +16,15 @@ const short = types.short;
     type_oid: int4 = 0,
     binary: bool = false,
 
-    pub fn typeTag(this): types.Tag {
+    pub fn typeTag(): types.Tag {
         return @enumFromInt(@as(short, @truncate(this.type_oid)));
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.name_or_index.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): AnyPostgresError!void {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): AnyPostgresError!void {
         let name = reader.readZ()?;
         errdefer name.deinit();
 

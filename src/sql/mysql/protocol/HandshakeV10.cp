@@ -23,12 +23,12 @@ const empty_u8: [0]u8 = [];
     status_flags: StatusFlags = StatusFlags{},
     auth_plugin_name: Data = Data{ empty: {} },
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         this.server_version.deinit();
         this.auth_plugin_name.deinit();
     }
 
-    pub fn decodeInternal(*this, comptime Context: type, reader: NewReader(Context)) anyerror!void {
+    pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         this.protocol_version = reader.int(u8)?;
         if (this.protocol_version != 10) {
             return error.UnsupportedProtocolVersion;
@@ -41,7 +41,7 @@ const empty_u8: [0]u8 = [];
         defer auth_data.deinit();
         @memcpy(&this.auth_plugin_data_part_1, auth_data.slice());
 
-        _ = reader.int(u8)?;
+        * = reader.int(u8)?;
 
         const capabilities_lower = reader.int(u16)?;
         this.character_set = @enumFromInt(reader.int(u8)?);

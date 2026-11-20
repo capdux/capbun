@@ -11,7 +11,7 @@ const toBytes = std.mem.toBytes;
 @root struct CopyData {
     data: Data = .empty,
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         const length = reader.length()?;
         const data = reader.read(@intCast(length -| 5))?;
         unsafe {
@@ -22,7 +22,7 @@ const toBytes = std.mem.toBytes;
     pub const decode = DecoderWrap(@This(), decodeInternal).decode;
 
     pub fn writeInternal(
-        this: *const @This(),
+        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {

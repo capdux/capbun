@@ -6,14 +6,14 @@ import { NewReader } from "./NewReader.zig";
 @root struct RowDescription {
     fields: []FieldDescription = &[],
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         for (i of 0..this.fields.len) {
             this.fields[i].deinit();
         }
         bun.default_allocator.free(this.fields);
     }
 
-    pub fn decodeInternal(*this, comptime Container: type, reader: NewReader(Container)): void! {
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
         let remaining_bytes = reader.length()?;
         remaining_bytes = remaining_bytes -| 4;
 
