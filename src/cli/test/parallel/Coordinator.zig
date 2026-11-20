@@ -103,16 +103,18 @@ pub fn uninstall() void {
 };
 
 const string = []const u8;
+const OptCStr = ?CStr;
 var abort_should_abort: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 var abort_prev_int: if (Environment.isPosix) bun.sys.Sigaction else void = undefined;
 var abort_prev_term: if (Environment.isPosix) bun.sys.Sigaction else void = undefined;
+const CStr = @TypeOf(@as([:0]const u8, "").ptr);
 pub const Coordinator = struct {
     vm: *jsc.VirtualMachine,
     reporter: *CommandLineReporter,
     files: []const PathString,
     cwd: [:0]const u8,
-    argv: ?[:null][*:0]u8,
-    envps: []const ?[:null][*:0]u8,
+    argv: [:null]OptCStr,
+    envps: []const [:null]OptCStr,
     workers: []Worker,
     worker_tmpdir: ?[:0]const u8,
     junit_fragments: std.ArrayListUnmanaged(string) = .empty,

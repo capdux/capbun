@@ -1570,7 +1570,7 @@ const Op = js_ast.Op;
 const Ref = js_ast.Ref;
 const S = js_ast.S;
 const Stmt = js_ast.Stmt;
-pub const empty = Expr{ .data = .{ .e_missing = E.Missing }, .loc = logger.Loc.Empty };
+pub const empty = Expr{ .data = .{ .e_missing = std.mem.zeroes(E.Missing) }, .loc = logger.Loc.Empty };
 pub const toJS = expr_jsc.exprToJS;
 pub var icount: usize = 0;
 var true_bool = E.Boolean{ .value = true };

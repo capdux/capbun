@@ -460,7 +460,7 @@ pub const NumberRenamer = struct {
     temp_allocator: std.mem.Allocator,
     number_scope_pool: bun.HiveArray(NumberScope, 128).Fallback,
     arena: bun.ArenaAllocator,
-    root: NumberScope = {},
+    root: NumberScope = .{},
     name_stack_fallback: std.heap.StackFallbackAllocator(512) = undefined,
     name_temp_allocator: std.mem.Allocator = undefined,
 

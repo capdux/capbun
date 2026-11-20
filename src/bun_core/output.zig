@@ -998,6 +998,7 @@ pub fn prettyFmt(comptime fmt: []const u8, comptime is_enabled: bool) [:0]const 
         _ = @setEvalBranchQuota(9999);
         comptime var i: usize = 0;
         _ = &i;
+        comptime {
         while ((i < fmt.len)) {
             switch (fmt[@as(usize, @intCast(i))]) {
 '\\' => {
@@ -1037,10 +1038,12 @@ i = (i + 1);
                 i = (i + 1);
             }
             const start: usize = i;
+            _ = &start;
             while (((i < fmt.len) and (fmt[@as(usize, @intCast(i))] != 62))) {
                 i = (i + 1);
             }
             const color_name = fmt[start..i];
+            _ = &color_name;
             const color_str = color_picker: {
             if (color_map.get(color_name)) |color_name_literal| {
                 _ = &color_name_literal;
@@ -1054,6 +1057,7 @@ i = (i + 1);
                 }
             }
 };
+            _ = &color_str;
             if (is_enabled) {
                 for (cp_iter_slice((if (is_reset) RESET else color_str))) |ch| {
                     _ = &ch;
@@ -1069,6 +1073,8 @@ new_fmt[cp_cast_int(usize, new_fmt_i)] = fmt[@as(usize, @intCast(i))];
 },
 }
         }
+
+}
         return std.fmt.comptimePrint("{s}", .{ new_fmt[0..new_fmt_i] });
 }
 

@@ -358,7 +358,7 @@ pub const Store = struct {
         return struct {
             list: std.ArrayListUnmanaged(T) = .empty,
 
-            pub const empty: @This() = {};
+            pub const empty: @This() = .{};
 
             pub fn initCapacity(allocator: std.mem.Allocator, n: usize) OOM!@This() {
                 const list: std.ArrayListUnmanaged(T) = try .initCapacity(allocator, n);

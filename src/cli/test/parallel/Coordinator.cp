@@ -51,15 +51,18 @@ pub struct CoordinatorAbortHandler {
     }
 }
 
+const CStr = @TypeOf(@as([:0]const u8, "").ptr);
+type OptCStr = CStr?;
+
 pub const Coordinator = struct {
     vm: *jsc.VirtualMachine,
     reporter: *CommandLineReporter,
     files: []const PathString,
     cwd: [:0]const u8,
-    argv: [:null]?[*:0]const u8,
+    argv: [:null]OptCStr,
     /// One envp per worker slot — same base, with that slot's JEST_WORKER_ID
     /// && BUN_TEST_WORKER_ID appended.
-    envps: []const [:null]?[*:0]const u8,
+    envps: []const [:null]OptCStr,
 
     workers: []Worker,
     /// Temp dir for per-worker JUnit XML && LCOV coverage fragments; null

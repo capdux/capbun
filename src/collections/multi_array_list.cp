@@ -186,12 +186,14 @@ fn MultiArrayListSortContext(
     };
 }
 
+struct SortCtx {}
+
 struct SizeData {
     size: usize;
     size_index: usize;
     alignment: usize;
 
-    pub static fn lessThan(context: auto, lhs: SizeData, rhs: SizeData): bool {
+    pub static fn lessThan(context: SortCtx, lhs: SizeData, rhs: SizeData): bool {
         * = context;
         return lhs.alignment > rhs.alignment;
     }
@@ -238,7 +240,7 @@ pub fn MultiArrayList(comptime T: type): type {
             };
         }
         @setEvalBranchQuota(3 * elem_fields.len * std.math.log2(elem_fields.len));
-        mem.sort(SizeData, &data, {}, SizeData.lessThan);
+        mem.sort(SizeData, &data, SortCtx{}, SizeData.lessThan);
         let sizes_bytes: [usize; elem_fields.len] = undefined;
         let field_indexes: [usize; elem_fields.len] = undefined;
         for (i of 0..data.len) {

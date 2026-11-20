@@ -1050,7 +1050,7 @@ const OOM = bun.OOM;
 const AsciiStatus = bun.strings.AsciiStatus;
 const jsc = bun.jsc;
 const ZigString = bun.jsc.ZigString;
-const empty_u16_buf: [0]u16 = &.{};
+const empty_u16_buf: [0]u16 = undefined;
 pub const StringImpl = extern union {
     ZigString: ZigString,
     WTFStringImpl: WTFStringImpl,
@@ -1059,7 +1059,7 @@ pub const StringImpl = extern union {
     Empty: void,
 };
 const string_empty = String{ .tag = .Empty, .value = .{ .ZigString = .Empty } };
-const string_dead = String{ .tag = .Dead, .value = .{ .Dead = .{} } };
+const string_dead = String{ .tag = .Dead, .value = .{ .Dead = @as(void, undefined) } };
 
 extern "c" fn BunString__createExternal(bytes: [*]const u8, len: usize, isLatin1: bool, ptr: ?*anyopaque, callback: ?*const ExternalFreeCallback) callconv(.c) String;
 

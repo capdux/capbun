@@ -74,12 +74,15 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const builtin = @import("builtin");
 pub const bun = @import("bun");
+pub const SortCtx = struct {
+};
+
 pub const SizeData = struct {
     size: usize,
     size_index: usize,
     alignment: usize,
 
-pub fn lessThan(context: anytype, lhs: SizeData, rhs: SizeData) bool {
+pub fn lessThan(context: SortCtx, lhs: SizeData, rhs: SizeData) bool {
             _ = &context;
             return (lhs.alignment > rhs.alignment);
     }
@@ -256,7 +259,7 @@ pub fn MultiArrayList(comptime T: type) type {
             }
         }
         _ = @setEvalBranchQuota(((3 * elem_fields.len) * std.math.log2(elem_fields.len)));
-        _ = mem.sort(SizeData, (&data), .{}, SizeData.lessThan);
+        _ = mem.sort(SizeData, (&data), SortCtx{  }, SizeData.lessThan);
         var sizes_bytes: [elem_fields . len]usize = undefined;
         _ = &sizes_bytes;
         var field_indexes: [elem_fields . len]usize = undefined;

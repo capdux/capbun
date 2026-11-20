@@ -49,7 +49,7 @@ type stringZ = [:0]const u8;
     }
 }
 
-pub const empty = Expr{ data: { e_missing: E.Missing{} }, loc: logger.Loc.Empty };
+pub const empty = Expr{ data: { e_missing: std.mem.zeroes(E.Missing) }, loc: logger.Loc.Empty };
 
 pub fn isAnonymousNamed(expr: Expr): bool {
     return switch (expr.data) {

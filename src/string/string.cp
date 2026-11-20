@@ -19,7 +19,7 @@ const OOM = bun.OOM;
 const AsciiStatus = bun.strings.AsciiStatus;
 const jsc = bun.jsc;
 const ZigString = bun.jsc.ZigString;
-const empty_u16_buf: [0]u16 = [];
+const empty_u16_buf: [0]u16 = undefined;
 
 export enum Tag : u8 {
     /// String is not valid. Observed on some failed operations.
@@ -91,7 +91,7 @@ extern fn BunString__createExternalGloballyAllocatedUTF16(
 ): String;
 
 const string_empty = String{ tag: .Empty, value: { ZigString: .Empty } };
-const string_dead = String{ tag: .Dead, value: { Dead: {} } };
+const string_dead = String{ tag: .Dead, value: { Dead: @as(void, undefined) } };
 
 /// Prefer using String instead of ZigString in new code.
 export @c struct String {

@@ -215,6 +215,157 @@ pub const Data = union {
     git_checkout: Repository.GitCheckoutData,
 };
 
+pub const PackageManagerTask = @This();
+
+tag: Tag,
+request: *Request,
+data: *Data,
+status: Status = Status.waiting,
+threadpool_task: ThreadPool.Task = ThreadPool.Task{ .callback = (&callback) },
+log: logger.Log,
+id: Id,
+@"err": ?anyerror = null,
+package_manager: *PackageManager,
+apply_patch_task: ?*PatchTask = null,
+next: ?*PackageManagerTask = null,
+
+pub fn callback(task: *ThreadPool.Task) void {
+        _ = Output.Source.configureThread();
+        defer {
+        _ = Output.flush();
+        }
+        const task_ptr: *PackageManagerTask = @fieldParentPtr("threadpool_task", task);
+        const manager = task_ptr.package_manager;
+        defer {
+        {
+            if ((task_ptr.status == .success)) {
+                if (task_ptr.apply_patch_task) |pt| {
+                    _ = &pt;
+                    defer {
+                    _ = pt.deinit();
+                    }
+                    _ = bun.handleOom(pt.apply());
+                    if ((pt.callback.apply.logger.errors > 0)) {
+                        defer {
+                        _ = pt.callback.apply.logger.deinit();
+                        }
+                        _ = (blk_catch_0: { break :blk_catch_0 ((pt.callback.apply.logger.print(Output.errorWriter())) catch |__ce_0| { _ = &__ce_0;  }); });
+                    }
+                }
+            }
+            _ = manager.resolve_tasks.push(task_ptr);
+            _ = manager.wake();
+        }
+        }
+        switch (task_ptr.tag) {
+.package_manifest => {
+const allocator = bun.default_allocator;
+        var manifest = (&task_ptr.request.package_manifest);
+        _ = &manifest;
+        const body = (&manifest.network.response_buffer);
+        defer {
+        _ = body.deinit();
+        }
+        if ((manifest.network.response.metadata == null)) {
+            const e = ((manifest.network.response.fail) orelse (error.HTTPError));
+            _ = ((task_ptr.log.addErrorFmt(null, logger.Loc.Empty, allocator, "{s} downloading package manifest {s}", .{ @errorName(e), manifest.name.slice() })) catch unreachable);
+            task_ptr.@"err" = e;
+            task_ptr.status = Status.fail;
+            task_ptr.data = .{ .package_manifest = .{} };
+            return;
+        }
+        const metadata = manifest.network.response.metadata.?;
+        const package_manifest = (blk_catch_2: { break :blk_catch_2 ((Npm.Registry.getPackageMetadata(allocator, manager.scopeForPackageName(manifest.name.slice()), metadata.response, body.slice(), (&task_ptr.log), manifest.name.slice(), manifest.network.callback.package_manifest.loaded_manifest, manager, manifest.network.callback.package_manifest.is_extended_manifest)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        task_ptr.@"err" = e;
+        task_ptr.status = Status.fail;
+        task_ptr.data = .{ .package_manifest = .{} };
+        return; }); });
+        switch (package_manifest) {
+.fresh, .cached => |result| {
+task_ptr.status = Status.success;
+        task_ptr.data = .{ .package_manifest = result };
+        return;
+},
+.not_found => {
+_ = ((task_ptr.log.addErrorFmt(null, logger.Loc.Empty, allocator, "404 - GET {s}", .{ task_ptr.request.package_manifest.name.slice() })) catch unreachable);
+        task_ptr.status = Status.fail;
+        task_ptr.data = .{ .package_manifest = .{} };
+        return;
+},
+}
+},
+.extract => {
+const buffer = (&task_ptr.request.extract.network.response_buffer);
+        defer {
+        _ = buffer.deinit();
+        }
+        const result = (blk_catch_4: { break :blk_catch_4 ((task_ptr.request.extract.tarball.run((&task_ptr.log), buffer.slice())) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        task_ptr.@"err" = e;
+        task_ptr.status = Status.fail;
+        task_ptr.data = .{ .extract = .{} };
+        return; }); });
+        task_ptr.data = .{ .extract = result };
+        task_ptr.status = Status.success;
+},
+.git_clone => {
+const name = task_ptr.request.git_clone.name.slice();
+        const url = task_ptr.request.git_clone.url.slice();
+        var attempt: u8 = 1;
+        _ = &attempt;
+        var dir_opt: ?std.fs.Dir = null;
+        _ = &dir_opt;
+        if (Repository.tryHTTPS(url)) |https| {
+            _ = &https;
+            dir_opt = (blk_catch_5: { break :blk_catch_5 ((Repository.download(manager.allocator, task_ptr.request.git_clone.env, (&task_ptr.log), manager.getCacheDirectory(), task_ptr.id, name, https, attempt)) catch |e| { _ = &e; if ((e == error.RepositoryNotFound)) {
+                task_ptr.@"err" = e;
+                task_ptr.status = Status.fail;
+                task_ptr.data = .{ .git_clone = bun.invalid_fd };
+                return;
+            }
+            task_ptr.@"err" = e;
+            task_ptr.status = Status.fail;
+            task_ptr.data = .{ .git_clone = bun.invalid_fd };
+            attempt = (attempt + 1);
+            break :blk_catch_5 null; }); });
+        }
+        if ((dir_opt == null)) {
+            if (Repository.trySSH(url)) |ssh| {
+                _ = &ssh;
+                dir_opt = (blk_catch_6: { break :blk_catch_6 ((Repository.download(manager.allocator, task_ptr.request.git_clone.env, (&task_ptr.log), manager.getCacheDirectory(), task_ptr.id, name, ssh, attempt)) catch |e| { _ = &e; task_ptr.@"err" = e;
+                task_ptr.status = Status.fail;
+                task_ptr.data = .{ .git_clone = bun.invalid_fd };
+                return; }); });
+            } else {
+                return;
+            }
+        }
+        const dir = dir_opt.?;
+        task_ptr.@"err" = null;
+        task_ptr.data = .{ .git_clone = bun.FD.fromStdDir(dir) };
+        task_ptr.status = Status.success;
+},
+.git_checkout => {
+const git_checkout = (&task_ptr.request.git_checkout);
+        const data = (blk_catch_7: { break :blk_catch_7 ((Repository.checkout(manager.allocator, task_ptr.request.git_checkout.env, (&task_ptr.log), manager.getCacheDirectory(), git_checkout.repo_dir.stdDir(), git_checkout.name.slice(), git_checkout.url.slice(), git_checkout.resolved.slice())) catch |e| { _ = &e; task_ptr.@"err" = e;
+        task_ptr.status = Status.fail;
+        task_ptr.data = .{ .git_checkout = .{} };
+        return; }); });
+        task_ptr.data = .{ .git_checkout = data };
+        task_ptr.status = Status.success;
+},
+.local_tarball => {
+const tarball_path = task_ptr.request.local_tarball.tarball_path.slice();
+        const normalize = task_ptr.request.local_tarball.normalize;
+        const result = (blk_catch_8: { break :blk_catch_8 ((readAndExtract(manager.allocator, (&task_ptr.request.local_tarball.tarball), tarball_path, normalize, (&task_ptr.log))) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        task_ptr.@"err" = e;
+        task_ptr.status = Status.fail;
+        task_ptr.data = .{ .extract = .{} };
+        return; }); });
+        task_ptr.data = .{ .extract = result };
+        task_ptr.status = Status.success;
+},
+}
+}
 const string = []const u8;
 const DependencyID = install.DependencyID;
 const ExtractData = install.ExtractData;

@@ -159,7 +159,7 @@ const Allocator = std.mem.Allocator;
 
 pub fn makeUntaggedContent() type {
         const orig = @typeInfo(Content).@"union";
-        return @Type(.{ .@"union" = .{ .layout = orig.layout, .tag_type = null, .fields = orig.fields, .decls = orig.decls } });
+        return @Type(.{ .@"union" = .{ .layout = orig.layout, .tag_type = null, .fields = orig.fields, .decls = (&.{}) } });
 }
 
 pub fn IncrementalGraph(comptime side: bake.Side) type {

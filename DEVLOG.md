@@ -1326,3 +1326,6 @@
 
 ### 2026-11-20 06:03:08 UTC - zig:check 第 2 轮 JSC 簇修复经验
 - `FFI.cp` 用移位构造 `NUMBER_TAG_U64` 避 `i64::MAX` 溢出、`array_buffer.cp` 补 `@callconv("c")`、`ErrorCode.cp` 小写绑定规避 `&UpperCase.Const`。
+
+### 2026-11-20 06:05:02 UTC - zig:check 第 2 轮 Core+Install+Parser 簇修复经验
+- 发现 `@root struct Task` 会被 `cpc` 静默丢弃（改名 `@root struct PackageManagerTask` 即完整生成字段）；`E.Missing{}` 空字面量用 `std.mem.zeroes(E.Missing)` 避降级为类型名。

@@ -157,24 +157,24 @@ fn readAndExtract(
     return tarball.run(log, bytes);
 }
 
-@root struct Task {
+@root struct PackageManagerTask {
     tag: Tag,
     request: Request,
     data: Data,
     status: Status = Status.waiting,
-    threadpool_task: ThreadPool.Task = { callback: &callback },
+    threadpool_task: ThreadPool.Task = ThreadPool.Task{ callback: &callback },
     log: logger.Log,
     id: Id,
     @"err": anyerror? = null,
     package_manager: *PackageManager,
     apply_patch_task: (*PatchTask)? = null,
-    next: (*Task)? = null,
+    next: (*PackageManagerTask)? = null,
 
     static fn callback(task: *ThreadPool.Task) {
         Output.Source.configureThread();
         defer Output.flush();
 
-        const task_ptr: *Task = @fieldParentPtr("threadpool_task", task);
+        const task_ptr: *PackageManagerTask = @fieldParentPtr("threadpool_task", task);
         const manager = task_ptr.package_manager;
         defer {
             if (task_ptr.status == .success) {

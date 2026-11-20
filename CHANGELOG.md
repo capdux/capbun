@@ -1597,3 +1597,6 @@
 
 ### 2026-11-20 06:03:08 UTC - zig:check 第 2 轮 JSC 簇 8 模块语义修复入库
 - 完成：`GeneratedBindings`/`FFI`/`ErrorCode`/`EventLoopHandle`/`TopExceptionScope`/`ZigString`/`array_buffer`/`host_fn` 8/8 全 PASS。
+
+### 2026-11-20 06:05:02 UTC - zig:check 第 2 轮 Core+Install+Parser+Bake 簇 12 模块语义修复入库
+- 完成：`multi_array_list`/`DevServer`/`IncrementalGraph`/`string`/`fmt`/`output`/`Coordinator`/`PackageManagerTask`/`isolated_install/Store`/`Expr`/`renamer`/`schema` 12/12 全 PASS。

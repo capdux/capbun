@@ -3914,7 +3914,7 @@ pub fn bundleNewRouteJSFunctionImpl(global: *bun.jsc.JSGlobalObject, request_ptr
         if ((dev_opt == null)) {
             return global.throw("Request context does not belong to dev server", .{});
         }
-        const dev = dev_opt.unwrap();
+        const dev = dev_opt.?;
         var pathname = extractPathnameFromUrl(url.byteSlice());
         _ = &pathname;
         if (((pathname.len == 0) or (pathname[0] != 47))) {
@@ -3926,7 +3926,7 @@ pub fn bundleNewRouteJSFunctionImpl(global: *bun.jsc.JSGlobalObject, request_ptr
         if ((route_opt == null)) {
             return global.throw("No route found for path: {s}", .{ pathname });
         }
-        const route_index = route_opt.unwrap();
+        const route_index = route_opt.?;
         _ = dev.vm.eventLoop().enter();
         defer {
         _ = dev.vm.eventLoop().exit();
@@ -3976,12 +3976,12 @@ pub fn newRouteParamsForBundlePromiseForJS(global: *bun.jsc.JSGlobalObject, call
         if ((req_opt == null)) {
             return global.throw("Request must be a Request object", .{});
         }
-        const request = req_opt.unwrap();
+        const request = req_opt.?;
         const dev_opt = request.request_context.devServer();
         if ((dev_opt == null)) {
             return global.throw("Request context does not belong to dev server", .{});
         }
-        const dev = dev_opt.unwrap();
+        const dev = dev_opt.?;
         const route_bundle_index = RouteBundle.Index.init(@intCast(route_bundle_index_js.toInt32()));
         const url = try url_js.toBunString(global);
         defer {
@@ -4004,7 +4004,7 @@ pub fn newRouteParamsForBundlePromise(dev: *DevServer, route_bundle_index: Route
         if ((route_opt == null)) {
             return dev.vm.global.throw("No route found for path: {s}", .{ pathname });
         }
-        const route_index = route_opt.unwrap();
+        const route_index = route_opt.?;
         if ((route_index != framework_bundle.route_index)) {
             return dev.vm.global.throw("Route index mismatch, expected {d} but got {d}", .{ framework_bundle.route_index.get(), route_index.get() });
         }

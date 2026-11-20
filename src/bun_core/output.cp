@@ -1004,7 +1004,8 @@ pub fn prettyFmt(comptime fmt: string, comptime is_enabled: bool): [:0]const u8 
 
     @setEvalBranchQuota(9999);
     comptime let i: usize = 0;
-    while (i < fmt.len) {
+    comptime {
+        while (i < fmt.len) {
         switch (fmt[i]) {
             '\\' => {
                 i += 1;
@@ -1069,6 +1070,7 @@ pub fn prettyFmt(comptime fmt: string, comptime is_enabled: bool): [:0]const u8 
                 i += 1;
             },
         }
+    }
     }
 
     return std.fmt.comptimePrint("{s}", [new_fmt[0..new_fmt_i]]);

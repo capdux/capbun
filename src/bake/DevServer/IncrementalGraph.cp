@@ -87,7 +87,7 @@ fn makeUntaggedContent(): type {
         .layout = orig.layout,
         .tag_type = null,
         .fields = orig.fields,
-        .decls = orig.decls,
+        .decls = &.{},
     } });
 }
 const ContentUntagged = makeUntaggedContent();
