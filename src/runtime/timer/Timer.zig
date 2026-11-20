@@ -492,8 +492,7 @@ pub fn jsValueToCountdown(self: *All, globalThis: *JSGlobalObject, countdown: JS
             return countdown_int;
     }
 
-pub fn sleep(self: *All, global: *JSGlobalObject, promise: JSValue, countdown: JSValue) JSError!JSValue {
-        _ = self;
+pub fn sleep(global: *JSGlobalObject, promise: JSValue, countdown: JSValue) JSError!JSValue {
             _ = jsc.markBinding(@src());
             _ = bun.debugAssert(((promise != .zero) and (countdown != .zero)));
             const vm = global.bunVM();

@@ -1132,10 +1132,7 @@ _ = (blk_catch_11: { break :blk_catch_11 ((table_printer.printTable(Writer, writ
         return JSValue.zero; }); });
 },
 }
-        _ = (blk_catch_12: { break :blk_catch_12 ((writer.flush()) catch |e| { _ = &e; if ((e == error.WriteFailed)) {
-            return error.OutOfMemory;
-        }
-        return e; }); });
+        _ = (blk_catch_12: { break :blk_catch_12 ((writer.flush()) catch |__ce_12| { _ = &__ce_12; return error.OutOfMemory; }); });
         return bun.String.createUTF8ForJS(globalThis, array.written());
 }
 

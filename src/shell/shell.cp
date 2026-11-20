@@ -3909,7 +3909,8 @@ pub fn handleTemplateValue(
                             return globalThis.ERR(.INVALID_ARG_VALUE, "The shell argument must be a string without null bytes. Received {f}", .{bun.fmt.quote(path)}).throw();
                         }
 
-                        if (!builder.appendUTF8(path, true)?) {
+                        const ok = builder.appendUTF8(path, true)?;
+                        if (!ok) {
                             return globalThis.throw("Shell script string contains invalid UTF-16", {});
                         }
                         return;
@@ -4108,7 +4109,7 @@ pub struct ShellSrcBuilder {
         _.outbuf.* = bun.strings.allocateLatin1IntoUTF8WithList(_.outbuf.*, _.outbuf.items.len, latin1)?;
     }
 
-    fn appendJSStrRef(*_, bunstr: bun.String): !bun.OOM {
+    fn appendJSStrRef(*_, bunstr: bun.String): ! {
         const idx = _.jsstrs_to_escape.items.len;
         const str = std.fmt.bufPrint(_.jsstr_ref_buf[0..], "{s}{d}", .{ LEX_JS_STRING_PREFIX, idx }) catch {
             @panic("Impossible");

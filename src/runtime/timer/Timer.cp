@@ -452,7 +452,7 @@ export class All {
         return countdown_int;
     }
 
-    pub fn sleep(
+    static fn sleep(
         global: *JSGlobalObject,
         promise: JSValue,
         countdown: JSValue,

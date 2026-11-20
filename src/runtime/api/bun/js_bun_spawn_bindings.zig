@@ -160,6 +160,10 @@ pub fn getArgv(globalThis: *jsc.JSGlobalObject, args: JSValue, PATH: []const u8,
         }
 }
 
+pub fn @"spawn"(globalThis: *jsc.JSGlobalObject, args: JSValue, secondaryArgsValue: ?JSValue) bun.JSError!JSValue {
+        return spawnMaybeSync(globalThis, args, secondaryArgsValue, false);
+}
+
 pub fn spawnSync(globalThis: *jsc.JSGlobalObject, args: JSValue, secondaryArgsValue: ?JSValue) bun.JSError!JSValue {
         return spawnMaybeSync(globalThis, args, secondaryArgsValue, true);
 }

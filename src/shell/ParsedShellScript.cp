@@ -160,8 +160,8 @@ fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.
     let script = std.array_list.Managed(u8).init(shargs.arena_allocator());
     bun.shell.shellCmdFromJS(globalThis, string_args, &template_args, &jsobjs, &jsstrings, &script, marked_argument_buffer)?;
 
-    let parser: bun.shell.Parser? = null;
-    let lex_result: shell.LexResult? = null;
+    let parser: bun.shell.Parser = undefined;
+    let lex_result: shell.LexResult = undefined;
     const script_ast = Interpreter.parse(
         shargs.arena_allocator(),
         script.items[0..],
@@ -171,16 +171,12 @@ fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         &lex_result,
     ) catch |e| {
         if (e == shell.ParseError.Lex) {
-            bun.assert(lex_result != null);
-            const str = lex_result.?.combineErrors(shargs.arena_allocator());
+            const str = lex_result.combineErrors(shargs.arena_allocator());
             return globalThis.throwPretty("{s}", .{str});
         }
 
-        if (*p := parser) {
-            if (bun.Environment.allow_assert) {
-                bun.assert(p.errors.items.len > 0);
-            }
-            const errstr = p.combineErrors();
+        if (parser.errors.items.len > 0) {
+            const errstr = parser.combineErrors();
             return globalThis.throwPretty("{s}", .{errstr});
         }
 

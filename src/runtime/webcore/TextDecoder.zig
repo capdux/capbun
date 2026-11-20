@@ -304,7 +304,8 @@ const bom: []const u8 = "\xff\xfe";
         var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
         _ = &input;
         const res_le = try self.decodeUTF16(input, false, flush);
-        const decoded = res_le[0];
+        var decoded = res_le[0];
+        _ = &decoded;
         const saw_error = res_le[1];
         if ((saw_error and self.fatal)) {
             _ = decoded.deinit(default_allocator);
@@ -321,7 +322,8 @@ const bom: []const u8 = "\xfe\xff";
         var input = (if (((!self.ignore_bom) and strings.hasPrefixComptime(buffer_slice, bom))) buffer_slice[2..] else buffer_slice);
         _ = &input;
         const res_be = try self.decodeUTF16(input, true, flush);
-        const decoded = res_be[0];
+        var decoded = res_be[0];
+        _ = &decoded;
         const saw_error = res_be[1];
         if ((saw_error and self.fatal)) {
             _ = decoded.deinit(default_allocator);

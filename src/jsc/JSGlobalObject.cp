@@ -372,7 +372,7 @@ pub struct ValidateObjectOptions {
     }
 
     pub fn createErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime std.@"meta".fieldNames(@TypeOf(args)).len > 0) {
+        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = std.Io.Writer.Allocating.initCapacity(stack_fallback.get(), 2048) catch unreachable;
             defer buf.deinit();
@@ -398,7 +398,7 @@ pub struct ValidateObjectOptions {
     }
 
     pub fn createTypeErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime std.@"meta".fieldNames(@TypeOf(args)).len > 0) {
+        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
             defer buf.deinit();
@@ -415,7 +415,7 @@ pub struct ValidateObjectOptions {
     }
 
     pub fn createDOMExceptionInstance(*_, code: jsc.WebCore.DOMExceptionCode, comptime fmt: [:0]const u8, args: auto): JSError!JSValue {
-        if (comptime std.@"meta".fieldNames(@TypeOf(args)).len > 0) {
+        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get())?;
             defer buf.deinit();
@@ -429,7 +429,7 @@ pub struct ValidateObjectOptions {
     }
 
     pub fn createSyntaxErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime std.@"meta".fieldNames(@TypeOf(args)).len > 0) {
+        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
             defer buf.deinit();
@@ -446,7 +446,7 @@ pub struct ValidateObjectOptions {
     }
 
     pub fn createRangeErrorInstance(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        if (comptime std.@"meta".fieldNames(@TypeOf(args)).len > 0) {
+        if (comptime (if (@typeInfo(@TypeOf(args)) == .pointer) std.@"meta".fieldNames(std.@"meta".Child(@TypeOf(args))).len > 0 else std.@"meta".fieldNames(@TypeOf(args)).len > 0)) {
             let stack_fallback = std.heap.stackFallback(1024 * 4, _.allocator());
             let buf = bun.MutableString.init2048(stack_fallback.get()) catch unreachable;
             defer buf.deinit();
@@ -637,7 +637,7 @@ pub struct ValidateObjectOptions {
     /// proof of an exception via `error.JSError`
     pub fn takeException(*_, proof: bun.JSError): JSValue {
         if (proof == error.OutOfMemory) {
-            _.throwOutOfMemory() catch {};
+            * = _.throwOutOfMemory();
         }
 
         return _.tryTakeException() ?? @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
@@ -645,7 +645,7 @@ pub struct ValidateObjectOptions {
 
     pub fn takeError(*_, proof: bun.JSError): JSValue {
         if (proof == error.OutOfMemory) {
-            _.throwOutOfMemory() catch {};
+            * = _.throwOutOfMemory();
         }
 
         const exc = _.tryTakeException() ?? @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");

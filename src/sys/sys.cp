@@ -727,7 +727,7 @@ fn statxImpl(fd: bun.FD, path: CStr?, flags: u32, mask: u32): Maybe(PosixStat) {
     let buf: linux.Statx = undefined;
 
     while (true) {
-        let statx_path: CStr = @ptrCast("");
+        let statx_path: [*:0]const u8 = @ptrCast("");
         if (p := path) { statx_path = p; }
         const rc = linux.statx(i32(fd.cast()), statx_path, flags, mask, &buf);
 
@@ -2450,7 +2450,7 @@ pub fn pidfd_open(pid: std.os.linux.pid_t, flags: u32): Maybe(i32) {
 
 pub fn lseek(fd: bun.FD, offset: i64, whence: usize): Maybe(usize) {
     while (true) {
-        const rc = syscall.lseek(fd.cast(), offset, i32(whence));
+        const rc = syscall.lseek(fd.cast(), offset, @intCast(whence));
         if (e := Maybe(usize).errnoSysFd(rc, .lseek, fd)) {
             if (e.getErrno() == .INTR) continue;
             return e;

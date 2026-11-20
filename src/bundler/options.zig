@@ -1328,7 +1328,7 @@ else => {
             development,
             production,
         };
-    pub const default_unwrap_commonjs_packages = .{ "react", "react-is", "react-dom", "scheduler", "react-client", "react-server", "react-refresh" };
+    pub const default_unwrap_commonjs_packages: [7][]const u8 = .{ "react", "react-is", "react-dom", "scheduler", "react-client", "react-server", "react-refresh" };
     pub const ImportPathFormat = enum {
             relative,
             absolute_url,

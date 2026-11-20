@@ -521,10 +521,7 @@ pub fn inspectTable(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
         },
     }
 
-    writer.flush() catch |e| {
-        if (e == error.WriteFailed) return error.OutOfMemory;
-        return e;
-    };
+    writer.flush() catch return error.OutOfMemory;
 
     return bun.String.createUTF8ForJS(globalThis, array.written());
 }

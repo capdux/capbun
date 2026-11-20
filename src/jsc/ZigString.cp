@@ -384,7 +384,8 @@
                 }
             }
             defer _.deinit();
-            return (try _.toOwned(allocator)).slice();
+            const owned = _.toOwned(allocator)?;
+            return owned.slice();
         }
 
         /// Same as `intoOwnedSlice`, but creates `[:0]const u8`

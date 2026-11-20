@@ -1174,7 +1174,7 @@ fn encodeTraceString(opts: TraceString, writer: auto): ! {
 }
 
 pub fn writeU64AsTwoVLQs(writer: auto, addr: usize): ! {
-    const high_u32 = ((addr & 0xFFFFFFFF00000000) >> 32) as u32;
+    const high_u32: u32 = @truncate(@as(u64, addr) >> 32);
     const low_u32 = (addr & 0xFFFFFFFF) as u32;
     const first = VLQ.encode(@bitCast(high_u32));
     const second = VLQ.encode(@bitCast(low_u32));

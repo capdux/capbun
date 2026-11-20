@@ -5,7 +5,7 @@ const uws = bun.uws;
 const UnboundedQueue = bun.threading.UnboundedQueue;
 
 const jsc = bun.jsc;
-const AnyTaskWithExtraContext = jsc.AnyTaskWithExtraContext;
+const AnyTaskWithExtraContext = jsc.AnyTaskWithExtraContext.AnyTaskWithExtraContext;
 const EventLoop = jsc.EventLoop;
 const VirtualMachine = jsc.VirtualMachine;
 

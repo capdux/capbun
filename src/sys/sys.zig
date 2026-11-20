@@ -1010,7 +1010,7 @@ pub fn statxImpl(fd: bun.FD, path: ?CStr, flags: u32, mask: u32) Maybe(PosixStat
         var buf: linux.Statx = undefined;
         _ = &buf;
         while (true) {
-            var statx_path: CStr = @ptrCast("");
+            var statx_path: [*:0]u8 = @ptrCast("");
             _ = &statx_path;
             if (path) |p| {
                 _ = &p;
@@ -2158,7 +2158,7 @@ pub fn pidfd_open(pid: std.os.linux.pid_t, flags: u32) Maybe(i32) {
 
 pub fn lseek(fd: bun.FD, offset: i64, whence: usize) Maybe(usize) {
         while (true) {
-            const rc = syscall.lseek(fd.cast(), offset, (if (comptime @typeInfo(@TypeOf(whence)) == .@"enum") cp_cast_int(i32, @intFromEnum(whence)) else cp_cast_int(i32, whence)));
+            const rc = syscall.lseek(fd.cast(), offset, @intCast(whence));
             if (Maybe(usize).errnoSysFd(rc, .lseek, fd)) |e| {
                 _ = &e;
                 if ((e.getErrno() == .INTR)) {

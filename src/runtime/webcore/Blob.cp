@@ -19,6 +19,19 @@ const debug = Output.scoped(.Blob, .visible);
 
 pub type BlobSizeType = u52;
 
+pub union(enum) BlobReadBytesResult {
+    ok: []u8,
+    err: jsc.SystemError,
+}
+
+pub fn NewInternalReadFileHandler(comptime Context: type, comptime Function: auto): type {
+    return struct {
+        pub static fn run(handler: *!, bytes: read_file_mod.ReadFileResultType) {
+            Function(bun.cast(Context, handler), bytes);
+        }
+    };
+}
+
 pub enum BlobClosingState: u8 {
     running,
     closing,
@@ -143,6 +156,7 @@ pub struct BlobExternalSharedDescriptor {
     pub const ClosingState = BlobClosingState;
     pub const Internal = BlobInternal;
     pub const Any = BlobAny;
+    pub const ReadBytesResult = BlobReadBytesResult;
     pub const external_shared_descriptor = BlobExternalSharedDescriptor;
 
     static fn new(blob: Blob): *Blob {
@@ -167,6 +181,103 @@ pub struct BlobExternalSharedDescriptor {
             return store.data == .s3;
         }
         return false;
+    }
+
+    fn doReadFileInternal(*_, comptime Handler: type, ctx: Handler, comptime Function: auto, global: *JSGlobalObject) {
+        if (Environment.isWindows) {
+            const ReadFileHandler = NewInternalReadFileHandler(Handler, Function);
+            read_file_mod.ReadFileUV.start(global.bunVM().eventLoop(), _.store.?, _.offset, _.size, ReadFileHandler, ctx);
+            return;
+        }
+        const file_read = read_file_mod.ReadFile.createWithCtx(
+            bun.default_allocator,
+            _.store.?,
+            ctx,
+            NewInternalReadFileHandler(Handler, Function).run,
+            _.offset,
+            _.size,
+        ) catch |e| bun.handleOom(e);
+        let read_file_task = read_file_mod.ReadFileTask.createOnJSThread(bun.default_allocator, global, file_read);
+        read_file_task.schedule();
+    }
+
+    fn readBytesToHandler(*_, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject): bun.JSTerminated! {
+        if (_.needsToReadFile()) {
+            const Adapter = struct {
+                static fn run(c: *Handler, r: read_file_mod.ReadFileResultType) {
+                    const res: BlobReadBytesResult = switch (r) {
+                        .result b => .{ .ok = b.buf },
+                        .err e => .{ .err = e },
+                    };
+                    Handler.onReadBytes(c, res);
+                }
+            };
+            const HandlerPtr = @TypeOf(ctx);
+            _.doReadFileInternal(HandlerPtr, ctx, Adapter.run, global);
+            return;
+        }
+        if (_.isS3()) {
+            const Task = struct {
+                ctx: *Handler,
+                blob: Blob,
+                poll: bun.Async.KeepAlive = .{},
+                vm: *jsc.VirtualMachine,
+
+                static fn done(t: *@This(), r: BlobReadBytesResult) {
+                    t.poll.unref(t.vm);
+                    t.blob.deinit();
+                    const c = t.ctx;
+                    bun.destroy(t);
+                    Handler.onReadBytes(c, r);
+                }
+
+                static fn cb(result: bun.S3.S3DownloadResult, opaque_self: *!): bun.JSTerminated! {
+                    const t: *@This() = unsafe { @ptrCast(@alignCast(opaque_self)) };
+                    switch (result) {
+                        .success response => t.done(.{ .ok = response.body.list.items }),
+                        .not_found e => t.done(.{ .err = .{
+                            .code = bun.String.cloneUTF8(e.code),
+                            .message = bun.String.cloneUTF8(e.message),
+                            .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
+                            .syscall = bun.String.static("fetch"),
+                        } }),
+                        .failure e => t.done(.{ .err = .{
+                            .code = bun.String.cloneUTF8(e.code),
+                            .message = bun.String.cloneUTF8(e.message),
+                            .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
+                            .syscall = bun.String.static("fetch"),
+                        } }),
+                    }
+                }
+            };
+            let t = bun.new(Task, .{ .ctx = ctx, .blob = _.dupe(), .vm = global.bunVM() });
+            t.poll.ref(t.vm);
+            const env = t.vm.transpiler.env;
+            const cred = t.blob.store.?.data.s3.getCredentials();
+            const path = t.blob.store.?.data.s3.path();
+            let proxy: ([]const u8)? = null;
+            if (p := env.getHttpProxy(true, null, null)) {
+                proxy = p.href;
+            }
+            const payer = t.blob.store.?.data.s3.request_payer;
+            if (_.offset > 0 || _.size != Blob.max_size) {
+                const len: usize? = if (_.size != Blob.max_size) @intCast(_.size) else null;
+                bun.S3.downloadSlice(cred, path, @intCast(_.offset), len, @ptrCast(&Task.cb), t, proxy, payer)?;
+            } else {
+                bun.S3.download(cred, path, @ptrCast(&Task.cb), t, proxy, payer)?;
+            }
+            return;
+        }
+        const view = _.sharedView();
+        const owned = bun.default_allocator.dupe(u8, view) catch {
+            Handler.onReadBytes(ctx, .{ .err = .{
+                .code = bun.String.static("ENOMEM"),
+                .message = bun.String.static("Out of memory"),
+                .syscall = bun.String.static("read"),
+            } });
+            return;
+        };
+        Handler.onReadBytes(ctx, .{ .ok = owned });
     }
 
     fn hasContentTypeFromUser(): bool {

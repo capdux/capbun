@@ -78,22 +78,6 @@ const errnoToZigErr = @import("bun").errnoToZigErr;
 const isRegularFile = @import("bun").isRegularFile;
 const isWritable = @import("bun").isWritable;
 const JSTerminated = @import("bun").JSTerminated;
-pub const atomic = @import("std:atomic");
-const posix = @import("std").posix;
-const JSGlobalObject = @import("bun:jsc").JSGlobalObject;
-const JSPromise = @import("bun:jsc").JSPromise;
-const SystemError = @import("bun:jsc").SystemError;
-const ZigString = @import("bun:jsc").ZigString;
-const WorkTask = @import("bun:jsc").WorkTask;
-const WorkPool = @import("bun:jsc").WorkPool;
-const WorkPoolTask = @import("bun:jsc").WorkPoolTask;
-const WebCore = @import("bun:jsc").WebCore;
-const EventLoop = @import("bun:jsc").EventLoop;
-const ConcurrentTask = @import("bun:jsc").ConcurrentTask;
-const ManagedTask = @import("bun:jsc").ManagedTask;
-const libuv = @import("bun:windows").libuv;
-const as = @import("bun:windows").as;
-const uv = @import("bun:windows").uv;
 pub const WriteFile = struct {
     file_blob: Blob,
     bytes_blob: Blob,
@@ -757,7 +741,21 @@ value.Locked.onReceiveValue = thenWrap;
 };
 
 pub const WriteFileOnWriteFileCallback = *const fn (*anyopaque, WriteFileResultType) anyerror!void;
+const atomic = std.atomic;
+const posix = std.posix;
 const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSPromise = jsc.JSPromise;
+const SystemError = jsc.SystemError;
+const ZigString = jsc.ZigString;
+const WorkTask = jsc.WorkTask;
+const WorkPool = jsc.WorkPool;
+const WorkPoolTask = jsc.WorkPoolTask;
+const WebCore = jsc.WebCore;
+const EventLoop = jsc.EventLoop;
+const ConcurrentTask = jsc.ConcurrentTask;
+const ManagedTask = jsc.ManagedTask;
+const uv = bun.windows.libuv;
 const AtomicValue = atomic.Value;
 const Blob = WebCore.Blob;
 const ClosingState = Blob.ClosingState;

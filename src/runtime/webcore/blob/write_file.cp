@@ -1,12 +1,22 @@
 // src/runtime/webcore/blob/write_file.cp
 import bun from "bun";
 import { default_allocator, destroy, assert, cast, Environment, invalid_fd, io, Output, FD, O, sys, errnoToZigErr, isRegularFile, isWritable, JSTerminated } from "bun";
-import atomic from "std:atomic";
-import { posix } from "std";
-import { JSGlobalObject, JSPromise, SystemError, ZigString, WorkTask, WorkPool, WorkPoolTask, WebCore, EventLoop, ConcurrentTask, ManagedTask } from "bun:jsc";
-import { libuv as uv } from "bun:windows";
 
+const atomic = std.atomic;
+const posix = std.posix;
 const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSPromise = jsc.JSPromise;
+const SystemError = jsc.SystemError;
+const ZigString = jsc.ZigString;
+const WorkTask = jsc.WorkTask;
+const WorkPool = jsc.WorkPool;
+const WorkPoolTask = jsc.WorkPoolTask;
+const WebCore = jsc.WebCore;
+const EventLoop = jsc.EventLoop;
+const ConcurrentTask = jsc.ConcurrentTask;
+const ManagedTask = jsc.ManagedTask;
+const uv = bun.windows.libuv;
 const AtomicValue = atomic.Value;
 const Blob = WebCore.Blob;
 const ClosingState = Blob.ClosingState;

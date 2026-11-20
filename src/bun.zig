@@ -2974,7 +2974,17 @@ pub fn new(t: T) *T {
 }.new;
 }
 
-pub fn TrivialDeinit(comptime T: type) *const fn (*T) void {
+pub fn TrivialDeinitType(comptime T: type) type {
+        const _TrivialDeinitHolder = struct {
+
+pub fn deinit(self_: *T) void {
+            _ = &self_;
+    }
+};
+        return @TypeOf(_TrivialDeinitHolder.deinit);
+}
+
+pub fn TrivialDeinit(comptime T: type) TrivialDeinitType(T) {
         return struct {
 
 pub fn deinit(self_: *T) void {

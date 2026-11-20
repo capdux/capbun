@@ -222,21 +222,16 @@ pub fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *
         var script = std.array_list.Managed(u8).init(shargs.arena_allocator());
         _ = &script;
         _ = try bun.shell.shellCmdFromJS(globalThis, string_args, (&template_args), (&jsobjs), (&jsstrings), (&script), marked_argument_buffer);
-        var parser: ?bun.shell.Parser = null;
+        var parser: bun.shell.Parser = undefined;
         _ = &parser;
-        var lex_result: ?shell.LexResult = null;
+        var lex_result: shell.LexResult = undefined;
         _ = &lex_result;
         const script_ast = (blk_catch_0: { break :blk_catch_0 ((Interpreter.parse(shargs.arena_allocator(), script.items[0..], jsobjs.items[0..], jsstrings.items[0..], (&parser), (&lex_result))) catch |e| { _ = &e; if ((e == shell.ParseError.Lex)) {
-            _ = bun.assert((lex_result != null));
-            const str = lex_result.?.combineErrors(shargs.arena_allocator());
+            const str = lex_result.combineErrors(shargs.arena_allocator());
             return globalThis.throwPretty("{s}", .{ str });
         }
-        if (parser) |*p| {
-            _ = &p;
-            if (bun.Environment.allow_assert) {
-                _ = bun.assert(((p.*).errors.items.len > 0));
-            }
-            const errstr = (p.*).combineErrors();
+        if ((parser.errors.items.len > 0)) {
+            const errstr = parser.combineErrors();
             return globalThis.throwPretty("{s}", .{ errstr });
         }
         return globalThis.throwError(e, "failed to lex/parse shell"); }); });

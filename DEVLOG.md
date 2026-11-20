@@ -1413,3 +1413,5 @@
 - **[2026-11-20] Wave 12 Batch A Meta+CSS 泛型收官**：`meta.cp` `ReturnOfType`/`ReturnOfMaybe` 兼容 `.pointer` 解包消除 110 处报错；`css/generics.cp` 改点语法自动解引用消除 96 处报错；`angle`/`time` 补 `@value` 与 `static fn`，`calc` 统一 `@as(void, {})` 消除 29 处报错。
 
 - **[2026-11-20] Wave 12 Batch B 典型修复**：`expect.cp` `argsToTuple` 改用 `@field(tup, comptimePrint("{d}", .{i}))` 一次清零 86 处 comptime 错；`node_fs.cp` 统一 `DirIterator.PathType`、修复 6 个 IO 内联方法 `*_` 接收者并提取 `max_path_bytes`；`YAMLObject`/`yaml` 消除 `||` 错误集合并退化。
+
+- **[2026-11-20] Wave 12 全量收官**：全仓 `bun run zig:check` 从 422 暴跌至 **103 错 / 30 个 `src/` 文件**（97.7% 模块零错误）；`meta.cp`、`expect.cp`（含全部 57 matcher）、`calc.cp` 均清零；`js_bun_spawn_bindings.cp` 用 `pub fn @"spawn"` 规避关键字跳导。

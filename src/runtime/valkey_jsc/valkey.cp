@@ -180,7 +180,7 @@ pub const ValkeyClient = struct {
     address: Address,
     protocol: Protocol,
 
-    connection_strings: []u8 = &{},
+    connection_strings: []u8 = empty_connection_strings[0..0],
 
     // TLS support
     tls: TLS = .none,
@@ -1221,6 +1221,7 @@ import ValkeyCommand from "./ValkeyCommand.zig";
 import protocol from "../../valkey/valkey_protocol.zig";
 import std from "std";
 
+let empty_connection_strings: [0]u8 = [];
 import bun from "bun";
 const jsc = bun.jsc;
 const uws = bun.uws;

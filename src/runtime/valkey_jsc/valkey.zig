@@ -209,7 +209,7 @@ pub const ValkeyClient = struct {
     address: Address,
     protocol: Protocol,
 
-    connection_strings: []u8 = &{},
+    connection_strings: []u8 = empty_connection_strings[0..0],
 
     // TLS support
     tls: TLS = .none,
@@ -1243,6 +1243,7 @@ pub const ValkeyClient = struct {
     }
 };
 const debug = bun.Output.scoped(.Redis, .visible);
+var empty_connection_strings: [0]u8 = &.{};
 const jsc = bun.jsc;
 const uws = bun.uws;
 const AutoFlusher = jsc.WebCore.AutoFlusher;

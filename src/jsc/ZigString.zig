@@ -786,7 +786,8 @@ pub fn toRangeErrorInstance(self: ZigString, global: *JSGlobalObject) JSValue {
                 defer {
                 _ = self.deinit();
                 }
-                return try self.toOwned(allocator).slice();
+                const owned = try self.toOwned(allocator);
+                return owned.slice();
         }
     
     pub fn intoOwnedSliceZ(self: *@This(), allocator: std.mem.Allocator) OOM![:0]const u8 {

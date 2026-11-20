@@ -285,7 +285,7 @@ pub struct Buffered {
                     buffer_slice;
 
                 const res_le = _.decodeUTF16(input, false, flush)?;
-                const decoded = res_le[0];
+                let decoded = res_le[0];
                 const saw_error = res_le[1];
 
                 if (saw_error && _.fatal) {
@@ -308,7 +308,7 @@ pub struct Buffered {
                     buffer_slice;
 
                 const res_be = _.decodeUTF16(input, true, flush)?;
-                const decoded = res_be[0];
+                let decoded = res_be[0];
                 const saw_error = res_be[1];
 
                 if (saw_error && _.fatal) {

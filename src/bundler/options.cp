@@ -1891,7 +1891,7 @@ pub struct BundleOptions {
         }
     }
 
-    pub const default_unwrap_commonjs_packages = [
+    pub const default_unwrap_commonjs_packages: [7]string = [
         "react",
         "react-is",
         "react-dom",

@@ -1172,7 +1172,7 @@ pub fn encodeTraceString(opts: TraceString, writer: anytype) !void {
 }
 
 pub fn writeU64AsTwoVLQs(writer: anytype, addr: usize) !void {
-        const high_u32 = (if (comptime @typeInfo(@TypeOf(cp_shr((addr & -4294967296), 32))) == .@"enum") cp_cast_int(u32, @intFromEnum(cp_shr((addr & -4294967296), 32))) else cp_cast_int(u32, cp_shr((addr & -4294967296), 32)));
+        const high_u32: u32 = @truncate(cp_shr((if (comptime @typeInfo(@TypeOf(addr)) == .@"enum") cp_cast_int(u64, @intFromEnum(addr)) else cp_cast_int(u64, addr)), 32));
         const low_u32 = (if (comptime @typeInfo(@TypeOf((addr & 4294967295))) == .@"enum") cp_cast_int(u32, @intFromEnum((addr & 4294967295))) else cp_cast_int(u32, (addr & 4294967295)));
         const first = VLQ.encode(@bitCast(high_u32));
         const second = VLQ.encode(@bitCast(low_u32));

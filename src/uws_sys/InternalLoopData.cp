@@ -32,7 +32,7 @@ export @extern class InternalLoopData {
     low_prio_budget: i32 = 0,
     dns_ready_head: *ConnectingSocket,
     closed_connecting_head: *ConnectingSocket,
-    mutex: bun.Mutex.ReleaseImpl.Type,
+    mutex: bun.Mutex.ExternImpl,
     parent_ptr: *!? = null,
     parent_tag: i8 = 0,
     iteration_nr: usize = 0,

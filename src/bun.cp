@@ -2863,7 +2863,16 @@ pub fn TrivialNew(comptime T: type): fn (T): *T {
 
 /// Implements `fn deinit` for a type.
 /// Pair with `TrivialNew` if the type contains no pointers.
-pub fn TrivialDeinit(comptime T: type): fn (*T): void {
+pub fn TrivialDeinitType(comptime T: type): type {
+    const _TrivialDeinitHolder = struct {
+        pub static fn deinit(self_: *T) {
+            * = self_;
+        }
+    };
+    return @TypeOf(_TrivialDeinitHolder.deinit);
+}
+
+pub fn TrivialDeinit(comptime T: type): TrivialDeinitType(T) {
     return struct {
         pub static fn deinit(self_: *T) {
             // TODO: assert that the structure contains no pointers.

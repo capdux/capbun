@@ -1,5 +1,5 @@
 let get_platform_tempdir = bun.once(RealFS.#platformTempDir);
-let _entries_option_map: *EntriesOption.Map = undefined;
+let _entries_option_map: *RealFSEntriesOption.Map = undefined;
 let _entries_option_map_loaded: bool = false;
 import StatHash from "./fs/stat_hash.zig";
 import path_handler from "../paths/resolve_path.zig";
@@ -822,7 +822,7 @@ pub struct Path {
 
 
     
-pub const EntriesOption = union(Tag) {
+pub const RealFSEntriesOption = union(Tag) {
     entries: *DirEntry,
     e: DirEntry.Err,
 
@@ -832,10 +832,10 @@ pub const EntriesOption = union(Tag) {
     };
 
     // - Doesn't store directory names which don't exist.
-    pub const Map = allocators.BSSMap(EntriesOption, Preallocate.Counts.dir_entry, false, 256, true);
+    pub const Map = allocators.BSSMap(RealFSEntriesOption, Preallocate.Counts.dir_entry, false, 256, true);
 };
 
-@tls let temp_entries_option: EntriesOption = undefined;
+@tls let temp_entries_option: RealFSEntriesOption = undefined;
 
 pub const PathContentsPair = struct { path: Path, contents: string };
 pub const ModKeyError = error{
@@ -910,8 +910,9 @@ pub const ModKeyError = error{
             pub const SafetyGap = 3;
         };
 pub struct RealFS {
+        pub const EntriesOption = RealFSEntriesOption;
         entries_mutex: Mutex = {},
-        entries: *EntriesOption.Map,
+        entries: *RealFSEntriesOption.Map,
         cwd: string,
         file_limit: usize = 32,
         file_quota: usize = 32,
@@ -1286,7 +1287,7 @@ pub struct RealFS {
                 switch (e) {
                     error.ENOENT, error.FileNotFound => {
                         fs.entries.markNotFound(get_or_put_result);
-                        temp_entries_option = EntriesOption{
+                        temp_entries_option = RealFSEntriesOption{
                             e: DirEntry.Err{ .original_err = e, .canonical_error = e },
                         };
                         return &temp_entries_option;
@@ -1301,7 +1302,7 @@ pub struct RealFS {
                 }
             }
 
-            temp_entries_option = EntriesOption{
+            temp_entries_option = RealFSEntriesOption{
                 e: DirEntry.Err{ .original_err = e, .canonical_error = e },
             };
             return &temp_entries_option;
@@ -1361,7 +1362,7 @@ pub struct RealFS {
 
                         in_place = cached_result.entries;
                     } else if (cache_result.?.status == .not_found && generation == 0) {
-                        temp_entries_option = EntriesOption{
+                        temp_entries_option = RealFSEntriesOption{
                             e: DirEntry.Err{ .original_err = error.ENOENT, .canonical_error = error.ENOENT },
                         };
                         return &temp_entries_option;
@@ -1422,7 +1423,7 @@ pub struct RealFS {
                 return out;
             }
 
-            temp_entries_option = EntriesOption{ .entries = entries };
+            temp_entries_option = RealFSEntriesOption{ .entries = entries };
 
             return &temp_entries_option;
         }
