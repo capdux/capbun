@@ -2942,3 +2942,7 @@ Options:
 - [2026-11-20 03:58:49 UTC] [发送至 cp_agy] 工单 `task-bun-20261120-enum-fromname-ambiguous-get`（复现 `/data/dev/cp/temp/repro_enum_fromname_ambiguous_get.cp`）：`pub enum` 自动生成的 `fromName` 调用无前缀 `get(s)` 与文件顶层 `pub fn get` 冲突报 `ambiguous reference`；`src/js_parser/ast/Expr.cp` (3300行, 1.016x) 已完成 CP 改写并标记 BLOCKED，原 `Expr.zig` 已还原保护。
 
 - [2026-11-20 04:02:38 UTC] 验收并提交 `src/install/npm.cp` (2817行, 1.015x)；接力派发 `src/install/` 最后 2 模块（`bin.zig`/`dependency.zig`）。
+
+- [2026-11-20 04:08:29 UTC] [发送至 cp_agy] 工单 `task-bun-20261120-prelude-ptr-shadow`（复现 `/data/dev/cp/temp/repro_prelude_ptr_shadow.cp`）：`Err.with_cause` prelude 中未加前缀的局部变量 `var ptr` 遮蔽顶层 `pub const ptr`；`src/bun.cp` (3907行, 1.022x) 已完成全部 CP 改写暂标 BLOCKED，原 `src/bun.zig` 已还原保护。
+
+- [2026-11-20 04:11:20 UTC] 验收并提交 `src/runtime/api/bun/h2_frame_parser.cp` (5035行, 1.032x)——整个 `src/runtime/` 实现 100% 闭环；接力派发 `src/sys/windows/windows.zig` (4108行)。

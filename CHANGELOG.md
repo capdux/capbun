@@ -1506,3 +1506,6 @@
 
 ### 2026-11-20 04:02:38 UTC - src/install/npm.cp (2817行) 迁移入库
 - 完成：`npm.cp` (1.015x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 04:11:20 UTC - src/runtime/ 100% 全目录闭环（h2_frame_parser.cp 5035行入库）
+- 完成：`h2_frame_parser.cp` (1.032x)，4 项硬门禁全 PASS。
