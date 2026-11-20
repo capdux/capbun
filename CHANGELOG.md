@@ -1862,3 +1862,4 @@
 - **[2026-11-21] Wave 46 B 组 (8 模块)**：更新 `bundler/{Chunk,linker_context/writeOutputFilesToDisk}`, `bake/DevServer/IncrementalGraph`, `install/{PackageManager/PopulateManifestCache,lockfile/{Tree,bun.lock,bun.lockb},pnpm}`。
 - **[2026-11-21] Wave 47 A 组 (3 模块)**：更新 `css/{rules/{container,scope},values/syntax}`。
 - **[2026-11-21] Wave 47 B 组 (6 模块)**：更新 `bake/DevServer/IncrementalGraph`, `bundler/linker_context/generateChunksInParallel`, `install/{PackageManager/PopulateManifestCache,lockfile/{bun.lock,bun.lockb},pnpm}`。
+- **[2026-11-21] Wave 48 A 组 (2 模块)**：更新 `css/rules/{container,scope}`。

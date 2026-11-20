@@ -74,8 +74,8 @@ pub enum ContainerSizeFeatureId {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+    static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 
     fn toCssWithPrefix(prefix: []const u8, dest: *Printer): PrintErr!void {
@@ -105,7 +105,7 @@ pub const StyleQuery = union(enum) {
     operation: StyleQueryOperation,
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .feature => |f| try f.toCss(dest, false),
             .not => |c| {
                 dest.writeStr("not ")?;
@@ -163,7 +163,7 @@ pub const StyleQuery = union(enum) {
         parent_operator: Operator?,
         _: *const css.Targets,
     ): bool {
-        return switch (_.*) {
+        return switch (_) {
             .not => true,
             .operation => |op| op.operator == parent_operator,
             .feature => true,
@@ -283,7 +283,7 @@ pub const ContainerCondition = union(enum) {
         parent_operator: Operator?,
         targets: *const css.Targets,
     ): bool {
-        return switch (_.*) {
+        return switch (_) {
             .not => true,
             .operation => |op| op.operator == parent_operator,
             .feature => |f| f.needsParens(parent_operator, targets),

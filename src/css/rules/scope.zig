@@ -78,7 +78,7 @@ pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
                 _ = try dest.writeStr("to (");
                 if (self.scope_start) |*scope_start| {
                     _ = &scope_start;
-                    _ = try dest.withContext((scope_start.*), (scope_end.*), struct {
+                    _ = try dest.withContext((&self.scope_start.?), (&self.scope_end.?), struct {
 
 pub fn toCssFn(scope_end_: *const css.selector.parser.SelectorList, d: *Printer) PrintErr!void {
             return css.selector.serialize.serializeSelectorList(scope_end_.v.slice(), d, d.context(), false);

@@ -84,8 +84,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *ContainerSizeFeatureId, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
+            return css.enum_property_util.toCss(@This(), s, dest);
     }
 
 pub fn toCssWithPrefix(self: ContainerSizeFeatureId, prefix: []const u8, dest: *Printer) PrintErr!void {
@@ -159,7 +159,7 @@ pub const StyleQuery = union(enum) {
     operation: StyleQueryOperation,
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .feature => |f| {
 _ = try f.toCss(dest, false);
 },
@@ -205,7 +205,7 @@ pub fn createOperation(operator: Operator, conditions: ArrayList(StyleQuery)) St
     }
 
 pub fn needsParens(self: @This(), parent_operator: ?Operator, _: *const css.Targets) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .not => true,
 .operation => |op| (op.operator == parent_operator),
 .feature => true,
@@ -292,7 +292,7 @@ return .{ .err = e };
     }
 
 pub fn needsParens(self: @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .not => true,
 .operation => |op| (op.operator == parent_operator),
 .feature => |f| f.needsParens(parent_operator, targets),

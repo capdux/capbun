@@ -44,11 +44,11 @@ pub fn ScopeRule(comptime R: type): type {
                 // <scope-start> is treated as an ancestor of scope end.
                 // https://drafts.csswg.org/css-nesting/#nesting-at-scope
                 if (*scope_start := _.scope_start) {
-                    try dest.withContext(scope_start, scope_end, struct {
+                    dest.withContext(&_.scope_start.?, &_.scope_end.?, struct {
                         pub fn toCssFn(scope_end_: *const css.selector.parser.SelectorList, d: *Printer): PrintErr!void {
                             return css.selector.serialize.serializeSelectorList(scope_end_.v.slice(), d, d.context(), false);
                         }
-                    }.toCssFn);
+                    }.toCssFn)?;
                 } else {
                     return css.selector.serialize.serializeSelectorList(scope_end.v.slice(), dest, dest.context(), false);
                 }
