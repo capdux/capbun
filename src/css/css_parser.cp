@@ -287,8 +287,9 @@ pub struct SourceLocation {
             inline for (f of std.@"meta".fields(ParserError)) {
                 if (e == @field(@typeInfo(ParserError).@"union".tag_type.?, f.name)) {
                     if (comptime f.type == void) {
+                        const ev: void = undefined;
                         return .{
-                            .kind = .{ .custom = @unionInit(ParserError, f.name, {}) },
+                            .kind = .{ .custom = @unionInit(ParserError, f.name, ev) },
                             .location = _,
                         };
                     }

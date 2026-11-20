@@ -256,7 +256,12 @@ pub fn flush(self: *BoxShadowHandler, dest: *css.DeclarationList, context: *css.
                         const input = (&src_slice[@as(usize, @intCast(i))]);
                         var output = (&dst_slice[@as(usize, @intCast(i))]);
                         _ = &output;
-                        if (output.color == null) { output.color = input.color.deepClone(context.allocator); }
+                        if (input.color.toRGB(context.allocator)) |c| {
+                            _ = &c;
+                            output.color = c;
+                        } else {
+                            output.color = input.color.deepClone(context.allocator);
+                        }
                         const fields = std.@"meta".fields(BoxShadow);
                         inline for (fields) |field| {
                             if (comptime std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "color")) {
@@ -284,7 +289,12 @@ pub fn flush(self: *BoxShadowHandler, dest: *css.DeclarationList, context: *css.
                         const input = (&src_slice[@as(usize, @intCast(i))]);
                         var output = (&dst_slice[@as(usize, @intCast(i))]);
                         _ = &output;
-                        if (output.color == null) { output.color = input.color.deepClone(context.allocator); }
+                        if (input.color.toP3(context.allocator)) |c| {
+                            _ = &c;
+                            output.color = c;
+                        } else {
+                            output.color = input.color.deepClone(context.allocator);
+                        }
                         const fields = std.@"meta".fields(BoxShadow);
                         inline for (fields) |field| {
                             if (comptime std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "color")) {

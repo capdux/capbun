@@ -213,7 +213,11 @@ pub struct BoxShadowHandler {
                 while (i < src_slice.len) : (i += 1) {
                     const input = &src_slice[i];
                     let output = &dst_slice[i];
-                    output.color = input.color.toRGB(context.allocator) ?? input.color.deepClone(context.allocator);
+                    if (c := input.color.toRGB(context.allocator)) {
+                        output.color = c;
+                    } else {
+                        output.color = input.color.deepClone(context.allocator);
+                    }
                     const fields = std.@"meta".fields(BoxShadow);
                     inline for (field of fields) {
                         if (comptime std.mem.eql(u8, field.name, "color")) continue;
@@ -239,7 +243,11 @@ pub struct BoxShadowHandler {
                 while (i < src_slice.len) : (i += 1) {
                     const input = &src_slice[i];
                     let output = &dst_slice[i];
-                    output.color = input.color.toP3(context.allocator) ?? input.color.deepClone(context.allocator);
+                    if (c := input.color.toP3(context.allocator)) {
+                        output.color = c;
+                    } else {
+                        output.color = input.color.deepClone(context.allocator);
+                    }
                     const fields = std.@"meta".fields(BoxShadow);
                     inline for (field of fields) {
                         if (comptime std.mem.eql(u8, field.name, "color")) continue;

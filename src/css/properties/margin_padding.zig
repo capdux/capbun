@@ -536,9 +536,10 @@ pub fn flush(self: *@This(), dest: *css.DeclarationList, context: *css.PropertyH
                 _ = logicalSideHelper((&inline_start), (&inline_end), "inline_start", "inline_end", inline_shorthand, inline_start_prop, inline_end_prop, logical_supported, dest, context);
             } else {
                 if (((inline_start != null) or (inline_end != null))) {
-                    if ((((((inline_start != null) and (inline_start.? == @field(Property, @tagName(inline_start_prop)))) and (inline_end != null)) and (inline_end.? == @field(Property, @tagName(inline_end_prop)))) and @field(inline_start.?, @tagName(inline_start_prop)).eql((&@field(inline_end.?, @tagName(inline_end_prop)))))) {
-                        _ = prop((&(inline_start.?)), inline_start_prop, left_prop, dest, context);
-                        _ = prop((&(inline_end.?)), inline_end_prop, right_prop, dest, context);
+                    const can_prop = (((((inline_start != null) and (inline_start.? == @field(Property, @tagName(inline_start_prop)))) and (inline_end != null)) and (inline_end.? == @field(Property, @tagName(inline_end_prop)))) and @field(inline_start.?, @tagName(inline_start_prop)).eql((&@field(inline_end.?, @tagName(inline_end_prop)))));
+                    if (can_prop) {
+                        _ = prop((&inline_start), inline_start_prop, left_prop, dest, context);
+                        _ = prop((&inline_end), inline_end_prop, right_prop, dest, context);
                     } else {
                         _ = logicalPropHelper((&inline_start), inline_start_prop, left_prop, right_prop, context);
                         _ = logicalPropHelper((&inline_end), inline_end_prop, right_prop, left_prop, context);

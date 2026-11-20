@@ -113,7 +113,8 @@ pub struct TokenList {
                     has_whitespace = false;
                 },
                 .animation_name => |v| {
-                    v.toCss(dest)?;
+                    let av = v;
+                    av.toCss(dest)?;
                     has_whitespace = false;
                 },
                 .token => |token| switch (token) {

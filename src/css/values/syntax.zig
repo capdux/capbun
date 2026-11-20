@@ -97,8 +97,7 @@ var first = true;
             return dest.writeChar(34);
     }
 
-pub fn parse(self: *SyntaxString, input: *css.Parser) Result(SyntaxString) {
-        _ = self;
+pub fn parse(input: *css.Parser) Result(SyntaxString) {
             const str = (switch (input.expectString()) {
 .result => |v| v,
 .err => |e| {

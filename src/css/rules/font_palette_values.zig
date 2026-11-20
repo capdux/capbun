@@ -191,7 +191,7 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: BasePalette, dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .light => {
 _ = try dest.writeStr("light");
 },
@@ -316,7 +316,7 @@ pub const FontPaletteValuesProperty = union(enum) {
     custom: css.css_properties.custom.CustomProperty,
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .font_family => |*f| {
 _ = try dest.writeStr("font-family");
             _ = try dest.delim(58, false);

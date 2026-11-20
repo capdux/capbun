@@ -224,7 +224,7 @@ pub fn toCss(self: DisplayPair, dest: *css.Printer) css.PrintErr!void {
 .ruby => .@"inline",
 else => .block,
 });
-                                const flow_inside = DisplayInside{ .flow = .{} };
+                                const flow_inside: DisplayInside = .flow;
                                 var needs_space = false;
                                 _ = &needs_space;
                                 if (((!self.outside.eql((&default_outside))) or (self.inside.eql((&flow_inside)) and (!self.is_list_item)))) {

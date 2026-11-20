@@ -69,7 +69,7 @@ pub enum SyntaxString {
         return dest.writeChar('"');
     }
 
-    pub fn parse(input: *css.Parser): Result(SyntaxString) {
+    pub static fn parse(input: *css.Parser): Result(SyntaxString) {
         const str = switch (input.expectString()) {
             .result => |v| v,
             .err => |e| return { err: e },

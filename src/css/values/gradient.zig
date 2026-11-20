@@ -104,10 +104,10 @@ else => -1.0,
                 if ((((angle == 0.0) and dest.minify) and brk: {
                 for (self.items.items) |*item| {
                     _ = &item;
-                    if ((((item.*).* == .hint) and ((item.*).hint != .percentage))) {
+                    if ((((item.*) == .hint) and ((item.*).hint != .percentage))) {
                         break :brk false;
                     }
-                    if (((((item.*).* == .color_stop) and ((item.*).color_stop.position != null)) and ((item.*).color_stop.position.? != .percentage))) {
+                    if (((((item.*) == .color_stop) and ((item.*).color_stop.position != null)) and ((item.*).color_stop.position.? != .percentage))) {
                         break :brk false;
                     }
                 }
@@ -1665,7 +1665,7 @@ pub fn serializeItems(comptime D: type, items: *const ArrayList(GradientItem(D))
         _ = &last;
         for (items.items) |*item| {
             _ = &item;
-            if (((((item.*).* == .hint) and ((item.*).hint == .percentage)) and ((item.*).hint.percentage.v == 0.5))) {
+            if (((((item.*) == .hint) and ((item.*).hint == .percentage)) and ((item.*).hint.percentage.v == 0.5))) {
                 continue;
             }
             if (last) |prev| {

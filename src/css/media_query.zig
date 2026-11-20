@@ -101,9 +101,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *Operator, dest: *Printer) PrintErr!void {
-            const s = self;
-            return css.enum_property_util.toCss(@This(), (&s), dest);
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            return css.enum_property_util.toCss(@This(), s, dest);
     }
 };
 
@@ -123,9 +122,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *Qualifier, dest: *Printer) PrintErr!void {
-            const s = self;
-            return css.enum_property_util.toCss(@This(), (&s), dest);
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            return css.enum_property_util.toCss(@This(), s, dest);
     }
 
 pub fn hash(self: Qualifier, hasher: anytype) void {
@@ -315,9 +313,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *MediaFeatureId, dest: *Printer) PrintErr!void {
-            const s = self;
-            return css.enum_property_util.toCss(@This(), (&s), dest);
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            return css.enum_property_util.toCss(@This(), s, dest);
     }
 
 pub fn hash(self: MediaFeatureId, hasher: anytype) void {
@@ -435,7 +432,7 @@ pub fn deinit(self: *MediaFeatureValue, allocator: std.mem.Allocator) void {
 {
             }
 },
-.env => |env| env.deinit(allocator),
+.env => |*env| env.deinit(allocator),
 });
     }
 
@@ -467,7 +464,7 @@ return ratio.toCss(dest);
 return IdentFns.toCss(id, dest);
 },
 .env => |env| {
-return EnvironmentVariable.toCss((&env), dest, false);
+return env.toCss(dest, false);
 },
 }
     }
@@ -564,7 +561,8 @@ pub fn parseUnknown(input: *css.Parser) Result(MediaFeatureValue) {
                 _ = &res;
                 return .{ .result = .{ .resolution = res } };
             }
-            if (input.tryParse(EnvironmentVariable.parse, .{}).asValue()) |env| {
+            const env_opts = css.ParserOptions.default(input.allocator(), null);
+            if (input.tryParse(EnvironmentVariable.parse, .{ (&env_opts), (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)) }).asValue()) |env| {
                 _ = &env;
                 return .{ .result = .{ .env = env } };
             }

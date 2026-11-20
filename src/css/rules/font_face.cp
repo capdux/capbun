@@ -426,7 +426,7 @@ pub union(enum) FontFormat {
     pub fn toCss(dest: *Printer): PrintErr!void {
         // Browser support for keywords rather than strings is very limited.
         // https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/src
-        switch (_.*) {
+        switch (_) {
             .woff => dest.writeStr("woff")?,
             .woff2 => dest.writeStr("woff2")?,
             .truetype => dest.writeStr("truetype")?,
@@ -549,8 +549,8 @@ pub enum FontTechnology {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+    static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 }
 

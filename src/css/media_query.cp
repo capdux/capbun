@@ -134,9 +134,8 @@ pub enum Operator {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        const s = _;
-        return css.enum_property_util.toCss(@This(), &s, dest);
+    static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 }
 
@@ -306,9 +305,8 @@ pub enum Qualifier {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        const s = _;
-        return css.enum_property_util.toCss(@This(), &s, dest);
+    static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 
     fn hash(hasher: auto) {
@@ -776,9 +774,8 @@ pub enum MediaFeatureId {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    fn toCss(dest: *Printer): PrintErr!void {
-        const s = _;
-        return css.enum_property_util.toCss(@This(), &s, dest);
+    static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), s, dest);
     }
 
     fn hash(hasher: auto) {
@@ -1247,7 +1244,7 @@ pub enum MediaFeatureValue {
             .resolution => {},
             .ratio => {},
             .ident => {},
-            .env => |env| env.deinit(allocator),
+            .env => |*env| env.deinit(allocator),
         };
     }
 
@@ -1269,7 +1266,7 @@ pub enum MediaFeatureValue {
             .resolution => |res| return res.toCss(dest),
             .ratio => |ratio| return ratio.toCss(dest),
             .ident => |id| return IdentFns.toCss(id, dest),
-            .env => |env| return EnvironmentVariable.toCss(&env, dest, false),
+            .env => |env| return env.toCss(dest, false),
         }
     }
 
@@ -1343,7 +1340,8 @@ pub enum MediaFeatureValue {
 
         if (res := input.tryParse(Resolution.parse, {}).asValue()) return { result: { resolution: res } };
 
-        if (env := input.tryParse(EnvironmentVariable.parse, {}).asValue()) return { result: { env: env } };
+        const env_opts = css.ParserOptions.default(input.allocator(), null);
+        if (env := input.tryParse(EnvironmentVariable.parse, .{ &env_opts, @as(usize, 0) }).asValue()) return { result: { env: env } };
 
         const ident = switch (IdentFns.parse(input)) {
             .err => |e| return { err: e },

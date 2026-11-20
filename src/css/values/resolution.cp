@@ -66,7 +66,7 @@ pub const Resolution = union(enum) {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        const value, const unit = switch (_) {
+        const vu = switch (_) {
             .dpi => |dpi| .{ dpi, "dpi" },
             .dpcm => |dpcm| .{ dpcm, "dpcm" },
             .dppx => |dppx| if (dest.targets.isCompatible(.x_resolution_unit))
@@ -74,6 +74,8 @@ pub const Resolution = union(enum) {
             else
                 .{ dppx, "dppx" },
         };
+        const value = vu[0];
+        const unit = vu[1];
 
         return css.serializer.serializeDimension(value, unit, dest)?;
     }

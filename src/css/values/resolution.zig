@@ -131,12 +131,13 @@ return .{ .err = undefined };
     }
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            const value = undefined;
-            const unit = (switch (self) {
+            const vu = (switch (self) {
 .dpi => |dpi| .{ dpi, "dpi" },
 .dpcm => |dpcm| .{ dpcm, "dpcm" },
 .dppx => |dppx| (if (dest.targets.isCompatible(.x_resolution_unit)) .{ dppx, "x" } else .{ dppx, "dppx" }),
 });
+            const value = vu[0];
+            const unit = vu[1];
             return try css.serializer.serializeDimension(value, unit, dest);
     }
 

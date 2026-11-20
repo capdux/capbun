@@ -206,9 +206,9 @@ if (input.expectIdentMatching("legacy").asErr()) |e| {
             return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-pub fn toCss(self: *LegacyJustify, dest: *css.Printer) css.PrintErr!void {
+pub fn toCss(s: *const @This(), dest: *css.Printer) css.PrintErr!void {
             _ = try dest.writeStr("legacy ");
-            switch (self) {
+            switch (s.*) {
 .left => {
 _ = try dest.writeStr("left");
 },

@@ -109,8 +109,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
             return css.enum_property_util.parse(@This(), input);
     }
 
-pub fn toCss(self: *FontTechnology, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
+            return css.enum_property_util.toCss(@This(), s, dest);
     }
 };
 
@@ -472,7 +472,7 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: FontFormat, dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .woff => {
 _ = try dest.writeStr("woff");
 },

@@ -348,7 +348,8 @@ pub fn newCustomError(self: SourceLocation, e: anytype) ParseError(ParserError) 
                             inline for (std.@"meta".fields(ParserError)) |f| {
                                 if ((e == @field(@typeInfo(ParserError).@"union".tag_type.?, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name)))) {
                                     if (comptime (f.type == void)) {
-                                        return .{ .kind = .{ .custom = @unionInit(ParserError, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name), .{}) }, .location = self };
+                                        const ev: void = undefined;
+                                        return .{ .kind = .{ .custom = @unionInit(ParserError, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name), ev) }, .location = self };
                                     }
                                 }
                             }

@@ -745,9 +745,9 @@ fn NewSizeHandler(
             if (logical_supported) {
                 logicalSideHelper(&inline_start, &inline_end, "inline_start", "inline_end", inline_shorthand, inline_start_prop, inline_end_prop, logical_supported, dest, context);
             } else if (inline_start != null || inline_end != null) {
-                if (inline_start != null && inline_start.? == @field(Property, @tagName(inline_start_prop)) && inline_end != null && inline_end.? == @field(Property, @tagName(inline_end_prop)) &&
-                    @field(inline_start.?, @tagName(inline_start_prop)).eql(&@field(inline_end.?, @tagName(inline_end_prop))))
-                {
+                const can_prop = inline_start != null && inline_start.? == @field(Property, @tagName(inline_start_prop)) && inline_end != null && inline_end.? == @field(Property, @tagName(inline_end_prop)) &&
+                    @field(inline_start.?, @tagName(inline_start_prop)).eql(&@field(inline_end.?, @tagName(inline_end_prop)));
+                if (can_prop) {
                     prop(&inline_start, inline_start_prop, left_prop, dest, context);
                     prop(&inline_end, inline_end_prop, right_prop, dest, context);
                 } else {

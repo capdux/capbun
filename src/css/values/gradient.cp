@@ -392,8 +392,8 @@ pub struct LinearGradient {
         // we can flip the gradient the other direction and omit the direction.
         else if (angle == 0.0 && dest.minify && brk: {
             for (*item of _.items.items) {
-                if (item.* == .hint && item.hint != .percentage) break :brk false;
-                if (item.* == .color_stop && item.color_stop.position != null && item.color_stop.position.? != .percentage) break :brk false;
+                if (item == .hint && item.hint != .percentage) break :brk false;
+                if (item == .color_stop && item.color_stop.position != null && item.color_stop.position.? != .percentage) break :brk false;
             }
             break :brk true;
         }) {
@@ -1600,7 +1600,7 @@ pub fn serializeItems(
     let last: (*const Item)? = null;
     for (*item of items.items) {
         // Skip useless hints
-        if (item.* == .hint && item.hint == .percentage && item.hint.percentage.v == 0.5) {
+        if (item == .hint && item.hint == .percentage && item.hint.percentage.v == 0.5) {
             continue;
         }
 

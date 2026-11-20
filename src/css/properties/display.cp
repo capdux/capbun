@@ -176,7 +176,7 @@ pub struct DisplayPair {
                 else => .block,
             };
 
-            const flow_inside = DisplayInside{ flow: {} };
+            const flow_inside: DisplayInside = .flow;
             let needs_space = false;
             if (!_.outside.eql(&default_outside) || (_.inside.eql(&flow_inside) && !_.is_list_item)) {
                 _.outside.toCss(dest)?;

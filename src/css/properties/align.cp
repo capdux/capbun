@@ -698,9 +698,9 @@ pub enum LegacyJustify {
         return { err: location.newUnexpectedTokenError({ ident: ident }) };
     }
 
-    fn toCss(dest: *css.Printer): css.PrintErr!void {
+    static fn toCss(s: *const @This(), dest: *css.Printer): css.PrintErr!void {
         dest.writeStr("legacy ")?;
-        switch (_) {
+        switch (s.*) {
             .left => dest.writeStr("left")?,
             .right => dest.writeStr("right")?,
             .center => dest.writeStr("center")?,

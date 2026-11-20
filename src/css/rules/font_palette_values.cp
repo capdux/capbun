@@ -89,7 +89,7 @@ pub const FontPaletteValuesProperty = union(enum) {
     const This = @This();
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .font_family => |*f| {
                 dest.writeStr("font-family")?;
                 dest.delim(':', false)?;
@@ -190,7 +190,7 @@ pub union(enum) BasePalette {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .light => try dest.writeStr("light"),
             .dark => try dest.writeStr("dark"),
             .integer => try css.CSSIntegerFns.toCss(&@as(i32, @intCast(_.integer)), dest),

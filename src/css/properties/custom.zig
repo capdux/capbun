@@ -169,7 +169,9 @@ _ = try DashedIdentFns.toCss(v, dest);
                 has_whitespace = false;
 },
 .animation_name => |v| {
-_ = try v.toCss(dest);
+var av = v;
+                _ = &av;
+                _ = try av.toCss(dest);
                 has_whitespace = false;
 },
 .token => |token| {
