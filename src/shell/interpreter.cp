@@ -1775,12 +1775,12 @@ pub fn ShellTask(
             }
         }
 
-        pub fn runFromThreadPool(task: *WorkPoolTask) {
+        pub static fn runFromThreadPool(task: *WorkPoolTask) {
             debug("runFromThreadPool", {});
-            let this: *@This() = @fieldParentPtr("task", task);
-            const ctx: *Ctx = @fieldParentPtr("task", this);
+            let shell_task: *@This() = @fieldParentPtr("task", task);
+            const ctx: *Ctx = @fieldParentPtr("task", shell_task);
             runFromThreadPool_(ctx);
-            this.onFinish();
+            shell_task.onFinish();
         }
 
         pub fn runFromMainThread(this: *@This()) {

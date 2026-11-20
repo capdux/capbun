@@ -94,8 +94,8 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 
 pub fn MultiArrayListUnionElem(comptime T: type, comptime u: std.builtin.Type.Union) type {
-        const empty_decls: [0]std.builtin.Type.Declaration = &.{};
-        const BareType = @Type(std.builtin.Type{ .@"union" = .{ .layout = u.layout, .tag_type = null, .fields = u.fields, .decls = (&empty_decls) } });
+        const empty_decls: []const std.builtin.Type.Declaration = &.{};
+        const BareType = @Type(std.builtin.Type{ .@"union" = .{ .layout = u.layout, .tag_type = null, .fields = u.fields, .decls = empty_decls } });
         const TagType = ((u.tag_type) orelse (@compileError("MultiArrayList does not support untagged unions")));
         return struct {
     tags: Tag,
@@ -290,8 +290,8 @@ pub fn MultiArrayList(comptime T: type) type {
                 entry_fields[cp_cast_int(usize, idx)] = std.builtin.Type.StructField{ .name = std.fmt.comptimePrint("{s}_ptr", .{ (if (@typeInfo(@TypeOf(elem_fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(elem_fields[@as(usize, @intCast(i))])) == .@"union") @tagName(elem_fields[@as(usize, @intCast(i))]) else elem_fields[@as(usize, @intCast(i))].name) }), .type = PtrTo(elem_fields[@as(usize, @intCast(i))].type), .default_value_ptr = null, .is_comptime = elem_fields[@as(usize, @intCast(i))].is_comptime, .alignment = elem_fields[@as(usize, @intCast(i))].alignment };
             }
         }
-        const empty_decls: [0]std.builtin.Type.Declaration = &.{};
-        break :entry @Type(std.builtin.Type{ .@"struct" = .{ .layout = .@"extern", .fields = (&entry_fields), .decls = (&empty_decls), .is_tuple = false } });
+        const empty_decls: []const std.builtin.Type.Declaration = &.{};
+        break :entry @Type(std.builtin.Type{ .@"struct" = .{ .layout = .@"extern", .fields = (&entry_fields), .decls = empty_decls, .is_tuple = false } });
 };
         const init_cap = init: {
         var max: usize = 1;

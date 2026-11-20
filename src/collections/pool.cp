@@ -19,14 +19,16 @@ struct SinglyLinkedListNode<T, Parent> {
         }
     }
 
-    pub fn removeNext(self_node: *Node): (*Node)? {
-        const next_node = self_node.next ?? return null;
-        self_node.next = next_node.next;
-        return next_node;
+    pub fn removeNext(*_): (*Node)? {
+        if (next_node := _.next) {
+            _.next = next_node.next;
+            return next_node;
+        }
+        return null;
     }
 
-    pub fn findLast(self_node: *Node): *Node {
-        let it: *Node = self_node;
+    pub fn findLast(*_): *Node {
+        let it: *Node = _;
         while (next_node := it.next) {
             it = next_node;
         }
@@ -43,8 +45,8 @@ struct SinglyLinkedListNode<T, Parent> {
         return count;
     }
 
-    pub inline fn release(self_node: *Node) {
-        @call(.auto, @field(Parent, "release"), [self_node]);
+    pub inline fn release(*_) {
+        @call(.auto, @field(Parent, "release"), [_]);
     }
 }
 
@@ -57,16 +59,16 @@ struct SinglyLinkedList<T, Parent> {
     pub fn prepend(*_, new_node: *Node) {
         unsafe {
             let n = new_node;
-            n.next = this.first;
-            this.first = new_node;
+            n.next = _.first;
+            _.first = new_node;
         }
     }
 
     pub fn remove(*_, node: *Node) {
-        if (this.first == node) {
-            this.first = node.next;
+        if (_.first == node) {
+            _.first = node.next;
         } else {
-            let current_elm = this.first.?;
+            let current_elm = _.first.?;
             while (current_elm.next != node) {
                 current_elm = current_elm.next.?;
             }
@@ -74,10 +76,12 @@ struct SinglyLinkedList<T, Parent> {
         }
     }
 
-    pub fn popFirst(self_list: *Self): (*Node)? {
-        const first = self_list.first ?? return null;
-        self_list.first = first.next;
-        return first;
+    pub fn popFirst(*_): (*Node)? {
+        if (first := _.first) {
+            _.first = first.next;
+            return first;
+        }
+        return null;
     }
 
     pub fn len(): usize {

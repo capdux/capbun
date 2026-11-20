@@ -715,8 +715,8 @@ pub fn highlightStringLit(comptime char: u8, writer: *std.Io.Writer, text_ptr: *
                     }
                     if (strings.findUrlPassword(inner)) |url_pass| {
                         _ = &url_pass;
-                        const offset = url_pass[0];
-                        const len = url_pass[1];
+                        const offset = url_pass.offset;
+                        const len = url_pass.len;
                         _ = try writer.print(Output.prettyFmt("<r><green>{c}{s}", true), .{ char, inner[0..offset] });
                         _ = try writer.splatByteAll(42, len);
                         _ = try writer.print(Output.prettyFmt("{s}{c}<r>", true), .{ inner[(offset + len)..], char });

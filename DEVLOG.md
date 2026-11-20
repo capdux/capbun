@@ -1344,3 +1344,6 @@
 
 ### 2026-11-20 06:15:49 UTC - zig:check 第 3 轮 JSC+WebCore 修复经验
 - `SystemError` 只读接收者消除 const 丢弃、`Body`/`FileSink`/`Response`/`s3/client` 统一经 `bun.*` 导入、`TextEncoder` 补 `@c static fn`。
+
+### 2026-11-20 06:16:26 UTC - zig:check 第 3 轮 Core+Shell+Sys 修复经验
+- `SemverQuery` 改 `@root struct Query` 避 `class` 指针化、`pool.cp` 统一 `*_` 接收者、`sys.cp` 用 `if (isX86)` 避 bool switch `else => unreachable`。

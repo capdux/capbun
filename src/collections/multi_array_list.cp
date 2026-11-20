@@ -8,13 +8,13 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 
 fn MultiArrayListUnionElem(comptime T: type, comptime u: std.builtin.Type.Union): type {
-    const empty_decls: [std.builtin.Type.Declaration; 0] = [];
+    const empty_decls: []const std.builtin.Type.Declaration = [];
     const BareType = @Type(std.builtin.Type{
         @"union": {
             layout: u.layout,
             tag_type: null,
             fields: u.fields,
-            decls: &empty_decls,
+            decls: empty_decls,
         },
     });
     const TagType = u.tag_type ?? @compileError("MultiArrayList does not support untagged unions");
@@ -267,12 +267,12 @@ pub fn MultiArrayList(comptime T: type): type {
                 alignment: elem_fields[i].alignment,
             };
         }
-        const empty_decls: [std.builtin.Type.Declaration; 0] = [];
+        const empty_decls: []const std.builtin.Type.Declaration = [];
         break :entry @Type(std.builtin.Type{
             @"struct": {
                 layout: .@"extern",
                 fields: &entry_fields,
-                decls: &empty_decls,
+                decls: empty_decls,
                 is_tuple: false,
             },
         });

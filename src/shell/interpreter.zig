@@ -1641,13 +1641,13 @@ pub fn onFinish(self: *@This()) void {
             }
     }
 
-pub fn runFromThreadPool(self: @This(), task: *WorkPoolTask) void {
+pub fn runFromThreadPool(task: *WorkPoolTask) void {
             _ = debug("runFromThreadPool", .{});
-            var this: *@This() = @fieldParentPtr("task", task);
-            _ = &this;
-            const ctx: *Ctx = @fieldParentPtr("task", self);
+            var shell_task: *@This() = @fieldParentPtr("task", task);
+            _ = &shell_task;
+            const ctx: *Ctx = @fieldParentPtr("task", shell_task);
             _ = runFromThreadPool_(ctx);
-            _ = self.onFinish();
+            _ = shell_task.onFinish();
     }
 
 pub fn runFromMainThread(self: *@This()) void {

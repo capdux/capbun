@@ -136,7 +136,7 @@ pub union Request {
 }
 
 pub union Data {
-    package_manifest: Npm.PackageManifest.PackageMetadata,
+    package_manifest: Npm.PackageManifest,
     extract: ExtractData,
     git_clone: bun.FD,
     git_checkout: Repository.GitCheckoutData,

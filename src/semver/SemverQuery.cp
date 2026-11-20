@@ -23,7 +23,7 @@ pub const Op = enum {
 };
 
 @root
-class Query {
+struct Query {
     range: Range = Range{};
     next: ?*Query = null;
 }

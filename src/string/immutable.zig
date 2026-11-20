@@ -1765,9 +1765,9 @@ pub fn encodeBytesToHex(destination: []u8, source: []const u8) usize {
             const remaining_end = ((remaining.ptr + remaining.len) - (remaining.len % 16));
             while ((remaining.ptr != remaining_end)) {
                 const input_chunk: @Vector(16,u8) = (remaining[0..16]).*;
-                const splat_4: @Vector(16,u8) = @splat((if (comptime @typeInfo(@TypeOf(4)) == .@"enum") cp_cast_int(u8, @intFromEnum(4)) else cp_cast_int(u8, 4)));
+                const splat_16: @Vector(16,u8) = @splat((if (comptime @typeInfo(@TypeOf(16)) == .@"enum") cp_cast_int(u8, @intFromEnum(16)) else cp_cast_int(u8, 16)));
                 const splat_15: @Vector(16,u8) = @splat((if (comptime @typeInfo(@TypeOf(15)) == .@"enum") cp_cast_int(u8, @intFromEnum(15)) else cp_cast_int(u8, 15)));
-                const input_chunk_4: @Vector(16,u8) = cp_shr(input_chunk, splat_4);
+                const input_chunk_4: @Vector(16,u8) = (input_chunk / splat_16);
                 const input_chunk_15: @Vector(16,u8) = (input_chunk & splat_15);
                 const lower_16: [16]u8 = .{ byte2hex(input_chunk_4[0]), byte2hex(input_chunk_4[1]), byte2hex(input_chunk_4[2]), byte2hex(input_chunk_4[3]), byte2hex(input_chunk_4[4]), byte2hex(input_chunk_4[5]), byte2hex(input_chunk_4[6]), byte2hex(input_chunk_4[7]), byte2hex(input_chunk_4[8]), byte2hex(input_chunk_4[9]), byte2hex(input_chunk_4[10]), byte2hex(input_chunk_4[11]), byte2hex(input_chunk_4[12]), byte2hex(input_chunk_4[13]), byte2hex(input_chunk_4[14]), byte2hex(input_chunk_4[15]) };
                 const upper_16: [16]u8 = .{ byte2hex(input_chunk_15[0]), byte2hex(input_chunk_15[1]), byte2hex(input_chunk_15[2]), byte2hex(input_chunk_15[3]), byte2hex(input_chunk_15[4]), byte2hex(input_chunk_15[5]), byte2hex(input_chunk_15[6]), byte2hex(input_chunk_15[7]), byte2hex(input_chunk_15[8]), byte2hex(input_chunk_15[9]), byte2hex(input_chunk_15[10]), byte2hex(input_chunk_15[11]), byte2hex(input_chunk_15[12]), byte2hex(input_chunk_15[13]), byte2hex(input_chunk_15[14]), byte2hex(input_chunk_15[15]) };

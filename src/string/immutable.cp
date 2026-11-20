@@ -1492,9 +1492,9 @@ pub fn encodeBytesToHex(destination: []u8, source: []const u8): usize {
         const remaining_end = remaining.ptr + remaining.len - (remaining.len % 16);
         while (remaining.ptr != remaining_end) {
             const input_chunk: @Vector(16, u8) = remaining[0..16].*;
-            const splat_4: @Vector(16, u8) = @splat(@as(u8, 4));
+            const splat_16: @Vector(16, u8) = @splat(@as(u8, 16));
             const splat_15: @Vector(16, u8) = @splat(@as(u8, 15));
-            const input_chunk_4: @Vector(16, u8) = input_chunk >> splat_4;
+            const input_chunk_4: @Vector(16, u8) = input_chunk / splat_16;
             const input_chunk_15: @Vector(16, u8) = input_chunk & splat_15;
 
             // This looks extremely redundant but it was the easiest way to make the compiler do the right thing

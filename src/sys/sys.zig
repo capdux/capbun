@@ -523,8 +523,7 @@ pub const O = (switch (Environment.os) {
     pub const TMPFILE = 0;
     pub const toPacked = toPackedO;
 },
-.linux, .wasm => (switch (Environment.isX86) {
-true => struct {
+.linux, .wasm => (if (Environment.isX86) struct {
     pub const RDONLY = 0;
     pub const WRONLY = 1;
     pub const RDWR = 2;
@@ -548,8 +547,7 @@ true => struct {
     pub const TMPFILE = 4259840;
     pub const NDELAY = NONBLOCK;
     pub const toPacked = toPackedO;
-},
-false => struct {
+} else struct {
     pub const RDONLY = 0;
     pub const WRONLY = 1;
     pub const RDWR = 2;
@@ -574,8 +572,6 @@ false => struct {
     pub const NDELAY = NONBLOCK;
     pub const SYMLINK = c.O_SYMLINK;
     pub const toPacked = toPackedO;
-},
-else => unreachable,
 }),
 .windows => struct {
     pub const RDONLY = 0;
@@ -3666,11 +3662,11 @@ pub fn getFileSize(fd: bun.FD) Maybe(usize) {
                 return .{ .err = e };
             }
             _ = log("GetFileSizeEx({f}) = {d}", .{ fd, size });
-            return .{ .result = (if (comptime @typeInfo(@TypeOf(@max(size, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(size, 0))) else cp_cast_int(i32, @max(size, 0))) };
+            return .{ .result = @as(usize, @intCast(@max(size, 0))) };
         }
         switch (fstat(fd)) {
 .result => |*stat_| {
-return .{ .result = (if (comptime @typeInfo(@TypeOf(@max(stat_.size, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(stat_.size, 0))) else cp_cast_int(i32, @max(stat_.size, 0))) };
+return .{ .result = @as(usize, @intCast(@max(stat_.size, 0))) };
 },
 .err => |e| {
 return .{ .err = e };

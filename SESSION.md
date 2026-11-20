@@ -3020,3 +3020,5 @@ Options:
 - [2026-11-20 06:10:44 UTC] 验收并提交外部根因 `uws_sys/App.cp` (0.777x) 与 `runtime/webcore/Blob.cp` (0.061x，升级 `@root struct Blob`)，全部 PASS。
 
 - [2026-11-20 06:15:49 UTC] 验收并提交第 3 轮 `zig:check` JSC+WebCore 簇 10 模块修复（10/10 全 PASS）。
+
+- [2026-11-20 06:16:26 UTC] 验收并提交第 3 轮 `zig:check` Core+Shell+Sys+Install 簇 11 模块修复（11/11 全 PASS），并派发 3 处外部根因修复（`http.cp`/`NullableAllocator.cp`/`unicode.cp`）。

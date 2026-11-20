@@ -1615,3 +1615,6 @@
 
 ### 2026-11-20 06:15:49 UTC - zig:check 第 3 轮 JSC+WebCore 簇 10 模块语义修复入库
 - 完成：`GeneratedBindings`/`SystemError`/`host_fn`/`ZigString`/`array_buffer`/`Body`/`FileSink`/`Response`/`TextEncoder`/`s3/client` 10/10 全 PASS。
+
+### 2026-11-20 06:16:26 UTC - zig:check 第 3 轮 Core+Shell+Sys+Install 簇 11 模块语义修复入库
+- 完成：`fmt`/`multi_array_list`/`pool`/`path_buffer_pool`/`PackageManagerTask`/`tsconfig_json`/`router`/`SemverQuery`/`interpreter`/`immutable`/`sys` 11/11 全 PASS。

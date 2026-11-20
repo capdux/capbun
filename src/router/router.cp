@@ -173,9 +173,9 @@ pub type MatchContextTypePtr = *MatchContextType;
 
 pub struct Routes {
     list: RouteIndex.List = RouteIndex.List.empty,
-    dynamic: []*Route = &[],
-    dynamic_names: []string = &[],
-    dynamic_match_names: []string = &[],
+    dynamic: []*Route = [],
+    dynamic_names: []string = [],
+    dynamic_match_names: []string = [],
     static: bun.StringHashMap(RoutePtr),
     index: *Route? = null,
     index_id: usize? = 0,
@@ -449,9 +449,9 @@ pub struct RouteLoader {
             i += 1;
         }
 
-        let dynamic: []*Route = &[];
-        let dynamic_names: []string = &[];
-        let dynamic_match_names: []string = &[];
+        let dynamic: []*Route = [];
+        let dynamic_names: []string = [];
+        let dynamic_match_names: []string = [];
 
         if (dynamic_i := dynamic_start) {
             dynamic = route_list.items(.route)[dynamic_i..];

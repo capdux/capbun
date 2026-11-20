@@ -1027,8 +1027,8 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                 }
 
                 if (url_pass := strings.findUrlPassword(inner)) {
-                    const offset = url_pass[0];
-                    const len = url_pass[1];
+                    const offset = url_pass.offset;
+                    const len = url_pass.len;
                     writer.print(Output.prettyFmt("<r><green>{c}{s}", true), [
                         char,
                         inner[0..offset],

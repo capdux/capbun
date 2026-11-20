@@ -17,7 +17,7 @@ pub fn PathBufferPoolT(comptime T: type) type {
         return struct {
 
 pub fn get() *T {
-            return (&Pool.get(bun.threadLocalAllocator()).data);
+            return (&Pool.get(bun.threadlocalAllocator()).data);
     }
 
 pub fn put(buffer: *const T) void {

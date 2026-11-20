@@ -153,65 +153,62 @@ pub const O = switch (Environment.os) {
 
         pub const toPacked = toPackedO;
     },
-    .linux, .wasm => switch (Environment.isX86) {
-        true => struct {
-            pub const RDONLY = 0x0000;
-            pub const WRONLY = 0x0001;
-            pub const RDWR = 0x0002;
+    .linux, .wasm => if (Environment.isX86) struct {
+        pub const RDONLY = 0x0000;
+        pub const WRONLY = 0x0001;
+        pub const RDWR = 0x0002;
 
-            pub const CREAT = 0o100;
-            pub const EXCL = 0o200;
-            pub const NOCTTY = 0o400;
-            pub const TRUNC = 0o1000;
-            pub const APPEND = 0o2000;
-            pub const NONBLOCK = 0o4000;
-            pub const DSYNC = 0o10000;
-            pub const SYNC = 0o4010000;
-            pub const RSYNC = 0o4010000;
-            pub const DIRECTORY = 0o200000;
-            pub const NOFOLLOW = 0o400000;
-            pub const CLOEXEC = 0o2000000;
+        pub const CREAT = 0o100;
+        pub const EXCL = 0o200;
+        pub const NOCTTY = 0o400;
+        pub const TRUNC = 0o1000;
+        pub const APPEND = 0o2000;
+        pub const NONBLOCK = 0o4000;
+        pub const DSYNC = 0o10000;
+        pub const SYNC = 0o4010000;
+        pub const RSYNC = 0o4010000;
+        pub const DIRECTORY = 0o200000;
+        pub const NOFOLLOW = 0o400000;
+        pub const CLOEXEC = 0o2000000;
 
-            pub const ASYNC = 0o20000;
-            pub const DIRECT = 0o40000;
-            pub const LARGEFILE = 0;
-            pub const NOATIME = 0o1000000;
-            pub const PATH = 0o10000000;
-            pub const TMPFILE = 0o20200000;
-            pub const NDELAY = NONBLOCK;
+        pub const ASYNC = 0o20000;
+        pub const DIRECT = 0o40000;
+        pub const LARGEFILE = 0;
+        pub const NOATIME = 0o1000000;
+        pub const PATH = 0o10000000;
+        pub const TMPFILE = 0o20200000;
+        pub const NDELAY = NONBLOCK;
 
-            pub const toPacked = toPackedO;
-        },
-        false => struct {
-            pub const RDONLY = 0x0000;
-            pub const WRONLY = 0x0001;
-            pub const RDWR = 0x0002;
+        pub const toPacked = toPackedO;
+    } else struct {
+        pub const RDONLY = 0x0000;
+        pub const WRONLY = 0x0001;
+        pub const RDWR = 0x0002;
 
-            pub const CREAT = 0o100;
-            pub const EXCL = 0o200;
-            pub const NOCTTY = 0o400;
-            pub const TRUNC = 0o1000;
-            pub const APPEND = 0o2000;
-            pub const NONBLOCK = 0o4000;
-            pub const DSYNC = 0o10000;
-            pub const SYNC = 0o4010000;
-            pub const RSYNC = 0o4010000;
-            pub const DIRECTORY = 0o40000;
-            pub const NOFOLLOW = 0o100000;
-            pub const CLOEXEC = 0o2000000;
+        pub const CREAT = 0o100;
+        pub const EXCL = 0o200;
+        pub const NOCTTY = 0o400;
+        pub const TRUNC = 0o1000;
+        pub const APPEND = 0o2000;
+        pub const NONBLOCK = 0o4000;
+        pub const DSYNC = 0o10000;
+        pub const SYNC = 0o4010000;
+        pub const RSYNC = 0o4010000;
+        pub const DIRECTORY = 0o40000;
+        pub const NOFOLLOW = 0o100000;
+        pub const CLOEXEC = 0o2000000;
 
-            pub const ASYNC = 0o20000;
-            pub const DIRECT = 0o200000;
-            pub const LARGEFILE = 0o400000;
-            pub const NOATIME = 0o1000000;
-            pub const PATH = 0o10000000;
-            pub const TMPFILE = 0o20040000;
-            pub const NDELAY = NONBLOCK;
+        pub const ASYNC = 0o20000;
+        pub const DIRECT = 0o200000;
+        pub const LARGEFILE = 0o400000;
+        pub const NOATIME = 0o1000000;
+        pub const PATH = 0o10000000;
+        pub const TMPFILE = 0o20040000;
+        pub const NDELAY = NONBLOCK;
 
-            pub const SYMLINK = c.O_SYMLINK;
+        pub const SYMLINK = c.O_SYMLINK;
 
-            pub const toPacked = toPackedO;
-        },
+        pub const toPacked = toPackedO;
     },
     .windows => struct {
         pub const RDONLY = 0o0;
@@ -4280,12 +4277,12 @@ pub fn getFileSize(fd: bun.FD): Maybe(usize) {
             return { err: e };
         }
         log("GetFileSizeEx({f}) = {d}", .{ fd, size });
-        return { result: i32(@max(size, 0)) };
+        return { result: @as(usize, @intCast(@max(size, 0))) };
     }
 
     switch (fstat(fd)) {
         .result => |*stat_| {
-            return { result: i32(@max(stat_.size, 0)) };
+            return { result: @as(usize, @intCast(@max(stat_.size, 0))) };
         },
         .err => |e| {
             return { err: e };

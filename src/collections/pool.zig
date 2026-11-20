@@ -63,17 +63,17 @@ pub fn insertAfter(self: *@This(), new_node: *Node) void {
                 }
         }
 
-pub fn removeNext(self_node: *Node) ?*Node {
-                const next_node = ((self_node.next) orelse { return null; });
-                var __next_node_moved = false; _ = &__next_node_moved;
-                defer if (!__next_node_moved) { const __T = @TypeOf(next_node); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next_node.release() catch {}; } else { next_node.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next_node; _drop_val.release(); } };
-                self_node.next = next_node.next;
-                __next_node_moved = true;
-                return next_node;
+pub fn removeNext(self: *@This()) ?*Node {
+                if (self.next) |next_node| {
+                    _ = &next_node;
+                    self.next = next_node.next;
+                    return next_node;
+                }
+                return null;
         }
 
-pub fn findLast(self_node: *Node) *Node {
-                var it: *Node = self_node;
+pub fn findLast(self: *@This()) *Node {
+                var it: *Node = self;
                 _ = &it;
                 while (it.next) |next_node| {
                     it = next_node;
@@ -93,9 +93,8 @@ pub fn countChildren(self: @This()) usize {
                 return count;
         }
 
-pub inline fn release(self: *@This(), self_node: *Node) void {
-            _ = self;
-                _ = @call(.auto, @field(Parent, "release"), .{ self_node });
+pub inline fn release(self: *@This()) void {
+                _ = @call(.auto, @field(Parent, "release"), .{ self });
         }
         const Self = @This();
         const Node = Self;
@@ -129,13 +128,13 @@ pub fn remove(self: *@This(), node: *Node) void {
                 }
         }
 
-pub fn popFirst(self_list: *Self) ?*Node {
-                const first = ((self_list.first) orelse { return null; });
-                var __first_moved = false; _ = &__first_moved;
-                defer if (!__first_moved) { const __T = @TypeOf(first); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = first.release() catch {}; } else { first.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = first; _drop_val.release(); } };
-                self_list.first = (first).?.next;
-                __first_moved = true;
-                return first;
+pub fn popFirst(self: *@This()) ?*Node {
+                if (self.first) |first| {
+                    _ = &first;
+                    self.first = first.next;
+                    return first;
+                }
+                return null;
         }
 
 pub fn len(self: @This()) usize {

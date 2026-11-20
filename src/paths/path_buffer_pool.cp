@@ -9,16 +9,16 @@ fn PathBufferPoolT(comptime T: type): type {
     return struct {
         const Pool = ObjectPool(T, null, true, 4);
 
-        pub fn get() *T {
-            return &Pool.get(bun.threadLocalAllocator()).data;
+        pub static fn get(): *T {
+            return &Pool.get(bun.threadlocalAllocator()).data;
         }
 
-        pub fn put(buffer: *const T) void {
+        pub static fn put(buffer: *const T) {
             const node: *Pool.Node = @alignCast(@fieldParentPtr("data", @constCast(buffer)));
             node.release();
         }
 
-        pub fn deleteAll() void {
+        pub static fn deleteAll() {
             Pool.deleteAll();
         }
     };

@@ -98,7 +98,7 @@ pub fn format(formatter: Formatter, writer: *std.Io.Writer) !void {
     }
 };
 pub const List = struct {
-    head: *Query = Query{  },
+    head: Query = Query{  },
     tail: ?*Query = null,
     next: ?*List = null,
 
@@ -137,7 +137,7 @@ pub fn andRange(self: *@This(), allocator: Allocator, range: Range) !void {
             _ = &tail;
             tail.* = Query{ .range = range };
             (tail).?.range = range;
-            var last_tail = ((self.tail) orelse (self.head));
+            var last_tail = ((self.tail) orelse ((&self.head)));
             _ = &last_tail;
             last_tail.next = tail;
             self.tail = tail;

@@ -188,9 +188,9 @@ pub const MatchContextType = struct {
 
 pub const Routes = struct {
     list: RouteIndex.List = RouteIndex.List.empty,
-    dynamic: []*Route = (&&.{}),
-    dynamic_names: [][]const u8 = (&&.{}),
-    dynamic_match_names: [][]const u8 = (&&.{}),
+    dynamic: []*Route = &.{},
+    dynamic_names: [][]const u8 = &.{},
+    dynamic_match_names: [][]const u8 = &.{},
     static: bun.StringHashMap(RoutePtr),
     index: ?*Route = null,
     index_id: ?usize = 0,
@@ -397,11 +397,11 @@ pub fn loadAll(allocator: std.mem.Allocator, config: Options.RouteConfig, log: *
                 _ = route_list.appendAssumeCapacity(.{ .name = (if (@typeInfo(@TypeOf(route)) == .@"enum" or @typeInfo(@TypeOf(route)) == .@"union") @tagName(route) else route.name), .filepath = route.abs_path.slice(), .match_name = route.match_name.slice(), .public_path = route.public_path.slice(), .route = route, .hash = route.full_hash });
                 i = (i + 1);
             }
-            var dynamic: []*Route = (&&.{});
+            var dynamic: []*Route = &.{};
             _ = &dynamic;
-            var dynamic_names: [][]const u8 = (&&.{});
+            var dynamic_names: [][]const u8 = &.{};
             _ = &dynamic_names;
-            var dynamic_match_names: [][]const u8 = (&&.{});
+            var dynamic_match_names: [][]const u8 = &.{};
             _ = &dynamic_match_names;
             if (dynamic_start) |dynamic_i| {
                 _ = &dynamic_i;
@@ -735,13 +735,18 @@ pub fn parse(base_: []const u8, extname: []const u8, entry: *Fs.FileSystem.Entry
     });
         }
         const sort_table: [256]u8 = brk: {
-                    var table: [256]u8 = undefined;
-                    for (&table, 0..) |*t, i| t.* = @as(u8, @intCast(i));
-                    table['['] = 252;
-                    table[']'] = 253;
-                    table['/'] = 254;
-                    break :brk table;
-                };
+                var table: [256]u8 = undefined;
+                _ = &table;
+                for (&table, 0..) |*t, i| {
+                    _ = &t;
+                    _ = &i;
+                    t.* = @as(u8, @intCast(i));
+                }
+                table[cp_cast_int(usize, 91)] = 252;
+                table[cp_cast_int(usize, 93)] = 253;
+                table[cp_cast_int(usize, 47)] = 254;
+                break :brk table;
+        };
     };
 };
 

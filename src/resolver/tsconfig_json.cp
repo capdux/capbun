@@ -9,7 +9,8 @@ const js_lexer = bun.js_lexer;
 const logger = bun.logger;
 const strings = bun.strings;
 
-const PathsMap = bun.StringArrayHashMap([]string);
+type StringSlice = []string;
+const PathsMap = bun.StringArrayHashMap(StringSlice);
 
 fn FlagSet(comptime Type: type): type {
     return std.EnumSet(std.meta.FieldEnum(Type));
