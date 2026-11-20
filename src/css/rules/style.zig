@@ -134,10 +134,10 @@ pub fn toCssBase(self: *@This(), dest: *Printer) PrintErr!void {
                     _ = &decl_field_name;
                     const important = (comptime std.mem.eql(u8, decl_field_name, "important_declarations"));
                     const decls: *const ArrayList(css.Property) = (&@field(self.declarations, decl_field_name));
-                    for (decls.items) |*decl| {
+                    for (decls.items) |decl| {
                         _ = &decl;
-                        if (((decl.*).* == .composes)) {
-                            const composes = (&(decl.*).composes);
+                        if ((decl == .composes)) {
+                            const composes = (&decl.composes);
                             if ((dest.isNested() and (dest.css_module != null))) {
                                 return dest.newError(css.PrinterErrorKind.invalid_composes_nesting, composes.cssparser_loc);
                             }
@@ -151,7 +151,7 @@ pub fn toCssBase(self: *@This(), dest: *Printer) PrintErr!void {
                             }
                         }
                         _ = try dest.newline();
-                        _ = try (decl.*).toCss(dest, important);
+                        _ = try decl.toCss(dest, important);
                         if ((((i != (len - 1)) or (!dest.minify)) or (supports_nesting and (self.rules.v.items.len > 0)))) {
                             _ = try dest.writeChar(59);
                         }

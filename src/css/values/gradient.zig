@@ -707,16 +707,37 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            const f: []const u8 = undefined;
-            const prefix: ?css.VendorPrefix = (switch (self) {
-.linear => |g| .{ "linear-gradient(", g.vendor_prefix },
-.repeating_linear => |g| .{ "repeating-linear-gradient(", g.vendor_prefix },
-.radial => |g| .{ "radial-gradient(", g.vendor_prefix },
-.repeating_radial => |g| .{ "repeating-radial-gradient(", g.vendor_prefix },
-.conic => .{ "conic-gradient(", null },
-.repeating_conic => .{ "repeating-conic-gradient(", null },
-.@"webkit-gradient" => .{ "-webkit-gradient(", null },
-});
+            var f: []const u8 = undefined;
+            _ = &f;
+            var prefix: ?css.VendorPrefix = null;
+            _ = &prefix;
+            switch (self) {
+.linear => |g| {
+f = "linear-gradient(";
+            prefix = g.vendor_prefix;
+},
+.repeating_linear => |g| {
+f = "repeating-linear-gradient(";
+            prefix = g.vendor_prefix;
+},
+.radial => |g| {
+f = "radial-gradient(";
+            prefix = g.vendor_prefix;
+},
+.repeating_radial => |g| {
+f = "repeating-radial-gradient(";
+            prefix = g.vendor_prefix;
+},
+.conic => {
+f = "conic-gradient(";
+},
+.repeating_conic => {
+f = "repeating-conic-gradient(";
+},
+.@"webkit-gradient" => {
+f = "-webkit-gradient(";
+},
+}
             if (prefix) |p| {
                 _ = &p;
                 _ = try p.toCss(dest);

@@ -587,7 +587,7 @@ pub inline fn logicalSideHelper(start: *OptProperty, end: *OptProperty, comptime
 pub inline fn prop(val: *OptProperty, comptime logical: css.PropertyIdTag, comptime physical: css.PropertyIdTag, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) void {
             if ((val.* != null)) {
                 const v = (&val.*.?);
-                if (((if (comptime @typeInfo(css.PropertyIdTag) == .@"enum") @as(css.PropertyIdTag, @enumFromInt(v.*)) else @as(css.PropertyIdTag, v.*)) == logical)) {
+                if ((std.@"meta".activeTag(v.*) == logical)) {
                     _ = (blk_catch_7: { break :blk_catch_7 ((dest.append(context.allocator, @unionInit(Property, @tagName(physical), @field(v, @tagName(logical))))) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
                 } else {
                     if ((v.* == .unparsed)) {

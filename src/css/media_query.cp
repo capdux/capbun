@@ -135,7 +135,8 @@ pub enum Operator {
     }
 
     fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+        const s = _;
+        return css.enum_property_util.toCss(@This(), &s, dest);
     }
 }
 
@@ -306,7 +307,8 @@ pub enum Qualifier {
     }
 
     fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+        const s = _;
+        return css.enum_property_util.toCss(@This(), &s, dest);
     }
 
     fn hash(hasher: auto) {
@@ -755,7 +757,7 @@ pub enum MediaFeatureId {
         prefix: []const u8,
         dest: *Printer,
     ): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .@"-webkit-device-pixel-ratio" => {
                 return dest.writeFmt("-webkit-{s}device-pixel-ratio", .{prefix});
             },
@@ -775,7 +777,8 @@ pub enum MediaFeatureId {
     }
 
     fn toCss(dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), _, dest);
+        const s = _;
+        return css.enum_property_util.toCss(@This(), &s, dest);
     }
 
     fn hash(hasher: auto) {
@@ -1236,7 +1239,7 @@ pub enum MediaFeatureValue {
     }
 
     fn deinit(*_, allocator: std.mem.Allocator) {
-        return switch (_) {
+        return switch (_.*) {
             .length => |l| l.deinit(allocator),
             .number => {},
             .integer => {},
@@ -1265,7 +1268,7 @@ pub enum MediaFeatureValue {
             },
             .resolution => |res| return res.toCss(dest),
             .ratio => |ratio| return ratio.toCss(dest),
-            .ident => |id| return IdentFns.toCss(&id, dest),
+            .ident => |id| return IdentFns.toCss(id, dest),
             .env => |env| return EnvironmentVariable.toCss(&env, dest, false),
         }
     }
@@ -1279,7 +1282,7 @@ pub enum MediaFeatureValue {
     /// Parses a single media query feature value, with an expected type.
     /// If the type is unknown, pass MediaFeatureType::Unknown instead.
     static fn parse(input: *css.Parser, expected_type: MediaFeatureType): Result(MediaFeatureValue) {
-        const parseKnownFn = MediaFeatureValue.parseKnown;
+        const parseKnownFn = @field(MediaFeatureValue, "parseKnown");
         if (value := input.tryParse(parseKnownFn, .{expected_type}).asValue()) {
             return { result: value };
         }
@@ -1440,8 +1443,8 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
         pub static fn toCss(s: *const @This(), dest: *Printer): PrintErr!void {
             return switch (s.*) {
                 .standard => |v| v.toCss(dest),
-                .custom => |d| DashedIdentFns.toCss(&d, dest),
-                .unknown => |v| IdentFns.toCss(&v, dest),
+                .custom => |d| DashedIdentFns.toCss(d, dest),
+                .unknown => |v| IdentFns.toCss(v, dest),
             };
         }
 
@@ -1450,11 +1453,11 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
                 .standard => |v| v.toCssWithPrefix(prefix, dest),
                 .custom => |d| {
                     try dest.writeStr(prefix);
-                    return DashedIdentFns.toCss(&d, dest);
+                    return DashedIdentFns.toCss(d, dest);
                 },
                 .unknown => |v| {
                     try dest.writeStr(prefix);
-                    return IdentFns.toCss(&v, dest);
+                    return IdentFns.toCss(v, dest);
                 },
             };
         }

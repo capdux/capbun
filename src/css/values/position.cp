@@ -387,7 +387,8 @@ pub enum HorizontalPositionKeyword {
     }
 
     static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), s, dest);
+        const _s = s;
+        return css.enum_property_util.toCss(@This(), &_s, dest);
     }
 
     fn intoLengthPercentage(): LengthPercentage {
@@ -422,7 +423,8 @@ pub enum VerticalPositionKeyword {
     }
 
     static fn toCss(s: @This(), dest: *Printer): PrintErr!void {
-        return css.enum_property_util.toCss(@This(), s, dest);
+        const _s = s;
+        return css.enum_property_util.toCss(@This(), &_s, dest);
     }
 
     fn intoLengthPercentage(): LengthPercentage {

@@ -176,13 +176,14 @@ pub struct DisplayPair {
                 else => .block,
             };
 
+            const flow_inside = DisplayInside{ flow: {} };
             let needs_space = false;
-            if (!_.outside.eql(&default_outside) || (_.inside.eql(&DisplayInside.flow) && !_.is_list_item)) {
+            if (!_.outside.eql(&default_outside) || (_.inside.eql(&flow_inside) && !_.is_list_item)) {
                 _.outside.toCss(dest)?;
                 needs_space = true;
             }
 
-            if (!_.inside.eql(&DisplayInside.flow)) {
+            if (!_.inside.eql(&flow_inside)) {
                 if (needs_space) {
                     dest.writeChar(' ')?;
                 }

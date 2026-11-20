@@ -228,7 +228,7 @@ pub struct ImageSet {
             }
         };
 
-        const options = switch (input.parseNestedBlock(ArrayList(ImageSetOption), undefined, Fn.parseNestedBlockFn)) {
+        const options = switch (input.parseNestedBlock(ArrayList(ImageSetOption), @as(void, undefined), Fn.parseNestedBlockFn)) {
             .result => |vv| vv,
             .err => |e| return .{ .err = e },
         };
@@ -406,7 +406,7 @@ fn parseFileType(input: *css.Parser): Result(Str) {
             return i.expectString();
         }
     };
-    return input.parseNestedBlock(Str, undefined, Fn.parseNestedBlockFn);
+    return input.parseNestedBlock(Str, @as(void, undefined), Fn.parseNestedBlockFn);
 }
 
 import bun from "bun";

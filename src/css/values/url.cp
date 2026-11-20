@@ -96,7 +96,7 @@ pub struct Url {
             let buf = std.Io.Writer.Allocating.init(dest.allocator);
             defer buf.deinit();
             // PERF(alloc) we could use stack fallback here?
-            css.Token.toCssGeneric(&css.Token{ .unquoted_url = url }, &buf.writer) catch return dest.addFmtError();
+            css.Token.toCssGeneric(css.Token{ unquoted_url: url }, &buf.writer) catch return dest.addFmtError();
 
             // If the unquoted url is longer than it would be quoted (e.g. `url("...")`)
             // then serialize as a string and choose the shorter version.

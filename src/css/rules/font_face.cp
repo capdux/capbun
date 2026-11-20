@@ -349,7 +349,7 @@ pub union(enum) FontStyle {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .normal => dest.writeStr("normal")?,
             .italic => dest.writeStr("italic")?,
             .oblique => |angle| {
@@ -477,7 +477,7 @@ pub union(enum) Source {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .url => _.url.toCss(dest)?,
             .local => {
                 dest.writeStr("local(")?;

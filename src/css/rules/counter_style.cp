@@ -19,7 +19,7 @@ pub struct CounterStyleRule {
         // dest.add_mapping(self.loc);
 
         dest.writeStr("@counter-style")?;
-        css.css_values.ident.CustomIdentFns.toCss(&_.name, dest)?;
+        css.css_values.ident.CustomIdentFns.toCss(_.name, dest)?;
         _.declarations.toCssBlock(dest)?;
     }
 

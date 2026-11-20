@@ -98,7 +98,8 @@ pub fn toCss(self: DashedIdentReference, dest: *Printer) PrintErr!void {
             if (dest.css_module) |*css_module| {
                 _ = &css_module;
                 if ((css_module.*).config.dashed_idents) {
-                    if (try (css_module.*).referenceDashed(dest, self.ident.v, (&self.@"from"), dest.loc.source_index)) |name| {
+                    const from_ptr: ?*const Specifier = (if ((self.@"from" != null)) (&self.@"from".?) else null);
+                    if (try (css_module.*).referenceDashed(dest, self.ident.v, from_ptr, dest.loc.source_index)) |name| {
                         _ = &name;
                         _ = try dest.writeStr("--");
                         _ = (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeName(name, dest)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); });

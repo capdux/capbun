@@ -401,7 +401,7 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: FontStyle, dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .normal => {
 _ = try dest.writeStr("normal");
 },
@@ -540,7 +540,7 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: Source, dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .url => {
 _ = try self.url.toCss(dest);
 },

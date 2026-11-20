@@ -345,7 +345,14 @@ pub fn newCustomError(self: SourceLocation, e: anytype) ParseError(ParserError) 
                         return .{ .kind = .{ .custom = selector.parser.SelectorParseErrorKind.intoDefaultParserError(e) }, .location = self };
                     } else {
                         if ((@TypeOf(e) == @typeInfo(ParserError).@"union".tag_type.?)) {
-                            return .{ .kind = .{ .custom = (if (comptime @typeInfo(ParserError) == .@"enum") @as(ParserError, @enumFromInt(e)) else @as(ParserError, e)) }, .location = self };
+                            inline for (std.@"meta".fields(ParserError)) |f| {
+                                if ((e == @field(@typeInfo(ParserError).@"union".tag_type.?, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name)))) {
+                                    if (comptime (f.type == void)) {
+                                        return .{ .kind = .{ .custom = @unionInit(ParserError, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name), .{}) }, .location = self };
+                                    }
+                                }
+                            }
+                            _ = @compileError("ParserError tag requires payload");
                         } else {
                             _ = @compileError(("TODO implement this for: " ++ @typeName(@TypeOf(e))));
                         }
@@ -4442,11 +4449,11 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: anytype) type {
 };
         return struct {
 
-pub fn valueType(self: @This()) media_query.MediaFeatureType {
+pub fn valueType(s: T) media_query.MediaFeatureType {
             inline for (std.@"meta".fields(T), 0..) |field, i| {
                 _ = &field;
                 _ = &i;
-                if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self.*))) {
+                if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(s))) {
                     return field_values[@as(usize, @intCast(i))];
                 }
             }

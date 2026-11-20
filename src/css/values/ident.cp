@@ -45,7 +45,8 @@ pub struct DashedIdentReference {
     fn toCss(dest: *Printer): PrintErr!void {
         if (*css_module := dest.css_module) {
             if (css_module.config.dashed_idents) {
-                if (name := css_module.referenceDashed(dest, _.ident.v, &_.@"from", dest.loc.source_index)?) {
+                const from_ptr: (*const Specifier)? = if (_.@"from" != null) &_.@"from".? else null;
+                if (name := css_module.referenceDashed(dest, _.ident.v, from_ptr, dest.loc.source_index)?) {
                     dest.writeStr("--")?;
                     css.serializer.serializeName(name, dest) catch return dest.addFmtError();
                     return;

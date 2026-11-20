@@ -190,7 +190,7 @@ return .{ .err = e };
             }
     }
 
-pub fn toCss(self: *BasePalette, dest: *Printer) PrintErr!void {
+pub fn toCss(self: BasePalette, dest: *Printer) PrintErr!void {
             switch (self.*) {
 .light => {
 _ = try dest.writeStr("light");
@@ -315,7 +315,7 @@ pub const FontPaletteValuesProperty = union(enum) {
     override_colors: ArrayList(OverrideColors),
     custom: css.css_properties.custom.CustomProperty,
 
-pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             switch (self.*) {
 .font_family => |*f| {
 _ = try dest.writeStr("font-family");

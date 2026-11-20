@@ -474,7 +474,7 @@ else => {
             return;
     }
 
-pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             var first = true;
             _ = &first;
             var last_without_block = false;

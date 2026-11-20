@@ -137,7 +137,7 @@ pub union(enum) SupportsCondition {
     }
 
     fn needsParens(parent: *const SupportsCondition): bool {
-        return switch (_.*) {
+        return switch (_) {
             .not => true,
             .@"and" => parent.* != .@"and",
             .@"or" => parent.* != .@"or",

@@ -434,7 +434,7 @@ pub fn CssRuleList(comptime AtRule: type): type {
             return;
         }
 
-        pub fn toCss(*_, dest: *Printer): PrintErr!void {
+        pub fn toCss(dest: *Printer): PrintErr!void {
             let first = true;
             let last_without_block = false;
 

@@ -107,10 +107,10 @@ pub fn StyleRule(comptime R: type): type {
                     const important = comptime std.mem.eql(u8, decl_field_name, "important_declarations");
                     const decls: *const ArrayList(css.Property) = &@field(_.declarations, decl_field_name);
 
-                    for (*decl of decls.items) {
+                    for (decl of decls.items) {
                         // The CSS modules `composes` property is handled specially, and omitted during printing.
                         // We need to add the classes it references to the list for the selectors in this rule.
-                        if (decl.* == .composes) {
+                        if (decl == .composes) {
                             const composes = &decl.composes;
                             if (dest.isNested() && dest.css_module != null) {
                                 return dest.newError(css.PrinterErrorKind.invalid_composes_nesting, composes.cssparser_loc);

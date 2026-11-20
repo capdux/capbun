@@ -139,7 +139,7 @@ pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
                 defer {
                 _ = buf.deinit();
                 }
-                _ = (blk_catch_1: { break :blk_catch_1 ((css.Token.toCssGeneric((&css.Token{ .unquoted_url = url }), (&buf.writer))) catch |__ce_1| { _ = &__ce_1; return dest.addFmtError(); }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((css.Token.toCssGeneric(css.Token{ .unquoted_url = url }, (&buf.writer))) catch |__ce_1| { _ = &__ce_1; return dest.addFmtError(); }); });
                 if ((buf.written().len > (url.len + 7))) {
                     var buf2 = std.Io.Writer.Allocating.init(dest.allocator);
                     _ = &buf2;

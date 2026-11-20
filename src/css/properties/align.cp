@@ -700,7 +700,7 @@ pub enum LegacyJustify {
 
     fn toCss(dest: *css.Printer): css.PrintErr!void {
         dest.writeStr("legacy ")?;
-        switch (_.*) {
+        switch (_) {
             .left => dest.writeStr("left")?,
             .right => dest.writeStr("right")?,
             .center => dest.writeStr("center")?,
@@ -825,7 +825,10 @@ pub struct PlaceItems {
                 const normal_val: AlignItems = .normal;
                 break :brk _.@"align".eql(&normal_val);
             },
-            .stretch => _.@"align".eql(&AlignItems{ .stretch = {} }),
+            .stretch => brk: {
+                const stretch_val: AlignItems = .stretch;
+                break :brk _.@"align".eql(&stretch_val);
+            },
             .baseline_position => |*p| brk: {
                 if (_.@"align" == .baseline_position) break :brk p.eql(&_.@"align".baseline_position);
                 break :brk false;

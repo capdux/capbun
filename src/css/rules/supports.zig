@@ -129,7 +129,7 @@ pub fn deepClone(this_ptr: *const SupportsCondition, allocator: std.mem.Allocato
     }
 
 pub fn needsParens(self: SupportsCondition, parent: *const SupportsCondition) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .not => true,
 .@"and" => (parent.* != .@"and"),
 .@"or" => (parent.* != .@"or"),

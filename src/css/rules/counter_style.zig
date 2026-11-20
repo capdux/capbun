@@ -54,7 +54,7 @@ pub const CounterStyleRule = struct {
 
 pub fn toCss(self: CounterStyleRule, dest: *Printer) PrintErr!void {
             _ = try dest.writeStr("@counter-style");
-            _ = try css.css_values.ident.CustomIdentFns.toCss((&self.name), dest);
+            _ = try css.css_values.ident.CustomIdentFns.toCss(self.name, dest);
             _ = try self.declarations.toCssBlock(dest);
     }
 

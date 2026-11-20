@@ -839,7 +839,7 @@ fn NewSizeHandler(
         ) {
             if (val.* != null) {
                 const v = &val.*.?;
-                if (@as(css.PropertyIdTag, v.*) == logical) {
+                if (std.@"meta".activeTag(v.*) == logical) {
                     dest.append(
                         context.allocator,
                         @unionInit(

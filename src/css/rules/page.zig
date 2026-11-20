@@ -85,7 +85,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), s, dest);
+            const _s = s;
+            return css.enum_property_util.toCss(@This(), (&_s), dest);
     }
 
 pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
@@ -124,7 +125,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), s, dest);
+            const _s = s;
+            return css.enum_property_util.toCss(@This(), (&_s), dest);
     }
 };
 

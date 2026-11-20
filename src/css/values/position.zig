@@ -88,7 +88,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), s, dest);
+            const _s = s;
+            return css.enum_property_util.toCss(@This(), (&_s), dest);
     }
 
 pub fn intoLengthPercentage(self: HorizontalPositionKeyword) LengthPercentage {
@@ -125,7 +126,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(s: @This(), dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), s, dest);
+            const _s = s;
+            return css.enum_property_util.toCss(@This(), (&_s), dest);
     }
 
 pub fn intoLengthPercentage(self: VerticalPositionKeyword) LengthPercentage {

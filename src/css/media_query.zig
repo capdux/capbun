@@ -102,7 +102,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(self: *Operator, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+            const s = self;
+            return css.enum_property_util.toCss(@This(), (&s), dest);
     }
 };
 
@@ -123,7 +124,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(self: *Qualifier, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+            const s = self;
+            return css.enum_property_util.toCss(@This(), (&s), dest);
     }
 
 pub fn hash(self: Qualifier, hasher: anytype) void {
@@ -294,7 +296,7 @@ pub const MediaFeatureId = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
 pub fn toCssWithPrefix(self: MediaFeatureId, prefix: []const u8, dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .@"-webkit-device-pixel-ratio" => {
 return dest.writeFmt("-webkit-{s}device-pixel-ratio", .{ prefix });
 },
@@ -314,7 +316,8 @@ pub fn parse(input: *css.Parser) Result(@This()) {
     }
 
 pub fn toCss(self: *MediaFeatureId, dest: *Printer) PrintErr!void {
-            return css.enum_property_util.toCss(@This(), self, dest);
+            const s = self;
+            return css.enum_property_util.toCss(@This(), (&s), dest);
     }
 
 pub fn hash(self: MediaFeatureId, hasher: anytype) void {
@@ -406,7 +409,7 @@ pub fn deepClone(self: MediaFeatureValue, allocator: std.mem.Allocator) MediaFea
     }
 
 pub fn deinit(self: *MediaFeatureValue, allocator: std.mem.Allocator) void {
-            return (switch (self) {
+            return (switch (self.*) {
 .length => |l| l.deinit(allocator),
 .number => {
 {
@@ -461,7 +464,7 @@ return res.toCss(dest);
 return ratio.toCss(dest);
 },
 .ident => |id| {
-return IdentFns.toCss((&id), dest);
+return IdentFns.toCss(id, dest);
 },
 .env => |env| {
 return EnvironmentVariable.toCss((&env), dest, false);
@@ -478,7 +481,7 @@ pub fn checkType(self: MediaFeatureValue, expected_type: MediaFeatureType) bool 
     }
 
 pub fn parse(input: *css.Parser, expected_type: MediaFeatureType) Result(MediaFeatureValue) {
-            const parseKnownFn = MediaFeatureValue{ .parseKnown = {} };
+            const parseKnownFn = @field(MediaFeatureValue, "parseKnown");
             if (input.tryParse(parseKnownFn, .{ expected_type }).asValue()) |value| {
                 _ = &value;
                 return .{ .result = value };
@@ -1444,8 +1447,8 @@ else => .unknown,
 pub fn toCss(s: *const @This(), dest: *Printer) PrintErr!void {
             return (switch (s.*) {
 .standard => |v| v.toCss(dest),
-.custom => |d| DashedIdentFns.toCss((&d), dest),
-.unknown => |v| IdentFns.toCss((&v), dest),
+.custom => |d| DashedIdentFns.toCss(d, dest),
+.unknown => |v| IdentFns.toCss(v, dest),
 });
     }
 
@@ -1455,13 +1458,13 @@ pub fn toCssWithPrefix(self: @This(), prefix: []const u8, dest: *Printer) PrintE
 .custom => |d| {
 {
                 _ = try dest.writeStr(prefix);
-                return DashedIdentFns.toCss((&d), dest);
+                return DashedIdentFns.toCss(d, dest);
             }
 },
 .unknown => |v| {
 {
                 _ = try dest.writeStr(prefix);
-                return IdentFns.toCss((&v), dest);
+                return IdentFns.toCss(v, dest);
             }
 },
 });

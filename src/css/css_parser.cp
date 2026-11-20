@@ -284,10 +284,17 @@ pub struct SourceLocation {
                 .location = _,
             };
         } else if (@TypeOf(e) == @typeInfo(ParserError).@"union".tag_type.?) {
-            return .{
-                .kind = .{ .custom = @as(ParserError, e) },
-                .location = _,
-            };
+            inline for (f of std.@"meta".fields(ParserError)) {
+                if (e == @field(@typeInfo(ParserError).@"union".tag_type.?, f.name)) {
+                    if (comptime f.type == void) {
+                        return .{
+                            .kind = .{ .custom = @unionInit(ParserError, f.name, {}) },
+                            .location = _,
+                        };
+                    }
+                }
+            }
+            @compileError("ParserError tag requires payload");
         } else {
             @compileError("TODO implement this for: " ++ @typeName(@TypeOf(e)));
         }
@@ -962,9 +969,9 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
     };
 
     return struct {
-        pub fn valueType(): media_query.MediaFeatureType {
+        pub static fn valueType(s: T): media_query.MediaFeatureType {
             inline for (std.@"meta".fields(T), 0..) |field, i| {
-                if (field.value == @intFromEnum(_.*)) {
+                if (field.value == @intFromEnum(s)) {
                     return field_values[i];
                 }
             }

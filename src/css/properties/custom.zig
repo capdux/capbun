@@ -165,7 +165,7 @@ _ = try v.toCss(dest);
                 has_whitespace = false;
 },
 .dashed_ident => |v| {
-_ = try DashedIdentFns.toCss((&v), dest);
+_ = try DashedIdentFns.toCss(v, dest);
                 has_whitespace = false;
 },
 .animation_name => |v| {
@@ -874,7 +874,7 @@ pub fn deinit(self: *Function, allocator: Allocator) void {
     }
 
 pub fn toCss(self: Function, dest: *Printer, is_custom_property: bool) PrintErr!void {
-            _ = try IdentFns.toCss((&self.name), dest);
+            _ = try IdentFns.toCss(self.name, dest);
             _ = try dest.writeChar(40);
             _ = try self.arguments.toCss(dest, is_custom_property);
             return try dest.writeChar(41);
@@ -1335,7 +1335,7 @@ pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
             return (switch (self.*) {
 .ua => |ua| ua.toCss(dest),
 .custom => |custom| custom.toCss(dest),
-.unknown => |unknown| CustomIdentFns.toCss((&unknown), dest),
+.unknown => |unknown| CustomIdentFns.toCss(unknown, dest),
 });
     }
 };

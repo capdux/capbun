@@ -66,7 +66,7 @@ pub const Resolution = union(enum) {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        const value, const unit = switch (_.*) {
+        const value, const unit = switch (_) {
             .dpi => |dpi| .{ dpi, "dpi" },
             .dpcm => |dpcm| .{ dpcm, "dpcm" },
             .dppx => |dppx| if (dest.targets.isCompatible(.x_resolution_unit))
@@ -80,9 +80,9 @@ pub const Resolution = union(enum) {
 
     pub fn addF32(_: std.mem.Allocator, other: f32): Resolution {
         return switch (_) {
-            .dpi => |dpi| { dpi: dpi + other },
-            .dpcm => |dpcm| { dpcm: dpcm + other },
-            .dppx => |dppx| { dppx: dppx + other },
+            .dpi => |dpi| Resolution{ dpi: dpi + other },
+            .dpcm => |dpcm| Resolution{ dpcm: dpcm + other },
+            .dppx => |dppx| Resolution{ dppx: dppx + other },
         };
     }
 };

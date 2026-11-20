@@ -109,7 +109,7 @@ pub struct TokenList {
                     has_whitespace = false;
                 },
                 .dashed_ident => |v| {
-                    DashedIdentFns.toCss(&v, dest)?;
+                    DashedIdentFns.toCss(v, dest)?;
                     has_whitespace = false;
                 },
                 .animation_name => |v| {
@@ -1253,7 +1253,7 @@ pub const EnvironmentVariableName = union(enum) {
         return switch (this.*) {
             .ua => |ua| ua.toCss(dest),
             .custom => |custom| custom.toCss(dest),
-            .unknown => |unknown| CustomIdentFns.toCss(&unknown, dest),
+            .unknown => |unknown| CustomIdentFns.toCss(unknown, dest),
         };
     }
 };
@@ -1306,7 +1306,7 @@ pub struct Function {
         dest: *Printer,
         is_custom_property: bool,
     ): PrintErr!void {
-        IdentFns.toCss(&_.name, dest)?;
+        IdentFns.toCss(_.name, dest)?;
         dest.writeChar('(')?;
         _.arguments.toCss(dest, is_custom_property)?;
         return dest.writeChar(')')?;

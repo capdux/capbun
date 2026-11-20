@@ -2649,9 +2649,7 @@ return .{ .err = e };
 };
                 var closure = Closure{ .parser = parser };
                 _ = &closure;
-                const IdentSlice = &.{};
-                _ = Impl.SelectorImpl.Identifier;
-                const names = (switch (input.parseNestedBlock(IdentSlice, (&closure), Closure.parsefn)) {
+                const names = (switch (input.parseNestedBlock(&.{}, Impl.SelectorImpl.Identifier, (&closure), Closure.parsefn)) {
 .err => |e| {
 return .{ .err = e };
 },

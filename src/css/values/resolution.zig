@@ -132,7 +132,7 @@ return .{ .err = undefined };
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             const value = undefined;
-            const unit = (switch (self.*) {
+            const unit = (switch (self) {
 .dpi => |dpi| .{ dpi, "dpi" },
 .dpcm => |dpcm| .{ dpcm, "dpcm" },
 .dppx => |dppx| (if (dest.targets.isCompatible(.x_resolution_unit)) .{ dppx, "x" } else .{ dppx, "dppx" }),
@@ -141,11 +141,10 @@ pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
     }
 
 pub fn addF32(self: @This(), _: std.mem.Allocator, other: f32) Resolution {
-        _ = other;
             return (switch (self) {
-.dpi => |dpi| dpi,
-.dpcm => |dpcm| dpcm,
-.dppx => |dppx| dppx,
+.dpi => |dpi| Resolution{ .dpi = (dpi + other) },
+.dpcm => |dpcm| Resolution{ .dpcm = (dpcm + other) },
+.dppx => |dppx| Resolution{ .dppx = (dppx + other) },
 });
     }
     const This = @This();

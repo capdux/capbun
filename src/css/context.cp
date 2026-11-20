@@ -269,7 +269,7 @@ pub struct PropertyHandlerContext {
         let found_idx: usize? = null;
         for (i of 0.._.supports.items.len) {
             if (condition.eql(&_.supports.items[i].condition)) {
-                found_idx = i;
+                found_idx = @as(usize, @intCast(i));
                 break;
             }
         }

@@ -88,7 +88,7 @@ pub const FontPaletteValuesProperty = union(enum) {
     /// See [FontPaletteValuesRule](FontPaletteValuesRule).
     const This = @This();
 
-    pub fn toCss(*_, dest: *Printer): PrintErr!void {
+    pub fn toCss(dest: *Printer): PrintErr!void {
         switch (_.*) {
             .font_family => |*f| {
                 dest.writeStr("font-family")?;
@@ -189,7 +189,7 @@ pub union(enum) BasePalette {
         } else return { err: location.newUnexpectedTokenError({ ident: ident }) };
     }
 
-    pub fn toCss(*_, dest: *Printer): PrintErr!void {
+    pub fn toCss(dest: *Printer): PrintErr!void {
         switch (_.*) {
             .light => try dest.writeStr("light"),
             .dark => try dest.writeStr("dark"),

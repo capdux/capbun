@@ -208,7 +208,7 @@ if (input.expectIdentMatching("legacy").asErr()) |e| {
 
 pub fn toCss(self: *LegacyJustify, dest: *css.Printer) css.PrintErr!void {
             _ = try dest.writeStr("legacy ");
-            switch (self.*) {
+            switch (self) {
 .left => {
 _ = try dest.writeStr("left");
 },
@@ -398,7 +398,10 @@ pub fn toCss(self: PlaceItems, dest: *css.Printer) css.PrintErr!void {
             const normal_val: AlignItems = .normal;
             break :brk self.@"align".eql((&normal_val));
 },
-.stretch => self.@"align".eql((&AlignItems{ .stretch = .{} })),
+.stretch => brk: {
+            const stretch_val: AlignItems = .stretch;
+            break :brk self.@"align".eql((&stretch_val));
+},
 .baseline_position => |*p| brk: {
             if ((self.@"align" == .baseline_position)) {
                 break :brk p.eql((&self.@"align".baseline_position));
