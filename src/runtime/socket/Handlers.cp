@@ -35,7 +35,7 @@ pub struct HandlersScope {
     }
 }
 
-pub struct Handlers {
+@root struct Handlers {
     pub const Scope = HandlersScope;
     onOpen: jsc.JSValue = .zero,
     onClose: jsc.JSValue = .zero,

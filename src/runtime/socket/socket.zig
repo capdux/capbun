@@ -1248,7 +1248,7 @@ pub fn NewSocket(comptime ssl: bool) type {
 
         fn writeOrEndBuffered(this: *This, globalObject: *jsc.JSGlobalObject, data_value: jsc.JSValue, encoding_value: jsc.JSValue, comptime is_end: bool) WriteResult {
             if (this.buffered_data_for_node_net.len == 0) {
-                var values = .{ data_value, .js_undefined, .js_undefined, encoding_value };
+                var values: [4]jsc.JSValue = .{ data_value, .js_undefined, .js_undefined, encoding_value };
                 return this.writeOrEnd(globalObject, &values, true, is_end);
             }
 
@@ -1888,19 +1888,19 @@ pub fn NewSocket(comptime ssl: bool) type {
         pub const setServername = if (ssl) tls_socket_functions.setServername else tcp_socket_function_that_returns_undefined;
 
         fn tcp_socket_function_that_returns_undefined(_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         fn tcp_socket_function_that_returns_false(_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-            return .js_false;
+            return JSValue.false;
         }
 
         fn tcp_socket_getter_that_returns_false(_: *This, _: *jsc.JSGlobalObject) bun.JSError!JSValue {
-            return .js_false;
+            return JSValue.false;
         }
 
         fn tcp_socket_function_that_returns_null(_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-            return .js_null;
+            return JSValue.null;
         }
     };
 }

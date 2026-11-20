@@ -162,7 +162,7 @@ pub fn toUint8ArrayTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSErr
 
 pub fn toJSONShare(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
             const bytes = self.slice();
-            var str = String.createUTF8(bytes);
+            var str = String.cloneUTF8(bytes);
             var __str_moved = false; _ = &__str_moved;
             defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
             defer {
@@ -513,8 +513,16 @@ pub fn doImage(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!
         return globalThis.throwTODO("Blob.image is not yet implemented");
 }
 
+pub fn needsToReadFile(self: Blob) bool {
+        if (self.store) |store| {
+            _ = &store;
+            return (store.data == .file);
+        }
+        return false;
+}
+
 pub fn getJSON(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        var str = String.createUTF8(self.sharedView());
+        var str = String.cloneUTF8(self.sharedView());
         var __str_moved = false; _ = &__str_moved;
         defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
         defer {

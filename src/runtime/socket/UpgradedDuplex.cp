@@ -44,7 +44,7 @@ pub struct Handlers {
 
 pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
-pub struct UpgradedDuplex {
+@root struct UpgradedDuplex {
     wrapper: SSLWrapper(*UpgradedDuplex)? = null,
     origin: jsc.Strong.Optional = .empty,
     global: *jsc.JSGlobalObject? = null,

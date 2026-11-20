@@ -1401,3 +1401,5 @@
 - **[2026-11-20] Wave 9 Batch C 收尾经验**：`uws_sys/Loop.cp` 补 `@value` 恢复值类型 `Loop`；`css/error.cp` 用 `@This().Err(...)` 避开枚举字面量 lowering；`resolve_path.cp` 补导出 `join`/`joinZ`；`Timer.cp` `All.setImmediate` 补 `static fn`；`array_buffer.cp` `toJS` 改值接收者；`Execution.cp` `ExpectAssertions` 改 `pub enum` 消除自动指针化。
 
 - **[2026-11-20] `src/interchange/yaml.cp` 完整恢复**：从原始提交恢复 5,743 行 `yaml_.zig` 并完成纯 CP 重构（30+ 嵌套类型提升顶层泛型 + `pub const` 导出保持 API 兼容），`zig:check` 零高危报错。
+
+- **[2026-11-20] Wave 10 Batch A Socket 全链路修复**：`uws_handlers.cp` 用 `@FieldType(struct { p: *((*T)?) }, "p")` 消除表达式位 `*?*T` 导致的 132 处 `*const type` 错；`Handlers`/`UpgradedDuplex` 升级 `@root struct` 补全根字段与 12 个核心方法导出；`h3.cp` 采用 `_h3_cb_sigs` + `@alignCast` 消除双重 `*const` 与对齐错。

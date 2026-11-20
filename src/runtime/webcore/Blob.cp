@@ -78,7 +78,7 @@ pub union(enum) BlobAny {
 
     fn toJSONShare(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
         const bytes = _.slice();
-        let str = String.createUTF8(bytes);
+        let str = String.cloneUTF8(bytes);
         defer str.deref();
         return str.toJSByParseJSON(globalObject);
     }
@@ -425,8 +425,15 @@ pub struct BlobExternalSharedDescriptor {
         return globalThis.throwTODO("Blob.image is not yet implemented");
     }
 
+    fn needsToReadFile(): bool {
+        if (store := _.store) {
+            return store.data == .file;
+        }
+        return false;
+    }
+
     fn getJSON(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
-        let str = String.createUTF8(_.sharedView());
+        let str = String.cloneUTF8(_.sharedView());
         defer str.deref();
         return JSPromise.resolvedPromiseValue(globalThis, str.toJSByParseJSON(globalThis)?);
     }

@@ -159,7 +159,7 @@ pub fn ResumableSink(
             if (oncancel.isCallable()) {
                 setCancel(this_value, globalThis, oncancel);
             }
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         pub fn jsStart(this: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
@@ -171,13 +171,13 @@ pub fn ResumableSink(
                 }
             }
 
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         pub fn jsWrite(this: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             jsc.markBinding(@src());
             const args = callframe.arguments();
-            if (this.isDetached()) return .js_undefined;
+            if (this.isDetached()) return JSValue.js_undefined;
 
             if (args.len < 1) {
                 return globalThis.throwInvalidArguments("ResumableSink.write requires at least 1 argument", .{});
@@ -202,19 +202,19 @@ pub fn ResumableSink(
                 },
             }
 
-            return .jsBoolean(this.status != .paused);
+            return JSValue.jsBoolean(this.status != .paused);
         }
 
         pub fn jsEnd(this: *ThisSink, _: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             jsc.markBinding(@src());
             const args = callframe.arguments();
-            if (this.isDetached()) return .js_undefined;
+            if (this.isDetached()) return JSValue.js_undefined;
             this.detachJS();
             log("jsEnd {}", .{args.len});
             this.status = .done;
 
             onEnd(this.context, if (args.len > 0) args[0] else null);
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         pub fn drain(this: *ThisSink) void {

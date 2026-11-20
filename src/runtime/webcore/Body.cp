@@ -1249,7 +1249,7 @@ pub struct ValueBufferer {
         if (sink := bun.api.NativePromiseContext.take(@This(), args.ptr[args.len - 1])) {
             sink.handleResolveStream(true);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     static fn onRejectStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -1259,7 +1259,7 @@ pub struct ValueBufferer {
             const e = args.ptr[0];
             sink.handleRejectStream(e, true);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     static fn handleRejectStream(sink: *@This(), e: JSValue, is_async: bool) {

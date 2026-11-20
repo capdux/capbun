@@ -1083,9 +1083,8 @@ pub fn sendPrefaceAndSettings(self: *H2FrameParser) void {
 
 pub fn sendSettingsACK(self: *H2FrameParser) void {
             _ = log("send HTTP_FRAME_SETTINGS ack true", .{});
-            var buffer: struct { FrameHeader.byteSize } = undefined;
+            var buffer: [FRAME_HEADER_SIZE]u8 = undefined;
             _ = &buffer;
-            u8 = undefined;
             _ = @memset((&buffer), 0);
             var stream = std.io.fixedBufferStream((&buffer));
             _ = &stream;
@@ -1504,7 +1503,7 @@ pub fn handleWindowUpdateFrame(self: *H2FrameParser, frame: FrameHeader, data: [
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "Invalid dataframe frame size", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 defer {
                 _ = self.flush();
@@ -1711,7 +1710,7 @@ pub fn handleGoAwayFrame(self: *H2FrameParser, frame: FrameHeader, data: []const
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid GoAway frame size", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 const payload = content.data;
                 const error_code = u32FromBytes(payload[4..8]);
@@ -1740,7 +1739,7 @@ pub fn handleOriginFrame(self: *H2FrameParser, frame: FrameHeader, data: []const
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "ORIGIN frame on stream", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 var payload = content.data;
                 _ = &payload;
@@ -1791,7 +1790,7 @@ pub fn handleAltsvcFrame(self: *H2FrameParser, frame: FrameHeader, data: []const
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "ALTSVC frame on server", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 const payload = content.data;
                 var stream = std.io.fixedBufferStream(payload);
@@ -1832,7 +1831,7 @@ pub fn handleRSTStreamFrame(self: *H2FrameParser, frame: FrameHeader, data: []co
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "Headers frame without continuation", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 const payload = content.data;
                 const rst_code = u32FromBytes(payload);
@@ -1861,7 +1860,7 @@ pub fn handlePingFrame(self: *H2FrameParser, frame: FrameHeader, data: []const u
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "Invalid ping frame size", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 const payload = content.data;
                 const isNotACK = ((frame.flags & @intFromEnum(PingFrameFlags.ACK)) == 0);
@@ -1893,7 +1892,7 @@ pub fn handlePriorityFrame(self: *H2FrameParser, frame: FrameHeader, data: []con
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid Priority frame size", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 const payload = content.data;
                 var priority: StreamPriority = undefined;
@@ -1928,7 +1927,7 @@ pub fn handleContinuationFrame(self: *H2FrameParser, frame: FrameHeader, data: [
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "Continuation without headers", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 const payload = content.data;
                 _ = self.readBuffer.reset();
@@ -1978,7 +1977,7 @@ pub fn handleHeadersFrame(self: *H2FrameParser, frame: FrameHeader, data: []cons
                 _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "Headers frame without continuation", self.lastStreamID, true);
                 return data.len;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 const payload = content.data;
                 var offset: usize = 0;
@@ -2107,7 +2106,7 @@ pub fn handleSettingsFrame(self: *H2FrameParser, frame: FrameHeader, data: []con
                 self.currentFrame = null;
                 return 0;
             }
-            if (self.handleIncommingPayload(self, data, frame.streamIdentifier)) |content| {
+            if (self.handleIncommingPayload(data, frame.streamIdentifier)) |content| {
                 _ = &content;
                 defer {
                 _ = self.flush();
@@ -2311,7 +2310,7 @@ pub fn setEncoding(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, call
                 return globalObject.throwValue(e);
             }
             self.handlers.binary_type = _opt_2808.?;
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn loadSettingsFromJSValue(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, options: jsc.JSValue) bun.JSError!void {
@@ -2500,7 +2499,7 @@ pub fn setLocalWindowSize(self: *H2FrameParser, globalObject: *jsc.JSGlobalObjec
                 }
                 stream.windowSize = windowSizeValue;
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn getCurrentState(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
@@ -2555,13 +2554,13 @@ pub fn goaway(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
                             _ = &array_buffer;
                             const slice = array_buffer.byteSlice();
                             _ = self.sendGoAway(0, @enumFromInt(errorCode), slice, lastStreamID, false);
-                            return error.js_undefined;
+                            return JSValue.js_undefined;
                         }
                     }
                 }
             }
             _ = self.sendGoAway(0, @enumFromInt(errorCode), "", lastStreamID, false);
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn ping(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -2578,7 +2577,7 @@ pub fn ping(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: 
                 _ = &array_buffer;
                 const slice = array_buffer.slice();
                 _ = self.sendPing(false, slice);
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             return globalObject.throw("Expected payload to be a Buffer", .{});
     }
@@ -2587,9 +2586,8 @@ pub fn origin(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
             _ = jsc.markBinding(@src());
             const origin_arg = callframe.argument(0);
             if (origin_arg.isEmptyOrUndefinedOrNull()) {
-                var buffer: struct { FrameHeader.byteSize } = undefined;
+                var buffer: [FRAME_HEADER_SIZE]u8 = undefined;
                 _ = &buffer;
-                u8 = undefined;
                 _ = @memset((&buffer), 0);
                 var stream = std.io.fixedBufferStream((&buffer));
                 _ = &stream;
@@ -2598,7 +2596,7 @@ pub fn origin(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
                 _ = &frame;
                 _ = frame.write(@TypeOf(writer), writer);
                 _ = self.write((&buffer));
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             if (origin_arg.isString()) {
                 const origin_string = try origin_arg.toSlice(globalObject, bun.default_allocator);
@@ -2657,7 +2655,7 @@ pub fn origin(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
                     _ = self.write(buffer[0..total_length]);
                 }
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn altsvc(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -2709,11 +2707,11 @@ pub fn altsvc(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
             }
             if ((stream_id > 0)) {
                 if ((self.streams.get(stream_id) == null)) {
-                    return error.js_undefined;
+                    return JSValue.js_undefined;
                 }
             }
             _ = self.sendAltSvc(stream_id, origin_str, value_str);
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn getEndAfterHeaders(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -2796,8 +2794,10 @@ pub fn getStreamState(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, c
             _ = &state;
             _ = state.put(globalObject, jsc.ZigString.static("localWindowSize"), jsc.JSValue.jsNumber(stream.windowSize));
             _ = state.put(globalObject, jsc.ZigString.static("state"), jsc.JSValue.jsNumber(@intFromEnum(stream.state)));
-            _ = state.put(globalObject, jsc.ZigString.static("localClose"), jsc.JSValue.jsNumber((if (comptime @typeInfo(@TypeOf((if (stream.canSendData()) 0 else 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (stream.canSendData()) 0 else 1))) else cp_cast_int(i32, (if (stream.canSendData()) 0 else 1)))));
-            _ = state.put(globalObject, jsc.ZigString.static("remoteClose"), jsc.JSValue.jsNumber((if (comptime @typeInfo(@TypeOf((if (stream.canReceiveData()) 0 else 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (stream.canReceiveData()) 0 else 1))) else cp_cast_int(i32, (if (stream.canReceiveData()) 0 else 1)))));
+            const local_close: i32 = (if (stream.canSendData()) 0 else 1);
+            const remote_close: i32 = (if (stream.canReceiveData()) 0 else 1);
+            _ = state.put(globalObject, jsc.ZigString.static("localClose"), jsc.JSValue.jsNumber(local_close));
+            _ = state.put(globalObject, jsc.ZigString.static("remoteClose"), jsc.JSValue.jsNumber(remote_close));
             _ = state.put(globalObject, jsc.ZigString.static("sumDependencyWeight"), jsc.JSValue.jsNumber(0));
             _ = state.put(globalObject, jsc.ZigString.static("weight"), jsc.JSValue.jsNumber(stream.weight));
             return state;
@@ -2827,7 +2827,7 @@ pub fn setStreamPriority(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject
                 return globalObject.throw("Invalid stream id", .{});
             }
             if (((!stream.canSendData()) and (!stream.canReceiveData()))) {
-                return error.false;
+                return JSValue.false;
             }
             if ((!options.isObject())) {
                 return globalObject.throw("Invalid priority", .{});
@@ -2873,7 +2873,7 @@ pub fn setStreamPriority(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject
             }
             if ((parent_id == stream.id)) {
                 _ = self.sendGoAway(stream.id, ErrorCode.PROTOCOL_ERROR, "Stream with self dependency", self.lastStreamID, true);
-                return error.false;
+                return JSValue.false;
             }
             stream.streamDependency = parent_id;
             stream.exclusive = exclusive;
@@ -2889,7 +2889,7 @@ pub fn setStreamPriority(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject
                 _ = frame.write(@TypeOf(writer), writer);
                 _ = priority.write(@TypeOf(writer), writer);
             }
-            return error.true;
+            return JSValue.true;
     }
 
 pub fn rstStream(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -2921,7 +2921,7 @@ pub fn rstStream(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfr
             }
             const error_code = error_arg.toU32();
             _ = self.endStream(stream, @enumFromInt(error_code));
-            return error.true;
+            return JSValue.true;
     }
 
 pub fn getSessionMemoryUsage(self: *H2FrameParser) usize {
@@ -3044,7 +3044,7 @@ pub fn noTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callf
             }
             stream.waitForTrailers = false;
             _ = self.sendData(stream, "", true, .js_undefined);
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn toValidHeaderName(input: []const u8, out: []u8) ![]const u8 {
@@ -3204,7 +3204,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                         stream.rstCode = @intFromEnum(ErrorCode.FRAME_SIZE_ERROR);
                         _ = self.dispatchWith2Extra(.onFrameError, identifier, jsc.JSValue.jsNumber(@intFromEnum(FrameType.HTTP_FRAME_HEADERS)), jsc.JSValue.jsNumber(@intFromEnum(ErrorCode.FRAME_SIZE_ERROR)));
                         _ = self.dispatchWithExtra(.onStreamError, identifier, jsc.JSValue.jsNumber(stream.rstCode));
-                        return error.js_undefined; }); });
+                        return JSValue.js_undefined; }); });
                     }
                 } else {
                     if (cp_index_of(SingleValueHeaders, validated_name)) |idx| {
@@ -3235,7 +3235,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                     stream.rstCode = @intFromEnum(ErrorCode.FRAME_SIZE_ERROR);
                     _ = self.dispatchWith2Extra(.onFrameError, identifier, jsc.JSValue.jsNumber(@intFromEnum(FrameType.HTTP_FRAME_HEADERS)), jsc.JSValue.jsNumber(@intFromEnum(ErrorCode.FRAME_SIZE_ERROR)));
                     _ = self.dispatchWithExtra(.onStreamError, identifier, jsc.JSValue.jsNumber(stream.rstCode));
-                    return error.js_undefined; }); });
+                    return JSValue.js_undefined; }); });
                 }
             }
             const encoded_data = encoded_headers.items;
@@ -3278,7 +3278,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                 stream.state = .HALF_CLOSED_LOCAL;
             }
             _ = self.dispatchWithExtra(.onStreamEnd, identifier, jsc.JSValue.jsNumber(@intFromEnum(stream.state)));
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn writeStream(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -3307,7 +3307,7 @@ pub fn writeStream(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, call
             }
             if ((!stream.canSendData())) {
                 _ = self.dispatchWriteCallback(callback_arg);
-                return error.false;
+                return JSValue.false;
             }
             const encoding: jsc.Node.Encoding = brk: {
             if (encoding_arg.isUndefined()) {
@@ -3332,7 +3332,7 @@ pub fn writeStream(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, call
             _ = buffer.deinit();
             }
             _ = self.sendData(stream, buffer.slice(), close, callback_arg);
-            return error.true;
+            return JSValue.true;
     }
 
 pub fn getNextStreamID(self: *H2FrameParser) u32 {
@@ -3382,7 +3382,7 @@ pub fn setNextStreamID(self: *H2FrameParser, _: *jsc.JSGlobalObject, callframe: 
                     }
                 }
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn hasNativeRead(self: *H2FrameParser, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
@@ -3445,14 +3445,14 @@ pub fn setStreamContext(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject,
                 return globalObject.throw("Expected context to be an object", .{});
             }
             _ = stream.setContext(context_arg, globalObject);
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn forEachStream(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = jsc.markBinding(@src());
             const args = callframe.arguments();
             if (((args.len < 1) or (!args[0].isCallable()))) {
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             const callback = args[0];
             const thisValue: JSValue = (if ((args.len > 1)) args[1] else .js_undefined);
@@ -3466,7 +3466,7 @@ pub fn forEachStream(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, ca
                 _ = self.handlers.vm.eventLoop().runCallback(callback, globalObject, thisValue, (&_args));
                 count = (count + 1);
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn emitAbortToAllStreams(self: *H2FrameParser, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -3493,7 +3493,7 @@ pub fn emitAbortToAllStreams(self: *H2FrameParser, _: *jsc.JSGlobalObject, _: *j
                     _ = self.dispatchWith2Extra(.onAborted, identifier, .js_undefined, jsc.JSValue.jsNumber(@intFromEnum(old_state)));
                 }
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn emitErrorToAllStreams(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -3514,7 +3514,7 @@ pub fn emitErrorToAllStreams(self: *H2FrameParser, globalObject: *jsc.JSGlobalOb
                     _ = self.dispatchWithExtra(.onStreamError, identifier, args_list.ptr[0]);
                 }
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn flushFromJS(self: *H2FrameParser, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
@@ -3661,7 +3661,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                 stream.state = .CLOSED;
                                 stream.rstCode = @intFromEnum(ErrorCode.COMPRESSION_ERROR);
                                 _ = self.dispatchWithExtra(.onStreamError, stream.getIdentifier(), jsc.JSValue.jsNumber(stream.rstCode));
-                                return error.js_undefined; }); });
+                                return JSValue.js_undefined; }); });
                             }
                         } else {
                             if ((!js_value.isEmptyOrUndefinedOrNull())) {
@@ -3967,7 +3967,7 @@ pub fn read(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: 
                     const result = try self.readBytes(bytes);
                     bytes = bytes[result..];
                 }
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             return globalObject.throw("Expected data to be a Buffer or ArrayBuffer", .{});
     }
@@ -4035,7 +4035,7 @@ pub fn setNativeSocketFromJS(self: *H2FrameParser, globalObject: *jsc.JSGlobalOb
                     self.has_nonnative_backpressure = false;
                 }
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn detachNativeSocket(self: *H2FrameParser) void {
@@ -4219,7 +4219,7 @@ pub fn detachFromJS(self: *H2FrameParser, _: *jsc.JSGlobalObject, _: *jsc.CallFr
                 _ = js.gc.context.clear(this_value, self.globalThis);
                 _ = self.strong_this.setWeak(this_value);
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn detach(self: *H2FrameParser) void {
@@ -4375,7 +4375,8 @@ const FRAME_PLUS_8 = (FrameHeader.byteSize + 8);
 const FRAME_PLUS_2 = (FrameHeader.byteSize + 2);
 const PREFACE_PLUS_SETTINGS_SIZE = ((24 + FrameHeader.byteSize) + FullSettingsPayload.byteSize);
 const FRAME_PLUS_16384 = (FrameHeader.byteSize + 16384);
-const empty_js_values: [0]jsc.JSValue = &.{};
+const FRAME_HEADER_SIZE = FrameHeader.byteSize;
+var empty_js_values: [0]jsc.JSValue = undefined;
 const MAX_BUFFER_SIZE = 32768;
 const SINGLE_VALUE_HEADERS_COUNT = SingleValueHeaders.keys().len;
 const H2FrameParserHiveAllocator = bun.HiveArray(H2FrameParser, 256).Fallback;
@@ -4548,7 +4549,7 @@ pub fn jsAssertSettings(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallF
                 }
             }
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn jsGetPackedSettings(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {

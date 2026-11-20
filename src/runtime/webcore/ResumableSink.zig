@@ -191,7 +191,7 @@ pub fn jsSetHandlers(_: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.
             if (oncancel.isCallable()) {
                 _ = setCancel(this_value, globalThis, oncancel);
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn jsStart(self: *@This(), globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
@@ -203,14 +203,14 @@ pub fn jsStart(self: *@This(), globalThis: *JSGlobalObject, callframe: *jsc.Call
                     self.highWaterMark = highWaterMark;
                 }
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn jsWrite(self: *@This(), globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
             const args = callframe.arguments();
             if (self.isDetached()) {
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             if ((args.len < 1)) {
                 return globalThis.throwInvalidArguments("ResumableSink.write requires at least 1 argument", .{});
@@ -236,20 +236,20 @@ _ = log("paused", .{});
 self.status = .started;
 },
 }
-            return error.jsBoolean;
+            return JSValue.jsBoolean((self.status != .paused));
     }
 
 pub fn jsEnd(self: *@This(), _: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
             const args = callframe.arguments();
             if (self.isDetached()) {
-                return error.js_undefined;
+                return JSValue.js_undefined;
             }
             _ = self.detachJS();
             _ = log("jsEnd {}", .{ args.len });
             self.status = .done;
             _ = onEnd(self.context, (if ((args.len > 0)) args[0] else null));
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn drain(self: *@This()) void {

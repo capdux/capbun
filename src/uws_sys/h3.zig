@@ -322,7 +322,7 @@ pub fn onWritable(self: *Response, ud: anytype, comptime handler: anytype) void 
             const W = struct {
 
 pub fn cb(r: *Response, off: u64, p: ?*anyopaque) callconv(.c) bool {
-            return handler(@ptrCast(p), off, r);
+            return handler(@ptrCast(@alignCast(p)), off, r);
     }
 };
             _ = uws_h3_res_on_writable(self, W.cb, @ptrCast(ud));
@@ -336,7 +336,7 @@ pub fn onAborted(self: *Response, ud: anytype, comptime handler: anytype) void {
             const W = struct {
 
 pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(p), r);
+            _ = handler(@ptrCast(@alignCast(p)), r);
     }
 };
             _ = uws_h3_res_on_aborted(self, W.cb, @ptrCast(ud));
@@ -350,7 +350,7 @@ pub fn onTimeout(self: *Response, ud: anytype, comptime handler: anytype) void {
             const W = struct {
 
 pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(p), r);
+            _ = handler(@ptrCast(@alignCast(p)), r);
     }
 };
             _ = uws_h3_res_on_timeout(self, W.cb, @ptrCast(ud));
@@ -364,7 +364,7 @@ pub fn onData(self: *Response, ud: anytype, comptime handler: anytype) void {
             const W = struct {
 
 pub fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(p), r, (if ((len > 0)) ptr[0..len] else ""), last);
+            _ = handler(@ptrCast(@alignCast(p)), r, (if ((len > 0)) ptr[0..len] else ""), last);
     }
 };
             _ = uws_h3_res_on_data(self, W.cb, @ptrCast(ud));
@@ -384,7 +384,7 @@ pub fn runCorkedWithType(self: *Response, ud: anytype, comptime handler: anytype
             const W = struct {
 
 pub fn cb(p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(p));
+            _ = handler(@ptrCast(@alignCast(p)));
     }
 };
             _ = uws_h3_res_cork(self, @ptrCast(ud), W.cb);
@@ -503,13 +503,43 @@ pub fn cb(ls: ?*ListenSocket, p: ?*anyopaque) callconv(.c) void {
     }
 };
 
-pub const Handler = ?*const *const fn(*Response, *Request, ?*anyopaque) callconv(.c) void;
-pub const ListenHandler = ?*const *const fn(?*ListenSocket, ?*anyopaque) callconv(.c) void;
-pub const HeaderCb = *const *const fn([*c]const u8, usize, [*c]const u8, usize, ?*anyopaque) callconv(.c) void;
-pub const WritableHandler = ?*const *const fn(*Response, u64, ?*anyopaque) callconv(.c) bool;
-pub const VoidHandler = ?*const *const fn(*Response, ?*anyopaque) callconv(.c) void;
-pub const DataHandler = ?*const *const fn(*Response, [*c]const u8, usize, bool, ?*anyopaque) callconv(.c) void;
-pub const CorkHandler = *const *const fn(?*anyopaque) callconv(.c) void;
+const OpaquePtr = ?*anyopaque;
+pub const Handler = ?HandlerFn;
+pub const ListenHandler = ?ListenHandlerFn;
+pub const WritableHandler = ?WritableHandlerFn;
+pub const VoidHandler = ?VoidHandlerFn;
+pub const DataHandler = ?DataHandlerFn;
+const _h3_cb_sigs = struct {
+
+pub fn handler(_: *Response, _: *Request, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn listen(_: ?*ListenSocket, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn header(_: [*c]const u8, _: usize, _: [*c]const u8, _: usize, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn writable(_: *Response, _: u64, _: OpaquePtr) callconv(.c) bool {
+            return false;
+    }
+
+pub fn void_h(_: *Response, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn data(_: *Response, _: [*c]const u8, _: usize, _: bool, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn cork(_: OpaquePtr) callconv(.c) void {
+    }
+};
+pub const HandlerFn = *const @TypeOf(_h3_cb_sigs.handler);
+pub const ListenHandlerFn = *const @TypeOf(_h3_cb_sigs.listen);
+pub const HeaderCb = *const @TypeOf(_h3_cb_sigs.header);
+pub const WritableHandlerFn = *const @TypeOf(_h3_cb_sigs.writable);
+pub const VoidHandlerFn = *const @TypeOf(_h3_cb_sigs.void_h);
+pub const DataHandlerFn = *const @TypeOf(_h3_cb_sigs.data);
+pub const CorkHandler = *const @TypeOf(_h3_cb_sigs.cork);
 
 extern "c" fn uws_h3_create_app(opts: BunSocketContextOptions, idle_timeout: u32) callconv(.c) *?*App;
 

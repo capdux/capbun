@@ -23,7 +23,7 @@ const us_socket_t = uws.us_socket_t;
 pub fn PtrHandler(comptime T: type, comptime ssl: bool): type {
     const S = uws.NewSocketHandler(ssl);
     return struct {
-        pub const Ext = *?*T;
+        pub const Ext = @FieldType(struct { p: *((*T)?) }, "p");
         inline fn wrap(s: *us_socket_t) S {
             return S.from(s);
         }
@@ -45,7 +45,7 @@ pub fn PtrHandler(comptime T: type, comptime ssl: bool): type {
                 swallow(inst.onWritable(wrap(s)));
             }
         }
-        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*void) void {
+        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: *!?) void {
             const inst = ext.* orelse return;
             if (@hasDecl(T, "onClose")) {
                 swallow(inst.onClose(wrap(s), code, reason));
@@ -113,7 +113,7 @@ pub fn BunListener(comptime ssl: bool): type {
             const ns = api.Listener.onCreate(ssl, listener, S.from(s));
             swallow(ns.onOpen(S.from(s)));
         }
-        pub fn onClose(s: *us_socket_t, code: i32, reason: ?*void) void {
+        pub fn onClose(s: *us_socket_t, code: i32, reason: *!?) void {
             if (s.ext(?*NS).*) |ns| {
                 swallow(ns.onClose(S.from(s), code, reason));
             }
@@ -149,7 +149,7 @@ pub fn BunListener(comptime ssl: bool): type {
 pub fn NsHandler(comptime Owner: type, comptime H: type, comptime ssl: bool): type {
     const S = uws.NewSocketHandler(ssl);
     return struct {
-        pub const Ext = *?*Owner;
+        pub const Ext = @FieldType(struct { p: *((*Owner)?) }, "p");
         inline fn wrap(s: *us_socket_t) S {
             return S.from(s);
         }
@@ -171,7 +171,7 @@ pub fn NsHandler(comptime Owner: type, comptime H: type, comptime ssl: bool): ty
                 swallow(H.onWritable(inst, wrap(s)));
             }
         }
-        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*void) void {
+        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: *!?) void {
             const inst = ext.* orelse return;
             if (@hasDecl(H, "onClose")) {
                 swallow(H.onClose(inst, wrap(s), code, reason));
@@ -224,7 +224,7 @@ pub fn HTTPClient(comptime ssl: bool): type {
     const H = bun.http.NewHTTPContext(ssl).Handler;
     const S = uws.NewSocketHandler(ssl);
     return struct {
-        pub const Ext = *?*void;
+        pub const Ext = @FieldType(struct { p: *(*!?) }, "p");
         inline fn wrap(s: *us_socket_t) S {
             return S.from(s);
         }
@@ -242,7 +242,7 @@ pub fn HTTPClient(comptime ssl: bool): type {
         pub fn onWritable(ext: Ext, s: *us_socket_t) void {
             fwd(ext, "onWritable", .{wrap(s)});
         }
-        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: ?*void) void {
+        pub fn onClose(ext: Ext, s: *us_socket_t, code: i32, reason: *!?) void {
             fwd(ext, "onClose", .{ wrap(s), code, reason });
         }
         pub fn onTimeout(ext: Ext, s: *us_socket_t) void {
@@ -263,7 +263,7 @@ pub fn HTTPClient(comptime ssl: bool): type {
         }
         pub fn onConnectingError(cs: *ConnectingSocket, code: i32) void {
             if (@hasDecl(H, "onConnectError")) {
-                swallow(H.onConnectError(cs.ext(?*void).* orelse return, S.fromConnecting(cs), code));
+                swallow(H.onConnectError(cs.ext(*!?).* orelse return, S.fromConnecting(cs), code));
             }
         }
         pub fn onHandshake(ext: Ext, s: *us_socket_t, ok: bool, err: uws.us_bun_verify_error_t) void {
@@ -293,10 +293,13 @@ pub fn Valkey(comptime ssl: bool): type {
     return NsHandler(js_valkey.JSValkeyClient, js_valkey.SocketHandler(ssl), ssl);
 }
 
+type OptSendQueue = (*IPC.SendQueue)?;
+type SendQueueExt = *OptSendQueue;
+
 pub struct SpawnIPC {
     const H = IPC.IPCHandlers.PosixSocket;
     const S = uws.NewSocketHandler(false);
-    pub const Ext = *?*IPC.SendQueue;
+    pub const Ext = SendQueueExt;
     pub static fn onOpen(_: **IPC.SendQueue?, _: *us_socket_t, _: bool, _: string) {}
     pub static fn onData(ext: **IPC.SendQueue?, s: *us_socket_t, data: string) {
         const inst = ext.* orelse return;

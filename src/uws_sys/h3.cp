@@ -1,11 +1,26 @@
 
-pub const Handler = ?*const fn (*Response, *Request, *!?) callconv(.c) void;
-pub const ListenHandler = ?*const fn (?*ListenSocket, *!?) callconv(.c) void;
-pub const HeaderCb = *const fn ([*c]const u8, usize, [*c]const u8, usize, *!?) callconv(.c) void;
-pub const WritableHandler = ?*const fn (*Response, u64, *!?) callconv(.c) bool;
-pub const VoidHandler = ?*const fn (*Response, *!?) callconv(.c) void;
-pub const DataHandler = ?*const fn (*Response, [*c]const u8, usize, bool, *!?) callconv(.c) void;
-pub const CorkHandler = *const fn (*!?) callconv(.c) void;
+type OpaquePtr = *!?;
+const _h3_cb_sigs = struct {
+    @callconv("c") static fn handler(_: *Response, _: *Request, _: OpaquePtr) {}
+    @callconv("c") static fn listen(_: (*ListenSocket)?, _: OpaquePtr) {}
+    @callconv("c") static fn header(_: [*c]const u8, _: usize, _: [*c]const u8, _: usize, _: OpaquePtr) {}
+    @callconv("c") static fn writable(_: *Response, _: u64, _: OpaquePtr): bool { return false; }
+    @callconv("c") static fn void_h(_: *Response, _: OpaquePtr) {}
+    @callconv("c") static fn data(_: *Response, _: [*c]const u8, _: usize, _: bool, _: OpaquePtr) {}
+    @callconv("c") static fn cork(_: OpaquePtr) {}
+};
+pub const HandlerFn = *const @TypeOf(_h3_cb_sigs.handler);
+pub type Handler = HandlerFn?;
+pub const ListenHandlerFn = *const @TypeOf(_h3_cb_sigs.listen);
+pub type ListenHandler = ListenHandlerFn?;
+pub const HeaderCb = *const @TypeOf(_h3_cb_sigs.header);
+pub const WritableHandlerFn = *const @TypeOf(_h3_cb_sigs.writable);
+pub type WritableHandler = WritableHandlerFn?;
+pub const VoidHandlerFn = *const @TypeOf(_h3_cb_sigs.void_h);
+pub type VoidHandler = VoidHandlerFn?;
+pub const DataHandlerFn = *const @TypeOf(_h3_cb_sigs.data);
+pub type DataHandler = DataHandlerFn?;
+pub const CorkHandler = *const @TypeOf(_h3_cb_sigs.cork);
 // src/uws_sys/h3.cp
 // HTTP/3 bindings for uWebSockets / libusockets in CP language
 
@@ -297,7 +312,7 @@ export @opaque class Response {
     ) {
         const W = struct {
             pub fn cb(r: *Response, off: u64, p: *!?) callconv(.c) bool {
-                return handler(@ptrCast(p), off, r);
+                return handler(@ptrCast(@alignCast(p)), off, r);
             }
         };
         uws_h3_res_on_writable(this, W.cb, @ptrCast(ud));
@@ -314,7 +329,7 @@ export @opaque class Response {
     ) {
         const W = struct {
             pub fn cb(r: *Response, p: *!?) callconv(.c) void {
-                handler(@ptrCast(p), r);
+                handler(@ptrCast(@alignCast(p)), r);
             }
         };
         uws_h3_res_on_aborted(this, W.cb, @ptrCast(ud));
@@ -331,7 +346,7 @@ export @opaque class Response {
     ) {
         const W = struct {
             pub fn cb(r: *Response, p: *!?) callconv(.c) void {
-                handler(@ptrCast(p), r);
+                handler(@ptrCast(@alignCast(p)), r);
             }
         };
         uws_h3_res_on_timeout(this, W.cb, @ptrCast(ud));
@@ -348,7 +363,7 @@ export @opaque class Response {
     ) {
         const W = struct {
             pub fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: *!?) callconv(.c) void {
-                handler(@ptrCast(p), r, if (len > 0) ptr[0..len] else "", last);
+                handler(@ptrCast(@alignCast(p)), r, if (len > 0) ptr[0..len] else "", last);
             }
         };
         uws_h3_res_on_data(this, W.cb, @ptrCast(ud));
@@ -366,7 +381,7 @@ export @opaque class Response {
     pub fn runCorkedWithType(*_, ud: anytype, comptime handler: anytype) {
         const W = struct {
             pub fn cb(p: *!?) callconv(.c) void {
-                handler(@ptrCast(p));
+                handler(@ptrCast(@alignCast(p)));
             }
         };
         uws_h3_res_cork(this, @ptrCast(ud), W.cb);

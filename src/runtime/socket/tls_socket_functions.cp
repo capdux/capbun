@@ -14,11 +14,13 @@ const X509 = @import("../api/bun/x509.zig");
 type OpaquePtr = *!;
 
 pub fn getServername(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
 
     const servername = BoringSSL.SSL_get_servername(ssl_ptr, BoringSSL.TLSEXT_NAMETYPE_host_name);
     if (servername == null) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
     return ZigString.fromUTF8(servername[0..bun.len(servername)]).toJS(globalObject);
 }
@@ -38,7 +40,8 @@ pub fn setServername(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *j
         return globalObject.throw("Expected \"serverName\" to be a string", .{});
     }
 
-    const slice = try (try server_name.getZigString(globalObject)).toOwnedSlice(bun.default_allocator);
+    const server_name_zs = server_name.getZigString(globalObject)?;
+    const slice = server_name_zs.toOwnedSlice(bun.default_allocator)?;
     if (old := this.server_name) {
         this.server_name = slice;
         default_allocator.free(old);
@@ -48,7 +51,9 @@ pub fn setServername(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *j
 
     const host = slice;
     if (host.len > 0) {
-        let ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+        const ssl_ptr_opt = this.socket.ssl();
+        if (ssl_ptr_opt == null) return JSValue.js_undefined;
+        let ssl_ptr = ssl_ptr_opt.?;
 
         if (ssl_ptr.isInitFinished()) {
             return globalObject.throw("Already started.", .{});
@@ -58,31 +63,37 @@ pub fn setServername(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *j
         ssl_ptr.setHostname(host__);
     }
 
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getPeerX509Certificate(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     const cert = BoringSSL.SSL_get_peer_certificate(ssl_ptr);
     if (x509 := cert) {
         return X509.toJSObject(x509, globalObject);
     }
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getX509Certificate(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     const cert = BoringSSL.SSL_get_certificate(ssl_ptr);
     if (x509 := cert) {
         return X509.toJSObject(x509.ref(), globalObject);
     }
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getTLSVersion(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     jsc.markBinding(@src());
 
-    const ssl_ptr = this.socket.ssl() orelse return JSValue.jsNull();
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.jsNull();
+    const ssl_ptr = ssl_ptr_opt.?;
     const version = BoringSSL.SSL_get_version(ssl_ptr);
     if (version == null) return JSValue.jsNull();
     const version_len = bun.len(version);
@@ -112,7 +123,9 @@ pub fn setMaxSendFragment(*_: *This, globalObject: *jsc.JSGlobalObject, callfram
         return globalObject.throw("Expected size to be less than 16385", .{});
     }
 
-    const ssl_ptr = this.socket.ssl() orelse return .false;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.false;
+    const ssl_ptr = ssl_ptr_opt.?;
     return JSValue.jsBoolean(BoringSSL.SSL_set_max_send_fragment(ssl_ptr, @as(usize, @intCast(size))) == 1);
 }
 
@@ -129,7 +142,9 @@ pub fn getPeerCertificate(*_: *This, globalObject: *jsc.JSGlobalObject, callfram
         abbreviated = arg.toBoolean();
     }
 
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
 
     if (abbreviated) {
         if (this.isServer()) {
@@ -140,8 +155,12 @@ pub fn getPeerCertificate(*_: *This, globalObject: *jsc.JSGlobalObject, callfram
             }
         }
 
-        const cert_chain = BoringSSL.SSL_get_peer_cert_chain(ssl_ptr) orelse return .js_undefined;
-        const cert = BoringSSL.sk_X509_value(cert_chain, 0) orelse return .js_undefined;
+        const cert_chain_opt = BoringSSL.SSL_get_peer_cert_chain(ssl_ptr);
+        if (cert_chain_opt == null) return JSValue.js_undefined;
+        const cert_chain = cert_chain_opt.?;
+        const cert_opt = BoringSSL.sk_X509_value(cert_chain, 0);
+        if (cert_opt == null) return JSValue.js_undefined;
+        const cert = cert_opt.?;
         return X509.toJS(cert, globalObject);
     }
     let cert = if (this.isServer()) BoringSSL.SSL_get_peer_certificate(ssl_ptr) else null;
@@ -151,27 +170,31 @@ pub fn getPeerCertificate(*_: *This, globalObject: *jsc.JSGlobalObject, callfram
     let first_cert = if (cert != null) cert else if (cert_chain != null) BoringSSL.sk_X509_value(cert_chain.?, 0) else null;
 
     if (first_cert == null) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getCertificate(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     const cert = BoringSSL.SSL_get_certificate(ssl_ptr);
 
     if (x509 := cert) {
         return X509.toJS(x509, globalObject);
     }
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn getTLSFinishedMessage(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     let dummy: [1]u8 = undefined;
     const size = BoringSSL.SSL_get_finished(ssl_ptr, bun.cast(OpaquePtr, &dummy), @sizeOf(@TypeOf(dummy)));
-    if (size == 0) return .js_undefined;
+    if (size == 0) return JSValue.js_undefined;
 
     const buffer_size = @as(usize, @intCast(size));
     let buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
@@ -185,7 +208,9 @@ pub fn getTLSFinishedMessage(*_: *This, globalObject: *jsc.JSGlobalObject, callf
 pub fn getSharedSigalgs(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     jsc.markBinding(@src());
 
-    const ssl_ptr = this.socket.ssl() orelse return JSValue.jsNull();
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.jsNull();
+    const ssl_ptr = ssl_ptr_opt.?;
 
     const nsig = BoringSSL.SSL_get_shared_sigalgs(ssl_ptr, 0, null, null, null, null, null);
 
@@ -259,7 +284,9 @@ pub fn getSharedSigalgs(*_: *This, globalObject: *jsc.JSGlobalObject, callframe:
 }
 
 pub fn getCipher(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     const cipher = BoringSSL.SSL_get_current_cipher(ssl_ptr);
     let result = JSValue.createEmptyObject(globalObject, 0);
 
@@ -295,10 +322,12 @@ pub fn getCipher(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
 }
 
 pub fn getTLSPeerFinishedMessage(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     let dummy: [1]u8 = undefined;
     const size = BoringSSL.SSL_get_peer_finished(ssl_ptr, bun.cast(OpaquePtr, &dummy), @sizeOf(@TypeOf(dummy)));
-    if (size == 0) return .js_undefined;
+    if (size == 0) return JSValue.js_undefined;
 
     const buffer_size = @as(usize, @intCast(size));
     let buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
@@ -311,7 +340,7 @@ pub fn getTLSPeerFinishedMessage(*_: *This, globalObject: *jsc.JSGlobalObject, c
 
 pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     if (this.socket.isDetached()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     const args = callframe.arguments_old(3);
@@ -336,7 +365,9 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
     let label = try label_arg.toSliceOrNull(globalObject);
     defer label.deinit();
     const label_slice = label.slice();
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
 
     if (args.len > 2) {
         const context_arg = args.ptr[2];
@@ -378,7 +409,9 @@ pub fn getEphemeralKeyInfo(*_: *This, globalObject: *jsc.JSGlobalObject, callfra
         return JSValue.jsNull();
     }
 
-    const ssl_ptr = this.socket.ssl() orelse return JSValue.jsNull();
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.jsNull();
+    const ssl_ptr = ssl_ptr_opt.?;
     let result = JSValue.createEmptyObject(globalObject, 0);
 
     const raw_key = BoringSSL.SSL_get_privatekey(ssl_ptr);
@@ -422,11 +455,13 @@ pub fn getALPNProtocol(*_: *This, globalObject: *jsc.JSGlobalObject): bun.JSErro
     let alpn_proto: [*c]const u8? = null;
     let alpn_proto_len: u32 = 0;
 
-    const ssl_ptr = this.socket.ssl() orelse return .false;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.false;
+    const ssl_ptr = ssl_ptr_opt.?;
 
     BoringSSL.SSL_get0_alpn_selected(ssl_ptr, &alpn_proto, &alpn_proto_len);
     if (alpn_proto == null or alpn_proto_len == 0) {
-        return .false;
+        return JSValue.false;
     }
 
     const slice = alpn_proto[0..alpn_proto_len];
@@ -440,11 +475,15 @@ pub fn getALPNProtocol(*_: *This, globalObject: *jsc.JSGlobalObject): bun.JSErro
 }
 
 pub fn getSession(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
-    const session = BoringSSL.SSL_get_session(ssl_ptr) orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
+    const session_opt = BoringSSL.SSL_get_session(ssl_ptr);
+    if (session_opt == null) return JSValue.js_undefined;
+    const session = session_opt.?;
     const size = BoringSSL.i2d_SSL_SESSION(session, null);
     if (size <= 0) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     const buffer_size = @as(usize, @intCast(size));
@@ -458,7 +497,7 @@ pub fn getSession(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.
 
 pub fn setSession(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     if (this.socket.isDetached()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     const args = callframe.arguments_old(1);
@@ -476,54 +515,66 @@ pub fn setSession(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.
         const session_slice = sb.slice();
         const ssl_ptr = this.socket.ssl();
         let tmp = @as([*c]const u8, @ptrCast(session_slice.ptr));
-        const session = BoringSSL.d2i_SSL_SESSION(null, &tmp, @as(c_long, @intCast(session_slice.len))) orelse return .js_undefined;
+        const session_opt = BoringSSL.d2i_SSL_SESSION(null, &tmp, @as(c_long, @intCast(session_slice.len)));
+        if (session_opt == null) return JSValue.js_undefined;
+        const session = session_opt.?;
         defer BoringSSL.SSL_SESSION_free(session);
         if (BoringSSL.SSL_set_session(ssl_ptr, session) != 1) {
             return globalObject.throwValue(getSSLException(globalObject, "SSL_set_session error"));
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     } else {
         return globalObject.throw("Expected session to be a string, Buffer or TypedArray", .{});
     }
 }
 
 pub fn getTLSTicket(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
-    const session = BoringSSL.SSL_get_session(ssl_ptr) orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
+    const session_opt = BoringSSL.SSL_get_session(ssl_ptr);
+    if (session_opt == null) return JSValue.js_undefined;
+    const session = session_opt.?;
     let ticket: [*c]const u8 = undefined;
     let length: usize = 0;
     BoringSSL.SSL_SESSION_get0_ticket(session, @as([*c][*c]const u8, @ptrCast(&ticket)), &length);
 
     if (ticket == null or length == 0) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     return jsc.ArrayBuffer.createBuffer(globalObject, ticket[0..length]);
 }
 
 pub fn renegotiate(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     BoringSSL.ERR_clear_error();
     if (BoringSSL.SSL_renegotiate(ssl_ptr) != 1) {
         return globalObject.throwValue(getSSLException(globalObject, "SSL_renegotiate error"));
     }
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn disableRenegotiation(*_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .js_undefined;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.js_undefined;
+    const ssl_ptr = ssl_ptr_opt.?;
     BoringSSL.SSL_set_renegotiate_mode(ssl_ptr, BoringSSL.ssl_renegotiate_never);
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 pub fn isSessionReused(*_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-    const ssl_ptr = this.socket.ssl() orelse return .false;
+    const ssl_ptr_opt = this.socket.ssl();
+    if (ssl_ptr_opt == null) return JSValue.false;
+    const ssl_ptr = ssl_ptr_opt.?;
     return JSValue.jsBoolean(BoringSSL.SSL_session_reused(ssl_ptr) == 1);
 }
 
 pub fn setVerifyMode(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     if (this.socket.isDetached()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     const args = callframe.arguments_old(2);
@@ -549,7 +600,7 @@ pub fn setVerifyMode(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *j
     }
     const ssl_ptr = this.socket.ssl();
     BoringSSL.SSL_set_verify(ssl_ptr, verify_mode, alwaysAllowSSLVerifyCallback);
-    return .js_undefined;
+    return JSValue.js_undefined;
 }
 
 @c fn alwaysAllowSSLVerifyCallback(_: c_int, _: *BoringSSL.X509_STORE_CTX?): c_int {

@@ -337,7 +337,7 @@ pub fn onResolveStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFr
                 _ = &sink;
                 _ = sink.handleResolveStream(true);
             }
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn onRejectStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -348,7 +348,7 @@ pub fn onRejectStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                 const e = args.ptr[0];
                 _ = sink.handleRejectStream(e, true);
             }
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn handleRejectStream(sink: *@This(), e: JSValue, is_async: bool) void {

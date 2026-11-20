@@ -7,15 +7,15 @@ const string = []const u8;
 pub fn CpResult(comptime __T: type, comptime __E: type) type {
     return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
 }
-pub const Err = struct {
+const __CpErr = struct {
     code: i32 = 0,
     msg: []const u8 = "",
     cause: ?*const anyopaque = null,
     cause_type_id: u64 = 0,
     pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
-    pub fn init(__cp_code: i32, __cp_msg: []const u8) Err { return Err{ .code = __cp_code, .msg = __cp_msg }; }
-    pub fn with_cause(__cp_self: Err, __cp_cause: anytype) Err { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return Err{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
-    pub fn downcast(__cp_self: Err, comptime __CpTarget: type) ?*const __CpTarget {
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
         if (__cp_self.cause) |__cp_c| {
             if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
                 if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
@@ -27,7 +27,8 @@ pub const Err = struct {
         return null;
     }
 };
-pub const Error = Err;
+pub const Err = __CpErr;
+pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
@@ -42,8 +43,8 @@ fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_r
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
-fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == Err) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return Err{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return Err{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return Err{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return Err.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return Err.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return Err{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
-fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime ((@hasDecl(@This(), "Err") and __T == @field(@This(), "Err")) or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 fn cp_eq(a: anytype, b: anytype) bool {
     const Ta = @TypeOf(a); const Tb = @TypeOf(b);
     if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
@@ -75,10 +76,14 @@ const X509 = @import("../api/bun/x509.zig");
 
 pub fn getServername(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         const servername = BoringSSL.SSL_get_servername(ssl_ptr, BoringSSL.TLSEXT_NAMETYPE_host_name);
         if ((servername == null)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         return ZigString.fromUTF8(servername[0..bun.len(servername)]).toJS(globalObject);
 }
@@ -95,7 +100,8 @@ pub fn setServername(self: *This, globalObject: *jsc.JSGlobalObject, callframe: 
         if ((!server_name.isString())) {
             return globalObject.throw("Expected \"serverName\" to be a string", .{});
         }
-        const slice = try try server_name.getZigString(globalObject).toOwnedSlice(bun.default_allocator);
+        const server_name_zs = try server_name.getZigString(globalObject);
+        const slice = try server_name_zs.toOwnedSlice(bun.default_allocator);
         if (self.server_name) |old| {
             _ = &old;
             self.server_name = slice;
@@ -105,7 +111,11 @@ pub fn setServername(self: *This, globalObject: *jsc.JSGlobalObject, callframe: 
         }
         const host = slice;
         if ((host.len > 0)) {
-            var ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+            const ssl_ptr_opt = self.socket.ssl();
+            if ((ssl_ptr_opt == null)) {
+                return JSValue.js_undefined;
+            }
+            var ssl_ptr = ssl_ptr_opt.?;
             _ = &ssl_ptr;
             if (ssl_ptr.isInitFinished()) {
                 return globalObject.throw("Already started.", .{});
@@ -116,35 +126,47 @@ pub fn setServername(self: *This, globalObject: *jsc.JSGlobalObject, callframe: 
             }
             _ = ssl_ptr.setHostname(host__);
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getPeerX509Certificate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         const cert = BoringSSL.SSL_get_peer_certificate(ssl_ptr);
         if (cert) |x509| {
             _ = &x509;
             return X509.toJSObject(x509, globalObject);
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getX509Certificate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         const cert = BoringSSL.SSL_get_certificate(ssl_ptr);
         if (cert) |x509| {
             _ = &x509;
             return X509.toJSObject(x509.ref(), globalObject);
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getTLSVersion(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
         _ = jsc.markBinding(@src());
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = JSValue.jsNull() }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.jsNull();
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         const version = BoringSSL.SSL_get_version(ssl_ptr);
         if ((version == null)) {
             return JSValue.jsNull();
@@ -174,7 +196,11 @@ pub fn setMaxSendFragment(self: *This, globalObject: *jsc.JSGlobalObject, callfr
         if ((size > 16384)) {
             return globalObject.throw("Expected size to be less than 16385", .{});
         }
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .false }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.false;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         return JSValue.jsBoolean((BoringSSL.SSL_set_max_send_fragment(ssl_ptr, @as(usize, @intCast(size))) == 1));
 }
 
@@ -190,7 +216,11 @@ pub fn getPeerCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callfr
             }
             abbreviated = arg.toBoolean();
         }
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         if (abbreviated) {
             if (self.isServer()) {
                 const cert = BoringSSL.SSL_get_peer_certificate(ssl_ptr);
@@ -202,8 +232,16 @@ pub fn getPeerCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callfr
                     return X509.toJS(x509, globalObject);
                 }
             }
-            const cert_chain = ((BoringSSL.SSL_get_peer_cert_chain(ssl_ptr)) orelse { return .{ .ok = .js_undefined }; });
-            const cert = ((BoringSSL.sk_X509_value(cert_chain, 0)) orelse { return .{ .ok = .js_undefined }; });
+            const cert_chain_opt = BoringSSL.SSL_get_peer_cert_chain(ssl_ptr);
+            if ((cert_chain_opt == null)) {
+                return JSValue.js_undefined;
+            }
+            const cert_chain = cert_chain_opt.?;
+            const cert_opt = BoringSSL.sk_X509_value(cert_chain, 0);
+            if ((cert_opt == null)) {
+                return JSValue.js_undefined;
+            }
+            const cert = cert_opt.?;
             return X509.toJS(cert, globalObject);
         }
         var cert = (if (self.isServer()) BoringSSL.SSL_get_peer_certificate(ssl_ptr) else null);
@@ -218,30 +256,38 @@ pub fn getPeerCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callfr
         var first_cert = (if ((cert != null)) (cert.?) else (if ((cert_chain != null)) BoringSSL.sk_X509_value(cert_chain.?, 0) else null));
         _ = &first_cert;
         if ((first_cert == null)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         const cert = BoringSSL.SSL_get_certificate(ssl_ptr);
         if (cert) |x509| {
             _ = &x509;
             return X509.toJS(x509, globalObject);
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn getTLSFinishedMessage(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         var dummy: [1]u8 = undefined;
         _ = &dummy;
         const size = BoringSSL.SSL_get_finished(ssl_ptr, bun.cast(OpaquePtr, (&dummy)), @sizeOf(@TypeOf(dummy)));
         if ((size == 0)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const buffer_size = @as(usize, @intCast(size));
         var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
@@ -255,7 +301,11 @@ pub fn getTLSFinishedMessage(self: *This, globalObject: *jsc.JSGlobalObject, cal
 pub fn getSharedSigalgs(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
         _ = jsc.markBinding(@src());
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = JSValue.jsNull() }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.jsNull();
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         const nsig = BoringSSL.SSL_get_shared_sigalgs(ssl_ptr, 0, null, null, null, null, null);
         const array = try jsc.JSValue.createEmptyArray(globalObject, @as(usize, @intCast(nsig)));
         {
@@ -337,7 +387,11 @@ const sn_str = BoringSSL.OBJ_nid2sn(sign_nid);
 
 pub fn getCipher(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         const cipher = BoringSSL.SSL_get_current_cipher(ssl_ptr);
         var result = JSValue.createEmptyObject(globalObject, 0);
         _ = &result;
@@ -370,12 +424,16 @@ pub fn getCipher(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc
 
 pub fn getTLSPeerFinishedMessage(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         var dummy: [1]u8 = undefined;
         _ = &dummy;
         const size = BoringSSL.SSL_get_peer_finished(ssl_ptr, bun.cast(OpaquePtr, (&dummy)), @sizeOf(@TypeOf(dummy)));
         if ((size == 0)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const buffer_size = @as(usize, @intCast(size));
         var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
@@ -388,7 +446,7 @@ pub fn getTLSPeerFinishedMessage(self: *This, globalObject: *jsc.JSGlobalObject,
 
 pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         if (self.socket.isDetached()) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const args = callframe.arguments_old(3);
         if ((args.len < 2)) {
@@ -412,7 +470,11 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
         _ = label.deinit();
         }
         const label_slice = label.slice();
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         if ((args.len > 2)) {
             const context_arg = args.ptr[2];
             var arena_alloc: bun.ArenaAllocator = bun.ArenaAllocator.init(bun.default_allocator);
@@ -456,7 +518,11 @@ pub fn getEphemeralKeyInfo(self: *This, globalObject: *jsc.JSGlobalObject, callf
         if (self.isServer()) {
             return JSValue.jsNull();
         }
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = JSValue.jsNull() }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.jsNull();
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         var result = JSValue.createEmptyObject(globalObject, 0);
         _ = &result;
         const raw_key = BoringSSL.SSL_get_privatekey(ssl_ptr);
@@ -502,10 +568,14 @@ pub fn getALPNProtocol(self: *This, globalObject: *jsc.JSGlobalObject) bun.JSErr
         _ = &alpn_proto;
         var alpn_proto_len: u32 = 0;
         _ = &alpn_proto_len;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .false }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.false;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         _ = BoringSSL.SSL_get0_alpn_selected(ssl_ptr, (&alpn_proto), (&alpn_proto_len));
         if (((alpn_proto == null) or (alpn_proto_len == 0))) {
-            return error.false;
+            return JSValue.false;
         }
         const slice = alpn_proto[0..alpn_proto_len];
         if (strings.eql(slice, "h2")) {
@@ -519,11 +589,19 @@ pub fn getALPNProtocol(self: *This, globalObject: *jsc.JSGlobalObject) bun.JSErr
 
 pub fn getSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
-        const session = ((BoringSSL.SSL_get_session(ssl_ptr)) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
+        const session_opt = BoringSSL.SSL_get_session(ssl_ptr);
+        if ((session_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const session = session_opt.?;
         const size = BoringSSL.i2d_SSL_SESSION(session, null);
         if ((size <= 0)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const buffer_size = @as(usize, @intCast(size));
         var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
@@ -537,7 +615,7 @@ pub fn getSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
 
 pub fn setSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         if (self.socket.isDetached()) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const args = callframe.arguments_old(1);
         if ((args.len < 1)) {
@@ -558,14 +636,18 @@ pub fn setSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
             const ssl_ptr = self.socket.ssl();
             var tmp = @as([*c]const u8, @ptrCast(session_slice.ptr));
             _ = &tmp;
-            const session = ((BoringSSL.d2i_SSL_SESSION(null, (&tmp), @as(c_long, @intCast(session_slice.len)))) orelse { return .{ .ok = .js_undefined }; });
+            const session_opt = BoringSSL.d2i_SSL_SESSION(null, (&tmp), @as(c_long, @intCast(session_slice.len)));
+            if ((session_opt == null)) {
+                return JSValue.js_undefined;
+            }
+            const session = session_opt.?;
             defer {
             _ = BoringSSL.SSL_SESSION_free(session);
             }
             if ((BoringSSL.SSL_set_session(ssl_ptr, session) != 1)) {
                 return globalObject.throwValue(getSSLException(globalObject, "SSL_set_session error"));
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
         } else {
             return globalObject.throw("Expected session to be a string, Buffer or TypedArray", .{});
         }
@@ -573,43 +655,63 @@ pub fn setSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
 
 pub fn getTLSTicket(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
-        const session = ((BoringSSL.SSL_get_session(ssl_ptr)) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
+        const session_opt = BoringSSL.SSL_get_session(ssl_ptr);
+        if ((session_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const session = session_opt.?;
         var ticket: [*c]const u8 = undefined;
         _ = &ticket;
         var length: usize = 0;
         _ = &length;
         _ = BoringSSL.SSL_SESSION_get0_ticket(session, @as([*c][*c]const u8, @ptrCast((&ticket))), (&length));
         if (((ticket == null) or (length == 0))) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         return jsc.ArrayBuffer.createBuffer(globalObject, ticket[0..length]);
 }
 
 pub fn renegotiate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
     _ = callframe;
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         _ = BoringSSL.ERR_clear_error;
         if ((BoringSSL.SSL_renegotiate(ssl_ptr) != 1)) {
             return globalObject.throwValue(getSSLException(globalObject, "SSL_renegotiate error"));
         }
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn disableRenegotiation(self: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .js_undefined }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.js_undefined;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         _ = BoringSSL.SSL_set_renegotiate_mode(ssl_ptr, BoringSSL.ssl_renegotiate_never);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn isSessionReused(self: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-        const ssl_ptr = ((self.socket.ssl()) orelse { return .{ .ok = .false }; });
+        const ssl_ptr_opt = self.socket.ssl();
+        if ((ssl_ptr_opt == null)) {
+            return JSValue.false;
+        }
+        const ssl_ptr = ssl_ptr_opt.?;
         return JSValue.jsBoolean((BoringSSL.SSL_session_reused(ssl_ptr) == 1));
 }
 
 pub fn setVerifyMode(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         if (self.socket.isDetached()) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         const args = callframe.arguments_old(2);
         if ((args.len < 2)) {
@@ -634,7 +736,7 @@ pub fn setVerifyMode(self: *This, globalObject: *jsc.JSGlobalObject, callframe: 
         }
         const ssl_ptr = self.socket.ssl();
         _ = BoringSSL.SSL_set_verify(ssl_ptr, verify_mode, alwaysAllowSSLVerifyCallback);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn alwaysAllowSSLVerifyCallback(_: c_int, _: ?*BoringSSL.X509_STORE_CTX) callconv(.c) c_int {

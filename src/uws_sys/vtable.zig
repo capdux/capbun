@@ -25,7 +25,8 @@ pub inline fn call(s: *us_socket_t, comptime f: anytype, extra: anytype) void {
     }
 
 pub fn on_open(s: *us_socket_t, is_client: c_int, ip: [*c]u8, ip_len: c_int) callconv(.c) ?*us_socket_t {
-            _ = call(s, H.onOpen, .{ (is_client != 0), (if ((ip != null)) (ip.?)[0..@intCast(ip_len)] else @as([]const u8, @ptrCast(@alignCast(&(.{}))))) });
+            const ip_slice: []const u8 = (if ((@intFromPtr(ip) != 0)) ip[0..@intCast(ip_len)] else "");
+            _ = call(s, H.onOpen, .{ (is_client != 0), ip_slice });
             return s;
     }
 
