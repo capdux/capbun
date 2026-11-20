@@ -1309,7 +1309,7 @@ pub fn migrateYarnLockfile(
         const base_name = entry.key_ptr.*;
         const versions = entry.value_ptr.*;
 
-        std.sort.pdq(VersionInfo, versions.items, {}, versionInfoLessThan);
+        std.sort.pdq(VersionInfo, versions.items, @as(void, undefined), versionInfoLessThan);
 
         const original_name_hash = stringHash(base_name);
         if (original_entry := lockfile.package_index.getPtr(original_name_hash)) {

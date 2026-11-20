@@ -146,7 +146,7 @@ return .{ .err = e };
 
 pub fn toCss(self: PropertyRule, dest: *Printer) PrintErr!void {
             _ = try dest.writeStr("@property ");
-            _ = try css.css_values.ident.DashedIdentFns.toCss((&self.name), dest);
+            _ = try css.css_values.ident.DashedIdentFns.toCss(self.name, dest);
             _ = try dest.whitespace();
             _ = try dest.writeChar(123);
             _ = dest.indent();

@@ -210,9 +210,10 @@ pub fn load(lockfile: *Lockfile, stream: *Stream, allocator: Allocator, log: *lo
         _ = &res;
         var reader = stream.reader();
         _ = &reader;
-        var header_buf_: struct { header_bytes.len } = undefined;
+        const header_len = header_bytes.len;
+        _ = &header_len;
+        var header_buf_: [header_len]u8 = undefined;
         _ = &header_buf_;
-        u8 = undefined;
         const read_len = try reader.readAll((&header_buf_));
         const header_buf = header_buf_[0..read_len];
         if ((!strings.eqlComptime(header_buf, header_bytes))) {

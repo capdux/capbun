@@ -1666,13 +1666,13 @@ pub fn serializeItems(comptime D: type, items: *const ArrayList(GradientItem(D))
         _ = &i;
         while ((i < items.items.len)) : (i = (i + 1)) {
             const item = (&items.items[@as(usize, @intCast(i))]);
-            if ((((item == .hint) and (item.hint == .percentage)) and (item.hint.percentage.v == 0.5))) {
+            if ((((item.* == .hint) and (item.hint == .percentage)) and (item.hint.percentage.v == 0.5))) {
                 continue;
             }
             if (last) |prev| {
                 _ = &prev;
                 if ((!dest.targets.shouldCompile(.double_position_gradients, .{ .double_position_gradients = true }))) {
-                    if ((((((prev.* == .color_stop) and (prev.color_stop.position != null)) and (item == .color_stop)) and (item.color_stop.position != null)) and prev.color_stop.color.eql((&item.color_stop.color)))) {
+                    if ((((((prev.* == .color_stop) and (prev.color_stop.position != null)) and (item.* == .color_stop)) and (item.color_stop.position != null)) and prev.color_stop.color.eql((&item.color_stop.color)))) {
                         _ = try dest.writeChar(32);
                         _ = try item.color_stop.position.?.toCss(dest);
                         last = null;

@@ -406,7 +406,7 @@ pub fn writeOutputFilesToDisk(
                 else => .server,
             },
             entry_point_index: if (output_kind == .@"entry-point")
-                chunk.entry_point.source_index - @as(u32, if (c.framework != null && c.framework.?.server_components != null) 3 else 1)
+                chunk.entry_point.source_index - (if (c.framework != null && c.framework.?.server_components != null) @as(u32, 3) else @as(u32, 1))
             else
                 null,
             referenced_css_chunks: switch (chunk.content) {

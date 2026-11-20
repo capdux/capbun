@@ -2200,10 +2200,10 @@ pub fn indexFailures(dev: *DevServer) !void {
             _ = payload.appendAssumeCapacity(MessageId.errors.char());
             const w = payload.writer();
             _ = try w.writeInt(u32, @intCast(dev.incremental_result.failures_removed.items.len), .little);
-            for (dev.incremental_result.failures_removed.items) |removed| {
+            for (dev.incremental_result.failures_removed.items) |*removed| {
                 _ = &removed;
-                _ = try w.writeInt(u32, @bitCast(removed.getOwner().encode()), .little);
-                _ = removed.deinit(dev);
+                _ = try w.writeInt(u32, @bitCast((removed.*).getOwner().encode()), .little);
+                _ = (removed.*).deinit(dev);
             }
             for (dev.incremental_result.failures_added.items) |added| {
                 _ = &added;
@@ -2249,10 +2249,10 @@ _ = try dev.client_graph.traceDependencies(index, (&gts), .no_stop, index);
                 _ = payload.appendAssumeCapacity(MessageId.errors.char());
                 const w = payload.writer();
                 _ = try w.writeInt(u32, @intCast(dev.incremental_result.failures_removed.items.len), .little);
-                for (dev.incremental_result.failures_removed.items) |removed| {
+                for (dev.incremental_result.failures_removed.items) |*removed| {
                     _ = &removed;
-                    _ = try w.writeInt(u32, @bitCast(removed.getOwner().encode()), .little);
-                    _ = removed.deinit(dev);
+                    _ = try w.writeInt(u32, @bitCast((removed.*).getOwner().encode()), .little);
+                    _ = (removed.*).deinit(dev);
                 }
                 _ = dev.publish(.errors, payload.items, .binary);
             }

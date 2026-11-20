@@ -101,7 +101,7 @@ pub struct PropertyRule {
         // dest.add_mapping(self.loc);
 
         dest.writeStr("@property ")?;
-        css.css_values.ident.DashedIdentFns.toCss(&_.name, dest)?;
+        css.css_values.ident.DashedIdentFns.toCss(_.name, dest)?;
         dest.whitespace()?;
         dest.writeChar('{')?;
         dest.indent();

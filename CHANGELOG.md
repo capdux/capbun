@@ -1856,3 +1856,5 @@
 - **[2026-11-21] Wave 43 B 组 (6 模块)**：更新 `bundler/{HTMLImportManifest,bundle_v2,linker_context/{computeCrossChunkDependencies,writeOutputFilesToDisk}}`, `install/{lockfile,yarn}`。
 - **[2026-11-21] Wave 44 B 组 (6 模块)**：更新 `bundler/{Chunk,bundle_v2,linker_context/computeCrossChunkDependencies}`, `install/{lockfile,lockfile/Tree,yarn}`。
 - **[2026-11-21] Wave 44 A 组 (6 模块)**：更新 `css/{selectors/parser,values/{gradient,syntax},properties/margin_padding,rules/{custom_media,rules}}`。
+- **[2026-11-21] Wave 45 B 组 (8 模块)**：更新 `bake/{DevServer,DevServer/IncrementalGraph}`, `jsc/CachedBytecode`, `bundler/{bundle_v2,linker_context/writeOutputFilesToDisk}`, `install/{lockfile/{bun.lock,bun.lockb},yarn}`。
+- **[2026-11-21] Wave 45 A 组 (6 模块)**：更新 `css/{values/{gradient,syntax},rules/{property,rules,layer},selectors/parser}`。

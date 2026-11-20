@@ -2716,7 +2716,7 @@ pub struct BundleV2 {
             chunks: chunks,
             css_file_list: start.css_entry_points,
             html_files: html_files,
-        });
+        })?;
     }
 
     fn enqueueOnResolvePluginIfNeeded(

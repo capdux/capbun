@@ -1603,7 +1603,7 @@ pub fn serializeItems(
     while (i < items.items.len) : (i += 1) {
         const item = &items.items[i];
         // Skip useless hints
-        if (item == .hint && item.hint == .percentage && item.hint.percentage.v == 0.5) {
+        if (item.* == .hint && item.hint == .percentage && item.hint.percentage.v == 0.5) {
             continue;
         }
 
@@ -1611,7 +1611,7 @@ pub fn serializeItems(
         if (prev := last) {
             if (!dest.targets.shouldCompile(.double_position_gradients, { double_position_gradients: true })) {
                 if (prev.* == .color_stop && prev.color_stop.position != null &&
-                    item == .color_stop && item.color_stop.position != null &&
+                    item.* == .color_stop && item.color_stop.position != null &&
                     prev.color_stop.color.eql(&item.color_stop.color))
                 {
                     dest.writeChar(' ')?;

@@ -300,7 +300,8 @@ pub struct SerializerLoadResult {
     ): SerializerLoadResult! {
         let res = SerializerLoadResult{};
         let reader = stream.reader();
-        let header_buf_: [header_bytes.len]u8 = undefined;
+        const header_len = header_bytes.len;
+        let header_buf_: [header_len]u8 = undefined;
         const read_len = (reader.readAll(&header_buf_)?);
         const header_buf = header_buf_[0..read_len];
 

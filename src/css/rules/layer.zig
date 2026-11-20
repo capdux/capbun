@@ -242,12 +242,12 @@ pub fn LayerBlockRule(comptime R: type) type {
     rules: css.CssRuleList(R),
     loc: Location,
 
-pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             _ = try dest.writeStr("@layer");
-            if (self.name) |*name| {
+            if (self.name) |name| {
                 _ = &name;
                 _ = try dest.writeChar(32);
-                _ = try (name.*).toCss(dest);
+                _ = try name.toCss(dest);
             }
             _ = try dest.whitespace();
             _ = try dest.writeChar(123);

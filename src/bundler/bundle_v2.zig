@@ -1668,7 +1668,7 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             }
             }
             _ = self.graph.heap.helpCatchMemoryIssues();
-            _ = dev_server.finalizeBundle(self, (&.{ .chunks = chunks, .css_file_list = start.css_entry_points, .html_files = html_files }));
+            _ = try dev_server.finalizeBundle(self, (&.{ .chunks = chunks, .css_file_list = start.css_entry_points, .html_files = html_files }));
     }
 
 pub fn enqueueOnResolvePluginIfNeeded(self: *BundleV2, source_index: Index.Int, import_record: *const ImportRecord, source_file: []const u8, import_record_index: u32, original_target: options.Target) bool {

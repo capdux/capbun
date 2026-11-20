@@ -211,7 +211,10 @@ pub fn CssRule(comptime Rule: type) type {
                     return lb.toCss(dest);
                 },
                 .property => |x| x.toCss(dest),
-                .starting_style => |x| x.toCss(dest),
+                .starting_style => |x| {
+                    var ss = x;
+                    return ss.toCss(dest);
+                },
                 .container => |x| x.toCss(dest),
                 .scope => |x| x.toCss(dest),
                 .unknown => |x| x.toCss(dest),

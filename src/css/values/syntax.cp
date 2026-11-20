@@ -341,7 +341,7 @@ pub enum SyntaxComponentKind {
     /// A literal component.
     literal: string,
 
-    pub fn parseString(input: *[]const u8): css.Maybe(SyntaxComponentKind, void) {
+    static fn parseString(input: *[]const u8): css.Maybe(SyntaxComponentKind, void) {
         // https://drafts.css-houdini.org/css-properties-values-api/#consume-syntax-component
         input.* = std.mem.trimLeft(u8, input.*, SPACE_CHARACTERS);
         if (bun.strings.startsWithChar(input.*, '<')) {

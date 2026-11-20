@@ -323,8 +323,7 @@ pub const SyntaxComponentKind = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn parseString(self: *SyntaxComponentKind, input: *[]const u8) css.Maybe(SyntaxComponentKind,void) {
-        _ = self;
+pub fn parseString(input: *[]const u8) css.Maybe(SyntaxComponentKind,void) {
             input.* = std.mem.trimLeft(u8, input.*, SPACE_CHARACTERS);
             if (bun.strings.startsWithChar(input.*, 60)) {
                 const end_idx = ((std.mem.indexOfScalar(u8, input.*, 62)) orelse { return .{ .err = undefined }; });

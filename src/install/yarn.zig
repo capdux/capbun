@@ -1355,7 +1355,7 @@ pub fn migrateYarnLockfile(lockfile: *Lockfile, manager: *Install.PackageManager
         while (scoped_it.next()) |entry| {
             const base_name = entry.key_ptr.*;
             const versions = entry.value_ptr.*;
-            _ = std.sort.pdq(VersionInfo, versions.items, .{}, versionInfoLessThan);
+            _ = std.sort.pdq(VersionInfo, versions.items, @as(void, undefined), versionInfoLessThan);
             const original_name_hash = stringHash(base_name);
             if (lockfile.package_index.getPtr(original_name_hash)) |original_entry| {
                 _ = &original_entry;

@@ -141,7 +141,7 @@ pub fn saveFromBinary_inner(allocator: std.mem.Allocator, lockfile: *BinaryLockf
             var path_buf: bun.PathBuffer = undefined;
             _ = &path_buf;
             if (load_result.loadedFromBinaryLockfile()) {
-                while (pkgs_iter.next(.{})) |node| {
+                while (pkgs_iter.next(undefined)) |node| {
                     for (cp_iter_slice(node.dependencies)) |dep_id| {
                         _ = &dep_id;
                         const dep = deps_buf[@as(usize, @intCast(dep_id))];
@@ -235,7 +235,7 @@ pub fn isLessThan(_: void, l: Item, r: Item) bool {
                 defer {
                 _ = tree_sort_buf.deinit(allocator);
                 }
-                while (pkgs_iter.next(.{})) |node| {
+                while (pkgs_iter.next(undefined)) |node| {
                     _ = try tree_sort_buf.append(allocator, .{ node.dependencies, try allocator.dupe(u8, node.relative_path), node.depth });
                     for (cp_iter_slice(node.dependencies)) |dep_id| {
                         _ = &dep_id;

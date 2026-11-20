@@ -2092,7 +2092,7 @@ fn indexFailures(dev: *DevServer)! {
 
         w.writeInt(u32, @intCast(dev.incremental_result.failures_removed.items.len), .little)?;
 
-        for (removed of dev.incremental_result.failures_removed.items) {
+        for (*removed of dev.incremental_result.failures_removed.items) {
             w.writeInt(u32, @bitCast(removed.getOwner().encode()), .little)?;
             removed.deinit(dev);
         }
@@ -2132,7 +2132,7 @@ fn indexFailures(dev: *DevServer)! {
 
         w.writeInt(u32, @intCast(dev.incremental_result.failures_removed.items.len), .little)?;
 
-        for (removed of dev.incremental_result.failures_removed.items) {
+        for (*removed of dev.incremental_result.failures_removed.items) {
             w.writeInt(u32, @bitCast(removed.getOwner().encode()), .little)?;
             removed.deinit(dev);
         }

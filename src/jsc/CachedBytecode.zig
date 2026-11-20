@@ -104,11 +104,12 @@ else => null,
     pub const VTable = (&std.mem.Allocator.VTable{ .alloc = vtableAlloc, .free = vtableFree, .resize = (&std.mem.Allocator.noResize), .remap = (&std.mem.Allocator.noRemap) });
 };
 
+const OptU8Ptr = ?[*]u8;
 pub const BytecodeResult = struct { []const u8, *CachedBytecode };
 
-extern "c" fn generateCachedModuleByteCodeFromSourceCode(sourceProviderURL: *bun.String, input_code: [*]const u8, inputSourceCodeSize: usize, outputByteCode: ?*[*]u8, outputByteCodeSize: *usize, cached_bytecode: *?*CachedBytecode) callconv(.c) bool;
+extern "c" fn generateCachedModuleByteCodeFromSourceCode(sourceProviderURL: *bun.String, input_code: [*]const u8, inputSourceCodeSize: usize, outputByteCode: *OptU8Ptr, outputByteCodeSize: *usize, cached_bytecode: *?*CachedBytecode) callconv(.c) bool;
 
-extern "c" fn generateCachedCommonJSProgramByteCodeFromSourceCode(sourceProviderURL: *bun.String, input_code: [*]const u8, inputSourceCodeSize: usize, outputByteCode: ?*[*]u8, outputByteCodeSize: *usize, cached_bytecode: *?*CachedBytecode) callconv(.c) bool;
+extern "c" fn generateCachedCommonJSProgramByteCodeFromSourceCode(sourceProviderURL: *bun.String, input_code: [*]const u8, inputSourceCodeSize: usize, outputByteCode: *OptU8Ptr, outputByteCodeSize: *usize, cached_bytecode: *?*CachedBytecode) callconv(.c) bool;
 
 extern "c" fn CachedBytecode__deref(ptr: *CachedBytecode) callconv(.c) void;
 

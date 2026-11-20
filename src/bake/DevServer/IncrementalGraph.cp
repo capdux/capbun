@@ -761,7 +761,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
 
             // Build a map from the existing import list. Later, entries that
             // were not marked as `.seen = true` will be freed.
-            let quick_lookup: TempLookup.HashTable = {};
+            let quick_lookup: TempLookup.HashTable = .empty;
             defer quick_lookup.deinit(temp_alloc);
             {
                 let it: ?EdgeIndex = g.first_import.items[file_index.get()].unwrap();

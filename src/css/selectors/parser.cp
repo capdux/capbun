@@ -1135,25 +1135,25 @@ pub const SelectorParser = struct {
         const pseudo_class: PseudoClass = pseudo_class: {
             const Map = comptime bun.ComptimeStringMap(PseudoClass, .{
                 // https://drafts.csswg.org/selectors-4/#useraction-pseudos
-                .{ "hover", PseudoClass{ .hover = {} } },
-                .{ "active", PseudoClass{ .active = {} } },
-                .{ "focus", PseudoClass{ .focus = {} } },
-                .{ "focus-visible", PseudoClass{ .focus_visible = {} } },
-                .{ "focus-within", PseudoClass{ .focus_within = {} } },
+                .{ "hover", PseudoClass.hover },
+                .{ "active", PseudoClass.active },
+                .{ "focus", PseudoClass.focus },
+                .{ "focus-visible", PseudoClass.focus_visible },
+                .{ "focus-within", PseudoClass.focus_within },
 
                 // https://drafts.csswg.org/selectors-4/#time-pseudos
-                .{ "current", PseudoClass{ .current = {} } },
-                .{ "past", PseudoClass{ .past = {} } },
-                .{ "future", PseudoClass{ .future = {} } },
+                .{ "current", PseudoClass.current },
+                .{ "past", PseudoClass.past },
+                .{ "future", PseudoClass.future },
 
                 // https://drafts.csswg.org/selectors-4/#resource-pseudos
-                .{ "playing", PseudoClass{ .playing = {} } },
-                .{ "paused", PseudoClass{ .paused = {} } },
-                .{ "seeking", PseudoClass{ .seeking = {} } },
-                .{ "buffering", PseudoClass{ .buffering = {} } },
-                .{ "stalled", PseudoClass{ .stalled = {} } },
-                .{ "muted", PseudoClass{ .muted = {} } },
-                .{ "volume-locked", PseudoClass{ .volume_locked = {} } },
+                .{ "playing", PseudoClass.playing },
+                .{ "paused", PseudoClass.paused },
+                .{ "seeking", PseudoClass.seeking },
+                .{ "buffering", PseudoClass.buffering },
+                .{ "stalled", PseudoClass.stalled },
+                .{ "muted", PseudoClass.muted },
+                .{ "volume-locked", PseudoClass.volume_locked },
 
                 // https://fullscreen.spec.whatwg.org/#:fullscreen-pseudo-class
                 .{ "fullscreen", PseudoClass{ .fullscreen = css.VendorPrefix{ .none = true } } },
@@ -1162,30 +1162,30 @@ pub const SelectorParser = struct {
                 .{ "-ms-fullscreen", PseudoClass{ .fullscreen = css.VendorPrefix{ .ms = true } } },
 
                 // https://drafts.csswg.org/selectors/#display-state-pseudos
-                .{ "open", PseudoClass{ .open = {} } },
-                .{ "closed", PseudoClass{ .closed = {} } },
-                .{ "modal", PseudoClass{ .modal = {} } },
-                .{ "picture-in-picture", PseudoClass{ .picture_in_picture = {} } },
+                .{ "open", PseudoClass.open },
+                .{ "closed", PseudoClass.closed },
+                .{ "modal", PseudoClass.modal },
+                .{ "picture-in-picture", PseudoClass.picture_in_picture },
 
                 // https://html.spec.whatwg.org/multipage/semantics-other.html#selector-popover-open
-                .{ "popover-open", PseudoClass{ .popover_open = {} } },
+                .{ "popover-open", PseudoClass.popover_open },
 
                 // https://drafts.csswg.org/selectors-4/#the-defined-pseudo
-                .{ "defined", PseudoClass{ .defined = {} } },
+                .{ "defined", PseudoClass.defined },
 
                 // https://drafts.csswg.org/selectors-4/#location
                 .{ "any-link", PseudoClass{ .any_link = css.VendorPrefix{ .none = true } } },
                 .{ "-webkit-any-link", PseudoClass{ .any_link = css.VendorPrefix{ .webkit = true } } },
                 .{ "-moz-any-link", PseudoClass{ .any_link = css.VendorPrefix{ .moz = true } } },
-                .{ "link", PseudoClass{ .link = {} } },
-                .{ "local-link", PseudoClass{ .local_link = {} } },
-                .{ "target", PseudoClass{ .target = {} } },
-                .{ "target-within", PseudoClass{ .target_within = {} } },
-                .{ "visited", PseudoClass{ .visited = {} } },
+                .{ "link", PseudoClass.link },
+                .{ "local-link", PseudoClass.local_link },
+                .{ "target", PseudoClass.target },
+                .{ "target-within", PseudoClass.target_within },
+                .{ "visited", PseudoClass.visited },
 
                 // https://drafts.csswg.org/selectors-4/#input-pseudos
-                .{ "enabled", PseudoClass{ .enabled = {} } },
-                .{ "disabled", PseudoClass{ .disabled = {} } },
+                .{ "enabled", PseudoClass.enabled },
+                .{ "disabled", PseudoClass.disabled },
                 .{ "read-only", PseudoClass{ .read_only = css.VendorPrefix{ .none = true } } },
                 .{ "-moz-read-only", PseudoClass{ .read_only = css.VendorPrefix{ .moz = true } } },
                 .{ "read-write", PseudoClass{ .read_write = css.VendorPrefix{ .none = true } } },
@@ -1193,18 +1193,18 @@ pub const SelectorParser = struct {
                 .{ "placeholder-shown", PseudoClass{ .placeholder_shown = css.VendorPrefix{ .none = true } } },
                 .{ "-moz-placeholder-shown", PseudoClass{ .placeholder_shown = css.VendorPrefix{ .moz = true } } },
                 .{ "-ms-placeholder-shown", PseudoClass{ .placeholder_shown = css.VendorPrefix{ .ms = true } } },
-                .{ "default", PseudoClass{ .default = {} } },
-                .{ "checked", PseudoClass{ .checked = {} } },
-                .{ "indeterminate", PseudoClass{ .indeterminate = {} } },
-                .{ "blank", PseudoClass{ .blank = {} } },
-                .{ "valid", PseudoClass{ .valid = {} } },
-                .{ "invalid", PseudoClass{ .invalid = {} } },
-                .{ "in-range", PseudoClass{ .in_range = {} } },
-                .{ "out-of-range", PseudoClass{ .out_of_range = {} } },
-                .{ "required", PseudoClass{ .required = {} } },
-                .{ "optional", PseudoClass{ .optional = {} } },
-                .{ "user-valid", PseudoClass{ .user_valid = {} } },
-                .{ "user-invalid", PseudoClass{ .user_invalid = {} } },
+                .{ "default", PseudoClass.default },
+                .{ "checked", PseudoClass.checked },
+                .{ "indeterminate", PseudoClass.indeterminate },
+                .{ "blank", PseudoClass.blank },
+                .{ "valid", PseudoClass.valid },
+                .{ "invalid", PseudoClass.invalid },
+                .{ "in-range", PseudoClass.in_range },
+                .{ "out-of-range", PseudoClass.out_of_range },
+                .{ "required", PseudoClass.required },
+                .{ "optional", PseudoClass.optional },
+                .{ "user-valid", PseudoClass.user_valid },
+                .{ "user-invalid", PseudoClass.user_invalid },
 
                 // https://html.spec.whatwg.org/multipage/semantics-other.html#selector-autofill
                 .{ "autofill", PseudoClass{ .autofill = css.VendorPrefix{ .none = true } } },
