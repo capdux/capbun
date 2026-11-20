@@ -177,10 +177,10 @@ pub fn createWithCtx(file_blob: Blob, bytes_blob: Blob, onWriteFileContext: *any
             return write_file;
     }
 
-pub fn create(file_blob: Blob, bytes_blob: Blob, comptime Context: type, context: Context, comptime callback: *const fn (Context, WriteFileResultType) anyerror!void, mkdirp_if_not_exists: bool) !*WriteFile {
+pub fn create(file_blob: Blob, bytes_blob: Blob, comptime Context: type, context: Context, comptime callback: *const fn (Context, WriteFileResultType) bun.JSTerminated!void, mkdirp_if_not_exists: bool) !*WriteFile {
             const Handler = struct {
 
-pub fn run(ptr: *anyopaque, bytes: WriteFileResultType) anyerror!void {
+pub fn run(ptr: *anyopaque, bytes: WriteFileResultType) bun.JSTerminated!void {
             _ = try callback(cast(Context, ptr), bytes);
     }
 };

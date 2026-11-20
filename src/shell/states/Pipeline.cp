@@ -167,7 +167,7 @@ pub const PipelineState = union(enum) {
                         },
                     };
                     _.cmds.?[i] = .{
-                        .cmd = switch (item.*) {
+                        .cmd = switch (item) {
                             .@"if" => PipelineItem.init(If.init(_.base.interpreter, subshell_state, item.@"if", If.ParentPtr.init(_), cmd_io)),
                             .cmd => PipelineItem.init(Cmd.init(_.base.interpreter, subshell_state, item.cmd, Cmd.ParentPtr.init(_), cmd_io)),
                             .condexpr => PipelineItem.init(CondExpr.init(_.base.interpreter, subshell_state, item.condexpr, CondExpr.ParentPtr.init(_), cmd_io)),

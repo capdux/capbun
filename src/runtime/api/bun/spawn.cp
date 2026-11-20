@@ -107,7 +107,8 @@ pub struct BunSpawnActions {
             bun.default_allocator.free(bun.span(buf));
         }
 
-        _.chdir_buf = (bun.default_allocator.dupeZ(u8, path)?).ptr;
+        const duped = bun.default_allocator.dupeZ(u8, path)?;
+        _.chdir_buf = duped.ptr;
     }
 }
 

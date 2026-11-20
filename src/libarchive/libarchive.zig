@@ -643,7 +643,7 @@ const c = bun.c;
 const default_allocator = bun.default_allocator;
 const strings = bun.strings;
 var EMPTY_PLUCKERS: [0]ArchiverPlucker = &.{};
-const EMPTY_PLUCKERS_SLICE: []ArchiverPlucker = *EMPTY_PLUCKERS;
+const EMPTY_PLUCKERS_SLICE: []ArchiverPlucker = EMPTY_PLUCKERS[0..0];
 
 pub fn isSymlinkTargetSafe(symlink_path: []const u8, link_target: [:0]const u8, symlink_join_buf: *?*bun.PathBuffer) bool {
         if (((link_target.len > 0) and (link_target[0] == 47))) {

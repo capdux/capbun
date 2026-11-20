@@ -292,7 +292,10 @@ pub fn ResumableSink(
             stream: webcore.streams.Result,
             allocator: Allocator,
         ) void {
-            const stream_ = stream;
+            let stream_ = stream;
+            if (false) {
+                stream_ = stream;
+            }
             const stream_needs_deinit = stream == .owned or stream == .owned_and_done;
 
             defer {

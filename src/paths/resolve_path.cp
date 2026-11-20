@@ -1359,7 +1359,20 @@ fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd
         return buf[0 .. end_path.len + 4];
     }
 
-    let parts: []const []const u8 = _parts;
+    const PartsT = @TypeOf(_parts);
+    const is_struct_ptr = comptime (@typeInfo(PartsT) == .pointer && @typeInfo(@typeInfo(PartsT).pointer.child) == .@"struct");
+    const arr_len = comptime if (is_struct_ptr) @typeInfo(@typeInfo(PartsT).pointer.child).@"struct".fields.len else 0;
+    let parts_arr: [arr_len][]const u8 = undefined;
+    let parts: []const []const u8 = undefined;
+    if (comptime is_struct_ptr) {
+        const fields = @typeInfo(@typeInfo(PartsT).pointer.child).@"struct".fields;
+        inline for (i of 0..fields.len) {
+            parts_arr[i] = @field(_parts.*, fields[i].name);
+        }
+        parts = &parts_arr;
+    } else {
+        parts = _parts;
+    }
     if (parts.len == 0) {
         if (comptime is_sentinel) {
             unreachable;

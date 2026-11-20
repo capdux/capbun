@@ -174,7 +174,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
                 #pointer: data,
                 // Code shouldn't rely on null pointers having a specific allocator, since
                 // `initNull` necessarily sets this field to undefined.
-                #allocator: if (info.isOptional() && data == null)
+                #allocator: if ((comptime info.isOptional()) && data == null)
                     undefined
                 else
                     allocator_,

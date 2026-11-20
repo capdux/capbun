@@ -90,7 +90,9 @@ export class CopyFile {
                 else => {},
             }
         }
-        this.store.?.deref();
+        if (s := _.store) {
+            s.deref();
+        }
         destroy(this);
     }
 
@@ -110,7 +112,9 @@ export class CopyFile {
         }
         let instance = system_error.toErrorInstanceWithAsyncStack(this.globalThis, promise);
         if (this.store != null) {
-            this.store.?.deref();
+            if (s := _.store) {
+            s.deref();
+        }
         }
         try promise.reject(globalThis, instance);
     }

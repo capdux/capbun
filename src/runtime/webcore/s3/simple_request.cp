@@ -408,12 +408,12 @@ export class S3HttpSimpleTask {
                 }
             },
             .commit(cb) => {
-                if (!this.failIfContainsError(response.status_code)?) {
+                if (!(this.failIfContainsError(response.status_code)?)) {
                     cb(.{ .success = undefined }, this.callback_context)?;
                 }
             },
             .part(cb) => {
-                if (!this.failIfContainsError(response.status_code)?) {
+                if (!(this.failIfContainsError(response.status_code)?)) {
                     if (etag := response.headers.get("etag")) {
                         cb(.{ .etag = etag }, this.callback_context)?;
                     } else {

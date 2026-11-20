@@ -374,7 +374,7 @@ struct ExtractContext {
             _.path,
             null,
             void,
-            {},
+            @as(void, {}),
             { depth_to_skip: 0, close_handles: true, log: false, npm: false },
         ) catch return ExtractContext.Result{ @"err": error.ReadError };
         return ExtractContext.Result{ success: count };

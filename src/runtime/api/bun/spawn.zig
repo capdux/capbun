@@ -145,7 +145,8 @@ pub fn chdir(self: *BunSpawnActions, path: []const u8) !void {
                 _ = &buf;
                 _ = bun.default_allocator.free(bun.span(buf));
             }
-            self.chdir_buf = try bun.default_allocator.dupeZ(u8, path).ptr;
+            const duped = try bun.default_allocator.dupeZ(u8, path);
+            self.chdir_buf = duped.ptr;
     }
 };
 

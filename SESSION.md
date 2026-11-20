@@ -3196,3 +3196,5 @@ Options:
 - **[2026-11-20 23:37] Wave 26 B 组验收提交（21 模块全绿）**：完成 Install/JSC/SQL/`bun_alloc` 21 模块独立验收（21/21 PASS，4 项门禁全绿）并原子提交；流水线补派 D 组修复外部根因 `repository.cp`/`VM.cp`/`DataCell.cp`。
 
 - **[2026-11-20 23:38] Wave 26 A 组验收提交（20 模块全绿）**：完成 `CompileTarget`（消除 `std/fmt.zig` 20 错）/Bake/Bundler/`js_printer`/AST/CLI/Sourcemap 20 模块独立验收（20/20 PASS，4 项门禁全绿）并原子提交；流水线补派 E 组修复外部根因 `AsyncHTTP.cp`/`toml.cp`/`parsePrefix.cp`/`immutable.cp`。
+
+- **[2026-11-20 23:39] Wave 26 C 组验收提交（23 模块全绿）**：完成 Shell/Runtime/HTTP/Paths/Libarchive/Ptr/Router/Watcher 23 模块独立验收（23/23 PASS，ratio 0.645x~1.147x）并原子提交；静待 D/E 两组外部根因完成即跑 Wave 27 `zig:check`。

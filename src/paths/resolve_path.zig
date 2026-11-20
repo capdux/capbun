@@ -1472,8 +1472,23 @@ pub fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, 
             }
             return buf[0..(end_path.len + 4)];
         }
-        var parts: []const []const u8 = _parts;
+        const PartsT = @TypeOf(_parts);
+        const is_struct_ptr = (comptime ((@typeInfo(PartsT) == .pointer) and (@typeInfo(@typeInfo(PartsT).pointer.child) == .@"struct")));
+        const arr_len = (comptime (if (is_struct_ptr) @typeInfo(@typeInfo(PartsT).pointer.child).@"struct".fields.len else 0));
+        _ = &arr_len;
+        var parts_arr: [arr_len][]const u8 = undefined;
+        _ = &parts_arr;
+        var parts: []const []const u8 = undefined;
         _ = &parts;
+        if (comptime is_struct_ptr) {
+            const fields = @typeInfo(@typeInfo(PartsT).pointer.child).@"struct".fields;
+            inline for (0..fields.len) |i| {
+                parts_arr[cp_cast_int(usize, i)] = @field(_parts.*, (if (@typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"union") @tagName(fields[@as(usize, @intCast(i))]) else fields[@as(usize, @intCast(i))].name));
+            }
+            parts = (&parts_arr);
+        } else {
+            parts = _parts;
+        }
         if ((parts.len == 0)) {
             if (comptime is_sentinel) {
                 _ = unreachable;

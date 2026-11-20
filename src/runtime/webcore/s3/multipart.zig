@@ -361,7 +361,7 @@ if ((upload.options.retry > 0)) {
                 _ = log("singleSendUploadResponse {} retry", .{ retry_val });
                 upload.options.retry = (upload.options.retry - 1);
                 const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = upload.path, .method = bun.http.Method.PUT, .proxy_url = upload.proxyUrl(), .body = upload.buffered.slice(), .content_type = upload.content_type, .content_disposition = upload.content_disposition, .content_encoding = upload.content_encoding, .acl = upload.acl, .storage_class = upload.storage_class, .request_payer = upload.request_payer };
-                const cb: __CpObj_upload__anyopaque = .{ .upload = @constCast(@ptrCast((&singleSendUploadResponse))) };
+                const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = @constCast(@ptrCast((&singleSendUploadResponse))) };
                 _ = try executeSimpleS3Request(upload.credentials, req_opts, cb, upload);
                 return;
             } else {
@@ -672,7 +672,7 @@ pub fn processBuffered(self: *MultiPartUpload, part_size: usize) void {
                 _ = log("processBuffered {s} singlefile_started", .{ self.path });
                 self.state = .singlefile_started;
                 const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = self.path, .method = bun.http.Method.PUT, .proxy_url = self.proxyUrl(), .body = self.buffered.slice(), .content_type = self.content_type, .content_disposition = self.content_disposition, .content_encoding = self.content_encoding, .acl = self.acl, .storage_class = self.storage_class, .request_payer = self.request_payer };
-                const cb: __CpObj_upload__anyopaque = .{ .upload = @constCast(@ptrCast((&singleSendUploadResponse))) };
+                const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = @constCast(@ptrCast((&singleSendUploadResponse))) };
                 _ = (blk_catch_4: { break :blk_catch_4 ((executeSimpleS3Request(self.credentials, req_opts, cb, self)) catch |__ce_4| { _ = &__ce_4;  }); });
             } else {
                 _ = (blk_catch_5: { break :blk_catch_5 ((self.processMultiPart(part_size)) catch |__ce_5| { _ = &__ce_5;  }); });
@@ -803,4 +803,3 @@ const OOMError = bun.OOM;
 const log = Output.scoped(.S3MultiPartUpload, .hidden);
 pub const __CpObj_commit__anyopaque = struct { commit: *anyopaque };
 pub const __CpObj_part__anyopaque = struct { part: *anyopaque };
-pub const __CpObj_upload__anyopaque = struct { upload: *anyopaque };

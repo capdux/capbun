@@ -94,7 +94,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             return;
         }
         if (duplex := _.origin.get()) {
-            if (global_obj := _.global) {
+            if (g := _.global) {
+                const global_obj: *jsc.JSGlobalObject = g;
                 const writeOrEnd_opt = if (msg_more) (duplex.getFunction(global_obj, "write") catch return) else (duplex.getFunction(global_obj, "end") catch return);
                 const writeOrEnd = writeOrEnd_opt orelse return;
                 if (data_ := data) {

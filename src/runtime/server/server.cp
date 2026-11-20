@@ -121,7 +121,10 @@ pub const AnyRoute = union(enum) {
 
         try builder.appendSlice(relative_path);
 
-        const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, try argument.get(init_ctx.global, "headers") orelse return null);
+        const headers_opt = (argument.get(init_ctx.global, "headers"))?;
+        if (headers_opt == null) return null;
+        const headers_val = headers_opt.?;
+        const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, headers_val);
         defer if (fetch_headers) |headers| headers.deref();
         if (init_ctx.global.hasException()) return error.JSError;
 

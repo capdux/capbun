@@ -153,7 +153,10 @@ else => {
 },
 }
             }
-            _ = (self.store.?).?.deref();
+            if (self.store) |s| {
+                _ = &s;
+                _ = (s).?.deref();
+            }
             _ = destroy(self);
     }
 
@@ -171,7 +174,10 @@ pub fn reject(self: *CopyFile, promise: *JSPromise) !void {
             var instance = system_error.toErrorInstanceWithAsyncStack(self.globalThis, promise);
             _ = &instance;
             if ((self.store != null)) {
-                _ = (self.store.?).?.deref();
+                if (self.store) |s| {
+                    _ = &s;
+                    _ = (s).?.deref();
+                }
             }
             _ = try promise.reject(globalThis, instance);
     }

@@ -732,10 +732,12 @@ pub fn wakeup(self: *HTTPThread) void {
 pub fn schedule(self: *HTTPThread, batch: bun.ThreadPool.Batch) void {
     var __batch_moved = false; _ = &__batch_moved;
     defer if (!__batch_moved) { const __T = @TypeOf(batch); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = batch.release() catch {}; } else { batch.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = batch; _drop_val.release(); } };
-        if ((batch.len == 0)) {
+        var b = batch;
+        _ = &b;
+        if ((b.len == 0)) {
             return;
         }
-        while (batch.pop()) |task| {
+        while (b.pop()) |task| {
             const http: *AsyncHTTP = @fieldParentPtr("task", task);
             _ = self.queued_tasks.push(http);
         }

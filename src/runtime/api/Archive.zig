@@ -78,7 +78,7 @@ pub fn run(self: *ExtractContext) Result {
                 const count = (blk_catch_0: { break :blk_catch_0 ((extractToDiskFiltered(self.store.sharedView(), self.path, self.glob_patterns)) catch |__ce_0| { _ = &__ce_0; return Result{ .@"err" = error.ReadError }; }); });
                 return .{ .success = count };
             }
-            const count = (blk_catch_1: { break :blk_catch_1 ((libarchive.Archiver.extractToDisk(self.store.sharedView(), self.path, null, void, .{}, .{ .depth_to_skip = 0, .close_handles = true, .log = false, .npm = false })) catch |__ce_1| { _ = &__ce_1; return ExtractContext.Result{ .@"err" = error.ReadError }; }); });
+            const count = (blk_catch_1: { break :blk_catch_1 ((libarchive.Archiver.extractToDisk(self.store.sharedView(), self.path, null, void, @as(void, .{}), .{ .depth_to_skip = 0, .close_handles = true, .log = false, .npm = false })) catch |__ce_1| { _ = &__ce_1; return ExtractContext.Result{ .@"err" = error.ReadError }; }); });
             return ExtractContext.Result{ .success = count };
     }
 

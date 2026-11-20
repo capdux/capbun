@@ -134,11 +134,11 @@ export class WriteFile {
         bytes_blob: Blob,
         comptime Context: type,
         context: Context,
-        comptime callback: fn (ctx: Context, bytes: WriteFileResultType) anyerror!void,
+        comptime callback: fn (ctx: Context, bytes: WriteFileResultType): void!bun.JSTerminated,
         mkdirp_if_not_exists: bool,
     ): !*WriteFile {
         const Handler = struct {
-            pub fn run(ptr: *!, bytes: WriteFileResultType): anyerror!void {
+            pub fn run(ptr: *!, bytes: WriteFileResultType): void!bun.JSTerminated {
                 try callback(cast(Context, ptr), bytes);
             }
         };

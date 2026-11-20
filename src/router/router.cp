@@ -228,8 +228,7 @@ pub struct Routes {
         }
 
         if (path.len == 0) {
-            if (_.index != null) {
-                const idx = _.index.?;
+            if (idx := _.index) {
                 return Match{
                     .params = params,
                     .name = idx.name,

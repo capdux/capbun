@@ -192,7 +192,12 @@ pub fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const 
                 _ = try builder.append(47);
             }
             _ = try builder.appendSlice(relative_path);
-            const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, try ((argument.get(init_ctx.global, "headers")) orelse { return .{ .ok = null }; }));
+            const headers_opt = try argument.get(init_ctx.global, "headers");
+            if ((headers_opt == null)) {
+                return null;
+            }
+            const headers_val = headers_opt.?;
+            const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, headers_val);
             defer {
             if (fetch_headers) |headers| {
                 _ = &headers;

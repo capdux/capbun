@@ -555,7 +555,7 @@ pub fn then(self: *TransformTask, promise: *jsc.JSPromise) bun.JSTerminated!void
             _ = self.deinit();
             }
             if ((self.log.hasAny() or (self.e != null))) {
-                var error_value: bun.JSError!JSValue = .{ .ok = undefined };
+                var error_value: bun.JSError!JSValue = .{ .ok = error.JSError };
                 _ = &error_value;
                 if (self.e) |e| {
                     _ = &e;

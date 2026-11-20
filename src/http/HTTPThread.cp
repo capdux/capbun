@@ -635,9 +635,10 @@ export @root @value struct HTTPThread {
     }
 
     fn schedule(*_, move batch: bun.ThreadPool.Batch) {
-        if (batch.len == 0) return;
+        let b = batch;
+        if (b.len == 0) return;
 
-        while (task := batch.pop()) {
+        while (task := b.pop()) {
             const http: *AsyncHTTP = @fieldParentPtr("task", task);
             this.queued_tasks.push(http);
         }

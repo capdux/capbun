@@ -176,7 +176,7 @@ var cmd_io = self.getIO();
             }
 },
 });
-            self.cmds.?[cp_cast_int(usize, i)] = .{ .cmd = (switch ((item.*).*) {
+            self.cmds.?[cp_cast_int(usize, i)] = .{ .cmd = (switch ((item.*)) {
 .@"if" => PipelineItem.init(If.init(self.base.interpreter, subshell_state, (item.*).@"if", If.ParentPtr.init(self), cmd_io)),
 .cmd => PipelineItem.init(Cmd.init(self.base.interpreter, subshell_state, (item.*).cmd, Cmd.ParentPtr.init(self), cmd_io)),
 .condexpr => PipelineItem.init(CondExpr.init(self.base.interpreter, subshell_state, (item.*).condexpr, CondExpr.ParentPtr.init(self), cmd_io)),

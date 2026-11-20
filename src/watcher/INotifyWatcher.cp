@@ -311,7 +311,7 @@ pub struct ReadPtr {
 
         let name_off: u8 = 0;
         let all_events = watcher.watch_events[0..event_count];
-        std.sort.pdq(WatchEvent, all_events, {}, WatchEvent.sortByIndex);
+        std.sort.pdq(WatchEvent, all_events, @as(void, {}), WatchEvent.sortByIndex);
 
         let last_event_index: usize = 0;
         let last_event_id: EventListIndex = std.math.maxInt(EventListIndex);

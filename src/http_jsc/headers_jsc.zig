@@ -73,10 +73,13 @@ const jsc = bun.jsc;
 const FetchHeaders = bun.webcore.FetchHeaders;
 const Headers = bun.http.Headers;
 
-pub fn toFetchHeaders(self: *Headers, global: *bun.jsc.JSGlobalObject) bun.JSError!*FetchHeaders {
-        if ((self.entries.len == 0)) {
+pub fn toFetchHeaders(h: *Headers, global: *bun.jsc.JSGlobalObject) bun.JSError!*FetchHeaders {
+        if ((h.entries.len == 0)) {
             return FetchHeaders.createEmpty();
         }
-        const headers = ((FetchHeaders.create(global, self.entries.items(.name).ptr, self.entries.items(.value).ptr, (&bun.ZigString.fromBytes(self.buf.items)), @truncate(self.entries.len))) orelse { return .{ .ok = error.JSError }; });
-        return headers;
+        if (FetchHeaders.create(global, h.entries.items(.name).ptr, h.entries.items(.value).ptr, (&bun.ZigString.fromBytes(h.buf.items)), @truncate(h.entries.len))) |headers| {
+            _ = &headers;
+            return headers;
+        }
+        return error.JSError;
 }

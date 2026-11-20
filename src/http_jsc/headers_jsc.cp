@@ -5,18 +5,20 @@ const jsc = bun.jsc;
 const FetchHeaders = bun.webcore.FetchHeaders;
 const Headers = bun.http.Headers;
 
-pub fn toFetchHeaders(*_: *Headers, global: *bun.jsc.JSGlobalObject): *FetchHeaders ! bun.JSError {
-    if (this.entries.len == 0) {
+pub fn toFetchHeaders(h: *Headers, global: *bun.jsc.JSGlobalObject): *FetchHeaders ! bun.JSError {
+    if (h.entries.len == 0) {
         return FetchHeaders.createEmpty();
     }
-    const headers = FetchHeaders.create(
+    if (headers := FetchHeaders.create(
         global,
-        this.entries.items(.name).ptr,
-        this.entries.items(.value).ptr,
-        &bun.ZigString.fromBytes(this.buf.items),
-        @truncate(this.entries.len),
-    ) ?? return err.JSError;
-    return headers;
+        h.entries.items(.name).ptr,
+        h.entries.items(.value).ptr,
+        &bun.ZigString.fromBytes(h.buf.items),
+        @truncate(h.entries.len),
+    )) {
+        return headers;
+    }
+    return error.JSError;
 }
 
 pub struct H2TestingAPIs {

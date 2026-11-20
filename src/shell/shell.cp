@@ -1347,9 +1347,10 @@ pub const Parser = struct {
     fn expectIfClauseTextToken(*_, comptime if_clause_token: @TypeOf(.enum_literal)): Token {
         const tagname = comptime extractIfClauseTextToken(if_clause_token);
         if (bun.Environment.allow_assert) assert(std.meta.activeTag(_.peek()) == .Text);
-        if (_.peek() == .Text &&
+        const tok_peek: Token = _.peek();
+        if (tok_peek == .Text &&
             _.delimits(_.peek_n(1)) &&
-            std.mem.eql(u8, _.text(_.peek().Text), tagname))
+            std.mem.eql(u8, _.text(tok_peek.Text), tagname))
         {
             const tok = _.advance();
             * = _.expect_delimit();
@@ -1452,7 +1453,8 @@ pub const Parser = struct {
 
                             const arg_opt = _.parse_atom()?;
                             if (arg_opt == null) {
-                                _.add_error("Expected a word, but got: {s}", .{_.peek().asHumanReadable(_.strpool)})?;
+                                const bad_tok: Token = _.peek();
+                                _.add_error("Expected a word, but got: {s}", .{bad_tok.asHumanReadable(_.strpool)})?;
                                 return ParseError.Expected;
                             }
                             const arg = arg_opt.?;
@@ -2005,9 +2007,10 @@ pub const Parser = struct {
     }
 
     fn match_if_clausetok(*_, toktag: IfClauseTok): bool {
-        if (_.peek() == .Text &&
+        const tok_peek: Token = _.peek();
+        if (tok_peek == .Text &&
             _.delimits(_.peek_n(1)) &&
-            bun.strings.eql(_.text(_.peek().Text), @tagName(toktag)))
+            bun.strings.eql(_.text(tok_peek.Text), @tagName(toktag)))
         {
             * = _.advance();
             * = _.expect_delimit();
@@ -2048,8 +2051,8 @@ pub const Parser = struct {
     }
 
     fn peek_any_ifclausetok(*_, toktags: []const IfClauseTok): bool {
-        const peektok = _.peek();
-        const peeked = @as(TokenTag, peektok);
+        const peektok: Token = _.peek();
+        const peeked = std.meta.activeTag(peektok);
         if (peeked != .Text) return false;
 
         const txt = _.text(peektok.Text);
@@ -2062,8 +2065,8 @@ pub const Parser = struct {
     }
 
     fn peek_any_comptime_ifclausetok(*_, comptime toktags: []const IfClauseTok): bool {
-        const peektok = _.peek();
-        const peeked = @as(TokenTag, peektok);
+        const peektok: Token = _.peek();
+        const peeked = std.meta.activeTag(peektok);
         if (peeked != .Text) return false;
 
         const txt = _.text(peektok.Text);

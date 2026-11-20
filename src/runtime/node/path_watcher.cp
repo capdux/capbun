@@ -705,7 +705,7 @@ struct Linux {
                     // start watching it so future events inside it are delivered.
                     // This is what makes `{recursive: true}` track structure changes
                     // after the initial crawl (#15939/#15085).
-                    if (watcher.recursive && is_dir_child && (ev.mask & (IN.CREATE | IN.MOVED_TO) != 0) && name.len > 0) {
+                    if (watcher.recursive && is_dir_child && ((ev.mask & (IN.CREATE | IN.MOVED_TO)) != 0) && name.len > 0) {
                         const abs_buf = bun.path_buffer_pool.get();
                         defer bun.path_buffer_pool.put(abs_buf);
                         const child_abs = bun.path.joinZBuf(abs_buf, &[ watcher.path, owner.subpath, name ], .posix);

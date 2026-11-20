@@ -451,12 +451,12 @@ _ = try self.errorWithBody(.failure);
 }
 },
 .commit => |cb| {
-if (try (!self.failIfContainsError(response.status_code))) {
+if ((!try self.failIfContainsError(response.status_code))) {
                 _ = try cb(.{ .success = undefined }, self.callback_context);
             }
 },
 .part => |cb| {
-if (try (!self.failIfContainsError(response.status_code))) {
+if ((!try self.failIfContainsError(response.status_code))) {
                 if (response.headers.get("etag")) |etag| {
                     _ = &etag;
                     _ = try cb(.{ .etag = etag }, self.callback_context);

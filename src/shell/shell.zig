@@ -1845,7 +1845,8 @@ pub fn expectIfClauseTextToken(self: *@This(), comptime if_clause_token: @TypeOf
             if (bun.Environment.allow_assert) {
                 _ = assert((std.meta.activeTag(self.peek()) == .Text));
             }
-            if ((((self.peek() == .Text) and self.delimits(self.peek_n(1))) and std.mem.eql(u8, self.text((self.peek()).?.Text), tagname))) {
+            const tok_peek: Token = self.peek();
+            if ((((tok_peek == .Text) and self.delimits(self.peek_n(1))) and std.mem.eql(u8, self.text(tok_peek.Text), tagname))) {
                 const tok = self.advance();
                 _ = self.expect_delimit();
                 return tok;
@@ -1928,7 +1929,8 @@ const txt = self.text(range);
                         }
                         const arg_opt = try self.parse_atom();
                         if ((arg_opt == null)) {
-                            _ = try self.add_error("Expected a word, but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
+                            const bad_tok: Token = self.peek();
+                            _ = try self.add_error("Expected a word, but got: {s}", .{ bad_tok.asHumanReadable(self.strpool) });
                             return ParseError.Expected;
                         }
                         const arg = arg_opt.?;
@@ -2465,7 +2467,8 @@ pub fn expect_delimit(self: *@This()) Token {
     }
 
 pub fn match_if_clausetok(self: *@This(), toktag: IfClauseTok) bool {
-            if ((((self.peek() == .Text) and self.delimits(self.peek_n(1))) and bun.strings.eql(self.text((self.peek()).?.Text), @tagName(toktag)))) {
+            const tok_peek: Token = self.peek();
+            if ((((tok_peek == .Text) and self.delimits(self.peek_n(1))) and bun.strings.eql(self.text(tok_peek.Text), @tagName(toktag)))) {
                 _ = self.advance();
                 _ = self.expect_delimit();
                 return true;
@@ -2505,12 +2508,12 @@ pub fn match_any(self: *@This(), toktags: []const TokenTag) bool {
     }
 
 pub fn peek_any_ifclausetok(self: *@This(), toktags: []const IfClauseTok) bool {
-            const peektok = self.peek();
-            const peeked = @as(TokenTag, @enumFromInt(peektok));
+            const peektok: Token = self.peek();
+            const peeked = std.meta.activeTag(peektok);
             if ((peeked != .Text)) {
                 return false;
             }
-            const txt = self.text((peektok).?.Text);
+            const txt = self.text(peektok.Text);
             for (cp_iter_slice(toktags)) |tag| {
                 _ = &tag;
                 if (bun.strings.eql(txt, @tagName(tag))) {
@@ -2521,12 +2524,12 @@ pub fn peek_any_ifclausetok(self: *@This(), toktags: []const IfClauseTok) bool {
     }
 
 pub fn peek_any_comptime_ifclausetok(self: *@This(), comptime toktags: []const IfClauseTok) bool {
-            const peektok = self.peek();
-            const peeked = @as(TokenTag, @enumFromInt(peektok));
+            const peektok: Token = self.peek();
+            const peeked = std.meta.activeTag(peektok);
             if ((peeked != .Text)) {
                 return false;
             }
-            const txt = self.text((peektok).?.Text);
+            const txt = self.text(peektok.Text);
             inline for (toktags) |tag| {
                 if (bun.strings.eqlComptime(txt, @tagName(tag))) {
                     return true;

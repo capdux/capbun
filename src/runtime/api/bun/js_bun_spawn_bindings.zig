@@ -390,7 +390,7 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
                             }
                             i = (i + 1);
                             while (try stdio_iter.next()) |value| : (i = (i + 1)) {
-                                var new_item: Stdio = Stdio{ .ignore = .{} };
+                                var new_item: Stdio = .ignore;
                                 _ = &new_item;
                                 _ = try new_item.extract(globalThis, i, value, is_sync);
                                 const opt = (switch (new_item.asSpawnOption(i)) {

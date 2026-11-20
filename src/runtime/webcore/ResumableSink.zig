@@ -325,7 +325,8 @@ pub fn finalize(self: *@This()) void {
     }
 
 pub fn onStreamPipe(self: *@This(), stream: webcore.streams.Result, allocator: Allocator) void {
-            const stream_ = stream;
+            var stream_ = stream;
+            _ = &stream_;
             const stream_needs_deinit = ((stream == .owned) or (stream == .owned_and_done));
             defer {
             {

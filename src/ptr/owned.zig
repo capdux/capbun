@@ -133,7 +133,7 @@ pub fn fromRaw(data: Pointer) Self {
     }
 
 pub fn fromRawIn(data: Pointer, allocator_: Allocator) Self {
-            return Self{ .#pointer = data, .#allocator = (if ((info.isOptional() and (data == null))) undefined else allocator_) };
+            return Self{ .#pointer = data, .#allocator = (if (((comptime info.isOptional()) and (data == null))) undefined else allocator_) };
     }
 
 pub fn deinit(self: *@This()) void {

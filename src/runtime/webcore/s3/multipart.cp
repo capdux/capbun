@@ -280,7 +280,7 @@ export class MultiPartUpload {
                         storage_class: upload.storage_class,
                         request_payer: upload.request_payer,
                     };
-                    const cb = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
+                    const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
                     executeSimpleS3Request(upload.credentials, req_opts, cb, upload)?;
                     return;
                 } else {
@@ -622,7 +622,7 @@ export class MultiPartUpload {
                 storage_class: this.storage_class,
                 request_payer: this.request_payer,
             };
-            const cb = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
+            const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
             executeSimpleS3Request(this.credentials, req_opts, cb, this) catch {};
         } else {
             this.processMultiPart(part_size) catch {};
