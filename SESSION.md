@@ -2952,3 +2952,7 @@ Options:
 - [2026-11-20 04:17:00 UTC] 验收并提交 `src/sys/windows/windows.cp` (4108行, 1.014x)——`src/sys/windows/` 100% 闭环；接力派发 `src/js_printer/js_printer.zig` (6422行)。
 
 - [2026-11-20 04:23:35 UTC] 验收并提交 `src/jsc/VirtualMachine.cp` (4245行, 1.017x)——`src/jsc/` 111/111 100% 闭环；接力派发 `src/js_parser/ast/P.zig` (6966行)。
+
+- [2026-11-20 04:24:26 UTC] [发送至 cp_agy] 工单 `task-bun-20261120-pub-const-error-collision`（复现 `/data/dev/cp/temp/repro_pub_const_error_collision.cp`）：含 `.err` switch 分支时 `cpc` 无条件注入 `pub const Error = Err;` 与用户导出 `pub const Error` 冲突；`src/sys/sys.cp` (4758行, 1.012x) 已完成全部 CP 改写暂标 BLOCKED，原 `src/sys/sys.zig` 已还原保护。
+
+- [2026-11-20 04:30:19 UTC] 验收并提交 `src/js_printer/js_printer.cp` (6495行, 1.011x)——`src/js_printer/` 100% 目录闭环。
