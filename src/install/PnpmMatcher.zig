@@ -214,11 +214,11 @@ pub const Behavior = enum {
     all_matchers_exclude,
     has_exclude_and_include_matchers,
 };
-const FromExprError = (OOM or error{
+const FromExprError = (OOM || error{
     InvalidRegExp,
     UnexpectedExpr,
 });
-const CreateMatcherError = (OOM or error{InvalidRegExp});
+const CreateMatcherError = (OOM || error{InvalidRegExp});
 
 pub fn createMatcher(raw: []const u8, buf: *std.Io.Writer.Allocating) CreateMatcherError!Matcher {
         _ = buf.clearRetainingCapacity();

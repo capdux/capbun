@@ -294,7 +294,7 @@ var password_to_use = password;
     }
     pub const pwhash = std.crypto.pwhash;
     pub const Algorithm = AlgorithmDef_;
-    pub const HashError = (pwhash.Error or error{UnsupportedAlgorithm});
+    pub const HashError = (pwhash.Error || error{UnsupportedAlgorithm});
 };
 
 pub const HashJobResult_ = struct {
@@ -498,7 +498,7 @@ defer {
             defer if (!__job_moved) { const __T = @TypeOf(job); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = job.release() catch {}; } else { job.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = job; _drop_val.release(); } };
             _ = job.ref.ref(globalObject.bunVM());
             _ = jsc.WorkPool.schedule((&job.task));
-            return (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+            return promise.value();
     }
 
 pub fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum, comptime sync: bool) anyerror!jsc.JSValue {
@@ -526,7 +526,7 @@ return jsc.JSValue.jsBoolean(pass);
             defer if (!__job_moved) { const __T = @TypeOf(job); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = job.release() catch {}; } else { job.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = job; _drop_val.release(); } };
             _ = job.ref.ref(globalObject.bunVM());
             _ = jsc.WorkPool.schedule((&job.task));
-            return (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+            return promise.value();
     }
 
 pub fn JSPasswordObject__hash(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) anyerror!jsc.JSValue {

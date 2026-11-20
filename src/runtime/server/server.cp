@@ -1326,7 +1326,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     false,
                 );
             } else {
-                const fetch_error = jsc.WebCore.Fetch.fetch_type_error_strings.get(bun.jsc.C.JSValueGetType(ctx, first_arg.asRef()));
+                // TODO: Fetch.fetch_type_error_strings is not ported in fetch.cp
+                const fetch_error = "fetch() expects a string, but received an invalid type";
                 const err = ctx.toTypeError(.INVALID_ARG_TYPE, "{s}", .{fetch_error});
 
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, err);
@@ -1433,7 +1434,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         port = @intCast(listener.getLocalPort());
 
                         let buf: [64]u8 = [_]u8{0} ** 64;
-                        const address_bytes = listener.socket(ssl_enabled).localAddress(&buf) orelse return JSValue.jsNull();
+                        let listener_socket = listener.socket(ssl_enabled);
+                        const address_bytes = listener_socket.localAddress(&buf) orelse return JSValue.jsNull();
                         let addr = SocketAddress.init(address_bytes, port) catch {
                             @branchHint(.unlikely);
                             return JSValue.jsNull();
@@ -1508,7 +1510,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 if (this.listener) |listener| {
                     let buf: [1024]u8 = [_]u8{0} ** 1024;
 
-                    if (listener.socket(ssl_enabled).remoteAddress(buf[0..1024])) |addr| {
+                    let listener_socket = listener.socket(ssl_enabled);
+                    if (listener_socket.remoteAddress(buf[0..1024])) |addr| {
                         if (addr.len > 0) {
                             return bun.String.createUTF8ForJS(globalThis, addr);
                         }
@@ -2830,9 +2833,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         }
                     },
                     .specific => |method_val| { // method_val is HTTP.Method here
-                        app.method(method_val, user_route.route.path, *UserRoute, user_route, onUserRouteRequest);
+                        app.method(method_val, user_route.route.path, user_route, onUserRouteRequest);
                         if (comptime has_h3) {
-                            if (this.h3_app) |h3_app| h3_app.method(method_val, user_route.route.path, *UserRoute, user_route, onH3UserRouteRequest);
+                            if (this.h3_app) |h3_app| h3_app.method(method_val, user_route.route.path, user_route, onH3UserRouteRequest);
                         }
                         if (is_star_path) {
                             star_methods_covered_by_user.insert(method_val);

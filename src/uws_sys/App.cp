@@ -171,7 +171,7 @@ pub fn NewApp(comptime ssl: bool): type {
     ): void {
         const Handler = struct {
             pub fn handle(res: *uws_res, req: *Request, user_data: *!?) callconv(.c) void {
-                handler(@ptrCast(user_data), req, bun.cast(*Response, res));
+                handler(unsafe { @ptrCast(@alignCast(user_data)) }, req, bun.cast(*Response, res));
             }
         };
         f(ssl_flag, bun.cast(*uws_app_t, this), pattern.ptr, pattern.len, Handler.handle, @ptrCast(ud));
@@ -307,7 +307,7 @@ pub fn NewApp(comptime ssl: bool): type {
         const Wrapper = struct {
             pub fn handle(data: *!?, code: i32, socket: *us_socket_t, error_code: u8, raw_packet: [*c]u8, raw_packet_length: i32) callconv(.c) void {
                 * = code;
-                const bytes = if (raw_packet != null && raw_packet_length > 0) raw_packet[0..@intCast(raw_packet_length)] else "";
+                const bytes = if (raw_packet_length > 0) unsafe { raw_packet[0..@intCast(raw_packet_length)] } else "";
                 handler(@ptrCast(data), socket, error_code, bytes);
             }
         };

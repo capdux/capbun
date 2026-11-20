@@ -1329,6 +1329,22 @@ pub union(enum) BlobAny {
         }
     }
 
+    fn isDetached(): bool {
+        switch (_.*) {
+            .Blob b => return b.isDetached(),
+            .InternalBlob ib => return ib.bytes.items.len == 0,
+            .WTFStringImpl w => return w.length() == 0,
+        }
+    }
+
+    fn needsToReadFile(): bool {
+        switch (_.*) {
+            .Blob b => return b.needsToReadFile(),
+            .InternalBlob => return false,
+            .WTFStringImpl => return false,
+        }
+    }
+
     fn toArrayBufferTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
         const bytes = _.slice();
         return ArrayBuffer.create(globalObject, bytes, .ArrayBuffer);
@@ -1611,14 +1627,14 @@ pub struct BlobExternalSharedDescriptor {
                 static fn cb(result: bun.S3.S3DownloadResult, opaque_self: *!): void ! bun.JSTerminated {
                     const t: *@This() = unsafe { @ptrCast(@alignCast(opaque_self)) };
                     switch (result) {
-                        .success response => t.done(.{ .ok = response.body.list.items }),
-                        .not_found e => t.done(.{ .err = .{
+                        .success response => t.done(BlobReadBytesResult{ ok: response.body.list.items }),
+                        .not_found e => t.done(BlobReadBytesResult{ err: .{
                             .code = bun.String.cloneUTF8(e.code),
                             .message = bun.String.cloneUTF8(e.message),
                             .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
                             .syscall = bun.String.static("fetch"),
                         } }),
-                        .failure e => t.done(.{ .err = .{
+                        .failure e => t.done(BlobReadBytesResult{ err: .{
                             .code = bun.String.cloneUTF8(e.code),
                             .message = bun.String.cloneUTF8(e.message),
                             .path = bun.String.cloneUTF8(t.blob.store.?.getPath() ?? ""),
@@ -1911,6 +1927,49 @@ pub struct BlobExternalSharedDescriptor {
     fn doImage(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
         * = _.size;
         return globalThis.throwTODO("Blob.image is not yet implemented");
+    }
+
+    fn isDetached(): bool {
+        return _.store == null;
+    }
+
+    static fn create(bytes_: []const u8, allocator_: std.mem.Allocator, globalThis: *JSGlobalObject, was_string: bool): Blob {
+        return bun.handleOom(Blob.tryCreate(bytes_, allocator_, globalThis, was_string));
+    }
+
+    // TODO: file/S3-backed blobs need doReadFile/doReadFromS3 (not yet ported)
+    fn toString(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSError!JSValue {
+        if (_.needsToReadFile() || _.isS3()) {
+            return global.throwTODO("Blob.toString for file/S3 blobs is not yet ported");
+        }
+        const view = _.sharedView();
+        if (view.len == 0) {
+            return ZigString.Empty.toJS(global);
+        }
+        let str = String.cloneUTF8(view);
+        defer str.deref();
+        return str.toJS(global);
+    }
+
+    fn toJSON(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSError!JSValue {
+        if (_.needsToReadFile() || _.isS3()) {
+            return global.throwTODO("Blob.toJSON for file/S3 blobs is not yet ported");
+        }
+        let str = String.cloneUTF8(_.sharedView());
+        defer str.deref();
+        return str.toJSByParseJSON(global);
+    }
+
+    fn toArrayBufferView(*_, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime, comptime TypedArrayView: JSValue.JSType): JSError!JSValue {
+        if (_.needsToReadFile() || _.isS3()) {
+            return global.throwTODO("Blob.toArrayBufferView for file/S3 blobs is not yet ported");
+        }
+        const view = _.sharedView();
+        if (view.len == 0) {
+            return jsc.ArrayBuffer.create(global, "", TypedArrayView);
+        }
+        const copy = bun.handleOom(bun.default_allocator.dupe(u8, view));
+        return ArrayBuffer.fromDefaultAllocator(global, copy, TypedArrayView);
     }
 
     fn needsToReadFile(): bool {

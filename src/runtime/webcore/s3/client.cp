@@ -103,7 +103,7 @@ pub fn downloadSlice(
 ): JSTerminatedError!void {
     let range: string? = brk: {
         if (size_ := size) {
-            let end = (offset + size_) - if (size_ > 0) 1 else 0;
+            let end = (offset + size_) - (if (size_ > 0) @as(usize, 1) else @as(usize, 0));
             break :brk handleOom(allocPrint(default_allocator, "bytes={}-{}", .{ offset, end }));
         }
         if (offset == 0) break :brk null;
@@ -513,8 +513,9 @@ pub fn uploadStream(
             if (stream.pending.result == .err) {
                 let err_res = stream.pending.result.err;
                 stream.pending = .{ .result = .done };
-                const [js_err, was_strong] = err_res.toJSWeak(globalThis);
-                if (was_strong == .Strong) {
+                const weak_pair = err_res.toJSWeak(globalThis);
+                const js_err = weak_pair[0];
+                if (weak_pair[1] == .Strong) {
                     js_err.unprotect();
                 }
                 js_err.ensureStillAlive();
@@ -525,8 +526,9 @@ pub fn uploadStream(
             if (stream.pending.result == .err) {
                 let err_res = stream.pending.result.err;
                 stream.pending = .{ .result = .done };
-                const [js_err, was_strong] = err_res.toJSWeak(globalThis);
-                if (was_strong == .Strong) {
+                const weak_pair = err_res.toJSWeak(globalThis);
+                const js_err = weak_pair[0];
+                if (weak_pair[1] == .Strong) {
                     js_err.unprotect();
                 }
                 js_err.ensureStillAlive();
@@ -589,7 +591,7 @@ pub fn downloadStream(
 ) {
     let range: string? = brk: {
         if (size_ := size) {
-            let end = (offset + size_) - if (size_ > 0) 1 else 0;
+            let end = (offset + size_) - (if (size_ > 0) @as(usize, 1) else @as(usize, 0));
             break :brk handleOom(allocPrint(default_allocator, "bytes={}-{}", .{ offset, end }));
         }
         if (offset == 0) break :brk null;
@@ -672,7 +674,7 @@ export class S3DownloadStreamWrapper {
     path: string;
     global: *JSGlobalObject;
 
-    pub fn callback(chunk: MutableString, has_more: bool, request_err: S3Error?, self: *S3DownloadStreamWrapper): JSTerminatedError!void {
+    static fn callback(chunk: MutableString, has_more: bool, request_err: S3Error?, self: *S3DownloadStreamWrapper): JSTerminatedError!void {
         defer {
             if (!has_more) self.deinit();
         }
@@ -729,7 +731,7 @@ export class S3DownloadStreamWrapper {
 
     static fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: S3Error?, opaque_self: *!) {
         let self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(opaque_self));
-        callback(chunk, has_more, s3_err, self) catch {};
+        S3DownloadStreamWrapper.callback(chunk, has_more, s3_err, self) catch {};
     }
 }
 

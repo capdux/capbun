@@ -59,7 +59,7 @@ pub enum PluginState {
     unknown,
     pending,
     loaded,
-    e,
+    @"err",
 }
 
 
@@ -669,7 +669,7 @@ pub fn deinit(dev: *DevServer) {
     dev.incremental_result.html_routes_soft_affected.deinit(alloc);
     dev.incremental_result.html_routes_hard_affected.deinit(alloc);
 
-    if (hack := dev.has_tailwind_plugin_hack) {
+    if (*hack := dev.has_tailwind_plugin_hack) {
         for (key of hack.keys()) {
             alloc.free(key);
         }
@@ -1152,7 +1152,7 @@ fn ensureRouteIsBundled(
         .unqueued => {
             // We already are bundling something, defer the request
             if (dev.current_bundle != null) {
-                dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, {})?;
+                dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined)?;
                 defer_function(ctx, .next_bundle)?;
                 dev.routeBundlePtr(route_bundle_index).server_state = .deferred_to_next_bundle;
                 return;
@@ -1184,7 +1184,7 @@ fn ensureRouteIsBundled(
                                 continue;
                             },
                             .err => {
-                                dev.plugin_state = .e;
+                                dev.plugin_state = .@"err";
                                 continue;
                             },
                             .ready => |ready| {
@@ -1196,12 +1196,12 @@ fn ensureRouteIsBundled(
                     }
                 },
                 .pending => {
-                    dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, {})?;
+                    dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined)?;
                     defer_function(ctx, .next_bundle)?;
                     dev.routeBundlePtr(route_bundle_index).server_state = .deferred_to_next_bundle;
                     return;
                 },
-                .e => {
+                .@"err" => {
                     on_plugin_error(ctx)?;
                     return;
                 },
@@ -1229,7 +1229,7 @@ fn ensureRouteIsBundled(
                 }
             }
 
-            dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, {})?;
+            dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined)?;
             defer_function(ctx, .next_bundle)?;
             dev.routeBundlePtr(route_bundle_index).server_state = .bundling;
 
@@ -1543,7 +1543,7 @@ fn onFrameworkRequestWithBundle(
     resp: AnyResponse,
 ): bun.JSError!void {
     const route_bundle = dev.routeBundlePtr(route_bundle_index);
-    assert(route_bundle.data == .framework);
+    assert(route_bundle.data.* == .framework);
 
     const framework_bundle = &route_bundle.data.framework;
 
@@ -2223,7 +2223,7 @@ fn generateClientBundle(dev: *DevServer, route_bundle: *RouteBundle): bun.OOM![]
 }
 
 fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle): bun.JSError!jsc.JSValue {
-    assert(route_bundle.data == .framework); // a jsc.JSValue has no purpose, and therefore isn't implemented.
+    assert(route_bundle.data.* == .framework); // a jsc.JSValue has no purpose, and therefore isn't implemented.
     if (Environment.allow_assert) assert(!route_bundle.data.framework.cached_css_file_array.has());
     assert(route_bundle.server_state == .loaded); // page is unfit to load
 
@@ -3155,7 +3155,7 @@ fn startNextBundleIfPresent(dev: *DevServer) {
         let is_reload = false;
         let timer = std.time.Timer.start() catch @panic("timers unsupported");
         if (dev.next_bundle.reload_event != null) {
-            let current = dev.next_bundle.reload_event.unwrap();
+            let current = dev.next_bundle.reload_event.?;
             dev.next_bundle.reload_event = null;
 
             timer = current.timer;
@@ -3912,7 +3912,7 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             w.writeInt(u32, @intCast(normalized_key.len), .little)?;
             if (k.len == 0) continue;
             w.writeAll(normalized_key)?;
-            w.writeByte(@intFromBool(g.stale_files.isSetAllowOutOfBound(i, true) || file.failed))?;
+            w.writeByte(@intFromBool(g.stale_files.isSetAllowOutOfBound(@intCast(i), true) || file.failed))?;
             w.writeByte(@intFromBool(side == .server && file.is_rsc))?;
             w.writeByte(@intFromBool(side == .server && file.is_ssr))?;
             try w.writeByte(@intFromBool(switch (side) {
@@ -4638,23 +4638,23 @@ struct PromiseEnsureRouteBundledCtx {
         switch (bundle_field) {
             .current_bundle => {
                 if (_.dev.current_bundle.?.promise.strong.hasValue()) {
-                    bun.handleOom(_.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, {}));
+                    bun.handleOom(_.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, undefined));
                     _.p = _.dev.current_bundle.?.promise.strong.get();
                     return;
                 }
                 const strong_promise = _.ensurePromise();
-                bun.handleOom(_.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, {}));
+                bun.handleOom(_.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, undefined));
                 _.dev.current_bundle.?.promise.strong = strong_promise;
                 return;
             },
             .next_bundle => {
                 if (_.dev.next_bundle.promise.strong.hasValue()) {
-                    bun.handleOom(_.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, {}));
+                    bun.handleOom(_.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, undefined));
                     _.p = _.dev.next_bundle.promise.strong.get();
                     return;
                 }
                 const strong_promise = _.ensurePromise();
-                bun.handleOom(_.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, {}));
+                bun.handleOom(_.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, _.route_bundle_index, undefined));
                 _.dev.next_bundle.promise.strong = strong_promise;
                 return;
             },

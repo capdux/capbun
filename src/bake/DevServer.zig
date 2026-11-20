@@ -103,7 +103,7 @@ pub const PluginState = enum {
     unknown,
     pending,
     loaded,
-    e,
+    @"err",
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -508,17 +508,17 @@ pub const c = struct {
 pub extern "c" fn BakeGetDefaultExportFromModule(global: *jsc.JSGlobalObject, module: JSValue) callconv(.c) JSValue;
 
 pub fn BakeLoadServerHmrPatch(global: *jsc.JSGlobalObject, code: bun.String) bun.JSError!JSValue {
-            const f = (@extern(*const *const fn(*jsc.JSGlobalObject, bun.String) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatch" })).*;
+            const f = (@extern(*const fn(*jsc.JSGlobalObject, bun.String) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatch" })).*;
             return bun.jsc.fromJSHostCall(global, @src(), f, .{ global, code });
     }
 
 pub fn BakeLoadServerHmrPatchWithSourceMap(global: *jsc.JSGlobalObject, code: bun.String, source_map_json_ptr: [*]const u8, source_map_json_len: usize) bun.JSError!JSValue {
-            const f = (@extern(*const *const fn(*jsc.JSGlobalObject, bun.String, [*]const u8, usize) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatchWithSourceMap" })).*;
+            const f = (@extern(*const fn(*jsc.JSGlobalObject, bun.String, [*]const u8, usize) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatchWithSourceMap" })).*;
             return bun.jsc.fromJSHostCall(global, @src(), f, .{ global, code, source_map_json_ptr, source_map_json_len });
     }
 
 pub fn BakeLoadInitialServerCode(global: *jsc.JSGlobalObject, code: bun.String, separate_ssr_graph: bool) bun.JSError!JSValue {
-            const f = (@extern(*const *const fn(*jsc.JSGlobalObject, bun.String, bool) callconv(.c) JSValue, .{ .name = "BakeLoadInitialServerCode" })).*;
+            const f = (@extern(*const fn(*jsc.JSGlobalObject, bun.String, bool) callconv(.c) JSValue, .{ .name = "BakeLoadInitialServerCode" })).*;
             return bun.jsc.fromJSHostCall(global, @src(), f, .{ global, code, separate_ssr_graph });
     }
 };
@@ -665,23 +665,23 @@ pub fn onDefer(self: *PromiseEnsureRouteBundledCtx, bundle_field: BundleQueueTyp
             switch (bundle_field) {
 .current_bundle => {
 if (self.dev.current_bundle.?.promise.strong.hasValue()) {
-                _ = bun.handleOom(self.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, .{}));
+                _ = bun.handleOom(self.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, undefined));
                 self.p = self.dev.current_bundle.?.promise.strong.get();
                 return;
             }
             const strong_promise = self.ensurePromise();
-            _ = bun.handleOom(self.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, .{}));
+            _ = bun.handleOom(self.dev.current_bundle.?.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, undefined));
             self.dev.current_bundle.?.promise.strong = strong_promise;
             return;
 },
 .next_bundle => {
 if (self.dev.next_bundle.promise.strong.hasValue()) {
-                _ = bun.handleOom(self.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, .{}));
+                _ = bun.handleOom(self.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, undefined));
                 self.p = self.dev.next_bundle.promise.strong.get();
                 return;
             }
             const strong_promise = self.ensurePromise();
-            _ = bun.handleOom(self.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, .{}));
+            _ = bun.handleOom(self.dev.next_bundle.promise.route_bundle_indices.put(bun.default_allocator, self.route_bundle_index, undefined));
             self.dev.next_bundle.promise.strong = strong_promise;
             return;
 },
@@ -1272,13 +1272,13 @@ pub fn deinit(dev: *DevServer) void {
         _ = dev.incremental_result.failures_added.deinit(alloc);
         _ = dev.incremental_result.html_routes_soft_affected.deinit(alloc);
         _ = dev.incremental_result.html_routes_hard_affected.deinit(alloc);
-        if (dev.has_tailwind_plugin_hack) |hack| {
+        if (dev.has_tailwind_plugin_hack) |*hack| {
             _ = &hack;
-            for (cp_iter_slice(hack.keys())) |key| {
+            for (cp_iter_slice((hack.*).keys())) |key| {
                 _ = &key;
                 _ = alloc.free(key);
             }
-            _ = hack.deinit(alloc);
+            _ = (hack.*).deinit(alloc);
         }
         for (cp_iter_slice(dev.directory_watchers.watches.keys())) |dir_name| {
             _ = &dir_name;
@@ -1566,7 +1566,7 @@ pub fn ensureRouteIsBundled(dev: *DevServer, route_bundle_index: RouteBundle.Ind
             switch (mut_state) {
 .unqueued => {
 if ((dev.current_bundle != null)) {
-                _ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, .{});
+                _ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined);
                 _ = try defer_function(ctx, .next_bundle);
                 dev.routeBundlePtr(route_bundle_index).server_state = .deferred_to_next_bundle;
                 return;
@@ -1597,7 +1597,7 @@ dev.plugin_state = .pending;
                     continue;
 },
 .err => {
-dev.plugin_state = .e;
+dev.plugin_state = .@"err";
                     continue;
 },
 .ready => |ready| {
@@ -1609,12 +1609,12 @@ dev.plugin_state = .loaded;
                 }
 },
 .pending => {
-_ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, .{});
+_ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined);
                 _ = try defer_function(ctx, .next_bundle);
                 dev.routeBundlePtr(route_bundle_index).server_state = .deferred_to_next_bundle;
                 return;
 },
-.e => {
+.@"err" => {
 _ = try on_plugin_error(ctx);
                 return;
 },
@@ -1643,7 +1643,7 @@ break;
                     continue;
                 }
             }
-            _ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, .{});
+            _ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined);
             _ = try defer_function(ctx, .next_bundle);
             dev.routeBundlePtr(route_bundle_index).server_state = .bundling;
             _ = (blk_catch_21: { break :blk_catch_21 ((dev.startAsyncBundle(entry_points, false, (blk_catch_20: { break :blk_catch_20 ((std.time.Timer.start()) catch |__ce_20| { _ = &__ce_20; @panic("timers unsupported"); }); }))) catch |e| { _ = &e; break :blk_catch_21 bun.handleOom(e); }); });
@@ -1895,7 +1895,7 @@ pub fn computeArgumentsForFrameworkRequest(dev: *DevServer, route_bundle_index: 
 
 pub fn onFrameworkRequestWithBundle(dev: *DevServer, route_bundle_index: RouteBundle.Index, req: bun.jsc.API.SavedRequest.Union, resp: AnyResponse) bun.JSError!void {
         const route_bundle = dev.routeBundlePtr(route_bundle_index);
-        _ = assert((route_bundle.data == .framework));
+        _ = assert((route_bundle.data.* == .framework));
         const framework_bundle = (&route_bundle.data.framework);
         var params: FrameworkRouter.MatchedParams = undefined;
         _ = &params;
@@ -2333,7 +2333,7 @@ errdefer {
 }
 
 pub fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle) bun.JSError!jsc.JSValue {
-        _ = assert((route_bundle.data == .framework));
+        _ = assert((route_bundle.data.* == .framework));
         if (Environment.allow_assert) {
             _ = assert((!route_bundle.data.framework.cached_css_file_array.has()));
         }
@@ -3083,7 +3083,7 @@ pub fn startNextBundleIfPresent(dev: *DevServer) void {
             var timer = (blk_catch_30: { break :blk_catch_30 ((std.time.Timer.start()) catch |__ce_30| { _ = &__ce_30; @panic("timers unsupported"); }); });
             _ = &timer;
             if ((dev.next_bundle.reload_event != null)) {
-                var current = (dev.next_bundle.reload_event).?.unwrap();
+                var current = dev.next_bundle.reload_event.?;
                 _ = &current;
                 dev.next_bundle.reload_event = null;
                 timer = current.timer;
@@ -3249,7 +3249,7 @@ pub fn handleRenderRedirect(dev: *DevServer, saved_request: bun.jsc.API.SavedReq
 pub fn respondForHTMLBundle(dev: *DevServer, html: *HTMLBundle.HTMLBundleRoute, req: *uws.Request, resp: AnyResponse) bun.OOM!void {
         var ctx = RequestEnsureRouteBundledCtx{ .dev = dev, .req = .{ .req = req }, .resp = resp, .kind = .bundled_html_page, .route_bundle_index = try dev.getOrPutRouteBundle(.{ .html = html }) };
         _ = &ctx;
-        _ = (blk_catch_32: { break :blk_catch_32 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; if (((e == error.JSError) or (e == error.JSTerminated))) {
+        _ = (blk_catch_32: { break :blk_catch_32 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; if (((e == error.JSError) || (e == error.JSTerminated))) {
             _ = dev.vm.global.reportActiveExceptionAsUnhandled(e);
         } else {
             return e;
@@ -3597,7 +3597,7 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
                         continue;
                     }
                     _ = try w.writeAll(normalized_key);
-                    _ = try w.writeByte(@intFromBool((g.stale_files.isSetAllowOutOfBound(i, true) or file.failed)));
+                    _ = try w.writeByte(@intFromBool((g.stale_files.isSetAllowOutOfBound(@intCast(i), true) or file.failed)));
                     _ = try w.writeByte(@intFromBool(((side == .server) and file.is_rsc)));
                     _ = try w.writeByte(@intFromBool(((side == .server) and file.is_ssr)));
                     _ = try w.writeByte(@intFromBool((switch (side) {

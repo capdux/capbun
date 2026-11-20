@@ -463,7 +463,7 @@ pub const PackageManifestFindVersionResult = union(enum) {
     found_with_filter: PackageManifestFindVersionFiltered,
     @"err": PackageManifestFindVersionErr,
 
-pub fn unwrap(self: *const PackageManifestFindVersionResult) ?PackageManifestFindResult {
+pub fn unwrap(self: PackageManifestFindVersionResult) ?PackageManifestFindResult {
             return (switch (self) {
 .found => |result| result,
 .found_with_filter => |filtered| filtered.result,
@@ -471,7 +471,7 @@ pub fn unwrap(self: *const PackageManifestFindVersionResult) ?PackageManifestFin
 });
     }
 
-pub fn latestIsFiltered(self: *const PackageManifestFindVersionResult) bool {
+pub fn latestIsFiltered(self: PackageManifestFindVersionResult) bool {
             return (switch (self) {
 .found_with_filter => |filtered| (filtered.newest_filtered != null),
 .@"err" => |e| (e == .all_versions_too_recent),
@@ -2006,7 +2006,7 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
 
 const ByteFixedStream = std.io.FixedBufferStream(string);
 const string = []const u8;
-const WhoamiError = (OOM or error{
+const WhoamiError = (OOM || error{
     NeedAuth,
     ProbablyInvalidAuth,
 });

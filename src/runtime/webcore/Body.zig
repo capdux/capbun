@@ -451,7 +451,8 @@ pub fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, own
             if (readable_stream) |stream| {
                 _ = &stream;
                 value.* = .Used;
-                if ((if (comptime @typeInfo(@TypeOf(stream)) == .pointer) (stream) else &(stream)).isLocked()) {
+                const isLockedFn = jsc.WebCore.ReadableStream.isLocked;
+                if (isLockedFn(stream, sink.global)) {
                     return error.StreamAlreadyUsed;
                 }
                 switch (stream.ptr) {
@@ -952,7 +953,7 @@ pub fn toJSWithAsyncStack(self: *@This(), globalObject: *jsc.JSGlobalObject, pro
             return js_value;
     }
 
-pub fn dupe(self: @This(), globalObject: *jsc.JSGlobalObject) BodyValueError {
+pub fn dupe(self: *@This(), globalObject: *jsc.JSGlobalObject) BodyValueError {
             var value = self.*;
             _ = &value;
             switch (self.*) {
@@ -1186,7 +1187,7 @@ pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue) bun.JSError!Value {
                 var str = try value.toBunString(globalThis);
                 _ = &str;
                 if ((str.length() == 0)) {
-                    return Body.Value{ .Empty = .{} };
+                    return Body.Value{ .Empty = undefined };
                 }
                 _ = assert((str.tag == .WTFStringImpl));
                 return Body.Value{ .WTFStringImpl = (if (@typeInfo(@TypeOf(str)) == .@"enum") @intFromEnum(str) else str.value).WTFStringImpl };
@@ -1196,7 +1197,7 @@ pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue) bun.JSError!Value {
                     _ = &buffer;
                     const bytes = buffer.byteSlice();
                     if ((bytes.len == 0)) {
-                        return Body.Value{ .Empty = .{} };
+                        return Body.Value{ .Empty = undefined };
                     }
                     return Body.Value{ .InternalBlob = .{ .bytes = std.array_list.Managed(u8), .was_string = false } };
                 }
@@ -1287,7 +1288,8 @@ pub fn resolve(self: *@This(), new_val: *Value, global: *JSGlobalObject, headers
                 }
                 if (locked.promise) |promise_| {
                     _ = &promise_;
-                    const promise = (promise_.asAnyPromise()).?;
+                    var promise = (promise_.asAnyPromise()).?;
+                    _ = &promise;
                     locked.promise = null;
                     switch (locked.action) {
 .getText => {
@@ -1634,8 +1636,11 @@ pub fn tee(self: *@This(), globalThis: *jsc.JSGlobalObject, owned_readable: ?*js
                 _ = &onReadableStreamAvailable;
                 _ = onReadableStreamAvailable(locked.task.?, globalThis, (locked.readable.get(globalThis)).?);
             }
-            const teed = ((try locked.readable.tee(globalThis)) orelse { return .{ .ok = .Used }; });
-            return Value{ .Locked = .{ .readable = jsc.WebCore.ReadableStream.Strong.init(teed, globalThis), .global = globalThis } };
+            if (try locked.readable.tee(globalThis)) |teed| {
+                _ = &teed;
+                return Value{ .Locked = .{ .readable = jsc.WebCore.ReadableStream.Strong.init(teed, globalThis), .global = globalThis } };
+            }
+            return Value{ .Used = undefined };
     }
 
 pub fn clone(self: *@This(), globalThis: *jsc.JSGlobalObject) bun.JSError!Value {

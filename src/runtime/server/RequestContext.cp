@@ -475,13 +475,13 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             this.response_buf_owned = std.ArrayListUnmanaged(u8){ .items = bb.items, .capacity = bb.capacity };
 
             if (this.resp) |resp| {
-                resp.onWritable(*RequestContext, onWritableCompleteResponseBuffer, this);
+                resp.onWritable(this, onWritableCompleteResponseBuffer);
             }
         }
 
         pub fn renderResponseBuffer(this: *RequestContext) void {
             if (this.resp) |resp| {
-                resp.onWritable(*RequestContext, onWritableResponseBuffer, this);
+                resp.onWritable(this, onWritableResponseBuffer);
             }
         }
 
@@ -828,7 +828,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 return true;
             } else {
                 this.flags.has_marked_pending = true;
-                resp.onWritable(*RequestContext, onWritableBytes, this);
+                resp.onWritable(this, onWritableBytes);
                 return true;
             }
         }
@@ -845,7 +845,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 this.deref();
             } else {
                 this.flags.has_marked_pending = true;
-                resp.onWritable(*RequestContext, onWritableCompleteResponseBuffer, this);
+                resp.onWritable(this, onWritableCompleteResponseBuffer);
             }
 
             return true;
@@ -1180,7 +1180,8 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                                 stream.cancel(globalThis);
                                 response_body_readable_stream_ref.deinit();
                             }
-                            this.handleRejectStream(globalThis, promise.result(globalThis.vm()));
+                            let promise_mut = promise;
+                            this.handleRejectStream(globalThis, promise_mut.result(globalThis.vm()));
                         },
                     }
                     return;
@@ -1941,7 +1942,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 // when it's the last one, we just want to know if it's done
                 if (is_done) {
                     this.flags.has_marked_pending = true;
-                    resp.onWritable(*RequestContext, onWritableResponseBuffer, this);
+                    resp.onWritable(this, onWritableResponseBuffer);
                 }
             }
         }
@@ -2341,7 +2342,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     this.shouldCloseConnection(),
                 )) {
                     this.flags.has_marked_pending = true;
-                    resp.onWritable(*RequestContext, onWritableBytes, this);
+                    resp.onWritable(this, onWritableBytes);
                     return;
                 }
             }

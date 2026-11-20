@@ -435,7 +435,7 @@ export class HTTPContext<const ssl: bool> {
                 const http_socket = socket.http_socket;
 
                 if (http_socket.isClosed()) {
-                    markSocketAsDead(http_socket);
+                    @This().markSocketAsDead(http_socket);
                     continue;
                 }
 
@@ -527,7 +527,7 @@ export class HTTPContext<const ssl: bool> {
                 if (session := found.h2_session) {
                     if (ssl) {
                         session.socket = sock;
-                        tagAsH2(sock, session);
+                        @This().tagAsH2(sock, session);
                         this.registerH2(session);
                         session.adopt(client);
                     } else unreachable;

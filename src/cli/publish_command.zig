@@ -308,7 +308,7 @@ _ = Output.errGeneric("failed to migrate lockfile: {s}", .{ @errorName((if (@typ
             _ = &pack_ctx;
             return Pack.pack((&pack_ctx), manager.original_package_json_path, true);
     }
-    const FromTarballError = (OOM or error{
+    const FromTarballError = (OOM || error{
                     MissingPackageJSON,
                     InvalidPackageJSON,
                     MissingPackageName,
@@ -1042,10 +1042,10 @@ pub fn constructPublishRequestBody(comptime directory_publish: bool, ctx: *const
             }
             return buf.items;
     }
-    const PublishError = (OOM or error{
+    const PublishError = (OOM || error{
             NeedAuth,
         });
-    const GetOTPError = (OOM or error{});
+    const GetOTPError = (OOM || error{});
     pub const ReadmeInfo = struct {
         filename: []const u8,
         contents: []const u8,

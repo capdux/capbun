@@ -1348,7 +1348,7 @@ pub const JSTerminated = error{
     /// and return error.JSTerminated.
     JSTerminated,
 };
-pub const JSOOM = (OOM or JSError);
+pub const JSOOM = (OOM || JSError);
 pub const S = sys.S;
 pub const O = sys.O;
 pub const Mode = sys.Mode;

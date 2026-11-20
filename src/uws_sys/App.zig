@@ -91,13 +91,13 @@ const UwsListenSocket = ListenSocketMod.ListenSocket;
 const uws_res = ResponseMod.uws_res;
 const WebSocketBehavior = WebSocketMod.WebSocketBehavior;
 const AppListenConfig = uws_app_listen_config_t;
-pub const ClientErrorHandlerFn = *const *const fn(data: ?*anyopaque, code: i32, socket: *us_socket_t, err_code: u8, raw_pkt: [*c]u8, len: i32) callconv(.c) void;
-pub const RouteHandlerFn = *const *const fn(res: *uws_res, req: *Request, ud: ?*anyopaque) callconv(.c) void;
-pub const ListenHandlerFn = *const *const fn(socket: OptListenSocket, conf: uws_app_listen_config_t, data: ?*anyopaque) callconv(.c) void;
-pub const ListenConfigHandlerFn = *const *const fn(socket: OptListenSocket, data: ?*anyopaque) callconv(.c) void;
-pub const ListenDomainHandlerFn = *const *const fn(ls: *UwsListenSocket, domain_str: [*:0]const u8, flags: i32, data: ?*anyopaque) callconv(.c) void;
-pub const FilterHandlerFn = *const *const fn(res: *uws_res, code: i32, ud: ?*anyopaque) callconv(.c) void;
-pub const MissingServerHandlerFn = *const *const fn(host: [*c]const u8, ud: ?*anyopaque) callconv(.c) void;
+pub const ClientErrorHandlerFn = *const fn(data: ?*anyopaque, code: i32, socket: *us_socket_t, err_code: u8, raw_pkt: [*c]u8, len: i32) callconv(.c) void;
+pub const RouteHandlerFn = *const fn(res: *uws_res, req: *Request, ud: ?*anyopaque) callconv(.c) void;
+pub const ListenHandlerFn = *const fn(socket: OptListenSocket, conf: uws_app_listen_config_t, data: ?*anyopaque) callconv(.c) void;
+pub const ListenConfigHandlerFn = *const fn(socket: OptListenSocket, data: ?*anyopaque) callconv(.c) void;
+pub const ListenDomainHandlerFn = *const fn(ls: *UwsListenSocket, domain_str: [*:0]const u8, flags: i32, data: ?*anyopaque) callconv(.c) void;
+pub const FilterHandlerFn = *const fn(res: *uws_res, code: i32, ud: ?*anyopaque) callconv(.c) void;
+pub const MissingServerHandlerFn = *const fn(host: [*c]const u8, ud: ?*anyopaque) callconv(.c) void;
 pub const c = struct {
     pub const uws_listen_handler = ListenConfigHandler;
     pub const uws_method_handler = RouteHandler;
@@ -222,7 +222,10 @@ pub fn route(self: *@This(), comptime f: anytype, pattern: []const u8, ud: anyty
             const Handler = struct {
 
 pub fn handle(res: *uws_res, req: *Request, user_data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(user_data), req, bun.cast(*Response, res));
+            _ = handler((blk: {
+            break :blk @ptrCast(@alignCast(user_data));
+
+}), req, bun.cast(*Response, res));
     }
 };
             _ = f(ssl_flag, bun.cast(*uws_app_t, self), pattern.ptr, pattern.len, Handler.handle, @ptrCast(ud));
@@ -366,7 +369,10 @@ pub fn onClientError(self: *@This(), user_data: anytype, comptime handler: anyty
 
 pub fn handle(data: ?*anyopaque, code: i32, socket: *us_socket_t, error_code: u8, raw_packet: [*c]u8, raw_packet_length: i32) callconv(.c) void {
             _ = &code;
-            const bytes = (if (((raw_packet != null) and (raw_packet_length > 0))) (raw_packet.?)[0..@intCast(raw_packet_length)] else "");
+            const bytes = (if ((raw_packet_length > 0)) (blk: {
+            break :blk raw_packet[0..@intCast(raw_packet_length)];
+
+}) else "");
             _ = handler(@ptrCast(data), socket, error_code, bytes);
     }
 };

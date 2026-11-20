@@ -130,7 +130,7 @@ const ClientFile = struct {
 pub fn pack(self: *const @This()) Packed {
             _ = assert(((self.html_route_bundle_index == null) or (self.source_map != .some)));
             const content_untagged: Content.Untagged = (switch (self.content) {
-.unknown => .{ .unknown = .{} },
+.unknown => .{ .unknown = undefined },
 .js => |v| .{ .js = v },
 .asset => |v| .{ .asset = v },
 .css_root => |v| .{ .css_root = v },
@@ -476,7 +476,7 @@ pub fn IncrementalGraph(comptime side: bake.Side) type {
             var graph: usize = 0;
             var code: usize = 0;
             var source_maps: usize = 0;
-            graph += DevServer.memoryCostArrayHashMap(DevServer.MemoryCost.MemoryCostStruct{}, g.bundled_files);
+            graph += DevServer.memoryCostArrayHashMap(g.bundled_files);
             graph += g.stale_files.bytes().len;
             graph += DevServer.memoryCostArrayList(g.first_dep);
             graph += DevServer.memoryCostArrayList(g.first_import);

@@ -371,7 +371,7 @@ pub fn onClose(self: *ServerWebSocket, _ws: uws.AnyWebSocket, code: i32, message
 }
 
 pub fn behavior(comptime ServerType: type, comptime ssl: bool, opts: uws.WebSocketBehavior) uws.WebSocketBehavior {
-        return uws.WebSocketBehavior.Wrap(ServerType, @This(), ssl).apply(opts);
+        return uws.WebSocketBehavior.wrap(ServerType, @This(), ssl, opts);
 }
 
 pub fn constructor(globalObject: *jsc.JSGlobalObject, _cf: *jsc.CallFrame) bun.JSError!*ServerWebSocket {

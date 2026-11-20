@@ -384,7 +384,7 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
 }
 
 static fn behavior(comptime ServerType: type, comptime ssl: bool, opts: uws.WebSocketBehavior): uws.WebSocketBehavior {
-    return uws.WebSocketBehavior.Wrap(ServerType, @This(), ssl).apply(opts);
+    return uws.WebSocketBehavior.wrap(ServerType, @This(), ssl, opts);
 }
 
 static fn constructor(globalObject: *jsc.JSGlobalObject, _cf: *jsc.CallFrame): (*ServerWebSocket) ! bun.JSError {

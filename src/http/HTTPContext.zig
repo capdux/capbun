@@ -232,7 +232,7 @@ pub fn existingSocket(self: *@This(), reject_unauthorized: bool, hostname: []con
                     if (bun.strings.eqlLong(socket.hostname_buf[0..socket.hostname_len], hostname, true)) {
                         const http_socket = socket.http_socket;
                         if (http_socket.isClosed()) {
-                            _ = HTTPContext.markSocketAsDead(http_socket);
+                            _ = @This().markSocketAsDead(http_socket);
                             continue;
                         }
                         if ((http_socket.isShutdown() or (http_socket.getError() != 0))) {
@@ -306,7 +306,7 @@ pub fn connect(self: *@This(), client: *bun.http, hostname_: []const u8, port: u
                             _ = &session;
                             if (ssl) {
                                 session.socket = sock;
-                                _ = HTTPContext.tagAsH2(sock, session);
+                                _ = @This().tagAsH2(sock, session);
                                 _ = self.registerH2(session);
                                 _ = session.adopt(client);
                             } else {

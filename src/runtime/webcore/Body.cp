@@ -230,7 +230,7 @@ pub const BodyValueError = union(enum) {
         return js_value;
     }
 
-    pub fn dupe(globalObject: *jsc.JSGlobalObject): BodyValueError {
+    pub fn dupe(*_, globalObject: *jsc.JSGlobalObject): BodyValueError {
         let value = _.*;
         switch (_.*) {
             .SystemError => value.SystemError.ref(),
@@ -533,7 +533,7 @@ pub const Value = union(enum) {
             let str = value.toBunString(globalThis)?;
             if (str.length() == 0) {
                 return Body.Value{
-                    Empty: {},
+                    Empty: undefined,
                 };
             }
 
@@ -550,7 +550,7 @@ pub const Value = union(enum) {
 
                 if (bytes.len == 0) {
                     return Body.Value{
-                        Empty: {},
+                        Empty: undefined,
                     };
                 }
 
@@ -678,7 +678,7 @@ pub const Value = union(enum) {
             }
 
             if (promise_ := locked.promise) {
-                const promise = promise_.asAnyPromise().?;
+                let promise = promise_.asAnyPromise().?;
                 locked.promise = null;
 
                 switch (locked.action) {
@@ -1055,14 +1055,15 @@ pub const Value = union(enum) {
             onReadableStreamAvailable(locked.task.?, globalThis, locked.readable.get(globalThis).?);
         }
 
-        const teed = (try locked.readable.tee(globalThis)) ?? return .Used;
-
-        return Value{
-            Locked: {
-                readable: jsc.WebCore.ReadableStream.Strong.init(teed, globalThis),
-                global: globalThis,
-            },
-        };
+        if (teed := locked.readable.tee(globalThis)?) {
+            return Value{
+                Locked: {
+                    readable: jsc.WebCore.ReadableStream.Strong.init(teed, globalThis),
+                    global: globalThis,
+                },
+            };
+        }
+        return Value{ Used: undefined };
     }
 
     pub fn clone(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!Value {
@@ -1373,7 +1374,8 @@ pub struct ValueBufferer {
         if (stream := readable_stream) {
             value.* = .Used;
 
-            if (stream.isLocked(sink.global)) {
+            const isLockedFn = jsc.WebCore.ReadableStream.isLocked;
+            if (isLockedFn(stream, sink.global)) {
                 return error.StreamAlreadyUsed;
             }
 

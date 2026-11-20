@@ -285,7 +285,7 @@ pub fn visit(self: *Visitor, idx: Index.Int, ast: *bun.css.BundlerStyleSheet, ta
     }
 };
 
-pub const ScanImportsAndExportsError = (bun.OOM or error{ImportResolutionFailed});
+pub const ScanImportsAndExportsError = (bun.OOM || error{ImportResolutionFailed});
 const Environment = bun.Environment;
 const FeatureFlags = bun.FeatureFlags;
 const ImportRecord = bun.ImportRecord;

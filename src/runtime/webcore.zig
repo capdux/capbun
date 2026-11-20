@@ -71,11 +71,14 @@ pub fn pipe(ptr: *void, stream: streams.Result, allocator: std.mem.Allocator) vo
     }
 
 pub fn init(ptr: *Type) Pipe {
-            return Pipe{ .ctx = ptr, .onPipe = pipe };
+            return Pipe{ .ctx = (blk: {
+            break :blk @ptrCast(ptr);
+
+}), .onPipe = pipe };
     }
 };
     }
-    pub const Function = *const *const fn(
+    pub const Function = *const fn(
             ctx: *void,
             stream: streams.Result,
             allocator: std.mem.Allocator,

@@ -108,7 +108,7 @@ allocator: std.mem.Allocator,
 request_buffer: MutableString = undefined,
 response_buffer: MutableString = undefined,
 package_manager: *PackageManager,
-callback: *Callback,
+callback: Callback,
 apply_patch_task: ?*PatchTask = null,
 next: ?*NetworkTask = null,
 tarball_stream: ?*TarballStream = null,
@@ -387,10 +387,10 @@ const accept_header_value = "application/vnd.npm.install-v1+json; q=1.0, applica
 const accept_header_value_extended = "application/json, */*";
 const default_headers_buf: []const u8 = ("Accept" ++ accept_header_value);
 const extended_headers_buf: []const u8 = ("Accept" ++ accept_header_value_extended);
-const ForManifestError = (OOM or error{
+const ForManifestError = (OOM || error{
     InvalidURL,
 });
-pub const ForTarballError = (OOM or error{
+pub const ForTarballError = (OOM || error{
     InvalidURL,
 });
 

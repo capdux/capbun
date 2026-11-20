@@ -771,7 +771,7 @@ const WorkspaceDepGroup = struct {
     behavior: Dependency.Behavior,
 };
 const workspace_dependency_groups = .{ WorkspaceDepGroup{ .name = "dependencies", .behavior = .{ .prod = true } }, WorkspaceDepGroup{ .name = "devDependencies", .behavior = .{ .dev = true } }, WorkspaceDepGroup{ .name = "optionalDependencies", .behavior = .{ .optional = true } }, WorkspaceDepGroup{ .name = "peerDependencies", .behavior = .{ .peer = true } } };
-const ParseError = (OOM or error{
+const ParseError = (OOM || error{
     InvalidLockfileVersion,
     UnknownLockfileVersion,
     InvalidConfigVersion,

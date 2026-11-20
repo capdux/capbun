@@ -31,6 +31,7 @@ pub const Err = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -255,7 +256,7 @@ pub fn init(self: *S3DownloadStreamWrapper, readable_stream_ref: WebCore.Readabl
             self.global = global;
     }
 
-pub fn callback(self: *const S3DownloadStreamWrapper, chunk: MutableString, has_more: bool, request_err: ?S3Error) JSTerminatedError!void {
+pub fn callback(chunk: MutableString, has_more: bool, request_err: ?S3Error, self: *S3DownloadStreamWrapper) JSTerminatedError!void {
             defer {
             {
                 if ((!has_more)) {
@@ -312,7 +313,7 @@ pub fn onStreamCancelled(ctx: ?*anyopaque) callconv(.c) void {
 pub fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: ?S3Error, opaque_self: *anyopaque) void {
             var self: *S3DownloadStreamWrapper = @ptrCast(@alignCast(opaque_self));
             _ = &self;
-            _ = (blk_catch_2: { break :blk_catch_2 ((callback(chunk, has_more, s3_err, self)) catch |__ce_2| { _ = &__ce_2;  }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((S3DownloadStreamWrapper.callback(chunk, has_more, s3_err, self)) catch |__ce_2| { _ = &__ce_2;  }); });
     }
     pub const new = bun.TrivialNew(@This());
 };
@@ -374,7 +375,7 @@ pub fn downloadSlice(self: *S3Credentials, path: []const u8, offset: usize, size
         var range: ?[]const u8 = brk: {
         if (size) |size_| {
             _ = &size_;
-            var end = ((offset + size_) - (if ((size_ > 0)) 1 else 0));
+            var end = ((offset + size_) - (if ((size_ > 0)) (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
             _ = &end;
             break :brk handleOom(allocPrint(default_allocator, "bytes={}-{}", .{ offset, end }));
         }
@@ -544,12 +545,9 @@ if ((stream.pending.result == .err)) {
             var err_res = stream.pending.result.err;
             _ = &err_res;
             stream.pending = .{ .result = .done };
-            const _tmp_v0 = err_res.toJSWeak(globalThis);
-            const js_err = cp_unpack_elem(_tmp_v0, 0);
-            _ = &js_err;
-            const was_strong = cp_unpack_elem(_tmp_v0, 1);
-            _ = &was_strong;
-            if ((was_strong == .Strong)) {
+            const weak_pair = err_res.toJSWeak(globalThis);
+            const js_err = weak_pair[0];
+            if ((weak_pair[1] == .Strong)) {
                 _ = js_err.unprotect();
             }
             _ = js_err.ensureStillAlive();
@@ -561,12 +559,9 @@ if ((stream.pending.result == .err)) {
             var err_res = stream.pending.result.err;
             _ = &err_res;
             stream.pending = .{ .result = .done };
-            const _tmp_v1 = err_res.toJSWeak(globalThis);
-            const js_err = cp_unpack_elem(_tmp_v1, 0);
-            _ = &js_err;
-            const was_strong = cp_unpack_elem(_tmp_v1, 1);
-            _ = &was_strong;
-            if ((was_strong == .Strong)) {
+            const weak_pair = err_res.toJSWeak(globalThis);
+            const js_err = weak_pair[0];
+            if ((weak_pair[1] == .Strong)) {
                 _ = js_err.unprotect();
             }
             _ = js_err.ensureStillAlive();
@@ -599,7 +594,7 @@ pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         var range: ?[]const u8 = brk: {
         if (size) |size_| {
             _ = &size_;
-            var end = ((offset + size_) - (if ((size_ > 0)) 1 else 0));
+            var end = ((offset + size_) - (if ((size_ > 0)) (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
             _ = &end;
             break :brk handleOom(allocPrint(default_allocator, "bytes={}-{}", .{ offset, end }));
         }

@@ -29,7 +29,7 @@ const log = Output.scoped(.WebSocketUpgradeClient, .visible);
 
 const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
 const empty_zig_slices: [0]ZigSlice = std.mem.zeroes([0]ZigSlice);
-const empty_byte_slices: [0][]const u8 = [];
+const empty_byte_slices: []const []const u8 = [];
 
 export struct TopDeflateNegotiationResult {
     enabled: bool = false,
@@ -122,7 +122,7 @@ export struct Headers8Bit {
         return _.value_slices;
     }
 
-    pub fn toHeaders(allocator: std.mem.Allocator): anyerror!Headers {
+    pub fn toHeaders(allocator: std.mem.Allocator): Headers! {
         let headers = Headers{
             allocator: allocator,
         };

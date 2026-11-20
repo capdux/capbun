@@ -333,13 +333,13 @@ pub fn exec(ctx: Command.Context) !void {
     }
 
 pub fn PackError(comptime for_publish: bool) type {
-            return ((OOM or error{
+            return ((OOM || error{
             MissingPackageName,
             InvalidPackageName,
             MissingPackageVersion,
             InvalidPackageVersion,
             MissingPackageJSON,
-        }) or (if (for_publish) error{
+        }) || (if (for_publish) error{
                 RestrictedUnscopedPackage,
                 PrivatePackage,
             } else error{}));

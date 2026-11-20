@@ -236,7 +236,7 @@ pub fn fromArrayList(list: std.array_list.Managed(u8)) @This() {
             return BlobAny{ .InternalBlob = BlobInternal{ .bytes = list } };
     }
 
-pub fn memoryCost(self: *const BlobAny) usize {
+pub fn memoryCost(self: BlobAny) usize {
             switch (self.*) {
 .Blob => |b| {
 if (b.store) |s| {
@@ -257,7 +257,7 @@ return b.memoryCost();
 }
     }
 
-pub inline fn fastSize(self: *const BlobAny) Blob.SizeType {
+pub inline fn fastSize(self: BlobAny) Blob.SizeType {
             return (switch (self.*) {
 .Blob => self.Blob.size,
 .WTFStringImpl => @truncate(self.WTFStringImpl.byteLength()),
@@ -265,7 +265,7 @@ pub inline fn fastSize(self: *const BlobAny) Blob.SizeType {
 });
     }
 
-pub inline fn size(self: *const BlobAny) Blob.SizeType {
+pub inline fn size(self: BlobAny) Blob.SizeType {
             return (switch (self.*) {
 .Blob => self.Blob.size,
 .WTFStringImpl => @truncate(self.WTFStringImpl.utf8ByteLength()),
@@ -273,7 +273,7 @@ else => @truncate(self.slice().len),
 });
     }
 
-pub fn slice(self: *const BlobAny) []const u8 {
+pub fn slice(self: BlobAny) []const u8 {
             switch (self.*) {
 .Blob => |b| {
 return b.sharedView();
@@ -417,6 +417,34 @@ const str = String.init(self.WTFStringImpl);
             var __bytes_moved = false; _ = &__bytes_moved;
             defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
             return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
+},
+}
+    }
+
+pub fn isDetached(self: BlobAny) bool {
+            switch (self.*) {
+.Blob => |b| {
+return b.isDetached();
+},
+.InternalBlob => |ib| {
+return (ib.bytes.items.len == 0);
+},
+.WTFStringImpl => |w| {
+return (w.length() == 0);
+},
+}
+    }
+
+pub fn needsToReadFile(self: BlobAny) bool {
+            switch (self.*) {
+.Blob => |b| {
+return b.needsToReadFile();
+},
+.InternalBlob => {
+return false;
+},
+.WTFStringImpl => {
+return false;
 },
 }
     }
@@ -663,7 +691,7 @@ pub fn run(c: *Handler, r: read_file_mod.ReadFileResultType) void {
     poll: bun.Async.KeepAlive = .{},
     vm: *jsc.VirtualMachine,
 
-pub fn done(t: *@This(), r: *BlobReadBytesResult) void {
+pub fn done(t: *@This(), r: BlobReadBytesResult) void {
             _ = t.poll.unref(t.vm);
             _ = t.blob.deinit();
             const c = t.ctx;
@@ -678,13 +706,13 @@ pub fn cb(result: bun.S3.S3DownloadResult, opaque_self: *anyopaque) bun.JSTermin
 });
             switch (result) {
 .success => |response| {
-_ = t.done(.{ .ok = response.body.list.items });
+_ = t.done(BlobReadBytesResult{ .ok = response.body.list.items });
 },
 .not_found => |e| {
-_ = t.done(.{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
+_ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
 },
 .failure => |e| {
-_ = t.done(.{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
+_ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), .message = bun.String.cloneUTF8(e.message), .path = bun.String.cloneUTF8(((t.blob.store.?.getPath()) orelse (""))), .syscall = bun.String.static("fetch") } });
 },
 }
     }
@@ -994,6 +1022,61 @@ pub fn getFormData(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSEr
 pub fn doImage(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
         _ = self.size;
         return globalThis.throwTODO("Blob.image is not yet implemented");
+}
+
+pub fn isDetached(self: Blob) bool {
+        return (self.store == null);
+}
+
+pub fn create(bytes_: []const u8, allocator_: std.mem.Allocator, globalThis: *JSGlobalObject, was_string: bool) Blob {
+        return bun.handleOom(Blob.tryCreate(bytes_, allocator_, globalThis, was_string));
+}
+
+pub fn toString(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+    _ = lifetime;
+        if ((self.needsToReadFile() or self.isS3())) {
+            return global.throwTODO("Blob.toString for file/S3 blobs is not yet ported");
+        }
+        const view = self.sharedView();
+        if ((view.len == 0)) {
+            return ZigString.Empty.toJS(global);
+        }
+        var str = String.cloneUTF8(view);
+        var __str_moved = false; _ = &__str_moved;
+        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+        defer {
+        _ = str.deref();
+        }
+        return str.toJS(global);
+}
+
+pub fn toJSON(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+    _ = lifetime;
+        if ((self.needsToReadFile() or self.isS3())) {
+            return global.throwTODO("Blob.toJSON for file/S3 blobs is not yet ported");
+        }
+        var str = String.cloneUTF8(self.sharedView());
+        var __str_moved = false; _ = &__str_moved;
+        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+        defer {
+        _ = str.deref();
+        }
+        return str.toJSByParseJSON(global);
+}
+
+pub fn toArrayBufferView(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime, comptime TypedArrayView: JSValue.JSType) JSError!JSValue {
+    _ = lifetime;
+        if ((self.needsToReadFile() or self.isS3())) {
+            return global.throwTODO("Blob.toArrayBufferView for file/S3 blobs is not yet ported");
+        }
+        const view = self.sharedView();
+        if ((view.len == 0)) {
+            return jsc.ArrayBuffer.create(global, "", TypedArrayView);
+        }
+        const copy = bun.handleOom(bun.default_allocator.dupe(u8, view));
+        var __copy_moved = false; _ = &__copy_moved;
+        defer if (!__copy_moved) { const __T = @TypeOf(copy); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = copy.release() catch {}; } else { copy.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = copy; _drop_val.release(); } };
+        return ArrayBuffer.fromDefaultAllocator(global, copy, TypedArrayView);
 }
 
 pub fn needsToReadFile(self: Blob) bool {

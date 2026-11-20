@@ -84,7 +84,7 @@ const PackageManager = bun.install.PackageManager;
 const Resolution = bun.install.Resolution;
 const Task = bun.install.Task;
 const invalid_package_id = bun.install.invalid_package_id;
-const StartManifestTaskError = (bun.OOM or error{InvalidURL});
+const StartManifestTaskError = (bun.OOM || error{InvalidURL});
 const Packages = union(enum) {
     all,
     ids: []const PackageID,

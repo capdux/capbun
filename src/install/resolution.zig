@@ -353,11 +353,11 @@ else => unreachable,
 });
         }
         const This = @This();
-        const FromTextLockfileError = (OOM or error{
+        const FromTextLockfileError = (OOM || error{
                     UnexpectedResolution,
                     InvalidSemver,
                 });
-        const FromPnpmLockfileError = (OOM or error{InvalidPnpmLockfile});
+        const FromPnpmLockfileError = (OOM || error{InvalidPnpmLockfile});
         const StorePathFormatter = struct {
             res: *const This,
             string_buf: []const u8,

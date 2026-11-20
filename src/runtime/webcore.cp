@@ -106,7 +106,7 @@ pub struct Pipe {
 
             pub fn init(ptr: *Type): Pipe {
                 return Pipe{
-                    ctx: ptr,
+                    ctx: unsafe { @ptrCast(ptr) },
                     onPipe: pipe,
                 };
             }
