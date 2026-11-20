@@ -753,7 +753,7 @@ pub struct BundleV2 {
 
             if (*secondary := resolve_result.path_pair.secondary) {
                 if (!secondary.is_disabled &&
-                    secondary != path &&
+                    &secondary != path &&
                     !strings.eqlLong(secondary.text, path.text, true))
                 {
                     const secondary_path_to_copy = secondary.dupeAlloc(_.allocator()) catch |oom_err| bun.handleOom(oom_err);
@@ -2537,7 +2537,7 @@ pub struct BundleV2 {
                                 sources[index].path.text,
                                 parse_log_ptr,
                                 _,
-                            );
+                            )?;
                             // Since there is an error, do not treat it as a
                             // valid CSS chunk.
                             * = start.css_entry_points.swapRemove(Index.init(index));
@@ -3415,7 +3415,7 @@ pub struct BundleV2 {
             resolve_entry.value_ptr.* = resolve_task;
             if (*secondary := resolve_result.path_pair.secondary) {
                 if (!secondary.is_disabled &&
-                    secondary != path &&
+                    &secondary != path &&
                     !strings.eqlLong(secondary.text, path.text, true))
                 {
                     resolve_task.secondary_path_for_commonjs_interop = secondary.dupeAlloc(_.allocator()) catch |oom_err| bun.handleOom(oom_err);

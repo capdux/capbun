@@ -334,7 +334,8 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                 chunk.template.placeholder.hash = hash.digest();
                 const rel_path = bun.handleOom(std.fmt.allocPrint(c.allocator(), "{f}", .{ chunk.template }));
                 _ = bun.path.platformToPosixInPlace(u8, rel_path);
-                if (try path_names_map.getOrPut(rel_path).found_existing) {
+                const gop = try path_names_map.getOrPut(rel_path);
+                if (gop.found_existing) {
                     const dup = try duplicates_map.getOrPut(bun.default_allocator, rel_path);
                     if ((!dup.found_existing)) {
                         dup.value_ptr.* = .{};

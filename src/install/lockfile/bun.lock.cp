@@ -1785,7 +1785,7 @@ pub fn parseIntoBinaryLockfile(
                         return error.InvalidPackageInfo;
                     }
 
-                    let [off, len] = try parseAppendDependencies(
+                    const dep_pair = parseAppendDependencies(
                         lockfile,
                         allocator,
                         deps_os_cpu_libc_bin_bundle_obj,
@@ -1798,7 +1798,9 @@ pub fn parseIntoBinaryLockfile(
                         &bundled_pkgs,
                         false,
                         undefined,
-                    );
+                    )?;
+                    const off = dep_pair[0];
+                    const len = dep_pair[1];
 
                     pkg.dependencies = { off: off, len: len };
                     pkg.resolutions = { off: off, len: len };

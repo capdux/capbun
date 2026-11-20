@@ -276,7 +276,7 @@ pub fn LowerDecorators(
                     .s_expr => |sexpr| {
                         let val = sexpr.value;
                         rewriteExpr(p, &val, kind);
-                        cur_stmt.* = p.s(S.SExpr{
+                        cur_stmt = p.s(S.SExpr{
                             value: val,
                             does_not_affect_tree_shaking: sexpr.does_not_affect_tree_shaking,
                         }, cur_stmt.loc);
@@ -490,7 +490,7 @@ pub fn LowerDecorators(
                     .s_if => |data| {
                         rewritePrivateAccessesInExpr(p, &data.test_, map);
                         rewritePrivateAccessesInStmts(p, (&data.yes)[0..1], map);
-                        if (*no := data.no) rewritePrivateAccessesInStmts(p, no[0..1], map);
+                        if (*no := data.no) rewritePrivateAccessesInStmts(p, (&no)[0..1], map);
                     },
                     .s_block => |data| rewritePrivateAccessesInStmts(p, data.stmts, map),
                     .s_for => |data| {
@@ -1161,7 +1161,11 @@ pub fn LowerDecorators(
                 if (name := original_class_name_for_decorator) {
                     class_name_str = name;
                 } else if (is_expr && expr_class_is_anonymous) {
-                    class_name_str = name_from_context ?? "";
+                    if (nfc := name_from_context) {
+                        class_name_str = nfc;
+                    } else {
+                        class_name_str = "";
+                    }
                 }
 
                 let cls_dec_args = bun.handleOom(p.allocator.alloc(Expr, 5));

@@ -437,7 +437,7 @@ pub fn generateCodeForFileInChunkJS(
                                         if (can_be_moved) {
                                             // if the value can be moved, move the decl directly to preserve destructuring
                                             // ie `const { main } = class { static main() {} }` => `var {main} = class { static main() {} }`
-                                            bun.handleOom(hoist.decls.append(hoist.allocator, decl.*));
+                                            bun.handleOom(hoist.decls.append(hoist.allocator, decl));
                                         } else {
                                             // if the value cannot be moved, add every destructuring key separately
                                             // ie `var { append } = { append() {} }` => `var append; __esm(() => ({ append } = { append() {} }))`

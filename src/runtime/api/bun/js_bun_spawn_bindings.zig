@@ -794,7 +794,7 @@ _ = fd.close();
         if ((Environment.isPosix and (!is_sync))) {
             if (maybe_ipc_mode) |mode| {
                 _ = &mode;
-                if (jsc_vm.rareData().spawnIPCGroup(jsc_vm).fromFd(.spawn_ipc, null, @sizeOf(*IPC.SendQueue), posix_ipc_fd.cast(), true)) |socket| {
+                if (jsc_vm.rareData().spawnIPCGroup(jsc_vm).fromFd(.spawn_ipc, null, @sizeOf(*IPC.SendQueue), posix_ipc_fd, true)) |socket| {
                     _ = &socket;
                     subprocess.ipc_data = IPC.Data.init(mode, .{ .subprocess = subprocess }, .uninitialized);
                     posix_ipc_info = IPC.Socket.@"from"(socket);
@@ -878,7 +878,8 @@ send_exit_notification = true;
             if (subprocess.stdin.buffer.start().asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_7: { break :blk_catch_7 ((globalThis.throwValue((blk_catch_6: { break :blk_catch_6 ((e.toJS(globalThis)) catch |__ce_6| { _ = &__ce_6; return error.JSError; }); }))) catch |__ce_7| { _ = &__ce_7;  }); });
+                if ((globalThis.throwValue((blk_catch_6: { break :blk_catch_6 ((e.toJS(globalThis)) catch |__ce_6| { _ = &__ce_6; return error.JSError; }); })) == error.JSError)) {
+                }
                 return error.JSError;
             }
         }
@@ -886,7 +887,8 @@ send_exit_notification = true;
             if (subprocess.stdout.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_9: { break :blk_catch_9 ((globalThis.throwValue((blk_catch_8: { break :blk_catch_8 ((e.toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return error.JSError; }); }))) catch |__ce_9| { _ = &__ce_9;  }); });
+                if ((globalThis.throwValue((blk_catch_7: { break :blk_catch_7 ((e.toJS(globalThis)) catch |__ce_7| { _ = &__ce_7; return error.JSError; }); })) == error.JSError)) {
+                }
                 return error.JSError;
             }
             if (((is_sync or (!lazy)) and (subprocess.stdout == .pipe))) {
@@ -897,7 +899,8 @@ send_exit_notification = true;
             if (subprocess.stderr.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
-                _ = (blk_catch_11: { break :blk_catch_11 ((globalThis.throwValue((blk_catch_10: { break :blk_catch_10 ((e.toJS(globalThis)) catch |__ce_10| { _ = &__ce_10; return error.JSError; }); }))) catch |__ce_11| { _ = &__ce_11;  }); });
+                if ((globalThis.throwValue((blk_catch_8: { break :blk_catch_8 ((e.toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return error.JSError; }); })) == error.JSError)) {
+                }
                 return error.JSError;
             }
             if (((is_sync or (!lazy)) and (subprocess.stderr == .pipe))) {

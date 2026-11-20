@@ -943,7 +943,7 @@ pub fn memoryCost(self: @This()) usize {
     }
 
 pub fn slice(self: @This()) []const u8 {
-            return (switch (self.*) {
+            return (switch (self) {
 .blob => self.blob.slice(),
 .array_buffer => self.array_buffer.slice(),
 else => @panic("Invalid source"),

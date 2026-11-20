@@ -839,7 +839,7 @@ pub fn spawnMaybeSync(
                 .spawn_ipc,
                 null,
                 @sizeOf(*IPC.SendQueue),
-                posix_ipc_fd.cast(),
+                posix_ipc_fd,
                 true,
             )) {
                 subprocess.ipc_data = IPC.Data.init(mode, .{ .subprocess = subprocess }, .uninitialized);
@@ -939,7 +939,7 @@ pub fn spawnMaybeSync(
     if (subprocess.stdin == .buffer) {
         if (e := subprocess.stdin.buffer.start().asErr()) {
             * = subprocess.tryKill(subprocess.killSignal);
-            * = globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) catch {};
+            if (globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) == error.JSError) {}
             return error.JSError;
         }
     }
@@ -947,7 +947,7 @@ pub fn spawnMaybeSync(
     if (subprocess.stdout == .pipe) {
         if (e := subprocess.stdout.pipe.start(subprocess, event_loop).asErr()) {
             * = subprocess.tryKill(subprocess.killSignal);
-            * = globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) catch {};
+            if (globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) == error.JSError) {}
             return error.JSError;
         }
         if ((is_sync || !lazy) && subprocess.stdout == .pipe) {
@@ -958,7 +958,7 @@ pub fn spawnMaybeSync(
     if (subprocess.stderr == .pipe) {
         if (e := subprocess.stderr.pipe.start(subprocess, event_loop).asErr()) {
             * = subprocess.tryKill(subprocess.killSignal);
-            * = globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) catch {};
+            if (globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) == error.JSError) {}
             return error.JSError;
         }
 

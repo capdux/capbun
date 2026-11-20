@@ -403,7 +403,7 @@ pub fn rewriteStmts(p: *P, stmts: []Stmt, kind: RewriteKind) void {
 var val = (if (@typeInfo(@TypeOf(sexpr)) == .@"enum") @intFromEnum(sexpr) else sexpr.value);
                 _ = &val;
                 _ = rewriteExpr(p, (&val), kind);
-                (cur_stmt.*).* = p.s(S.SExpr{ .value = val, .does_not_affect_tree_shaking = sexpr.does_not_affect_tree_shaking }, (cur_stmt.*).loc);
+                (cur_stmt.*) = p.s(S.SExpr{ .value = val, .does_not_affect_tree_shaking = sexpr.does_not_affect_tree_shaking }, (cur_stmt.*).loc);
 },
 .s_local => |local| {
 for (cp_mut_slice(&local.decls.slice())) |*decl| {
@@ -1424,7 +1424,12 @@ else => 5,
                     class_name_str = name;
                 } else {
                     if ((is_expr and expr_class_is_anonymous)) {
-                        if (class_name_str == null) { class_name_str = ""; }
+                        if (name_from_context) |nfc| {
+                            _ = &nfc;
+                            class_name_str = nfc;
+                        } else {
+                            class_name_str = "";
+                        }
                     }
                 }
                 var cls_dec_args = bun.handleOom(p.allocator.alloc(Expr, 5));

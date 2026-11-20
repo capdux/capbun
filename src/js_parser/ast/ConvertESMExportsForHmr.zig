@@ -346,8 +346,10 @@ pub fn finalize(self: *ConvertESMExportsForHmr, p: anytype, all_parts: []js_ast.
             _ = try self.last_part.symbol_uses.put(p.allocator, p.module_ref, .{ .count_estimate = 1 });
             _ = try self.last_part.declared_symbols.append(p.allocator, .{ .ref = p.module_ref, .is_top_level = true });
         }
-        if ((p.options.features.react_fast_refresh and p.react_refresh.register_used)) {
-            _ = try self.stmts.append(p.allocator, Stmt.alloc(S.SExpr, .{ .value = Expr.init(E.Call, .{ .target = Expr.init(E.Dot, .{ .target = Expr.initIdentifier(p.hmr_api_ref, .Empty), .name = "reactRefreshAccept", .name_loc = .Empty }, .Empty), .args = .empty }, .Empty) }, .Empty));
+        if (comptime @hasField(@TypeOf(p.*), "react_refresh")) {
+            if ((p.options.features.react_fast_refresh and p.react_refresh.register_used)) {
+                _ = try self.stmts.append(p.allocator, Stmt.alloc(S.SExpr, .{ .value = Expr.init(E.Call, .{ .target = Expr.init(E.Dot, .{ .target = Expr.initIdentifier(p.hmr_api_ref, .Empty), .name = "reactRefreshAccept", .name_loc = .Empty }, .Empty), .args = .empty }, .Empty) }, .Empty));
+            }
         }
         for (cp_mut_slice(&all_parts[0..(all_parts.len - 1)])) |*part| {
             _ = &part;

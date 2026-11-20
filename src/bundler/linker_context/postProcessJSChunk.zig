@@ -301,7 +301,7 @@ else => {
         _ = j.deinit();
         }
         const output_format = c.options.output_format;
-        var line_offset: bun.SourceMap.LineColumnOffset.Optional = (if ((c.options.source_maps != .none)) bun.SourceMap.LineColumnOffset.Optional{ .value = .{} } else bun.SourceMap.LineColumnOffset.Optional{ .@"null" = .{} });
+        var line_offset: bun.SourceMap.LineColumnOffset.Optional = (if ((c.options.source_maps != .none)) bun.SourceMap.LineColumnOffset.Optional{ .value = .{} } else bun.SourceMap.LineColumnOffset.Optional{ .@"null" = undefined });
         _ = &line_offset;
         var newline_before_comment = false;
         _ = &newline_before_comment;

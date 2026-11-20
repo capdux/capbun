@@ -342,7 +342,7 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
                 _ = &js_index;
                 for (cp_mut_slice(&sorted_chunks.slice()[@as(usize, @intCast(js_index))].content.javascript.css_chunks)) |*idx| {
                     _ = &idx;
-                    (idx.*).* = remapped_css_indexes[@as(usize, @intCast((idx.*).*))];
+                    (idx.*) = remapped_css_indexes[@as(usize, @intCast((idx.*)))];
                 }
             }
         }

@@ -113,7 +113,7 @@ pub const Source = union(enum) {
     }
 
     pub fn slice(): []const u8 {
-        return switch (_.*) {
+        return switch (_) {
             .blob => _.blob.slice(),
             .array_buffer => _.array_buffer.slice(),
             else => @panic("Invalid source"),

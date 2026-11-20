@@ -503,17 +503,19 @@ pub struct DeduplicatedImportResult {
             _.last_part.declared_symbols.append(p.allocator, { ref: p.module_ref, is_top_level: true })?;
         }
 
-        if (p.options.features.react_fast_refresh && p.react_refresh.register_used) {
-            _.stmts.append(p.allocator, Stmt.alloc(S.SExpr, {
-                value: Expr.init(E.Call, {
-                    target: Expr.init(E.Dot, {
-                        target: Expr.initIdentifier(p.hmr_api_ref, .Empty),
-                        name: "reactRefreshAccept",
-                        name_loc: .Empty,
+        if (comptime @hasField(@TypeOf(p.*), "react_refresh")) {
+            if (p.options.features.react_fast_refresh && p.react_refresh.register_used) {
+                _.stmts.append(p.allocator, Stmt.alloc(S.SExpr, {
+                    value: Expr.init(E.Call, {
+                        target: Expr.init(E.Dot, {
+                            target: Expr.initIdentifier(p.hmr_api_ref, .Empty),
+                            name: "reactRefreshAccept",
+                            name_loc: .Empty,
+                        }, .Empty),
+                        args: .empty,
                     }, .Empty),
-                    args: .empty,
-                }, .Empty),
-            }, .Empty))?;
+                }, .Empty))?;
+            }
         }
 
         // Merge all part metadata into the first part.

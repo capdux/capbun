@@ -273,7 +273,7 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
     let line_offset: bun.SourceMap.LineColumnOffset.Optional = if (c.options.source_maps != .none)
         bun.SourceMap.LineColumnOffset.Optional{ value: {} }
     else
-        bun.SourceMap.LineColumnOffset.Optional{ @"null": {} };
+        bun.SourceMap.LineColumnOffset.Optional{ @"null": undefined };
 
     // Concatenate the generated JavaScript chunks together
 

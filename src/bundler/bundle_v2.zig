@@ -1569,7 +1569,7 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
 
 });
                         if ((self.linker.scanCSSImports(@as(u32, @intCast(index)), import_records.slice(), css_asts, sources, loaders, parse_log_ptr) == .errors)) {
-                            _ = dev_server.handleParseTaskFailure(error.InvalidCssImport, .client, sources[@as(usize, @intCast(index))].path.text, parse_log_ptr, self);
+                            _ = try dev_server.handleParseTaskFailure(error.InvalidCssImport, .client, sources[@as(usize, @intCast(index))].path.text, parse_log_ptr, self);
                             _ = start.css_entry_points.swapRemove(Index.init(index));
                         }
                     } else {

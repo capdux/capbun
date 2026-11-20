@@ -374,7 +374,7 @@ const is_async = flags.is_async_or_has_async_dependency;
                             _ = &initializer;
                             const can_be_moved = initializer.canBeMoved();
                             if (can_be_moved) {
-                                _ = bun.handleOom(hoist.decls.append(hoist.allocator, (decl.*).*));
+                                _ = bun.handleOom(hoist.decls.append(hoist.allocator, (decl.*)));
                             } else {
                                 const binding = (decl.*).binding.toExpr((&hoist));
                                 value = value.joinWithComma(binding.assign(initializer), temp_allocator);

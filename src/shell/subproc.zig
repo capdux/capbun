@@ -61,8 +61,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
-fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const util = @import("./util.zig");
@@ -274,7 +272,9 @@ pub fn doWrite(self: *SubprocCapturedWriter, chunk: []const u8) void {
                 return;
             }
             _ = log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(self), @tagName(self.parent().out_type), chunk.len, self.parent().buffered_output.len() });
-            _ = self.writer.enqueue(self, null, chunk).run();
+            var enqueue_yield = self.writer.enqueue(self, null, chunk);
+            _ = &enqueue_yield;
+            _ = enqueue_yield.run();
     }
 
 pub fn getBuffer(self: *SubprocCapturedWriter) []const u8 {
@@ -498,12 +498,11 @@ pub fn abortAfterFailedStart(self: *ShellSubprocess) void {
             if (Environment.isWindows) {
                 return;
             }
-            for (cp_iter_slice(.{ .stdout, .stderr })) |tag| {
-                _ = &tag;
-                const r: *Readable = (&@field(self, @tagName(tag)));
-                if (((r.* == .pipe) and (r.pipe.state == .pending))) {
-                    r.pipe.state = .{ .err = null };
-                }
+            if (((self.stdout == .pipe) and (self.stdout.pipe.state == .pending))) {
+                self.stdout.pipe.state = .{ .err = null };
+            }
+            if (((self.stderr == .pipe) and (self.stderr.pipe.state == .pending))) {
+                self.stderr.pipe.state = .{ .err = null };
             }
             self.process.exit_handler = .{};
             _ = self.deinit();
@@ -536,9 +535,10 @@ pub fn spawnMaybeSyncImpl(event_loop: jsc.EventLoopHandle, allocator: Allocator,
             defer {
             {
                 if ((!stdio_consumed)) {
-                    for (cp_mut_slice(&spawn_args.stdio)) |*s| {
-                        _ = &s;
-                        _ = (s.*).deinit();
+                    var s_idx: usize = 0;
+                    _ = &s_idx;
+                    while ((s_idx < spawn_args.stdio.len)) : (s_idx = (s_idx + 1)) {
+                        _ = spawn_args.stdio[@as(usize, @intCast(s_idx))].deinit();
                     }
                 }
             }
@@ -601,7 +601,7 @@ return .{ .err = .{ .custom = bun.handleOom(bun.default_allocator.dupe(u8, e.toS
             var subprocess = bun.handleOom(event_loop.allocator().create(Subprocess));
             _ = &subprocess;
             out_subproc.* = subprocess;
-            subprocess.* = Subprocess{ .event_loop = event_loop, .process = spawn_result.toProcess(event_loop, is_sync), .stdin = (blk_catch_3: { break :blk_catch_3 ((Subprocess.Writable.init(spawn_args.stdio[0], event_loop, subprocess, spawn_result.stdin)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnexpectedCreatingStdin)) {  break :__sw_blk_2 cp_val(std.debug.panic("unexpected error while creating stdin", .{})); } }  unreachable; }); }); }), .stdout = Subprocess.Readable.init(.stdout, spawn_args.stdio[1], shellio.stdout, event_loop, subprocess, spawn_result.stdout, event_loop.allocator(), ShellSubprocess.default_max_buffer_size, true), .stderr = Subprocess.Readable.init(.stderr, spawn_args.stdio[2], shellio.stderr, event_loop, subprocess, spawn_result.stderr, event_loop.allocator(), ShellSubprocess.default_max_buffer_size, true), .flags = .{ .is_sync = is_sync }, .cmd_parent = spawn_args.cmd_parent };
+            subprocess.* = Subprocess{ .event_loop = event_loop, .process = spawn_result.toProcess(event_loop, is_sync), .stdin = (blk_catch_3: { break :blk_catch_3 ((Subprocess.Writable.init(spawn_args.stdio[0], event_loop, subprocess, spawn_result.stdin)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnexpectedCreatingStdin)) {  break :__sw_blk_0 cp_val(std.debug.panic("unexpected error while creating stdin", .{})); } }  unreachable; }); }); }), .stdout = Subprocess.Readable.init(.stdout, spawn_args.stdio[1], shellio.stdout, event_loop, subprocess, spawn_result.stdout, event_loop.allocator(), ShellSubprocess.default_max_buffer_size, true), .stderr = Subprocess.Readable.init(.stderr, spawn_args.stdio[2], shellio.stderr, event_loop, subprocess, spawn_result.stderr, event_loop.allocator(), ShellSubprocess.default_max_buffer_size, true), .flags = .{ .is_sync = is_sync }, .cmd_parent = spawn_args.cmd_parent };
             _ = subprocess.process.setExitHandler(subprocess);
             stdio_consumed = true;
             if ((subprocess.stdin == .pipe)) {
@@ -650,7 +650,7 @@ notify_caller_process_already_exited.* = true;
                 }
             }
             _ = log("returning", .{});
-            return .{ .result = .{} };
+            return .{ .result = undefined };
     }
 
 pub fn wait(self: *ShellSubprocess, sync: bool) void {
@@ -744,12 +744,10 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
                 self.* = .ignore;
         }
     
-    pub fn onReady(self: *@This(), _: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {
-            _ = self;
+    pub fn onReady(_: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {
         }
     
-    pub fn onStart(self: *@This(), _: *Writable) void {
-            _ = self;
+    pub fn onStart(_: *Writable) void {
         }
     
     pub fn init(stdio: Stdio, event_loop: jsc.EventLoopHandle, subprocess: *Subprocess, result: StdioResult) !Writable {
@@ -1104,7 +1102,9 @@ pub fn isDone(self: *@This()) bool {
     }
 
 pub fn onCapturedWriterDone(self: *@This()) void {
-            _ = self.trySignalDoneToCmd().run();
+            var done_yield = self.trySignalDoneToCmd();
+            _ = &done_yield;
+            _ = done_yield.run();
     }
 
 pub fn create(event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result: StdioResult, capture: ?*sh.IOWriter, out_type: bun.shell.Subprocess.OutKind) *PipeReader {
@@ -1189,7 +1189,9 @@ pub fn onReaderDone(self: *@This()) void {
             defer {
             _ = self.deref();
             }
-            _ = self.trySignalDoneToCmd().run();
+            var done_yield = self.trySignalDoneToCmd();
+            _ = &done_yield;
+            _ = done_yield.run();
             if (self.process) |process| {
                 _ = &process;
                 _ = process.onCloseIO(self.kind(process));
@@ -1326,7 +1328,9 @@ pub fn onReaderError(self: *@This(), e: bun.sys.Error) void {
             defer {
             _ = self.deref();
             }
-            _ = self.trySignalDoneToCmd().run();
+            var done_yield = self.trySignalDoneToCmd();
+            _ = &done_yield;
+            _ = done_yield.run();
             if (self.process) |process| {
                 _ = &process;
                 _ = process.onCloseIO(self.kind(process));

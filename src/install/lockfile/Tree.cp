@@ -494,8 +494,10 @@ pub fn isFilteredDependencyOrWorkspace(
         builder.sort_buf.clearRetainingCapacity();
         builder.sort_buf.ensureUnusedCapacity(builder.allocator, resolution_list.len)?;
 
-        for (dep_id of resolution_list.begin()..resolution_list.end()) {
-            builder.sort_buf.appendAssumeCapacity(@intCast(dep_id));
+        let dep_idx: u32 = resolution_list.begin();
+        const dep_end = resolution_list.end();
+        while (dep_idx < dep_end) : (dep_idx += 1) {
+            builder.sort_buf.appendAssumeCapacity(@intCast(dep_idx));
         }
 
         std.sort.pdq(

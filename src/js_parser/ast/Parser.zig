@@ -900,9 +900,10 @@ const uses_any_import_statements = brk: {
 };
             }
             if (p.has_called_runtime) {
-                var runtime_imports_buf: struct { RuntimeImports.all.len } = undefined;
+                const runtime_imports_len = (comptime RuntimeImports.all.len);
+                _ = &runtime_imports_len;
+                var runtime_imports_buf: [runtime_imports_len]u8 = undefined;
                 _ = &runtime_imports_buf;
-                u8 = undefined;
                 var runtime_imports: []u8 = runtime_imports_buf[0..];
                 _ = &runtime_imports;
                 var iter = p.runtime_imports.iter();

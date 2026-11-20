@@ -1347,7 +1347,8 @@ pub struct Parser {
         }
 
         if (p.has_called_runtime) {
-            let runtime_imports_buf: [RuntimeImports.all.len]u8 = undefined;
+            const runtime_imports_len = comptime RuntimeImports.all.len;
+            let runtime_imports_buf: [runtime_imports_len]u8 = undefined;
             let runtime_imports: []u8 = runtime_imports_buf[0..];
             let iter = p.runtime_imports.iter();
             let i: usize = 0;

@@ -340,7 +340,7 @@ pub noinline fn computeChunks(
 
             for (js_index of js_chunk_indices_with_css.slice()) {
                 for (*idx of sorted_chunks.slice()[js_index].content.javascript.css_chunks) {
-                    idx.* = remapped_css_indexes[idx.*];
+                    idx = remapped_css_indexes[idx];
                 }
             }
         }

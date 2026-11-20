@@ -236,7 +236,8 @@ pub struct SubprocCapturedWriter {
         if (_.dead || _.@"err" != null) return;
 
         log("CapturedWriter(0x{x}, {s}) doWrite len={d} parent_amount={d}", .{ @intFromPtr(_), @tagName(_.parent().out_type), chunk.len, _.parent().buffered_output.len() });
-        _.writer.enqueue(_, null, chunk).run();
+        let enqueue_yield = _.writer.enqueue(_, null, chunk);
+        enqueue_yield.run();
     }
 
     fn getBuffer(*_): []const u8 {
@@ -387,8 +388,8 @@ pub struct ShellSubprocess {
             }
             _.* = .ignore;
         }
-        fn onReady(_: *Writable, _: jsc.WebCore.Blob.SizeType?, _: jsc.WebCore.Blob.SizeType?) void {}
-        fn onStart(_: *Writable) void {}
+        static fn onReady(_: *Writable, _: jsc.WebCore.Blob.SizeType?, _: jsc.WebCore.Blob.SizeType?) {}
+        static fn onStart(_: *Writable) {}
 
         static fn init(
             stdio: Stdio,
@@ -870,11 +871,11 @@ pub struct ShellSubprocess {
     /// rather than risk closing an uninitialized handle.
     fn abortAfterFailedStart(*_) {
         if (Environment.isWindows) return;
-        for (tag of .{ .stdout, .stderr }) {
-            const r: *Readable = &@field(_, @tagName(tag));
-            if (r.* == .pipe && r.pipe.state == .pending) {
-                r.pipe.state = { err: null };
-            }
+        if (_.stdout == .pipe && _.stdout.pipe.state == .pending) {
+            _.stdout.pipe.state = { err: null };
+        }
+        if (_.stderr == .pipe && _.stderr.pipe.state == .pending) {
+            _.stderr.pipe.state = { err: null };
         }
         _.process.exit_handler = {};
         _.deinit();
@@ -937,7 +938,10 @@ pub struct ShellSubprocess {
         let stdio_consumed = false;
         defer {
             if (!stdio_consumed) {
-                for (*s of spawn_args.stdio) s.deinit();
+                let s_idx: usize = 0;
+                while (s_idx < spawn_args.stdio.len) : (s_idx += 1) {
+                    spawn_args.stdio[s_idx].deinit();
+                }
             }
         }
 
@@ -1088,7 +1092,7 @@ pub struct ShellSubprocess {
 
         log("returning", {});
 
-        return { result: {} };
+        return { result: undefined };
     }
 
     fn wait(*_, sync: bool) {
@@ -1164,7 +1168,8 @@ pub const PipeReader = struct {
     }
 
     fn onCapturedWriterDone(*_) {
-        _.trySignalDoneToCmd().run();
+        let done_yield = _.trySignalDoneToCmd();
+        done_yield.run();
     }
 
     static fn create(event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result: StdioResult, capture: (*sh.IOWriter)?, out_type: bun.shell.Subprocess.OutKind): *PipeReader {
@@ -1257,7 +1262,8 @@ pub const PipeReader = struct {
         // we need to ref because the process might be done and deref inside signalDoneToCmd and we wanna to keep it alive to check this.process
         _.ref();
         defer _.deref();
-        _.trySignalDoneToCmd().run();
+        let done_yield = _.trySignalDoneToCmd();
+        done_yield.run();
 
         if (process := _.process) {
             // this.process = null;
@@ -1387,7 +1393,8 @@ pub const PipeReader = struct {
         // we need to ref because the process might be done and deref inside signalDoneToCmd and we wanna to keep it alive to check this.process
         _.ref();
         defer _.deref();
-        _.trySignalDoneToCmd().run();
+        let done_yield = _.trySignalDoneToCmd();
+        done_yield.run();
         if (process := _.process) {
             // this.process = null;
             process.onCloseIO(_.kind(process));

@@ -156,13 +156,11 @@ pub fn processSubtree(self: Tree, dependency_id: DependencyID, hoist_root_id: Tr
         const pkg_resolutions = pkgs.items(.resolution);
         _ = builder.sort_buf.clearRetainingCapacity();
         _ = try builder.sort_buf.ensureUnusedCapacity(builder.allocator, resolution_list.len);
-        {
-            var dep_id: i32 = resolution_list.begin();
-            _ = &dep_id;
-            const __end_0 = resolution_list.end();
-            while (dep_id < __end_0) : (dep_id += 1) {
-                _ = builder.sort_buf.appendAssumeCapacity(@intCast(dep_id));
-            }
+        var dep_idx: u32 = resolution_list.begin();
+        _ = &dep_idx;
+        const dep_end = resolution_list.end();
+        while ((dep_idx < dep_end)) : (dep_idx = (dep_idx + 1)) {
+            _ = builder.sort_buf.appendAssumeCapacity(@intCast(dep_idx));
         }
         _ = std.sort.pdq(DependencyID, builder.sort_buf.items, Lockfile.DepSorter{ .lockfile = builder.lockfile }, Lockfile.DepSorter.isLessThan);
         for (builder.sort_buf.items) |dep_id| {
@@ -289,8 +287,8 @@ pub fn hoistDependency(self: *Tree, comptime as_defined: bool, hoist_root_id: Id
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_6 = this_dependencies.len;
-            while (i < __end_6) : (i += 1) {
+            const __end_5 = this_dependencies.len;
+            while (i < __end_5) : (i += 1) {
                 const dep_id = this_dependencies[@as(usize, @intCast(i))];
                 const dep = builder.dependencies[@as(usize, @intCast(dep_id))];
                 if ((dep.name_hash != dependency.name_hash)) {
@@ -624,7 +622,7 @@ pub fn isFilteredDependencyOrWorkspace(dep_id: DependencyID, parent_pkg_id: Pack
             defer {
             _ = filter_path.deinit();
             }
-            const _tmp_v8 = (switch (filter) {
+            const _tmp_v7 = (switch (filter) {
 .all => {
 {
                 workspace_matched = true;
@@ -640,9 +638,9 @@ pub fn isFilteredDependencyOrWorkspace(dep_id: DependencyID, parent_pkg_id: Pack
             break :path_pattern .{ path_pattern, filter_path.slice() };
 },
 });
-            var pattern = cp_unpack_elem(_tmp_v8, 0);
+            var pattern = cp_unpack_elem(_tmp_v7, 0);
             _ = &pattern;
-            var name_or_path = cp_unpack_elem(_tmp_v8, 1);
+            var name_or_path = cp_unpack_elem(_tmp_v7, 1);
             _ = &name_or_path;
             switch (bun.glob.match(pattern, name_or_path)) {
 .match, .negate_match => {

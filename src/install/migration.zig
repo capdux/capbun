@@ -1083,7 +1083,7 @@ else => .npm,
             _ = try lockfile.verifyData();
         }
         lockfile.meta_hash = try lockfile.generateMetaHash(false, lockfile.packages.len);
-        return LoadResult{ .ok = .{ .lockfile = lockfile, .migrated = .npm, .loaded_from_binary_lockfile = false } };
+        return LoadResult{ .ok = .{ .lockfile = lockfile, .migrated = .npm, .loaded_from_binary_lockfile = false, .serializer_result = .{}, .format = .binary } };
 }
 
 pub fn packageNameFromPath(pkg_path: []const u8) []const u8 {

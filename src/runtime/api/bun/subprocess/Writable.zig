@@ -135,15 +135,13 @@ else => {
 },
 }
             _ = process.onStdinDestroyed();
-            self.* = Writable{ .ignore = .{} };
+            self.* = Writable{ .ignore = undefined };
     }
 
-pub fn onReady(self: *@This(), _: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {
-        _ = self;
+pub fn onReady(_: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {
     }
 
-pub fn onStart(self: *@This(), _: *Writable) void {
-        _ = self;
+pub fn onStart(_: *Writable) void {
     }
 
 pub fn init(stdio: *Stdio, event_loop: *jsc.EventLoop, subprocess: *Subprocess, result: StdioResult, promise_for_stream: *jsc.JSValue) !Writable {

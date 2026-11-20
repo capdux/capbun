@@ -242,7 +242,8 @@ pub fn generateChunksInParallel(
             const rel_path = bun.handleOom(std.fmt.allocPrint(c.allocator(), "{f}", [ chunk.template ]));
             bun.path.platformToPosixInPlace(u8, rel_path);
 
-            if ((path_names_map.getOrPut(rel_path)?).found_existing) {
+            const gop = path_names_map.getOrPut(rel_path)?;
+            if (gop.found_existing) {
                 // collect all duplicates in a list
                 const dup = duplicates_map.getOrPut(bun.default_allocator, rel_path)?;
                 if (!dup.found_existing) dup.value_ptr.* = {};

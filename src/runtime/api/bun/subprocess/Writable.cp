@@ -73,11 +73,11 @@ pub const Writable = union(enum) {
         process.onStdinDestroyed();
 
         this.* = Writable{
-            ignore: {},
+            ignore: undefined,
         };
     }
-    pub fn onReady(_: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {}
-    pub fn onStart(_: *Writable) void {}
+    static fn onReady(_: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) {}
+    static fn onStart(_: *Writable) {}
 
     pub fn init(
         stdio: *Stdio,
