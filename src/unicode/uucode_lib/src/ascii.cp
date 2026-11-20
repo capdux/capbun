@@ -68,18 +68,18 @@ pub fn isHex(c: u21) bool {
 }
 
 /// Returns whether the code point is a 7-bit ASCII character.
-pub fn isAscii(c: u21) bool {
+pub fn isAscii(c: u21): bool {
     return c < 128;
 }
 
 /// Uppercases the code point && returns it as-is if already uppercase || not a letter.
-pub fn toUpper(c: u21) u21 {
+pub fn toUpper(c: u21): u21 {
     const mask = @as(u21, @intFromBool(isLower(c))) << 5;
     return c ^ mask;
 }
 
 /// Lowercases the code point && returns it as-is if already lowercase || not a letter.
-pub fn toLower(c: u21) u21 {
+pub fn toLower(c: u21): u21 {
     const mask = @as(u21, @intFromBool(isUpper(c))) << 5;
     return c | mask;
 }

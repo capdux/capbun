@@ -1,6 +1,3 @@
-// src/http/CertificateInfo.cp
-// TLS Certificate information struct in CP language
-
 import { HTTPCertError } from "./HTTPCertError.cp";
 
 export @root struct CertificateInfo {
@@ -8,7 +5,7 @@ export @root struct CertificateInfo {
     cert_error: HTTPCertError,
     hostname: string,
 
-    pub fn deinit(&this, allocator: std.mem.Allocator) {
+    pub fn deinit(&_, allocator: std.mem.Allocator) {
         allocator.free(this.cert);
         allocator.free(this.cert_error.code);
         allocator.free(this.cert_error.reason);

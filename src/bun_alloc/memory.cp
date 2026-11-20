@@ -30,7 +30,7 @@ pub fn create(comptime T: type, allocator: Allocator, value: T): *T!OOM {
 ///
 /// The memory must have been allocated by the `create` function in this namespace, not
 /// directly by `allocator.create`.
-pub fn destroy(allocator: Allocator, ptr: auto): void {
+pub fn destroy(allocator: Allocator, ptr: auto) {
     if (comptime Environment.allow_assert) {
         if (isDefault(allocator)) {
             bun.destroy(ptr);
@@ -66,7 +66,7 @@ fn exemptedFromDeinit(comptime T: type): bool {
     switch (T) {
         Allocator => { return true; },
         else => {
-            _ = T.deinit; // no deinit method? add one, set to void, or add an exemption
+            * = T.deinit; // no deinit method? add one, set to void, or add an exemption
             return false;
         },
     }
@@ -96,7 +96,7 @@ fn deinitIsVoid(comptime T: type): bool {
 /// pointer to `undefined`.
 ///
 /// This method does not free `ptr_or_slice` itself.
-pub fn deinit(ptr_or_slice: auto): void {
+pub fn deinit(ptr_or_slice: auto) {
     const PtrType = @TypeOf(ptr_or_slice);
     const ptr_info = @typeInfo(PtrType);
     switch (ptr_info.pointer.size) {

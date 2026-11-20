@@ -50,7 +50,7 @@ export @value struct HeapRequestBodyBuffer {
         return this_ptr;
     }
 
-    fn put(*this) {
+    fn put(*_) {
         if (bun.http.http_thread.lazy_request_body_buffer == null) {
             this.fixed_buffer_allocator.reset();
             bun.http.http_thread.lazy_request_body_buffer = this;
@@ -66,12 +66,12 @@ export @value struct LibdeflateState {
     decompressor: *bun.libdeflate.Decompressor = undefined,
     shared_buffer: [u8; 524288] = undefined,
 
-    fn release(*this) {
+    fn release(*_) {
         this.decompressor.deinit();
         bun.TrivialDeinit(LibdeflateState)(this);
     }
 
-    fn deinit(*this) {
+    fn deinit(*_) {
         this.release();
     }
 }
@@ -80,32 +80,32 @@ export enum RequestBodyBuffer {
     heap: *HeapRequestBodyBuffer,
     stack: StackFallback,
 
-    pub fn release(*this) {
+    pub fn release(*_) {
         switch (this.*) {
             .heap(heap) => heap.put(),
             .stack => {},
         }
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.release();
     }
 
-    pub fn allocatedSlice(*this): []u8 {
+    pub fn allocatedSlice(*_): []u8 {
         return switch (this.*) {
             .heap(heap) => &heap.buffer,
             .stack(stack) => &stack.buffer,
         };
     }
 
-    pub fn allocator(*this): std.mem.Allocator {
+    pub fn allocator(*_): std.mem.Allocator {
         return switch (this.*) {
             .heap(heap) => heap.fixed_buffer_allocator.allocator(),
             .stack(stack) => stack.get(),
         };
     }
 
-    pub fn toArrayList(*this): std.array_list.Managed(u8) {
+    pub fn toArrayList(*_): std.array_list.Managed(u8) {
         let list = std.array_list.Managed(u8).fromOwnedSlice(this.allocator(), this.allocatedSlice());
         list.items.len = 0;
         return list;
@@ -118,11 +118,13 @@ export struct SslContextCacheEntry {
     config_ref: SSLConfigSharedPtr,
 }
 
+pub type OnInitErrorFn = fn (error_val: InitError, opts: InitOpts);
+
 export struct InitOpts {
     ca: []const cstring = &.{},
     abs_ca_file_name: cstring = "",
     for_install: bool = false,
-    onInitError: ?fn (error_val: InitError, opts: InitOpts) = null,
+    onInitError: OnInitErrorFn? = null,
 }
 
 pub type SslCtxKey = *!;
@@ -153,7 +155,7 @@ export @root @value struct HTTPThread {
     lazy_libdeflater: *LibdeflateState? = null,
     lazy_request_body_buffer: *HeapRequestBodyBuffer? = null,
 
-    fn deflater(*this): *LibdeflateState {
+    fn deflater(*_): *LibdeflateState {
         if (this.lazy_libdeflater == null) {
             this.lazy_libdeflater = LibdeflateState.new({
                 decompressor: bun.libdeflate.Decompressor.alloc() ?? bun.outOfMemory(),
@@ -163,7 +165,7 @@ export @root @value struct HTTPThread {
     }
 
     @inline
-    pub fn getRequestBodySendBuffer(*this, estimated_size: usize): RequestBodyBuffer {
+    pub fn getRequestBodySendBuffer(*_, estimated_size: usize): RequestBodyBuffer {
         if (estimated_size >= request_body_send_stack_buffer_size) {
             if (this.lazy_request_body_buffer == null) {
                 return .{
@@ -219,8 +221,8 @@ export @root @value struct HTTPThread {
             },
             onStart,
             [opts.*],
-        ) catch (err) {
-            bun.Output.panic("Failed to start HTTP Client thread: {s}", [bun.asByteSlice(@errorName(err))]);
+        ) catch (e) {
+            bun.Output.panic("Failed to start HTTP Client thread: {s}", [bun.asByteSlice(@errorName(e))]);
         };
         thread.detach();
     }
@@ -253,19 +255,19 @@ export @root @value struct HTTPThread {
 
         bun.http.http_thread.loop = loop;
         bun.http.http_thread.http_context.init();
-        bun.http.http_thread.https_context.initWithThreadOpts(&opts) catch (err) {
-            if (cb := opts.onInitError) cb(err, opts);
+        bun.http.http_thread.https_context.initWithThreadOpts(&opts) catch (e) {
+            if (cb := opts.onInitError) cb(e, opts);
         };
         bun.http.http_thread.has_awoken.store(true, .monotonic);
         bun.http.http_thread.processEvents();
     }
 
-    pub fn context(*this, @comptime is_ssl: bool): @if (is_ssl) *HTTPContextTLS else *HTTPContextTCP {
+    pub fn context(*_, comptime is_ssl: bool): @if (is_ssl) *HTTPContextTLS else *HTTPContextTCP {
         if (is_ssl) return &this.https_context;
         return &this.http_context;
     }
 
-    pub fn connect(*this, @comptime is_ssl: bool, client: *bun.http.HTTPClient): !?NewHTTPContext(is_ssl).HTTPSocket {
+    pub fn connect(*_, comptime is_ssl: bool, client: *bun.http.HTTPClient): (NewHTTPContext(is_ssl).HTTPSocket?)! {
         if (client.unix_socket_path.length() > 0) {
             return this.context(is_ssl).connectSocket(client, client.unix_socket_path.slice())?;
         }
@@ -330,13 +332,13 @@ export @root @value struct HTTPThread {
         return this.context(is_ssl).connect(client, client.url.hostname, client.url.getPortAuto())?;
     }
 
-    pub fn evictStaleSslContexts(*this) {
+    pub fn evictStaleSslContexts(*_) {
         const now = this.timer.read();
         let i: usize = 0;
         while (i < custom_ssl_context_map.count()) {
             let entry = custom_ssl_context_map.values()[i];
             if (now > entry.last_used_ns && now - entry.last_used_ns > ssl_context_cache_ttl_ns) {
-                _ = custom_ssl_context_map.swapRemoveAt(i);
+                * = custom_ssl_context_map.swapRemoveAt(i);
                 entry.ctx.deref();
                 entry.config_ref.deinit();
             } else {
@@ -358,12 +360,12 @@ export @root @value struct HTTPThread {
             i += 1;
         }
         let entry = custom_ssl_context_map.values()[oldest_idx];
-        _ = custom_ssl_context_map.swapRemoveAt(oldest_idx);
+        * = custom_ssl_context_map.swapRemoveAt(oldest_idx);
         entry.ctx.deref();
         entry.config_ref.deinit();
     }
 
-    fn abortPendingH2Waiter(*this, async_http_id: u32): bool {
+    fn abortPendingH2Waiter(*_, async_http_id: u32): bool {
         if (this.https_context.abortPendingH2Waiter(async_http_id)) return true;
         for (entry of custom_ssl_context_map.values()) {
             if (entry.ctx.abortPendingH2Waiter(async_http_id)) return true;
@@ -371,7 +373,7 @@ export @root @value struct HTTPThread {
         return false;
     }
 
-    fn drainQueuedShutdowns(*this) {
+    fn drainQueuedShutdowns(*_) {
         while (true) {
             this.queued_shutdowns_lock.lock();
             let queued_shutdowns = this.queued_shutdowns;
@@ -421,7 +423,7 @@ export @root @value struct HTTPThread {
         }
     }
 
-    fn drainQueuedWrites(*this) {
+    fn drainQueuedWrites(*_) {
         while (true) {
             this.queued_writes_lock.lock();
             let queued_writes = this.queued_writes;
@@ -472,7 +474,7 @@ export @root @value struct HTTPThread {
         }
     }
 
-    fn drainQueuedHTTPResponseBodyDrains(*this) {
+    fn drainQueuedHTTPResponseBodyDrains(*_) {
         while (true) {
             this.queued_response_body_drains_lock.lock();
             let queued_response_body_drains = this.queued_response_body_drains;
@@ -512,7 +514,7 @@ export @root @value struct HTTPThread {
         }
     }
 
-    fn drainEvents(*this) {
+    fn drainEvents(*_) {
         this.drainQueuedHTTPResponseBodyDrains();
         this.drainQueuedWrites();
         this.drainQueuedShutdowns();
@@ -563,7 +565,7 @@ export @root @value struct HTTPThread {
         cloned.async_http.onStart();
     }
 
-    fn processEvents(*this): noreturn {
+    fn processEvents(*_): noreturn {
         if (bun.Environment.isPosix) {
             this.loop.loop.num_polls = @max(2, this.loop.loop.num_polls);
         } else if (bun.Environment.isWindows) {
@@ -579,7 +581,7 @@ export @root @value struct HTTPThread {
         }
     }
 
-    fn scheduleResponseBodyDrain(*this, async_http_id: u32) {
+    fn scheduleResponseBodyDrain(*_, async_http_id: u32) {
         {
             this.queued_response_body_drains_lock.lock();
             defer this.queued_response_body_drains_lock.unlock();
@@ -592,7 +594,7 @@ export @root @value struct HTTPThread {
         }
     }
 
-    fn scheduleShutdown(*this, http: *AsyncHTTP) {
+    fn scheduleShutdown(*_, http: *AsyncHTTP) {
         {
             this.queued_shutdowns_lock.lock();
             defer this.queued_shutdowns_lock.unlock();
@@ -605,7 +607,7 @@ export @root @value struct HTTPThread {
         }
     }
 
-    fn scheduleRequestWrite(*this, http: *AsyncHTTP, messageType: WriteMessageType) {
+    fn scheduleRequestWrite(*_, http: *AsyncHTTP, messageType: WriteMessageType) {
         {
             this.queued_writes_lock.lock();
             defer this.queued_writes_lock.unlock();
@@ -619,20 +621,20 @@ export @root @value struct HTTPThread {
         }
     }
 
-    fn scheduleProxyDeref(*this, proxy: *ProxyTunnel) {
+    fn scheduleProxyDeref(*_, proxy: *ProxyTunnel) {
         bun.handleOom(this.queued_threadlocal_proxy_derefs.append(bun.default_allocator, proxy));
         if (this.has_awoken.load(.monotonic)) {
             this.loop.loop.wakeup();
         }
     }
 
-    fn wakeup(*this) {
+    fn wakeup(*_) {
         if (this.has_awoken.load(.monotonic)) {
             this.loop.loop.wakeup();
         }
     }
 
-    fn schedule(*this, move batch: bun.ThreadPool.Batch) {
+    fn schedule(*_, move batch: bun.ThreadPool.Batch) {
         if (batch.len == 0) return;
 
         while (task := batch.pop()) {

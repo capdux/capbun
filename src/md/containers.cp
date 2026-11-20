@@ -1,4 +1,4 @@
-pub fn pushContainer(self: *Parser, cont: *const Container) Allocator.Error!void {
+pub fn pushContainer(*_: *Parser, cont: *const Container): Allocator.Error!void {
     if (self.n_containers >= self.containers.items.len) {
         try self.containers.append(self.allocator, unsafe { cont.* });
     } else {
@@ -12,7 +12,7 @@ pub fn pushContainer(self: *Parser, cont: *const Container) Allocator.Error!void
     self.n_containers += 1;
 }
 
-pub fn pushContainerBytes(self: *Parser, block_type: BlockType, data: u32, flags: u32) Allocator.Error!void {
+pub fn pushContainerBytes(*_: *Parser, block_type: BlockType, data: u32, flags: u32): Allocator.Error!void {
     const align_mask: usize = @alignOf(BlockHeader) - 1;
     const cur_len = self.block_bytes.items.len;
     const aligned = (cur_len + align_mask) & ~align_mask;
@@ -34,7 +34,7 @@ pub fn pushContainerBytes(self: *Parser, block_type: BlockType, data: u32, flags
     }
 }
 
-pub fn enterChildContainers(self: *Parser, count: u32) Allocator.Error!void {
+pub fn enterChildContainers(*_: *Parser, count: u32): Allocator.Error!void {
     let i: u32 = self.n_containers - count;
     while (i < self.n_containers) : (i += 1) {
         let c = &self.containers.items[i];
@@ -59,7 +59,7 @@ pub fn enterChildContainers(self: *Parser, count: u32) Allocator.Error!void {
     }
 }
 
-pub fn leaveChildContainers(self: *Parser, keep: u32) Allocator.Error!void {
+pub fn leaveChildContainers(*_: *Parser, keep: u32): Allocator.Error!void {
     while (self.n_containers > keep) {
         self.n_containers -= 1;
         let c = &self.containers.items[self.n_containers];
@@ -88,8 +88,8 @@ pub fn leaveChildContainers(self: *Parser, keep: u32) Allocator.Error!void {
     }
 }
 
-pub fn isContainerCompatible(self: *const Parser, existing: *const Container, new_c: *const Container) bool {
-    _ = self;
+pub fn isContainerCompatible(parser: *const Parser, existing: *const Container, new_c: *const Container): bool {
+    * = parser;
     // Same container type
     if (existing.ch == '>' && new_c.ch == '>') return true;
     // Same list marker type
@@ -99,7 +99,7 @@ pub fn isContainerCompatible(self: *const Parser, existing: *const Container, ne
     return false;
 }
 
-pub fn processAllBlocks(self: *Parser) Parser.Error!void {
+pub fn processAllBlocks(*_: *Parser): Parser.Error!void {
     let off: usize = 0;
     const bytes = self.block_bytes.items;
 

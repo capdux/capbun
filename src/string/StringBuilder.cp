@@ -22,38 +22,38 @@ const assert = bun.assert;
         };
     }
 
-    pub fn countZ(*this, slice: []const u8): void {
+    pub fn countZ(*_, slice: []const u8) {
         this.cap += slice.len + 1;
     }
 
-    pub fn count(*this, slice: []const u8): void {
+    pub fn count(*_, slice: []const u8) {
         this.cap += slice.len;
     }
 
-    pub fn allocate(*this, allocator: Allocator): Allocator.Error!void {
+    pub fn allocate(*_, allocator: Allocator): Allocator.Error!void {
         const slice = allocator.alloc(u8, this.cap)?;
         this.ptr = slice.ptr;
         this.len = 0;
     }
 
-    pub fn deinit(*this, allocator: Allocator): void {
+    pub fn deinit(*_, allocator: Allocator) {
         if (this.ptr == null || this.cap == 0) return;
         unsafe {
             allocator.free(this.ptr.?[0..this.cap]);
         }
     }
 
-    pub fn count16(*this, slice: []const u16): void {
+    pub fn count16(*_, slice: []const u16) {
         const result = bun.simdutf.length.utf8.from.utf16.le(slice);
         this.cap += result;
     }
 
-    pub fn count16Z(*this, slice: [:0]const u16): void {
+    pub fn count16Z(*_, slice: [:0]const u16) {
         const result = bun.strings.elementLengthUTF16IntoUTF8(slice);
         this.cap += result + 1;
     }
 
-    pub fn append16(*this, slice: []const u16, fallback_allocator: std.mem.Allocator): ?[:0]u8 {
+    pub fn append16(*_, slice: []const u16, fallback_allocator: std.mem.Allocator): [:0]u8? {
         let buf = this.writable();
         if (slice.len == 0) {
             buf[0] = 0;
@@ -74,7 +74,7 @@ const assert = bun.assert;
         }
     }
 
-    pub fn appendZ(*this, slice: []const u8): [:0]const u8 {
+    pub fn appendZ(*_, slice: []const u8): [:0]const u8 {
         if (comptime Environment.allow_assert) {
             assert(this.len + 1 <= this.cap);
             assert(this.ptr != null);
@@ -92,13 +92,13 @@ const assert = bun.assert;
         }
     }
 
-    pub fn appendStr(*this, str: bun.String): []const u8 {
+    pub fn appendStr(*_, str: bun.String): []const u8 {
         const slice = str.toUTF8(bun.default_allocator);
         defer slice.deinit();
         return this.append(slice.slice());
     }
 
-    pub fn append(*this, slice: []const u8): []const u8 {
+    pub fn append(*_, slice: []const u8): []const u8 {
         if (comptime Environment.allow_assert) {
             assert(this.len <= this.cap);
             assert(this.ptr != null);
@@ -115,10 +115,10 @@ const assert = bun.assert;
         }
     }
 
-    pub fn addConcat(*this, slices: []const []const u8): bun.StringPointer {
+    pub fn addConcat(*_, slices: []const []const u8): bun.StringPointer {
         let remain = this.allocatedSlice()[this.len..];
         let len: usize = 0;
-        for (slices) |slice| {
+        for (slice of slices) {
             @memcpy(remain[0..slice.len], slice);
             remain = remain[slice.len..];
             len += slice.len;
@@ -126,7 +126,7 @@ const assert = bun.assert;
         return this.add(len);
     }
 
-    pub fn add(*this, len: usize): bun.StringPointer {
+    pub fn add(*_, len: usize): bun.StringPointer {
         if (comptime Environment.allow_assert) {
             assert(this.len <= this.cap);
             assert(this.ptr != null);
@@ -140,7 +140,7 @@ const assert = bun.assert;
         return bun.StringPointer{ offset: @as(u32, @truncate(start)), length: @as(u32, @truncate(len)) };
     }
 
-    pub fn appendCount(*this, slice: []const u8): bun.StringPointer {
+    pub fn appendCount(*_, slice: []const u8): bun.StringPointer {
         if (comptime Environment.allow_assert) {
             assert(this.len <= this.cap);
             assert(this.ptr != null);
@@ -157,7 +157,7 @@ const assert = bun.assert;
         return bun.StringPointer{ offset: @as(u32, @truncate(start)), length: @as(u32, @truncate(slice.len)) };
     }
 
-    pub fn appendCountZ(*this, slice: []const u8): bun.StringPointer {
+    pub fn appendCountZ(*_, slice: []const u8): bun.StringPointer {
         if (comptime Environment.allow_assert) {
             assert(this.len <= this.cap);
             assert(this.ptr != null);
@@ -176,7 +176,7 @@ const assert = bun.assert;
         return bun.StringPointer{ offset: @as(u32, @truncate(start)), length: @as(u32, @truncate(slice.len)) };
     }
 
-    pub fn fmt(*this, comptime str: []const u8, args: anytype): []const u8 {
+    pub fn fmt(*_, comptime str: []const u8, args: anytype): []const u8 {
         if (comptime Environment.allow_assert) {
             assert(this.len <= this.cap);
             assert(this.ptr != null);
@@ -191,7 +191,7 @@ const assert = bun.assert;
         return out;
     }
 
-    pub fn fmtAppendCount(*this, comptime str: []const u8, args: anytype): bun.StringPointer {
+    pub fn fmtAppendCount(*_, comptime str: []const u8, args: anytype): bun.StringPointer {
         if (comptime Environment.allow_assert) {
             assert(this.len <= this.cap);
             assert(this.ptr != null);
@@ -210,7 +210,7 @@ const assert = bun.assert;
         };
     }
 
-    pub fn fmtAppendCountZ(*this, comptime str: []const u8, args: anytype): bun.StringPointer {
+    pub fn fmtAppendCountZ(*_, comptime str: []const u8, args: anytype): bun.StringPointer {
         if (comptime Environment.allow_assert) {
             assert(this.len <= this.cap);
             assert(this.ptr != null);
@@ -230,11 +230,11 @@ const assert = bun.assert;
         };
     }
 
-    pub fn fmtCount(*this, comptime str: []const u8, args: anytype): void {
+    pub fn fmtCount(*_, comptime str: []const u8, args: anytype) {
         this.cap += std.fmt.count(str, args);
     }
 
-    pub fn allocatedSlice(*this): []u8 {
+    pub fn allocatedSlice(*_): []u8 {
         let empty_buf: [0]u8 = [];
         let ptr = this.ptr orelse return &empty_buf;
         if (comptime Environment.allow_assert) {
@@ -243,7 +243,7 @@ const assert = bun.assert;
         return unsafe { ptr[0..this.cap] };
     }
 
-    pub fn writable(*this): []u8 {
+    pub fn writable(*_): []u8 {
         let empty_buf: [0]u8 = [];
         let ptr = this.ptr orelse return &empty_buf;
         if (comptime Environment.allow_assert) {
@@ -256,7 +256,7 @@ const assert = bun.assert;
     ///
     /// After calling this, you are responsible for freeing the underlying memory.
     /// This StringBuilder should not be used after calling this function.
-    pub fn moveToSlice(*this, into_slice: *[]u8): void {
+    pub fn moveToSlice(*_, into_slice: *[]u8) {
         unsafe {
             into_slice.* = this.allocatedSlice();
             this.* = {};

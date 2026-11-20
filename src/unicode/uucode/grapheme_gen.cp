@@ -32,16 +32,18 @@ enum GraphemeBreakNoControl: u5 {
 }
 
 struct Context {
-    pub fn get(this, cp: u21): GraphemeBreakNoControl! {
-        _ = this;
+    pub fn get(*_, cp: u21): GraphemeBreakNoControl! {
+        const self_ref = _;
+        * = self_ref;
         if (cp > uucode.config.max_code_point) return .other;
 
         const uu_gb = uucode.get(.grapheme_break_no_control, cp);
         return @enumFromInt(@intFromEnum(uu_gb));
     }
 
-    pub fn eql(this, a: GraphemeBreakNoControl, b: GraphemeBreakNoControl): bool {
-        _ = this;
+    pub fn eql(*_, a: GraphemeBreakNoControl, b: GraphemeBreakNoControl): bool {
+        const self_ref = _;
+        * = self_ref;
         return a == b;
     }
 }
@@ -69,17 +71,17 @@ pub fn @"main"(): void! {
 
     // Write stage1
     stdout.print("const stage1: [{}]u16 = .{{", .{t.stage1.len})?;
-    for (t.stage1) |entry| stdout.print("{},", .{entry})?;
+    for (entry of t.stage1) stdout.print("{},", .{entry})?;
     stdout.writeAll("};\n\n")?;
 
     // Write stage2
     stdout.print("const stage2: [{}]u8 = .{{", .{t.stage2.len})?;
-    for (t.stage2) |entry| stdout.print("{},", .{entry})?;
+    for (entry of t.stage2) stdout.print("{},", .{entry})?;
     stdout.writeAll("};\n\n")?;
 
     // Write stage3
     stdout.print("const stage3: [{}]GraphemeBreakNoControl = .{{", .{t.stage3.len})?;
-    for (t.stage3) |entry| {
+    for (entry of t.stage3) {
         stdout.print(".{s},", .{@tagName(entry)})?;
     }
     stdout.writeAll("};\n")?;

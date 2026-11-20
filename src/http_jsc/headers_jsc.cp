@@ -5,7 +5,7 @@ const jsc = bun.jsc;
 const FetchHeaders = bun.webcore.FetchHeaders;
 const Headers = bun.http.Headers;
 
-pub fn toFetchHeaders(this: *Headers, global: *bun.jsc.JSGlobalObject): *FetchHeaders ! bun.JSError {
+pub fn toFetchHeaders(*_: *Headers, global: *bun.jsc.JSGlobalObject): *FetchHeaders ! bun.JSError {
     if (this.entries.len == 0) {
         return FetchHeaders.createEmpty();
     }

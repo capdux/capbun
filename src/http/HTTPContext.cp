@@ -146,7 +146,7 @@ export class HTTPContext<const ssl: bool> {
                             return;
                         }
 
-                        const ssl_ptr = @as(*bun.BoringSSL.c.SSL, @ptrCast(socket.getNativeHandle()));
+                        const ssl_ptr: *bun.BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
                         if (!client.checkServerIdentity(comptime ssl, socket, handshake_error, ssl_ptr, true)) {
                             return;
                         }
@@ -332,7 +332,7 @@ export class HTTPContext<const ssl: bool> {
 
     const kind: bun.uws.SocketKind = if (ssl) .http_client_tls else .http_client;
 
-    pub fn registerH2(*this, session: *bun.http.H2.ClientSession) {
+    pub fn registerH2(*_, session: *bun.http.H2.ClientSession) {
         if (!ssl) return;
         if (session.registry_index != std.math.maxInt(u32)) return;
         session.ref();
@@ -340,13 +340,13 @@ export class HTTPContext<const ssl: bool> {
         bun.handleOom(this.active_h2_sessions.append(bun.default_allocator, session));
     }
 
-    pub fn abortPendingH2Waiter(*this, async_http_id: u32): bool {
+    pub fn abortPendingH2Waiter(*_, async_http_id: u32): bool {
         if (!ssl) return false;
         for (pc of this.pending_h2_connects.items) {
             let i: usize = 0;
             for (waiter of pc.waiters.items) {
                 if (waiter.async_http_id == async_http_id) {
-                    _ = pc.waiters.swapRemove(i);
+                    * = pc.waiters.swapRemove(i);
                     waiter.failFromH2(error.Aborted);
                     return true;
                 }
@@ -356,14 +356,14 @@ export class HTTPContext<const ssl: bool> {
         return false;
     }
 
-    pub fn unregisterH2(*this, session: *bun.http.H2.ClientSession) {
+    pub fn unregisterH2(*_, session: *bun.http.H2.ClientSession) {
         if (!ssl) return;
         let idx = session.registry_index;
         if (idx == std.math.maxInt(u32)) return;
         session.registry_index = std.math.maxInt(u32);
         let list = *this.active_h2_sessions;
         bun.debugAssert(idx < list.items.len && list.items[idx] == session);
-        _ = list.swapRemove(idx);
+        * = list.swapRemove(idx);
         if (idx < list.items.len) list.items[idx].registry_index = idx;
         session.deref();
     }
@@ -375,17 +375,17 @@ export class HTTPContext<const ssl: bool> {
     }
 
     fn existingSocket(
-        *this,
+        *_,
         reject_unauthorized: bool,
         hostname: []const u8,
         port: u16,
-        ssl_config: ?*bun.api.server.ServerConfig.SSLConfig,
+        ssl_config: *bun.api.server.ServerConfig.SSLConfig?,
         want_tunnel: bool,
         target_hostname: []const u8,
         target_port: u16,
         proxy_auth_hash: u64,
         want_h2: bun.BoringSSL.c.SSL.AlpnOffer,
-    ): ?ExistingSocket {
+    ): ExistingSocket? {
         if (hostname.len > MAX_KEEPALIVE_HOSTNAME)
             return null;
 
@@ -445,7 +445,7 @@ export class HTTPContext<const ssl: bool> {
 
                 if (s := socket.ssl_config) s.deinit();
                 socket.ssl_config = null;
-                let tunnel: ?*bun.http.ProxyTunnel = if (socket.proxy_tunnel != null) socket.proxy_tunnel.?.leak() else null;
+                let tunnel: *bun.http.ProxyTunnel? = if (socket.proxy_tunnel != null) socket.proxy_tunnel.?.leak() else null;
                 socket.proxy_tunnel = null;
                 if (socket.target_hostname.len > 0) {
                     bun.default_allocator.free(socket.target_hostname);
@@ -461,7 +461,7 @@ export class HTTPContext<const ssl: bool> {
         return null;
     }
 
-    pub fn connectSocket(*this, client: *bun.http, socket_path: []const u8): !?HTTPSocket {
+    pub fn connectSocket(*_, client: *bun.http, socket_path: []const u8): !HTTPSocket? {
         client.connected_url = if (client.http_proxy != null) client.http_proxy.? else client.url;
         const socket = HTTPSocket.connectUnixGroup(
             &this.group,
@@ -475,7 +475,7 @@ export class HTTPContext<const ssl: bool> {
         return socket;
     }
 
-    pub fn connect(*this, client: *bun.http, hostname_: []const u8, port: u16): !?HTTPSocket {
+    pub fn connect(*_, client: *bun.http, hostname_: []const u8, port: u16): !HTTPSocket? {
         const hostname = if (bun.FeatureFlags.hardcode_localhost_to_127_0_0_1 && bun.strings.eqlComptime(hostname_, "localhost"))
             "127.0.0.1"
         else
@@ -570,26 +570,30 @@ export class HTTPContext<const ssl: bool> {
         return socket;
     }
 
-    pub fn initWithClientConfig(*this, client: *bun.http): bun.http.InitError!void {
+    pub fn initWithClientConfig(*_, client: *bun.http): bun.http.InitError!void {
         if (!ssl) @compileError("ssl only");
         const opts = client.tls_props.?.get().asUSocketsForClientVerification();
-        this.initWithOpts(&opts) catch (err) return err;
+        this.initWithOpts(&opts) catch (e) return e;
     }
 
-    fn initWithOpts(*this, opts: *const bun.uws.SocketContext.BunSocketContextOptions): bun.http.InitError!void {
+    fn initWithOpts(*_, opts: *const bun.uws.SocketContext.BunSocketContextOptions): bun.http.InitError!void {
         if (!ssl) @compileError("ssl only");
-        let err: bun.uws.create_bun_socket_error_t = .none;
-        this.secure = opts.createSSLContext(&err) ?? return switch (err) {
-            .load_ca_file => error.LoadCAFile,
-            .invalid_ca_file => error.InvalidCAFile,
-            .invalid_ca => error.InvalidCA,
-            else => error.FailedToOpenSocket,
-        };
+        let err_code: bun.uws.create_bun_socket_error_t = .none;
+        if (ctx := opts.createSSLContext(&err_code)) {
+            this.secure = ctx;
+        } else {
+            return switch (err_code) {
+                .load_ca_file => error.LoadCAFile,
+                .invalid_ca_file => error.InvalidCAFile,
+                .invalid_ca => error.InvalidCA,
+                else => error.FailedToOpenSocket,
+            };
+        }
         this.sslCtx().setup();
         this.group.init(bun.http.http_thread.loop.loop, null, this);
     }
 
-    pub fn initWithThreadOpts(*this, init_opts: *const bun.http.HTTPThread.InitOpts): bun.http.InitError!void {
+    pub fn initWithThreadOpts(*_, init_opts: *const bun.http.HTTPThread.InitOpts): bun.http.InitError!void {
         if (!ssl) @compileError("ssl only");
         let opts: bun.uws.SocketContext.BunSocketContextOptions = .{
             .ca = if (init_opts.ca.len > 0) @ptrCast(init_opts.ca) else null,
@@ -597,10 +601,10 @@ export class HTTPContext<const ssl: bool> {
             .ca_file_name = if (init_opts.abs_ca_file_name.len > 0) init_opts.abs_ca_file_name else null,
             .request_cert = 1,
         };
-        this.initWithOpts(&opts) catch (err) return err;
+        this.initWithOpts(&opts) catch (e) return e;
     }
 
-    fn deinit(*this) {
+    fn deinit(*_) {
         {
             let iter = this.pending_sockets.used.iterator(.{ .kind = .set });
             while (idx := iter.next()) {
@@ -638,7 +642,7 @@ export class HTTPContext<const ssl: bool> {
         bun.default_allocator.destroy(this);
     }
 
-    pub fn init(*this) {
+    pub fn init(*_) {
         this.group.init(bun.http.http_thread.loop.loop, null, this);
         if (ssl) {
             let err: bun.uws.create_bun_socket_error_t = .none;
@@ -651,7 +655,7 @@ export class HTTPContext<const ssl: bool> {
         }
     }
 
-    pub fn sslCtx(*this): *bun.BoringSSL.c.SSL_CTX {
+    pub fn sslCtx(*_): *bun.BoringSSL.c.SSL_CTX {
         if (!ssl) {
             unreachable;
         }
@@ -659,17 +663,17 @@ export class HTTPContext<const ssl: bool> {
     }
 
     pub fn releaseSocket(
-        *this,
+        *_,
         socket: HTTPSocket,
         did_have_handshaking_error_while_reject_unauthorized_is_false: bool,
         hostname: []const u8,
         port: u16,
-        ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr,
-        tunnel: ?*bun.http.ProxyTunnel,
+        ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr?,
+        tunnel: *bun.http.ProxyTunnel?,
         target_hostname: []const u8,
         target_port: u16,
         proxy_auth_hash: u64,
-        h2_session: ?*bun.http.H2.ClientSession,
+        h2_session: *bun.http.H2.ClientSession?,
     ) {
         if (bun.Environment.allow_assert) {
             bun.assert(!socket.isClosed());
@@ -720,7 +724,7 @@ export class HTTPContext<const ssl: bool> {
     ref_count: RefCount,
     pending_sockets: PooledSocketHiveAllocator,
     group: SocketGroup = .{},
-    secure: ?*bun.BoringSSL.c.SSL_CTX = null,
+    secure: (*bun.BoringSSL.c.SSL_CTX)? = null,
     active_h2_sessions: std.ArrayListUnmanaged(*bun.http.H2.ClientSession) = .{},
     pending_h2_connects: std.ArrayListUnmanaged(*bun.http.H2.PendingConnect) = .{},
 }

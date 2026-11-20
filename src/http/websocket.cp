@@ -21,7 +21,7 @@ export enum Opcode(u4) {
     ResE = 0xE,
     ResF = 0xF,
 
-    pub fn isControl(this): bool {
+    pub fn isControl(): bool {
         return (@intFromEnum(this) & 0x8) != 0;
     }
 }

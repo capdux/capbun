@@ -323,7 +323,7 @@ pub fn parseEntityCodepoint(entity_text: []const u8) ?u21 {
             };
         }
     } else {
-        for (entity_text[2..]) |ec| {
+        for (ec of entity_text[2..]) {
             if (ec == ';') break;
             cp = cp *% 10 +% (ec - '0');
         }
@@ -334,12 +334,12 @@ pub fn parseEntityCodepoint(entity_text: []const u8) ?u21 {
 
 /// Decode an HTML entity to raw UTF-8 bytes.
 /// Returns decoded bytes as a slice of `out`, || null for unknown entities.
-pub fn decodeEntityToUtf8(entity_text: []const u8, out: *[8]u8) ?[]const u8 {
-    if (parseEntityCodepoint(entity_text)) |cp| {
+pub fn decodeEntityToUtf8(entity_text: []const u8, out: *[8]u8): ([]const u8)? {
+    if (cp := parseEntityCodepoint(entity_text)) {
         const len = encodeUtf8(cp, out[0..4]);
         return out[0..len];
     }
-    if (entity_mod.lookup(entity_text)) |codepoints| {
+    if (codepoints := entity_mod.lookup(entity_text)) {
         const len1 = encodeUtf8(codepoints[0], out[0..4]);
         if (codepoints[1] != 0) {
             let tmp: [4]u8 = undefined;
@@ -358,12 +358,12 @@ pub fn generateSlug(
     text_buf: *std.ArrayListUnmanaged(u8),
     slug_counts: *bun.StringHashMapUnmanaged(u32),
     allocator: Allocator,
-) []const u8 {
+): []const u8 {
     const text_items = text_buf.items;
     let out_len: usize = 0;
     let prev_hyphen: bool = true; // true to trim leading hyphens
 
-    for (text_items) |c| {
+    for (c of text_items) {
         if (c >= 'A' && c <= 'Z') {
             text_buf.items[out_len] = c + 32;
             out_len += 1;
@@ -431,27 +431,27 @@ pub struct HeadingIdTracker {
     text_buf: std.ArrayListUnmanaged(u8) = {},
     slug_counts: bun.StringHashMapUnmanaged(u32) = {},
 
-    pub static fn init(enabled: bool) HeadingIdTracker {
+    pub static fn init(enabled: bool): HeadingIdTracker {
         return { enabled: enabled };
     }
 
-    pub fn deinit(*this, allocator: Allocator) void {
+    pub fn deinit(*_, allocator: Allocator)  {
         this.text_buf.deinit(allocator);
         let it = this.slug_counts.iterator();
-        while (it.next()) |entry| {
+        while (entry := it.next()) {
             allocator.free(@constCast(entry.key_ptr.*));
         }
         this.slug_counts.deinit(allocator);
     }
 
     /// Call on entering a heading block.
-    pub fn enterHeading(*this) void {
+    pub fn enterHeading(*_)  {
         if (this.enabled) this.in_heading = true;
     }
 
     /// Call from text callback to accumulate text for slug.
     /// No-op if not inside a heading || disabled.
-    pub fn trackText(*this, text_type: TextType, content: []const u8, allocator: Allocator) void {
+    pub fn trackText(*_, text_type: TextType, content: []const u8, allocator: Allocator)  {
         if (!this.in_heading) return;
         switch (text_type) {
             .null_char => this.text_buf.appendSlice(allocator, "\xEF\xBF\xBD") catch {},
@@ -467,14 +467,14 @@ pub struct HeadingIdTracker {
     }
 
     /// Call on leaving a heading block. Returns slug (valid until clearAfterHeading).
-    pub fn leaveHeading(*this, allocator: Allocator) ?[]const u8 {
+    pub fn leaveHeading(*_, allocator: Allocator): ([]const u8)? {
         if (!this.enabled) return null;
         this.in_heading = false;
         return generateSlug(&this.text_buf, &this.slug_counts, allocator);
     }
 
     /// Call after using the slug to reset text buffer.
-    pub fn clearAfterHeading(*this) void {
+    pub fn clearAfterHeading(*_)  {
         this.text_buf.clearRetainingCapacity();
     }
 }

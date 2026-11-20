@@ -42,6 +42,6 @@ fn resize(
     return true;
 }
 
-fn free(_: *!, buf: []u8, alignment: Alignment, return_address: usize): void {
+fn free(_: *!, buf: []u8, alignment: Alignment, return_address: usize) {
     c_allocator.rawFree(buf, alignment, return_address);
 }

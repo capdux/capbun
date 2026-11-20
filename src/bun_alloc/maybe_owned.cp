@@ -6,8 +6,8 @@ import std from "std";
 
 const Alignment = std.mem.Alignment;
 
-fn nullAlloc(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): ?[*]u8 {
-    _ = .{ ptr, len, alignment, ret_addr };
+fn nullAlloc(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): [*]u8? {
+    * = .{ ptr, len, alignment, ret_addr };
     std.debug.panic("cannot allocate with a borrowed `MaybeOwned` allocator", .{});
 }
 

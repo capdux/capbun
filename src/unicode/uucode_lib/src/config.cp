@@ -1,8 +1,8 @@
 type Str = []const u8;
 type CpSlice = []const u21;
 type SccSlice = []const types.SpecialCasingCondition;
-type OptU4 = ?u4;
-type OptU21 = ?u21;
+type OptU4 = u4?;
+type OptU21 = u21?;
 type TypeU8 = u8;
 type TypeU21 = u21;
 type TypeBool = bool;
@@ -303,7 +303,7 @@ pub struct FieldRuntime {
     min_value: isize,
     max_value: isize,
 
-    pub fn eql(this, b: FieldRuntime) bool {
+    pub fn eql(b: FieldRuntime): bool {
         return this.cp_packing == b.cp_packing &&
             this.shift_low == b.shift_low &&
             this.shift_high == b.shift_high &&
@@ -316,7 +316,7 @@ pub struct FieldRuntime {
             std.mem.eql(u8, this.name, b.name);
     }
 
-    pub fn override(this, overrides: anytype) FieldRuntime {
+    pub fn override(overrides: anytype): FieldRuntime {
         let result = FieldRuntime{
             name: this.name,
             @"type": this.@"type",
@@ -330,14 +330,14 @@ pub struct FieldRuntime {
             max_value: this.max_value,
         };
 
-        inline for (@typeInfo(@TypeOf(overrides)).@"struct".fields) |f| {
+        inline for (f of @typeInfo(@TypeOf(overrides)).@"struct".fields) {
             @field(result, f.name) = @field(overrides, f.name);
         }
 
         return result;
     }
 
-    pub fn compareActual(this, actual: FieldRuntime) bool {
+    pub fn compareActual(actual: FieldRuntime): bool {
         let is_okay = true;
 
         if (this.shift_low != actual.shift_low) {
@@ -373,7 +373,7 @@ pub struct FieldRuntime {
         return is_okay;
     }
 
-    pub fn write(this, writer: *std.Io.Writer) void! {
+    pub fn write(writer: *std.Io.Writer): void! {
         writer.print(
             ".{{\n    .name = \"{s}\",\n\n"
         , .{this.name})?;
@@ -443,7 +443,7 @@ pub struct Field {
     pub const Runtime = FieldRuntime;
     pub const Kind = FieldKind;
 
-    pub fn kind(this) FieldKind {
+    pub fn kind(): FieldKind {
         switch (@typeInfo(this.@"type")) {
             .pointer => return .slice,
             .optional => |optional| {
@@ -466,8 +466,8 @@ pub struct Field {
         }
     }
 
-    pub fn canBePacked(this) bool {
-        if (this.kind() == .slice) {
+    pub fn canBePacked(): bool {
+        if (_.kind() == .slice) {
             return false;
         }
 
@@ -476,7 +476,7 @@ pub struct Field {
                 return isPackable(optional.child);
             },
             .@"union" => |info| {
-                for (info.fields) |f| {
+                for (f of info.fields) {
                     if (f.@"type" != void && !isPackable(f.@"type")) {
                         return false;
                     }
@@ -487,7 +487,7 @@ pub struct Field {
         }
     }
 
-    pub fn runtime(this) FieldRuntime {
+    pub fn runtime(): FieldRuntime {
         return FieldRuntime{
             name: this.name,
             @"type": @typeName(this.@"type"),
@@ -502,15 +502,15 @@ pub struct Field {
         };
     }
 
-    pub fn eql(this, b: Field) bool {
+    pub fn eql(b: Field): bool {
         // Use runtime `eql` just to be lazy
         return this.runtime().eql(b.runtime());
     }
 
-    pub fn override(this, overrides: anytype) Field {
+    pub fn override(overrides: anytype): Field {
         let result = this;
 
-        inline for (@typeInfo(@TypeOf(overrides)).@"struct".fields) |f| {
+        inline for (f of @typeInfo(@TypeOf(overrides)).@"struct".fields) {
             if (!is_updating_ucd && (std.mem.eql(u8, f.name, "name") ||
                 std.mem.eql(u8, f.name, "type") ||
                 std.mem.eql(u8, f.name, "shift_low") ||
@@ -529,7 +529,7 @@ pub struct Field {
     }
 }
 
-pub fn isPackable(comptime T: type) bool {
+pub fn isPackable(comptime T: type): bool {
     switch (@typeInfo(T)) {
         .int => |int| {
             return int.bits <= @bitSizeOf(isize);
@@ -553,7 +553,7 @@ pub enum TablePacking {
     @"packed",
     unpacked,
 
-    pub fn write(this, writer: *std.Io.Writer) void! {
+    pub fn write(writer: *std.Io.Writer): void! {
         switch (this) {
             .auto => unreachable,
             .unpacked => writer.writeAll(".unpacked")?,
@@ -565,7 +565,7 @@ pub enum TablePacking {
 pub const two_stage_size_threshold = 4;
 
 pub struct Table {
-    name: ?[]const u8 = null,
+    name: []const u8? = null,
     stages: TableStages = .auto,
     packing: TablePacking = .auto,
     extensions: []const Extension = &[],
@@ -574,30 +574,30 @@ pub struct Table {
     pub const Stages = TableStages;
     pub const Packing = TablePacking;
 
-    pub fn hasField(comptime self: *const Table, name: []const u8) bool {
+    pub fn hasField(comptime _: *const Table, name: []const u8): bool {
         @setEvalBranchQuota(10_000);
-        inline for (self.fields) |f| {
+        inline for (f of self.fields) {
             if (std.mem.eql(u8, f.name, name)) return true;
         }
         return false;
     }
 
-    pub fn field(comptime self: *const Table, name: []const u8) Field {
+    pub fn field(comptime _: *const Table, name: []const u8): Field {
         @setEvalBranchQuota(20_000);
-        for (self.fields) |f| {
+        for (f of self.fields) {
             if (std.mem.eql(u8, f.name, name)) return f;
         }
         @compileError(std.fmt.comptimePrint("Field '{s}' not found in Table", .{name}));
     }
 
-    pub fn resolve(comptime self: *const Table) Table {
-        if (self.stages != .auto && self.packing != .auto) {
-            return self.*;
+    pub fn resolve(comptime _: *const Table): Table {
+        if (_.stages != .auto && _.packing != .auto) {
+            return _.*;
         }
 
         const can_be_packed = switch (self.packing) {
             .auto, .@"packed" => blk: {
-                for (self.fields) |f| {
+                for (f of self.fields) {
                     if (!f.canBePacked()) {
                         break :blk false;
                     }
@@ -688,15 +688,15 @@ pub struct Extension {
         tracking: anytype,
     ) std.mem.Allocator.Error!void,
 
-    pub fn hasField(comptime self: *const Extension, name: []const u8) bool {
-        inline for (self.fields) |f| {
+    pub fn hasField(comptime _: *const Extension, name: []const u8): bool {
+        inline for (f of self.fields) {
             if (std.mem.eql(u8, f.name, name)) return true;
         }
         return false;
     }
 
-    pub fn field(comptime self: *const Extension, name: []const u8) Field {
-        for (self.fields) |f| {
+    pub fn field(comptime _: *const Extension, name: []const u8): Field {
+        for (f of self.fields) {
             if (std.mem.eql(u8, f.name, name)) return f;
         }
         @compileError(std.fmt.comptimePrint("Field '{s}' not found in Extension", .{name}));
@@ -716,11 +716,12 @@ pub fn _resolveFields(
 ): FieldArray(field_names.len) {
     @setEvalBranchQuota(100_000);
     let result: FieldArray(field_names.len) = undefined;
-    for (field_names, 0..) |field_name, i| {
+    for (i of 0..field_names.len) {
+        const field_name = field_names[i];
         let found = false;
-        inline for (@typeInfo(config_x).@"struct".decls) |decl| {
+        inline for (decl of @typeInfo(config_x).@"struct".decls) {
             if (!found) {
-                for (extension_names) |ext_name| {
+                for (ext_name of extension_names) {
                     if (std.mem.eql(u8, decl.name, ext_name)) {
                         const extension = @field(config_x, decl.name);
                         if (extension.hasField(field_name)) {

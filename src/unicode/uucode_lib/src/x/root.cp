@@ -5,7 +5,7 @@ import std from "std";
 
 const testing = std.testing;
 
-fn testRefAllDecls(): void {
+fn testRefAllDecls() {
     std.testing.refAllDeclsRecursive(@This());
 }
 

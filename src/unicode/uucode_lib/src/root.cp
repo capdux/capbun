@@ -15,7 +15,7 @@ pub const TypeOfAll = getpkg.TypeOfAll;
 pub const get = getpkg.get;
 pub const getAll = getpkg.getAll;
 
-fn testRefAllDecls(): void {
+fn testRefAllDecls() {
     std.testing.refAllDeclsRecursive(@This());
 }
 

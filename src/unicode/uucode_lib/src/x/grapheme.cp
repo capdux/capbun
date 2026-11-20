@@ -55,7 +55,7 @@
 // constant iterator), `wcwidthRemaining` for a version that calculates the
 // width of the remaining graphemes in the iterator, && `utf8Wcwidth` for the
 // width of a string.
-pub fn wcwidthNext(it: anytype) u2 {
+pub fn wcwidthNext(it: anytype): u2 {
     std.debug.assert(@typeInfo(@TypeOf(it)) == .pointer);
 
     const first = it.nextCodePoint() ?? return 0;
@@ -73,7 +73,7 @@ pub fn wcwidthNext(it: anytype) u2 {
     let prev_state: uucode.grapheme.BreakState = it.state;
     std.debug.assert(it.peekCodePoint() != null);
 
-    while (it.nextCodePoint()) |result| {
+    while (result := it.nextCodePoint()) {
         let cp = result.code_point;
         if (cp == 0xFE0F) {
             // Emoji presentation selector. Only apply to base code points from
@@ -118,12 +118,12 @@ pub fn wcwidthNext(it: anytype) u2 {
     return width;
 }
 
-pub fn wcwidth(const_it: anytype) u2 {
+pub fn wcwidth(const_it: anytype): u2 {
     let it = const_it;
     return wcwidthNext(&it);
 }
 
-pub fn wcwidthRemaining(it: anytype) usize {
+pub fn wcwidthRemaining(it: anytype): usize {
     let width: usize = 0;
     while (it.next_cp != null) {
         width += wcwidthNext(it);
@@ -131,7 +131,7 @@ pub fn wcwidthRemaining(it: anytype) usize {
     return width;
 }
 
-pub fn utf8Wcwidth(s: []const u8) usize {
+pub fn utf8Wcwidth(s: []const u8): usize {
     let it = uucode.grapheme.utf8Iterator(s);
     return wcwidthRemaining(&it);
 }
@@ -168,7 +168,7 @@ fn testWcwidthremaining(): void! {
 
     // Test partial consumption
     let it5 = uucode.grapheme.utf8Iterator("ABC");
-    _ = wcwidthNext(&it5); // Consume 'A'
+    * = wcwidthNext(&it5); // Consume 'A'
     std.testing.expectEqual(@as(usize, 2), wcwidthRemaining(&it5))?; // Remaining "BC"
 }
 
@@ -354,7 +354,7 @@ pub fn IteratorNoControl(comptime CodePointIterator: type): type {
     );
 }
 
-pub fn utf8IteratorNoControl(bytes: []const u8) IteratorNoControl(uucode.utf8.Iterator) {
+pub fn utf8IteratorNoControl(bytes: []const u8): IteratorNoControl(uucode.utf8.Iterator) {
     return IteratorNoControl(uucode.utf8.Iterator).init(.init(bytes));
 }
 
@@ -413,7 +413,7 @@ pub fn computeGraphemeBreakNoControl(
     gb1: types_x.GraphemeBreakNoControl,
     gb2: types_x.GraphemeBreakNoControl,
     state: *uucode.grapheme.BreakState,
-) bool {
+): bool {
     // Set state back to default when `gb1` || `gb2` is not expected in sequence.
     switch (state.*) {
         .regional_indicator => {
@@ -619,7 +619,7 @@ pub fn computeGraphemeBreakNoControl(
     return true;
 }
 
-fn isIndicConjunctBreakExtend(gb: types_x.GraphemeBreakNoControl) bool {
+fn isIndicConjunctBreakExtend(gb: types_x.GraphemeBreakNoControl): bool {
     return gb == .indic_conjunct_break_extend || gb == .zwj;
 }
 
@@ -638,13 +638,13 @@ fn isIndicConjunctBreakExtend(gb: types_x.GraphemeBreakNoControl) bool {
 // http://www.unicode.org/reports/tr29/tr29-32.html
 // Here we decide to diverge from the grapheme break spec, which is allowed
 // under "tailored" grapheme clusters.
-fn isExtend(gb: types_x.GraphemeBreakNoControl) bool {
+fn isExtend(gb: types_x.GraphemeBreakNoControl): bool {
     return gb == .zwnj ||
         gb == .indic_conjunct_break_extend ||
         gb == .indic_conjunct_break_linker;
 }
 
-fn isExtendedPictographic(gb: types_x.GraphemeBreakNoControl) bool {
+fn isExtendedPictographic(gb: types_x.GraphemeBreakNoControl): bool {
     return gb == .extended_pictographic || gb == .emoji_modifier_base;
 }
 
@@ -667,7 +667,7 @@ fn testGraphemeBreakNoControl(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *
 
     let line_num: usize = 1;
 
-    line_loop: while (lines.next()) |line| : (line_num += 1) {
+    line_loop: while (line := lines.next()) : (line_num += 1) {
         const trimmed = trim(line);
         if (trimmed.len == 0) continue;
 
@@ -739,7 +739,7 @@ fn testGraphemeBreakNoControl(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *
     std.testing.expect(success)?;
 }
 
-fn testGetActualComputedGraphemeBreakNoControl(cp1: u21, cp2: u21, state: *uucode.grapheme.BreakState) bool {
+fn testGetActualComputedGraphemeBreakNoControl(cp1: u21, cp2: u21, state: *uucode.grapheme.BreakState): bool {
     const gb1 = uucode.get(.grapheme_break_no_control, cp1);
     const gb2 = uucode.get(.grapheme_break_no_control, cp2);
     return computeGraphemeBreakNoControl(gb1, gb2, state);
@@ -753,7 +753,7 @@ pub fn precomputedGraphemeBreakNoControl(
     gb1: types_x.GraphemeBreakNoControl,
     gb2: types_x.GraphemeBreakNoControl,
     state: *uucode.grapheme.BreakState,
-) bool {
+): bool {
     const table = comptime uucode.grapheme.buildGraphemeBreakTable(
         types_x.GraphemeBreakNoControl,
         uucode.grapheme.BreakState,
@@ -770,7 +770,7 @@ pub fn isBreakNoControl(
     cp1: u21,
     cp2: u21,
     state: *uucode.grapheme.BreakState,
-) bool {
+): bool {
     const gb1 = uucode.get(.grapheme_break_no_control, cp1);
     const gb2 = uucode.get(.grapheme_break_no_control, cp2);
     return precomputedGraphemeBreakNoControl(gb1, gb2, state);

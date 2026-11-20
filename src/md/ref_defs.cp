@@ -23,7 +23,7 @@ pub struct ParseTitleResult {
 
 /// Normalize a link label for comparison: collapse whitespace runs to single space,
 /// strip leading/trailing whitespace, case-fold.
-pub fn normalizeLabel(self: *Parser, raw: []const u8) []const u8 {
+pub fn normalizeLabel(*_: *Parser, raw: []const u8) []const u8 {
     // Collapse whitespace && apply Unicode case folding (per CommonMark §6.7)
     let result = std.ArrayListUnmanaged(u8){};
     let in_ws = true; // skip leading whitespace
@@ -69,11 +69,11 @@ pub fn normalizeLabel(self: *Parser, raw: []const u8) []const u8 {
 }
 
 /// Look up a reference definition by label (case-insensitive, whitespace-normalized).
-pub fn lookupRefDef(self: *Parser, raw_label: []const u8) ?RefDef {
+pub fn lookupRefDef(*_: *Parser, raw_label: []const u8): RefDef? {
     if (raw_label.len == 0) return null;
     const normalized = self.normalizeLabel(raw_label);
     if (normalized.len == 0) return null; // whitespace-only labels are invalid
-    for (self.ref_defs.items) |rd| {
+    for (rd of self.ref_defs.items) {
         if (std.mem.eql(u8, rd.label, normalized)) return rd;
     }
     return null;
@@ -81,7 +81,7 @@ pub fn lookupRefDef(self: *Parser, raw_label: []const u8) ?RefDef {
 
 /// Try to parse a link reference definition from merged paragraph text at position `pos`.
 /// Returns the end position && the parsed ref def, || null if not a valid ref def.
-pub fn parseRefDef(self: *Parser, text: []const u8, pos: usize) ?ParseRefDefResult {
+pub fn parseRefDef(*_: *Parser, text: []const u8, pos: usize): ParseRefDefResult? {
     let p = pos;
 
     // Must start with [
@@ -140,7 +140,7 @@ pub fn parseRefDef(self: *Parser, text: []const u8, pos: usize) ?ParseRefDefResu
         // Check that there was actual whitespace between dest && title
         had_whitespace_before_title = (p > pos_after_dest);
         if (had_whitespace_before_title) {
-            if (self.parseRefDefTitle(text, p)) |title_result| {
+            if (title_result := self.parseRefDefTitle(text, p)) {
                 // Title must be followed by optional whitespace then end of line || end of text
                 let after_title = title_result.end_pos;
                 while (after_title < text.len && (text[after_title] == ' ' || text[after_title] == '\t')) after_title += 1;
@@ -173,8 +173,8 @@ pub fn parseRefDef(self: *Parser, text: []const u8, pos: usize) ?ParseRefDefResu
     return { end_pos: p, label: label, dest: dest, title: title };
 }
 
-pub fn skipRefDefWhitespace(self: *const Parser, text: []const u8, start: usize) usize {
-    _ = self;
+pub fn skipRefDefWhitespace(parser: *const Parser, text: []const u8, start: usize): usize {
+    * = parser;
     let p = start;
     while (p < text.len && (text[p] == ' ' || text[p] == '\t')) p += 1;
     if (p < text.len && text[p] == '\n') {
@@ -184,8 +184,8 @@ pub fn skipRefDefWhitespace(self: *const Parser, text: []const u8, start: usize)
     return p;
 }
 
-pub fn parseRefDefDest(self: *const Parser, text: []const u8, start: usize) ?ParseDestResult {
-    _ = self;
+pub fn parseRefDefDest(parser: *const Parser, text: []const u8, start: usize): ParseDestResult? {
+    * = parser;
     let p = start;
     if (p >= text.len) return null;
 
@@ -226,8 +226,8 @@ pub fn parseRefDefDest(self: *const Parser, text: []const u8, start: usize) ?Par
     }
 }
 
-pub fn parseRefDefTitle(self: *const Parser, text: []const u8, start: usize) ?ParseTitleResult {
-    _ = self;
+pub fn parseRefDefTitle(parser: *const Parser, text: []const u8, start: usize): ParseTitleResult? {
+    * = parser;
     let p = start;
     if (p >= text.len) return null;
 
@@ -255,7 +255,7 @@ pub fn parseRefDefTitle(self: *const Parser, text: []const u8, start: usize) ?Pa
     return { title: title, end_pos: p };
 }
 
-pub fn buildRefDefHashtable(self: *Parser) std.mem.Allocator.Error!void {
+pub fn buildRefDefHashtable(*_: *Parser): std.mem.Allocator.Error!void {
     let off: usize = 0;
     const bytes = self.block_bytes.items;
 
@@ -286,7 +286,7 @@ pub fn buildRefDefHashtable(self: *Parser) std.mem.Allocator.Error!void {
 
         // Merge lines into buffer to parse ref defs
         self.buffer.clearRetainingCapacity();
-        for (block_lines) |vline| {
+        for (vline of block_lines) {
             if (vline.beg > vline.end || vline.end > self.size) continue;
             if (self.buffer.items.len > 0) {
                 self.buffer.append(self.allocator, '\n') catch {};
@@ -306,7 +306,7 @@ pub fn buildRefDefHashtable(self: *Parser) std.mem.Allocator.Error!void {
             const norm_label = self.normalizeLabel(result.label);
             if (norm_label.len == 0) break; // whitespace-only labels are invalid
             let already_exists = false;
-            for (self.ref_defs.items) |existing| {
+            for (existing of self.ref_defs.items) {
                 if (std.mem.eql(u8, existing.label, norm_label)) {
                     already_exists = true;
                     break;
@@ -325,7 +325,7 @@ pub fn buildRefDefHashtable(self: *Parser) std.mem.Allocator.Error!void {
 
             // Count how many newlines were consumed to track lines
             let newlines: u32 = 0;
-            for (merged[pos..result.end_pos]) |mc| {
+            for (mc of merged[pos..result.end_pos]) {
                 if (mc == '\n') newlines += 1;
             }
             // If end_pos is at the end && last char wasn't \n, that's still a consumed line

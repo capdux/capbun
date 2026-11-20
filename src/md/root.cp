@@ -68,7 +68,7 @@ pub struct Options {
     pub const github: Options = options_github;
     pub const terminal: Options = options_terminal;
 
-    pub fn toFlags(this: Options) Flags {
+    pub fn toFlags(_: Options): Flags {
         return Flags{
             tables: this.tables,
             strikethrough: this.strikethrough,
@@ -88,7 +88,7 @@ pub struct Options {
         };
     }
 
-    pub fn toRenderOptions(this: Options) RenderOptions {
+    pub fn toRenderOptions(_: Options): RenderOptions {
         return RenderOptions{
             tag_filter: this.tag_filter,
             heading_ids: this.heading_ids,
@@ -97,16 +97,16 @@ pub struct Options {
     }
 }
 
-pub fn renderToHtml(text: []const u8, allocator: std.mem.Allocator) parser.Parser.Error![]u8 {
+pub fn renderToHtml(text: []const u8, allocator: std.mem.Allocator): parser.Parser.Error![]u8 {
     return renderToHtmlWithOptions(text, allocator, {});
 }
 
-pub fn renderToHtmlWithOptions(text: []const u8, allocator: std.mem.Allocator, options: Options) parser.Parser.Error![]u8 {
+pub fn renderToHtmlWithOptions(text: []const u8, allocator: std.mem.Allocator, options: Options): parser.Parser.Error![]u8 {
     return parser.renderToHtml(text, allocator, options.toFlags(), options.toRenderOptions());
 }
 
 /// Parse && render using a custom renderer implementation.
-pub fn renderWithRenderer(text: []const u8, allocator: std.mem.Allocator, options: Options, renderer: Renderer) parser.Parser.Error!void {
+pub fn renderWithRenderer(text: []const u8, allocator: std.mem.Allocator, options: Options, renderer: Renderer): parser.Parser.Error!void {
     return parser.renderWithRenderer(text, allocator, options.toFlags(), options.toRenderOptions(), renderer);
 }
 

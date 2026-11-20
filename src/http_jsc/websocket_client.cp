@@ -87,8 +87,8 @@ enum ReceiveState {
     close,
     fail,
 
-    pub fn needControlFrame(this): bool {
-        return this != .need_body;
+    pub fn needControlFrame(): bool {
+        return _ != .need_body;
     }
 }
 
@@ -159,7 +159,7 @@ enum Copy {
     bytes: []const u8,
     raw: []const u8,
 
-    pub fn len(this, byte_len: *usize): usize {
+    pub fn len(byte_len: *usize): usize {
         switch (this) {
             .utf16 => {
                 unsafe { byte_len.* = strings.elementLengthUTF16IntoUTF8(this.utf16); }
@@ -180,7 +180,7 @@ enum Copy {
         }
     }
 
-    pub fn copy(this, globalThis: *jsc.JSGlobalObject, buf: []u8, content_byte_len: usize, opcode: Opcode) {
+    pub fn copy(globalThis: *jsc.JSGlobalObject, buf: []u8, content_byte_len: usize, opcode: Opcode) {
         if (this == .raw) {
             bun.assert(buf.len >= this.raw.len);
             bun.assert(buf.ptr != this.raw.ptr);

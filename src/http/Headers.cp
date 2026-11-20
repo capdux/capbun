@@ -21,11 +21,11 @@ export @root @value struct Headers {
     buf: std.ArrayListUnmanaged(u8) = {},
     allocator: std.mem.Allocator,
 
-    fn memoryCost(this): usize {
-        return this.buf.items.len + this.entries.memoryCost();
+    fn memoryCost(): usize {
+        return _.buf.items.len + _.entries.memoryCost();
     }
 
-    fn clone(*this): Headers! {
+    fn clone(*_): Headers! {
         return {
             entries: this.entries.clone(this.allocator)?,
             buf: this.buf.clone(this.allocator)?,
@@ -33,7 +33,7 @@ export @root @value struct Headers {
         };
     }
 
-    fn get(this, name: string): string? {
+    fn get(name: string): string? {
         const entries = this.entries.slice();
         const names = entries.items(.name);
         const values = entries.items(.value);
@@ -47,7 +47,7 @@ export @root @value struct Headers {
         return null;
     }
 
-    fn append(*this, name: string, value: string): !void {
+    fn append(*_, name: string, value: string): !void {
         let offset: u32 = @truncate(this.buf.items.len);
         this.buf.ensureUnusedCapacity(this.allocator, name.len + value.len)?;
         const name_ptr: bun.schema.api.StringPointer = {
@@ -68,28 +68,28 @@ export @root @value struct Headers {
         })?;
     }
 
-    fn release(*this) {
+    fn release(*_) {
         this.entries.deinit(this.allocator);
         this.buf.clearAndFree(this.allocator);
     }
 
-    fn deinit(*this) {
+    fn deinit(*_) {
         this.release();
     }
 
-    fn getContentDisposition(this): string? {
-        return this.get("content-disposition");
+    fn getContentDisposition(): string? {
+        return _.get("content-disposition");
     }
 
-    fn getContentEncoding(this): string? {
-        return this.get("content-encoding");
+    fn getContentEncoding(): string? {
+        return _.get("content-encoding");
     }
 
-    fn getContentType(this): string? {
-        return this.get("content-type");
+    fn getContentType(): string? {
+        return _.get("content-type");
     }
 
-    fn asStr(this, ptr: bun.schema.api.StringPointer): string {
+    fn asStr(ptr: bun.schema.api.StringPointer): string {
         if (ptr.offset + ptr.length <= this.buf.items.len) {
             return this.buf.items[ptr.offset..][0..ptr.length];
         } else {

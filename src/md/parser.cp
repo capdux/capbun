@@ -38,7 +38,7 @@ pub struct Parser {
     n_containers: u32 = 0,
 
     // Current block being built
-    current_block: ?usize = null,
+    current_block: usize? = null,
     current_block_lines: std.ArrayListUnmanaged(VerbatimLine) = {},
 
     // Opener stacks
@@ -79,7 +79,7 @@ pub struct Parser {
 
     pub const Error = bun.JSError || bun.StackOverflow;
 
-    static fn init(allocator: Allocator, text: []const u8, flags: Flags, rend: Renderer) Parser {
+    static fn init(allocator: Allocator, text: []const u8, flags: Flags, rend: Renderer): Parser {
         const size: OFF = @intCast(text.len);
         let p = Parser{
             allocator: allocator,
@@ -96,7 +96,7 @@ pub struct Parser {
         return p;
     }
 
-    fn deinit(self: *Parser) void {
+    fn deinit(*_: *Parser)  {
         self.marks.deinit(self.allocator);
         self.containers.deinit(self.allocator);
         self.block_bytes.deinit(self.allocator);
@@ -106,12 +106,12 @@ pub struct Parser {
         self.emph_delims.deinit(self.allocator);
     }
 
-    pub inline fn ch(self: *const Parser, off: OFF) u8 {
+    pub inline fn ch(_: *const Parser, off: OFF): u8 {
         if (off >= self.size) return 0;
         return self.text[off];
     }
 
-    fn buildMarkCharMap(self: *Parser) void {
+    fn buildMarkCharMap(*_: *Parser)  {
         self.mark_char_map.set('\\');
         self.mark_char_map.set('*');
         self.mark_char_map.set('_');
@@ -228,7 +228,7 @@ pub struct Parser {
 // Public API
 // ========================================
 
-pub fn renderToHtml(text: []const u8, allocator: Allocator, flags: Flags, render_opts: root.RenderOptions) Parser.Error![]u8 {
+pub fn renderToHtml(text: []const u8, allocator: Allocator, flags: Flags, render_opts: root.RenderOptions): Parser.Error![]u8 {
     // Skip UTF-8 BOM
     const input = helpers.skipUtf8Bom(text);
 
@@ -252,8 +252,8 @@ pub fn renderToHtml(text: []const u8, allocator: Allocator, flags: Flags, render
 /// Renderer implementation (e.g. for JS callback-based rendering).
 /// `render_options` carries render-only flags (tag_filter, heading_ids,
 /// autolink_headings) so they are not silently dropped by the API.
-pub fn renderWithRenderer(text: []const u8, allocator: Allocator, flags: Flags, render_options: root.RenderOptions, rend: Renderer) Parser.Error!void {
-    _ = render_options; // Available for renderer implementations; parse layer does not use these.
+pub fn renderWithRenderer(text: []const u8, allocator: Allocator, flags: Flags, render_options: root.RenderOptions, rend: Renderer): Parser.Error!void {
+    * = render_options; // Available for renderer implementations; parse layer does not use these.
     const input = helpers.skipUtf8Bom(text);
 
     let p = Parser.init(allocator, input, flags, rend);

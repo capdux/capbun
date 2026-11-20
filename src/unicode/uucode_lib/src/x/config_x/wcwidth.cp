@@ -150,10 +150,10 @@ fn compute(
     data: anytype,
     backing: anytype,
     tracking: anytype,
-) std.mem.Allocator.Error!void {
-    _ = allocator;
-    _ = backing;
-    _ = tracking;
+): std.mem.Allocator.Error!void {
+    * = allocator;
+    * = backing;
+    * = tracking;
     const gc = data.general_category;
 
     let width: u2 = undefined;

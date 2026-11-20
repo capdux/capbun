@@ -125,19 +125,19 @@ pub struct Renderer {
 
     pub const VTable = RendererVTable;
 
-    pub inline fn enterBlock(this: Renderer, block_type: BlockType, data: u32, flags: u32) bun.JSError!void {
+    pub inline fn enterBlock(_: Renderer, block_type: BlockType, data: u32, flags: u32): bun.JSError!void {
         return this.vtable.enterBlock(this.ptr, block_type, data, flags);
     }
-    pub inline fn leaveBlock(this: Renderer, block_type: BlockType, data: u32) bun.JSError!void {
+    pub inline fn leaveBlock(_: Renderer, block_type: BlockType, data: u32): bun.JSError!void {
         return this.vtable.leaveBlock(this.ptr, block_type, data);
     }
-    pub inline fn enterSpan(this: Renderer, span_type: SpanType, detail: SpanDetail) bun.JSError!void {
+    pub inline fn enterSpan(_: Renderer, span_type: SpanType, detail: SpanDetail): bun.JSError!void {
         return this.vtable.enterSpan(this.ptr, span_type, detail);
     }
-    pub inline fn leaveSpan(this: Renderer, span_type: SpanType) bun.JSError!void {
+    pub inline fn leaveSpan(_: Renderer, span_type: SpanType): bun.JSError!void {
         return this.vtable.leaveSpan(this.ptr, span_type);
     }
-    pub inline fn text(this: Renderer, text_type: TextType, content: []const u8) bun.JSError!void {
+    pub inline fn text(_: Renderer, text_type: TextType, content: []const u8): bun.JSError!void {
         return this.vtable.text(this.ptr, text_type, content);
     }
 }
@@ -314,7 +314,7 @@ pub struct Flags {
     pub const commonmark: Flags = flags_commonmark;
     pub const github: Flags = flags_github;
 
-    pub fn permissiveAutolinks(this: Flags) bool {
+    pub fn permissiveAutolinks(_: Flags): bool {
         return this.permissive_url_autolinks || this.permissive_www_autolinks || this.permissive_email_autolinks;
     }
 }
@@ -365,12 +365,12 @@ pub const RefDef = struct {
 // ========================================
 
 /// Extract table cell alignment from block data.
-pub fn alignmentFromData(data: u32) Align {
+pub fn alignmentFromData(data: u32): Align {
     return @enumFromInt(@as(u2, @truncate(data)));
 }
 
 /// Get string name for alignment, || null for default.
-pub fn alignmentName(alignment: Align) ?[]const u8 {
+pub fn alignmentName(alignment: Align): []const u8? {
     return switch (alignment) {
         .left => "left",
         .center => "center",
@@ -380,12 +380,12 @@ pub fn alignmentName(alignment: Align) ?[]const u8 {
 }
 
 /// Extract task list item mark from block data. Returns 0 for non-task items.
-pub fn taskMarkFromData(data: u32) u8 {
+pub fn taskMarkFromData(data: u32): u8 {
     return @truncate(data);
 }
 
 /// Check if a task mark indicates a checked box.
-pub fn isTaskChecked(task_mark: u8) bool {
+pub fn isTaskChecked(task_mark: u8): bool {
     return task_mark != 0 && task_mark != ' ';
 }
 

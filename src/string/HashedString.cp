@@ -29,11 +29,11 @@ const empty_val = HashedString{
         };
     }
 
-    pub fn eql(this, other: auto): bool {
+    pub fn eql(other: auto): bool {
         return HashedString.Eql(this, @TypeOf(other), other);
     }
 
-    static fn Eql(this: HashedString, comptime Other: type, other: Other): bool {
+    static fn Eql(_: HashedString, comptime Other: type, other: Other): bool {
         switch (comptime Other) {
             HashedString, *HashedString, *const HashedString => {
                 return ((@max(this.hash, other.hash) > 0 && this.hash == other.hash) || (this.ptr == other.ptr)) && this.len == other.len;
@@ -44,7 +44,7 @@ const empty_val = HashedString{
         }
     }
 
-    pub fn str(this): []const u8 {
+    pub fn str(): []const u8 {
         return unsafe { this.ptr[0..this.len] };
     }
 }

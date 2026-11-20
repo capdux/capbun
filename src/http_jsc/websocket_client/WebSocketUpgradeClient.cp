@@ -56,7 +56,7 @@ export struct Headers8Bit {
         names_ptr: ([*]const bun.String!)?,
         values_ptr: ([*]const bun.String!)?,
         len: usize,
-    ) std.mem.Allocator.Error!Headers8Bit {
+    ): std.mem.Allocator.Error!Headers8Bit {
         if (len == 0) {
             return Headers8Bit{
                 slices: empty_zig_slices[0..0],
@@ -104,25 +104,25 @@ export struct Headers8Bit {
         };
     }
 
-    pub fn deinit(this) void {
-        const slices = this.slices;
-        for (slices) |*s| s.deinit();
-        if (this.slices.len > 0) {
-            this.allocator.free(this.slices);
-            this.allocator.free(this.name_slices);
-            this.allocator.free(this.value_slices);
+    pub fn deinit()  {
+        const slices = _.slices;
+        for (*s of slices) s.deinit();
+        if (_.slices.len > 0) {
+            _.allocator.free(_.slices);
+            _.allocator.free(_.name_slices);
+            _.allocator.free(_.value_slices);
         }
     }
 
-    pub fn names(this) []const []const u8 {
-        return this.name_slices;
+    pub fn names(): []const []const u8 {
+        return _.name_slices;
     }
 
-    pub fn values(this) []const []const u8 {
-        return this.value_slices;
+    pub fn values(): []const []const u8 {
+        return _.value_slices;
     }
 
-    pub fn toHeaders(this, allocator: std.mem.Allocator) anyerror!Headers {
+    pub fn toHeaders(allocator: std.mem.Allocator): anyerror!Headers {
         let headers = Headers{
             allocator: allocator,
         };
@@ -130,8 +130,8 @@ export struct Headers8Bit {
 
         const n_slices = this.name_slices;
         const v_slices = this.value_slices;
-        for (n_slices, v_slices) |name, value| {
-            headers.append(name, value)?;
+        for (i of 0..n_slices.len) {
+            headers.append(n_slices[i], v_slices[i])?;
         }
 
         return headers;
@@ -146,9 +146,9 @@ export struct BuildRequestResult {
 fn buildConnectRequest(
     target_host: []const u8,
     target_port: u16,
-    proxy_authorization: ?[]const u8,
-    proxy_headers: ?Headers,
-) std.mem.Allocator.Error![]u8 {
+    proxy_authorization: []const u8?,
+    proxy_headers: Headers?,
+): std.mem.Allocator.Error![]u8 {
     const allocator = bun.default_allocator;
 
     let buf = std.array_list.Managed(u8).init(allocator);
@@ -167,7 +167,8 @@ fn buildConnectRequest(
         const slice = hdrs.entries.slice();
         const hdr_names = slice.items(.name);
         const hdr_values = slice.items(.value);
-        for (hdr_names, 0..) |name_ptr, idx| {
+        for (idx of 0..hdr_names.len) {
+            const name_ptr = hdr_names[idx];
             const name = hdrs.asStr(name_ptr);
             if (proxy_authorization != null && strings.eqlCaseInsensitiveASCII(name, "proxy-authorization", true)) {
                 continue;
@@ -181,7 +182,7 @@ fn buildConnectRequest(
     return buf.toOwnedSlice();
 }
 
-fn computeAcceptValue(key: []const u8) [28]u8 {
+fn computeAcceptValue(key: []const u8): [28]u8 {
     const websocket_guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     let hasher = bun.sha.Hashers.SHA1.init();
     hasher.update(key);
@@ -189,7 +190,7 @@ fn computeAcceptValue(key: []const u8) [28]u8 {
     let hash: bun.sha.Hashers.SHA1.Digest = undefined;
     hasher.final(&hash);
     let result: [28]u8 = undefined;
-    _ = bun.base64.encode(&result, &hash);
+    * = bun.base64.encode(&result, &hash);
     return result;
 }
 
@@ -201,19 +202,21 @@ fn buildRequestBody(
     port: u16,
     client_protocol: []const u8,
     extra_headers: Headers8Bit,
-    target_authorization: ?[]const u8,
+    target_authorization: ([]const u8)?,
     offer_permessage_deflate: bool,
-) std.mem.Allocator.Error!BuildRequestResult {
+): std.mem.Allocator.Error!BuildRequestResult {
     const allocator = bun.default_allocator;
 
-    let user_host: ?[]const u8 = null;
-    let user_key: ?[]const u8 = null;
-    let user_protocol: ?[]const u8 = null;
+    let user_host: ([]const u8)? = null;
+    let user_key: ([]const u8)? = null;
+    let user_protocol: ([]const u8)? = null;
     let user_authorization: bool = false;
 
     const extra_names = extra_headers.names();
     const extra_values = extra_headers.values();
-    for (extra_names, extra_values) |name_slice, value| {
+    for (idx of 0..extra_names.len) {
+        const name_slice = extra_names[idx];
+        const value = extra_values[idx];
         if (user_host == null && strings.eqlCaseInsensitiveASCII(name_slice, "host", true)) {
             user_host = value;
         } else if (user_key == null && strings.eqlCaseInsensitiveASCII(name_slice, "sec-websocket-key", true)) {
@@ -271,7 +274,9 @@ fn buildRequestBody(
         }
     }
 
-    for (extra_names, extra_values) |name_slice, value| {
+    for (idx of 0..extra_names.len) {
+        const name_slice = extra_names[idx];
+        const value = extra_values[idx];
         if (strings.eqlCaseInsensitiveASCII(name_slice, "host", true) ||
             strings.eqlCaseInsensitiveASCII(name_slice, "connection", true) ||
             strings.eqlCaseInsensitiveASCII(name_slice, "upgrade", true) ||
@@ -332,7 +337,7 @@ fn buildRequestBody(
     return null;
 }
 
-@c pub fn freeSSLConfig(config: *SSLConfig) void {
+@c pub fn freeSSLConfig(config: *SSLConfig)  {
     config.deinit();
     bun.default_allocator.destroy(config);
 }
@@ -441,7 +446,9 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             let protocol_for_subprotocols: []const u8 = client_protocol_slice.slice();
             const hdr_names = extra_headers.names();
             const hdr_values = extra_headers.values();
-            for (hdr_names, hdr_values) |name, value| {
+            for (idx of 0..hdr_names.len) {
+                const name = hdr_names[idx];
+                const value = hdr_values[idx];
                 if (strings.eqlCaseInsensitiveASCII(name, "sec-websocket-protocol", true)) {
                     protocol_for_subprotocols = value;
                     break;
@@ -826,18 +833,16 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
 
             const response = PicoHTTP.Response.parse(body, &this.headers_buf) catch |e| {
-                switch (e) {
-                    error.Malformed_HTTP_Response => {
-                        this.terminate(ErrorCode.invalid_response);
-                        return;
-                    },
-                    error.ShortRead => {
-                        if (this.body.items.len == 0) {
-                            bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
-                        }
-                        return;
-                    },
+                if (e == error.Malformed_HTTP_Response) {
+                    this.terminate(ErrorCode.invalid_response);
+                    return;
+                } else if (e == error.ShortRead) {
+                    if (this.body.items.len == 0) {
+                        bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
+                    }
+                    return;
                 }
+                return;
             };
 
             this.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
@@ -863,18 +868,16 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
 
             const response = PicoHTTP.Response.parse(body, &this.headers_buf) catch |e| {
-                switch (e) {
-                    error.Malformed_HTTP_Response => {
-                        this.terminate(ErrorCode.invalid_response);
-                        return;
-                    },
-                    error.ShortRead => {
-                        if (this.body.items.len == 0) {
-                            bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
-                        }
-                        return;
-                    },
+                if (e == error.Malformed_HTTP_Response) {
+                    this.terminate(ErrorCode.invalid_response);
+                    return;
+                } else if (e == error.ShortRead) {
+                    if (this.body.items.len == 0) {
+                        bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
+                    }
+                    return;
                 }
+                return;
             };
 
             if (response.status_code != 200) {
@@ -1001,18 +1004,16 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
 
             const response = PicoHTTP.Response.parse(body, &this.headers_buf) catch |e| {
-                switch (e) {
-                    error.Malformed_HTTP_Response => {
-                        this.terminate(ErrorCode.invalid_response);
-                        return;
-                    },
-                    error.ShortRead => {
-                        if (this.body.items.len == 0) {
-                            bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
-                        }
-                        return;
-                    },
+                if (e == error.Malformed_HTTP_Response) {
+                    this.terminate(ErrorCode.invalid_response);
+                    return;
+                } else if (e == error.ShortRead) {
+                    if (this.body.items.len == 0) {
+                        bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
+                    }
+                    return;
                 }
+                return;
             };
 
             this.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);

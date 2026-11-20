@@ -8,11 +8,11 @@ fn compute(
     data: anytype,
     backing: anytype,
     tracking: anytype,
-) std.mem.Allocator.Error!void {
-    _ = allocator;
-    _ = cp;
-    _ = backing;
-    _ = tracking;
+): std.mem.Allocator.Error!void {
+    * = allocator;
+    * = cp;
+    * = backing;
+    * = tracking;
 
     data.grapheme_break_no_control = switch (data.grapheme_break) {
         .control, .cr, .lf => .other,

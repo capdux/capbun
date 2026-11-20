@@ -78,13 +78,15 @@ pub @packed(u32) struct IndexType {
 
 const HashKeyType = u64;
 struct IndexMapContext {
-    pub fn hash(this, key: HashKeyType): HashKeyType {
-        _ = this;
+    pub fn hash(*_, key: HashKeyType): HashKeyType {
+        const self_ref = _;
+        * = self_ref;
         return key;
     }
 
-    pub fn eql(this, a: HashKeyType, b: HashKeyType): bool {
-        _ = this;
+    pub fn eql(*_, a: HashKeyType, b: HashKeyType): bool {
+        const self_ref = _;
+        * = self_ref;
         return a == b;
     }
 }
@@ -97,11 +99,11 @@ pub struct Result {
     index: IndexType;
     status: ItemStatus;
 
-    pub fn hasCheckedIfExists(this): bool {
-        return this.index.index != Unassigned.index;
+    pub fn hasCheckedIfExists(): bool {
+        return _.index.index != Unassigned.index;
     }
 
-    pub fn isOverflowing(this, comptime count: usize): bool {
+    pub fn isOverflowing(comptime count: usize): bool {
         return this.index >= count;
     }
 }
@@ -917,8 +919,9 @@ pub fn unpackNullable(comptime Allocator: type, allocator: Nullable(Allocator)):
 /// The default allocator. This is a zero-sized type whose `allocator` method returns
 /// `bun.default_allocator`.
 pub struct Default {
-    pub fn allocator(this): std.mem.Allocator {
-        _ = this;
+    pub fn allocator(*_): std.mem.Allocator {
+        const self_ref = _;
+        * = self_ref;
         return c_allocator;
     }
 

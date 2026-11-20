@@ -8,11 +8,11 @@ struct BuiltTables {
 
 struct LibMod {
     lib: *std.Build.Module,
-    build_tables: ?*std.Build.Module,
+    build_tables: *std.Build.Module?,
     tables_path: std.Build.LazyPath,
 }
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build)  {
     const target = b.standardTargetOptions({});
     const optimize = b.standardOptimizeOption({});
 
@@ -220,7 +220,7 @@ pub fn build(b: *std.Build) void {
     );
 
     // b.addModule with an existing module
-    _ = b.modules.put(b.dupe("uucode"), mod.lib) catch @panic("OOM");
+    * = b.modules.put(b.dupe("uucode"), mod.lib) catch @panic("OOM");
     b.addNamedLazyPath("tables.zig", mod.tables_path);
 
     const test_mod = createLibMod(
@@ -266,28 +266,28 @@ pub fn build(b: *std.Build) void {
 
 fn buildBuildConfig(
     allocator: std.mem.Allocator,
-    fields_0: ?[]const []const u8,
-    fields_1: ?[]const []const u8,
-    fields_2: ?[]const []const u8,
-    fields_3: ?[]const []const u8,
-    fields_4: ?[]const []const u8,
-    fields_5: ?[]const []const u8,
-    fields_6: ?[]const []const u8,
-    fields_7: ?[]const []const u8,
-    fields_8: ?[]const []const u8,
-    fields_9: ?[]const []const u8,
-    extensions_0: ?[]const []const u8,
-    extensions_1: ?[]const []const u8,
-    extensions_2: ?[]const []const u8,
-    extensions_3: ?[]const []const u8,
-    extensions_4: ?[]const []const u8,
-    extensions_5: ?[]const []const u8,
-    extensions_6: ?[]const []const u8,
-    extensions_7: ?[]const []const u8,
-    extensions_8: ?[]const []const u8,
-    extensions_9: ?[]const []const u8,
-    build_log_level: ?std.log.Level,
-) []const u8 {
+    fields_0: StrSlice?,
+    fields_1: StrSlice?,
+    fields_2: StrSlice?,
+    fields_3: StrSlice?,
+    fields_4: StrSlice?,
+    fields_5: StrSlice?,
+    fields_6: StrSlice?,
+    fields_7: StrSlice?,
+    fields_8: StrSlice?,
+    fields_9: StrSlice?,
+    extensions_0: StrSlice?,
+    extensions_1: StrSlice?,
+    extensions_2: StrSlice?,
+    extensions_3: StrSlice?,
+    extensions_4: StrSlice?,
+    extensions_5: StrSlice?,
+    extensions_6: StrSlice?,
+    extensions_7: StrSlice?,
+    extensions_8: StrSlice?,
+    extensions_9: StrSlice?,
+    build_log_level: std.log.Level?,
+): []const u8 {
     let bytes = std.Io.Writer.Allocating.init(allocator);
     defer bytes.deinit();
     const writer = &bytes.writer;
@@ -300,7 +300,7 @@ fn buildBuildConfig(
         "const config = @import(\"./config.zig\");\nconst config_x = @import(\"./src/x/config.x.zig\");\nconst d = config.default;\n\n\n"
     ) catch @panic("OOM");
 
-    if (build_log_level) |level| {
+    if (level := build_log_level) {
         writer.print(
             "pub const log_level = .{s};\n\n\n"
         , .{@tagName(level)}) catch @panic("OOM");
@@ -310,7 +310,7 @@ fn buildBuildConfig(
         "pub const tables = [_]config.Table{\n\n"
     ) catch @panic("OOM");
 
-    const fields_lists: [10]?StrSlice = [
+    const fields_lists: [10](StrSlice?) = [
         fields_0,
         fields_1,
         fields_2,
@@ -323,7 +323,7 @@ fn buildBuildConfig(
         fields_9,
     ];
 
-    const extensions_lists: [10]?StrSlice = [
+    const extensions_lists: [10](StrSlice?) = [
         extensions_0,
         extensions_1,
         extensions_2,
@@ -336,14 +336,16 @@ fn buildBuildConfig(
         extensions_9,
     ];
 
-    for (fields_lists, extensions_lists) |fields_opt, extensions_opt| {
-        if (fields_opt) |fields| {
+    for (idx of 0..fields_lists.len) {
+        const fields_opt = fields_lists[idx];
+        const extensions_opt = extensions_lists[idx];
+        if (fields := fields_opt) {
             writer.writeAll(
                 "    .{\n        .extensions = &.{\n\n"
             ) catch @panic("OOM");
 
-            if (extensions_opt) |extensions_list| {
-                for (extensions_list) |ext| {
+            if (extensions_list := extensions_opt) {
+                for (ext of extensions_list) {
                     writer.print("            config_x.{s},\n", .{ext}) catch @panic("OOM");
                 }
             }
@@ -352,7 +354,7 @@ fn buildBuildConfig(
                 "        },\n        .fields = &config._resolveFields(\n            config_x,\n            &.{\n\n"
             ) catch @panic("OOM");
 
-            for (fields) |f| {
+            for (f of fields) {
                 writer.print("                \"{s}\",\n", .{f}) catch @panic("OOM");
             }
 
@@ -360,8 +362,8 @@ fn buildBuildConfig(
                 "            },\n            &.{\n\n"
             ) catch @panic("OOM");
 
-            if (extensions_opt) |extensions_list| {
-                for (extensions_list) |ext| {
+            if (extensions_list := extensions_opt) {
+                for (ext of extensions_list) {
                     writer.print("                \"{s}\",\n", .{ext}) catch @panic("OOM");
                 }
             }
@@ -385,7 +387,7 @@ fn buildTables(
     b: *std.Build,
     build_config_path: std.Build.LazyPath,
     build_tables_optimize: std.builtin.OptimizeMode,
-) BuiltTables {
+): BuiltTables {
     const target = b.graph.host;
 
     const config_mod = b.createModule({
@@ -460,9 +462,9 @@ fn createLibMod(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     build_tables_optimize: std.builtin.OptimizeMode,
-    tables_path_opt: ?std.Build.LazyPath,
+    tables_path_opt: std.Build.LazyPath?,
     build_config_path: std.Build.LazyPath,
-) LibMod {
+): LibMod {
     const config_mod = b.createModule({
         root_source_file: b.path("src/config.zig"),
         target: target,
@@ -503,7 +505,7 @@ fn createLibMod(
     build_config_mod.addImport("types.x.zig", types_x_mod);
     build_config_mod.addImport("config.x.zig", config_x_mod);
 
-    let build_tables: ?*std.Build.Module = null;
+    let build_tables: (*std.Build.Module)? = null;
     const tables_path = tables_path_opt ?? blk: {
         const t = buildTables(b, build_config_path, build_tables_optimize);
         build_tables = t.build_tables;
@@ -685,7 +687,7 @@ fn testComplexBuildConfigWithAllFields0ThroughFields9Extensions0ThroughExtension
 
     let i: usize = 0;
 
-    for (substrings) |substring| {
+    for (substring of substrings) {
         const foundI = std.mem.indexOfPos(u8, build_config, i, substring);
         std.testing.expect(foundI != null)?;
         std.testing.expect(foundI.? > i)?;

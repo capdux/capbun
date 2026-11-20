@@ -13,11 +13,11 @@ export @root struct PendingConnect {
     ssl_config: *SSLConfig? = null,
     waiters: std.ArrayListUnmanaged(*bun.http.HTTPClient) = .{},
 
-    fn matches(&this, hostname: string, port: u16, ssl_config: *SSLConfig?): bool {
+    fn matches(&_, hostname: string, port: u16, ssl_config: *SSLConfig?): bool {
         return this.port == port && this.ssl_config == ssl_config && bun.strings.eqlLong(this.hostname, hostname, true);
     }
 
-    fn unregisterFrom(*this, ctx: *HTTPContextTLS) {
+    fn unregisterFrom(*_, ctx: *HTTPContextTLS) {
         const list = &ctx.pending_h2_connects;
         let i: usize = 0;
         while (i < list.items.len) {
@@ -29,13 +29,13 @@ export @root struct PendingConnect {
         }
     }
 
-    fn release(*this) {
+    fn release(*_) {
         bun.default_allocator.free(this.hostname);
         this.waiters.deinit(bun.default_allocator);
         bun.destroy(this);
     }
 
-    fn deinit(*this) {
+    fn deinit(*_) {
         this.release();
     }
 }

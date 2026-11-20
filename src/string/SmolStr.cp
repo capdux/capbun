@@ -33,27 +33,27 @@ const SmolStrNegatedTag: usize = ~SmolStrTag;
         return inlined;
     }
 
-    pub inline fn len(this: SmolStrInlined): u8 {
+    pub inline fn len(_: SmolStrInlined): u8 {
         return @intCast(this.__len);
     }
 
-    pub fn setLen(*this, new_len: u7): void {
+    pub fn setLen(*_, new_len: u7) {
         this.__len = new_len;
     }
 
-    pub fn slice(this: *const SmolStrInlined): []const u8 {
+    pub fn slice(_: *const SmolStrInlined): []const u8 {
         return unsafe { @constCast(this).ptr()[0..this.__len] };
     }
 
-    pub fn sliceMut(*this): []u8 {
+    pub fn sliceMut(*_): []u8 {
         return unsafe { this.ptr()[0..this.__len] };
     }
 
-    pub fn allChars(*this): *[inlined_max_len]u8 {
+    pub fn allChars(*_): *[inlined_max_len]u8 {
         return unsafe { this.ptr()[0..inlined_max_len] };
     }
 
-    inline fn ptr(*this): [*]u8 {
+    inline fn ptr(*_): [*]u8 {
         return unsafe { @as([*]u8, @as(*u128, this)) };
     }
 }
@@ -75,7 +75,7 @@ const smol_inlined_empty = SmolStrInlined{
 
     pub const Inlined = SmolStrInlined;
 
-    pub fn jsonStringify(this: *const SmolStr, writer: anytype): !void {
+    pub fn jsonStringify(_: *const SmolStr, writer: anytype): !void {
         writer.write(this.slice())?;
     }
 
@@ -83,7 +83,7 @@ const smol_inlined_empty = SmolStrInlined{
         return SmolStr.fromInlined(Inlined.empty);
     }
 
-    pub fn len(this: *const SmolStr): u32 {
+    pub fn len(_: *const SmolStr): u32 {
         if (this.isInlined()) {
             return @intCast((@intFromPtr(this.__ptr) >> 56) & 0b01111111);
         }
@@ -91,29 +91,29 @@ const smol_inlined_empty = SmolStrInlined{
         return this.__len;
     }
 
-    pub fn ptr(*this): [*]u8 {
+    pub fn ptr(*_): [*]u8 {
         return unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) & SmolStrNegatedTag) };
     }
 
-    pub fn ptrConst(this: *const SmolStr): [*]const u8 {
+    pub fn ptrConst(_: *const SmolStr): [*]const u8 {
         return unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) & SmolStrNegatedTag) };
     }
 
-    pub fn markInlined(*this): void {
+    pub fn markInlined(*_) {
         this.__ptr = unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) | SmolStrTag) };
     }
 
-    pub fn markHeap(*this): void {
+    pub fn markHeap(*_) {
         this.__ptr = unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) & SmolStrNegatedTag) };
     }
 
-    pub fn isInlined(this: *const SmolStr): bool {
+    pub fn isInlined(_: *const SmolStr): bool {
         return (@as(usize, @intFromPtr(this.__ptr)) & SmolStrTag) != 0;
     }
 
     /// ## Panics
     /// if `this` is too long to fit in an inlined string
-    pub fn toInlined(this: *const SmolStr): Inlined {
+    pub fn toInlined(_: *const SmolStr): Inlined {
         assert(this.len() <= Inlined.max_len);
         let inlined: Inlined = unsafe { @bitCast(@as(u128, @bitCast(this.*))) };
         inlined._tag = 1;
@@ -149,7 +149,7 @@ const smol_inlined_empty = SmolStrInlined{
         return SmolStr.fromInlined(inlined);
     }
 
-    pub fn deinit(*this, allocator: Allocator): void {
+    pub fn deinit(*_, allocator: Allocator) {
         if (!this.isInlined()) {
             allocator.free(this.slice());
         }
@@ -166,7 +166,7 @@ const smol_inlined_empty = SmolStrInlined{
         return SmolStr.fromInlined(inlined);
     }
 
-    pub fn slice(this: *const SmolStr): []const u8 {
+    pub fn slice(_: *const SmolStr): []const u8 {
         if (this.isInlined()) {
             const bytes: [*]const u8 = unsafe { @ptrCast(this) };
             return unsafe { bytes[0..this.len()] };
@@ -174,7 +174,7 @@ const smol_inlined_empty = SmolStrInlined{
         return unsafe { this.ptrConst()[0..this.__len] };
     }
 
-    pub fn appendChar(*this, allocator: Allocator, char: u8): Allocator.Error!void {
+    pub fn appendChar(*_, allocator: Allocator, char: u8): Allocator.Error!void {
         if (this.isInlined()) {
             let inlined = this.toInlined();
             if (inlined.len() + 1 > Inlined.max_len) {
@@ -209,7 +209,7 @@ const smol_inlined_empty = SmolStrInlined{
         return;
     }
 
-    pub fn appendSlice(*this, allocator: Allocator, values: []const u8): Allocator.Error!void {
+    pub fn appendSlice(*_, allocator: Allocator, values: []const u8): Allocator.Error!void {
         if (this.isInlined()) {
             let inlined = this.toInlined();
             if (inlined.len() + values.len > Inlined.max_len) {

@@ -8,20 +8,20 @@ export struct MaxHeapAllocator {
     pub const ArrayList = std.array_list.AlignedManaged(u8, .of(std.c.max_align_t));
     array_list: ArrayList,
 
-    static fn alloc(ptr: *!, len: usize, alignment: std.mem.Alignment, _: usize): ?[*]u8 {
+    static fn alloc(ptr: *!, len: usize, alignment: std.mem.Alignment, _: usize): [*]u8? {
         bun.assert(alignment.toByteUnits() <= @alignOf(std.c.max_align_t));
         unsafe {
-            const self: *MaxHeapAllocator = bun.cast(*MaxHeapAllocator, ptr);
-            self.array_list.items.len = 0;
-            self.array_list.ensureTotalCapacity(len) catch return null;
-            self.array_list.items.len = len;
-            return self.array_list.items.ptr;
+            const inst: *MaxHeapAllocator = bun.cast(*MaxHeapAllocator, ptr);
+            inst.array_list.items.len = 0;
+            inst.array_list.ensureTotalCapacity(len) catch return null;
+            inst.array_list.items.len = len;
+            return inst.array_list.items.ptr;
         }
     }
 
     static fn resize(_: *!, buf: []u8, _: std.mem.Alignment, new_len: usize, _: usize): bool {
-        _ = new_len;
-        _ = buf;
+        * = new_len;
+        * = buf;
         @panic("not implemented");
     }
 
@@ -30,13 +30,13 @@ export struct MaxHeapAllocator {
         _: []u8,
         _: std.mem.Alignment,
         _: usize,
-    ): void {}
+    ) {}
 
-    pub fn reset(*this): void {
+    pub fn reset(*_) {
         this.array_list.items.len = 0;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.array_list.deinit();
     }
 
@@ -47,7 +47,7 @@ export struct MaxHeapAllocator {
         .remap = &std.mem.Allocator.noRemap,
     };
 
-    pub fn init(*this, allocator: std.mem.Allocator): std.mem.Allocator {
+    pub fn init(*_, allocator: std.mem.Allocator): std.mem.Allocator {
         this.array_list = ArrayList.init(allocator);
 
         return std.mem.Allocator{

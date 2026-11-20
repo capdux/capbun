@@ -18,16 +18,16 @@ pub struct MutableStringBufferedWriter {
 
     pub const Writer = std.Io.GenericWriter(*MutableStringBufferedWriter, Allocator.Error, MutableStringBufferedWriter.writeAll);
 
-    inline fn remain(*this): []u8 {
+    inline fn remain(*_): []u8 {
         return this.buffer[this.pos..];
     }
 
-    pub fn flush(*this): Allocator.Error!void {
-        _ = this.context.writeAll(this.buffer[0..this.pos])?;
+    pub fn flush(*_): Allocator.Error!void {
+        * = this.context.writeAll(this.buffer[0..this.pos])?;
         this.pos = 0;
     }
 
-    pub fn writeAll(*this, bytes: []const u8): Allocator.Error!usize {
+    pub fn writeAll(*_, bytes: []const u8): Allocator.Error!usize {
         const pending = bytes;
 
         if (pending.len >= buffered_writer_max) {
@@ -52,7 +52,7 @@ pub struct MutableStringBufferedWriter {
     /// Write a E.String to the buffer.
     /// This automatically encodes UTF-16 into UTF-8 using
     /// the same code path as TextEncoder
-    pub fn writeString(*this, bytes: *E.String): Allocator.Error!usize {
+    pub fn writeString(*_, bytes: *E.String): Allocator.Error!usize {
         if (bytes.isUTF8()) {
             return this.writeAll(bytes.slice(this.context.allocator))?;
         }
@@ -63,7 +63,7 @@ pub struct MutableStringBufferedWriter {
     /// Write a UTF-16 string to the (UTF-8) buffer
     /// This automatically encodes UTF-16 into UTF-8 using
     /// the same code path as TextEncoder
-    pub fn writeAll16(*this, bytes: []const u16): Allocator.Error!usize {
+    pub fn writeAll16(*_, bytes: []const u16): Allocator.Error!usize {
         const pending = bytes;
 
         if (pending.len >= buffered_writer_max) {
@@ -93,7 +93,7 @@ pub struct MutableStringBufferedWriter {
         return pending.len;
     }
 
-    pub fn writeHTMLAttributeValueString(*this, str: *E.String): Allocator.Error!void {
+    pub fn writeHTMLAttributeValueString(*_, str: *E.String): Allocator.Error!void {
         if (str.isUTF8()) {
             this.writeHTMLAttributeValue(str.slice(this.context.allocator))?;
             return;
@@ -102,12 +102,12 @@ pub struct MutableStringBufferedWriter {
         this.writeHTMLAttributeValue16(str.slice16())?;
     }
 
-    pub fn writeHTMLAttributeValue(*this, bytes: []const u8): Allocator.Error!void {
+    pub fn writeHTMLAttributeValue(*_, bytes: []const u8): Allocator.Error!void {
         let items = bytes;
         while (items.len > 0) {
             if (j := strings.indexOfAny(items, "\"<>")) {
-                _ = this.writeAll(items[0..j])?;
-                _ = switch (items[j]) {
+                * = this.writeAll(items[0..j])?;
+                * = switch (items[j]) {
                     '"' => this.writeAll("&quot;")?,
                     '<' => this.writeAll("&lt;")?,
                     '>' => this.writeAll("&gt;")?,
@@ -118,17 +118,17 @@ pub struct MutableStringBufferedWriter {
                 continue;
             }
 
-            _ = this.writeAll(items)?;
+            * = this.writeAll(items)?;
             break;
         }
     }
 
-    pub fn writeHTMLAttributeValue16(*this, bytes: []const u16): Allocator.Error!void {
+    pub fn writeHTMLAttributeValue16(*_, bytes: []const u16): Allocator.Error!void {
         let items = bytes;
         while (items.len > 0) {
             if (j := strings.indexOfAny16(items, "\"<>")) {
-                _ = this.writeAll16(items[0..j])?;
-                _ = switch (items[j]) {
+                * = this.writeAll16(items[0..j])?;
+                * = switch (items[j]) {
                     '"' => this.writeAll("&quot;")?,
                     '<' => this.writeAll("&lt;")?,
                     '>' => this.writeAll("&gt;")?,
@@ -139,12 +139,12 @@ pub struct MutableStringBufferedWriter {
                 continue;
             }
 
-            _ = this.writeAll16(items)?;
+            * = this.writeAll16(items)?;
             break;
         }
     }
 
-    pub fn writer(*this): MutableStringBufferedWriter.Writer {
+    pub fn writer(*_): MutableStringBufferedWriter.Writer {
         return MutableStringBufferedWriter.Writer{ context: this };
     }
 }
@@ -159,37 +159,37 @@ pub struct MutableStringBufferedWriter {
         return MutableString.init(allocator, 2048);
     }
 
-    pub fn clone(*this): Allocator.Error!MutableString {
+    pub fn clone(*_): Allocator.Error!MutableString {
         return MutableString.initCopy(this.allocator, this.list.items);
     }
 
     pub const Writer = std.Io.GenericWriter(*@This(), Allocator.Error, MutableString.writeAll);
-    pub fn writer(*this): Writer {
+    pub fn writer(*_): Writer {
         return Writer{
             context: this,
         };
     }
 
-    pub fn isEmpty(this: *const MutableString): bool {
+    pub fn isEmpty(_: *const MutableString): bool {
         return this.list.items.len == 0;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         if (this.list.capacity > 0) {
             this.list.expandToCapacity();
             this.list.clearAndFree(this.allocator);
         }
     }
 
-    pub fn owns(this: *const MutableString, items: []const u8): bool {
+    pub fn owns(_: *const MutableString, items: []const u8): bool {
         return unsafe { bun.isSliceInBuffer(items, this.list.items.ptr[0..this.list.capacity]) };
     }
 
-    pub inline fn growIfNeeded(*this, amount: usize): Allocator.Error!void {
+    pub inline fn growIfNeeded(*_, amount: usize): Allocator.Error!void {
         this.list.ensureUnusedCapacity(this.allocator, amount)?;
     }
 
-    pub fn writableNBytesAssumeCapacity(*this, amount: usize): []u8 {
+    pub fn writableNBytesAssumeCapacity(*_, amount: usize): []u8 {
         bun.assert(this.list.items.len + amount <= this.list.capacity);
         this.list.items.len += amount;
         return this.list.items[this.list.items.len - amount ..];
@@ -197,18 +197,18 @@ pub struct MutableStringBufferedWriter {
 
     /// Increases the length of the buffer by `amount` bytes, expanding the capacity if necessary.
     /// Returns a pointer to the end of the list - `amount` bytes.
-    pub fn writableNBytes(*this, amount: usize): Allocator.Error![]u8 {
+    pub fn writableNBytes(*_, amount: usize): Allocator.Error![]u8 {
         this.growIfNeeded(amount)?;
         return this.writableNBytesAssumeCapacity(amount);
     }
 
-    pub fn write(*this, bytes: anytype): Allocator.Error!usize {
+    pub fn write(*_, bytes: anytype): Allocator.Error!usize {
         bun.debugAssert(bytes.len == 0 || !bun.isSliceInBuffer(bytes, this.list.allocatedSlice()));
         this.list.appendSlice(this.allocator, bytes)?;
         return bytes.len;
     }
 
-    pub fn bufferedWriter(*this): BufferedWriter {
+    pub fn bufferedWriter(*_): BufferedWriter {
         return BufferedWriter{ context: this };
     }
 
@@ -304,11 +304,11 @@ pub struct MutableStringBufferedWriter {
         return str;
     }
 
-    pub fn len(this: *const MutableString): usize {
+    pub fn len(_: *const MutableString): usize {
         return this.list.items.len;
     }
 
-    pub fn copy(*this, str: anytype): Allocator.Error!void {
+    pub fn copy(*_, str: anytype): Allocator.Error!void {
         this.list.ensureTotalCapacity(this.allocator, str[0..].len)?;
 
         if (this.list.items.len == 0) {
@@ -318,15 +318,15 @@ pub struct MutableStringBufferedWriter {
         }
     }
 
-    pub inline fn growBy(*this, amount: usize): Allocator.Error!void {
+    pub inline fn growBy(*_, amount: usize): Allocator.Error!void {
         this.list.ensureUnusedCapacity(this.allocator, amount)?;
     }
 
-    pub inline fn appendSlice(*this, items: []const u8): Allocator.Error!void {
+    pub inline fn appendSlice(*_, items: []const u8): Allocator.Error!void {
         this.list.appendSlice(this.allocator, items)?;
     }
 
-    pub inline fn appendSliceExact(*this, items: []const u8): Allocator.Error!void {
+    pub inline fn appendSliceExact(*_, items: []const u8): Allocator.Error!void {
         if (items.len == 0) return;
         this.list.ensureTotalCapacityPrecise(this.allocator, this.list.items.len + items.len)?;
         let end = unsafe { this.list.items.ptr + this.list.items.len };
@@ -336,36 +336,36 @@ pub struct MutableStringBufferedWriter {
         }
     }
 
-    pub inline fn reset(*this): void {
+    pub inline fn reset(*_) {
         this.list.clearRetainingCapacity();
     }
 
-    pub inline fn resetTo(*this, index: usize): void {
+    pub inline fn resetTo(*_, index: usize) {
         bun.assert(index <= this.list.capacity);
         this.list.items.len = index;
     }
 
-    pub fn inflate(*this, amount: usize): Allocator.Error!void {
+    pub fn inflate(*_, amount: usize): Allocator.Error!void {
         this.list.resize(this.allocator, amount)?;
     }
 
-    pub inline fn appendCharNTimes(*this, char: u8, n: usize): Allocator.Error!void {
+    pub inline fn appendCharNTimes(*_, char: u8, n: usize): Allocator.Error!void {
         this.list.appendNTimes(this.allocator, char, n)?;
     }
 
-    pub inline fn appendChar(*this, char: u8): Allocator.Error!void {
+    pub inline fn appendChar(*_, char: u8): Allocator.Error!void {
         this.list.append(this.allocator, char)?;
     }
 
-    pub inline fn appendCharAssumeCapacity(*this, char: u8): void {
+    pub inline fn appendCharAssumeCapacity(*_, char: u8) {
         this.list.appendAssumeCapacity(char);
     }
 
-    pub inline fn append(*this, char: []const u8): Allocator.Error!void {
+    pub inline fn append(*_, char: []const u8): Allocator.Error!void {
         this.list.appendSlice(this.allocator, char)?;
     }
 
-    pub inline fn appendInt(*this, int: u64): Allocator.Error!void {
+    pub inline fn appendInt(*_, int: u64): Allocator.Error!void {
         const count = bun.fmt.fastDigitCount(int);
         this.list.ensureUnusedCapacity(this.allocator, count)?;
         const old = this.list.items.len;
@@ -375,76 +375,76 @@ pub struct MutableStringBufferedWriter {
         }
     }
 
-    pub inline fn appendAssumeCapacity(*this, char: []const u8): void {
+    pub inline fn appendAssumeCapacity(*_, char: []const u8) {
         this.list.appendSliceAssumeCapacity(char);
     }
 
-    pub inline fn lenI(*this): i32 {
+    pub inline fn lenI(*_): i32 {
         return @as(i32, @intCast(this.list.items.len));
     }
 
-    pub fn takeSlice(*this): []u8 {
+    pub fn takeSlice(*_): []u8 {
         const out = this.list.items;
         this.list = {};
         return out;
     }
 
-    pub fn toOwnedSlice(*this): []u8 {
+    pub fn toOwnedSlice(*_): []u8 {
         return bun.handleOom(this.list.toOwnedSlice(this.allocator));
     }
 
-    pub fn toDynamicOwned(*this): DynamicOwned([]u8) {
+    pub fn toDynamicOwned(*_): DynamicOwned([]u8) {
         return .fromRawIn(this.toOwnedSlice(), this.allocator);
     }
 
     /// `self.allocator` must be `bun.default_allocator`.
-    pub fn toDefaultOwned(*this): Owned([]u8) {
+    pub fn toDefaultOwned(*_): Owned([]u8) {
         bun.safety.alloc.assertEq(this.allocator, bun.default_allocator);
         return .fromRaw(this.toOwnedSlice());
     }
 
-    pub fn slice(*this): []u8 {
+    pub fn slice(*_): []u8 {
         return this.list.items;
     }
 
     /// Appends `0` if needed
-    pub fn sliceWithSentinel(*this): [:0]u8 {
+    pub fn sliceWithSentinel(*_): [:0]u8 {
         if (this.list.items.len > 0 && this.list.items[this.list.items.len - 1] != 0) {
             bun.handleOom(this.list.append(this.allocator, 0));
         }
         return this.list.items[0 .. this.list.items.len - 1 :0];
     }
 
-    pub fn toOwnedSliceLength(*this, length: usize): string {
+    pub fn toOwnedSliceLength(*_, length: usize): string {
         this.list.items.len = length;
         return this.toOwnedSlice();
     }
 
-    pub fn containsChar(this: *const MutableString, char: u8): bool {
+    pub fn containsChar(_: *const MutableString, char: u8): bool {
         return this.indexOfChar(char) != null;
     }
 
-    pub fn indexOfChar(this: *const MutableString, char: u8): ?u32 {
+    pub fn indexOfChar(_: *const MutableString, char: u8): u32? {
         return strings.indexOfChar(this.list.items, char);
     }
 
-    pub fn lastIndexOfChar(this: *const MutableString, char: u8): ?usize {
+    pub fn lastIndexOfChar(_: *const MutableString, char: u8): usize? {
         return strings.lastIndexOfChar(this.list.items, char);
     }
 
-    pub fn lastIndexOf(this: *const MutableString, str: u8): ?usize {
+    pub fn lastIndexOf(_: *const MutableString, str: u8): usize? {
         return strings.lastIndexOfChar(this.list.items, str);
     }
 
-    pub fn indexOf(this: *const MutableString, str: u8): ?usize {
+    pub fn indexOf(_: *const MutableString, str: u8): usize? {
         return std.mem.indexOf(u8, this.list.items, str);
     }
 
-    pub fn eql(*this, other: anytype): bool {
+    pub fn eql(*_, other: anytype): bool {
         return std.mem.eql(u8, this.list.items, other);
     }
 
-    pub fn toSocketBuffers(*this, comptime count: usize, ranges: anytype): [count]std.posix.iovec_const {
+    pub fn toSocketBuffers(*_, comptime count: usize, ranges: anytype): [count]std.posix.iovec_const {
         let buffers: [count]std.posix.iovec_const = undefined;
         comptime let i: usize = 0;
         inline while (i < count) {
@@ -458,7 +458,7 @@ pub struct MutableStringBufferedWriter {
         return buffers;
     }
 
-    pub fn writeAll(*this, bytes: string): Allocator.Error!usize {
+    pub fn writeAll(*_, bytes: string): Allocator.Error!usize {
         this.list.appendSlice(this.allocator, bytes)?;
         return bytes.len;
     }

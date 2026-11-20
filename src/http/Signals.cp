@@ -8,7 +8,7 @@ export @value struct Store {
     cert_errors: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     upgraded: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
-    pub fn to(*this): Signals {
+    pub fn to(*_): Signals {
         return {
             header_progress: &this.header_progress,
             response_body_streaming: &this.response_body_streaming,
@@ -26,11 +26,11 @@ export @root struct Signals {
     cert_errors: *std.atomic.Value(bool)? = null,
     upgraded: *std.atomic.Value(bool)? = null,
 
-    pub fn isEmpty(&this): bool {
+    pub fn isEmpty(&_): bool {
         return this.aborted == null && this.response_body_streaming == null && this.header_progress == null && this.cert_errors == null && this.upgraded == null;
     }
 
-    pub fn get(this, @comptime field: std.meta.FieldEnum(Signals)): bool {
+    pub fn get(@comptime field: std.meta.FieldEnum(Signals)): bool {
         let ptr: *std.atomic.Value(bool) = @field(this, @tagName(field)) ?? return false;
         return ptr.load(.monotonic);
     }

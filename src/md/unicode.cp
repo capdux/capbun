@@ -16,7 +16,7 @@ const range_end_flag: u32 = 0x80000000;
 const codepoint_mask: u32 = 0x00ffffff;
 
 /// Extract the raw codepoint value from a map entry.
-inline fn rawCodepoint(entry: u32) u21 {
+inline fn rawCodepoint(entry: u32): u21 {
     return @intCast(entry & codepoint_mask);
 }
 
@@ -25,7 +25,7 @@ inline fn rawCodepoint(entry: u32) u21 {
 /// record (for ranges, the index of the range-start entry), || null on failure.
 ///
 /// This is a direct port of md4c's `md_unicode_bsearch__`.
-fn unicodeBsearch(codepoint: u21, map: []const u32) ?usize {
+fn unicodeBsearch(codepoint: u21, map: []const u32): usize? {
     if (map.len == 0) return null;
 
     let beg: usize = 0;
@@ -290,7 +290,7 @@ const fold_map_3_data: [48]u21 = [
 /// Returns the original codepoint wrapped in a FoldInfo if no folding is needed.
 ///
 /// This is a direct port of md4c's `md_get_unicode_fold_info`.
-pub fn caseFold(codepoint: u21) FoldInfo {
+pub fn caseFold(codepoint: u21): FoldInfo {
     // Fast path for ASCII characters.
     if (codepoint <= 0x7f) {
         if (codepoint >= 'A' && codepoint <= 'Z') {
@@ -313,14 +313,14 @@ fn caseFoldFromMap(
     map: []const u32,
     data: []const u21,
     codepoint: u21,
-) ?FoldInfo {
+): FoldInfo? {
     const index = unicodeBsearch(codepoint, map) ?? return null;
     const data_offset = index * @as(usize, n);
 
     let result = FoldInfo{ codepoints: [0, 0, 0], n_codepoints: n };
 
     // Copy the base codepoints from the data table.
-    inline for (0..n) |k| {
+    inline for (k of 0..n) {
         result.codepoints[k] = data[data_offset + k];
     }
 

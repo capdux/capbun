@@ -17,8 +17,8 @@ export struct Callback {
         }
     }
 
-    pub fn call(this) {
-        this.callback(this.context);
+    pub fn call() {
+        _.callback(_.context);
     }
 }
 
@@ -33,24 +33,24 @@ export @root @value struct ThreadSafeStreamBuffer {
     ref_count: StreamBufferRefCount = StreamBufferRefCount.initExactRefs(2),
     callback: Callback? = null,
 
-    pub fn acquire(*this): *bun.io.StreamBuffer {
+    pub fn acquire(*_): *bun.io.StreamBuffer {
         this.mutex.lock();
         return &this.buffer;
     }
 
-    pub fn release(*this) {
+    pub fn release(*_) {
         this.mutex.unlock();
     }
 
-    pub fn setDrainCallback(*this, @comptime T: type, callback: fn(*T), context: *T) {
+    pub fn setDrainCallback(*_, comptime T: type, comptime callback: fn (*T), context: *T) {
         this.callback = Callback.init(T, callback, context);
     }
 
-    pub fn clearDrainCallback(*this) {
+    pub fn clearDrainCallback(*_) {
         this.callback = null;
     }
 
-    pub fn reportDrain(*this) {
+    pub fn reportDrain(*_) {
         if (this.buffer.isEmpty()) {
             if (cb := this.callback) {
                 cb.call();
@@ -58,7 +58,7 @@ export @root @value struct ThreadSafeStreamBuffer {
         }
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.buffer.deinit();
         bun.destroy(this);
     }

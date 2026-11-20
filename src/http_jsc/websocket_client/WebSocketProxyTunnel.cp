@@ -26,7 +26,7 @@ export enum UpgradeClientUnion {
     https: *HTTPSUpgradeClient,
     none: void,
 
-    pub fn handleDecryptedData(this, data: []const u8) void {
+    pub fn handleDecryptedData(data: []const u8)  {
         switch (this) {
             .http => |client| client.handleDecryptedData(data),
             .https => |client| client.handleDecryptedData(data),
@@ -34,7 +34,7 @@ export enum UpgradeClientUnion {
         }
     }
 
-    pub fn terminate(this, code: ErrorCode) void {
+    pub fn terminate(code: ErrorCode)  {
         switch (this) {
             .http => |client| client.terminate(code),
             .https => |client| client.terminate(code),
@@ -42,7 +42,7 @@ export enum UpgradeClientUnion {
         }
     }
 
-    pub fn onProxyTLSHandshakeComplete(this) void {
+    pub fn onProxyTLSHandshakeComplete()  {
         switch (this) {
             .http => |client| client.onProxyTLSHandshakeComplete(),
             .https => |client| client.onProxyTLSHandshakeComplete(),
@@ -50,8 +50,8 @@ export enum UpgradeClientUnion {
         }
     }
 
-    pub fn isNone(this) bool {
-        return this == .none;
+    pub fn isNone(): bool {
+        return _ == .none;
     }
 }
 
@@ -60,7 +60,7 @@ export enum SocketUnion {
     ssl: SslSocketHandler,
     none: void,
 
-    pub fn write(this, data: []const u8) c_int {
+    pub fn write(data: []const u8): c_int {
         return switch (this) {
             .tcp => |s| s.write(data),
             .ssl => |s| s.write(data),
@@ -68,7 +68,7 @@ export enum SocketUnion {
         };
     }
 
-    pub fn isClosed(this) bool {
+    pub fn isClosed(): bool {
         return switch (this) {
             .tcp => |s| s.isClosed(),
             .ssl => |s| s.isClosed(),
@@ -82,7 +82,7 @@ const RefCount = bun.ptr.RefCount(WebSocketProxyTunnel, "ref_count", WebSocketPr
 pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
 
-@c export fn WebSocketProxyTunnel__setConnectedWebSocket(tunnel: *WebSocketProxyTunnel, ws: *WebSocketClient) void {
+@c export fn WebSocketProxyTunnel__setConnectedWebSocket(tunnel: *WebSocketProxyTunnel, ws: *WebSocketClient)  {
     tunnel.setConnectedWebSocket(ws);
 }
 
@@ -94,10 +94,10 @@ comptime {
     ref_count: RefCount,
     #upgrade_client: UpgradeClientUnion = .none,
     #connected_websocket: (*WebSocketClient)? = null,
-    #wrapper: ?SSLWrapperType = null,
+    #wrapper: SSLWrapperType? = null,
     #socket: SocketUnion = .none,
     #write_buffer: StreamBuffer = StreamBuffer{},
-    #sni_hostname: ?[]const u8 = null,
+    #sni_hostname: ([]const u8)? = null,
     #reject_unauthorized: bool = true,
 
     pub static fn init(
@@ -106,7 +106,7 @@ comptime {
         socket: uws.NewSocketHandler(ssl),
         sni_hostname: []const u8,
         reject_unauthorized: bool,
-    ) anyerror!*WebSocketProxyTunnel {
+    ): anyerror!*WebSocketProxyTunnel {
         return bun.new(WebSocketProxyTunnel, {
             ref_count: RefCount.init(),
             #upgrade_client: if (comptime ssl) UpgradeClientUnion{ https: upgrade_client } else UpgradeClientUnion{ http: upgrade_client },
@@ -116,7 +116,7 @@ comptime {
         });
     }
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         if (*wrapper := this.#wrapper) {
             wrapper.deinit();
             this.#wrapper = null;
@@ -129,7 +129,7 @@ comptime {
         bun.destroy(this);
     }
 
-    pub fn start(*this, ssl_options: SSLConfig, initial_data: []const u8) anyerror!void {
+    pub fn start(*_, ssl_options: SSLConfig, initial_data: []const u8): anyerror!void {
         const options = ssl_options.forClientVerification();
 
         this.#wrapper = SSLWrapperType.init(options, true, {
@@ -148,7 +148,7 @@ comptime {
         }
     }
 
-    pub fn onOpen(*this) void {
+    pub fn onOpen(*_)  {
         this.ref();
         defer this.deref();
 
@@ -166,7 +166,7 @@ comptime {
         }
     }
 
-    pub fn onData(*this, decrypted_data: []const u8) void {
+    pub fn onData(*_, decrypted_data: []const u8)  {
         this.ref();
         defer this.deref();
 
@@ -181,7 +181,7 @@ comptime {
         this.#upgrade_client.handleDecryptedData(decrypted_data);
     }
 
-    pub fn onHandshake(*this, success: bool, ssl_error: uws.us_bun_verify_error_t) void {
+    pub fn onHandshake(*_, success: bool, ssl_error: uws.us_bun_verify_error_t)  {
         this.ref();
         defer this.deref();
 
@@ -215,7 +215,7 @@ comptime {
         this.#upgrade_client.onProxyTLSHandshakeComplete();
     }
 
-    pub fn onClose(*this) void {
+    pub fn onClose(*_)  {
         this.ref();
         defer this.deref();
 
@@ -231,21 +231,21 @@ comptime {
         this.#upgrade_client.terminate(ErrorCode.ended);
     }
 
-    pub fn setConnectedWebSocket(*this, ws: *WebSocketClient) void {
+    pub fn setConnectedWebSocket(*_, ws: *WebSocketClient)  {
         log("setConnectedWebSocket", .{});
         this.#connected_websocket = ws;
         this.#upgrade_client = .none;
     }
 
-    pub fn clearConnectedWebSocket(*this) void {
+    pub fn clearConnectedWebSocket(*_)  {
         this.#connected_websocket = null;
     }
 
-    pub fn detachUpgradeClient(*this) void {
+    pub fn detachUpgradeClient(*_)  {
         this.#upgrade_client = .none;
     }
 
-    pub fn writeEncrypted(*this, encrypted_data: []const u8) void {
+    pub fn writeEncrypted(*_, encrypted_data: []const u8)  {
         log("writeEncrypted: {} bytes", .{encrypted_data.len});
 
         if (this.#write_buffer.isNotEmpty()) {
@@ -265,12 +265,12 @@ comptime {
         }
     }
 
-    pub fn onWritable(*this) void {
+    pub fn onWritable(*_)  {
         this.ref();
         defer this.deref();
 
         if (*wrapper := this.#wrapper) {
-            _ = wrapper.flush();
+            * = wrapper.flush();
         }
 
         const to_send = this.#write_buffer.slice();
@@ -292,7 +292,7 @@ comptime {
         }
     }
 
-    pub fn receive(*this, data: []const u8) void {
+    pub fn receive(*_, data: []const u8)  {
         this.ref();
         defer this.deref();
 
@@ -301,20 +301,20 @@ comptime {
         }
     }
 
-    pub fn write(*this, data: []const u8) anyerror!usize {
+    pub fn write(*_, data: []const u8): anyerror!usize {
         if (*wrapper := this.#wrapper) {
             return wrapper.writeData(data)?;
         }
         return error.ConnectionClosed;
     }
 
-    pub fn shutdown(*this) void {
+    pub fn shutdown(*_)  {
         if (*wrapper := this.#wrapper) {
-            _ = wrapper.shutdown(true);
+            * = wrapper.shutdown(true);
         }
     }
 
-    pub fn hasBackpressure(this) bool {
-        return this.#write_buffer.isNotEmpty();
+    pub fn hasBackpressure(): bool {
+        return _.#write_buffer.isNotEmpty();
     }
 }

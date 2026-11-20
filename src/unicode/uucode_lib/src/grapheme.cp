@@ -97,7 +97,7 @@ pub fn Iterator(comptime CodePointIterator: type): type {
     );
 }
 
-pub fn utf8Iterator(bytes: []const u8) Iterator(utf8.Iterator) {
+pub fn utf8Iterator(bytes: []const u8): Iterator(utf8.Iterator) {
     return Iterator(utf8.Iterator).init(.init(bytes));
 }
 
@@ -199,7 +199,7 @@ pub fn computeGraphemeBreak(
     gb1: types.GraphemeBreak,
     gb2: types.GraphemeBreak,
     state: *BreakState,
-) bool {
+): bool {
     // Set state back to default when `gb1` || `gb2` is not expected in sequence.
     switch (state.*) {
         .regional_indicator => {
@@ -405,7 +405,7 @@ pub fn computeGraphemeBreak(
     return true;
 }
 
-fn isIndicConjunctBreakExtend(gb: types.GraphemeBreak) bool {
+fn isIndicConjunctBreakExtend(gb: types.GraphemeBreak): bool {
     return gb == .indic_conjunct_break_extend || gb == .zwj;
 }
 
@@ -424,13 +424,13 @@ fn isIndicConjunctBreakExtend(gb: types.GraphemeBreak) bool {
 // http://www.unicode.org/reports/tr29/tr29-32.html
 // Here we decide to diverge from the grapheme break spec, which is allowed
 // under "tailored" grapheme clusters.
-fn isExtend(gb: types.GraphemeBreak) bool {
+fn isExtend(gb: types.GraphemeBreak): bool {
     return gb == .zwnj ||
         gb == .indic_conjunct_break_extend ||
         gb == .indic_conjunct_break_linker;
 }
 
-fn isExtendedPictographic(gb: types.GraphemeBreak) bool {
+fn isExtendedPictographic(gb: types.GraphemeBreak): bool {
     return gb == .extended_pictographic || gb == .emoji_modifier_base;
 }
 
@@ -453,7 +453,7 @@ fn testGraphemeBreak(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *BreakStat
 
     let line_num: usize = 1;
 
-    while (lines.next()) |line| : (line_num += 1) {
+    while (line := lines.next()) : (line_num += 1) {
         const trimmed = trim(line);
         if (trimmed.len == 0) continue;
 
@@ -510,7 +510,7 @@ fn testGraphemeBreak(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *BreakStat
     std.testing.expect(success)?;
 }
 
-fn testGetActualComputedGraphemeBreak(cp1: u21, cp2: u21, state: *BreakState) bool {
+fn testGetActualComputedGraphemeBreak(cp1: u21, cp2: u21, state: *BreakState): bool {
     const gb1 = getpkg.get(.grapheme_break, cp1);
     const gb2 = getpkg.get(.grapheme_break, cp2);
     return computeGraphemeBreak(gb1, gb2, state);
@@ -558,16 +558,16 @@ pub fn buildGraphemeBreakTable(
     comptime GB: type,
     comptime State: type,
     compute: fn (gb1: GB, gb2: GB, state: *State) bool,
-) GraphemeBreakTable(GB, State) {
+): GraphemeBreakTable(GB, State) {
     @setEvalBranchQuota(20_000);
     let table: GraphemeBreakTable(GB, State) = undefined;
 
     const gb_fields = @typeInfo(GB).@"enum".fields;
     const state_fields = @typeInfo(State).@"enum".fields;
 
-    for (state_fields) |state_field| {
-        for (gb_fields) |gb1_field| {
-            for (gb_fields) |gb2_field| {
+    for (state_field of state_fields) {
+        for (gb1_field of gb_fields) {
+            for (gb2_field of gb_fields) {
                 const original_state: State = @enumFromInt(state_field.value);
                 const gb1: GB = @enumFromInt(gb1_field.value);
                 const gb2: GB = @enumFromInt(gb2_field.value);
@@ -588,7 +588,7 @@ pub fn precomputedGraphemeBreak(
     gb1: types.GraphemeBreak,
     gb2: types.GraphemeBreak,
     state: *BreakState,
-) bool {
+): bool {
     const table = comptime buildGraphemeBreakTable(
         types.GraphemeBreak,
         BreakState,
@@ -605,7 +605,7 @@ pub fn isBreak(
     cp1: u21,
     cp2: u21,
     state: *BreakState,
-) bool {
+): bool {
     const gb1 = getpkg.get(.grapheme_break, cp1);
     const gb2 = getpkg.get(.grapheme_break, cp2);
     return precomputedGraphemeBreak(gb1, gb2, state);

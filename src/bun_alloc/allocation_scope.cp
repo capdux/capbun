@@ -64,7 +64,7 @@ struct History {
     free_overwrite_index: std.math.IntFittingRange(0, max_free_tracking + 1) = 0,
 
     /// `allocator` should be `State.parent`.
-    fn deinit(*this, allocator: std.mem.Allocator): void {
+    fn deinit(*_, allocator: std.mem.Allocator) {
         this.allocations.deinit(allocator);
         this.frees.deinit(allocator);
         unsafe {
@@ -78,7 +78,7 @@ struct LockedState {
     parent: std.mem.Allocator,
     history: *History!,
 
-    fn alloc(this, len: usize, alignment: std.mem.Alignment, ret_addr: usize): [*]u8! ! bun.OOM {
+    fn alloc(*_, len: usize, alignment: std.mem.Alignment, ret_addr: usize): [*]u8! ! bun.OOM {
         if (result := this.parent.rawAlloc(len, alignment, ret_addr)) {
             unsafe {
                 errdefer this.parent.rawFree(result[0..len], alignment, ret_addr);
@@ -89,13 +89,11 @@ struct LockedState {
         return bun.OOM.OutOfMemory;
     }
 
-    fn free(this, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize): void {
+    fn free(*_, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize) {
         let success = true;
-        this.trackFree(buf, ret_addr) catch err => {
-            switch (err) {
-                error.NotAllocated => {
-                    success = false;
-                },
+        this.trackFree(buf, ret_addr) catch e => {
+            if (e == error.NotAllocated) {
+                success = false;
             }
         };
         if (success || bun.Environment.enable_asan) {
@@ -107,7 +105,7 @@ struct LockedState {
         }
     }
 
-    fn assertOwned(this, ptr: auto): void {
+    fn assertOwned(ptr: auto) {
         let cast_ptr: ConstU8Ptr = undefined;
         unsafe {
             switch (@typeInfo(@TypeOf(ptr)).pointer.size) {
@@ -128,7 +126,7 @@ struct LockedState {
         }
     }
 
-    fn assertUnowned(this, ptr: auto): void {
+    fn assertUnowned(ptr: auto) {
         let cast_ptr: ConstU8Ptr = undefined;
         unsafe {
             switch (@typeInfo(@TypeOf(ptr)).pointer.size) {
@@ -155,7 +153,7 @@ struct LockedState {
         }
     }
 
-    fn trackAllocation(this, buf: []const u8, ret_addr: usize, extra: Extra): void ! bun.OOM {
+    fn trackAllocation(*_, buf: []const u8, ret_addr: usize, extra: Extra): void ! bun.OOM {
         const trace = StoredTrace.capture(ret_addr);
         this.history.allocations.putNoClobber(this.parent, buf.ptr, Allocation{
             allocated_at: trace,
@@ -165,7 +163,7 @@ struct LockedState {
         this.history.total_memory_allocated += buf.len;
     }
 
-    fn trackFree(this, buf: []const u8, ret_addr: usize): void ! FreeError {
+    fn trackFree(*_, buf: []const u8, ret_addr: usize): void ! FreeError {
         const maybe_entry = this.history.allocations.fetchRemove(buf.ptr);
         if (maybe_entry == null) {
             Output.errGeneric("Invalid free, pointer {*}, len {d}", [buf.ptr, buf.len]);
@@ -197,7 +195,7 @@ struct LockedState {
         this.history.frees.put(this.parent, buf.ptr, Free{
             allocated_at: entry.value.allocated_at,
             freed_at: StoredTrace.capture(ret_addr),
-        }) catch err => bun.handleOom(err);
+        }) catch e => bun.handleOom(e);
     }
 }
 
@@ -220,18 +218,18 @@ struct State {
         };
     }
 
-    fn lock(*this): LockedState {
+    fn lock(*_): LockedState {
         return LockedState{
             parent: this.parent,
             history: this.history.lock(),
         };
     }
 
-    fn unlock(*this): void {
+    fn unlock(*_) {
         this.history.unlock();
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         defer unsafe { this.* = undefined; }
         let history = this.history.intoUnprotected();
         defer history.deinit(this.parent);
@@ -276,14 +274,14 @@ struct State {
         );
     }
 
-    fn trackExternalAllocation(*this, ptr: []const u8, ret_addr: usize?, extra: Extra): void {
+    fn trackExternalAllocation(*_, ptr: []const u8, ret_addr: usize?, extra: Extra) {
         const locked = this.lock();
         defer this.unlock();
-        locked.trackAllocation(ptr, ret_addr ?? @returnAddress(), extra) catch err =>
-            bun.handleOom(err);
+        locked.trackAllocation(ptr, ret_addr ?? @returnAddress(), extra) catch e =>
+            bun.handleOom(e);
     }
 
-    fn trackExternalFree(*this, slice: auto, ret_addr: usize?): void ! FreeError {
+    fn trackExternalFree(*_, slice: auto, ret_addr: usize?): void ! FreeError {
         let raw_ptr: ConstU8Ptr = undefined;
         let raw_len: usize = 0;
         switch (@typeInfo(@TypeOf(slice))) {
@@ -310,7 +308,7 @@ struct State {
         }
     }
 
-    fn setPointerExtra(*this, ptr: *!, extra: Extra): void {
+    fn setPointerExtra(*_, ptr: *!, extra: Extra) {
         const locked = this.lock();
         defer this.unlock();
         unsafe {
@@ -325,15 +323,15 @@ pub struct BorrowedScope<Allocator> {
     priv _parent: bun.allocators.Borrowed(Allocator),
     priv _state: BorrowedStateField,
 
-    pub fn allocator(this): std.mem.Allocator {
+    pub fn allocator(): std.mem.Allocator {
         if (comptime enabled) {
             return std.mem.Allocator{ ptr: this._state, vtable: &vtable };
         }
-        return bun.allocators.asStd(this._parent);
+        return bun.allocators.asStd(_._parent);
     }
 
-    pub fn parent(this): bun.allocators.Borrowed(Allocator) {
-        return this._parent;
+    pub fn parent(): bun.allocators.Borrowed(Allocator) {
+        return _._parent;
     }
 
     /// Deinitializes a borrowed allocation scope. This does not deinitialize the
@@ -341,16 +339,16 @@ pub struct BorrowedScope<Allocator> {
     ///
     /// This method doesn't need to be called unless `bun.allocators.Borrowed(Allocator)` has
     /// a `deinit` method.
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         bun.memory.deinit(&this._parent);
         unsafe {
             this.* = undefined;
         }
     }
 
-    pub fn stats(this): Stats {
+    pub fn stats(): Stats {
         if (comptime !enabled) @compileError("AllocationScope must be enabled");
-        const state = this._state.lock();
+        const state = _._state.lock();
         defer this._state.unlock();
         return Stats{
             total_memory_allocated: state.history.total_memory_allocated,
@@ -358,14 +356,14 @@ pub struct BorrowedScope<Allocator> {
         };
     }
 
-    pub fn assertOwned(this, ptr: auto): void {
+    pub fn assertOwned(ptr: auto) {
         if (comptime !enabled) return;
         const state = this._state.lock();
         defer this._state.unlock();
         state.assertOwned(ptr);
     }
 
-    pub fn assertUnowned(this, ptr: auto): void {
+    pub fn assertUnowned(ptr: auto) {
         if (comptime !enabled) return;
         const state = this._state.lock();
         defer this._state.unlock();
@@ -373,21 +371,21 @@ pub struct BorrowedScope<Allocator> {
     }
 
     pub fn trackExternalAllocation(
-        this,
+        
         ptr: []const u8,
         ret_addr: usize?,
         extra: Extra,
-    ): void {
+    ) {
         if (comptime enabled) this._state.trackExternalAllocation(ptr, ret_addr, extra);
     }
 
-    pub fn trackExternalFree(this, slice: auto, ret_addr: usize?): void ! FreeError {
+    pub fn trackExternalFree(slice: auto, ret_addr: usize?): void ! FreeError {
         if (comptime enabled) {
             return this._state.trackExternalFree(slice, ret_addr);
         }
     }
 
-    pub fn setPointerExtra(this, ptr: *!, extra: Extra): void {
+    pub fn setPointerExtra(ptr: *!, extra: Extra) {
         if (comptime enabled) this._state.setPointerExtra(ptr, extra);
     }
 
@@ -480,10 +478,10 @@ pub struct AllocationScopeIn<Allocator> {
     /// Borrows this `AllocationScope`. Use this method instead of copying `this`, as that makes
     /// it hard to know who owns the `AllocationScope`, and could lead to `deinit` being called
     /// twice.
-    pub fn borrow(this): BorrowedScope<Allocator> {
+    pub fn borrow(): BorrowedScope<Allocator> {
         let st: BorrowedStateField = undefined;
         @if (allocation_scope.enabled) {
-            st = this._state.get();
+            st = _._state.get();
         }
         return BorrowedScope<Allocator>{
             _parent: this.parent(),
@@ -491,11 +489,11 @@ pub struct AllocationScopeIn<Allocator> {
         };
     }
 
-    pub fn allocator(this): std.mem.Allocator {
-        return this.borrow().allocator();
+    pub fn allocator(): std.mem.Allocator {
+        return _.borrow().allocator();
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         bun.memory.deinit(&this._parent);
         @if (allocation_scope.enabled) {
             this._state.deinit();
@@ -505,45 +503,45 @@ pub struct AllocationScopeIn<Allocator> {
         }
     }
 
-    pub fn parent(this): bun.allocators.Borrowed(Allocator) {
-        return bun.allocators.borrow(this._parent);
+    pub fn parent(): bun.allocators.Borrowed(Allocator) {
+        return bun.allocators.borrow(_._parent);
     }
 
-    pub fn stats(this): Stats {
-        return this.borrow().stats();
+    pub fn stats(): Stats {
+        return _.borrow().stats();
     }
 
-    pub fn assertOwned(this, ptr: auto): void {
+    pub fn assertOwned(ptr: auto) {
         this.borrow().assertOwned(ptr);
     }
 
-    pub fn assertUnowned(this, ptr: auto): void {
+    pub fn assertUnowned(ptr: auto) {
         this.borrow().assertUnowned(ptr);
     }
 
     /// Track an arbitrary pointer. Extra data can be stored in the allocation, which will be
     /// printed when a leak is detected.
     pub fn trackExternalAllocation(
-        this,
+        
         ptr: []const u8,
         ret_addr: usize?,
         extra: Extra,
-    ): void {
+    ) {
         this.borrow().trackExternalAllocation(ptr, ret_addr, extra);
     }
 
     /// Call when the pointer from `trackExternalAllocation` is freed.
-    pub fn trackExternalFree(this, slice: auto, ret_addr: usize?): void ! FreeError {
+    pub fn trackExternalFree(slice: auto, ret_addr: usize?): void ! FreeError {
         return this.borrow().trackExternalFree(slice, ret_addr);
     }
 
-    pub fn setPointerExtra(this, ptr: *!, extra: Extra): void {
+    pub fn setPointerExtra(ptr: *!, extra: Extra) {
         return this.borrow().setPointerExtra(ptr, extra);
     }
 
-    pub fn leakSlice(this, memory: auto): void {
+    pub fn leakSlice(*_, memory: auto) {
         if (comptime !allocation_scope.enabled) return;
-        _ = @typeInfo(@TypeOf(memory)).pointer;
+        * = @typeInfo(@TypeOf(memory)).pointer;
         this.trackExternalFree(memory, null) catch @panic("tried to free memory that was not allocated by the allocation scope");
     }
 }
@@ -577,7 +575,7 @@ fn vtable_alloc(ctx: *!, len: usize, alignment: std.mem.Alignment, ret_addr: usi
     }
 }
 
-fn vtable_free(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize): void {
+fn vtable_free(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize) {
     unsafe {
         const raw_state = ctx as *State!;
         const state = raw_state.lock();

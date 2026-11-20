@@ -16,7 +16,7 @@ fn mimalloc_free(
     buf: []u8,
     alignment: Alignment,
     _: usize,
-): void {
+) {
     if (Environment.enable_logs) {
         log("mi_free({d})", .{buf.len});
     }
@@ -58,15 +58,22 @@ const MimallocAllocator = struct {
         return mimalloc.mi_malloc_size(ptr);
     }
 
-    fn alloc_with_default_allocator(_: *!, len: usize, alignment: Alignment, _: usize): ?[*]u8 {
+    static fn alloc_with_default_allocator(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): ?[*]u8 {
+        * = ptr;
+        * = ret_addr;
         return alignedAlloc(len, alignment);
     }
 
-    fn resize_with_default_allocator(_: *!, buf: []u8, _: Alignment, new_len: usize, _: usize): bool {
+    static fn resize_with_default_allocator(ptr: *!, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize): bool {
+        * = ptr;
+        * = alignment;
+        * = ret_addr;
         return mimalloc.mi_expand(buf.ptr, new_len) != null;
     }
 
-    fn remap_with_default_allocator(_: *!, buf: []u8, alignment: Alignment, new_len: usize, _: usize): ?[*]u8 {
+    static fn remap_with_default_allocator(ptr: *!, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize): ?[*]u8 {
+        * = ptr;
+        * = ret_addr;
         return @ptrCast(mimalloc.mi_realloc_aligned(buf.ptr, new_len, alignment.toByteUnits()));
     }
 
@@ -110,11 +117,16 @@ const ZAllocator = struct {
         return mimalloc.mi_malloc_size(ptr);
     }
 
-    fn alloc_with_z_allocator(_: *!, len: usize, alignment: Alignment, _: usize): ?[*]u8 {
+    static fn alloc_with_z_allocator(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): ?[*]u8 {
+        * = ptr;
+        * = ret_addr;
         return alignedAlloc(len, alignment);
     }
 
-    fn resize_with_z_allocator(_: *!, buf: []u8, _: Alignment, new_len: usize, _: usize): bool {
+    static fn resize_with_z_allocator(ptr: *!, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize): bool {
+        * = ptr;
+        * = alignment;
+        * = ret_addr;
         if (new_len <= buf.len) {
             return true;
         }
@@ -151,6 +163,6 @@ pub const z_allocator = Allocator{
 };
 
 /// mimalloc can free allocations without being given their size.
-pub fn freeWithoutSize(ptr: *!?): void {
+pub fn freeWithoutSize(ptr: *!?) {
     mimalloc.mi_free(ptr);
 }

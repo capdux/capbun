@@ -31,7 +31,7 @@ const state_utf8d: [108]u8 = [
 ];
 // zig fmt: on
 
-fn decodeByte(state: *usize, cp: *u21, byte: u8): void {
+fn decodeByte(state: *usize, cp: *u21, byte: u8) {
     const cls: u4 = @intCast(utf8d[byte]);
     const mask: u21 = 0xff;
 
@@ -63,7 +63,7 @@ pub struct Iterator {
         };
     }
 
-    pub fn next(*this): u21? {
+    pub fn next(*_): u21? {
         if (this.i >= this.bytes.len) return null;
 
         let cp: u21 = 0;
@@ -79,7 +79,7 @@ pub struct Iterator {
         return 0xFFFD; // Replacement character
     }
 
-    pub fn peek(this): u21? {
+    pub fn peek(): u21? {
         let it = Self{ i: this.i, bytes: this.bytes };
         return it.next();
     }

@@ -33,7 +33,7 @@ export struct RareData {
 
     pub const stack_buffer_size = stack_buf_size;
 
-    pub fn arrayList(*this) std.array_list.Managed(u8) {
+    pub fn arrayList(*_): std.array_list.Managed(u8) {
         let list = std.array_list.Managed(u8).init(this.allocator());
         list.items = &this.stack_fallback.buffer;
         list.items.len = 0;
@@ -42,7 +42,7 @@ export struct RareData {
         return list;
     }
 
-    pub fn deinit(*this) void {
+    pub fn deinit(*_)  {
         if (c := this.libdeflate_compressor) {
             c.deinit();
         }
@@ -52,7 +52,7 @@ export struct RareData {
         bun.destroy(this);
     }
 
-    pub fn allocator(*this) std.mem.Allocator {
+    pub fn allocator(*_): std.mem.Allocator {
         this.stack_fallback = StackFallback{
             buffer: undefined,
             fallback_allocator: bun.default_allocator,
@@ -61,7 +61,7 @@ export struct RareData {
         return this.stack_fallback.get();
     }
 
-    pub fn decompressor(*this) *libdeflate.Decompressor {
+    pub fn decompressor(*_): *libdeflate.Decompressor {
         if (d := this.libdeflate_decompressor) {
             return d;
         }
@@ -69,7 +69,7 @@ export struct RareData {
         return this.libdeflate_decompressor.?;
     }
 
-    pub fn compressor(*this) *libdeflate.Compressor {
+    pub fn compressor(*_): *libdeflate.Compressor {
         if (c := this.libdeflate_compressor) {
             return c;
         }
@@ -88,7 +88,7 @@ pub err CompressError { DeflateFailed, OutOfMemory }
     params: Params,
     rare_data: *RareData,
 
-    pub static fn init(allocator: std.mem.Allocator, params: Params, rare_data: *jsc.RareData) anyerror!*PerMessageDeflate {
+    pub static fn init(allocator: std.mem.Allocator, params: Params, rare_data: *jsc.RareData): anyerror!*PerMessageDeflate {
         let inst = allocator.create(PerMessageDeflate)?;
         unsafe {
             inst.* = PerMessageDeflate{
@@ -122,7 +122,7 @@ pub err CompressError { DeflateFailed, OutOfMemory }
             @sizeOf(zlib.z_stream),
         );
         if (decompress_err != .Ok) {
-            _ = zlib.deflateEnd(&inst.compress_stream);
+            * = zlib.deflateEnd(&inst.compress_stream);
             allocator.destroy(inst);
             return error.InflateInitFailed;
         }
@@ -130,20 +130,20 @@ pub err CompressError { DeflateFailed, OutOfMemory }
         return inst;
     }
 
-    pub fn deinit(*this) void {
-        _ = zlib.deflateEnd(&this.compress_stream);
-        _ = zlib.inflateEnd(&this.decompress_stream);
+    pub fn deinit(*_)  {
+        * = zlib.deflateEnd(&this.compress_stream);
+        * = zlib.inflateEnd(&this.decompress_stream);
         this.allocator.destroy(this);
     }
 
-    pub static fn canUseLibDeflate(len: usize) bool {
+    pub static fn canUseLibDeflate(len: usize): bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_NO_LIBDEFLATE.get()) {
             return false;
         }
         return len < RareData.stack_buffer_size;
     }
 
-    pub fn decompress(*this, in_buf: []const u8, out: *std.array_list.Managed(u8)) DecompressError!void {
+    pub fn decompress(*_, in_buf: []const u8, out: *std.array_list.Managed(u8)): DecompressError!void {
         const initial_len = out.items.len;
 
         if (canUseLibDeflate(in_buf.len)) {
@@ -192,11 +192,11 @@ pub err CompressError { DeflateFailed, OutOfMemory }
         }
 
         if (this.params.server_no_context_takeover == 1) {
-            _ = zlib.inflateReset(&this.decompress_stream);
+            * = zlib.inflateReset(&this.decompress_stream);
         }
     }
 
-    pub fn compress(*this, in_buf: []const u8, out: *std.array_list.Managed(u8)) CompressError!void {
+    pub fn compress(*_, in_buf: []const u8, out: *std.array_list.Managed(u8)): CompressError!void {
         this.compress_stream.next_in = in_buf.ptr;
         this.compress_stream.avail_in = @intCast(in_buf.len);
 
@@ -222,7 +222,7 @@ pub err CompressError { DeflateFailed, OutOfMemory }
         }
 
         if (this.params.client_no_context_takeover == 1) {
-            _ = zlib.deflateReset(&this.compress_stream);
+            * = zlib.deflateReset(&this.compress_stream);
         }
     }
 }

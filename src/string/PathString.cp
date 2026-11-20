@@ -19,17 +19,17 @@ const PathStringBackingIntType = if (use_small_path_string_) u64 else u128;
 
     const jsc = bun.jsc;
 
-    pub fn estimatedSize(this: *const PathString): usize {
+    pub fn estimatedSize(_: *const PathString): usize {
         return @as(usize, this.len);
     }
 
-    pub inline fn slice(this: anytype): []const u8 {
+    pub inline fn slice(_: anytype): []const u8 {
         @setRuntimeSafety(false);
         const raw: [*]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.ptr))) };
         return unsafe { raw[0..this.len] };
     }
 
-    pub inline fn sliceAssumeZ(this: anytype): [:0]const u8 {
+    pub inline fn sliceAssumeZ(_: anytype): [:0]const u8 {
         @setRuntimeSafety(false);
         const raw: [*:0]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.ptr))) };
         return unsafe { raw[0..this.len :0] };
@@ -45,11 +45,11 @@ const PathStringBackingIntType = if (use_small_path_string_) u64 else u128;
         };
     }
 
-    pub inline fn isEmpty(this: anytype): bool {
+    pub inline fn isEmpty(_: anytype): bool {
         return this.len == 0;
     }
 
-    pub fn format(this: PathString, writer: *std.Io.Writer): !void {
+    pub fn format(_: PathString, writer: *std.Io.Writer): !void {
         writer.writeAll(this.slice())?;
     }
 

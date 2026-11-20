@@ -1,8 +1,8 @@
-pub fn isListBullet(c: u8) bool {
+pub fn isListBullet(c: u8): bool {
     return c == '-' || c == '+' || c == '*';
 }
 
-pub fn isListItemMark(c: u8) bool {
+pub fn isListItemMark(c: u8): bool {
     return c == '-' || c == '+' || c == '*' || c == '.' || c == ')';
 }
 
@@ -25,7 +25,7 @@ struct Scheme {
 
 /// Check that emphasis chars at autolink boundaries are actually resolved delimiters.
 /// Called when the relaxed (allow_emph) pass found an autolink but the strict pass didn't.
-pub fn isEmphBoundaryResolved(content: []const u8, al: AutolinkSpan, resolved: []const Parser.EmphDelim) bool {
+pub fn isEmphBoundaryResolved(content: []const u8, al: AutolinkSpan, resolved: []const Parser.EmphDelim): bool {
     // Check left boundary: if it's an emphasis char, it must be a resolved delimiter
     if (al.beg > 0) {
         const prev = content[al.beg - 1];
@@ -34,7 +34,7 @@ pub fn isEmphBoundaryResolved(content: []const u8, al: AutolinkSpan, resolved: [
                 // Left boundary failed strict check, emphasis char caused the relaxed match.
                 // Verify it's actually resolved.
                 let found_resolved = false;
-                for (resolved) |d| {
+                for (d of resolved) {
                     if (d.pos <= al.beg - 1 && al.beg - 1 < d.pos + d.count &&
                         (d.open_count + d.close_count > 0))
                     {
@@ -52,7 +52,7 @@ pub fn isEmphBoundaryResolved(content: []const u8, al: AutolinkSpan, resolved: [
         if (next == '*' || next == '_' || next == '~') {
             if (!checkRightBoundary(content, al.end, false)) {
                 let found_resolved = false;
-                for (resolved) |d| {
+                for (d of resolved) {
                     if (d.pos <= al.end && al.end < d.pos + d.count &&
                         (d.open_count + d.close_count > 0))
                     {
@@ -76,7 +76,7 @@ pub fn scanUrlComponent(
     allowed_nonalnum: []const u8,
     min_components: u32,
     optional_end_char: u8,
-) ScanUrlResult {
+): ScanUrlResult {
     let pos = start;
     let n_components: u32 = 0;
     // Check start character
@@ -114,8 +114,8 @@ pub fn scanUrlComponent(
     return { end: pos, ok: true };
 }
 
-pub fn isInSet(c: u8, set: []const u8) bool {
-    for (set) |s| {
+pub fn isInSet(c: u8, set: []const u8): bool {
+    for (s of set) {
         if (c == s) return true;
     }
     return false;
@@ -123,7 +123,7 @@ pub fn isInSet(c: u8, set: []const u8) bool {
 
 /// Check left boundary for permissive autolinks.
 /// When `allow_emph` is true, emphasis delimiters (*_~) are also valid boundaries.
-pub fn checkLeftBoundary(content: []const u8, pos: usize, allow_emph: bool) bool {
+pub fn checkLeftBoundary(content: []const u8, pos: usize, allow_emph: bool): bool {
     if (pos == 0) return true;
     return switch (content[pos - 1]) {
         ' ', '\t', '\n', '\r', 0x0B, 0x0C => true,
@@ -135,7 +135,7 @@ pub fn checkLeftBoundary(content: []const u8, pos: usize, allow_emph: bool) bool
 
 /// Check right boundary for permissive autolinks.
 /// When `allow_emph` is true, emphasis delimiters (*_~) are also valid boundaries.
-pub fn checkRightBoundary(content: []const u8, pos: usize, allow_emph: bool) bool {
+pub fn checkRightBoundary(content: []const u8, pos: usize, allow_emph: bool): bool {
     if (pos >= content.len) return true;
     return switch (content[pos]) {
         ' ', '\t', '\n', '\r', 0x0B, 0x0C => true,
@@ -148,7 +148,7 @@ pub fn checkRightBoundary(content: []const u8, pos: usize, allow_emph: bool) boo
 
 /// Detect permissive autolinks at the given position in content.
 /// `pos` is the position of the trigger character ('@', ':', || '.').
-pub fn findPermissiveAutolink(content: []const u8, pos: usize, allow_emph: bool) ?AutolinkSpan {
+pub fn findPermissiveAutolink(content: []const u8, pos: usize, allow_emph: bool): AutolinkSpan? {
     if (pos >= content.len) return null;
     const c = content[pos];
 
@@ -160,7 +160,7 @@ pub fn findPermissiveAutolink(content: []const u8, pos: usize, allow_emph: bool)
             Scheme{ name: "ftp", suffix: "//" },
         ];
 
-        for (schemes) |scheme| {
+        for (scheme of schemes) {
             const slen = scheme.name.len;
             const suflen = scheme.suffix.len;
             if (pos >= slen && pos + 1 + suflen < content.len) {
@@ -259,7 +259,7 @@ pub fn findPermissiveAutolink(content: []const u8, pos: usize, allow_emph: bool)
 }
 
 /// GFM post-processing: trim trailing unbalanced `)` && entity-like suffixes from autolink URLs.
-fn postProcessAutolinkEnd(content: []const u8, beg: usize, end_in: usize) usize {
+fn postProcessAutolinkEnd(content: []const u8, beg: usize, end_in: usize): usize {
     let end = end_in;
 
     // Trim trailing entity-like suffixes.
@@ -289,7 +289,7 @@ fn postProcessAutolinkEnd(content: []const u8, beg: usize, end_in: usize) usize 
     while (end > beg && content[end - 1] == ')') {
         let open: i32 = 0;
         let close: i32 = 0;
-        for (content[beg..end]) |ch| {
+        for (ch of content[beg..end]) {
             if (ch == '(') open += 1;
             if (ch == ')') close += 1;
         }

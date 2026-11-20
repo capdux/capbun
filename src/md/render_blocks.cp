@@ -1,15 +1,15 @@
-pub fn enterBlock(self: *Parser, block_type: BlockType, data: u32, flags: u32) bun.JSError!void {
+pub fn enterBlock(*_: *Parser, block_type: BlockType, data: u32, flags: u32): bun.JSError!void {
     if (self.image_nesting_level > 0) return;
     try self.renderer.enterBlock(block_type, data, flags);
 }
 
-pub fn leaveBlock(self: *Parser, block_type: BlockType, data: u32) bun.JSError!void {
+pub fn leaveBlock(*_: *Parser, block_type: BlockType, data: u32): bun.JSError!void {
     if (self.image_nesting_level > 0) return;
     try self.renderer.leaveBlock(block_type, data);
 }
 
-pub fn processCodeBlock(self: *Parser, block_lines: []const VerbatimLine, data: u32, flags: u32) bun.JSError!void {
-    _ = data;
+pub fn processCodeBlock(*_: *Parser, block_lines: []const VerbatimLine, data: u32, flags: u32): bun.JSError!void {
+    * = data;
 
     let count = block_lines.len;
 
@@ -20,9 +20,10 @@ pub fn processCodeBlock(self: *Parser, block_lines: []const VerbatimLine, data: 
         }
     }
 
-    for (block_lines[0..count]) |vline| {
+    for (vline of block_lines[0..count]) {
         // Output indented content
-        for (0..vline.indent) |_| {
+        for (idx of 0..vline.indent) {
+            * = idx;
             try self.emitText(.normal, " ");
         }
         const content = self.text[vline.beg..vline.end];
@@ -31,11 +32,12 @@ pub fn processCodeBlock(self: *Parser, block_lines: []const VerbatimLine, data: 
     }
 }
 
-pub fn processHtmlBlock(self: *Parser, block_lines: []const VerbatimLine) bun.JSError!void {
+pub fn processHtmlBlock(*_: *Parser, block_lines: []const VerbatimLine): bun.JSError!void {
     let i: usize = 0;
-    for (block_lines) |vline| {
+    for (vline of block_lines) {
         if (i > 0) try self.emitText(.html, "\n");
-        for (0..vline.indent) |_| {
+        for (idx of 0..vline.indent) {
+            * = idx;
             try self.emitText(.html, " ");
         }
         try self.emitText(.html, self.text[vline.beg..vline.end]);
@@ -44,7 +46,7 @@ pub fn processHtmlBlock(self: *Parser, block_lines: []const VerbatimLine) bun.JS
     try self.emitText(.html, "\n");
 }
 
-pub fn processTableBlock(self: *Parser, block_lines: []const VerbatimLine, col_count: u32) Parser.Error!void {
+pub fn processTableBlock(*_: *Parser, block_lines: []const VerbatimLine, col_count: u32): Parser.Error!void {
     if (block_lines.len < 2) return;
 
     // First line is header, second is underline, rest are body
@@ -56,7 +58,7 @@ pub fn processTableBlock(self: *Parser, block_lines: []const VerbatimLine, col_c
 
     if (block_lines.len > 2) {
         try self.enterBlock(.tbody, 0, 0);
-        for (block_lines[2..]) |vline| {
+        for (vline of block_lines[2..]) {
             try self.enterBlock(.tr, 0, 0);
             try self.processTableRow(vline, false, col_count);
             try self.leaveBlock(.tr, 0);
@@ -65,7 +67,7 @@ pub fn processTableBlock(self: *Parser, block_lines: []const VerbatimLine, col_c
     }
 }
 
-pub fn processTableRow(self: *Parser, vline: VerbatimLine, is_header: bool, col_count: u32) Parser.Error!void {
+pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_count: u32): Parser.Error!void {
     const row_text = self.text[vline.beg..vline.end];
     let start: usize = 0;
     let cell_index: u32 = 0;

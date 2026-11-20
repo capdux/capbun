@@ -61,7 +61,7 @@ export @root struct ClientSession {
     conn_unacked_bytes: u32 = 0,
     registry_index: u32 = 4294967295,
 
-    fn release(*this) {
+    fn release(*_) {
         bun.http.H2.live_sessions.fetchSub(1, .monotonic);
         bun.debugAssert(this.registry_index == std.math.maxInt(u32));
         this.hpack.deinit();
@@ -83,7 +83,7 @@ export @root struct ClientSession {
         bun.destroy(this);
     }
 
-    fn deinit(*this) {
+    fn deinit(*_) {
         this.release();
     }
 
@@ -107,19 +107,19 @@ export @root struct ClientSession {
         return session;
     }
 
-    fn hasHeadroom(this): bool {
-        return !this.goaway_received &&
-            !this.encoder_poisoned &&
-            this.fatal_error == null &&
-            this.streams.count() < this.remote_max_concurrent_streams &&
-            this.next_stream_id < H2FrameParser.MAX_STREAM_ID;
+    fn hasHeadroom(): bool {
+        return !_.goaway_received &&
+            !_.encoder_poisoned &&
+            _.fatal_error == null &&
+            _.streams.count() < _.remote_max_concurrent_streams &&
+            _.next_stream_id < H2FrameParser.MAX_STREAM_ID;
     }
 
-    fn matches(this, hostname: string, port: u16, ssl_config: *SSLConfig?): bool {
+    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?): bool {
         return this.port == port && bun.api.server.ServerConfig.SSLConfig.rawPtr(this.ssl_config) == ssl_config && bun.strings.eqlLong(this.hostname, hostname, true);
     }
 
-    fn adopt(*this, client: *HTTPClient) {
+    fn adopt(*_, client: *HTTPClient) {
         client.registerAbortTracker(true, this.socket);
         if (this.delivering || !this.settings_received) {
             bun.handleOom(this.pending_attach.append(bun.default_allocator, client));
@@ -137,13 +137,13 @@ export @root struct ClientSession {
         }
     }
 
-    fn enqueue(*this, client: *HTTPClient) {
+    fn enqueue(*_, client: *HTTPClient) {
         client.registerAbortTracker(true, this.socket);
         bun.handleOom(this.pending_attach.append(bun.default_allocator, client));
         this.rearmTimeout();
     }
 
-    fn drainPending(*this) {
+    fn drainPending(*_) {
         if (!this.settings_received || this.pending_attach.items.len == 0) {
             return;
         }
@@ -163,23 +163,23 @@ export @root struct ClientSession {
         }
     }
 
-    fn canPool(this): bool {
-        return this.streams.count() == 0 &&
-            !this.goaway_received &&
-            !this.encoder_poisoned &&
-            this.fatal_error == null &&
-            this.expecting_continuation == 0 &&
-            this.read_buffer.items.len == 0 &&
-            this.write_buffer.isEmpty() &&
-            this.remote_max_concurrent_streams > 0 &&
-            this.next_stream_id < H2FrameParser.MAX_STREAM_ID;
+    fn canPool(): bool {
+        return _.streams.count() == 0 &&
+            !_.goaway_received &&
+            !_.encoder_poisoned &&
+            _.fatal_error == null &&
+            _.expecting_continuation == 0 &&
+            _.read_buffer.items.len == 0 &&
+            _.write_buffer.isEmpty() &&
+            _.remote_max_concurrent_streams > 0 &&
+            _.next_stream_id < H2FrameParser.MAX_STREAM_ID;
     }
 
-    fn queue(*this, bytes: string) {
+    fn queue(*_, bytes: string) {
         bun.handleOom(this.write_buffer.write(bytes));
     }
 
-    fn writeFrame(*this, frame_type: H2FrameParser.FrameType, flags: u8, stream_id: u32, payload: string) {
+    fn writeFrame(*_, frame_type: H2FrameParser.FrameType, flags: u8, stream_id: u32, payload: string) {
         let header: H2FrameParser.FrameHeader = {
             "type": @intFromEnum(frame_type),
             flags: flags,
@@ -191,7 +191,7 @@ export @root struct ClientSession {
         this.queue(payload);
     }
 
-    fn attach(*this, client: *HTTPClient) {
+    fn attach(*_, client: *HTTPClient) {
         bun.debugAssert(this.hasHeadroom());
 
         let stream = Stream.new({
@@ -211,12 +211,12 @@ export @root struct ClientSession {
 
         this.rearmTimeout();
         const request = client.buildRequest(client.state.original_request_body.len());
-        encode.writeRequest(this, client, stream, request) catch (err) {
+        encode.writeRequest(this, client, stream, request) catch (e) {
             this.encoder_poisoned = true;
             this.streams.swapRemove(stream.id);
             stream.deinit();
             client.h2 = null;
-            client.failFromH2(err);
+            client.failFromH2(e);
             for (c of this.pending_attach.items) c.retryAfterH2Coalesce();
             this.pending_attach.clearRetainingCapacity();
             this.flush() catch {};
@@ -232,8 +232,8 @@ export @root struct ClientSession {
         }
         client.state.response_stage = .headers;
 
-        this.flush() catch (err) {
-            this.failAll(err);
+        this.flush() catch (e) {
+            this.failAll(e);
             return;
         };
 
@@ -242,7 +242,7 @@ export @root struct ClientSession {
         }
     }
 
-    fn removeStream(*this, stream: *Stream) {
+    fn removeStream(*_, stream: *Stream) {
         if (this.expecting_continuation == stream.id) {
             this.orphan_header_block.deinit(bun.default_allocator);
             this.orphan_header_block = stream.header_block;
@@ -252,7 +252,7 @@ export @root struct ClientSession {
         stream.deinit();
     }
 
-    fn detachWithFailure(*this, stream: *Stream, err: anyerror) {
+    fn detachWithFailure(*_, stream: *Stream, err: anyerror) {
         stream.rst(.CANCEL);
         this.flush() catch {};
         let client = stream.client;
@@ -266,7 +266,7 @@ export @root struct ClientSession {
         }
     }
 
-    fn rearmTimeout(*this) {
+    fn rearmTimeout(*_) {
         let want = false;
         for (s of this.streams.values()) {
             if (c := s.client) {
@@ -291,7 +291,7 @@ export @root struct ClientSession {
         this.socket.setTimeout(timeout);
     }
 
-    fn drainResponseBodyByHttpId(*this, async_http_id: u32) {
+    fn drainResponseBodyByHttpId(*_, async_http_id: u32) {
         this.ref();
         defer this.deref();
         for (let stream of this.streams.values()) {
@@ -303,7 +303,7 @@ export @root struct ClientSession {
         }
     }
 
-    fn streamBodyByHttpId(*this, async_http_id: u32, ended: bool) {
+    fn streamBodyByHttpId(*_, async_http_id: u32, ended: bool) {
         this.ref();
         defer this.deref();
         for (let stream of this.streams.values()) {
@@ -313,8 +313,8 @@ export @root struct ClientSession {
                 client.state.original_request_body.stream.ended = ended;
                 this.rearmTimeout();
                 encode.drainSendBody(this, stream, std.math.maxInt(usize));
-                this.flush() catch (err) {
-                    this.failAll(err);
+                this.flush() catch (e) {
+                    this.failAll(e);
                     return;
                 };
                 return;
@@ -322,12 +322,12 @@ export @root struct ClientSession {
         }
     }
 
-    fn writeWindowUpdate(*this, stream_id: u32, increment: u31) {
+    fn writeWindowUpdate(*_, stream_id: u32, increment: u31) {
         const value: u32 = @byteSwap(@as(u32, increment));
         this.writeFrame(.HTTP_FRAME_WINDOW_UPDATE, 0, stream_id, std.mem.asBytes(&value));
     }
 
-    fn replenishWindow(*this) {
+    fn replenishWindow(*_) {
         const threshold = bun.http.H2.local_initial_window_size / 2;
         if (this.conn_unacked_bytes >= threshold) {
             this.writeWindowUpdate(0, @intCast(this.conn_unacked_bytes));
@@ -343,7 +343,7 @@ export @root struct ClientSession {
         }
     }
 
-    fn flush(*this): !bool {
+    fn flush(*_): !bool {
         const pending = this.write_buffer.slice();
         if (pending.len == 0) {
             return false;
@@ -370,7 +370,7 @@ export @root struct ClientSession {
         return true;
     }
 
-    fn onData(*this, incoming: string) {
+    fn onData(*_, incoming: string) {
         this.ref();
         defer this.deref();
         this.stream_progressed = false;
@@ -403,8 +403,8 @@ export @root struct ClientSession {
             return;
         }
         encode.drainSendBodies(this);
-        this.flush() catch (err) {
-            this.failAll(err);
+        this.flush() catch (e) {
+            this.failAll(e);
             return;
         };
 
@@ -437,8 +437,8 @@ export @root struct ClientSession {
             if (this.fatal_error != null) {
                 return;
             }
-            this.flush() catch (err) {
-                this.failAll(err);
+            this.flush() catch (e) {
+                this.failAll(e);
                 return;
             };
         }
@@ -446,16 +446,16 @@ export @root struct ClientSession {
         this.maybeRelease();
     }
 
-    fn onWritable(*this) {
+    fn onWritable(*_) {
         this.ref();
         defer this.deref();
-        this.flush() catch (err) {
-            this.failAll(err);
+        this.flush() catch (e) {
+            this.failAll(e);
             return;
         };
         encode.drainSendBodies(this);
-        this.flush() catch (err) {
-            this.failAll(err);
+        this.flush() catch (e) {
+            this.failAll(e);
             return;
         };
         this.reapAborted();
@@ -463,7 +463,7 @@ export @root struct ClientSession {
         this.maybeRelease();
     }
 
-    fn onIdleData(*this, incoming: string) {
+    fn onIdleData(*_, incoming: string) {
         bun.handleOom(this.read_buffer.appendSlice(bun.default_allocator, incoming));
         const consumed = dispatch.parseFrames(this, this.read_buffer.items);
         const tail = this.read_buffer.items.len - consumed;
@@ -476,7 +476,7 @@ export @root struct ClientSession {
         };
     }
 
-    fn onClose(*this, err: anyerror) {
+    fn onClose(*_, err: anyerror) {
         this.ref();
         defer this.deref();
         this.ctx.unregisterH2(this);
@@ -501,7 +501,7 @@ export @root struct ClientSession {
         this.deref();
     }
 
-    fn failAll(*this, err: anyerror) {
+    fn failAll(*_, err: anyerror) {
         this.fatal_error = this.fatal_error ?? err;
         const sock = this.socket;
         if (!sock.isClosedOrHasError()) {
@@ -516,7 +516,7 @@ export @root struct ClientSession {
         sock.close(.failure);
     }
 
-    fn abortByHttpId(*this, async_http_id: u32) {
+    fn abortByHttpId(*_, async_http_id: u32) {
         let i: usize = 0;
         while (i < this.pending_attach.items.len) {
             let client = this.pending_attach.items[i];
@@ -543,7 +543,7 @@ export @root struct ClientSession {
         this.maybeRelease();
     }
 
-    fn reapAborted(*this) {
+    fn reapAborted(*_) {
         let i: usize = 0;
         while (i < this.streams.count()) {
             let stream = this.streams.values()[i];
@@ -559,7 +559,7 @@ export @root struct ClientSession {
         }
     }
 
-    fn maybeRelease(*this) {
+    fn maybeRelease(*_) {
         if (this.streams.count() > 0 || this.pending_attach.items.len > 0) {
             return;
         }
@@ -586,7 +586,7 @@ export @root struct ClientSession {
         }
     }
 
-    fn deliverStream(*this, stream: *Stream): bool {
+    fn deliverStream(*_, stream: *Stream): bool {
         if (stream.client == null) return true;
         let client = stream.client.?;
 
@@ -616,12 +616,12 @@ export @root struct ClientSession {
 
         if (stream.headers_ready) {
             stream.headers_ready = false;
-            const result = this.applyHeaders(stream, client) catch (err) {
+            const result = this.applyHeaders(stream, client) catch (e) {
                 stream.rst(.CANCEL);
                 this.flush() catch {};
                 stream.client = null;
                 client.h2 = null;
-                client.failFromH2(err);
+                client.failFromH2(e);
                 return true;
             };
             if (client.state.flags.is_redirect_pending) {
@@ -659,7 +659,7 @@ export @root struct ClientSession {
                 stream.client = null;
                 client.h2 = null;
             }
-            const report = client.handleResponseBody(stream.body_buffer.items, false) catch (err) {
+            const report = client.handleResponseBody(stream.body_buffer.items, false) catch (e) {
                 stream.body_buffer.clearRetainingCapacity();
                 stream.rst(.CANCEL);
                 this.flush() catch {};
@@ -667,7 +667,7 @@ export @root struct ClientSession {
                     stream.client = null;
                     client.h2 = null;
                 }
-                client.failFromH2(err);
+                client.failFromH2(e);
                 return true;
             };
             stream.body_buffer.clearRetainingCapacity();
@@ -696,7 +696,7 @@ export @root struct ClientSession {
         return false;
     }
 
-    fn finishStream(*this, stream: *Stream, client: *HTTPClient): bool {
+    fn finishStream(*_, stream: *Stream, client: *HTTPClient): bool {
         if (cl := client.state.content_length) {
             if (stream.data_bytes_received != cl) {
                 client.failFromH2(error.HTTP2ContentLengthMismatch);
@@ -707,7 +707,7 @@ export @root struct ClientSession {
         return true;
     }
 
-    fn applyHeaders(*this, stream: *Stream, client: *HTTPClient): !HeaderResult {
+    fn applyHeaders(*_, stream: *Stream, client: *HTTPClient): !HeaderResult {
         let response: bun.picohttp.Response = {
             minor_version: 0,
             status_code: stream.status_code,

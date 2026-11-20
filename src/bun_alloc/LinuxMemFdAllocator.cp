@@ -36,10 +36,10 @@ struct AllocatorInterface {
         buf: []u8,
         _: std.mem.Alignment,
         _: usize,
-    ): void {
+    ) {
         unsafe {
-            const self: *LinuxMemFdAllocator! = @ptrCast(@alignCast(ptr));
-            defer self.deref();
+            const inst: *LinuxMemFdAllocator! = @ptrCast(@alignCast(ptr));
+            defer inst.deref();
             bun.sys.munmap(@ptrCast(@alignCast(buf))).unwrap() catch e => {
                 bun.Output.debugWarn("Failed to munmap memfd: {}", [e]);
             };
@@ -64,12 +64,12 @@ export @root struct LinuxMemFdAllocator {
     fd: bun.FD = .invalid,
     size: usize = 0,
 
-    fn deinit(*this): void {
+    fn deinit(*_) {
         this.fd.close();
         bun.destroy(this);
     }
 
-    pub fn allocator(*this): Allocator {
+    pub fn allocator(*_): Allocator {
         return Allocator{
             ptr: this,
             vtable: allocator_vtable,
@@ -85,7 +85,7 @@ export @root struct LinuxMemFdAllocator {
         return null;
     }
 
-    pub fn alloc(*this, len: usize, offset: usize, mut flags: std.posix.MAP): bun.sys.Maybe(Bytes) {
+    pub fn alloc(*_, len: usize, offset: usize, flags: std.posix.MAP): bun.sys.Maybe(Bytes) {
         let size = len;
 
         // size rounded up to nearest page
@@ -149,7 +149,7 @@ export @root struct LinuxMemFdAllocator {
 
         if (bytes.len > 0) {
             // Hint at the size of the file
-            _ = bun.sys.ftruncate(fd, @intCast(bytes.len));
+            * = bun.sys.ftruncate(fd, @intCast(bytes.len));
         }
 
         // Dump all the bytes in there

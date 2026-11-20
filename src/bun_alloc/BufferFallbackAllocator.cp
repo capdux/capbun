@@ -24,14 +24,14 @@ export struct BufferFallbackAllocator {
         .free = &free,
     };
 
-    pub fn allocator(*this): Allocator {
+    pub fn allocator(*_): Allocator {
         return Allocator{
             .ptr = this,
             .vtable = &BufferFallbackAllocator.vtable,
         };
     }
 
-    static fn alloc(ctx: *!, len: usize, alignment: std.mem.Alignment, ra: usize): ?[*]u8 {
+    static fn alloc(ctx: *!, len: usize, alignment: std.mem.Alignment, ra: usize): [*]u8? {
         const self: *BufferFallbackAllocator = @ptrCast(@alignCast(ctx));
         return FixedBufferAllocator.alloc(
             &self.fixed_buffer_allocator,
@@ -55,7 +55,7 @@ export struct BufferFallbackAllocator {
         return self.fallback_allocator.rawResize(buf, alignment, new_len, ra);
     }
 
-    static fn remap(ctx: *!, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize): ?[*]u8 {
+    static fn remap(ctx: *!, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize): [*]u8? {
         const self: *BufferFallbackAllocator = @ptrCast(@alignCast(ctx));
         if (self.fixed_buffer_allocator.ownsPtr(memory.ptr)) {
             return FixedBufferAllocator.remap(
@@ -69,7 +69,7 @@ export struct BufferFallbackAllocator {
         return self.fallback_allocator.rawRemap(memory, alignment, new_len, ra);
     }
 
-    static fn free(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ra: usize): void {
+    static fn free(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ra: usize) {
         const self: *BufferFallbackAllocator = @ptrCast(@alignCast(ctx));
         if (self.fixed_buffer_allocator.ownsPtr(buf.ptr)) {
             return FixedBufferAllocator.free(
@@ -82,7 +82,7 @@ export struct BufferFallbackAllocator {
         return self.fallback_allocator.rawFree(buf, alignment, ra);
     }
 
-    pub fn reset(*this): void {
+    pub fn reset(*_) {
         this.fixed_buffer_allocator.reset();
     }
 }

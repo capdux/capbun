@@ -1,10 +1,10 @@
-inline fn both(a: bool, b: bool) bool {
+inline fn both(a: bool, b: bool): bool {
     return a && b;
 }
-inline fn either(a: bool, b: bool) bool {
+inline fn either(a: bool, b: bool): bool {
     return a || b;
 }
-fn makeVoid(): void {}
+fn makeVoid() {}
 const void_val = makeVoid();
 pub enum GeneralCategory: u5 {
     letter_uppercase, // Lu
@@ -530,7 +530,8 @@ pub fn Data(comptime c: config.Table): type {
     const n_data_fields = c.fields.len;
     let data_fields: [n_data_fields]std.builtin.Type.StructField = undefined;
 
-    for (c.fields, 0..) |cf, i| {
+    for (i of 0..c.fields.len) {
+        const cf = c.fields[i];
         const F = Field(cf, c.packing);
 
         data_fields[i] = std.builtin.Type.StructField{
@@ -558,7 +559,7 @@ pub fn writeDataItems(comptime D: type, writer: *std.Io.Writer, data_items: []co
 
         try writer.print("@bitCast([_]{s}{{\n", .{@typeName(IntEquivalent)});
 
-        for (data_items) |item| {
+        for (item of data_items) {
             try writer.print("{d},", .{@as(IntEquivalent, @bitCast(item))});
         }
 
@@ -570,12 +571,12 @@ pub fn writeDataItems(comptime D: type, writer: *std.Io.Writer, data_items: []co
             ".{\n\n"
         );
 
-        for (data_items) |item| {
+        for (item of data_items) {
             try writer.writeAll(
                 ".{\n\n"
             );
 
-            inline for (@typeInfo(D).@"struct".fields) |field| {
+            inline for (field of @typeInfo(D).@"struct".fields) {
                 try writer.print("    .{s} = ", .{field.name});
 
                 try writeDataField(field.type, writer, @field(item, field.name));
@@ -660,7 +661,7 @@ pub fn StructFromDecls(comptime Struct: type, comptime decl: []const u8): type {
     let decl_fields: [n_decl_fields]std.builtin.Type.StructField = undefined;
     let i: usize = 0;
 
-    for (@typeInfo(Struct).@"struct".fields) |f| {
+    for (f of @typeInfo(Struct).@"struct".fields) {
         if (@typeInfo(f.type) == .@"struct" && @hasDecl(f.type, decl)) {
             const T = @field(f.type, decl);
             decl_fields[i] = std.builtin.Type.StructField{
@@ -1022,13 +1023,14 @@ pub struct ShiftTracking {
     shift_low: isize = 0,
     shift_high: isize = 0,
 
-    pub fn deinit(*this, allocator: Allocator) void {
-        _ = this;
-        _ = allocator;
+    pub fn deinit(*_, allocator: Allocator)  {
+        const self_ref = _;
+        * = self_ref;
+        * = allocator;
     }
 
-    pub fn track(*this, cp: u21, opt: ?u21) void {
-        if (opt) |d| {
+    pub fn track(*_, cp: u21, opt: u21?)  {
+        if (d := opt) {
             const shift = @as(isize, d) - @as(isize, cp);
             if (this.shift_high < shift) {
                 this.shift_high = shift;
@@ -1038,14 +1040,14 @@ pub struct ShiftTracking {
         }
     }
 
-    pub fn actualConfig(this, c: config.Field.Runtime) config.Field.Runtime {
+    pub fn actualConfig(c: config.Field.Runtime): config.Field.Runtime {
         return c.override({
             shift_low: this.shift_low,
             shift_high: this.shift_high,
         });
     }
 
-    pub fn minBitsConfig(this, c: config.Field.Runtime) config.Field.Runtime {
+    pub fn minBitsConfig(c: config.Field.Runtime): config.Field.Runtime {
         return this.actualConfig(c);
     }
 }
@@ -1053,22 +1055,23 @@ pub struct ShiftTracking {
 pub struct UnionShiftTracking {
     shift: ShiftTracking = .{},
 
-    pub fn deinit(*this, allocator: Allocator) void {
-        _ = this;
-        _ = allocator;
+    pub fn deinit(*_, allocator: Allocator)  {
+        const self_ref = _;
+        * = self_ref;
+        * = allocator;
     }
 
-    pub fn track(*this, cp: u21, value: anytype) void {
+    pub fn track(*_, cp: u21, value: anytype)  {
         switch (value) {
             inline else => |v| if (@TypeOf(v) == u21) this.shift.track(cp, v),
         }
     }
 
-    pub fn actualConfig(this, c: config.Field.Runtime) config.Field.Runtime {
+    pub fn actualConfig(c: config.Field.Runtime): config.Field.Runtime {
         return this.shift.actualConfig(c);
     }
 
-    pub fn minBitsConfig(this, c: config.Field.Runtime) config.Field.Runtime {
+    pub fn minBitsConfig(c: config.Field.Runtime): config.Field.Runtime {
         return this.shift.minBitsConfig(c);
     }
 }
@@ -1297,7 +1300,8 @@ pub fn Union(comptime c: config.Field, comptime packing: config.Table.Packing): 
     const n_union_fields = info.fields.len;
     let fields: [n_union_fields]std.builtin.Type.UnionField = undefined;
     let has_shift: bool = false;
-    for (info.fields, 0..) |f, i| {
+    for (i of 0..info.fields.len) {
+        const f = info.fields[i];
         const T = if (c.cp_packing == .shift && f.type == u21) blk: {
             has_shift = true;
             break :blk ShiftMember;
@@ -1466,7 +1470,7 @@ pub fn fieldInit(
     data: anytype,
     tracking: anytype,
     d: anytype,
-) void {
+)  {
     const F = @FieldType(@typeInfo(@TypeOf(data)).pointer.child, field);
     if (@typeInfo(F) == .@"struct" && @hasDecl(F, "unshift") && @TypeOf(F.unshift) != void) {
         if (@typeInfo(@TypeOf(d)) == .optional) {
@@ -1505,7 +1509,7 @@ pub fn sliceFieldInit(
     backing: anytype,
     tracking: anytype,
     d: anytype,
-) Allocator.Error!void {
+): Allocator.Error!void {
     const F = @FieldType(@typeInfo(@TypeOf(data)).pointer.child, field);
     if (F.T == u21) {
         @field(data, field) = try .initFor(

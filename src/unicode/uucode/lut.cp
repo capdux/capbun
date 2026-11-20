@@ -9,15 +9,17 @@ const block_size = 256;
 const Block = [block_size]u8;
 
 struct BlockContext {
-    pub fn hash(this, k: Block): u64 {
-        _ = this;
+    pub fn hash(*_, k: Block): u64 {
+        const self_ref = _;
+        * = self_ref;
         let hasher = std.hash.Wyhash.init(0);
         std.hash.autoHashStrat(&hasher, k, .DeepRecursive);
         return hasher.final();
     }
 
-    pub fn eql(this, a: Block, b: Block): bool {
-        _ = this;
+    pub fn eql(*_, a: Block, b: Block): bool {
+        const self_ref = _;
+        * = self_ref;
         return std.mem.eql(u8, &a, &b);
     }
 }

@@ -37,7 +37,7 @@ export @root struct Stream {
     send_window: i32,
     pending_body: string = "",
 
-    pub fn release(*this) {
+    pub fn release(*_) {
         bun.http.H2.live_streams.fetchSub(1, .monotonic);
         this.header_block.deinit(bun.default_allocator);
         this.body_buffer.deinit(bun.default_allocator);
@@ -46,11 +46,11 @@ export @root struct Stream {
         bun.destroy(this);
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.release();
     }
 
-    pub fn rst(*this, code: H2FrameParser.ErrorCode) {
+    pub fn rst(*_, code: H2FrameParser.ErrorCode) {
         if (this.rst_done || this.state == .closed) return;
         this.rst_done = true;
         this.state = .closed;
@@ -58,7 +58,7 @@ export @root struct Stream {
         this.session.writeFrame(.HTTP_FRAME_RST_STREAM, 0, this.id, std.mem.asBytes(&value));
     }
 
-    pub fn sentEndStream(*this) {
+    pub fn sentEndStream(*_) {
         this.state = switch (this.state) {
             .open => .half_closed_local,
             .half_closed_remote => .closed,
@@ -66,7 +66,7 @@ export @root struct Stream {
         };
     }
 
-    pub fn recvEndStream(*this) {
+    pub fn recvEndStream(*_) {
         this.state = switch (this.state) {
             .open => .half_closed_remote,
             .half_closed_local => .closed,
@@ -75,12 +75,12 @@ export @root struct Stream {
     }
 
     @inline
-    pub fn localClosed(&this): bool {
+    pub fn localClosed(&_): bool {
         return this.state == .half_closed_local || this.state == .closed;
     }
 
     @inline
-    pub fn remoteClosed(&this): bool {
+    pub fn remoteClosed(&_): bool {
         return this.state == .half_closed_remote || this.state == .closed;
     }
 }
