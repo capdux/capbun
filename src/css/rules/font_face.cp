@@ -418,7 +418,7 @@ pub union(enum) FontFormat {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -448,7 +448,7 @@ pub union(enum) Source {
                 return fontprops.FontFamily.parse(i);
             }
         };
-        const local = switch (input.parseNestedBlock(fontprops.FontFamily, {}, Fn.parseNestedBlock)) {
+        const local = switch (input.parseNestedBlock(fontprops.FontFamily, @as(void, undefined), Fn.parseNestedBlock)) {
             .result => |vv| vv,
             .err => |e| return { err: e },
         };
@@ -467,7 +467,7 @@ pub union(enum) Source {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -553,7 +553,7 @@ pub struct UrlSource {
 
         let format: FontFormat? = null;
         if (input.tryParse(css.Parser.expectFunctionMatching, .{"format"}).isOk()) {
-            switch (input.parseNestedBlock(FontFormat, {}, css.voidWrap(FontFormat, FontFormat.parse))) {
+            switch (input.parseNestedBlock(FontFormat, @as(void, undefined), css.voidWrap(FontFormat, FontFormat.parse))) {
                 .result => |vv| format = vv,
                 .err => |e| return { err: e },
             }
@@ -566,7 +566,7 @@ pub struct UrlSource {
                     return i.parseList(FontTechnology, FontTechnology.parse);
                 }
             };
-            switch (input.parseNestedBlock(ArrayList(FontTechnology), {}, Fn.parseNestedBlockFn)) {
+            switch (input.parseNestedBlock(ArrayList(FontTechnology), @as(void, undefined), Fn.parseNestedBlockFn)) {
                 .result => |vv| tech = vv,
                 .err => |e| return { err: e },
             }
@@ -595,7 +595,7 @@ pub struct UrlSource {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -632,7 +632,7 @@ pub struct FontFaceRule {
     }
 
     fn deepClone(allocator: std.mem.Allocator): This {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -647,11 +647,11 @@ pub struct FontFaceAtRuleParser {
     }
 
     static fn parseBlock(_: *FontFaceDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRule) {
-        return { err: input.newError(css.BasicParseErrorKind{ .at_rule_body_invalid = {} }) };
+        return { err: input.newError(css.BasicParseErrorKind{ .at_rule_body_invalid = undefined }) };
     }
 
     static fn ruleWithoutBlock(_: *FontFaceDeclarationParser, _: Prelude, _: *const css.ParserState): css.Maybe(AtRule, void) {
-        return { err: {} };
+        return { err: undefined };
     }
 }
 
@@ -660,7 +660,7 @@ pub struct FontFaceQualifiedRuleParser {
     pub const QualifiedRule = FontFaceProperty;
 
     static fn parsePrelude(_: *FontFaceDeclarationParser, input: *css.Parser): Result(Prelude) {
-        return { err: input.newError(css.BasicParseErrorKind{ .qualified_rule_invalid = {} }) };
+        return { err: input.newError(css.BasicParseErrorKind{ .qualified_rule_invalid = undefined }) };
     }
 
     static fn parseBlock(_: *FontFaceDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
@@ -693,7 +693,7 @@ pub struct FontFaceValueParser {
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(name, "font-style")) {
             if (c := FontStyle.parse(input).asValue()) {
                 if (input.expectExhausted().isOk()) {
-                    return { result: { font_style: c } };
+                    return { result: { font_style: bun.create(input.allocator(), FontStyle, c) } };
                 }
             }
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(name, "font-stretch")) {

@@ -122,11 +122,11 @@ pub union(enum) SupportsCondition {
     }
 
     pub fn eql(other: *const SupportsCondition): bool {
-        return css.implementEql(SupportsCondition, _, other);
+        return css.implementEql(SupportsCondition, &_, other);
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): SupportsCondition {
-        return css.implementDeepClone(SupportsCondition, _, allocator);
+        return css.implementDeepClone(SupportsCondition, &_, allocator);
     }
 
     fn needsParens(parent: *const SupportsCondition): bool {

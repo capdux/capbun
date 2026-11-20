@@ -811,13 +811,24 @@ pub fn toCss_Selector(selector: *const parser.Selector, dest: *css.Printer) Prin
                 if ((compound.len == 0)) {
                     continue;
                 }
-                const ns_pair = (if ((0 >= compound.len)) .{ true, 0 } else (switch (compound[0]) {
-.explicit_any_namespace, .explicit_no_namespace, .namespace => .{ false, 1 },
-.default_namespace => .{ true, 1 },
-else => .{ true, 0 },
-}));
-                const can_elide_namespace = @field(ns_pair, "0");
-                const first_non_namespace: usize = @field(ns_pair, "1");
+                var can_elide_namespace = true;
+                _ = &can_elide_namespace;
+                var first_non_namespace: usize = 0;
+                _ = &first_non_namespace;
+                if ((0 < compound.len)) {
+                    switch (compound[0]) {
+.explicit_any_namespace, .explicit_no_namespace, .namespace => {
+can_elide_namespace = false;
+                    first_non_namespace = 1;
+},
+.default_namespace => {
+first_non_namespace = 1;
+},
+else => {
+
+},
+}
+                }
                 var perform_step_2 = true;
                 _ = &perform_step_2;
                 const next_combinator = combinators.next();

@@ -78,7 +78,7 @@ pub struct MachoSigner {
                 const seg = cmd.cast(macho.segment_command_64).?;
                 if (strings.eqlComptime(seg.segName(), SEG_LINKEDIT)) {
                     linkedit_seg = seg;
-                    linkedit_off = unsafe { (cmd.data.ptr as usize) - (obj.ptr as usize) };
+                    linkedit_off = unsafe { @intFromPtr(cmd.data.ptr) - @intFromPtr(obj.ptr) };
                     if (linkedit_seg.fileoff < text_seg.fileoff + text_seg.filesize) {
                         return err.InvalidLinkeditOffset;
                     }
@@ -99,7 +99,7 @@ pub struct MachoSigner {
                     const cs = cmd.cast(macho.linkedit_data_command).?;
                     sig_off = cs.dataoff;
                     sig_sz = cs.datasize;
-                    cs_cmd_off = unsafe { (cmd.data.ptr as usize) - (obj.ptr as usize) };
+                    cs_cmd_off = unsafe { @intFromPtr(cmd.data.ptr) - @intFromPtr(obj.ptr) };
                 },
                 else => {},
             }

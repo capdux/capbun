@@ -363,7 +363,7 @@ pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
     }
 
 pub fn eql(self: ConicGradient, other: *const ConicGradient) bool {
-            return css.implementEql(@This(), self, other);
+            return css.implementEql(@This(), (&self), other);
     }
 };
 
@@ -394,7 +394,7 @@ pub fn toCss(self: WebKitGradientPoint, dest: *Printer) PrintErr!void {
     }
 
 pub fn eql(self: WebKitGradientPoint, other: *const WebKitGradientPoint) bool {
-            return css.implementEql(@This(), self, other);
+            return css.implementEql(@This(), (&self), other);
     }
 
 pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
@@ -478,7 +478,7 @@ pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
     }
 
 pub fn eql(self: WebKitColorStop, other: *const WebKitColorStop) bool {
-            return css.implementEql(WebKitColorStop, self, other);
+            return css.implementEql(WebKitColorStop, (&self), other);
     }
 };
 
@@ -1232,7 +1232,7 @@ pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
     }
 
 pub fn eql(self: @This(), other: *const EndingShape) bool {
-            return css.implementEql(@This(), self, other);
+            return css.implementEql(@This(), (&self), other);
     }
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
@@ -1572,7 +1572,7 @@ pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
     }
 
 pub fn eql(self: @This(), other: *const This) bool {
-            return css.implementEql(@This(), self, other);
+            return css.implementEql(@This(), (&self), other);
     }
     const This = @This();
 };

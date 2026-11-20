@@ -497,7 +497,7 @@ pub inline fn deepClone(comptime T: type, this: *const T, allocator: Allocator):
         @compileError(@typeName(T) ++ " does not have a deepClone() function");
     }
 
-    return this.deepClone(allocator);
+    return @constCast(this).deepClone(allocator);
 }
 
 pub inline fn tryFromAngle(comptime T: type, angle: Angle): T? {
@@ -660,7 +660,12 @@ pub fn hash(comptime T: type, this: *const T, hasher: *std.hash.Wyhash) {
     }
     return switch (T) {
         []const u8 => hasher.update(this.*),
-        else => T.hash(this, hasher),
+        else => {
+            if (comptime @typeInfo(@TypeOf(T.hash)).@"fn".params[0].type == T) {
+                return T.hash(this.*, hasher);
+            }
+            return T.hash(this, hasher);
+        },
     };
 }
 

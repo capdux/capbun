@@ -114,10 +114,7 @@ pub fn toCss(self: DeclarationBlock, dest: *Printer) PrintErr!void {
                 const is_important = (comptime std.mem.eql(u8, decl_field_name, "important_declarations"));
                 for (decls.items) |decl| {
                     _ = &decl;
-                    _ = try css.Property.toCss((blk: {
-                    break :blk (&decl);
-
-}), dest, is_important);
+                    _ = try decl.toCss(dest, is_important);
                     if ((i != (length - 1))) {
                         _ = try dest.writeChar(59);
                         _ = try dest.whitespace();
@@ -142,10 +139,7 @@ pub fn toCssBlock(self: DeclarationBlock, dest: *Printer) PrintErr!void {
                 for (decls.items) |decl| {
                     _ = &decl;
                     _ = try dest.newline();
-                    _ = try css.Property.toCss((blk: {
-                    break :blk (&decl);
-
-}), dest, is_important);
+                    _ = try decl.toCss(dest, is_important);
                     if (((i != (length - 1)) or (!dest.minify))) {
                         _ = try dest.writeChar(59);
                     }
@@ -164,7 +158,10 @@ pub inline fn handle(d: *DeclarationBlock, ctx: *css.PropertyHandlerContext, hnd
             for (@field(d, decl_field).items) |*prop| {
                 _ = &prop;
                 ctx.is_important = important;
-                const handled = hndlr.handleProperty((prop.*), ctx);
+                const handled = hndlr.handleProperty((blk: {
+                break :blk (&(prop.*));
+
+}), ctx);
                 if ((!handled)) {
                     _ = bun.handleOom(hndlr.decls.append(ctx.allocator, (prop.*).*));
                     (prop.*).* = css.Property{ .all = .@"revert-layer" };
@@ -247,58 +244,59 @@ pub const PropertyDeclarationParser = struct {
     declarations: *ArrayList(css.Property),
     options: *const css.ParserOptions,
     const This = @This();
-    pub const AtRuleParser = struct {
-    
-    pub fn parsePrelude(self: *@This(), name: []const u8, input: *css.Parser) Result(Prelude) {
-            _ = self;
-                return .{ .e = input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
-        }
-    
-    pub fn parseBlock(self: *@This(), _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(AtRule) {
-            _ = self;
-                return .{ .err = input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
-        }
-    
-    pub fn ruleWithoutBlock(self: *@This(), _: Prelude, _: *const css.ParserState) css.Maybe(AtRule,void) {
-            _ = self;
-                return .{ .err = .{} };
-        }
-        pub const Prelude = void;
-        pub const AtRule = void;
-    };
-    pub const QualifiedRuleParser = struct {
-    
-    pub fn parsePrelude(self: *@This(), input: *css.Parser) Result(Prelude) {
-            _ = self;
-                return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
-    
-    pub fn parseBlock(self: *@This(), _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
-            _ = self;
-                return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
-        pub const Prelude = void;
-        pub const QualifiedRule = void;
-    };
-    pub const DeclarationParser = struct {
-    
-    pub fn parseValue(self: *@This(), name: []const u8, input: *css.Parser) Result(Declaration) {
-                return parse_declaration(name, input, self.declarations, self.important_declarations, self.options);
-        }
-        pub const Declaration = void;
-    };
-    pub const RuleBodyItemParser = struct {
-    
-    pub fn parseQualified(self: *@This()) bool {
-            _ = self;
-                return false;
-        }
-    
-    pub fn parseDeclarations(self: *@This()) bool {
-            _ = self;
-                return true;
-        }
-    };
+    pub const AtRuleParser = PropertyAtRuleParser;
+    pub const QualifiedRuleParser = PropertyQualifiedRuleParser;
+    pub const DeclarationParser = PropertyDeclParser;
+    pub const RuleBodyItemParser = PropertyRuleBodyItemParser;
+};
+
+pub const PropertyAtRuleParser = struct {
+
+pub fn parsePrelude(_: *PropertyDeclarationParser, name: []const u8, input: *css.Parser) Result(Prelude) {
+            return .{ .err = input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
+    }
+
+pub fn parseBlock(_: *PropertyDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(AtRule) {
+            return .{ .err = input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
+    }
+
+pub fn ruleWithoutBlock(_: *PropertyDeclarationParser, _: Prelude, _: *const css.ParserState) css.Maybe(AtRule,void) {
+            return .{ .err = undefined };
+    }
+    pub const Prelude = void;
+    pub const AtRule = void;
+};
+
+pub const PropertyQualifiedRuleParser = struct {
+
+pub fn parsePrelude(_: *PropertyDeclarationParser, input: *css.Parser) Result(Prelude) {
+            return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
+
+pub fn parseBlock(_: *PropertyDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
+            return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
+    pub const Prelude = void;
+    pub const QualifiedRule = void;
+};
+
+pub const PropertyDeclParser = struct {
+
+pub fn parseValue(p: *PropertyDeclarationParser, name: []const u8, input: *css.Parser) Result(Declaration) {
+            return parse_declaration(name, input, p.declarations, p.important_declarations, p.options);
+    }
+    pub const Declaration = void;
+};
+
+pub const PropertyRuleBodyItemParser = struct {
+
+pub fn parseQualified(_: *PropertyDeclarationParser) bool {
+            return false;
+    }
+
+pub fn parseDeclarations(_: *PropertyDeclarationParser) bool {
+            return true;
+    }
 };
 
 pub const DeclarationHandler = struct {

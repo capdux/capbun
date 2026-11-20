@@ -225,8 +225,8 @@ pub struct todo_stuff {
         return bun.bits.@"and"(@This(), a, b);
     }
 
-    pub fn asBits(vp: @This()): u8 {
-        return @bitCast(vp);
+    pub fn asBits(): u8 {
+        return @bitCast(_);
     }
 
     pub fn eql(other: @This()): bool {
@@ -582,7 +582,7 @@ pub fn DeriveParse(comptime T: type): type {
     return struct {
         pub fn parse(input: *Parser): Result(T) {
             if (comptime is_union_enum) {
-                const payload_count, const first_payload_index, const void_count, const first_void_index = comptime counts: {
+                const counts_val = comptime counts: {
                     let mut f_void_idx: usize? = null;
                     let mut f_payload_idx: usize? = null;
                     let mut p_count: usize = 0;
@@ -606,6 +606,10 @@ pub fn DeriveParse(comptime T: type): type {
                     }
                     break :counts .{ p_count, f_payload_idx.?, v_count, f_void_idx };
                 };
+                const payload_count = @field(counts_val, "0");
+                const first_payload_index = @field(counts_val, "1");
+                const void_count = @field(counts_val, "2");
+                const first_void_index = @field(counts_val, "3");
 
                 return generateCode(input, first_payload_index, first_void_index, void_count, payload_count);
             }
@@ -1745,12 +1749,12 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                             const supports = if (input.tryParse(Parser.expectFunctionMatching, .{"supports"}) == .result) brk: {
                                 const Func = struct {
                                     pub fn do(_: void, p: *Parser): Result(SupportsCondition) {
-                                        const result = p.tryParse(SupportsCondition.parse, {});
+                                        const result = p.tryParse(SupportsCondition.parse, .{});
                                         if (result == .err) return SupportsCondition.parseDeclaration(p);
                                         return result;
                                     }
                                 };
-                                break :brk switch (input.parseNestedBlock(SupportsCondition, {}, Func.do)) {
+                                break :brk switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), Func.do)) {
                                     .result => |v| v,
                                     .err => |e| return .{ .err = e },
                                 };
@@ -1777,7 +1781,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                                 return .{ .err = input.newCustomError(ParserError{ .unexpected_namespace_rule = {} }) };
                             }
 
-                            const prefix = switch (input.tryParse(Parser.expectIdent, {})) {
+                            const prefix = switch (input.tryParse(Parser.expectIdent, .{})) {
                                 .result => |v| v,
                                 .err => null,
                             };
@@ -1845,10 +1849,10 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                     .@"import" => {
                         parser.state = State.imports;
                         let import_rule = ImportRule{
-                            .url = prelude.@"import"[0],
-                            .media = prelude.@"import"[1],
-                            .supports = prelude.@"import"[2],
-                            .layer = if (prelude.@"import"[3]) |v| .{ .v = v.value } else null,
+                            .url = prelude.@"import".url,
+                            .media = prelude.@"import".media,
+                            .supports = prelude.@"import".supports,
+                            .layer = if (prelude.@"import".layer != null) .{ .v = prelude.@"import".layer.?.value } else null,
                             .loc = loc,
                         };
                         AtRuleParserT.CustomAtRuleParser.onImportRule(parser.at_rule_parser, &import_rule, @intCast(start.position), @intCast(start.position + 1));
@@ -2370,7 +2374,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         let kf_parser = css_rules.keyframes.KeyframesListParser{};
                         let iter = RuleBodyParser(css_rules.keyframes.KeyframesListParser).new(input, &kf_parser);
                         // todo_stuff.think_mem_mgmt
-                        let keyframes = ArrayList(css_rules.keyframes.Keyframe){};
+                        let keyframes: ArrayList(css_rules.keyframes.Keyframe) = .{};
 
                         while (iter.next()) |result| {
                             if (result.asValue()) |keyframe| {
@@ -2656,7 +2660,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                 if (parser.composes_state == .allow) {
                     const len = input.position() - location;
                     let usage = PropertyBitset.initEmpty();
-                    let custom_properties = bun.BabyList(string){};
+                    let custom_properties: bun.BabyList(string) = .{};
                     fillPropertyBitSet(parser.allocator, &usage, &declarations, &custom_properties);
 
                     const custom_properties_slice = custom_properties.slice();
@@ -2726,7 +2730,7 @@ pub fn NestedRuleParser(comptime T: type): type {
 
         pub fn parseNested(this: *This, input: *Parser, is_style_rule: bool) Result(struct { DeclarationBlock, CssRuleList(T.CustomAtRuleParser.AtRule) }) {
             // TODO: think about memory management in error cases
-            let rules = CssRuleList(T.CustomAtRuleParser.AtRule){};
+            let rules: CssRuleList(T.CustomAtRuleParser.AtRule) = .{};
             let nested_parser = This{
                 .allocator = input.allocator(),
                 .options = this.options,
@@ -3207,7 +3211,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
 
             if (self.options.css_modules) |*config| {
                 let references = CssModuleReferences{};
-                printer.css_module = CssModule.new(allocator, config, &self.sources, project_root, &references);
+                const cfg_ptr: *const css_modules.Config = unsafe { &config };
+                printer.css_module = CssModule.new(allocator, cfg_ptr, &self.sources, project_root, &references);
 
                 try self.rules.toCss(printer);
                 try printer.newline();
@@ -3341,7 +3346,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
                         continue;
                     }
 
-                    const ParseErr = Err(ParserError);
+                    const ParseErr = errors_.Err(ParserError);
                     return .{ .err = ParseErr.fromParseError(e, options.filename) };
                 }
             }
@@ -3990,7 +3995,7 @@ pub struct Parser {
         comptime T: type,
         comptime parse_one: *const fn (*Parser) Result(T),
     ): Result(ArrayList(T)) {
-        return _.parseCommaSeparatedInternal(T, {}, voidWrap(T, parse_one), false);
+        return _.parseCommaSeparatedInternal(T, @as(void, undefined), voidWrap(T, parse_one), false);
     }
 
     fn parseCommaSeparatedWithCtx(
@@ -4303,7 +4308,7 @@ pub struct Parser {
             .unquoted_url => |value| return { result: value },
             .function => |name| {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
-                    const result = _.parseNestedBlock(string, {}, struct {
+                    const result = _.parseNestedBlock(string, @as(void, undefined), struct {
                         fn parse(_: void, parser: *Parser): Result(string) {
                             return switch (parser.expectString()) {
                                 .result => |v| .{ .result = v },
@@ -4334,7 +4339,7 @@ pub struct Parser {
             .quoted_string => |value| return { result: value },
             .function => |name| {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
-                    const result = _.parseNestedBlock(string, {}, struct {
+                    const result = _.parseNestedBlock(string, @as(void, undefined), struct {
                         fn parse(_: void, parser: *Parser): Result(string) {
                             return switch (parser.expectString()) {
                                 .result => |v| .{ .result = v },

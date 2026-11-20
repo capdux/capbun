@@ -293,9 +293,8 @@ pub fn bitwiseAnd(self: VendorPrefix, a: @This(), b: @This()) @This() {
             return bun.bits.@"and"(@This(), a, b);
     }
 
-pub fn asBits(self: VendorPrefix, vp: @This()) u8 {
-        _ = self;
-            return @bitCast(vp);
+pub fn asBits(self: VendorPrefix) u8 {
+            return @bitCast(self);
     }
 
 pub fn eql(self: VendorPrefix, other: @This()) bool {
@@ -835,7 +834,7 @@ pub fn parseList(self: *Parser, comptime T: type, comptime parse_one: *const fn 
     }
 
 pub fn parseCommaSeparated(self: *Parser, comptime T: type, comptime parse_one: *const fn (*Parser) Result(T)) Result(ArrayList(T)) {
-            return self.parseCommaSeparatedInternal(T, .{}, voidWrap(T, parse_one), false);
+            return self.parseCommaSeparatedInternal(T, @as(void, undefined), voidWrap(T, parse_one), false);
     }
 
 pub fn parseCommaSeparatedWithCtx(self: *Parser, comptime T: type, closure: anytype, comptime parse_one: *const fn (@TypeOf(closure), *Parser) Result(T)) Result(ArrayList(T)) {
@@ -1207,7 +1206,7 @@ return .{ .result = value };
 },
 .function => |name| {
 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
-                const result = self.parseNestedBlock(string, .{}, struct {
+                const result = self.parseNestedBlock(string, @as(void, undefined), struct {
 
 pub fn parse(_: void, parser: *Parser) Result(string) {
             return (switch (parser.expectString()) {
@@ -1246,7 +1245,7 @@ return .{ .result = value };
 },
 .function => |name| {
 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
-                const result = self.parseNestedBlock(string, .{}, struct {
+                const result = self.parseNestedBlock(string, @as(void, undefined), struct {
 
 pub fn parse(_: void, parser: *Parser) Result(string) {
             return (switch (parser.expectString()) {
@@ -4100,10 +4099,7 @@ pub fn DeriveParse(comptime T: type) type {
 
 pub fn parse(input: *Parser) Result(T) {
             if (comptime is_union_enum) {
-                const payload_count = undefined;
-                const first_payload_index = undefined;
-                const void_count = undefined;
-                const first_void_index = (comptime counts: {
+                const counts_val = (comptime counts: {
                 var f_void_idx: ?usize = null;
                 _ = &f_void_idx;
                 var f_payload_idx: ?usize = null;
@@ -4141,6 +4137,10 @@ pub fn parse(input: *Parser) Result(T) {
                 }
                 break :counts .{ p_count, f_payload_idx.?, v_count, f_void_idx };
 });
+                const payload_count = @field(counts_val, "0");
+                const first_payload_index = @field(counts_val, "1");
+                const void_count = @field(counts_val, "2");
+                const first_void_index = @field(counts_val, "3");
                 return generateCode(input, first_payload_index, first_void_index, void_count, payload_count);
             }
             const location = input.currentSourceLocation();
@@ -4838,12 +4838,12 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                                 const supports = if (input.tryParse(Parser.expectFunctionMatching, .{"supports"}) == .result) brk: {
                                     const Func = struct {
                                         pub fn do(_: void, p: *Parser) Result(SupportsCondition) {
-                                            const result = p.tryParse(SupportsCondition.parse, {});
+                                            const result = p.tryParse(SupportsCondition.parse, .{});
                                             if (result == .err) return SupportsCondition.parseDeclaration(p);
                                             return result;
                                         }
                                     };
-                                    break :brk switch (input.parseNestedBlock(SupportsCondition, {}, Func.do)) {
+                                    break :brk switch (input.parseNestedBlock(SupportsCondition, @as(void, undefined), Func.do)) {
                                         .result => |v| v,
                                         .err => |e| return .{ .err = e },
                                     };
@@ -4870,7 +4870,7 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                                     return .{ .err = input.newCustomError(ParserError{ .unexpected_namespace_rule = {} }) };
                                 }
     
-                                const prefix = switch (input.tryParse(Parser.expectIdent, {})) {
+                                const prefix = switch (input.tryParse(Parser.expectIdent, .{})) {
                                     .result => |v| v,
                                     .err => null,
                                 };
@@ -4938,10 +4938,10 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                         .@"import" => {
                             parser.state = State.imports;
                             var import_rule = ImportRule{
-                                .url = prelude.@"import"[0],
-                                .media = prelude.@"import"[1],
-                                .supports = prelude.@"import"[2],
-                                .layer = if (prelude.@"import"[3]) |v| .{ .v = v.value } else null,
+                                .url = prelude.@"import".url,
+                                .media = prelude.@"import".media,
+                                .supports = prelude.@"import".supports,
+                                .layer = if (prelude.@"import".layer != null) .{ .v = prelude.@"import".layer.?.value } else null,
                                 .loc = loc,
                             };
                             AtRuleParserT.CustomAtRuleParser.onImportRule(parser.at_rule_parser, &import_rule, @intCast(start.position), @intCast(start.position + 1));
@@ -5068,11 +5068,9 @@ pub fn recordComposes(self: *@This(), allocator: Allocator, composes: *Composes)
     }
 
 pub fn parseNested(self: *@This(), input: *Parser, is_style_rule: bool) Result(struct{DeclarationBlock,CssRuleList(T.CustomAtRuleParser.AtRule)}) {
-            var rules = CssRuleList(T.CustomAtRuleParser.AtRule);
+            var rules: CssRuleList(T.CustomAtRuleParser.AtRule) = .{};
             _ = &rules;
-            {
-            }
-            var nested_parser = This{ .allocator = input.allocator(), .options = self.options, .at_rule_parser = self.at_rule_parser, .declarations = DeclarationList{  }, .important_declarations = DeclarationList{  }, .rules = rules, .is_in_style_rule = (self.is_in_style_rule or is_style_rule), .allow_declarations = ((self.allow_declarations or self.is_in_style_rule) or is_style_rule), .composes_state = (if ((self.is_in_style_rule and (self.composes_state == .allow))) .{ .disallow_nested = .{ .line = self.composes_state.allow.line, .column = self.composes_state.allow.column } } else self.composes_state), .composes = self.composes, .composes_refs = self.composes_refs, .local_properties = self.local_properties };
+            var nested_parser = This{ .allocator = input.allocator(), .options = self.options, .at_rule_parser = self.at_rule_parser, .declarations = DeclarationList{  }, .important_declarations = DeclarationList{  }, .rules = (&rules), .is_in_style_rule = (self.is_in_style_rule or is_style_rule), .allow_declarations = ((self.allow_declarations or self.is_in_style_rule) or is_style_rule), .composes_state = (if ((self.is_in_style_rule and (self.composes_state == .allow))) .{ .disallow_nested = .{ .line = self.composes_state.allow.line, .column = self.composes_state.allow.column } } else self.composes_state), .composes = self.composes, .composes_refs = self.composes_refs, .local_properties = self.local_properties };
             _ = &nested_parser;
             const parse_declarations = This.RuleBodyItemParser.parseDeclarations((&nested_parser));
             var errors = ArrayList(ParseError(ParserError));
@@ -5482,10 +5480,8 @@ return .{ .err = e };
                 _ = &kf_parser;
                 var iter = RuleBodyParser(css_rules.keyframes.KeyframesListParser).new(input, (&kf_parser));
                 _ = &iter;
-                var keyframes = ArrayList(css_rules.keyframes.Keyframe);
+                var keyframes: ArrayList(css_rules.keyframes.Keyframe) = .{};
                 _ = &keyframes;
-                {
-                }
                 while (iter.next()) |result| {
                     if (result.asValue()) |keyframe| {
                         _ = &keyframe;
@@ -5713,10 +5709,9 @@ return .{ .err = e };
                     const len = (input.position() - location);
                     var usage = PropertyBitset.initEmpty();
                     _ = &usage;
-                    var custom_properties = bun.BabyList(string);
+                    var custom_properties: bun.BabyList(string) = .{};
                     _ = &custom_properties;
-                    {
-                    }
+                    _ = fillPropertyBitSet(parser.allocator, (&usage), (&declarations), (&custom_properties));
                     const custom_properties_slice = custom_properties.slice();
                     for (cp_iter_slice(parser.composes_refs.slice())) |comp_ref| {
                         _ = &comp_ref;
@@ -5926,7 +5921,11 @@ pub fn toCssWithWriterImpl(self: *const @This(), allocator: Allocator, printer: 
                 _ = &config;
                 var references = CssModuleReferences{  };
                 _ = &references;
-                printer.css_module = CssModule.new(allocator, (config.*), (&self.sources), project_root, (&references));
+                const cfg_ptr: *const css_modules.Config = (blk: {
+                break :blk (config.*);
+
+});
+                printer.css_module = CssModule.new(allocator, cfg_ptr, (&self.sources), project_root, (&references));
                 _ = try self.rules.toCss(printer);
                 _ = try printer.newline();
                 return ToCssResultInternal{ .dependencies = printer.dependencies, .exports = exports: {
@@ -6014,7 +6013,7 @@ break;
                     if (result_options.error_recovery) {
                         continue;
                     }
-                    const ParseErr = .ParserError;
+                    const ParseErr = errors_.Err(ParserError);
                     return .{ .err = ParseErr.fromParseError(e, options.filename) };
                 }
             }

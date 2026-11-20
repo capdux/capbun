@@ -1271,15 +1271,20 @@ pub const tocss_servo = struct {
             //
             // If we are in this case, after we have serialized the universal
             // selector, we skip Step 2 && continue with the algorithm.
-            const ns_pair = if (0 >= compound.len)
-                .{ true, 0 }
-            else switch (compound[0]) {
-                .explicit_any_namespace, .explicit_no_namespace, .namespace => .{ false, 1 },
-                .default_namespace => .{ true, 1 },
-                else => .{ true, 0 },
-            };
-            const can_elide_namespace = @field(ns_pair, "0");
-            const first_non_namespace: usize = @field(ns_pair, "1");
+            let can_elide_namespace = true;
+            let first_non_namespace: usize = 0;
+            if (0 < compound.len) {
+                switch (compound[0]) {
+                    .explicit_any_namespace, .explicit_no_namespace, .namespace => {
+                        can_elide_namespace = false;
+                        first_non_namespace = 1;
+                    },
+                    .default_namespace => {
+                        first_non_namespace = 1;
+                    },
+                    else => {},
+                }
+            }
             let perform_step_2 = true;
             const next_combinator = combinators.next();
             if (first_non_namespace == compound.len - 1) {

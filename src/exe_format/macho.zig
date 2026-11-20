@@ -149,7 +149,7 @@ pub fn init(allocator: Allocator, obj: []const u8) !*MachoSigner {
                     if (strings.eqlComptime(seg.segName(), SEG_LINKEDIT)) {
                         linkedit_seg = seg;
                         linkedit_off = (blk: {
-                        break :blk ((if (comptime @typeInfo(@TypeOf(cmd.data.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(cmd.data.ptr)) else cp_cast_int(usize, cmd.data.ptr)) - (if (comptime @typeInfo(@TypeOf(obj.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(obj.ptr)) else cp_cast_int(usize, obj.ptr)));
+                        break :blk (@intFromPtr(cmd.data.ptr) - @intFromPtr(obj.ptr));
 
 });
                         if ((linkedit_seg.fileoff < (text_seg.fileoff + text_seg.filesize))) {
@@ -170,7 +170,7 @@ const cs = (cmd.cast(macho.linkedit_data_command)).?;
                 sig_off = cs.dataoff;
                 sig_sz = cs.datasize;
                 cs_cmd_off = (blk: {
-                break :blk ((if (comptime @typeInfo(@TypeOf(cmd.data.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(cmd.data.ptr)) else cp_cast_int(usize, cmd.data.ptr)) - (if (comptime @typeInfo(@TypeOf(obj.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(obj.ptr)) else cp_cast_int(usize, obj.ptr)));
+                break :blk (@intFromPtr(cmd.data.ptr) - @intFromPtr(obj.ptr));
 
 });
 },

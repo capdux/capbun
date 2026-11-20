@@ -1042,7 +1042,7 @@ pub const SelectorParser = struct {
 
     pub const Impl = selector_impl.Selectors;
 
-    pub fn newLocalIdentifier(_: *SelectorParser, input: *css.Parser, tag: css.CssRef.Tag, raw: []const u8, loc: usize): Impl.SelectorImpl.LocalIdentifier {
+    pub static fn newLocalIdentifier(_: *SelectorParser, input: *css.Parser, tag: css.CssRef.Tag, raw: []const u8, loc: usize): Impl.SelectorImpl.LocalIdentifier {
         if (input.flags.css_modules) {
             return Impl.SelectorImpl.LocalIdentifier.fromRef(input.addSymbolForName(raw, tag, bun.logger.Loc{
                 .start = @intCast(loc),
@@ -3502,7 +3502,8 @@ pub fn parse_qualified_name(
                 '*' => {
                     const after_star = input.state();
                     const result = input.nextIncludingWhitespace();
-                    if (t_val := result.asValue()) {
+                    if (result == .result) {
+                        const t_val = result.result;
                         if (t_val.* == .delim && t_val.delim == '|') {
                             return parse_qualified_name_eplicit_namespace_helper(
                                 Impl,

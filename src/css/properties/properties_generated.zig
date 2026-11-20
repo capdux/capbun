@@ -5948,7 +5948,7 @@ return R{ .err = e };
     }
 
 pub fn propertyId(self: Property) PropertyId {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => .@"background-color",
 .@"background-image" => .@"background-image",
 .@"background-position-x" => .@"background-position-x",
@@ -6202,7 +6202,7 @@ pub fn propertyId(self: Property) PropertyId {
     }
 
 pub fn deepClone(self: Property, allocator: std.mem.Allocator) Property {
-            return (switch (self.*) {
+            return (switch (self) {
 .@"background-color" => |*v| Property{ .@"background-color" = v.deepClone(allocator) },
 .@"background-image" => |*v| Property{ .@"background-image" = v.deepClone(allocator) },
 .@"background-position-x" => |*v| Property{ .@"background-position-x" = v.deepClone(allocator) },
@@ -10490,7 +10490,7 @@ pub fn eql(lhs: *const PropertyId, rhs: *const PropertyId) bool {
     }
 
 pub fn hash(self: PropertyId, hasher: *std.hash.Wyhash) void {
-            const tag = @intFromEnum(self.*);
+            const tag = @intFromEnum(self);
             _ = hasher.update(std.mem.asBytes((&tag)));
     }
 

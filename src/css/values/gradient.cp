@@ -658,7 +658,7 @@ pub struct ConicGradient {
     }
 
     fn eql(other: *const ConicGradient): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), &_, other);
     }
 }
 
@@ -1115,7 +1115,7 @@ pub const EndingShape = union(enum) {
     }
 
     pub fn eql(other: *const EndingShape): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), &_, other);
     }
 };
 
@@ -1145,7 +1145,7 @@ pub struct WebKitGradientPoint {
     }
 
     fn eql(other: *const WebKitGradientPoint): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), &_, other);
     }
 
     static fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
@@ -1310,7 +1310,7 @@ pub struct WebKitColorStop {
     }
 
     fn eql(other: *const WebKitColorStop): bool {
-        return css.implementEql(WebKitColorStop, _, other);
+        return css.implementEql(WebKitColorStop, &_, other);
     }
 }
 
@@ -1353,7 +1353,7 @@ pub fn ColorStop(comptime D: type): type {
         }
 
         pub fn eql(other: *const This): bool {
-            return css.implementEql(@This(), _, other);
+            return css.implementEql(@This(), &_, other);
         }
     };
 }

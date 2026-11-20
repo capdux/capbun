@@ -37,7 +37,7 @@ pub fn StyleRule(comptime R: type): type {
                 selectors: _.selectors.deepClone(allocator),
                 vendor_prefix: _.vendor_prefix,
                 declarations: _.declarations.deepClone(allocator),
-                rules: _.rules.deepClone(allocator),
+                rules: @constCast(&_.rules).deepClone(allocator),
                 loc: _.loc,
             };
         }
@@ -228,13 +228,13 @@ pub fn StyleRule(comptime R: type): type {
                     let len = @min(_.declarations.declarations.items.len, other.declarations.declarations.items.len);
                     let i: usize = 0;
                     while (i < len) {
-                        if (!_.declarations.declarations.items[i].propertyId().eql(other.declarations.declarations.items[i].propertyId())) break :brk false;
+                        if (!_.declarations.declarations.items[i].propertyId().eql(&other.declarations.declarations.items[i].propertyId())) break :brk false;
                         i += 1;
                     }
                     len = @min(_.declarations.important_declarations.items.len, other.declarations.important_declarations.items.len);
                     i = 0;
                     while (i < len) {
-                        if (!_.declarations.important_declarations.items[i].propertyId().eql(other.declarations.important_declarations.items[i].propertyId())) break :brk false;
+                        if (!_.declarations.important_declarations.items[i].propertyId().eql(&other.declarations.important_declarations.items[i].propertyId())) break :brk false;
                         i += 1;
                     }
                     break :brk true;

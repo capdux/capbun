@@ -41,7 +41,7 @@ pub struct MediaList {
         const MediaQueryList = ArrayList(MediaQuery);
         let media_queries = MediaQueryList{};
         while (true) {
-            const mq = switch (input.parseUntilBefore(css.Delimiters{ .comma = true }, MediaQuery, {}, css.voidWrap(MediaQuery, MediaQuery.parse))) {
+            const mq = switch (input.parseUntilBefore(css.Delimiters{ .comma = true }, MediaQuery, @as(void, undefined), css.voidWrap(MediaQuery, MediaQuery.parse))) {
                 .result => |v| v,
                 .err => |e| {
                     if (e.kind == .basic && e.kind.basic == .end_of_input) break;
@@ -186,7 +186,6 @@ pub struct MediaQuery {
                 const media_type = switch (MediaType.parse(i)) {
                     .result => |vv| vv,
                     .err => |e| return { err: e },
-                    else => unreachable,
                 };
                 return { result: .{ qualifier, media_type } };
             }
@@ -444,7 +443,7 @@ pub enum MediaCondition {
         };
     }
 
-    pub fn parseWithFlags(input: *css.Parser, flags: QueryConditionFlags): Result(MediaCondition) {
+    pub static fn parseWithFlags(input: *css.Parser, flags: QueryConditionFlags): Result(MediaCondition) {
         return parseQueryCondition(MediaCondition, input, flags);
     }
 

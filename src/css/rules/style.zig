@@ -78,7 +78,7 @@ pub fn hashKey(self: @This()) u64 {
     }
 
 pub fn deepClone(self: @This(), allocator: std.mem.Allocator) This {
-            return This{ .selectors = self.selectors.deepClone(allocator), .vendor_prefix = self.vendor_prefix, .declarations = self.declarations.deepClone(allocator), .rules = self.rules.deepClone(allocator), .loc = self.loc };
+            return This{ .selectors = self.selectors.deepClone(allocator), .vendor_prefix = self.vendor_prefix, .declarations = self.declarations.deepClone(allocator), .rules = @constCast((&self.rules)).deepClone(allocator), .loc = self.loc };
     }
 
 pub fn updatePrefix(self: *@This(), context: *css.MinifyContext) void {
@@ -229,7 +229,7 @@ pub inline fn isDuplicate(self: *@This(), other: *const This) bool {
             var i: usize = 0;
             _ = &i;
             while ((i < len)) {
-                if ((!self.declarations.declarations.items[@as(usize, @intCast(i))].propertyId().eql(other.declarations.declarations.items[@as(usize, @intCast(i))].propertyId()))) {
+                if ((!self.declarations.declarations.items[@as(usize, @intCast(i))].propertyId().eql((&other.declarations.declarations.items[@as(usize, @intCast(i))].propertyId())))) {
                     break :brk false;
                 }
                 i = (i + 1);
@@ -237,7 +237,7 @@ pub inline fn isDuplicate(self: *@This(), other: *const This) bool {
             len = @min(self.declarations.important_declarations.items.len, other.declarations.important_declarations.items.len);
             i = 0;
             while ((i < len)) {
-                if ((!self.declarations.important_declarations.items[@as(usize, @intCast(i))].propertyId().eql(other.declarations.important_declarations.items[@as(usize, @intCast(i))].propertyId()))) {
+                if ((!self.declarations.important_declarations.items[@as(usize, @intCast(i))].propertyId().eql((&other.declarations.important_declarations.items[@as(usize, @intCast(i))].propertyId())))) {
                     break :brk false;
                 }
                 i = (i + 1);

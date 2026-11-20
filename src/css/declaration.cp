@@ -107,7 +107,7 @@ pub struct DeclarationBlock {
             const is_important = comptime std.mem.eql(u8, decl_field_name, "important_declarations");
 
             for (decl of decls.items) {
-                css.Property.toCss(unsafe { &decl }, dest, is_important)?;
+                decl.toCss(dest, is_important)?;
                 if (i != length - 1) {
                     try dest.writeChar(';');
                     dest.whitespace()?;
@@ -135,7 +135,7 @@ pub struct DeclarationBlock {
             const is_important = comptime std.mem.eql(u8, decl_field_name, "important_declarations");
             for (decl of decls.items) {
                 dest.newline()?;
-                css.Property.toCss(unsafe { &decl }, dest, is_important)?;
+                decl.toCss(dest, is_important)?;
                 if (i != length - 1 || !dest.minify) {
                     try dest.writeChar(';');
                 }
@@ -165,7 +165,7 @@ pub struct DeclarationBlock {
                 for (*prop of @field(d, decl_field).items) {
                     ctx.is_important = important;
 
-                    const handled = hndlr.handleProperty(prop, ctx);
+                    const handled = hndlr.handleProperty(unsafe { &prop }, ctx);
 
                     if (!handled) {
                         bun.handleOom(hndlr.decls.append(ctx.allocator, prop.*));
@@ -222,61 +222,66 @@ pub struct PropertyDeclarationParser {
 
     const This = @This();
 
-    pub const AtRuleParser = struct {
-        pub const Prelude = void;
-        pub const AtRule = void;
+    pub const AtRuleParser = PropertyAtRuleParser;
+    pub const QualifiedRuleParser = PropertyQualifiedRuleParser;
+    pub const DeclarationParser = PropertyDeclParser;
+    pub const RuleBodyItemParser = PropertyRuleBodyItemParser;
+}
 
-        fn parsePrelude(_: *This, name: []const u8, input: *css.Parser): Result(Prelude) {
-            return {
-                e: input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }),
-            };
-        }
+pub struct PropertyAtRuleParser {
+    pub const Prelude = void;
+    pub const AtRule = void;
 
-        fn parseBlock(_: *This, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRule) {
-            return { err: input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
-        }
+    static fn parsePrelude(_: *PropertyDeclarationParser, name: []const u8, input: *css.Parser): Result(Prelude) {
+        return {
+            err: input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }),
+        };
+    }
 
-        fn ruleWithoutBlock(_: *This, _: Prelude, _: *const css.ParserState): css.Maybe(AtRule, void) {
-            return { err: {} };
-        }
-    };
+    static fn parseBlock(_: *PropertyDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRule) {
+        return { err: input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
+    }
 
-    pub const QualifiedRuleParser = struct {
-        pub const Prelude = void;
-        pub const QualifiedRule = void;
+    static fn ruleWithoutBlock(_: *PropertyDeclarationParser, _: Prelude, _: *const css.ParserState): css.Maybe(AtRule, void) {
+        return { err: undefined };
+    }
+}
 
-        fn parsePrelude(_: *This, input: *css.Parser): Result(Prelude) {
-            return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
+pub struct PropertyQualifiedRuleParser {
+    pub const Prelude = void;
+    pub const QualifiedRule = void;
 
-        fn parseBlock(_: *This, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
-            return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
-    };
+    static fn parsePrelude(_: *PropertyDeclarationParser, input: *css.Parser): Result(Prelude) {
+        return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
 
-    pub const DeclarationParser = struct {
-        pub const Declaration = void;
+    static fn parseBlock(_: *PropertyDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
+        return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
+}
 
-        fn parseValue(*_, name: []const u8, input: *css.Parser): Result(Declaration) {
-            return parse_declaration(
-                name,
-                input,
-                _.declarations,
-                _.important_declarations,
-                _.options,
-            );
-        }
-    };
+pub struct PropertyDeclParser {
+    pub const Declaration = void;
 
-    pub const RuleBodyItemParser = struct {
-        fn parseQualified(_: *This): bool {
-            return false;
-        }
+    static fn parseValue(p: *PropertyDeclarationParser, name: []const u8, input: *css.Parser): Result(Declaration) {
+        return parse_declaration(
+            name,
+            input,
+            p.declarations,
+            p.important_declarations,
+            p.options,
+        );
+    }
+}
 
-        fn parseDeclarations(_: *This): bool {
-            return true;
-        }
-    };
+pub struct PropertyRuleBodyItemParser {
+    static fn parseQualified(_: *PropertyDeclarationParser): bool {
+        return false;
+    }
+
+    static fn parseDeclarations(_: *PropertyDeclarationParser): bool {
+        return true;
+    }
 }
 
 pub fn parse_declaration(

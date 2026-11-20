@@ -114,7 +114,7 @@ pub const FontPaletteValuesProperty = union(enum) {
     }
 
     pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -198,7 +198,7 @@ pub union(enum) BasePalette {
     }
 
     pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -250,45 +250,49 @@ pub struct FontPaletteValuesDeclarationParser {
         }
     };
 
-    pub const RuleBodyItemParser = struct {
-        fn parseQualified(*_): bool {
-            return false;
-        }
+    pub const RuleBodyItemParser = FontPaletteValuesRuleBodyItemParser;
+    pub const AtRuleParser = FontPaletteValuesAtRuleParser;
+    pub const QualifiedRuleParser = FontPaletteValuesQualifiedRuleParser;
+}
 
-        fn parseDeclarations(*_): bool {
-            return true;
-        }
-    };
+pub struct FontPaletteValuesRuleBodyItemParser {
+    static fn parseQualified(_: *FontPaletteValuesDeclarationParser): bool {
+        return false;
+    }
 
-    pub const AtRuleParser = struct {
-        pub const Prelude = void;
-        pub const AtRule = FontPaletteValuesProperty;
+    static fn parseDeclarations(_: *FontPaletteValuesDeclarationParser): bool {
+        return true;
+    }
+}
 
-        fn parsePrelude(*_, name: []const u8, input: *css.Parser): Result(Prelude) {
-            return { err: input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
-        }
+pub struct FontPaletteValuesAtRuleParser {
+    pub const Prelude = void;
+    pub const AtRule = FontPaletteValuesProperty;
 
-        fn parseBlock(*_, _: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRuleParser.AtRule) {
-            return { err: input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
-        }
+    static fn parsePrelude(_: *FontPaletteValuesDeclarationParser, name: []const u8, input: *css.Parser): Result(Prelude) {
+        return { err: input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
+    }
 
-        fn ruleWithoutBlock(*_, _: AtRuleParser.Prelude, _: *const css.ParserState): css.Maybe(AtRuleParser.AtRule, void) {
-            return { err: {} };
-        }
-    };
+    static fn parseBlock(_: *FontPaletteValuesDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(AtRule) {
+        return { err: input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
+    }
 
-    pub const QualifiedRuleParser = struct {
-        pub const Prelude = void;
-        pub const QualifiedRule = FontPaletteValuesProperty;
+    static fn ruleWithoutBlock(_: *FontPaletteValuesDeclarationParser, _: Prelude, _: *const css.ParserState): css.Maybe(AtRule, void) {
+        return { err: undefined };
+    }
+}
 
-        fn parsePrelude(*_, input: *css.Parser): Result(Prelude) {
-            return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
+pub struct FontPaletteValuesQualifiedRuleParser {
+    pub const Prelude = void;
+    pub const QualifiedRule = FontPaletteValuesProperty;
 
-        fn parseBlock(*_, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
-            return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
-    };
+    static fn parsePrelude(_: *FontPaletteValuesDeclarationParser, input: *css.Parser): Result(Prelude) {
+        return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
+
+    static fn parseBlock(_: *FontPaletteValuesDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser): Result(QualifiedRule) {
+        return { err: input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
 }
 
 import bun from "bun";

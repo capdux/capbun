@@ -2508,7 +2508,7 @@ pub union(PropertyIdTag) Property {
   }
 
   fn propertyId(): PropertyId {
-    return switch (_.*) {
+    return switch (_) {
       .@"background-color" => .@"background-color",
 .@"background-image" => .@"background-image",
 .@"background-position-x" => .@"background-position-x",
@@ -2762,7 +2762,7 @@ pub union(PropertyIdTag) Property {
   }
 
   fn deepClone(allocator: std.mem.Allocator): Property {
-    return switch (_.*) {
+    return switch (_) {
       .@"background-color" => |*v| Property{ @"background-color": v.deepClone(allocator) },
 .@"background-image" => |*v| Property{ @"background-image": v.deepClone(allocator) },
 .@"background-position-x" => |*v| Property{ @"background-position-x": v.deepClone(allocator) },
@@ -10666,7 +10666,7 @@ pub union(PropertyIdTag) PropertyId {
   }
 
   fn hash(hasher: *std.hash.Wyhash) {
-    const tag = @intFromEnum(_.*);
+    const tag = @intFromEnum(_);
     hasher.update(std.mem.asBytes(&tag));
   }
 

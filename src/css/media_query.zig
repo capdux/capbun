@@ -229,8 +229,7 @@ pub fn needsParens(self: MediaCondition, parent_operator: ?Operator, targets: *c
 });
     }
 
-pub fn parseWithFlags(self: *MediaCondition, input: *css.Parser, flags: QueryConditionFlags) Result(MediaCondition) {
-        _ = self;
+pub fn parseWithFlags(input: *css.Parser, flags: QueryConditionFlags) Result(MediaCondition) {
             return parseQueryCondition(MediaCondition, input, flags);
     }
 
@@ -636,7 +635,7 @@ pub fn parse(input: *css.Parser) Result(MediaList) {
             var media_queries = MediaQueryList{  };
             _ = &media_queries;
             while (true) {
-                const mq = (switch (input.parseUntilBefore(css.Delimiters{ .comma = true }, MediaQuery, .{}, css.voidWrap(MediaQuery, MediaQuery.parse))) {
+                const mq = (switch (input.parseUntilBefore(css.Delimiters{ .comma = true }, MediaQuery, @as(void, undefined), css.voidWrap(MediaQuery, MediaQuery.parse))) {
 .result => |v| v,
 .err => |e| {
 {
@@ -758,7 +757,6 @@ pub fn tryParseFn(i: *css.Parser) Result(struct{?Qualifier,?MediaType}) {
 .err => |e| {
 return .{ .err = e };
 },
-else => unreachable,
 });
             return .{ .result = .{ qualifier, media_type } };
     }
