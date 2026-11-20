@@ -128,8 +128,7 @@ else => true,
 });
     }
 
-pub fn eql(self: LengthPercentageOrAuto, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 

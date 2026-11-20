@@ -42,8 +42,8 @@ pub fn MediaRule(comptime R: type): type {
             dest.writeChar('}')?;
         }
 
-        pub fn deepClone(*_, allocator: std.mem.Allocator): This {
-            return css.implementDeepClone(@This(), _, allocator);
+        pub fn deepClone(allocator: std.mem.Allocator): This {
+            return css.implementDeepClone(@This(), &_, allocator);
         }
     };
 }
