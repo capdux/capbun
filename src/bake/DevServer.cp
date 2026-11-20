@@ -884,7 +884,7 @@ pub fn setRoutes(dev: *DevServer, server: auto): !bool {
         internal_prefix ++ "/hmr",
         dev,
         0,
-        uws.WebSocketBehavior.Wrap(DevServer, HmrSocket, is_ssl).apply({}),
+        uws.WebSocketBehavior.wrap(DevServer, HmrSocket, is_ssl, {}),
     );
 
     if (bun.FeatureFlags.bake_debugging_features) {

@@ -83,7 +83,7 @@ pub const Start = union(enum) {
     done: ByteList,
 
 pub fn toJS(self: Start, globalThis: *JSGlobalObject) JSError!JSValue {
-            switch (self.*) {
+            switch (self) {
 .empty, .ready => {
 return JSValue.js_undefined;
 },
@@ -312,7 +312,7 @@ pub const ResultWritable = union(enum) {
     into_array_and_done: Blob.SizeType,
 
 pub fn isDone(self: ResultWritable) bool {
-            switch (self.*) {
+            switch (self) {
 .owned_and_done, .temporary_and_done, .into_array_and_done, .done, .err => {
 return true;
 },
@@ -867,7 +867,10 @@ pub const BufferAction = union(enum) {
     json: jsc.JSPromise.Strong,
 
 pub fn fulfill(self: *BufferAction, global: *JSGlobalObject, blob: *AnyBlob) bun.JSTerminated!void {
-            return blob.wrap(.{ .normal = self.swap() }, global, self.*);
+            var p = jsc.AnyPromise{ .normal = self.swap() };
+            _ = &p;
+            const val = (blk_catch_14: { break :blk_catch_14 ((blob.toPromise(global, self.*)) catch |e| { _ = &e; return p.reject(global, global.takeException(e)); }); });
+            return p.resolve(global, val);
     }
 
 pub fn reject(self: *BufferAction, global: *JSGlobalObject, e: Result.StreamError) bun.JSTerminated!void {

@@ -929,11 +929,11 @@ pub struct SecurityScanSubprocess {
         return _.has_process_exited && _.remaining_fds == 0;
     }
 
-    fn eventLoop(): *jsc.AnyEventLoop {
+    fn eventLoop(*_): *jsc.AnyEventLoop {
         return &_.manager.event_loop;
     }
 
-    fn loop(): *bun.Async.Loop {
+    fn loop(*_): *bun.Async.Loop {
         if (comptime bun.Environment.isWindows) {
             return _.manager.event_loop.loop().uv_loop;
         }

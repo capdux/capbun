@@ -153,7 +153,7 @@ return;
         }
         for (cp_iter_slice(ast.export_star_import_records)) |record_idx| {
             _ = &record_idx;
-            _ = try needed_records.put(needed_records_alloc, record_idx, .{});
+            _ = try needed_records.put(needed_records_alloc, record_idx, undefined);
         }
         if (client.requested_exports.get(source_index)) |existing| {
             _ = &existing;
@@ -167,7 +167,7 @@ var partial_iter = partial.iterator();
             while (partial_iter.next()) |p_entry| {
                 if (resolveBarrelExport(p_entry.key_ptr.*, named_exports, named_imports)) |resolution| {
                     _ = &resolution;
-                    _ = try needed_records.put(needed_records_alloc, resolution.import_record_index, .{});
+                    _ = try needed_records.put(needed_records_alloc, resolution.import_record_index, undefined);
                 }
             }
 },
@@ -182,7 +182,7 @@ var partial_iter = partial.iterator();
                 while (persisted_iter.next()) |alias_ptr| {
                     if (resolveBarrelExport(alias_ptr.*, named_exports, named_imports)) |resolution| {
                         _ = &resolution;
-                        _ = try needed_records.put(needed_records_alloc, resolution.import_record_index, .{});
+                        _ = try needed_records.put(needed_records_alloc, resolution.import_record_index, undefined);
                     }
                 }
             }
@@ -209,7 +209,7 @@ var partial_iter = partial.iterator();
                     _ = &imp;
                     if ((imp.import_record_index < ast.import_records.len)) {
                         if (needed_paths.contains(ast.import_records.slice()[@as(usize, @intCast(imp.import_record_index))].path.text)) {
-                            _ = try needed_records.put(needed_records_alloc, imp.import_record_index, .{});
+                            _ = try needed_records.put(needed_records_alloc, imp.import_record_index, undefined);
                         }
                     }
                 }
@@ -314,7 +314,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
             if ((ni.import_record_index >= file_import_records.len)) {
                 continue;
             }
-            _ = try named_ir_indices.put(named_ir_indices_alloc, ni.import_record_index, .{});
+            _ = try named_ir_indices.put(named_ir_indices_alloc, ni.import_record_index, undefined);
             const ir = file_import_records.slice()[@as(usize, @intCast(ni.import_record_index))];
             const resolved_path_text = (if (ir.flags.is_unused) ((dedup_fallback.get(ir.path.text)) orelse (ir.path.text)) else ir.path.text);
             var target: u32 = 0;

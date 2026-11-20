@@ -593,7 +593,7 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
     pub fn processResult(this_jsvalue: jsc.JSValue, globalThis: *JSGlobalObject, flags: JSValue, result: streams.Result) bun.JSError!jsc.JSValue {
                 switch (result) {
     .err => |e| {
-    if ((e.* == .Error)) {
+    if ((e == .Error)) {
                     return globalThis.throwValue(try e.Error.toJS(globalThis));
                 } else {
                     const js_err = e.JSValue;

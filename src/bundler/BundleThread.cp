@@ -49,7 +49,7 @@ pub fn BundleThread(CompletionStruct: type): type {
         };
 
         pub fn spawn(instance: *Self): !std.Thread {
-            const thread = std.Thread.spawn({}, threadMain, { instance})?;
+            const thread = std.Thread.spawn(.{}, threadMain, .{ instance })?;
             instance.ready_event.wait();
             return thread;
         }

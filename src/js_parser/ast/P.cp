@@ -59,7 +59,8 @@ pub fn NewParser_(
         pub const is_typescript_enabled = js_parser_features.typescript;
         pub const is_jsx_enabled = js_parser_jsx != .none;
         pub const only_scan_imports_and_do_not_visit = js_parser_features.scan_only;
-        const ImportRecordList = if (only_scan_imports_and_do_not_visit) *std.array_list.Managed(ImportRecord) else std.array_list.Managed(ImportRecord);
+        type ImportRecordPtr = *std.array_list.Managed(ImportRecord);
+        const ImportRecordList = if (only_scan_imports_and_do_not_visit) ImportRecordPtr else std.array_list.Managed(ImportRecord);
         const NamedImportsType = if (only_scan_imports_and_do_not_visit) *js_ast.Ast.NamedImports else js_ast.Ast.NamedImports;
         const NeedsJSXType = if (only_scan_imports_and_do_not_visit) bool else void;
         pub const track_symbol_usage_during_parse_pass = only_scan_imports_and_do_not_visit && is_typescript_enabled;
@@ -6940,13 +6941,13 @@ pub fn NewParser_(
     };
 }
 
-let e_missing_data = E.Missing{};
-let s_missing = S.Empty{};
+let e_missing_data: E.Missing = {};
+let s_missing: S.Empty = {};
 let nullExprData = Expr.Data{ e_missing: e_missing_data };
 let nullStmtData = Stmt.Data{ s_empty: s_missing };
 
-let keyExprData = Expr.Data{ e_string: &Prefill.String.Key };
-let nullExprValueData = E.Null{};
+let keyExprData = Expr.Data{ e_string: unsafe { &Prefill.String.Key } };
+let nullExprValueData: E.Null = {};
 let falseExprValueData = E.Boolean{ value: false };
 let nullValueExpr = Expr.Data{ e_null: nullExprValueData };
 let falseValueExpr = Expr.Data{ e_boolean: E.Boolean{ value: false } };

@@ -644,11 +644,11 @@ pub fn isDone(self: *SecurityScanSubprocess) bool {
             return (self.has_process_exited and (self.remaining_fds == 0));
     }
 
-pub fn eventLoop(self: SecurityScanSubprocess) *jsc.AnyEventLoop {
+pub fn eventLoop(self: *SecurityScanSubprocess) *jsc.AnyEventLoop {
             return (&self.manager.event_loop);
     }
 
-pub fn loop(self: SecurityScanSubprocess) *bun.Async.Loop {
+pub fn loop(self: *SecurityScanSubprocess) *bun.Async.Loop {
             if (comptime bun.Environment.isWindows) {
                 return self.manager.event_loop.loop().uv_loop;
             }

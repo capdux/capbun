@@ -286,7 +286,7 @@ if ((pipe.state == .done)) {
             out.* = .{ .buffer = CowString.initOwned(pipe.state.done, bun.default_allocator) };
             pipe.state = .{ .done = &.{} };
         } else {
-            out.* = .{ .ignore = .{} };
+            out.* = .ignore;
         }
         _ = pipe.deref();
 },
@@ -683,13 +683,19 @@ pub fn onProcessExit(client: *Subprocess, process: *Process, status: bun.spawn.S
                     }
                     switch (status) {
 .exited => |exited| {
-_ = (blk_catch_0: { break :blk_catch_0 (((promise.asAnyPromise()).?.resolve(globalThis, JSValue.jsNumber(exited.code))) catch |__ce_0| { _ = &__ce_0;  }); });
+var p = (promise.asAnyPromise()).?;
+                    _ = &p;
+                    _ = (blk_catch_0: { break :blk_catch_0 ((p.resolve(globalThis, JSValue.jsNumber(exited.code))) catch |__ce_0| { _ = &__ce_0;  }); });
 },
 .@"err" => |e| {
-_ = (blk_catch_2: { break :blk_catch_2 (((promise.asAnyPromise()).?.rejectWithAsyncStack(globalThis, (blk_catch_1: { break :blk_catch_1 ((e.toJS(globalThis)) catch |__ce_1| { _ = &__ce_1; return; }); }))) catch |__ce_2| { _ = &__ce_2;  }); });
+var p = (promise.asAnyPromise()).?;
+                    _ = &p;
+                    _ = (blk_catch_2: { break :blk_catch_2 ((p.rejectWithAsyncStack(globalThis, (blk_catch_1: { break :blk_catch_1 ((e.toJS(globalThis)) catch |__ce_1| { _ = &__ce_1; return; }); }))) catch |__ce_2| { _ = &__ce_2;  }); });
 },
 .signaled => {
-_ = (blk_catch_3: { break :blk_catch_3 (((promise.asAnyPromise()).?.resolve(globalThis, JSValue.jsNumber((128 +% @intFromEnum(status.signaled))))) catch |__ce_3| { _ = &__ce_3;  }); });
+var p = (promise.asAnyPromise()).?;
+                    _ = &p;
+                    _ = (blk_catch_3: { break :blk_catch_3 ((p.resolve(globalThis, JSValue.jsNumber((128 +% @intFromEnum(status.signaled))))) catch |__ce_3| { _ = &__ce_3;  }); });
 },
 else => {
 if (comptime Environment.allow_assert) {

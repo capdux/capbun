@@ -136,7 +136,12 @@ pub fn init(self: *INotifyWatcher, _root: []const u8) !void {
         _ = &_root;
         _ = bun.assert((!self.loaded));
         self.loaded = true;
-        if (self.coalesce_interval == null) { self.coalesce_interval = 100000; }
+        if (std.math.cast(isize, bun.env_var.BUN_INOTIFY_COALESCE_INTERVAL.get())) |v| {
+            _ = &v;
+            self.coalesce_interval = v;
+        } else {
+            self.coalesce_interval = 100000;
+        }
         self.fd = .fromNative(try std.posix.inotify_init1(IN.CLOEXEC));
         const allocated = try bun.default_allocator.alignedAlloc(EventListBytes, .{ .@"of" = Event }, 1);
         self.eventlist_bytes = (&allocated[0]);
@@ -147,7 +152,9 @@ pub fn read(self: *INotifyWatcher) bun.sys.Maybe(ConstUnalignedEventSlice) {
         _ = bun.assert(self.loaded);
         var i: u32 = 0;
         _ = &i;
-        var read_eventlist_bytes: []u8 = (&&.{});
+        var empty_u8: [0]u8 = &.{};
+        _ = &empty_u8;
+        var read_eventlist_bytes: []u8 = empty_u8[0..0];
         _ = &read_eventlist_bytes;
         if ((self.read_ptr != null)) {
             const ptr = self.read_ptr.?;
@@ -337,7 +344,7 @@ pub fn processINotifyEventBatch(watcher: *bun.Watcher, event_count: usize, temp_
         _ = &name_off;
         var all_events = watcher.watch_events[0..event_count];
         _ = &all_events;
-        _ = std.sort.pdq(WatchEvent, all_events, .{}, WatchEvent.sortByIndex);
+        _ = std.sort.pdq(WatchEvent, all_events, undefined, WatchEvent.sortByIndex);
         var last_event_index: usize = 0;
         _ = &last_event_index;
         var last_event_id: EventListIndex = std.math.maxInt(EventListIndex);

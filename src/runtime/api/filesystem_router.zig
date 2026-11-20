@@ -32,10 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn CpOptType(comptime __T: type) type { if (@typeInfo(__T) == .optional) return __T; return ?__T; }
-fn CpUnwrapOpt(comptime __T: type) type { if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
-fn cp_opt_is_null(v: anytype) bool { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) return v == null; return false; }
-fn cp_opt_unwrap(v: anytype) CpUnwrapOpt(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
@@ -91,7 +87,8 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
             _ = &out_buf;
             if (try argument.get(globalThis, "style")) |style_val| {
                 _ = &style_val;
-                if ((!(blk_oc_0: { const __o_0 = style_val.getZigString(globalThis); const __R_0 = CpOptType(@TypeOf(cp_opt_unwrap(__o_0).eqlComptime("nextjs"))); if (cp_opt_is_null(__o_0)) break :blk_oc_0 @as(__R_0, null); break :blk_oc_0 @as(__R_0, cp_opt_unwrap(__o_0).eqlComptime("nextjs")); }))) {
+                const style_str = try style_val.getZigString(globalThis);
+                if ((!style_str.eqlComptime("nextjs"))) {
                     return globalThis.throwInvalidArguments("Only 'nextjs' style is currently implemented", .{});
                 }
             } else {
@@ -166,7 +163,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
             vm.transpiler.resolver.log = orig_log;
             }
             const path_to_use = ((root_dir_path.cloneWithTrailingSlash(allocator)) catch unreachable).slice();
-            var maybe_root_dir_info = (blk_catch_5: { break :blk_catch_5 ((vm.transpiler.resolver.readDirInfo(path_to_use)) catch |__ce_5| { _ = &__ce_5; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
+            var maybe_root_dir_info = (blk_catch_4: { break :blk_catch_4 ((vm.transpiler.resolver.readDirInfo(path_to_use)) catch |__ce_4| { _ = &__ce_4; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
             _ = origin_str.deinit();
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
@@ -181,7 +178,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
             const root_dir_info = maybe_root_dir_info.?;
             var router = ((Router.init(vm.transpiler.fs, allocator, .{ .dir = path_to_use, .extensions = (if ((extensions.items.len > 0)) extensions.items else default_extensions), .asset_prefix_path = asset_prefix_slice.slice() })) catch unreachable);
             _ = &router;
-            _ = (blk_catch_7: { break :blk_catch_7 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_7| { _ = &__ce_7; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
+            _ = (blk_catch_6: { break :blk_catch_6 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_6| { _ = &__ce_6; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
             _ = origin_str.deinit();
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
@@ -262,8 +259,8 @@ pub fn reload(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfram
             defer {
             vm.transpiler.resolver.log = orig_log;
             }
-            _ = self.bustDirCache(self, globalThis);
-            const maybe_root_dir_info = (blk_catch_10: { break :blk_catch_10 ((vm.transpiler.resolver.readDirInfo(self.router.config.dir)) catch |__ce_10| { _ = &__ce_10; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
+            _ = self.bustDirCache(globalThis);
+            const maybe_root_dir_info = (blk_catch_9: { break :blk_catch_9 ((vm.transpiler.resolver.readDirInfo(self.router.config.dir)) catch |__ce_9| { _ = &__ce_9; const err_value = log.toJS(globalThis, globalThis.allocator(), "reading root directory");
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
             return globalThis.throwValue(try err_value); }); });
@@ -275,7 +272,7 @@ pub fn reload(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfram
             const root_dir_info = maybe_root_dir_info.?;
             var router = ((Router.init(vm.transpiler.fs, allocator, .{ .dir = ((allocator.dupe(u8, self.router.config.dir)) catch unreachable), .extensions = ((allocator.dupe(string, self.router.config.extensions)) catch unreachable), .asset_prefix_path = self.router.config.asset_prefix_path })) catch unreachable);
             _ = &router;
-            _ = (blk_catch_14: { break :blk_catch_14 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_14| { _ = &__ce_14; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
+            _ = (blk_catch_13: { break :blk_catch_13 ((router.loadRoutes((&log), root_dir_info, Resolver, (&vm.transpiler.resolver), router.config.dir)) catch |__ce_13| { _ = &__ce_13; const err_value = log.toJS(globalThis, globalThis.allocator(), "loading routes");
             _ = arena_.deinit();
             _ = globalThis.allocator().destroy(arena_);
             return globalThis.throwValue(try err_value); }); });
@@ -328,7 +325,7 @@ pub fn @"match"(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfr
                 }
                 path = try ZigString.Slice.initDupe(globalThis.allocator(), URL.parse(path.slice()).pathname);
             }
-            const url_path = (blk_catch_16: { break :blk_catch_16 ((URLPath.parse(path.slice())) catch |e| { _ = &e; return globalThis.throw("{s} parsing path: {s}", .{ @errorName(e), path.slice() }); }); });
+            const url_path = (blk_catch_15: { break :blk_catch_15 ((URLPath.parse(path.slice())) catch |e| { _ = &e; return globalThis.throw("{s} parsing path: {s}", .{ @errorName(e), path.slice() }); }); });
             var params = Router.Param.List{  };
             _ = &params;
             defer {

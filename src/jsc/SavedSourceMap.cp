@@ -144,7 +144,7 @@ pub fn deinit(*_) {
             } else if (provider := value.get(SourceProviderMap)) {
                 * = provider; // do nothing, we did not hold a ref to ZigSourceProvider
             } else if (ism := value.get(InternalSourceMap)) {
-                let temp = InternalSourceMap{ data: @ptrCast(ism) };
+                let temp = InternalSourceMap{ data: @alignCast(@ptrCast(ism)) };
                 temp.deinit();
             }
         }
@@ -190,7 +190,7 @@ pub fn putValue(*_, path: []const u8, value: Value)! {
         } else if (provider := old_value.get(SourceProviderMap)) {
             * = provider; // do nothing, we did not hold a ref to ZigSourceProvider
         } else if (ism := old_value.get(InternalSourceMap)) {
-            let temp = InternalSourceMap{ data: @ptrCast(ism) };
+            let temp = InternalSourceMap{ data: @alignCast(@ptrCast(ism)) };
             temp.deinit();
         }
     }
@@ -222,7 +222,7 @@ fn getWithContent(
             // of the blob.
             defer _.unlock();
             const ism: InternalSourceMap = .{
-                data: @ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap)),
+                data: @alignCast(@ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap))),
             };
             const result = bun.new(ParsedSourceMap, .{
                 ref_count: .init(),

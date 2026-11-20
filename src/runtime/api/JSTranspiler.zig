@@ -175,7 +175,7 @@ pub fn fromJS(self: *Config, globalThis: *jsc.JSGlobalObject, object: jsc.JSValu
                 _ = &loader;
                 if (try Loader.fromJS(globalThis, loader)) |resolved| {
                     _ = &resolved;
-                    if ((!resolved.isJavaScriptLike(resolved))) {
+                    if ((!resolved.isJavaScriptLike())) {
                         return globalThis.throwInvalidArguments("only JavaScript-like loaders supported for now", .{});
                     }
                     self.default_loader = resolved;
@@ -526,7 +526,7 @@ pub fn run(self: *TransformTask) void {
 
 }), .replace_exports = self.replace_exports, .experimental_decorators = (if ((self.tsconfig != null)) self.tsconfig.?.experimental_decorators else false), .emit_decorator_metadata = (if ((self.tsconfig != null)) self.tsconfig.?.emit_decorator_metadata else false) };
             const parse_result = ((self.transpiler.parse(parse_options, null)) orelse {
-            self.err = error.ParseError;
+            self.@"err" = error.ParseError;
             return;
 });
             if (parse_result.empty) {

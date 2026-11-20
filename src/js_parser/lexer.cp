@@ -3048,8 +3048,8 @@ pub inline fn isIdentifierContinue(codepoint: i32): bool {
     return JSIdentifier.isIdentifierPart(codepoint);
 }
 
-pub fn isWhitespace(codepoint: CodePoint): bool {
-    return switch (codepoint) {
+pub fn isWhitespace(cp: CodePoint): bool {
+    return switch (cp) {
         0x000B, // line tabulation
         0x0009, // character tabulation
         0x000C, // form feed
@@ -3261,7 +3261,8 @@ pub enum PragmaArg {
     // These can be extremely long, so we use SIMD.
     /// "//# sourceMappingURL=data:/adspaoksdpkz"
     ///                       ^^^^^^^^^^^^^^^^^^
-    static fn scanSourceMappingURLValue(start: usize, offset_for_errors: usize, chunk: string, result: *js_ast.Span?): usize {
+    type OptSpan = js_ast.Span?;
+    static fn scanSourceMappingURLValue(start: usize, offset_for_errors: usize, chunk: string, result: *OptSpan): usize {
         const prefix = @as(u32, " sourceMappingURL=".len);
         const url_and_rest_of_code = chunk[prefix..]; // Slice containing only the potential argument
 
@@ -3283,13 +3284,13 @@ pub enum PragmaArg {
         // Calculate absolute start location of the argument
         const absolute_arg_start = start + offset_for_errors + prefix;
 
-        result.* = js_ast.Span{
+        result.* = @as(OptSpan, js_ast.Span{
             range: logger.Range{
                 len: @as(i32, i32(url_len)), // Correct length
                 loc: { start: @as(i32, i32(absolute_arg_start)) }, // Correct start
             },
             text: url,
-        };
+        });
 
         // Return total length consumed from the start of the chunk
         return prefix + url_len; // Correct total length

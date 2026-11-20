@@ -81,7 +81,10 @@ pub const IPCDecodeError = error{
     NotEnoughBytes,
     /// Format could not be recognized. Report an error and close the socket.
     InvalidFormat,
-} || bun.JSError;
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+};
 
 pub err IPCSerializationError {
     /// Value could not be serialized.
@@ -478,7 +481,7 @@ pub struct WindowsWrite {
 }
 
 pub union(enum) IPCSendQueueOwner {
-    subprocess: *bun.api.Subprocess,
+    subprocess: *bun.api.Subprocess.Subprocess,
     virtual_machine: *bun.jsc.VirtualMachine.IPCInstance,
 }
 

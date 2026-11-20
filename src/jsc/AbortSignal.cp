@@ -6,7 +6,7 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
-const ListenerCallback = *const fn (arg0: *!?, arg1: JSValue) callconv(.c) void;
+type ListenerCallback = *const fn (arg0: *!?, arg1: JSValue) callconv(.c) void;
 
 pub const AbortReasonImpl = union(enum) {
     common: CommonAbortReason,
@@ -35,7 +35,7 @@ pub const TimeoutImpl = struct {
     signal: *AbortSignal,
 
     /// "epoch" is reused.
-    flags: jsc.API.Timer.TimerObjectInternals.Flags = .{},
+    flags: jsc.API.Timer.TimerObjectInternals.TimerObjectInternals.Flags = .{},
 
     /// See `swapGlobalForTestIsolation`: timers from a prior isolated test
     /// file must not fire abort handlers in the new global.

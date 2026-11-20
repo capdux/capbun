@@ -33,7 +33,8 @@ pub struct FileSystemRouter {
 
         let out_buf: [max_path_x2]u8 = undefined;
         if (style_val := argument.get(globalThis, "style")?) {
-            if (!style_val.getZigString(globalThis)?.eqlComptime("nextjs")) {
+            const style_str = style_val.getZigString(globalThis)?;
+            if (!style_str.eqlComptime("nextjs")) {
                 return globalThis.throwInvalidArguments("Only 'nextjs' style is currently implemented", {});
             }
         } else {
@@ -227,7 +228,7 @@ pub struct FileSystemRouter {
         vm.transpiler.resolver.log = &log;
         defer vm.transpiler.resolver.log = orig_log;
 
-        bustDirCache(_, globalThis);
+        _.bustDirCache(globalThis);
 
         const maybe_root_dir_info = vm.transpiler.resolver.readDirInfo(_.router.config.dir) catch {
             // Build the JS error before freeing the arena: `log` is backed by the arena allocator.

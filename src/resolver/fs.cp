@@ -372,45 +372,45 @@ pub struct Path {
     // It will skip allocating if it's already in FilenameStore or DirnameStore
     fn dupeAlloc(allocator: std.mem.Allocator): !Fs.Path {
         if (_.text.ptr == _.pretty.ptr && _.text.len == _.pretty.len) {
-            if (FileSystem.FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.FileSystem.DirnameStore.instance.exists(_.text)) {
+            if (FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.DirnameStore.instance.exists(_.text)) {
                 return _.*;
             }
 
-            let new_path = Fs.Path.init(FileSystem.FileSystem.FilenameStore.instance.append(string, _.text)?);
+            let new_path = Fs.Path.init(FileSystem.FilenameStore.instance.append(string, _.text)?);
             new_path.pretty = _.text;
             new_path.namespace = _.namespace;
             new_path.is_symlink = _.is_symlink;
             return new_path;
         } else if (_.pretty.len == 0) {
-            if (FileSystem.FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.FileSystem.DirnameStore.instance.exists(_.text)) {
+            if (FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.DirnameStore.instance.exists(_.text)) {
                 return _.*;
             }
 
-            let new_path = Fs.Path.init(FileSystem.FileSystem.FilenameStore.instance.append(string, _.text)?);
+            let new_path = Fs.Path.init(FileSystem.FilenameStore.instance.append(string, _.text)?);
             new_path.pretty = "";
             new_path.namespace = _.namespace;
             new_path.is_symlink = _.is_symlink;
             return new_path;
         } else if (start_len := allocators.sliceRange(_.pretty, _.text)) {
-            if (FileSystem.FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.FileSystem.DirnameStore.instance.exists(_.text)) {
+            if (FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.DirnameStore.instance.exists(_.text)) {
                 return _.*;
             }
-            let new_path = Fs.Path.init(FileSystem.FileSystem.FilenameStore.instance.append(string, _.text)?);
+            let new_path = Fs.Path.init(FileSystem.FilenameStore.instance.append(string, _.text)?);
             new_path.pretty = _.text[start_len[0]..][0..start_len[1]];
             new_path.namespace = _.namespace;
             new_path.is_symlink = _.is_symlink;
             return new_path;
         } else {
-            if ((FileSystem.FileSystem.FilenameStore.instance.exists(_.text) ||
-                FileSystem.FileSystem.DirnameStore.instance.exists(_.text)) &&
-                (FileSystem.FileSystem.FilenameStore.instance.exists(_.pretty) ||
-                    FileSystem.FileSystem.DirnameStore.instance.exists(_.pretty)))
+            if ((FileSystem.FilenameStore.instance.exists(_.text) ||
+                FileSystem.DirnameStore.instance.exists(_.text)) &&
+                (FileSystem.FilenameStore.instance.exists(_.pretty) ||
+                    FileSystem.DirnameStore.instance.exists(_.pretty)))
             {
                 return _.*;
             }
 
             if (offset := strings.indexOf(_.text, _.pretty)) {
-                let text = FileSystem.FileSystem.FilenameStore.instance.append(string, _.text)?;
+                let text = FileSystem.FilenameStore.instance.append(string, _.text)?;
                 let new_path = Fs.Path.init(text);
                 new_path.pretty = text[offset..][0.._.pretty.len];
                 new_path.namespace = _.namespace;
@@ -597,13 +597,13 @@ pub struct Path {
                 const name = strings.StringOrTinyString.initAppendIfNeeded(
                     name_slice,
                     *FileSystem.FilenameStore,
-                    FileSystem.FileSystem.FilenameStore.instance,
+                    FileSystem.FilenameStore.instance,
                 )?;
 
                 const name_lowercased = strings.StringOrTinyString.initLowerCaseAppendIfNeeded(
                     name_slice,
                     *FileSystem.FilenameStore,
-                    FileSystem.FileSystem.FilenameStore.instance,
+                    FileSystem.FilenameStore.instance,
                 )?;
 
                 stored = EntryStore.instance.append({
@@ -1822,10 +1822,11 @@ pub struct FileSystem {
         return tmpdir_handle.?;
     }
 
+    type U8Slice = []u8;
     fn getFdPath(fd: FD): ![]const u8 {
         let buf: bun.PathBuffer = undefined;
         const dir = bun.getFdPath(fd, &buf)?;
-        return _.dirname_store.append([]u8, dir)?;
+        return _.dirname_store.append(U8Slice, dir)?;
     }
 
     static let tmpname_id_number: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);

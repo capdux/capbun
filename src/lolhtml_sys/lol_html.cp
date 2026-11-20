@@ -646,11 +646,11 @@ fn DirectiveFunctionType(comptime Container: type): type {
 }
 
 fn DirectiveFunctionTypeForHandler(comptime Container: type, comptime UserDataType: type): type {
-    return (fn (UserDataType, Container): bool);
+    return (fn (_: *UserDataType, _: *Container): bool);
 }
 
 fn DocTypeHandlerCallback(comptime UserDataType: type): type {
-    return (fn (DocType, UserDataType): bool);
+    return (fn (_: *DocType, _: *UserDataType): bool);
 }
 
 pub fn DirectiveHandler(

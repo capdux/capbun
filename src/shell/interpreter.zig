@@ -269,11 +269,11 @@ pub fn #computeEstimatedSizeForGC(self: Interpreter, _: *const ThisInterpreter) 
             return size;
     }
 
-pub fn memoryCost(self: Interpreter) usize {
+pub fn memoryCost(self: *Interpreter) usize {
             return self.#computeEstimatedSizeForGC();
     }
 
-pub fn estimatedSize(self: Interpreter) usize {
+pub fn estimatedSize(self: *Interpreter) usize {
             return self.estimated_size_for_gc;
     }
 
@@ -315,7 +315,10 @@ pub fn createShellInterpreter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             if ((parsed_shell_script.args == null)) {
                 return globalThis.throw("shell: shell args is null, this is a bug in Bun. Please file a GitHub issue.", .{});
             }
-            _ = parsed_shell_script.take(globalThis, shargs, (&jsobjs), (&quiet), (&cwd), (&export_env));
+            _ = parsed_shell_script.take(globalThis, (blk: {
+            break :blk shargs;
+
+}), (&jsobjs), (&quiet), (&cwd), (&export_env));
             defer {
             if (cwd) |*cc| {
                 _ = &cc;

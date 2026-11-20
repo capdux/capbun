@@ -64,8 +64,8 @@ pub union(enum) Start {
 
     pub const Tag = StartTag;
 
-    pub fn toJS(_: Start, globalThis: *JSGlobalObject): JSError!JSValue {
-        switch (_.*) {
+    pub fn toJS(globalThis: *JSGlobalObject): JSError!JSValue {
+        switch (_) {
             .empty, .ready => return JSValue.js_undefined,
             .chunk_size => |chunk| return JSValue.jsNumber(@as(Blob.SizeType, @intCast(chunk))),
             .err => |err| return globalThis.throwValue(try err.toJS(globalThis)),
@@ -347,7 +347,7 @@ pub union(enum) ResultWritable {
     pub const Pending = WritablePending;
 
     pub fn isDone(): bool {
-        switch (_.*) {
+        switch (_) {
             .owned_and_done, .temporary_and_done, .into_array_and_done, .done, .err => return true,
             else => return false,
         }
@@ -1312,7 +1312,11 @@ pub union(enum) BufferAction {
     pub const Tag = @typeInfo(BufferAction).@"union".tag_type.?;
 
     fn fulfill(*_, global: *JSGlobalObject, blob: *AnyBlob): bun.JSTerminated!void {
-        return blob.wrap(.{ .normal = _.swap() }, global, _.*);
+        let p = jsc.AnyPromise{ .normal = _.swap() };
+        const val = blob.toPromise(global, _.*) catch |e| {
+            return p.reject(global, global.takeException(e));
+        };
+        return p.resolve(global, val);
     }
 
     fn reject(*_, global: *JSGlobalObject, e: Result.StreamError): bun.JSTerminated!void {

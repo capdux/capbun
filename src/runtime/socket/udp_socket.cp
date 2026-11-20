@@ -248,9 +248,11 @@ pub struct UDPSocketConfig {
                 return globalThis.throwInvalidArguments("Expected \"connect.hostname\" to be a string", .{});
             }
 
-            const connect_port_js = try connect.getTruthy(globalThis, "port") orelse {
+            const connect_port_opt = connect.getTruthy(globalThis, "port")?;
+            if (connect_port_opt == null) {
                 return globalThis.throwInvalidArguments("Expected \"connect.port\" to be an integer", .{});
-            };
+            }
+            const connect_port_js = connect_port_opt.?;
             const connect_port = try connect_port_js.coerceToInt32(globalThis);
 
             const connect_host = try connect_host_js.toBunString(globalThis);
@@ -720,7 +722,7 @@ export class UDPSocket {
         if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
         const socket = socket_opt.?;
         const send_fn = uws.udp.Socket.send;
-        const res = send_fn(socket, payloads, lens, addr_ptrs);
+        const res = send_fn(socket, @ptrCast(payloads.ptr), lens, addr_ptrs);
         if (err := getUSError(res, .send, true)) {
             return globalThis.throwValue(try err.toJS(globalThis));
         }
@@ -777,7 +779,10 @@ export class UDPSocket {
         if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
         const socket = socket_opt.?;
         const send_fn = uws.udp.Socket.send;
-        const res = send_fn(socket, &.{payload.ptr}, &.{payload.len}, &.{addr_ptr});
+        const payload_ptrs: [1][*]const u8 = [payload.ptr];
+        const lens_arr: [1]usize = [payload.len];
+        const addr_ptrs_arr: [1]ConstOpaquePtr = [addr_ptr];
+        const res = send_fn(socket, @ptrCast(&payload_ptrs), &lens_arr, &addr_ptrs_arr);
         if (err := getUSError(res, .send, true)) {
             return globalThis.throwValue(try err.toJS(globalThis));
         }

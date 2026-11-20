@@ -307,7 +307,8 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
                 return JSBuffer__fromMmap(globalObject, buf.ptr, buf.len);
             },
             .err e => {
-                return globalObject.throwValue(e.toJS(globalObject) catch return .zero) catch return .zero;
+                if (globalObject.throwValue(e.toJS(globalObject) catch return .zero) == error.JSTerminated) {}
+                return .zero;
             },
         }
     }

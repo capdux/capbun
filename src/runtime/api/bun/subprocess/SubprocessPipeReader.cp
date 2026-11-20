@@ -1,4 +1,4 @@
-let empty_u8: [0]u8 = [];
+let empty_u8: [0]u8 = undefined;
 
 pub const State = union(enum) {
     pending: void,
@@ -156,7 +156,8 @@ pub const State = union(enum) {
             .@"err" => {
                 
                 const empty = (jsc.WebCore.ReadableStream.empty(globalObject))?;
-                jsc.WebCore.ReadableStream.cancel(&((jsc.WebCore.ReadableStream.fromJS(empty, globalObject))?).?, globalObject);
+                let stream = (jsc.WebCore.ReadableStream.fromJS(empty, globalObject)?).?;
+                stream.cancel(globalObject);
                 return empty;
             },
         }

@@ -638,7 +638,7 @@ pub fn getLastLastByte(ctx: *const BufferWriter) u8 {
             return ctx.last_bytes[0];
     }
 
-pub fn reserveNext(ctx: *BufferWriter, count: u64) [*]u8 {
+pub fn reserveNext(ctx: *BufferWriter, count: u64) anyerror![*]u8 {
             _ = try ctx.buffer.growIfNeeded(count);
             return (blk: {
             break :blk @as([*]u8, @ptrCast(@alignCast(&(ctx.buffer.list.items.ptr[@as(usize, @intCast(ctx.buffer.list.items.len))]))));
@@ -5684,13 +5684,13 @@ pub fn printJSON(comptime Writer: type, _writer: Writer, expr: Expr, source: *co
         return @as(usize, @intCast(@max(printer.writer.written, 0)));
 }
 
-pub fn printWithWriter(comptime Writer: type, writer: Writer, target: options.Target, ast: Ast, source: *const logger.Source, opts: Options, import_records: []const ImportRecord, parts: []const js_ast.Part, renamer: bun.renamer.Renamer, comptime generate_source_maps: bool) *PrintResult {
+pub fn printWithWriter(comptime Writer: type, writer: Writer, target: options.Target, ast: Ast, source: *const logger.Source, opts: Options, import_records: []const ImportRecord, parts: []const js_ast.Part, renamer: bun.renamer.Renamer, comptime generate_source_maps: bool) PrintResult {
         return (switch (target.isBun()) {
 inline else => |is_bun| printWithWriterAndPlatform(Writer, writer, is_bun, ast, source, opts, import_records, parts, renamer, generate_source_maps),
 });
 }
 
-pub fn printWithWriterAndPlatform(comptime Writer: type, writer: Writer, comptime is_bun_platform: bool, ast: Ast, source: *const logger.Source, opts: Options, import_records: []const ImportRecord, parts: []const js_ast.Part, renamer: bun.renamer.Renamer, comptime generate_source_maps: bool) *PrintResult {
+pub fn printWithWriterAndPlatform(comptime Writer: type, writer: Writer, comptime is_bun_platform: bool, ast: Ast, source: *const logger.Source, opts: Options, import_records: []const ImportRecord, parts: []const js_ast.Part, renamer: bun.renamer.Renamer, comptime generate_source_maps: bool) PrintResult {
         const prev_action = bun.crash_handler.current_action;
         defer {
         bun.crash_handler.current_action = prev_action;

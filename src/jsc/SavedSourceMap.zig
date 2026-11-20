@@ -192,7 +192,7 @@ pub fn deinit(self: *SavedSourceMap) void {
                     } else {
                         if (value.get(InternalSourceMap)) |ism| {
                             _ = &ism;
-                            var temp = InternalSourceMap{ .data = @ptrCast(ism) };
+                            var temp = InternalSourceMap{ .data = @alignCast(@ptrCast(ism)) };
                             _ = &temp;
                             _ = temp.deinit();
                         }
@@ -247,7 +247,7 @@ pub fn putValue(self: *SavedSourceMap, path: []const u8, value: Value) !void {
                 } else {
                     if (old_value.get(InternalSourceMap)) |ism| {
                         _ = &ism;
-                        var temp = InternalSourceMap{ .data = @ptrCast(ism) };
+                        var temp = InternalSourceMap{ .data = @alignCast(@ptrCast(ism)) };
                         _ = &temp;
                         _ = temp.deinit();
                     }
@@ -269,7 +269,7 @@ pub fn getWithContent(self: *SavedSourceMap, path: []const u8, hint: SourceMap.P
 defer {
         _ = self.unlock();
         }
-        const ism: InternalSourceMap = .{ .data = @ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap)) };
+        const ism: InternalSourceMap = .{ .data = @alignCast(@ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap))) };
         const result = bun.new(ParsedSourceMap, .{ .ref_count = .init(), .input_line_count = ism.inputLineCount(), .internal = ism });
         mapping.value_ptr.* = Value.init(result).ptr();
         _ = result.ref();

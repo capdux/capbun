@@ -97,7 +97,7 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
     defer needed_records.deinit(needed_records_alloc);
 
     for (record_idx of ast.export_star_import_records) {
-        needed_records.put(needed_records_alloc, record_idx, {})?;
+        needed_records.put(needed_records_alloc, record_idx, undefined)?;
     }
 
     if (existing := client.requested_exports.get(source_index)) {
@@ -107,7 +107,7 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
                 let partial_iter = partial.iterator();
                 while (p_entry := partial_iter.next()) {
                     if (resolution := resolveBarrelExport(p_entry.key_ptr.*, named_exports, named_imports)) {
-                        needed_records.put(needed_records_alloc, resolution.import_record_index, {})?;
+                        needed_records.put(needed_records_alloc, resolution.import_record_index, undefined)?;
                     }
                 }
             },
@@ -123,7 +123,7 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
             let persisted_iter = persisted.keyIterator();
             while (alias_ptr := persisted_iter.next()) {
                 if (resolution := resolveBarrelExport(alias_ptr.*, named_exports, named_imports)) {
-                    needed_records.put(needed_records_alloc, resolution.import_record_index, {})?;
+                    needed_records.put(needed_records_alloc, resolution.import_record_index, undefined)?;
                 }
             }
         }
@@ -155,7 +155,7 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
             if (imp := named_imports.get(entry.value_ptr.ref)) {
                 if (imp.import_record_index < ast.import_records.len) {
                     if (needed_paths.contains(ast.import_records.slice()[imp.import_record_index].path.text)) {
-                        needed_records.put(needed_records_alloc, imp.import_record_index, {})?;
+                        needed_records.put(needed_records_alloc, imp.import_record_index, undefined)?;
                     }
                 }
             }
@@ -301,7 +301,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
     while (ni_entry := ni_iter.next()) {
         const ni = ni_entry.value_ptr;
         if (ni.import_record_index >= file_import_records.len) continue;
-        named_ir_indices.put(named_ir_indices_alloc, ni.import_record_index, {})?;
+        named_ir_indices.put(named_ir_indices_alloc, ni.import_record_index, undefined)?;
         const ir = file_import_records.slice()[ni.import_record_index];
         // In dev server mode, source_index may not be patched — resolve via
         // path map as a read-only fallback. Do NOT write back to the import

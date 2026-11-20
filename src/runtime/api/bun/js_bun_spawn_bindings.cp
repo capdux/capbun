@@ -137,13 +137,13 @@ pub fn spawnMaybeSync(
     let cwd = jsc_vm.transpiler.fs.top_level_dir;
 
     let stdio: [3]Stdio = undefined;
-    stdio[0] = Stdio{ .ignore = {} };
-    stdio[1] = Stdio{ .pipe = {} };
-    stdio[2] = Stdio{ .inherit = {} };
+    stdio[0] = Stdio.ignore;
+    stdio[1] = Stdio.pipe;
+    stdio[2] = Stdio.inherit;
 
     if (comptime is_sync) {
-        stdio[1] = Stdio{ .pipe = {} };
-        stdio[2] = Stdio{ .pipe = {} };
+        stdio[1] = Stdio.pipe;
+        stdio[2] = Stdio.pipe;
     }
     let lazy = false;
     let on_exit_callback = JSValue.zero;

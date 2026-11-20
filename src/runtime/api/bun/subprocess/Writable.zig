@@ -322,7 +322,7 @@ pub fn finalize(self: *@This()) void {
                     _ = pipe.signal.clear();
                 }
                 _ = pipe.deref();
-                self.* = Writable{ .ignore = .{} };
+                self.* = .ignore;
             }
 },
 .buffer => {
@@ -334,7 +334,7 @@ pub fn finalize(self: *@This()) void {
 .memfd => |fd| {
 {
                 _ = fd.close();
-                self.* = Writable{ .ignore = .{} };
+                self.* = .ignore;
             }
 },
 .ignore => {
@@ -355,10 +355,10 @@ _ = pipe.end(null);
 },
 .memfd => |fd| {
 _ = fd.close();
-            self.* = Writable{ .ignore = .{} };
+            self.* = .ignore;
 },
 .fd => {
-self.* = Writable{ .ignore = .{} };
+self.* = .ignore;
 },
 .buffer => {
 _ = self.buffer.close();

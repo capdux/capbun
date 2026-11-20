@@ -163,7 +163,7 @@ pub struct Config {
 
         if (loader := object.get(globalThis, "loader")?) {
             if (resolved := Loader.fromJS(globalThis, loader)?) {
-                if (!resolved.isJavaScriptLike(resolved)) {
+                if (!resolved.isJavaScriptLike()) {
                     return globalThis.throwInvalidArguments("only JavaScript-like loaders supported for now", .{});
                 }
 
@@ -541,7 +541,7 @@ pub struct TransformTask {
         };
 
         const parse_result = _.transpiler.parse(parse_options, null) orelse {
-            _.err = error.ParseError;
+            _.@"err" = error.ParseError;
             return;
         };
 

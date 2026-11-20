@@ -5897,7 +5897,7 @@ pub struct BufferWriter {
         return ctx.last_bytes[0];
     }
 
-    static fn reserveNext(ctx: *BufferWriter, count: u64): [*]u8! {
+    static fn reserveNext(ctx: *BufferWriter, count: u64): anyerror![*]u8 {
         ctx.buffer.growIfNeeded(count)?;
         return unsafe { @as([*]u8, &ctx.buffer.list.items.ptr[ctx.buffer.list.items.len]) };
     }

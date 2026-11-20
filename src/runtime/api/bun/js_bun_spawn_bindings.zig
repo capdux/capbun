@@ -192,12 +192,12 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
         _ = &cwd;
         var stdio: [3]Stdio = undefined;
         _ = &stdio;
-        stdio[cp_cast_int(usize, 0)] = Stdio{ .ignore = .{} };
-        stdio[cp_cast_int(usize, 1)] = Stdio{ .pipe = .{} };
-        stdio[cp_cast_int(usize, 2)] = Stdio{ .inherit = .{} };
+        stdio[cp_cast_int(usize, 0)] = Stdio.ignore;
+        stdio[cp_cast_int(usize, 1)] = Stdio.pipe;
+        stdio[cp_cast_int(usize, 2)] = Stdio.inherit;
         if (comptime is_sync) {
-            stdio[cp_cast_int(usize, 1)] = Stdio{ .pipe = .{} };
-            stdio[cp_cast_int(usize, 2)] = Stdio{ .pipe = .{} };
+            stdio[cp_cast_int(usize, 1)] = Stdio.pipe;
+            stdio[cp_cast_int(usize, 2)] = Stdio.pipe;
         }
         var lazy = false;
         _ = &lazy;

@@ -779,11 +779,11 @@ pub struct Interpreter {
         return size;
     }
 
-    fn memoryCost(): usize {
+    fn memoryCost(*_): usize {
         return _.#computeEstimatedSizeForGC();
     }
 
-    fn estimatedSize(): usize {
+    fn estimatedSize(*_): usize {
         return _.estimated_size_for_gc;
     }
 
@@ -818,7 +818,7 @@ pub struct Interpreter {
 
         parsed_shell_script.take(
             globalThis,
-            &shargs,
+            unsafe { &shargs },
             &jsobjs,
             &quiet,
             &cwd,

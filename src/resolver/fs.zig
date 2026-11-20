@@ -547,10 +547,10 @@ pub inline fn isPrettyPathPosix(path: *const Path) bool {
 
 pub fn dupeAlloc(self: Path, allocator: std.mem.Allocator) !Fs.Path {
             if (((self.text.ptr == self.pretty.ptr) and (self.text.len == self.pretty.len))) {
-                if ((FileSystem.FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.FileSystem.DirnameStore.instance.exists(self.text))) {
+                if ((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text))) {
                     return self.*;
                 }
-                var new_path = Fs.Path.init(try FileSystem.FileSystem.FilenameStore.instance.append(string, self.text));
+                var new_path = Fs.Path.init(try FileSystem.FilenameStore.instance.append(string, self.text));
                 _ = &new_path;
                 new_path.pretty = self.text;
                 new_path.namespace = self.namespace;
@@ -558,10 +558,10 @@ pub fn dupeAlloc(self: Path, allocator: std.mem.Allocator) !Fs.Path {
                 return new_path;
             } else {
                 if ((self.pretty.len == 0)) {
-                    if ((FileSystem.FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.FileSystem.DirnameStore.instance.exists(self.text))) {
+                    if ((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text))) {
                         return self.*;
                     }
-                    var new_path = Fs.Path.init(try FileSystem.FileSystem.FilenameStore.instance.append(string, self.text));
+                    var new_path = Fs.Path.init(try FileSystem.FilenameStore.instance.append(string, self.text));
                     _ = &new_path;
                     new_path.pretty = "";
                     new_path.namespace = self.namespace;
@@ -570,22 +570,22 @@ pub fn dupeAlloc(self: Path, allocator: std.mem.Allocator) !Fs.Path {
                 } else {
                     if (allocators.sliceRange(self.pretty, self.text)) |start_len| {
                         _ = &start_len;
-                        if ((FileSystem.FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.FileSystem.DirnameStore.instance.exists(self.text))) {
+                        if ((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text))) {
                             return self.*;
                         }
-                        var new_path = Fs.Path.init(try FileSystem.FileSystem.FilenameStore.instance.append(string, self.text));
+                        var new_path = Fs.Path.init(try FileSystem.FilenameStore.instance.append(string, self.text));
                         _ = &new_path;
                         new_path.pretty = self.text[start_len[0]..][0..start_len[1]];
                         new_path.namespace = self.namespace;
                         new_path.is_symlink = self.is_symlink;
                         return new_path;
                     } else {
-                        if (((FileSystem.FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.FileSystem.DirnameStore.instance.exists(self.text)) and (FileSystem.FileSystem.FilenameStore.instance.exists(self.pretty) or FileSystem.FileSystem.DirnameStore.instance.exists(self.pretty)))) {
+                        if (((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text)) and (FileSystem.FilenameStore.instance.exists(self.pretty) or FileSystem.DirnameStore.instance.exists(self.pretty)))) {
                             return self.*;
                         }
                         if (strings.indexOf(self.text, self.pretty)) |offset| {
                             _ = &offset;
-                            var text = try FileSystem.FileSystem.FilenameStore.instance.append(string, self.text);
+                            var text = try FileSystem.FilenameStore.instance.append(string, self.text);
                             _ = &text;
                             var new_path = Fs.Path.init(self.text);
                             _ = &new_path;
@@ -743,8 +743,8 @@ else => null,
                 _ = &existing;
                 stored = existing;
             } else {
-                const name = try strings.StringOrTinyString.initAppendIfNeeded(name_slice, *FileSystem.FilenameStore, FileSystem.FileSystem.FilenameStore.instance);
-                const name_lowercased = try strings.StringOrTinyString.initLowerCaseAppendIfNeeded(name_slice, *FileSystem.FilenameStore, FileSystem.FileSystem.FilenameStore.instance);
+                const name = try strings.StringOrTinyString.initAppendIfNeeded(name_slice, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance);
+                const name_lowercased = try strings.StringOrTinyString.initLowerCaseAppendIfNeeded(name_slice, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance);
                 stored = try EntryStore.instance.append(.{ .base_ = name, .base_lowercase_ = name_lowercased, .dir = self.dir, .mutex = .{}, .need_stat = (found_kind == null), .cache = .{ .symlink = PathString.empty, .kind = ((found_kind) orelse (.file)) } });
             }
             const stored_name = stored.base();
@@ -937,14 +937,14 @@ pub fn create(self: *TmpfilePosix, _: *RealFS, name: [:0]const u8) !void {
                 self.fd = try bun.sys.openat(dir_fd, name, flags, std.posix.S.IRWXU).unwrap();
         }
 
-pub fn promoteToCWD(self: *TmpfilePosix, from_name: [*:0]u8, name: [*:0]u8) !void {
+pub fn promoteToCWD(self: *TmpfilePosix, from_name: [*:0]const u8, name: [*:0]const u8) !void {
                 _ = bun.assert((self.fd != bun.invalid_fd));
                 _ = bun.assert((self.dir_fd != bun.invalid_fd));
                 _ = try bun.sys.moveFileZWithHandle(self.fd, self.dir_fd, bun.sliceTo(from_name, 0), bun.FD.cwd(), bun.sliceTo(name, 0));
                 _ = self.close();
         }
 
-pub fn closeAndDelete(self: *TmpfilePosix, name: [*:0]u8) void {
+pub fn closeAndDelete(self: *TmpfilePosix, name: [*:0]const u8) void {
                 _ = self.close();
                 if (comptime (!Environment.isLinux)) {
                     if ((self.dir_fd == bun.invalid_fd)) {
@@ -984,7 +984,7 @@ pub fn create(self: *TmpfileWindows, rfs: *RealFS, name: [:0]const u8) !void {
                 self.existing_path = try bun.default_allocator.dupe(u8, fd_path);
         }
 
-pub fn promoteToCWD(self: *TmpfileWindows, from_name: [*:0]u8, name: [:0]const u8) !void {
+pub fn promoteToCWD(self: *TmpfileWindows, from_name: [*:0]const u8, name: [:0]const u8) !void {
                 _ = &from_name;
                 var existing_buf: bun.WPathBuffer = undefined;
                 _ = &existing_buf;
@@ -1001,7 +1001,7 @@ pub fn promoteToCWD(self: *TmpfileWindows, from_name: [*:0]u8, name: [:0]const u
                 }
         }
 
-pub fn closeAndDelete(self: *TmpfileWindows, name: [*:0]u8) void {
+pub fn closeAndDelete(self: *TmpfileWindows, name: [*:0]const u8) void {
                 _ = &name;
                 _ = self.close();
         }
@@ -1558,7 +1558,7 @@ pub fn getFdPath(self: FileSystem, fd: FD) ![]const u8 {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
             const dir = try bun.getFdPath(fd, (&buf));
-            return try self.dirname_store.append(&.{}, u8, dir);
+            return try self.dirname_store.append(U8Slice, dir);
     }
 
 pub fn tmpname(extname: []const u8, buf: []u8, hash: u64) std.fmt.BufPrintError![:0]u8 {
@@ -1641,7 +1641,7 @@ pub fn absAlloc(f: *@This(), allocator: std.mem.Allocator, parts: anytype) ![]co
             return try allocator.dupe(u8, joined);
     }
 
-pub fn absAllocZ(f: *@This(), allocator: std.mem.Allocator, parts: anytype) ![*:0]u8 {
+pub fn absAllocZ(f: *@This(), allocator: std.mem.Allocator, parts: anytype) ![*:0]const u8 {
             const joined = path_handler.joinAbsString(f.top_level_dir, parts, .loose);
             return try allocator.dupeZ(u8, joined);
     }
@@ -1687,6 +1687,7 @@ pub fn printLimits() void {
             _ = Output.print("}}\n", .{});
             _ = Output.flush();
     }
+    const U8Slice = []u8;
     pub const DirnameStore = allocators.BSSStringList(Preallocate.Counts.dir_entry, 128);
     pub const FilenameStore = allocators.BSSStringList(Preallocate.Counts.files, 64);
     pub const Error = error{

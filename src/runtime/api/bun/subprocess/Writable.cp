@@ -291,7 +291,7 @@ pub const Writable = union(enum) {
 
                 pipe.deref();
 
-                this.* = Writable{ ignore: {} };
+                this.* = .ignore;
             },
             .buffer => {
                 this.buffer.updateRef(false);
@@ -299,7 +299,7 @@ pub const Writable = union(enum) {
             },
             .memfd => |fd| {
                 fd.close();
-                this.* = Writable{ ignore: {} };
+                this.* = .ignore;
             },
             .ignore => {},
             .fd, .inherit => {},
@@ -313,10 +313,10 @@ pub const Writable = union(enum) {
             },
             .memfd => |fd| {
                 fd.close();
-                this.* = Writable{ ignore: {} };
+                this.* = .ignore;
             },
             .fd => {
-                this.* = Writable{ ignore: {} };
+                this.* = .ignore;
             },
             .buffer => {
                 this.buffer.close();

@@ -193,7 +193,7 @@ pub struct Transpiler {
                     }
                 }
 
-                let parts = [
+                let parts: [2][]const u8 = [
                     entry_point,
                     bun.pathLiteral(".."),
                 ];
@@ -897,7 +897,11 @@ pub struct Transpiler {
                 opts.features.standard_decorators = !loader.isTypeScript() || !(this_parse.experimental_decorators || this_parse.emit_decorator_metadata);
                 opts.features.allow_runtime = transpiler.options.allow_runtime;
                 opts.features.set_breakpoint_on_first_line = this_parse.set_breakpoint_on_first_line;
-                opts.features.trim_unused_imports = transpiler.options.trim_unused_imports ?? loader.isTypeScript();
+                if (v := transpiler.options.trim_unused_imports) {
+                    opts.features.trim_unused_imports = v;
+                } else {
+                    opts.features.trim_unused_imports = loader.isTypeScript();
+                }
                 opts.features.no_macros = transpiler.options.no_macros;
                 opts.features.runtime_transpiler_cache = this_parse.runtime_transpiler_cache;
                 opts.transform_only = transpiler.options.transform_only;

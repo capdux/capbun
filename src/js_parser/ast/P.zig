@@ -100,12 +100,15 @@ const ReactRefreshImportClause = struct {
 };
 const ReactRefreshExportKind = enum { named, default };
 const import_meta_hot_accept_err = "Dependencies to `import.meta.hot.accept` must be statically analyzable module specifiers matching direct imports.";
-var e_missing_data = E.Missing;
-var s_missing = S.Empty;
+var e_missing_data: E.Missing = .{};
+var s_missing: S.Empty = .{};
 var nullExprData = Expr.Data{ .e_missing = e_missing_data };
 var nullStmtData = Stmt.Data{ .s_empty = s_missing };
-var keyExprData = Expr.Data{ .e_string = *const Prefill.String.Key };
-var nullExprValueData = E.Null;
+var keyExprData = Expr.Data{ .e_string = (blk: {
+    break :blk *const Prefill.String.Key;
+
+}) };
+var nullExprValueData: E.Null = .{};
 var falseExprValueData = E.Boolean{ .value = false };
 var nullValueExpr = Expr.Data{ .e_null = nullExprValueData };
 var falseValueExpr = Expr.Data{ .e_boolean = E.Boolean{ .value = false } };
@@ -4647,7 +4650,8 @@ pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source
     pub const is_typescript_enabled = js_parser_features.typescript;
     pub const is_jsx_enabled = (js_parser_jsx != .none);
     pub const only_scan_imports_and_do_not_visit = js_parser_features.scan_only;
-    const ImportRecordList = (if (only_scan_imports_and_do_not_visit) (&std.array_list.Managed(ImportRecord)) else std.array_list.Managed(ImportRecord));
+    const ImportRecordPtr = *std.array_list.Managed(ImportRecord);
+    const ImportRecordList = (if (only_scan_imports_and_do_not_visit) ImportRecordPtr else std.array_list.Managed(ImportRecord));
     const NamedImportsType = (if (only_scan_imports_and_do_not_visit) *js_ast.Ast.NamedImports else js_ast.Ast.NamedImports);
     const NeedsJSXType = (if (only_scan_imports_and_do_not_visit) bool else void);
     pub const track_symbol_usage_during_parse_pass = (only_scan_imports_and_do_not_visit and is_typescript_enabled);

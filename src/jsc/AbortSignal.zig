@@ -158,11 +158,11 @@ pub fn getTimeout(self: *AbortSignal) ?*TimeoutImpl {
     pub const Timeout = TimeoutImpl;
 };
 
+const ListenerCallback = *const fn (?*anyopaque, JSValue) callconv(.c) void;
 const CommonAbortReason = CommonAbortReasonModule.CommonAbortReason;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
-const ListenerCallback = *const *const fn(arg0: ?*anyopaque, arg1: JSValue) callconv(.c) void;
 pub const AbortReasonImpl = union(enum) {
     common: CommonAbortReason,
     js: JSValue,
@@ -184,7 +184,7 @@ pub fn toJS(self: @This(), global: *jsc.JSGlobalObject) JSValue {
 pub const TimeoutImpl = struct {
     event_loop_timer: jsc.API.Timer.EventLoopTimer,
     signal: *AbortSignal,
-    flags: jsc.API.Timer.TimerObjectInternals.Flags = .{},
+    flags: jsc.API.Timer.TimerObjectInternals.TimerObjectInternals.Flags = .{},
     generation: u32 = 0,
 
 pub fn init(vm: *jsc.VirtualMachine, signal_: *AbortSignal, milliseconds: u64) *TimeoutImpl {

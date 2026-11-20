@@ -147,17 +147,13 @@ pub const StringOrTinyString = struct {
     @"meta": StringOrTinyStringMeta = .{},
 
 pub fn slice(self: StringOrTinyString) []const u8 {
-            return (switch (self.@"meta".is_tiny_string) {
-1 => self.remainder_buf[0..self.@"meta".remainder_len],
-0 => {
-{
+            if ((self.@"meta".is_tiny_string == 1)) {
+                return self.remainder_buf[0..self.@"meta".remainder_len];
+            } else {
                 const ptr: [*]const u8 = @ptrFromInt(std.mem.readInt(usize, self.remainder_buf[0..@sizeOf(usize)], .little));
                 const len = std.mem.readInt(usize, self.remainder_buf[@sizeOf(usize)..(@sizeOf(usize) * 2)], .little);
                 return ptr[0..len];
             }
-},
-else => unreachable,
-});
     }
 
 pub fn deinit(self: *StringOrTinyString, _: std.mem.Allocator) void {
@@ -1616,11 +1612,12 @@ pub fn indexOfNeedsURLEncode(slice: []const u8) ?u32 {
                 remaining = remaining[ascii_vector_size..];
             }
         }
-        for (cp_mut_slice(&remaining)) |*char_| {
-            _ = &char_;
-            const char = (char_.*).*;
+        var char_idx: usize = 0;
+        _ = &char_idx;
+        while ((char_idx < remaining.len)) : (char_idx = (char_idx + 1)) {
+            const char = remaining[@as(usize, @intCast(char_idx))];
             if (((((((((((((char > 127) or (char < 32)) or (char == 92)) or (char == 37)) or (char == 34)) or (char == 35)) or (char == 63)) or (char == 91)) or (char == 93)) or (char == 94)) or (char == 124)) or (char == 126))) {
-                return @as(u32, @truncate((@intFromPtr((char_.*)) - @intFromPtr(slice.ptr))));
+                return @as(u32, @truncate((@intFromPtr((&remaining[@as(usize, @intCast(char_idx))])) - @intFromPtr(slice.ptr))));
             }
         }
         return null;
@@ -1978,8 +1975,8 @@ pub fn firstNonASCII16(slice: []const u16) ?u32 {
                             {
                                 var i: i32 = 0;
                                 _ = &i;
-                                const __end_15 = index_of_first_nonascii_in_vector;
-                                while (i < __end_15) : (i += 1) {
+                                const __end_14 = index_of_first_nonascii_in_vector;
+                                while (i < __end_14) : (i += 1) {
                                     if ((vec[@as(usize, @intCast(i))] > 127)) {
                                         _ = bun.Output.panic("firstNonASCII16: found non-ASCII character in ASCII vector before the first non-ASCII character", .{});
                                     }
@@ -2411,7 +2408,7 @@ pub fn percentEncodeWrite(utf8_input: []const u8, writer: *std.array_list.Manage
             _ = writer.appendSliceAssumeCapacity(safe);
             for (cp_iter_slice(to_encode)) |byte| {
                 _ = &byte;
-                const hex_bytes: []i32 = .{ 37, byte2hex((cp_shr(byte, 4) & 15)), byte2hex((byte & 15)) };
+                const hex_bytes: [3]u8 = .{ (if (comptime @typeInfo(@TypeOf(37)) == .@"enum") cp_cast_int(u8, @intFromEnum(37)) else cp_cast_int(u8, 37)), byte2hex((cp_shr(byte, 4) & 15)), byte2hex((byte & 15)) };
                 _ = writer.appendSliceAssumeCapacity((&hex_bytes));
             }
         }

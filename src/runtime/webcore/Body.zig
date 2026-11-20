@@ -266,7 +266,7 @@ var input = value.useAsAnyBlobAllowNonUTF8String();
             }
             }
             if (is_pending) {
-                _ = input.Blob.doReadFileInternal((&@This()), sink, onFinishedLoadingFile, sink.global);
+                _ = input.Blob.doReadFileInternal(SelfPtr, sink, onFinishedLoadingFile, sink.global);
             } else {
                 const bytes = input.slice();
                 _ = log("Blob {}", .{ bytes.len });
@@ -497,7 +497,7 @@ _ = assert((bs.pipe.ctx == null));
     }
 
 pub fn onReceiveValue(ctx: *anyopaque, value: *jsc.WebCore.Body.Value) void {
-            const sink = bun.cast((&@This()), ctx);
+            const sink = bun.cast(SelfPtr, ctx);
             switch (value.*) {
 .Error => |e| {
 _ = log("onReceiveValue Error", .{});
@@ -517,6 +517,7 @@ _ = value.toBlobIfPossible();
     const log = bun.Output.scoped(.BodyValueBufferer, .visible);
     const ArrayBufferSink = bun.webcore.Sink.ArrayBufferSink;
     const Callback = ValueBuffererCallback;
+    const SelfPtr = *@This();
 };
 
 pub const Body = @This();
@@ -1251,7 +1252,7 @@ defer {
 .WTFStringImpl => Body.Value{ .WTFStringImpl = any_blob.WTFStringImpl },
 });
                 }
-                return error.Empty;
+                return Value.Empty;
 },
 else => {
 
@@ -1537,10 +1538,7 @@ pub fn toErrorInstance(self: *@This(), e: ValueError, global: *JSGlobalObject) b
                     if ((readable.ptr == .Bytes)) {
                         var stream_err = self.Error.toStreamError(global);
                         _ = &stream_err;
-                        _ = try readable.ptr.Bytes.onData(.{ .err = (blk: {
-                        break :blk (&stream_err);
-
-}) }, bun.default_allocator);
+                        _ = try readable.ptr.Bytes.onData(.{ .err = stream_err }, bun.default_allocator);
                     } else {
                         _ = readable.abort(global);
                     }

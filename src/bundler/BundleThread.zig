@@ -100,7 +100,7 @@ pub fn BundleThread(CompletionStruct: type) type {
     generation: bun.Generation = 0,
 
 pub fn spawn(instance: *Self) !std.Thread {
-            const thread = try std.Thread.spawn(.{}, threadMain, .{ .instance = instance });
+            const thread = try std.Thread.spawn(.{}, threadMain, .{ instance });
             _ = instance.ready_event.wait();
             return thread;
     }

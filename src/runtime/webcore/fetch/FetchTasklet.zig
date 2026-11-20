@@ -791,7 +791,7 @@ pub fn checkServerIdentity(self: *FetchTasklet, certificate_info: http.Certifica
                         _ = self.tracker.didCancel(self.global_this);
                         if (self.http) |http_| {
                             _ = &http_;
-                            _ = (http).?.http_thread.scheduleShutdown(http_);
+                            _ = bun.http.http_thread.scheduleShutdown(http_);
                         }
                         self.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false; }); });
@@ -810,7 +810,7 @@ pub fn checkServerIdentity(self: *FetchTasklet, certificate_info: http.Certifica
                         _ = self.tracker.didCancel(self.global_this);
                         if (self.http) |http_| {
                             _ = &http_;
-                            _ = (http).?.http_thread.scheduleShutdown(http_);
+                            _ = bun.http.http_thread.scheduleShutdown(http_);
                         }
                         self.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false; }); });
@@ -914,7 +914,7 @@ pub fn onStartStreamingHTTPResponseBodyCallback(ctx: *anyopaque) jsc.WebCore.Dra
             if (tasklet.http) |http_| {
                 _ = &http_;
                 _ = http_.enableResponseBodyStreaming();
-                _ = (http).?.http_thread.scheduleResponseBodyDrain(http_.async_http_id);
+                _ = bun.http.http_thread.scheduleResponseBodyDrain(http_.async_http_id);
             }
             _ = tasklet.mutex.lock();
             defer {
@@ -1180,7 +1180,7 @@ pub fn writeRequestData(self: *FetchTasklet, data: []const u8) ResumableSinkBack
             defer {
             {
                 if (needs_schedule) {
-                    _ = (http).?.http_thread.scheduleRequestWrite(self.http.?, .data);
+                    _ = bun.http.http_thread.scheduleRequestWrite(self.http.?, .data);
                 }
             }
             }
@@ -1220,11 +1220,11 @@ pub fn writeEndRequest(self: *FetchTasklet, err: ?jsc.JSValue) void {
                     defer {
                     _ = (if (comptime @typeInfo(@TypeOf(thread_safe_stream_buffer)) == .pointer) (thread_safe_stream_buffer) else &(thread_safe_stream_buffer)).release();
                     }
-                    _ = handleOom(stream_buffer.write((http).?.end_of_chunked_http1_1_encoding_response_body));
+                    _ = handleOom(stream_buffer.write(bun.http.end_of_chunked_http1_1_encoding_response_body));
                 }
                 if (self.http) |http_| {
                     _ = &http_;
-                    _ = http_.http_thread.scheduleRequestWrite(http_, .end);
+                    _ = bun.http.http_thread.scheduleRequestWrite(http_, .end);
                 }
             }
     }
@@ -1234,12 +1234,12 @@ pub fn abortTask(self: *FetchTasklet) void {
             _ = self.tracker.didCancel(self.global_this);
             if (self.http) |http_| {
                 _ = &http_;
-                _ = http_.http_thread.scheduleShutdown(http_);
+                _ = bun.http.http_thread.scheduleShutdown(http_);
             }
     }
 
 pub fn queue(allocator: Allocator, global: *JSGlobalObject, fetch_options: *const FetchOptions, promise: jsc.JSPromise.Strong) !*FetchTasklet {
-            _ = (http).?.HTTPThread.init((&.{}));
+            _ = bun.http.HTTPThread.init((&.{}));
             var node = try get(allocator, global, fetch_options, promise);
             _ = &node;
             var batch = ThreadPool.Batch;
@@ -1247,7 +1247,7 @@ pub fn queue(allocator: Allocator, global: *JSGlobalObject, fetch_options: *cons
             _ = node.http.?.schedule(allocator, (&batch));
             _ = node.poll_ref.ref(global.bunVM());
             _ = node.ref();
-            _ = (http).?.http_thread.schedule(batch);
+            _ = bun.http.http_thread.schedule(batch);
             return node;
     }
 

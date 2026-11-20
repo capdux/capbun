@@ -94,8 +94,7 @@ pub fn init(self: *FormData, fields: Map, buffer: []const u8) void {
             self.buffer = buffer;
     }
 
-pub fn getBoundary(self: *const FormData, content_type: []const u8) ?[]const u8 {
-        _ = self;
+pub fn getBoundary(content_type: []const u8) ?[]const u8 {
             const boundary_index = ((strings.indexOf(content_type, "boundary=")) orelse { return null; });
             const boundary_start = (boundary_index + "boundary=".len);
             const begin = content_type[boundary_start..];
@@ -140,7 +139,7 @@ pub fn fromMultipartData(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame)
             defer {
             _ = boundary_slice.deinit();
             }
-            var encoding = Encoding{ .URLEncoded = .{} };
+            var encoding = Encoding{ .URLEncoded = undefined };
             _ = &encoding;
             if (input_value.isEmptyOrUndefinedOrNull()) {
                 return globalThis.throwInvalidArguments("input must not be empty", .{});
@@ -377,7 +376,12 @@ else => {
                     body = body[0..(body.len - 2)];
                 }
                 (if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) = body;
-                if (field.filename == null) { field.filename = .{}; }
+                if (filename) |fname| {
+                    _ = &fname;
+                    field.filename = fname;
+                } else {
+                    field.filename = .{};
+                }
                 field.is_file = is_file;
                 _ = iterator(ctx, name, field, input);
             }
@@ -418,7 +422,9 @@ else => {
                 _ = self.allocator.destroy(self);
         }
     
-    pub fn toJS(self: *AsyncFormData, global: *JSGlobalObject, data: []const u8, promise: AnyPromise) JSTerminated!void {
+    pub fn toJS(self: *AsyncFormData, global: *JSGlobalObject, data: []const u8, promise_val: AnyPromise) JSTerminated!void {
+                var promise = promise_val;
+                _ = &promise;
                 if (((self.encoding == .Multipart) and (self.encoding.Multipart.len == 0))) {
                     _ = log("AsnycFormData.toJS -> promise.reject missing boundary", .{});
                     _ = try promise.reject(global, jsc.ZigString.init("FormData missing boundary").toErrorInstance(global));

@@ -622,7 +622,7 @@ pub const Value = union(enum) {
                         };
                     }
 
-                    return .Empty;
+                    return Value.Empty;
                 },
                 else => {},
             }
@@ -926,7 +926,7 @@ pub const Value = union(enum) {
                 if (readable.ptr == .Bytes) {
                     let stream_err = _.Error.toStreamError(global);
                     try readable.ptr.Bytes.onData(
-                        { err: unsafe { &stream_err } },
+                        { err: stream_err },
                         bun.default_allocator,
                     );
                 } else {
@@ -1109,6 +1109,7 @@ pub struct ValueBufferer {
 
     const ArrayBufferSink = bun.webcore.Sink.ArrayBufferSink;
     const Callback = ValueBuffererCallback;
+    type SelfPtr = *@This();
 
     ctx: *!,
     onFinishedBuffering: Callback,
@@ -1186,7 +1187,7 @@ pub struct ValueBufferer {
                 defer if (!is_pending) input.detach();
 
                 if (is_pending) {
-                    input.Blob.doReadFileInternal(*@This(), sink, onFinishedLoadingFile, sink.global);
+                    input.Blob.doReadFileInternal(SelfPtr, sink, onFinishedLoadingFile, sink.global);
                 } else {
                     const bytes = input.slice();
                     log("Blob {}", .{bytes.len});
@@ -1429,7 +1430,7 @@ pub struct ValueBufferer {
     }
 
     static fn onReceiveValue(ctx: *!, value: *jsc.WebCore.Body.Value) {
-        const sink = bun.cast(*@This(), ctx);
+        const sink = bun.cast(SelfPtr, ctx);
         switch (value.*) {
             .Error => |e| {
                 log("onReceiveValue Error", {});

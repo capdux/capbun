@@ -625,7 +625,7 @@ export class FetchTasklet {
                         _.abort_reason.set(globalObject, check_result);
                         _.signal_store.aborted.store(true, .monotonic);
                         _.tracker.didCancel(_.global_this);
-                        if (http_ := _.http) http.http_thread.scheduleShutdown(http_);
+                        if (http_ := _.http) bun.http.http_thread.scheduleShutdown(http_);
                         _.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false;
                     };
@@ -640,7 +640,7 @@ export class FetchTasklet {
                         _.abort_reason.set(globalObject, hostname_err_result);
                         _.signal_store.aborted.store(true, .monotonic);
                         _.tracker.didCancel(_.global_this);
-                        if (http_ := _.http) http.http_thread.scheduleShutdown(http_);
+                        if (http_ := _.http) bun.http.http_thread.scheduleShutdown(http_);
                         _.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false;
                     };
@@ -831,7 +831,7 @@ export class FetchTasklet {
 
         if (http_ := tasklet.http) {
             http_.enableResponseBodyStreaming();
-            http.http_thread.scheduleResponseBodyDrain(http_.async_http_id);
+            bun.http.http_thread.scheduleResponseBodyDrain(http_.async_http_id);
         }
 
         tasklet.mutex.lock();
@@ -1191,7 +1191,7 @@ export class FetchTasklet {
         let needs_schedule = false;
         defer {
             if (needs_schedule) {
-                http.http_thread.scheduleRequestWrite(_.http.?, .data);
+                bun.http.http_thread.scheduleRequestWrite(_.http.?, .data);
             }
         }
 
@@ -1230,10 +1230,10 @@ export class FetchTasklet {
                 const thread_safe_stream_buffer = _.request_body_streaming_buffer orelse return;
                 const stream_buffer = thread_safe_stream_buffer.acquire();
                 defer thread_safe_stream_buffer.release();
-                handleOom(stream_buffer.write(http.end_of_chunked_http1_1_encoding_response_body));
+                handleOom(stream_buffer.write(bun.http.end_of_chunked_http1_1_encoding_response_body));
             }
             if (http_ := _.http) {
-                http_.http_thread.scheduleRequestWrite(http_, .end);
+                bun.http.http_thread.scheduleRequestWrite(http_, .end);
             }
         }
     }
@@ -1243,7 +1243,7 @@ export class FetchTasklet {
         _.tracker.didCancel(_.global_this);
 
         if (http_ := _.http) {
-            http_.http_thread.scheduleShutdown(http_);
+            bun.http.http_thread.scheduleShutdown(http_);
         }
     }
 
@@ -1279,7 +1279,7 @@ export class FetchTasklet {
         fetch_options: *const FetchOptions,
         promise: jsc.JSPromise.Strong,
     ): !*FetchTasklet {
-        http.HTTPThread.init(&.{});
+        bun.http.HTTPThread.init(&.{});
         let node = try get(
             allocator,
             global,
@@ -1292,7 +1292,7 @@ export class FetchTasklet {
         node.poll_ref.ref(global.bunVM());
 
         node.ref();
-        http.http_thread.schedule(batch);
+        bun.http.http_thread.schedule(batch);
 
         return node;
     }

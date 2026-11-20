@@ -591,14 +591,13 @@ pub struct StringOrTinyString {
 
     fn slice(): []const u8 {
         // This is a switch expression instead of a statement to make sure it uses the faster assembly
-        return switch (_.@"meta".is_tiny_string) {
-            1 => _.remainder_buf[0.._.@"meta".remainder_len],
-            0 => {
-                const ptr: [*]const u8 = @ptrFromInt(std.mem.readInt(usize, _.remainder_buf[0..@sizeOf(usize)], .little));
-                const len = std.mem.readInt(usize, _.remainder_buf[@sizeOf(usize) .. @sizeOf(usize) * 2], .little);
-                return ptr[0..len];
-            }
-        };
+        if (_.@"meta".is_tiny_string == 1) {
+            return _.remainder_buf[0.._.@"meta".remainder_len];
+        } else {
+            const ptr: [*]const u8 = @ptrFromInt(std.mem.readInt(usize, _.remainder_buf[0..@sizeOf(usize)], .little));
+            const len = std.mem.readInt(usize, _.remainder_buf[@sizeOf(usize) .. @sizeOf(usize) * 2], .little);
+            return ptr[0..len];
+        }
     }
 
     fn deinit(*_, _: std.mem.Allocator) {
@@ -1337,8 +1336,9 @@ pub fn indexOfNeedsURLEncode(slice: []const u8): u32? {
         }
     }
 
-    for (*char_ of remaining) {
-        const char = char_.*;
+    let char_idx: usize = 0;
+    while (char_idx < remaining.len) : (char_idx += 1) {
+        const char = remaining[char_idx];
         if (char > 127 || char < 0x20 ||
             char == '\\' ||
             char == '%' ||
@@ -1351,7 +1351,7 @@ pub fn indexOfNeedsURLEncode(slice: []const u8): u32? {
             char == '|' ||
             char == '~')
         {
-            return @as(u32, @truncate(@intFromPtr(char_) - @intFromPtr(slice.ptr)));
+            return @as(u32, @truncate(@intFromPtr(&remaining[char_idx]) - @intFromPtr(slice.ptr)));
         }
     }
 
@@ -2286,7 +2286,7 @@ pub fn percentEncodeWrite(
 
         // URL encode the code point
         for (byte of to_encode) {
-            const hex_bytes = ['%', byte2hex((byte >> 4) & 0xF), byte2hex(byte & 0xF)];
+            const hex_bytes: [3]u8 = [@as(u8, '%'), byte2hex((byte >> 4) & 0xF), byte2hex(byte & 0xF)];
             writer.appendSliceAssumeCapacity(&hex_bytes);
         }
     }

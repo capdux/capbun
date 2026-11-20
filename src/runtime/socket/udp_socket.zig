@@ -158,9 +158,13 @@ pub fn fromJS(globalThis: *JSGlobalObject, options: JSValue, thisValue: JSValue)
                 if ((!connect_host_js.isString())) {
                     return globalThis.throwInvalidArguments("Expected \"connect.hostname\" to be a string", .{});
                 }
-                const connect_port_js = try ((connect.getTruthy(globalThis, "port")) orelse {
-                return globalThis.throwInvalidArguments("Expected \"connect.port\" to be an integer", .{});
-});
+                const connect_port_opt = try connect.getTruthy(globalThis, "port");
+                var __connect_port_opt_moved = false; _ = &__connect_port_opt_moved;
+                defer if (!__connect_port_opt_moved) { const __T = @TypeOf(connect_port_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = connect_port_opt.release() catch {}; } else { connect_port_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = connect_port_opt; _drop_val.release(); } };
+                if ((connect_port_opt == null)) {
+                    return globalThis.throwInvalidArguments("Expected \"connect.port\" to be an integer", .{});
+                }
+                const connect_port_js = connect_port_opt.?;
                 var __connect_port_js_moved = false; _ = &__connect_port_js_moved;
                 defer if (!__connect_port_js_moved) { const __T = @TypeOf(connect_port_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = connect_port_js.release() catch {}; } else { connect_port_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = connect_port_js; _drop_val.release(); } };
                 const connect_port = try connect_port_js.coerceToInt32(globalThis);
@@ -705,7 +709,7 @@ pub fn sendManyImpl(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *C
             const send_fn = uws.udp.Socket.send;
             var __send_fn_moved = false; _ = &__send_fn_moved;
             defer if (!__send_fn_moved) { const __T = @TypeOf(send_fn); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = send_fn.release() catch {}; } else { send_fn.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = send_fn; _drop_val.release(); } };
-            const res = send_fn(socket, payloads, lens, addr_ptrs);
+            const res = send_fn(socket, @ptrCast(payloads.ptr), lens, addr_ptrs);
             var __res_moved = false; _ = &__res_moved;
             defer if (!__res_moved) { const __T = @TypeOf(res); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = res.release() catch {}; } else { res.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = res; _drop_val.release(); } };
             if (getUSError(res, .send, true)) |err| {
@@ -779,7 +783,10 @@ pub fn send(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFrame
             const send_fn = uws.udp.Socket.send;
             var __send_fn_moved = false; _ = &__send_fn_moved;
             defer if (!__send_fn_moved) { const __T = @TypeOf(send_fn); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = send_fn.release() catch {}; } else { send_fn.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = send_fn; _drop_val.release(); } };
-            const res = send_fn(socket, (&.{ payload.ptr }), (&.{ payload.len }), (&.{ addr_ptr }));
+            const payload_ptrs: [1][*]const u8 = .{ payload.ptr };
+            const lens_arr: [1]usize = .{ payload.len };
+            const addr_ptrs_arr: [1]ConstOpaquePtr = .{ addr_ptr };
+            const res = send_fn(socket, @ptrCast((&payload_ptrs)), (&lens_arr), (&addr_ptrs_arr));
             var __res_moved = false; _ = &__res_moved;
             defer if (!__res_moved) { const __T = @TypeOf(res); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = res.release() catch {}; } else { res.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = res; _drop_val.release(); } };
             if (getUSError(res, .send, true)) |err| {

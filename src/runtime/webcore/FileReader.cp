@@ -197,7 +197,7 @@ pub union(enum) Lazy {
                     _.lazy.blob.deref();
                     _.lazy = .none;
                 }
-                const opened_res = openFileBlobImpl(_.lazy.blob.data.file);
+                const opened_res = openFileBlobImpl(&_.lazy.blob.data.file);
                 if (opened_res == .err) {
                     _.fd = bun.invalid_fd;
                     return .{ .err = opened_res.err };
@@ -412,7 +412,7 @@ pub union(enum) Lazy {
                     bun.assert_eql(buf.ptr, reader_buffer.items.ptr);
                     let buffer = reader_buffer.moveToUnmanaged();
                     buffer.shrinkRetainingCapacity(buf.len);
-                    _.pending.result = .{ .owned_and_done = .moveFromList(&buffer) };
+                    _.pending.result = .{ .owned_and_done = .moveFromList(unsafe { &buffer }) };
                 } else {
                     reader_buffer.clearRetainingCapacity();
                     _.pending.result = .{ .temporary = .fromBorrowedSliceDangerous(buf) };

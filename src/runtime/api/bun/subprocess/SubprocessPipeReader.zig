@@ -197,7 +197,9 @@ self.state = State{ .done = empty_u8[0..0] };
 },
 .@"err" => {
 const empty = try jsc.WebCore.ReadableStream.empty(globalObject);
-        _ = jsc.WebCore.ReadableStream.cancel((&(try jsc.WebCore.ReadableStream.fromJS(empty, globalObject)).?), globalObject);
+        var stream = (try jsc.WebCore.ReadableStream.fromJS(empty, globalObject)).?;
+        _ = &stream;
+        _ = stream.cancel(globalObject);
         return empty;
 },
 }
@@ -278,7 +280,7 @@ pub const deref = PipeReader.RefCount.deref;
 pub const IOReader = bun.io.BufferedReader;
 pub const Poll = IOReader;
 pub const toJS = toReadableStream;
-var empty_u8: [0]u8 = &.{};
+var empty_u8: [0]u8 = undefined;
 pub const State = union(enum) {
     pending: void,
     done: []u8,

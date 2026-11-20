@@ -220,7 +220,7 @@ const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
 const empty_zig_slices: [0]ZigSlice = std.mem.zeroes([0]ZigSlice);
 const empty_byte_slices: []const []const u8 = &.{};
 
-pub fn buildConnectRequest(target_host: []const u8, target_port: u16, proxy_authorization: []const ?u8, proxy_headers: ?Headers) std.mem.Allocator.Error![]u8 {
+pub fn buildConnectRequest(target_host: []const u8, target_port: u16, proxy_authorization: ?[]const u8, proxy_headers: ?Headers) std.mem.Allocator.Error![]u8 {
         const allocator = bun.default_allocator;
         var buf = std.array_list.Managed(u8).init(allocator);
         _ = &buf;

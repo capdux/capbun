@@ -329,7 +329,9 @@ pub fn toJSBufferFromMemfd(fd: bun.FD, globalObject: *jsc.JSGlobalObject) bun.JS
 return JSBuffer__fromMmap(globalObject, buf.ptr, buf.len);
 },
 .err => |e| {
-return (blk_catch_3: { break :blk_catch_3 ((globalObject.throwValue((blk_catch_2: { break :blk_catch_2 ((e.toJS(globalObject)) catch |__ce_2| { _ = &__ce_2; return error.zero; }); }))) catch |__ce_3| { _ = &__ce_3; return error.zero; }); });
+if ((globalObject.throwValue((blk_catch_2: { break :blk_catch_2 ((e.toJS(globalObject)) catch |__ce_2| { _ = &__ce_2; return error.zero; }); })) == error.JSTerminated)) {
+            }
+            return error.zero;
 },
 }
     }

@@ -331,7 +331,7 @@ pub struct TestingAPIs {
                             out.* = { buffer: CowString.initOwned(pipe.state.done, bun.default_allocator) };
                             pipe.state = { done: [] };
                         } else {
-                            out.* = { ignore: {} };
+                            out.* = .ignore;
                         }
                         pipe.deref();
                     },
@@ -709,11 +709,18 @@ pub struct TestingAPIs {
                     }
 
                     switch (status) {
-                        .exited => |exited| promise.asAnyPromise().?.resolve(globalThis, JSValue.jsNumber(exited.code)) catch {},
-                        .@"err" => |e| {
-                            promise.asAnyPromise().?.rejectWithAsyncStack(globalThis, e.toJS(globalThis) catch return) catch {};
+                        .exited => |exited| {
+                            let p = promise.asAnyPromise().?;
+                            p.resolve(globalThis, JSValue.jsNumber(exited.code)) catch {};
                         },
-                        .signaled => promise.asAnyPromise().?.resolve(globalThis, JSValue.jsNumber(128 +% @intFromEnum(status.signaled))) catch {},
+                        .@"err" => |e| {
+                            let p = promise.asAnyPromise().?;
+                            p.rejectWithAsyncStack(globalThis, e.toJS(globalThis) catch return) catch {};
+                        },
+                        .signaled => {
+                            let p = promise.asAnyPromise().?;
+                            p.resolve(globalThis, JSValue.jsNumber(128 +% @intFromEnum(status.signaled))) catch {};
+                        },
                         else => {
                             if (comptime Environment.allow_assert) {
                                 unreachable;

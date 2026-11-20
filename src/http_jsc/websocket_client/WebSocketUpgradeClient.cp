@@ -146,7 +146,7 @@ export struct BuildRequestResult {
 fn buildConnectRequest(
     target_host: []const u8,
     target_port: u16,
-    proxy_authorization: []const u8?,
+    proxy_authorization: ([]const u8)?,
     proxy_headers: Headers?,
 ): std.mem.Allocator.Error![]u8 {
     const allocator = bun.default_allocator;

@@ -97,18 +97,18 @@ pub const _AlreadyBundled = union(enum) {
     bytecode: []u8,
     bytecode_cjs: []u8,
 
-pub fn bytecodeSlice(self: *const _AlreadyBundled) []u8 {
+pub fn bytecodeSlice(self: _AlreadyBundled) []u8 {
             return (switch (self) {
 inline .bytecode, .bytecode_cjs => |slice| slice,
 else => empty_u8[0..0],
 });
     }
 
-pub fn isBytecode(self: *const _AlreadyBundled) bool {
+pub fn isBytecode(self: _AlreadyBundled) bool {
             return ((self == .bytecode) or (self == .bytecode_cjs));
     }
 
-pub fn isCommonJS(self: *const _AlreadyBundled) bool {
+pub fn isCommonJS(self: _AlreadyBundled) bool {
             return ((self == .source_code_cjs) or (self == .bytecode_cjs));
     }
 };
@@ -224,7 +224,7 @@ pub fn resolveEntryPoint(transpiler: *Transpiler, entry_point: []const u8) !_res
                     break :name bun.strings.normalizeSlashesOnly((&cache_bust_buf), dir, std.fs.path.sep);
                 }
             }
-            var parts: [][]const u8 = .{ entry_point, bun.pathLiteral("..") };
+            var parts: [2][]const u8 = .{ entry_point, bun.pathLiteral("..") };
             _ = &parts;
             break :name bun.path.joinAbsStringBufZ(transpiler.fs.top_level_dir, (&cache_bust_buf), (&parts), .auto);
 };
@@ -593,7 +593,12 @@ if (source.isWebAssembly()) {
             opts.features.standard_decorators = ((!loader.isTypeScript()) or (!(this_parse.experimental_decorators or this_parse.emit_decorator_metadata)));
             opts.features.allow_runtime = transpiler.options.allow_runtime;
             opts.features.set_breakpoint_on_first_line = this_parse.set_breakpoint_on_first_line;
-            if (opts.features.trim_unused_imports == null) { opts.features.trim_unused_imports = loader.isTypeScript(); }
+            if (transpiler.options.trim_unused_imports) |v| {
+                _ = &v;
+                opts.features.trim_unused_imports = v;
+            } else {
+                opts.features.trim_unused_imports = loader.isTypeScript();
+            }
             opts.features.no_macros = transpiler.options.no_macros;
             opts.features.runtime_transpiler_cache = this_parse.runtime_transpiler_cache;
             opts.transform_only = transpiler.options.transform_only;

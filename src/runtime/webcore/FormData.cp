@@ -70,7 +70,8 @@ export class FormData {
             this.allocator.destroy(this);
         }
 
-        pub static fn toJS(this: *AsyncFormData, global: *JSGlobalObject, data: []const u8, promise: AnyPromise) JSTerminated!void {
+        pub static fn toJS(this: *AsyncFormData, global: *JSGlobalObject, data: []const u8, promise_val: AnyPromise) JSTerminated!void {
+            let promise = promise_val;
             if (this.encoding == .Multipart and this.encoding.Multipart.len == 0) {
                 log("AsnycFormData.toJS -> promise.reject missing boundary", .{});
                 try promise.reject(global, jsc.ZigString.init("FormData missing boundary").toErrorInstance(global));
@@ -90,7 +91,7 @@ export class FormData {
         }
     };
 
-    pub fn getBoundary(content_type: []const u8): ([]const u8)? {
+    static fn getBoundary(content_type: []const u8): ([]const u8)? {
         const boundary_index = strings.indexOf(content_type, "boundary=") orelse return null;
         const boundary_start = boundary_index + "boundary=".len;
         const begin = content_type[boundary_start..];
@@ -156,7 +157,7 @@ export class FormData {
         defer boundary_slice.deinit();
 
         let encoding = Encoding{
-            .URLEncoded = {},
+            .URLEncoded = undefined,
         };
 
         if (input_value.isEmptyOrUndefinedOrNull()) {
@@ -397,7 +398,11 @@ export class FormData {
                 body = body[0 .. body.len - 2];
             }
             field.value = body;
-            field.filename = filename orelse .{};
+            if (fname := filename) {
+                field.filename = fname;
+            } else {
+                field.filename = {};
+            }
             field.is_file = is_file;
 
             iterator(ctx, name, field, input);

@@ -139,7 +139,7 @@ pub const Readable = union(enum) {
                 return jsc.WebCore.ReadableStream.fromOwnedSlice(globalThis, owned_slice, 0);
             },
             else => {
-                return .js_undefined;
+                return JSValue.js_undefined;
             },
         }
     }
@@ -170,7 +170,7 @@ pub const Readable = union(enum) {
                 return jsc.MarkedArrayBuffer.fromBytes(owned_slice, bun.default_allocator, .Uint8Array).toNodeBuffer(globalThis);
             },
             else => {
-                return .js_undefined;
+                return JSValue.js_undefined;
             },
         }
     }

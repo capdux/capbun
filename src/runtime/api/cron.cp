@@ -1237,7 +1237,7 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
         argv0: resolved_argv0,
         windows: if (comptime bun.Environment.isWindows) .{
             loop: jsc.EventLoopHandle.init(jsc.VirtualMachine.get().eventLoop()),
-        } else null,
+        } else undefined,
     };
 
     let envp_arena = std.heap.ArenaAllocator.init(bun.default_allocator);

@@ -3136,3 +3136,5 @@ Options:
 - **[2026-11-20 22:13] Wave 19 A 组验收提交（14 模块全绿）**：完成 `node_crypto_binding`（33 错清零）、`output`、`SSLConfig`、`cache`、`ThreadPool`、`bundle_v2`、`options`、`env_loader`、`hot_reloader`、`filter_run`、`Coordinator`、`HTTPContext`、`websocket_client`、`JSGlobalObject` 14 模块独立验收（14/14 PASS，ratio 0.844x~1.070x）并原子提交。
 
 - **[2026-11-20 22:22] Wave 19 C 组验收提交（45 模块全绿）**：完成 23 个 2 错 + 22 个 1 错模块独立验收（45/45 `cpc`+`ast-check` PASS，ratio 0.653x~1.118x，`json.cp` 原无备份除外）并原子提交；已记录 6 项清单外根因（`bundle_v2.Result` `@"err"`、`quic/Socket.makeStream` `pub`、`quic/Header.classify` `static`、`walker_skippable.walk` `static`、`hot_reloader.onError` 接收者、`DevServer.source_dir_prefix`）；静待 B 组（`dc6fb57d`）收尾。
+
+- **[2026-11-20 22:25] Wave 19 B 组验收提交（37 模块全绿）**：完成 JSParser/Bake/WebCore/Socket/Bundler/JSC/API/Shell 等 37 模块独立验收（全部 PASS，ratio 0.834x~1.089x）并原子提交；`interpreter.cp` 已修正 `memoryCost`/`estimatedSize` 接收者消除 `ZigGeneratedClasses` 最后 2 错；已记录 `shell.cp:3812` `TestToken.from_real` 缺 `pub`。

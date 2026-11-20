@@ -257,7 +257,7 @@ pub const DecodedIPCMessage = union(enum) {
 
 pub const DecodeIPCMessageResult = struct {
     bytes_consumed: u32,
-    message: *DecodedIPCMessage,
+    message: DecodedIPCMessage,
 };
 
 pub const advanced = struct {
@@ -486,7 +486,7 @@ pub fn destroy(self: *WindowsWrite) void {
 };
 
 pub const IPCSendQueueOwner = union(enum) {
-    subprocess: *bun.api.Subprocess,
+    subprocess: *bun.api.Subprocess.Subprocess,
     virtual_machine: *bun.jsc.VirtualMachine.IPCInstance,
 };
 
@@ -1191,12 +1191,15 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 pub const log = Output.scoped(.IPC, .visible);
-pub const IPCDecodeError = (error{
+pub const IPCDecodeError = error{
     /// There werent enough bytes, recall this function again when new data is available.
     NotEnoughBytes,
     /// Format could not be recognized. Report an error and close the socket.
     InvalidFormat,
-} or bun.JSError);
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+};
 pub const AdvancedVersionPacket = extern struct {
     type: AdvancedIPCMessageType align(1) = .Version,
     version: u32 align(1) = 1,
@@ -1360,7 +1363,7 @@ _ = &namedPipe;
         return JSValue.false;
 }
 
-pub fn handleIPCMessage(send_queue: *SendQueue, message: *DecodedIPCMessage, globalThis: *jsc.JSGlobalObject) void {
+pub fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalThis: *jsc.JSGlobalObject) void {
         if (comptime Environment.isDebug) {
             var formatter = jsc.JSValue.Formatter{ .global = globalThis };
             _ = &formatter;
@@ -1376,7 +1379,7 @@ _ = log("received ipc message: internal: {f}", .{ jsvalue.toFmt((&formatter)) })
 },
 }
         }
-        var internal_command: ?*IPCCommand = null;
+        var internal_command: ?IPCCommand = null;
         _ = &internal_command;
         if ((message == .data)) {
             _ = handle_message: {

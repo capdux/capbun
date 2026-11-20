@@ -1404,7 +1404,7 @@ pub fn setRoutes(dev: *DevServer, server: anytype) !bool {
         _ = app.post((internal_prefix ++ "/report_error"), dev, wrapGenericRequestHandler(ErrorReportRequest.run, is_ssl));
         _ = app.post((internal_prefix ++ "/unref"), dev, wrapGenericRequestHandler(UnrefSourceMapRequest.run, is_ssl));
         _ = app.any(internal_prefix, dev, wrapGenericRequestHandler(onNotFound, is_ssl));
-        _ = app.ws((internal_prefix ++ "/hmr"), dev, 0, uws.WebSocketBehavior.Wrap(DevServer, HmrSocket, is_ssl).apply(.{}));
+        _ = app.ws((internal_prefix ++ "/hmr"), dev, 0, uws.WebSocketBehavior.wrap(DevServer, HmrSocket, is_ssl, .{}));
         if (bun.FeatureFlags.bake_debugging_features) {
             _ = app.get((internal_prefix ++ "/incremental_visualizer"), *DevServer, dev, wrapGenericRequestHandler(onIncrementalVisualizer, is_ssl));
             _ = app.get((internal_prefix ++ "/memory_visualizer"), *DevServer, dev, wrapGenericRequestHandler(onMemoryVisualizer, is_ssl));

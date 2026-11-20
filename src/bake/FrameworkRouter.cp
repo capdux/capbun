@@ -474,7 +474,7 @@ static fn parseNextJsAppImpl(
         return null;
 
     // TODO: opengraph-image and metadata friends
-    if (!loader.isJavaScriptLike(loader))
+    if (!loader.isJavaScriptLike())
         return null;
 
     const kind = bun.ComptimeStringMap(ParsedPattern.Kind, switch (extract) {

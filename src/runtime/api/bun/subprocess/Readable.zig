@@ -211,7 +211,7 @@ defer {
             return jsc.WebCore.ReadableStream.fromOwnedSlice(globalThis, owned_slice, 0);
 },
 else => {
-return error.js_undefined;
+return JSValue.js_undefined;
 },
 }
     }
@@ -243,7 +243,7 @@ defer {
             return jsc.MarkedArrayBuffer.fromBytes(owned_slice, bun.default_allocator, .Uint8Array).toNodeBuffer(globalThis);
 },
 else => {
-return error.js_undefined;
+return JSValue.js_undefined;
 },
 }
     }

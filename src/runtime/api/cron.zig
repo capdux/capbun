@@ -1221,7 +1221,7 @@ pub fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: anytype, stdin_opt
             job.stderr_reader.source = .{ .pipe = bun.new(bun.windows.libuv.Pipe, std.mem.zeroes(bun.windows.libuv.Pipe)) };
         }
         const cwd = jsc.VirtualMachine.get().transpiler.fs.top_level_dir;
-        const spawn_options = bun.spawn.SpawnOptions{ .stdin = stdin_opt, .stdout = stdout_opt, .stderr = (if (comptime bun.Environment.isWindows) .{ .buffer = job.stderr_reader.source.?.pipe } else .ignore), .cwd = cwd, .argv0 = resolved_argv0, .windows = (if (comptime bun.Environment.isWindows) .{ .loop = jsc.EventLoopHandle.init(jsc.VirtualMachine.get().eventLoop()) } else null) };
+        const spawn_options = bun.spawn.SpawnOptions{ .stdin = stdin_opt, .stdout = stdout_opt, .stderr = (if (comptime bun.Environment.isWindows) .{ .buffer = job.stderr_reader.source.?.pipe } else .ignore), .cwd = cwd, .argv0 = resolved_argv0, .windows = (if (comptime bun.Environment.isWindows) .{ .loop = jsc.EventLoopHandle.init(jsc.VirtualMachine.get().eventLoop()) } else undefined) };
         var envp_arena = std.heap.ArenaAllocator.init(bun.default_allocator);
         _ = &envp_arena;
         defer {

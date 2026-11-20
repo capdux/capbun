@@ -83,7 +83,7 @@ pub fn onStart(self: *FileReader) streams.Start {
                     self.lazy = .none;
                 }
                 }
-                const opened_res = openFileBlobImpl(self.lazy.blob.data.file);
+                const opened_res = openFileBlobImpl((&self.lazy.blob.data.file));
                 if ((opened_res == .err)) {
                     self.fd = bun.invalid_fd;
                     return .{ .err = opened_res.err };
@@ -306,7 +306,10 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                         var buffer = reader_buffer.moveToUnmanaged();
                         _ = &buffer;
                         _ = buffer.shrinkRetainingCapacity(buf.len);
-                        self.pending.result = .{ .owned_and_done = .moveFromList(buffer) };
+                        self.pending.result = .{ .owned_and_done = .moveFromList((blk: {
+                        break :blk buffer;
+
+})) };
                     } else {
                         _ = reader_buffer.clearRetainingCapacity();
                         self.pending.result = .{ .temporary = .fromBorrowedSliceDangerous(buf) };

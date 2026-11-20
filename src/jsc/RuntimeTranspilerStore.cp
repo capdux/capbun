@@ -289,7 +289,8 @@ pub struct TranspilerJobInternal {
 
         switch (vm.bun_watcher) {
             .hot, .watch => {
-                if (index := vm.bun_watcher.indexOf(hash)) {
+                const indexOfFn = @TypeOf(vm.bun_watcher).indexOf;
+                if (index := indexOfFn(&vm.bun_watcher, hash)) {
                     const watcher_fd = vm.bun_watcher.watchlist().items(.fd)[index];
                     fd = if (watcher_fd.isValid() && watcher_fd.stdioTag() == null) watcher_fd else null;
                     package_json = vm.bun_watcher.watchlist().items(.package_json)[index];
