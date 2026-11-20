@@ -42,7 +42,7 @@ pub struct HTMLRewriter {
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
 
-    fn constructor(_: *JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*HTMLRewriter {
+    static fn constructor(_: *JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*HTMLRewriter {
         const rewriter = bun.handleOom(bun.default_allocator.create(HTMLRewriter));
         rewriter.* = HTMLRewriter{
             builder: LOLHTML.HTMLRewriter.Builder.init(),
@@ -105,7 +105,7 @@ pub struct HTMLRewriter {
 
         bun.handleOom(_.context.selectors.append(bun.default_allocator, selector));
         bun.handleOom(_.context.element_handlers.append(bun.default_allocator, handler));
-        return callFrame._();
+        return callFrame.this();
     }
 
     pub fn onDocument_(
@@ -155,7 +155,7 @@ pub struct HTMLRewriter {
         );
 
         bun.handleOom(_.context.document_handlers.append(bun.default_allocator, handler));
-        return callFrame._();
+        return callFrame.this();
     }
 
     fn finalize(*_) {
@@ -215,7 +215,9 @@ pub struct HTMLRewriter {
                     return global.throwValue(e);
                 }
                 out_response_value.ensureStillAlive();
-                let out_response = out_response_value.@"as"(Response) ?? return out_response_value;
+                const out_response_opt = out_response_value.@"as"(Response);
+                if (out_response_opt == null) return out_response_value;
+                let out_response = out_response_opt.?;
                 let blob = out_response.getBodyValue().useAsAnyBlobAllowNonUTF8String();
 
                 defer {
@@ -1134,7 +1136,8 @@ pub struct TextChunk {
     }
 
     fn contentHandler(*_, comptime Callback: (fn (*LOLHTML.TextChunk, []const u8, bool) LOLHTML.Error!void), thisObject: JSValue, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
-        const text_chunk = _.text_chunk ?? return .js_undefined;
+        if (_.text_chunk == null) return JSValue.jsUndefined();
+        const text_chunk = _.text_chunk.?;
         let content_slice = content.toSlice(bun.default_allocator);
         defer content_slice.deinit();
 
@@ -1154,7 +1157,7 @@ pub struct TextChunk {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.TextChunk.before, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.TextChunk.before, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub fn after_(
@@ -1164,7 +1167,7 @@ pub struct TextChunk {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.TextChunk.after, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.TextChunk.after, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub fn replace_(
@@ -1174,7 +1177,7 @@ pub struct TextChunk {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.TextChunk.replace, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.TextChunk.replace, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub const before = host_fn.wrapInstanceMethod(TextChunk, "before_", false);
@@ -1186,26 +1189,30 @@ pub struct TextChunk {
         _: *JSGlobalObject,
         callFrame: *jsc.CallFrame,
     ): bun.JSError!JSValue {
-        const text_chunk = _.text_chunk ?? return .js_undefined;
+        if (_.text_chunk == null) return JSValue.jsUndefined();
+        const text_chunk = _.text_chunk.?;
         text_chunk.remove();
-        return callFrame._();
+        return callFrame.this();
     }
 
     pub fn getText(
         *_,
         global: *JSGlobalObject,
     ): bun.JSError!JSValue {
-        const text_chunk = _.text_chunk ?? return .js_undefined;
+        if (_.text_chunk == null) return JSValue.jsUndefined();
+        const text_chunk = _.text_chunk.?;
         return bun.String.createUTF8ForJS(global, text_chunk.getContent().slice());
     }
 
     fn removed(*_, _: *JSGlobalObject): JSValue {
-        const text_chunk = _.text_chunk ?? return .js_undefined;
+        if (_.text_chunk == null) return JSValue.jsUndefined();
+        const text_chunk = _.text_chunk.?;
         return JSValue.jsBoolean(text_chunk.isRemoved());
     }
 
     fn lastInTextNode(*_, _: *JSGlobalObject): JSValue {
-        const text_chunk = _.text_chunk ?? return .js_undefined;
+        if (_.text_chunk == null) return JSValue.jsUndefined();
+        const text_chunk = _.text_chunk.?;
         return JSValue.jsBoolean(text_chunk.isLastInTextNode());
     }
 
@@ -1254,7 +1261,7 @@ pub struct DocType {
         globalObject: *JSGlobalObject,
     ): JSValue {
         if (_.doctype == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         const str = _.doctype.?.getName().slice();
         if (str.len == 0)
             return JSValue.jsNull();
@@ -1266,7 +1273,7 @@ pub struct DocType {
         globalObject: *JSGlobalObject,
     ): JSValue {
         if (_.doctype == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         const str = _.doctype.?.getSystemId().slice();
         if (str.len == 0)
@@ -1279,7 +1286,7 @@ pub struct DocType {
         globalObject: *JSGlobalObject,
     ): JSValue {
         if (_.doctype == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         const str = _.doctype.?.getPublicId().slice();
         if (str.len == 0)
@@ -1293,9 +1300,9 @@ pub struct DocType {
         callFrame: *jsc.CallFrame,
     ): bun.JSError!JSValue {
         if (_.doctype == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         _.doctype.?.remove();
-        return callFrame._();
+        return callFrame.this();
     }
 
     pub fn removed(
@@ -1303,7 +1310,7 @@ pub struct DocType {
         _: *JSGlobalObject,
     ): JSValue {
         if (_.doctype == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         return JSValue.jsBoolean(_.doctype.?.isRemoved());
     }
 }
@@ -1351,7 +1358,7 @@ pub struct DocEnd {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.DocEnd.append, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.DocEnd.append, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub const append = host_fn.wrapInstanceMethod(DocEnd, "append_", false);
@@ -1408,7 +1415,7 @@ pub struct Comment {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.Comment.before, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.Comment.before, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub fn after_(
@@ -1418,7 +1425,7 @@ pub struct Comment {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.Comment.after, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.Comment.after, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub fn replace_(
@@ -1428,7 +1435,7 @@ pub struct Comment {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.Comment.replace, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.Comment.replace, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub const before = host_fn.wrapInstanceMethod(Comment, "before_", false);
@@ -1443,7 +1450,7 @@ pub struct Comment {
         if (_.comment == null)
             return JSValue.jsNull();
         _.comment.?.remove();
-        return callFrame._();
+        return callFrame.this();
     }
 
     pub fn getText(
@@ -1474,7 +1481,7 @@ pub struct Comment {
         _: *JSGlobalObject,
     ): JSValue {
         if (_.comment == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         return JSValue.jsBoolean(_.comment.?.isRemoved());
     }
 
@@ -1555,7 +1562,7 @@ pub struct EndTag {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.EndTag.before, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.EndTag.before, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub fn after_(
@@ -1565,7 +1572,7 @@ pub struct EndTag {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.EndTag.after, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.EndTag.after, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub fn replace_(
@@ -1575,7 +1582,7 @@ pub struct EndTag {
         content: ZigString,
         contentOptions: ContentOptions?,
     ): JSValue {
-        return _.contentHandler(LOLHTML.EndTag.replace, callFrame._(), globalObject, content, contentOptions);
+        return _.contentHandler(LOLHTML.EndTag.replace, callFrame.this(), globalObject, content, contentOptions);
     }
 
     pub const before = host_fn.wrapInstanceMethod(EndTag, "before_", false);
@@ -1588,10 +1595,10 @@ pub struct EndTag {
         callFrame: *jsc.CallFrame,
     ): bun.JSError!JSValue {
         if (_.end_tag == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         _.end_tag.?.remove();
-        return callFrame._();
+        return callFrame.this();
     }
 
     pub fn getName(
@@ -1599,7 +1606,7 @@ pub struct EndTag {
         globalObject: *JSGlobalObject,
     ): bun.JSError!JSValue {
         if (_.end_tag == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         return _.end_tag.?.getName().toJS(globalObject)?;
     }
@@ -1672,10 +1679,13 @@ pub struct AttributeIterator {
             return JSValue.createObject2(globalObject, done_label, value_label, .true, .js_undefined);
         };
 
-        const value = attribute.value();
-        const name = attribute.name();
+        const value = attribute.@"value"();
+        const name = attribute.@"name"();
 
-        const strings_to_array = [name.toString(), value.toString()];
+        const to_str = @TypeOf(name).toString;
+        const s0 = @as(bun.String, to_str(name));
+        const s1 = @as(bun.String, to_str(value));
+        const strings_to_array: [2]bun.String = [s0, s1];
         return JSValue.createObject2(globalObject, done_label, value_label, .false, (bun.String.toJSArray(
             globalObject,
             &strings_to_array,
@@ -1765,7 +1775,7 @@ pub struct Element {
         };
 
         function.protect();
-        return callFrame._();
+        return callFrame.this();
     }
 
     //     // fn wrap(comptime name: string)
@@ -1798,7 +1808,7 @@ pub struct Element {
     /// Sets an attribute to a provided value, creating the attribute if it does not exist.
     fn setAttribute_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, name_: ZigString, value_: ZigString): JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         // Mutating the attribute Vec (push → possible realloc) invalidates
         // the slice::Iter any live AttributeIterator borrows from.
@@ -1810,13 +1820,13 @@ pub struct Element {
         let value_slice = value_.toSlice(bun.default_allocator);
         defer value_slice.deinit();
         _.element.?.setAttribute(name_slice.slice(), value_slice.slice()) catch return createLOLHTMLError(globalObject);
-        return callFrame._();
+        return callFrame.this();
     }
 
     ///  Removes the attribute.
     fn removeAttribute_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, name: ZigString): JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         // Vec::remove shifts trailing elements and shrinks len, leaving any
         // live slice::Iter's end pointer past the new end.
@@ -1828,7 +1838,7 @@ pub struct Element {
         _.element.?.removeAttribute(
             name_slice.slice(),
         ) catch return createLOLHTMLError(globalObject);
-        return callFrame._();
+        return callFrame.this();
     }
 
     pub const onEndTag = host_fn.wrapInstanceMethod(Element, "onEndTag_", false);
@@ -1839,7 +1849,7 @@ pub struct Element {
 
     fn contentHandler(*_, comptime Callback: (fn (*LOLHTML.Element, []const u8, bool) LOLHTML.Error!void), thisObject: JSValue, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         let content_slice = content.toSlice(bun.default_allocator);
         defer content_slice.deinit();
@@ -1855,10 +1865,9 @@ pub struct Element {
 
     ///  Inserts content before the element.
     fn before_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
-        return contentHandler(
-            _,
+        return _.contentHandler(
             LOLHTML.Element.before,
-            callFrame._(),
+            callFrame.this(),
             globalObject,
             content,
             contentOptions,
@@ -1867,10 +1876,9 @@ pub struct Element {
 
     ///  Inserts content right after the element.
     fn after_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
-        return contentHandler(
-            _,
+        return _.contentHandler(
             LOLHTML.Element.after,
-            callFrame._(),
+            callFrame.this(),
             globalObject,
             content,
             contentOptions,
@@ -1879,10 +1887,9 @@ pub struct Element {
 
     /// Inserts content right after the start tag of the element.
     fn prepend_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
-        return contentHandler(
-            _,
+        return _.contentHandler(
             LOLHTML.Element.prepend,
-            callFrame._(),
+            callFrame.this(),
             globalObject,
             content,
             contentOptions,
@@ -1891,10 +1898,9 @@ pub struct Element {
 
     ///  Inserts content right before the end tag of the element.
     fn append_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
-        return contentHandler(
-            _,
+        return _.contentHandler(
             LOLHTML.Element.append,
-            callFrame._(),
+            callFrame.this(),
             globalObject,
             content,
             contentOptions,
@@ -1903,10 +1909,9 @@ pub struct Element {
 
     /// Removes the element and inserts content in place of it.
     fn replace_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
-        return contentHandler(
-            _,
+        return _.contentHandler(
             LOLHTML.Element.replace,
-            callFrame._(),
+            callFrame.this(),
             globalObject,
             content,
             contentOptions,
@@ -1915,10 +1920,9 @@ pub struct Element {
 
     ///  Replaces content of the element.
     fn setInnerContent_(*_, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ContentOptions?): JSValue {
-        return contentHandler(
-            _,
+        return _.contentHandler(
             LOLHTML.Element.setInnerContent,
-            callFrame._(),
+            callFrame.this(),
             globalObject,
             content,
             contentOptions,
@@ -1935,24 +1939,24 @@ pub struct Element {
     ///  Removes the element with all its content.
     fn remove(*_, _: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         _.element.?.remove();
-        return callFrame._();
+        return callFrame.this();
     }
 
     ///  Removes the start tag and end tag of the element but keeps its inner content intact.
     fn removeAndKeepContent(*_, _: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         _.element.?.removeAndKeepContent();
-        return callFrame._();
+        return callFrame.this();
     }
 
     fn getTagName(*_, globalObject: *JSGlobalObject): bun.JSError!JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
         return htmlStringValue(_.element.?.tagName(), globalObject)?;
     }
@@ -1970,33 +1974,35 @@ pub struct Element {
 
     fn getRemoved(*_, _: *JSGlobalObject): JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         return JSValue.jsBoolean(_.element.?.isRemoved());
     }
 
     fn getSelfClosing(*_, _: *JSGlobalObject): JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         return JSValue.jsBoolean(_.element.?.isSelfClosing());
     }
 
     fn getCanHaveContent(*_, _: *JSGlobalObject): JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         return JSValue.jsBoolean(_.element.?.canHaveContent());
     }
 
     fn getNamespaceURI(*_, globalObject: *JSGlobalObject): JSError!JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
         return bun.String.createUTF8ForJS(globalObject, std.mem.span(_.element.?.namespaceURI()));
     }
 
     fn getAttributes(*_, globalObject: *JSGlobalObject): JSValue {
         if (_.element == null)
-            return .js_undefined;
+            return JSValue.jsUndefined();
 
-        const iter = _.element.?.attributes() ?? return createLOLHTMLError(globalObject);
+        const iter_opt = _.element.?.attributes();
+        if (iter_opt == null) return createLOLHTMLError(globalObject);
+        const iter = iter_opt.?;
         let attr_iter = bun.new(AttributeIterator, {
             ref_count: .init(),
             iterator: iter,

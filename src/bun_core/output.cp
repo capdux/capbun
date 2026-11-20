@@ -106,8 +106,10 @@ pub struct Source {
         _.buffered_stream = &_.buffered_stream_backing.new_interface;
         _.buffered_error_stream = &_.buffered_error_stream_backing.new_interface;
 
-        _.stream_backing = _.raw_stream.quietWriter().adaptToNewApi(&[]);
-        _.error_stream_backing = _.raw_error_stream.quietWriter().adaptToNewApi(&[]);
+        let empty_stream_buf: [0]u8 = [];
+        let empty_err_buf: [0]u8 = [];
+        _.stream_backing = _.raw_stream.quietWriter().adaptToNewApi(empty_stream_buf[0..0]);
+        _.error_stream_backing = _.raw_error_stream.quietWriter().adaptToNewApi(empty_err_buf[0..0]);
         _.stream = &_.stream_backing.new_interface;
         _.error_stream = &_.error_stream_backing.new_interface;
     }
@@ -185,7 +187,7 @@ pub struct Source {
         }
 
         if (term_program := bun.env_var.TERM_PROGRAM.get()) {
-            const use_16m = [
+            const use_16m: [5][]const u8 = [
                 "ghostty",
                 "MacTerm",
                 "WezTerm",
@@ -862,11 +864,13 @@ fn scopedEvaluateIsVisible(
     }
 }
 
+type IoWriterPtr = *std.Io.Writer;
+
 fn scopedLogImpl(
     comptime tagname: []const u8,
     really_disable: *std.atomic.Value(bool),
     out_set: *bool,
-    out: **std.Io.Writer,
+    out: *IoWriterPtr,
     buffered_writer: *File.QuietWriter.Adapter,
     buffer: *[4096]u8,
     lock: *bun.Mutex,

@@ -131,7 +131,8 @@ pub fn RefCount(comptime T: type, comptime field_name: string, comptime destruct
         }
 
         pub static fn deref(target: *T) {
-            derefWithContext(target, {});
+            const empty_ctx: void = undefined;
+            derefWithContext(target, empty_ctx);
         }
 
         pub static fn derefWithContext(target: *T, ctx: Ctx) {
@@ -384,7 +385,8 @@ pub fn RefPtr(comptime T: type): type {
 
         /// Decrement the reference count, and destroy the object if the count is 0.
         pub fn deref(this: &Self) {
-            this.derefWithContext({});
+            const empty_ctx: void = undefined;
+            this.derefWithContext(empty_ctx);
         }
 
         /// Decrement the reference count, and destroy the object if the count is 0.

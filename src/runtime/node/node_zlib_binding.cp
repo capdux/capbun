@@ -52,7 +52,7 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
 pub fn CompressionStream(comptime T: type): type {
     return struct {
-        pub fn write(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        pub static fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
 
             if (arguments.len != 7) {
@@ -67,7 +67,7 @@ pub fn CompressionStream(comptime T: type): type {
             let @"in": ([]const u8)? = null;
             let out: ([]u8)? = null;
 
-            const this_value = callframe._();
+            const this_value = callframe.this();
 
             if (arguments[0].isUndefined()) {
                 return globalThis.ERR(.INVALID_ARG_VALUE, "flush value is required", {}).throw();
@@ -104,26 +104,26 @@ pub fn CompressionStream(comptime T: type): type {
             }
             out = out_buf.byteSlice()[out_off..][0..out_len];
 
-            if (_.write_in_progress) {
+            if (stream.write_in_progress) {
                 return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
             }
-            if (_.pending_close) {
+            if (stream.pending_close) {
                 return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
             }
-            _.write_in_progress = true;
-            _.ref();
+            stream.write_in_progress = true;
+            stream.ref();
 
-            _.stream.setBuffers(@"in", out);
-            _.stream.setFlush(i32(flush));
+            stream.stream.setBuffers(@"in", out);
+            stream.stream.setFlush(i32(flush));
 
             // Only create the strong handle when we have a pending write
             // And make sure to clear it when we are done.
-            _.this_value.set(globalThis, this_value);
+            stream.this_value.set(globalThis, this_value);
 
             const vm = globalThis.bunVM();
-            _.task = { callback: &AsyncJob.runTask };
-            _.poll_ref.ref(vm);
-            jsc.WorkPool.schedule(&_.task);
+            stream.task = { callback: &AsyncJob.runTask };
+            stream.poll_ref.ref(vm);
+            jsc.WorkPool.schedule(&stream.task);
 
             return .js_undefined;
         }
@@ -134,48 +134,48 @@ pub fn CompressionStream(comptime T: type): type {
                 AsyncJob.run(target);
             }
 
-            pub fn run(*_) {
-                const globalThis: *jsc.JSGlobalObject = _.globalThis;
+            pub static fn run(stream: *T) {
+                const globalThis: *jsc.JSGlobalObject = stream.globalThis;
                 const vm = globalThis.bunVMConcurrently();
 
-                _.stream.doWork();
+                stream.stream.doWork();
 
-                vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(_)));
+                vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(stream)));
             }
         };
 
-        pub fn runFromJSThread(*_) {
-            const global: *jsc.JSGlobalObject = _.globalThis;
+        pub static fn runFromJSThread(stream: *T) {
+            const global: *jsc.JSGlobalObject = stream.globalThis;
             const vm = global.bunVM();
-            defer _.deref();
-            defer _.poll_ref.unref(vm);
+            defer stream.deref();
+            defer stream.poll_ref.unref(vm);
 
-            _.write_in_progress = false;
+            stream.write_in_progress = false;
 
             // Clear the strong handle before we call any callbacks.
-            const this_value = _.this_value.trySwap() orelse {
+            const this_value = stream.this_value.trySwap() orelse {
                 debug("this_value is null in runFromJSThread", .{});
                 return;
             };
 
             this_value.ensureStillAlive();
 
-            if (!(checkError(_, global, this_value))) {
+            if (!(checkError(stream, global, this_value))) {
                 return;
             }
 
-            _.stream.updateWriteResult(&_.write_result.?[1], &_.write_result.?[0]);
+            stream.stream.updateWriteResult(&stream.write_result.?[1], &stream.write_result.?[0]);
             this_value.ensureStillAlive();
 
             const write_callback: jsc.JSValue = T.js.writeCallbackGetCached(this_value).?;
 
             vm.eventLoop().runCallback(write_callback, global, this_value, []);
 
-            if (_.pending_reset) resetInternal(_, global, this_value);
-            if (_.pending_close) _ = closeInternal(_);
+            if (stream.pending_reset) resetInternal(stream, global, this_value);
+            if (stream.pending_close) closeInternal(stream);
         }
 
-        pub fn writeSync(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        pub static fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
 
             if (arguments.len != 7) {
@@ -225,88 +225,88 @@ pub fn CompressionStream(comptime T: type): type {
             }
             out = out_buf.byteSlice()[out_off..][0..out_len];
 
-            if (_.write_in_progress) {
+            if (stream.write_in_progress) {
                 return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
             }
-            if (_.pending_close) {
+            if (stream.pending_close) {
                 return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
             }
-            _.write_in_progress = true;
-            _.ref();
+            stream.write_in_progress = true;
+            stream.ref();
 
-            _.stream.setBuffers(@"in", out);
-            _.stream.setFlush(i32(flush));
-            const this_value = callframe._();
+            stream.stream.setBuffers(@"in", out);
+            stream.stream.setFlush(i32(flush));
+            const this_value = callframe.this();
 
-            _.stream.doWork();
-            if (checkError(_, globalThis, this_value)) {
-                _.stream.updateWriteResult(&_.write_result.?[1], &_.write_result.?[0]);
-                _.write_in_progress = false;
+            stream.stream.doWork();
+            if (checkError(stream, globalThis, this_value)) {
+                stream.stream.updateWriteResult(&stream.write_result.?[1], &stream.write_result.?[0]);
+                stream.write_in_progress = false;
             }
-            _.deref();
+            stream.deref();
 
             return .js_undefined;
         }
 
-        pub fn reset(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
-            resetInternal(_, globalThis, callframe._());
+        pub static fn reset(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
+            resetInternal(stream, globalThis, callframe.this());
             return .js_undefined;
         }
 
-        fn resetInternal(*_, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue) {
+        static fn resetInternal(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue) {
             // reset() destroys and re-creates the brotli/zstd encoder state (or
             // mutates the z_stream). Doing so while an async write is running on
             // the threadpool would be a use-after-free / data race, so defer it
             // until the in-flight write completes (mirrors pending_close).
-            if (_.write_in_progress) {
-                _.pending_reset = true;
+            if (stream.write_in_progress) {
+                stream.pending_reset = true;
                 return;
             }
-            _.pending_reset = false;
-            if (_.closed) return;
-            const e = _.stream.reset();
+            stream.pending_reset = false;
+            if (stream.closed) return;
+            const e = stream.stream.reset();
             if (e.isError()) {
-                emitError(_, globalThis, this_value, e);
+                emitError(stream, globalThis, this_value, e);
             }
         }
 
-        pub fn close(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        pub static fn close(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             * = globalThis;
             * = callframe;
-            closeInternal(_);
+            closeInternal(stream);
             return .js_undefined;
         }
 
-        fn closeInternal(*_) {
-            if (_.write_in_progress) {
-                _.pending_close = true;
+        static fn closeInternal(stream: *T) {
+            if (stream.write_in_progress) {
+                stream.pending_close = true;
                 return;
             }
-            _.pending_close = false;
-            _.closed = true;
-            _.this_value.deinit();
-            _.stream.close();
+            stream.pending_close = false;
+            stream.closed = true;
+            stream.this_value.deinit();
+            stream.stream.close();
         }
 
-        pub fn setOnError(_: *T, this_value: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
+        pub static fn setOnError(_: *T, this_value: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
             if (value.isFunction()) {
                 T.js.errorCallbackSetCached(this_value, globalObject, value.withAsyncContextIfNeeded(globalObject));
             }
         }
 
-        pub fn getOnError(_: *T, this_value: jsc.JSValue, _: *jsc.JSGlobalObject): jsc.JSValue {
+        pub static fn getOnError(_: *T, this_value: jsc.JSValue, _: *jsc.JSGlobalObject): jsc.JSValue {
             return T.js.errorCallbackGetCached(this_value) ?? .js_undefined;
         }
 
         /// returns true if no error was detected/emitted
-        fn checkError(*_, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue): bool {
-            const e = _.stream.getErrorInfo();
+        static fn checkError(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue): bool {
+            const e = stream.stream.getErrorInfo();
             if (!e.isError()) return true;
-            emitError(_, globalThis, this_value, e);
+            emitError(stream, globalThis, this_value, e);
             return false;
         }
 
-        pub fn emitError(*_, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue, err_: Error) {
+        pub static fn emitError(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue, err_: Error) {
             // Clear write_in_progress *before* invoking the onerror callback.
             // The callback may re-enter write(), which sets write_in_progress=true
             // and schedules a WorkPool task. If we cleared the flag after the
@@ -314,12 +314,12 @@ pub fn CompressionStream(comptime T: type): type {
             // below could free the native zlib/brotli/zstd state while a task is
             // still queued, leading to a use-after-free when the worker thread
             // runs doWork().
-            _.write_in_progress = false;
+            stream.write_in_progress = false;
 
-            let msg_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.msg, 0) }));
+            let msg_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.msg, 0) orelse "" }));
             const msg_value = msg_str.transferToJS(globalThis) catch return;
-            const err_value: jsc.JSValue = .jsNumber(err_.err);
-            let code_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.code, 0) }));
+            const err_value: jsc.JSValue = .jsNumber(err_.e);
+            let code_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.code, 0) orelse "" }));
             const code_value = code_str.transferToJS(globalThis) catch return;
 
             const callback: jsc.JSValue = T.js.errorCallbackGetCached(this_value) ??
@@ -328,12 +328,12 @@ pub fn CompressionStream(comptime T: type): type {
             const vm = globalThis.bunVM();
             vm.eventLoop().runCallback(callback, globalThis, this_value, &[msg_value, err_value, code_value]);
 
-            if (_.pending_reset) resetInternal(_, globalThis, this_value);
-            if (_.pending_close) * = closeInternal(_);
+            if (stream.pending_reset) resetInternal(stream, globalThis, this_value);
+            if (stream.pending_close) closeInternal(stream);
         }
 
-        pub fn finalize(*_) {
-            _.deref();
+        pub static fn finalize(stream: *T) {
+            stream.deref();
         }
     };
 }

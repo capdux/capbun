@@ -7,7 +7,7 @@ import {
     JSError,
     jsc,
 } from "bun";
-import { S3File } from "./S3File";
+import S3File from "./S3File.zig";
 
 const S3Credentials = S3.S3Credentials;
 const JSGlobalObject = jsc.JSGlobalObject;
@@ -109,7 +109,7 @@ export class S3Client {
     storage_class: S3.StorageClass? = null;
     request_payer: bool = false;
 
-    pub fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!*S3Client {
+    pub static fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!*S3Client {
         const arguments = callframe.arguments_old(1).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         defer args.deinit();
@@ -284,27 +284,27 @@ export class S3Client {
     }
 
     // Static methods
-    pub fn staticWrite(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticWrite(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return S3File.write(globalThis, callframe);
     }
 
-    pub fn staticPresign(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticPresign(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return S3File.presign(globalThis, callframe);
     }
 
-    pub fn staticExists(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticExists(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return S3File.exists(globalThis, callframe);
     }
 
-    pub fn staticSize(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticSize(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return S3File.size(globalThis, callframe);
     }
 
-    pub fn staticUnlink(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticUnlink(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return S3File.unlink(globalThis, callframe);
     }
 
-    pub fn staticFile(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticFile(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         const arguments = callframe.arguments_old(2).slice();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         defer args.deinit();
@@ -316,7 +316,7 @@ export class S3Client {
         return try S3File.constructInternalJS(globalThis, path, args.nextEat());
     }
 
-    pub fn staticStat(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
+    pub static fn staticStat(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
         return S3File.stat(globalThis, callframe);
     }
 

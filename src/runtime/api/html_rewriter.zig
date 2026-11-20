@@ -31,6 +31,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -43,7 +44,6 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-fn cp_fmt(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == bool) { return if (v) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{v}) catch unreachable; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{v}) catch unreachable; } else if (comptime @typeInfo(__T) == .@"enum") { return @tagName(v); } else if (comptime @typeInfo(__T) == .optional) { if (v) |unwrapped| { return cp_fmt(unwrapped); } else { return "null"; } } else { return std.fmt.allocPrint(std.heap.page_allocator, "{any}", .{v}) catch unreachable; } }
 fn cp_eq(a: anytype, b: anytype) bool {
     const Ta = @TypeOf(a); const Tb = @TypeOf(b);
     if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
@@ -100,8 +100,7 @@ pub const HTMLRewriter = struct {
     builder: *LOLHTML.HTMLRewriter.Builder,
     context: *LOLHTMLContext,
 
-pub fn constructor(self: *HTMLRewriter, _: *JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*HTMLRewriter {
-        _ = self;
+pub fn constructor(_: *JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*HTMLRewriter {
             const rewriter = bun.handleOom(bun.default_allocator.create(HTMLRewriter));
             rewriter.* = HTMLRewriter{ .builder = LOLHTML.HTMLRewriter.Builder.init(), .context = bun.new(LOLHTMLContext, .{ .ref_count = .init() }) };
             bun.analytics.Features.html_rewriter = (bun.analytics.Features.html_rewriter + 1);
@@ -130,7 +129,7 @@ pub fn on_(self: *HTMLRewriter, global: *JSGlobalObject, selector_name: ZigStrin
             _ = (blk_catch_1: { break :blk_catch_1 ((self.builder.addElementContentHandlers(selector, ElementHandler, ElementHandler.onElement, (if ((handler.onElementCallback != null)) handler else null), ElementHandler, ElementHandler.onComment, (if ((handler.onCommentCallback != null)) handler else null), ElementHandler, ElementHandler.onText, (if ((handler.onTextCallback != null)) handler else null))) catch |__ce_1| { _ = &__ce_1; return global.throwValue(createLOLHTMLError(global)); }); });
             _ = bun.handleOom(self.context.selectors.append(bun.default_allocator, selector));
             _ = bun.handleOom(self.context.element_handlers.append(bun.default_allocator, handler));
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn onDocument_(self: *HTMLRewriter, global: *JSGlobalObject, listener: JSValue, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
@@ -145,7 +144,7 @@ pub fn onDocument_(self: *HTMLRewriter, global: *JSGlobalObject, listener: JSVal
             }
             _ = self.builder.addDocumentContentHandlers(DocumentHandler, DocumentHandler.onDocType, (if ((handler.onDocTypeCallback != null)) handler else null), DocumentHandler, DocumentHandler.onComment, (if ((handler.onCommentCallback != null)) handler else null), DocumentHandler, DocumentHandler.onText, (if ((handler.onTextCallback != null)) handler else null), DocumentHandler, DocumentHandler.onEnd, (if ((handler.onEndCallback != null)) handler else null));
             _ = bun.handleOom(self.context.document_handlers.append(bun.default_allocator, handler));
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn finalize(self: *HTMLRewriter) void {
@@ -201,7 +200,11 @@ pub fn transform_(self: *HTMLRewriter, global: *JSGlobalObject, response_value: 
                         return global.throwValue(e);
                     }
                     _ = out_response_value.ensureStillAlive();
-                    var out_response = ((out_response_value.@"as"(Response)) orelse { return .{ .ok = out_response_value }; });
+                    const out_response_opt = out_response_value.@"as"(Response);
+                    if ((out_response_opt == null)) {
+                        return out_response_value;
+                    }
+                    var out_response = out_response_opt.?;
                     _ = &out_response;
                     var blob = out_response.getBodyValue().useAsAnyBlobAllowNonUTF8String();
                     _ = &blob;
@@ -716,7 +719,10 @@ pub fn init(text_chunk: *LOLHTML.TextChunk) *TextChunk {
     }
 
 pub fn contentHandler(self: *TextChunk, comptime Callback: *const fn (*LOLHTML.TextChunk, []const u8, bool) LOLHTML.Error!void, thisObject: JSValue, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            const text_chunk = ((self.text_chunk) orelse { return .js_undefined; });
+            if ((self.text_chunk == null)) {
+                return JSValue.jsUndefined();
+            }
+            const text_chunk = self.text_chunk.?;
             var content_slice = content.toSlice(bun.default_allocator);
             _ = &content_slice;
             defer {
@@ -727,35 +733,47 @@ pub fn contentHandler(self: *TextChunk, comptime Callback: *const fn (*LOLHTML.T
     }
 
 pub fn before_(self: *TextChunk, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.TextChunk.before, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.TextChunk.before, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn after_(self: *TextChunk, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.TextChunk.after, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.TextChunk.after, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn replace_(self: *TextChunk, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.TextChunk.replace, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.TextChunk.replace, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn remove(self: *TextChunk, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
-            const text_chunk = ((self.text_chunk) orelse { return .{ .ok = .js_undefined }; });
+            if ((self.text_chunk == null)) {
+                return JSValue.jsUndefined();
+            }
+            const text_chunk = self.text_chunk.?;
             _ = text_chunk.remove();
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn getText(self: *TextChunk, global: *JSGlobalObject) bun.JSError!JSValue {
-            const text_chunk = ((self.text_chunk) orelse { return .{ .ok = .js_undefined }; });
+            if ((self.text_chunk == null)) {
+                return JSValue.jsUndefined();
+            }
+            const text_chunk = self.text_chunk.?;
             return bun.String.createUTF8ForJS(global, text_chunk.getContent().slice());
     }
 
 pub fn removed(self: *TextChunk, _: *JSGlobalObject) JSValue {
-            const text_chunk = ((self.text_chunk) orelse { return .js_undefined; });
+            if ((self.text_chunk == null)) {
+                return JSValue.jsUndefined();
+            }
+            const text_chunk = self.text_chunk.?;
             return JSValue.jsBoolean(text_chunk.isRemoved());
     }
 
 pub fn lastInTextNode(self: *TextChunk, _: *JSGlobalObject) JSValue {
-            const text_chunk = ((self.text_chunk) orelse { return .js_undefined; });
+            if ((self.text_chunk == null)) {
+                return JSValue.jsUndefined();
+            }
+            const text_chunk = self.text_chunk.?;
             return JSValue.jsBoolean(text_chunk.isLastInTextNode());
     }
 
@@ -798,7 +816,7 @@ pub fn init(doctype: *LOLHTML.DocType) *DocType {
 
 pub fn name(self: *DocType, globalObject: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             const str = self.doctype.?.getName().slice();
             if ((str.len == 0)) {
@@ -809,7 +827,7 @@ pub fn name(self: *DocType, globalObject: *JSGlobalObject) JSValue {
 
 pub fn systemId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             const str = self.doctype.?.getSystemId().slice();
             if ((str.len == 0)) {
@@ -820,7 +838,7 @@ pub fn systemId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
 
 pub fn publicId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             const str = self.doctype.?.getPublicId().slice();
             if ((str.len == 0)) {
@@ -831,15 +849,15 @@ pub fn publicId(self: *DocType, globalObject: *JSGlobalObject) JSValue {
 
 pub fn remove(self: *DocType, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.doctype == null)) {
-                return error.js_undefined;
+                return JSValue.jsUndefined();
             }
             _ = self.doctype.?.remove();
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn removed(self: *DocType, _: *JSGlobalObject) JSValue {
             if ((self.doctype == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             return JSValue.jsBoolean(self.doctype.?.isRemoved());
     }
@@ -874,7 +892,7 @@ pub fn contentHandler(self: *DocEnd, comptime Callback: *const fn (*LOLHTML.DocE
     }
 
 pub fn append_(self: *DocEnd, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.DocEnd.append, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.DocEnd.append, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn finalize(self: *DocEnd) void {
@@ -917,15 +935,15 @@ pub fn contentHandler(self: *Comment, comptime Callback: *const fn (*LOLHTML.Com
     }
 
 pub fn before_(self: *Comment, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.Comment.before, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Comment.before, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn after_(self: *Comment, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.Comment.after, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Comment.after, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn replace_(self: *Comment, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.Comment.replace, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Comment.replace, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn remove(self: *Comment, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
@@ -933,7 +951,7 @@ pub fn remove(self: *Comment, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun
                 return JSValue.jsNull();
             }
             _ = self.comment.?.remove();
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn getText(self: *Comment, globalObject: *JSGlobalObject) bun.JSError!JSValue {
@@ -957,7 +975,7 @@ pub fn setText(self: *Comment, global: *JSGlobalObject, value: JSValue) JSError!
 
 pub fn removed(self: *Comment, _: *JSGlobalObject) JSValue {
             if ((self.comment == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             return JSValue.jsBoolean(self.comment.?.isRemoved());
     }
@@ -1013,28 +1031,28 @@ pub fn contentHandler(self: *EndTag, comptime Callback: *const fn (*LOLHTML.EndT
     }
 
 pub fn before_(self: *EndTag, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.EndTag.before, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.EndTag.before, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn after_(self: *EndTag, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.EndTag.after, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.EndTag.after, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn replace_(self: *EndTag, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(LOLHTML.EndTag.replace, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.EndTag.replace, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn remove(self: *EndTag, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.end_tag == null)) {
-                return error.js_undefined;
+                return JSValue.jsUndefined();
             }
             _ = self.end_tag.?.remove();
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn getName(self: *EndTag, globalObject: *JSGlobalObject) bun.JSError!JSValue {
             if ((self.end_tag == null)) {
-                return error.js_undefined;
+                return JSValue.jsUndefined();
             }
             return try self.end_tag.?.getName().toJS(globalObject);
     }
@@ -1109,9 +1127,12 @@ pub fn next(self: *AttributeIterator, globalObject: *JSGlobalObject, _: *jsc.Cal
             return JSValue.createObject2(globalObject, done_label, value_label, .true, .js_undefined);
 });
             _ = &attribute;
-            const value = (if (@typeInfo(@TypeOf(attribute)) == .@"enum") @intFromEnum(attribute) else attribute.value)();
-            const name = (if (@typeInfo(@TypeOf(attribute)) == .@"enum" or @typeInfo(@TypeOf(attribute)) == .@"union") @tagName(attribute) else attribute.name)();
-            const strings_to_array: [][]const u8 = .{ cp_string_from(name), cp_string_from(value) };
+            const value = attribute.@"value"();
+            const name = attribute.@"name"();
+            const to_str = @TypeOf(name).toString;
+            const s0 = (if (comptime @typeInfo(bun.String) == .@"enum") @as(bun.String, @enumFromInt(to_str(name))) else @as(bun.String, to_str(name)));
+            const s1 = (if (comptime @typeInfo(bun.String) == .@"enum") @as(bun.String, @enumFromInt(to_str(value))) else @as(bun.String, to_str(value)));
+            const strings_to_array: [2]bun.String = .{ s0, s1 };
             return JSValue.createObject2(globalObject, done_label, value_label, .false, try bun.String.toJSArray(globalObject, (&strings_to_array)));
     }
 
@@ -1174,7 +1195,7 @@ pub fn onEndTag_(self: *Element, globalObject: *JSGlobalObject, function: JSValu
             const e = createLOLHTMLError(globalObject);
             return globalObject.throwValue(e); }); });
             _ = function.protect();
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn getAttribute_(self: *Element, globalObject: *JSGlobalObject, name: ZigString) bun.JSError!JSValue {
@@ -1208,7 +1229,7 @@ pub fn hasAttribute_(self: *Element, global: *JSGlobalObject, name: ZigString) J
 
 pub fn setAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, name_: ZigString, value_: ZigString) JSValue {
             if ((self.element == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             _ = self.detachAttributeIterators();
             var name_slice = name_.toSlice(bun.default_allocator);
@@ -1222,12 +1243,12 @@ pub fn setAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *J
             _ = value_slice.deinit();
             }
             _ = (blk_catch_10: { break :blk_catch_10 ((self.element.?.setAttribute(name_slice.slice(), value_slice.slice())) catch |__ce_10| { _ = &__ce_10; return createLOLHTMLError(globalObject); }); });
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn removeAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, name: ZigString) JSValue {
             if ((self.element == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             _ = self.detachAttributeIterators();
             var name_slice = name.toSlice(bun.default_allocator);
@@ -1236,12 +1257,12 @@ pub fn removeAttribute_(self: *Element, callFrame: *jsc.CallFrame, globalObject:
             _ = name_slice.deinit();
             }
             _ = (blk_catch_11: { break :blk_catch_11 ((self.element.?.removeAttribute(name_slice.slice())) catch |__ce_11| { _ = &__ce_11; return createLOLHTMLError(globalObject); }); });
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn contentHandler(self: *Element, comptime Callback: *const fn (*LOLHTML.Element, []const u8, bool) LOLHTML.Error!void, thisObject: JSValue, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
             if ((self.element == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             var content_slice = content.toSlice(bun.default_allocator);
             _ = &content_slice;
@@ -1253,48 +1274,48 @@ pub fn contentHandler(self: *Element, comptime Callback: *const fn (*LOLHTML.Ele
     }
 
 pub fn before_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(self, LOLHTML.Element.before, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Element.before, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn after_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(self, LOLHTML.Element.after, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Element.after, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn prepend_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(self, LOLHTML.Element.prepend, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Element.prepend, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn append_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(self, LOLHTML.Element.append, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Element.append, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn replace_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(self, LOLHTML.Element.replace, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Element.replace, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn setInnerContent_(self: *Element, callFrame: *jsc.CallFrame, globalObject: *JSGlobalObject, content: ZigString, contentOptions: ?ContentOptions) JSValue {
-            return self.contentHandler(self, LOLHTML.Element.setInnerContent, callFrame._(), globalObject, content, contentOptions);
+            return self.contentHandler(LOLHTML.Element.setInnerContent, callFrame.this(), globalObject, content, contentOptions);
     }
 
 pub fn remove(self: *Element, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.element == null)) {
-                return error.js_undefined;
+                return JSValue.jsUndefined();
             }
             _ = self.element.?.remove();
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn removeAndKeepContent(self: *Element, _: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!JSValue {
             if ((self.element == null)) {
-                return error.js_undefined;
+                return JSValue.jsUndefined();
             }
             _ = self.element.?.removeAndKeepContent();
-            return callFrame._();
+            return callFrame.this();
     }
 
 pub fn getTagName(self: *Element, globalObject: *JSGlobalObject) bun.JSError!JSValue {
             if ((self.element == null)) {
-                return error.js_undefined;
+                return JSValue.jsUndefined();
             }
             return try htmlStringValue(self.element.?.tagName(), globalObject);
     }
@@ -1313,37 +1334,41 @@ pub fn setTagName(self: *Element, global: *JSGlobalObject, value: JSValue) JSErr
 
 pub fn getRemoved(self: *Element, _: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             return JSValue.jsBoolean(self.element.?.isRemoved());
     }
 
 pub fn getSelfClosing(self: *Element, _: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             return JSValue.jsBoolean(self.element.?.isSelfClosing());
     }
 
 pub fn getCanHaveContent(self: *Element, _: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
             return JSValue.jsBoolean(self.element.?.canHaveContent());
     }
 
 pub fn getNamespaceURI(self: *Element, globalObject: *JSGlobalObject) JSError!JSValue {
             if ((self.element == null)) {
-                return error.js_undefined;
+                return JSValue.jsUndefined();
             }
             return bun.String.createUTF8ForJS(globalObject, std.mem.span(self.element.?.namespaceURI()));
     }
 
 pub fn getAttributes(self: *Element, globalObject: *JSGlobalObject) JSValue {
             if ((self.element == null)) {
-                return .js_undefined;
+                return JSValue.jsUndefined();
             }
-            const iter = ((self.element.?.attributes()) orelse { return createLOLHTMLError(globalObject); });
+            const iter_opt = self.element.?.attributes();
+            if ((iter_opt == null)) {
+                return createLOLHTMLError(globalObject);
+            }
+            const iter = iter_opt.?;
             var attr_iter = bun.new(AttributeIterator, .{ .ref_count = .init(), .iterator = iter });
             _ = &attr_iter;
             _ = attr_iter.ref();

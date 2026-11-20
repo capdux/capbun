@@ -126,7 +126,8 @@ pub fn ref(target: *T) void {
     }
 
 pub fn deref(target: *T) void {
-            _ = derefWithContext(target, .{});
+            const empty_ctx: void = undefined;
+            _ = derefWithContext(target, empty_ctx);
     }
 
 pub fn derefWithContext(target: *T, ctx: Ctx) void {
@@ -317,7 +318,8 @@ pub fn initRef(raw_ptr: *T) Self {
     }
 
 pub fn deref(self: *const @This()) void {
-            _ = self.derefWithContext(.{});
+            const empty_ctx: void = undefined;
+            _ = self.derefWithContext(empty_ctx);
     }
 
 pub fn derefWithContext(self: *const @This(), ctx: Ctx) void {

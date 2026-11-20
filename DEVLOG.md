@@ -1385,3 +1385,5 @@
 - **[2026-11-20] Wave 6 Batch B 典型修复**：`MaxHeapAllocator` 升级 `@root struct` 导出 `isInstance`；`wyhash` 3 个超 `i64::MAX` 的 `u64` 素数改位移构造；`ls`/`touch`/`ErrorPacket` 可选切片/数组加括号 `([]const u8)?`/`([5]u8)?`；`ConsoleObject`/`fmt` 剩余 `writer.print(..., [])` 改 `.{}`；`workaround_missing_symbols` 补 `@callconv("c")`；`url` `**bool?` 改 `(*bool)?`。
 
 - **[2026-11-20] Wave 6 Batch A 典型修复**：`ArrayBufferSink` 升级 `@root struct` 导出根级 `JSSink`；`ServerWebSocket`/`SecureContext` 修正 `memoryCost` 接收者 `*_` 与错误联合返回 `JSValue.*` 显式限定；`BunObject` 用 `@export(&@field(BunObject, ...))` 避开 `&UpperCase`；`SocketAddress`/`TextDecoder` 拆解元组解构避开 `CpUnpackElemType(?anyopaque)`。
+
+- **[2026-11-20] Wave 7 Batch A 核弹级根因修复**：`output.cp` 用 `type IoWriterPtr = *std.Io.Writer; out: *IoWriterPtr` 消除 263 处二级指针压平报错；`ref_count.cp` 以 `const empty_ctx: void = undefined` 消除 16 处 void `.{}` 报错；`ReadableStream.JSReadableStreamSource` 与 `node_zlib_binding.CompressionStream` 方法统一 `static fn` 显式接源类型指针消除 53 处绑定错；`Blob` 补全 23 项根导出、`S3Client` 补 `static fn`、`node_fs_binding` 补 6 项导出。

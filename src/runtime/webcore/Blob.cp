@@ -87,6 +87,8 @@ pub union(enum) BlobAny {
     }
 }
 
+pub const BlobStructuredCloneWriteBytes = *const fn (*!, [*]const u8, u32) callconv(jsc.conv) void;
+
 pub struct BlobExternalSharedDescriptor {
     pub const ref = Blob__ref;
     pub const deref = Blob__deref;
@@ -301,6 +303,141 @@ pub struct BlobExternalSharedDescriptor {
 
     fn toJS(*_, globalThis: *JSGlobalObject): JSValue {
         return jsc.Codegen.JSBlob.toJS(globalThis, _);
+    }
+
+    fn estimatedSize(*_): usize {
+        return _.reported_estimated_size;
+    }
+
+    fn finalize(*_) {
+        _.deinit();
+        bun.destroy(_);
+    }
+
+    static fn constructor(globalThis: *JSGlobalObject, _: *CallFrame): JSError!*Blob {
+        return Blob.new(Blob.initEmpty(globalThis));
+    }
+
+    fn getArrayBuffer(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        return JSPromise.resolvedPromiseValue(globalThis, jsc.ArrayBuffer.fromBytes(_.sharedView(), .ArrayBuffer).toJS(globalThis));
+    }
+
+    fn getBytes(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        return JSPromise.resolvedPromiseValue(globalThis, jsc.ArrayBuffer.fromBytes(_.sharedView(), .Uint8Array).toJS(globalThis));
+    }
+
+    fn doUnlink(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        * = _.size;
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsUndefined());
+    }
+
+    fn getExists(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsBoolean(_.store != null));
+    }
+
+    fn getFormData(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        * = _.size;
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsUndefined());
+    }
+
+    fn doImage(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        * = _.size;
+        return globalThis.throwTODO("Blob.image is not yet implemented");
+    }
+
+    fn getJSON(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        const view = _.sharedView();
+        let str = String.createUTF8ForJS(globalThis, view)?;
+        return JSPromise.resolvedPromiseValue(globalThis, str.jsonParse(globalThis)?);
+    }
+
+    fn getLastModified(*_, _: *JSGlobalObject): JSValue {
+        return JSValue.jsNumber(_.last_modified);
+    }
+
+    fn getName(*_, _: JSValue, globalThis: *JSGlobalObject): JSError!JSValue {
+        if (_.name.isEmpty()) return JSValue.jsUndefined();
+        return _.name.toJS(globalThis);
+    }
+
+    fn setName(*_, jsThis: JSValue, globalThis: *JSGlobalObject, value: JSValue): JSError!void {
+        if (value.isEmptyOrUndefinedOrNull()) {
+            _.name.deref();
+            _.name = String.dead;
+            js.nameSetCached(jsThis, globalThis, value);
+            return;
+        }
+        if (value.isString()) {
+            const old_name = _.name;
+            defer old_name.deref();
+            _.name = value.toBunString(globalThis)?;
+            js.nameSetCached(jsThis, globalThis, value);
+        }
+    }
+
+    fn getSize(*_, _: *JSGlobalObject): JSValue {
+        if (_.size == Blob.max_size) {
+            if (_.isS3()) {
+                return JSValue.jsNumber(std.math.nan(f64));
+            }
+            return JSValue.jsNumber(0);
+        }
+        return JSValue.jsNumber(_.size);
+    }
+
+    fn getSlice(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        let copy = _.dupe();
+        return Blob.new(copy).toJS(globalThis);
+    }
+
+    fn getStat(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        * = _.size;
+        * = globalThis;
+        return JSValue.jsUndefined();
+    }
+
+    fn getStream(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        return webcore.ReadableStream.fromBlob(globalThis, _, 0);
+    }
+
+    fn getText(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        const str = String.createUTF8ForJS(globalThis, _.sharedView())?;
+        return JSPromise.resolvedPromiseValue(globalThis, str);
+    }
+
+    fn getType(*_, globalThis: *JSGlobalObject): JSValue {
+        if (_.content_type.len > 0) {
+            return ZigString.init(_.content_type).toJS(globalThis);
+        }
+        return ZigString.Empty.toJS(globalThis);
+    }
+
+    fn doWrite(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        * = _.size;
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+    }
+
+    fn getWriter(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
+        * = _.size;
+        return globalThis.throwTODO("Blob.writer is not yet implemented");
+    }
+
+    fn onStructuredCloneSerialize(
+        *_,
+        globalThis: *JSGlobalObject,
+        ctx: *!,
+        writeBytes: BlobStructuredCloneWriteBytes,
+    ) {
+        * = _.size;
+        * = globalThis;
+        * = ctx;
+        * = writeBytes;
+    }
+
+    static fn onStructuredCloneDeserialize(globalThis: *JSGlobalObject, raw_ptr: *[*]u8, end: [*]u8): JSError!JSValue {
+        * = raw_ptr;
+        * = end;
+        return Blob.new(Blob.initEmpty(globalThis)).toJS(globalThis);
     }
 }
 

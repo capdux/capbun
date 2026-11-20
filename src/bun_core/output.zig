@@ -149,8 +149,12 @@ pub fn init(self: *Source, stream: Source.StreamType, err_stream: Source.StreamT
             self.buffered_error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi((&self.stderr_buffer));
             self.buffered_stream = (&self.buffered_stream_backing.new_interface);
             self.buffered_error_stream = (&self.buffered_error_stream_backing.new_interface);
-            self.stream_backing = self.raw_stream.quietWriter().adaptToNewApi((&&.{}));
-            self.error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi((&&.{}));
+            var empty_stream_buf: [0]u8 = &.{};
+            _ = &empty_stream_buf;
+            var empty_err_buf: [0]u8 = &.{};
+            _ = &empty_err_buf;
+            self.stream_backing = self.raw_stream.quietWriter().adaptToNewApi(empty_stream_buf[0..0]);
+            self.error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi(empty_err_buf[0..0]);
             self.stream = (&self.stream_backing.new_interface);
             self.error_stream = (&self.error_stream_backing.new_interface);
     }
@@ -217,7 +221,7 @@ pub fn getColorDepthOnce() void {
             }
             if (bun.env_var.TERM_PROGRAM.get()) |term_program| {
                 _ = &term_program;
-                const use_16m: [][]const u8 = .{ "ghostty", "MacTerm", "WezTerm", "HyperTerm", "iTerm.app" };
+                const use_16m: [5][]const u8 = .{ "ghostty", "MacTerm", "WezTerm", "HyperTerm", "iTerm.app" };
                 inline for (use_16m) |program| {
                     if (strings.eqlComptime(term_program, program)) {
                         lazy_color_depth = depth_16m;
@@ -534,6 +538,7 @@ pub fn end() void {
 };
 
 const ByteSlice = []u8;
+const IoWriterPtr = *std.Io.Writer;
 const StdinBufferedReader = bun.deprecated.BufferedReader(4096,File.Reader);
 const SystemTimer = @import("../perf/system_timer.zig").Timer;
 const ComptimeStringMap = bun.ComptimeStringMap;
@@ -893,7 +898,7 @@ pub fn scopedEvaluateIsVisible(comptime tagname: []const u8, really_disable: *st
         }
 }
 
-pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.Value(bool), out_set: *bool, out: *std.Io.Writer, buffered_writer: *File.QuietWriter.Adapter, buffer: *[4096]u8, lock: *bun.Mutex, is_visible_fn: *const fn () bool, comptime fmt: []const u8, args: anytype) void {
+pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.Value(bool), out_set: *bool, out: *IoWriterPtr, buffered_writer: *File.QuietWriter.Adapter, buffer: *[4096]u8, lock: *bun.Mutex, is_visible_fn: *const fn () bool, comptime fmt: []const u8, args: anytype) void {
         if ((!source_set)) {
             return;
         }

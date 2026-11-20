@@ -367,6 +367,146 @@ pub fn findOrCreateFileFromPath(pathlike: *jsc.Node.PathOrFileDescriptor, global
 pub fn toJS(self: *Blob, globalThis: *JSGlobalObject) JSValue {
         return jsc.Codegen.JSBlob.toJS(globalThis, self);
 }
+
+pub fn estimatedSize(self: *Blob) usize {
+        return self.reported_estimated_size;
+}
+
+pub fn finalize(self: *Blob) void {
+        _ = self.deinit();
+        _ = bun.destroy(self);
+}
+
+pub fn constructor(globalThis: *JSGlobalObject, _: *CallFrame) JSError!*Blob {
+        return Blob.new(Blob.initEmpty(globalThis));
+}
+
+pub fn getArrayBuffer(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        return JSPromise.resolvedPromiseValue(globalThis, jsc.ArrayBuffer.fromBytes(self.sharedView(), .ArrayBuffer).toJS(globalThis));
+}
+
+pub fn getBytes(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        return JSPromise.resolvedPromiseValue(globalThis, jsc.ArrayBuffer.fromBytes(self.sharedView(), .Uint8Array).toJS(globalThis));
+}
+
+pub fn doUnlink(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        _ = self.size;
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsUndefined());
+}
+
+pub fn getExists(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsBoolean((self.store != null)));
+}
+
+pub fn getFormData(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        _ = self.size;
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsUndefined());
+}
+
+pub fn doImage(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        _ = self.size;
+        return globalThis.throwTODO("Blob.image is not yet implemented");
+}
+
+pub fn getJSON(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        const view = self.sharedView();
+        var str = try String.createUTF8ForJS(globalThis, view);
+        var __str_moved = false; _ = &__str_moved;
+        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+        return JSPromise.resolvedPromiseValue(globalThis, try str.jsonParse(globalThis));
+}
+
+pub fn getLastModified(self: *Blob, _: *JSGlobalObject) JSValue {
+        return JSValue.jsNumber(self.last_modified);
+}
+
+pub fn getName(self: *Blob, _: JSValue, globalThis: *JSGlobalObject) JSError!JSValue {
+        if (self.name.isEmpty()) {
+            return JSValue.jsUndefined();
+        }
+        return self.name.toJS(globalThis);
+}
+
+pub fn setName(self: *Blob, jsThis: JSValue, globalThis: *JSGlobalObject, value: JSValue) JSError!void {
+        if (value.isEmptyOrUndefinedOrNull()) {
+            _ = self.name.deref();
+            self.name = String.dead;
+            _ = js.nameSetCached(jsThis, globalThis, value);
+            return;
+        }
+        if (value.isString()) {
+            const old_name = self.name;
+            defer {
+            _ = old_name.deref();
+            }
+            self.name = try value.toBunString(globalThis);
+            _ = js.nameSetCached(jsThis, globalThis, value);
+        }
+}
+
+pub fn getSize(self: *Blob, _: *JSGlobalObject) JSValue {
+        if ((self.size == Blob.max_size)) {
+            if (self.isS3()) {
+                return JSValue.jsNumber(std.math.nan(f64));
+            }
+            return JSValue.jsNumber(0);
+        }
+        return JSValue.jsNumber(self.size);
+}
+
+pub fn getSlice(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        var copy = self.dupe();
+        var __copy_moved = false; _ = &__copy_moved;
+        defer if (!__copy_moved) { const __T = @TypeOf(copy); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = copy.release() catch {}; } else { copy.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = copy; _drop_val.release(); } };
+        return Blob.new(copy).toJS(globalThis);
+}
+
+pub fn getStat(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        _ = self.size;
+        _ = &globalThis;
+        return JSValue.jsUndefined();
+}
+
+pub fn getStream(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        return webcore.ReadableStream.fromBlob(globalThis, self, 0);
+}
+
+pub fn getText(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        const str = try String.createUTF8ForJS(globalThis, self.sharedView());
+        var __str_moved = false; _ = &__str_moved;
+        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+        return JSPromise.resolvedPromiseValue(globalThis, str);
+}
+
+pub fn getType(self: *Blob, globalThis: *JSGlobalObject) JSValue {
+        if ((self.content_type.len > 0)) {
+            return ZigString.init(self.content_type).toJS(globalThis);
+        }
+        return ZigString.Empty.toJS(globalThis);
+}
+
+pub fn doWrite(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        _ = self.size;
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+}
+
+pub fn getWriter(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        _ = self.size;
+        return globalThis.throwTODO("Blob.writer is not yet implemented");
+}
+
+pub fn onStructuredCloneSerialize(self: *Blob, globalThis: *JSGlobalObject, ctx: *anyopaque, writeBytes: BlobStructuredCloneWriteBytes) void {
+        _ = self.size;
+        _ = &globalThis;
+        _ = &ctx;
+        _ = &writeBytes;
+}
+
+pub fn onStructuredCloneDeserialize(globalThis: *JSGlobalObject, raw_ptr: *[*]u8, end: [*]u8) JSError!JSValue {
+        _ = &raw_ptr;
+        _ = &end;
+        return Blob.new(Blob.initEmpty(globalThis)).toJS(globalThis);
+}
 pub const Store = BlobStore;
 pub const read_file = read_file_mod;
 pub const write_file = write_file_mod;
@@ -394,6 +534,7 @@ const DOMFormData = jsc.DOMFormData;
 const URLSearchParams = jsc.URLSearchParams;
 const BlobStore = StoreMod.Store;
 const debug = Output.scoped(.Blob, .visible);
+pub const BlobStructuredCloneWriteBytes = *const *const fn(*anyopaque, [*]const u8, u32) callconv(jsc.conv) void;
 
 pub fn Bun__Blob__getSizeForBindings(blob: *Blob) callconv(.c) usize {
         return blob.getSizeForBindings();

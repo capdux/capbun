@@ -148,11 +148,14 @@ pub struct Binding {
     pub const readlink = callAsync(.readlink);
     pub const rm = callAsync(.rm);
     pub const rmdir = callAsync(.rmdir);
-    pub const realpath = callAsync(.realpath);
+    pub const realpath = callAsync(.realpathNonNative);
     pub const realpathNative = callAsync(.realpath);
     pub const rename = callAsync(.rename);
     pub const stat = callAsync(.stat);
+    pub const statfs = callAsync(.statfs);
+    pub const symlink = callAsync(.symlink);
     pub const truncate = callAsync(.truncate);
+    pub const unlink = callAsync(.unlink);
     pub const utimes = callAsync(.utimes);
     pub const lutimes = callAsync(.lutimes);
     pub const accessSync = callSync(.access);
@@ -188,7 +191,10 @@ pub struct Binding {
     pub const rmSync = callSync(.rm);
     pub const rmdirSync = callSync(.rmdir);
     pub const statSync = callSync(.stat);
+    pub const statfsSync = callSync(.statfs);
+    pub const symlinkSync = callSync(.symlink);
     pub const truncateSync = callSync(.truncate);
+    pub const unlinkSync = callSync(.unlink);
     pub const utimesSync = callSync(.utimes);
     pub const lutimesSync = callSync(.lutimes);
     pub const writev = callAsync(.writev);
