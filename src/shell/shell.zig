@@ -1958,7 +1958,8 @@ else => {
             }
             const arg1 = arg1_opt.?;
             if ((self.peek() != .Text)) {
-                _ = try self.add_error("Expected a conditional expression operator, but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
+                const peektok: Token = self.peek();
+                _ = try self.add_error("Expected a conditional expression operator, but got: {s}", .{ peektok.asHumanReadable(self.strpool) });
                 return ParseError.Expected;
             }
             const op = self.expect(.Text);

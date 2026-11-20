@@ -212,6 +212,6 @@ extern "c" fn JSCInitialize(env: [*]const [*:0]u8, count: usize, cb: JSCInitiali
 extern "c" fn Bun__JSC__operationMathPow(a: f64, b: f64) callconv(.c) f64;
 
 pub fn onJSCInvalidEnvVar(name: [*]const u8, len: usize) callconv(.c) void {
-        _ = bun.Output.errGeneric("invalid JSC environment variable", "", "    <b>{s}<r>", "", "For a list of options, see this file:", "", "    https://github.com/oven-sh/webkit/blob/main/Source/JavaScriptCore/runtime/OptionsList.h", "", "Environment variables must be prefixed with \"BUN_JSC_\". This code runs before .env files are loaded, so those won't work here.", "", "Warning: options change between releases of Bun and WebKit without notice. This is not a stable API, you should not rely on it beyond debugging something, and it may be removed entirely in a future version of Bun.", .{ name[0..len] });
+        _ = bun.Output.errGeneric("invalid JSC environment variable\n\n    <b>{s}<r>\n\nFor a list of options, see this file:\n\n    https://github.com/oven-sh/webkit/blob/main/Source/JavaScriptCore/runtime/OptionsList.h\n\nEnvironment variables must be prefixed with \"BUN_JSC_\". This code runs before .env files are loaded, so those won't work here.\n\nWarning: options change between releases of Bun and WebKit without notice. This is not a stable API, you should not rely on it beyond debugging something, and it may be removed entirely in a future version of Bun.", .{ name[0..len] });
         _ = bun.Global.exit(1);
 }

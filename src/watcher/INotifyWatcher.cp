@@ -329,7 +329,7 @@ pub struct ReadPtr {
                 all_events[last_event_index].merge(all_events[i]);
                 continue;
             }
-            last_event_index = i;
+            last_event_index = @intCast(i);
             last_event_id = all_events[i].index;
         }
         if (all_events.len == 0) return .success;

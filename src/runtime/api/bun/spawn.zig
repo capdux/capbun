@@ -125,7 +125,8 @@ pub fn open(self: *BunSpawnActions, fd: bun.FD, path: []const u8, flags: u32, mo
     }
 
 pub fn openZ(self: *BunSpawnActions, fd: bun.FD, path: [*:0]const u8, flags: u32, mode: i32) !void {
-            _ = try self.actions.append(bun.default_allocator, .{ .kind = .open, .path = try bun.default_allocator.dupeZ(u8, bun.span(path)).ptr, .flags = (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)), .mode = (if (comptime @typeInfo(@TypeOf(mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(mode)) else cp_cast_int(i32, mode)), .fds = .{ fd.native(), 0 } });
+            const duped_path = try bun.default_allocator.dupeZ(u8, bun.span(path));
+            _ = try self.actions.append(bun.default_allocator, .{ .kind = .open, .path = duped_path.ptr, .flags = (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)), .mode = (if (comptime @typeInfo(@TypeOf(mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(mode)) else cp_cast_int(i32, mode)), .fds = .{ fd.native(), 0 } });
     }
 
 pub fn close(self: *BunSpawnActions, fd: bun.FD) !void {

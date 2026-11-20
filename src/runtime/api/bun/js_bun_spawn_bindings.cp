@@ -454,9 +454,9 @@ pub fn spawnMaybeSync(
                     } else {
                         // On Windows, ConPTY supplies stdio via PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE.
                         // Set stdio to .ignore so spawnProcessWindows doesn't allocate pipes.
-                        stdio[0] = Stdio{ .ignore = {} };
-                        stdio[1] = Stdio{ .ignore = {} };
-                        stdio[2] = Stdio{ .ignore = {} };
+                        stdio[0] = Stdio.ignore;
+                        stdio[1] = Stdio.ignore;
+                        stdio[2] = Stdio.ignore;
                         // ConPTY spawns with bInheritHandles=FALSE and no stdio buffer,
                         // so extra fds and IPC pipes can't be passed to the child.
                         if (maybe_ipc_mode != null || extra_fds.items.len > 0) {
@@ -491,7 +491,7 @@ pub fn spawnMaybeSync(
             inline for (fd_index of 0..stdio.len) {
                 if (stdio[fd_index] == .memfd) {
                     stdio[fd_index].memfd.close();
-                    stdio[fd_index] = Stdio{ .ignore = {} };
+                    stdio[fd_index] = Stdio.ignore;
                 }
             }
         }
@@ -499,7 +499,7 @@ pub fn spawnMaybeSync(
     //"NODE_CHANNEL_FD=" is 16 bytes long, 15 bytes for the number, and 1 byte for the null terminator should be enough/safe
     let ipc_env_buf: [32]u8 = undefined;
     if (!is_sync) if (ipc_mode := maybe_ipc_mode) {
-        env_array.ensureUnusedCapacity(allocator, 3) catch |e| return globalThis.throwError(e, "in Bun.spawn") catch return .zero;
+        env_array.ensureUnusedCapacity(allocator, 3) catch |e| return globalThis.throwError(e, "in Bun.spawn");
         const ipc_fd: i32 = brk: {
             if (ipc_channel == -1) {
                 // If the user didn't specify an IPC channel, we need to add one

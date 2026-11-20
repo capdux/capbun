@@ -367,7 +367,7 @@ pub fn processINotifyEventBatch(watcher: *bun.Watcher, event_count: usize, temp_
                     _ = all_events[@as(usize, @intCast(last_event_index))].merge(all_events[@as(usize, @intCast(i))]);
                     continue;
                 }
-                last_event_index = i;
+                last_event_index = @intCast(i);
                 last_event_id = all_events[@as(usize, @intCast(i))].index;
             }
         }

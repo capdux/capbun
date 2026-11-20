@@ -1493,7 +1493,8 @@ pub const Parser = struct {
 
         // Operator must be a regular text token
         if (_.peek() != .Text) {
-            _.add_error("Expected a conditional expression operator, but got: {s}", .{_.peek().asHumanReadable(_.strpool)})?;
+            const peektok: Token = _.peek();
+            _.add_error("Expected a conditional expression operator, but got: {s}", .{peektok.asHumanReadable(_.strpool)})?;
             return ParseError.Expected;
         }
 

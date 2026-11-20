@@ -2,14 +2,13 @@
 import bun from "bun";
 
 const Condition = bun.threading.Condition;
-const Mutex = bun.threading.Mutex;
 
 pub fn Channel(
     comptime T: type,
     comptime buffer_type: bun.LinearFifoBufferType,
 ): type {
     return struct {
-        mutex: Mutex = .{},
+        mutex: bun.threading.Mutex = .{},
         putters: Condition = .{},
         getters: Condition = .{},
         buffer: Buffer,
@@ -74,7 +73,8 @@ pub fn Channel(
         }
 
         pub fn writeItem(self: *Self, item: T)! {
-            return self.writeAll(&[1]T{item});
+            const arr = [1]T{ item };
+            return self.writeAll(&arr);
         }
 
         pub fn write(self: *Self, items: []const T): usize! {

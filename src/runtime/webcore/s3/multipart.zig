@@ -148,7 +148,7 @@ pub fn allocatedSlice(self: *const UploadPart) []const u8 {
             return "";
     }
 
-pub fn onPartResponse(result: S3SimpleRequest.S3PartResult, self_any: *anyopaque) callconv(.c) JSTerminatedError!void {
+pub fn onPartResponse(result: S3SimpleRequest.S3PartResult, self_any: *anyopaque) JSTerminatedError!void {
             const part: *UploadPart = @ptrCast(@alignCast(self_any));
             if (((part.state == .canceled) or (part.ctx.state == .finished))) {
                 _ = log("onPartResponse {} canceled", .{ part.partNumber });
@@ -599,7 +599,7 @@ pub fn rollbackMultiPartRequest(self: *MultiPartUpload) JSTerminatedError!void {
             _ = &params_buffer;
             var search_params = ((bufPrint((&params_buffer), "?uploadId={s}", .{ self.upload_id })) catch unreachable);
             _ = &search_params;
-            _ = try executeSimpleS3Request(self.credentials, .{ .path = self.path, .method = bun.http.Method.DELETE, .proxy_url = self.proxyUrl(), .body = "", .search_params = search_params, .request_payer = self.request_payer }, .{ .upload = @ptrCast((&onRollbackMultiPartRequest)) }, self);
+            _ = try executeSimpleS3Request(self.credentials, .{ .path = self.path, .method = bun.http.Method.DELETE, .proxy_url = self.proxyUrl(), .body = "", .search_params = search_params, .request_payer = self.request_payer }, .{ .upload = @constCast(@ptrCast((&onRollbackMultiPartRequest))) }, self);
     }
 
 pub fn enqueuePart(self: *MultiPartUpload, chunk: []const u8, allocated_size: usize, needs_clone: bool) JSTerminatedError!bool {

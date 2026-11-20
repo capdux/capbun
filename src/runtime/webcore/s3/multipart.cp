@@ -85,7 +85,7 @@ export struct UploadPart {
         return "";
     }
 
-    @c static fn onPartResponse(result: S3SimpleRequest.S3PartResult, self_any: *!): JSTerminatedError!void {
+    static fn onPartResponse(result: S3SimpleRequest.S3PartResult, self_any: *!): JSTerminatedError!void {
         const part: *UploadPart = @ptrCast(@alignCast(self_any));
         if (part.state == .canceled or part.ctx.state == .finished) {
             log("onPartResponse {} canceled", .{ part.partNumber });
@@ -532,7 +532,7 @@ export class MultiPartUpload {
             .body = "",
             .search_params = search_params,
             .request_payer = this.request_payer,
-        }, .{ .upload = @ptrCast(&onRollbackMultiPartRequest) }, this)?;
+        }, .{ .upload = @constCast(@ptrCast(&onRollbackMultiPartRequest)) }, this)?;
     }
 
     fn enqueuePart(*_, chunk: string, allocated_size: usize, needs_clone: bool): JSTerminatedError!bool {
