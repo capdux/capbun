@@ -121,18 +121,16 @@ pub const Paths = struct {
 pub const CacheFolderResolver = struct {
     version: Semver.Version,
 
-pub fn resolve(self: CacheFolderResolver, res: @This(), comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) !Resolution {
-        _ = self;
+pub fn resolve(self: CacheFolderResolver, comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) !Resolution {
         _ = _unused_builder;
         _ = _unused_expr;
-            return Resolution{ .tag = Resolution.Tag.npm, .value = Resolution.Value{ .npm = Resolution.Npm{ .version = res.version, .url = cp_string_from("") } } };
+            return Resolution{ .tag = Resolution.Tag.npm, .value = Resolution.Value{ .npm = Resolution.Npm{ .version = self.version, .url = cp_string_from("") } } };
     }
 
-pub fn count(self: CacheFolderResolver, res: @This(), comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) void {
-        _ = self;
-        _ = res;
+pub fn count(self: CacheFolderResolver, comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) void {
         _ = _unused_builder;
         _ = _unused_expr;
+            _ = self.version;
     }
 
 pub fn checkBundledDependencies() bool {
@@ -303,16 +301,14 @@ pub fn NewResolver(comptime tag: Resolution.Tag) type {
         return struct {
     folder_path: []const u8,
 
-pub fn resolve(self: @This(), res: @This(), comptime Builder: type, builder: Builder, _unused: JSAst.Expr) !Resolution {
-        _ = self;
+pub fn resolve(self: @This(), comptime Builder: type, builder: Builder, _unused: JSAst.Expr) !Resolution {
         _ = _unused;
-            return Resolution{ .tag = tag, .value = @unionInit(Resolution.Value, @tagName(tag), builder.append(String, res.folder_path)) };
+            return Resolution{ .tag = tag, .value = @unionInit(Resolution.Value, @tagName(tag), builder.append(String, self.folder_path)) };
     }
 
-pub fn count(self: @This(), res: @This(), comptime Builder: type, builder: Builder, _unused: JSAst.Expr) void {
-        _ = self;
+pub fn count(self: @This(), comptime Builder: type, builder: Builder, _unused: JSAst.Expr) void {
         _ = _unused;
-            _ = builder.count(res.folder_path);
+            _ = builder.count(self.folder_path);
     }
 
 pub fn checkBundledDependencies() bool {

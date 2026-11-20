@@ -143,15 +143,15 @@ fn NewResolver(comptime tag: Resolution.Tag): type {
     return struct {
         folder_path: string,
 
-        pub fn resolve(res: @This(), comptime Builder: type, builder: Builder, _unused: JSAst.Expr): !Resolution {
+        pub fn resolve(comptime Builder: type, builder: Builder, _unused: JSAst.Expr): !Resolution {
             return Resolution{
                 tag: tag,
-                value: @unionInit(Resolution.Value, @tagName(tag), builder.append(String, res.folder_path)),
+                value: @unionInit(Resolution.Value, @tagName(tag), builder.append(String, _.folder_path)),
             };
         }
 
-        pub fn count(res: @This(), comptime Builder: type, builder: Builder, _unused: JSAst.Expr) {
-            builder.count(res.folder_path);
+        pub fn count(comptime Builder: type, builder: Builder, _unused: JSAst.Expr) {
+            builder.count(_.folder_path);
         }
 
         pub static fn checkBundledDependencies(): bool {
@@ -167,19 +167,21 @@ const WorkspaceResolver = NewResolver(Resolution.Tag.workspace);
 struct CacheFolderResolver {
     version: Semver.Version,
 
-    pub fn resolve(res: @This(), comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr): !Resolution {
+    pub fn resolve(comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr): !Resolution {
         return Resolution{
             tag: Resolution.Tag.npm,
             value: Resolution.Value{
                 npm: Resolution.Npm{
-                    version: res.version,
+                    version: _.version,
                     url: String.from(""),
                 },
             },
         };
     }
 
-    pub fn count(res: @This(), comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) {}
+    pub fn count(comptime Builder: type, _unused_builder: Builder, _unused_expr: JSAst.Expr) {
+        * = _.version;
+    }
 
     pub static fn checkBundledDependencies(): bool {
         return true;
