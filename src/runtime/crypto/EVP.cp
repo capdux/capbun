@@ -1,13 +1,15 @@
 // src/runtime/crypto/EVP.cp
 
 import bun from "bun";
+import PBKDF2_ from "./PBKDF2.zig";
+
 const strings = bun.strings;
 const BoringSSL = bun.BoringSSL.c;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const ZigString = jsc.ZigString;
 
-pub enum Algorithm_ {
+pub enum Algorithm {
     blake2b256,
     blake2b512,
     blake2s256,
@@ -28,8 +30,8 @@ pub enum Algorithm_ {
     shake128,
     shake256,
 
-    pub fn md(_: Algorithm_): *const BoringSSL.EVP_MD? {
-        return switch (this) {
+    fn md(): (*const BoringSSL.EVP_MD)? {
+        return switch (_) {
             .blake2b256 => BoringSSL.EVP_blake2b256(),
             .blake2b512 => BoringSSL.EVP_blake2b512(),
             .md4 => BoringSSL.EVP_md4(),
@@ -50,8 +52,8 @@ pub enum Algorithm_ {
         };
     }
 
-    pub fn getNames(): std.EnumArray(Algorithm_, bun.String) {
-        let all = std.EnumArray(Algorithm_, bun.String).initUndefined();
+    static fn getNames(): std.EnumArray(Algorithm, bun.String) {
+        let all = std.EnumArray(Algorithm, bun.String).initUndefined();
         let iter = all.iterator();
         while (entry := iter.next()) {
             entry.value.* = bun.String.init(@tagName(entry.key));
@@ -59,9 +61,9 @@ pub enum Algorithm_ {
         return all;
     }
 
-    pub const names: std.EnumArray(Algorithm_, bun.String) = getNames();
+    const names: std.EnumArray(Algorithm, bun.String) = getNames();
 
-    pub const map = bun.ComptimeStringMap(Algorithm_, .{
+    const map = bun.ComptimeStringMap(Algorithm, .{
         .{ "blake2b256", .blake2b256 },
         .{ "blake2b512", .blake2b512 },
         .{ "blake2s256", .blake2s256 },
@@ -97,80 +99,84 @@ pub enum Algorithm_ {
         .{ "shake256", .shake256 },
     });
 }
-pub const Algorithm = Algorithm_;
 
-export class EVP {
+pub const Digest = [BoringSSL.EVP_MAX_MD_SIZE]u8;
+pub const PBKDF2 = PBKDF2_;
+pub const pbkdf2 = PBKDF2.pbkdf2;
+
+err CopyError {
+    OutOfMemory,
+}
+
+@root struct EVP {
     ctx: BoringSSL.EVP_MD_CTX = undefined;
     md: *const BoringSSL.EVP_MD = undefined;
-    algorithm: Algorithm_;
+    algorithm: Algorithm;
 
-    pub const Algorithm = Algorithm_;
-
-    pub static fn init(algorithm: Algorithm_, md: *const BoringSSL.EVP_MD, engine: *BoringSSL.ENGINE): EVP {
+    static fn init(algorithm: Algorithm, md: *const BoringSSL.EVP_MD, engine: *BoringSSL.ENGINE): EVP {
         bun.BoringSSL.load();
 
         let ctx: BoringSSL.EVP_MD_CTX = undefined;
-        @memset(&ctx, 0);
         BoringSSL.EVP_MD_CTX_init(&ctx);
         * = BoringSSL.EVP_DigestInit_ex(&ctx, md, engine);
         return .{
-            .ctx = ctx,
-            .md = md,
-            .algorithm = algorithm,
+            ctx: ctx,
+            md: md,
+            algorithm: algorithm,
         };
     }
 
-    pub fn reset(*_: *EVP, engine: *BoringSSL.ENGINE) {
+    fn reset(*_, engine: *BoringSSL.ENGINE) {
         BoringSSL.ERR_clear_error();
-        * = BoringSSL.EVP_DigestInit_ex(&this.ctx, this.md, engine);
+        * = BoringSSL.EVP_DigestInit_ex(&_.ctx, _.md, engine);
     }
 
-    pub fn hash(*_: *EVP, engine: *BoringSSL.ENGINE, input: []const u8, output: []u8): u32? {
+    fn hash(*_, engine: *BoringSSL.ENGINE, input: []const u8, output: []u8): u32? {
         BoringSSL.ERR_clear_error();
-        let outsize: c_uint = @min(@as(u16, @truncate(output.len)), this.size());
-        if (BoringSSL.EVP_Digest(input.ptr, input.len, output.ptr, &outsize, this.md, engine) != 1) {
+        let outsize: c_uint = @min(@as(u16, @truncate(output.len)), _.size());
+        if (BoringSSL.EVP_Digest(input.ptr, input.len, output.ptr, &outsize, _.md, engine) != 1) {
             return null;
         }
 
         return outsize;
     }
 
-    pub fn final(*_: *EVP, engine: *BoringSSL.ENGINE, output: []u8): []u8 {
+    fn final(*_, engine: *BoringSSL.ENGINE, output: []u8): []u8 {
         BoringSSL.ERR_clear_error();
-        let outsize: u32 = @min(@as(u16, @truncate(output.len)), this.size());
+        let outsize: u32 = @min(@as(u16, @truncate(output.len)), _.size());
         if (BoringSSL.EVP_DigestFinal_ex(
-            &this.ctx,
+            &_.ctx,
             output.ptr,
             &outsize,
         ) != 1) {
             return output[0..0];
         }
 
-        this.reset(engine);
+        _.reset(engine);
 
         return output[0..outsize];
     }
 
-    pub fn update(*_: *EVP, input: []const u8) {
+    fn update(*_, input: []const u8) {
         BoringSSL.ERR_clear_error();
-        * = BoringSSL.EVP_DigestUpdate(&this.ctx, input.ptr, input.len);
+        * = BoringSSL.EVP_DigestUpdate(&_.ctx, input.ptr, input.len);
     }
 
-    pub fn size(_: *const EVP): u16 {
-        return @as(u16, @truncate(BoringSSL.EVP_MD_CTX_size(&this.ctx)));
+    fn size(): u16 {
+        return @as(u16, @truncate(BoringSSL.EVP_MD_CTX_size(&_.ctx)));
     }
 
-    pub fn copy(_: *const EVP, engine: *BoringSSL.ENGINE): anyerror!EVP {
+    fn copy(engine: *BoringSSL.ENGINE): EVP ! CopyError {
         BoringSSL.ERR_clear_error();
-        let new_evp = init(this.algorithm, this.md, engine);
-        if (BoringSSL.EVP_MD_CTX_copy_ex(&new_evp.ctx, &this.ctx) == 0) {
+        let new_evp = init(_.algorithm, _.md, engine);
+        if (BoringSSL.EVP_MD_CTX_copy_ex(&new_evp.ctx, &_.ctx) == 0) {
             return error.OutOfMemory;
         }
         return new_evp;
     }
 
-    pub static fn byNameAndEngine(engine: *BoringSSL.ENGINE, name: []const u8): EVP? {
-        if (algorithm := Algorithm_.map.getWithEql(name, strings.eqlCaseInsensitiveASCIIIgnoreLength)) {
+    static fn byNameAndEngine(engine: *BoringSSL.ENGINE, name: []const u8): EVP? {
+        if (algorithm := Algorithm.map.getWithEql(name, strings.eqlCaseInsensitiveASCIIIgnoreLength)) {
             if (md := algorithm.md()) {
                 return EVP.init(algorithm, md, engine);
             }
@@ -183,21 +189,13 @@ export class EVP {
         return null;
     }
 
-    pub static fn byName(name: ZigString, global: *jsc.JSGlobalObject): EVP? {
+    static fn byName(name: ZigString, global: *jsc.JSGlobalObject): EVP? {
         let name_str = name.toSlice(global.allocator());
         defer name_str.deinit();
         return byNameAndEngine(global.bunVM().rareData().boringEngine(), name_str.slice());
     }
 
-    pub fn release(*_: *EVP) {
-        * = BoringSSL.EVP_MD_CTX_cleanup(&this.ctx);
-    }
-
-    pub fn deinit(*_: *EVP) {
-        this.release();
+    fn deinit(*_) {
+        * = BoringSSL.EVP_MD_CTX_cleanup(&_.ctx);
     }
 }
-
-pub const Digest = [BoringSSL.EVP_MAX_MD_SIZE]u8;
-pub const PBKDF2 = @import("./PBKDF2.zig");
-pub const pbkdf2 = PBKDF2.pbkdf2;

@@ -1642,3 +1642,6 @@
 
 ### 2026-11-20 06:34:49 UTC - zig:check 外部根因（EnvMap/event_loop/bun/http）修复入库
 - 完成：`EnvMap` 补 `static fn init`、`event_loop` 升级 `@root struct EventLoop`、`bun` 导出 `threadlocalAllocator`、`http` 导出 `ProxyTunnel`，4/4 全 PASS。
+
+### 2026-11-20 06:39:17 UTC - zig:check 外部根因（EVP/node/types/Body/ReadableStream）全面升级入库
+- 完成：`EVP`/`Body`/`ReadableStream` 升级完整 `@root struct`，`node/types` 消除 `pub union` 自动指针化，4/4 全 PASS。

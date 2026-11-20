@@ -1,4 +1,4 @@
-pub union(enum) BlobOrStringOrBuffer {
+pub const BlobOrStringOrBuffer = union(enum) {
     blob: jsc.WebCore.Blob,
     string_or_buffer: StringOrBuffer,
 
@@ -139,9 +139,9 @@ pub union(enum) BlobOrStringOrBuffer {
         }
         return null;
     }
-}
+};
 
-pub union(enum) StringOrBuffer {
+pub const StringOrBuffer = union(enum) {
     string: bun.SliceWithUnderlyingString,
     threadsafe_string: bun.SliceWithUnderlyingString,
     encoded_slice: jsc.ZigString.Slice,
@@ -345,7 +345,7 @@ pub union(enum) StringOrBuffer {
         const is_async = false;
         return StringOrBuffer.fromJSWithEncodingMaybeAsync(global, allocator, value, encoding, is_async, allow_string_object);
     }
-}
+};
 
 /// https://github.com/nodejs/node/blob/master/lib/buffer.js#L587
 /// See `jsc.WebCore.encoding` for encoding and decoding functions.
@@ -537,7 +537,7 @@ pub fn CallbackTask(comptime Result: type): type {
     };
 }
 
-pub union(enum) PathLike {
+pub const PathLike = union(enum) {
     string: bun.PathString,
     buffer: Buffer,
     slice_with_underlying_string: bun.SliceWithUnderlyingString,
@@ -785,7 +785,7 @@ pub union(enum) PathLike {
             return .{ encoded_slice: sliced.utf8 };
         }
     }
-}
+};
 
 pub struct Valid {
     const MAX_PATH_BYTES = bun.MAX_PATH_BYTES;
@@ -917,7 +917,7 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!Mod
     return @truncate(mode_int & 0o777);
 }
 
-pub union(Tag) PathOrFileDescriptor {
+pub const PathOrFileDescriptor = union(Tag) {
     fd: bun.FD,
     path: PathLike,
 
@@ -981,7 +981,7 @@ pub union(Tag) PathOrFileDescriptor {
             path: path_opt.?,
         };
     }
-}
+};
 
 pub enum FileModeKind {
     access,
@@ -1245,7 +1245,7 @@ pub struct Dirent {
     }
 }
 
-pub union(enum) PathOrBlob {
+pub const PathOrBlob = union(enum) {
     path: jsc.Node.PathOrFileDescriptor,
     blob: Blob,
 
@@ -1270,7 +1270,7 @@ pub union(enum) PathOrBlob {
         }
         return ctx.throwInvalidArgumentTypeValue("destination", "path, file descriptor, or Blob", arg);
     }
-}
+};
 
 type string = []const u8;
 

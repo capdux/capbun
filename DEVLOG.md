@@ -1371,3 +1371,6 @@
 
 ### 2026-11-20 06:34:49 UTC - 跨模块根因修复经验（EnvMap/event_loop/bun/http）
 - `jsc/event_loop.cp` 升级 `@root struct EventLoop` 恢复全部 `enqueueTaskConcurrent` 等根方法导出。
+
+### 2026-11-20 06:39:17 UTC - 4 大 WebCore/Crypto/Node 根因重构经验
+- `Body.cp`（1833行）与 `ReadableStream.cp`、`EVP.cp` 全部按 `@root struct` 补全根级导出与 Mixin；`node/types.cp` 5 个联合体改 `pub const U = union(enum)` 根除多余 `*`。
