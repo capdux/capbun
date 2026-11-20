@@ -329,7 +329,7 @@ pub inline fn parseErrorSet(T: type, errors: []const std.builtin.Type.Error) Par
 
 pub fn voidFromJSError(e: bun.JSError, globalThis: *jsc.JSGlobalObject) void {
         if ((e == error.OutOfMemory)) {
-            _ = globalThis.throwOutOfMemory();
+            _ = globalThis.throwOutOfMemoryValue();
         }
 }
 

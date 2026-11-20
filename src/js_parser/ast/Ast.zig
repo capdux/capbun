@@ -118,7 +118,7 @@ pub const NamedImports = std.ArrayHashMapUnmanaged(Ref, NamedImport, RefHashCtx,
 pub const NamedExports = bun.StringArrayHashMapUnmanaged(NamedExport);
 pub const ConstValuesMap = std.ArrayHashMapUnmanaged(Ref, Expr, RefHashCtx, false);
 pub const TsEnumsMap = std.ArrayHashMapUnmanaged(Ref, bun.StringHashMapUnmanaged(InlinedEnumValue), RefHashCtx, false);
-var empty_u32s: [0]u32 = &.{};
+var empty_u32s: [0]u32 = undefined;
 pub const empty = Ast{ .parts = .{}, .runtime_imports = .{} };
 pub const Class = G.Class;
 const Runtime = runtime_pkg.Runtime;

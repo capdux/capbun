@@ -48,7 +48,7 @@ pub fn Dynamic(comptime Pointer: type): type {
 pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
     return struct {
         const Self = @This();
-        const info = PointerInfo.parse(Pointer, PointerInfo.ParseOptions{});
+        const info = PointerInfo.parse(Pointer, .{});
         const NonOptionalPointer = info.NonOptionalPointer;
         const Child = info.Child;
         const ConstPointer = AddConst(Pointer);
@@ -393,7 +393,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
 fn Unmanaged(comptime Pointer: type, comptime Allocator: type): type {
     return struct {
         const Self = @This();
-        const info = PointerInfo.parse(Pointer, PointerInfo.ParseOptions{});
+        const info = PointerInfo.parse(Pointer, .{});
 
         #pointer: Pointer;
 

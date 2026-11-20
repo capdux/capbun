@@ -1374,3 +1374,6 @@
 
 ### 2026-11-20 06:39:17 UTC - 4 大 WebCore/Crypto/Node 根因重构经验
 - `Body.cp`（1833行）与 `ReadableStream.cp`、`EVP.cp` 全部按 `@root struct` 补全根级导出与 Mixin；`node/types.cp` 5 个联合体改 `pub const U = union(enum)` 根除多余 `*`。
+
+### 2026-11-20 06:45:45 UTC - zig:check 第 5 轮 JSC+Test+Core 修复经验
+- `throwOutOfMemoryValue()` 根治裸错误集丢弃；`writer.print(..., .{})` 消除 23 处 `std/Io/Writer.zig` 报错；回调签名去掉多余 `*const` 消除 `*const *const fn`。

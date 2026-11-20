@@ -75,7 +75,7 @@ pub const JSValue = enum(i64) {
 
     pub const isTruthy = toBoolean;
 
-    const PropertyIteratorFn = *const fn (
+    const PropertyIteratorFn = fn (
         globalObject_: *JSGlobalObject,
         ctx_ptr: *!?,
         key: *ZigString,
@@ -84,7 +84,7 @@ pub const JSValue = enum(i64) {
         is_private_symbol: bool,
     ) callconv(.c) void;
 
-    extern fn JSC__JSValue__forEachPropertyNonIndexed(JSValue0: JSValue, arg1: *JSGlobalObject, arg2: *!?, ArgFn3: ?*const fn (*JSGlobalObject, *!?, *ZigString, JSValue, bool, bool) callconv(.c) void) void;
+    extern fn JSC__JSValue__forEachPropertyNonIndexed(JSValue0: JSValue, arg1: *JSGlobalObject, arg2: *!?, ArgFn3: ?fn (*JSGlobalObject, *!?, *ZigString, JSValue, bool, bool) callconv(.c) void) void;
 
     pub fn forEachPropertyNonIndexed(
         this: JSValue,
@@ -2198,12 +2198,12 @@ pub const JSValue = enum(i64) {
         return JSC__JSValue__isAggregateError(this, globalObject);
     }
 
-    extern fn JSC__JSValue__forEach(this: JSValue, globalObject: *JSGlobalObject, ctx: *!?, callback: *const fn (vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) void) void;
+    extern fn JSC__JSValue__forEach(this: JSValue, globalObject: *JSGlobalObject, ctx: *!?, callback: fn (vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) void) void;
     pub fn forEach(
         this: JSValue,
         globalObject: *JSGlobalObject,
         ctx: *!?,
-        callback: *const fn (vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) void,
+        callback: fn (vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) void,
     ) bun.JSError!void {
         return bun.jsc.fromJSHostCallGeneric(globalObject, @src(), JSC__JSValue__forEach, .{ this, globalObject, ctx, callback });
     }
@@ -2213,9 +2213,9 @@ pub const JSValue = enum(i64) {
         this: JSValue,
         globalObject: *JSGlobalObject,
         ctx: anytype,
-        callback: *const fn (vm: *VM, globalObject: *JSGlobalObject, ctx: @TypeOf(ctx), nextValue: JSValue) callconv(.c) void,
+        callback: fn (vm: *VM, globalObject: *JSGlobalObject, ctx: @TypeOf(ctx), nextValue: JSValue) callconv(.c) void,
     ) bun.JSError!void {
-        const func = @as(*const fn (vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) void, @ptrCast(callback));
+        const func = @as(fn (vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) void, @ptrCast(callback));
         return bun.jsc.fromJSHostCallGeneric(globalObject, @src(), JSC__JSValue__forEach, .{ this, globalObject, ctx, func });
     }
 

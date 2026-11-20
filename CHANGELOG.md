@@ -1645,3 +1645,6 @@
 
 ### 2026-11-20 06:39:17 UTC - zig:check 外部根因（EVP/node/types/Body/ReadableStream）全面升级入库
 - 完成：`EVP`/`Body`/`ReadableStream` 升级完整 `@root struct`，`node/types` 消除 `pub union` 自动指针化，4/4 全 PASS。
+
+### 2026-11-20 06:45:45 UTC - zig:check 第 5 轮 JSC+Test+Core 簇 12 模块语义修复入库
+- 完成：`GeneratedBindings`/`ConsoleObject`/`expect`/`ConcurrentPromiseTask`/`DecodedJSValue`/`JSPromise`/`JSValue`/`ZigString`/`host_fn`/`Ast`/`owned`/`dir_info` 12/12 全 PASS。

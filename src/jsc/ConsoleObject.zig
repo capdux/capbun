@@ -761,7 +761,7 @@ const int: i64 = brk: {
 };
                 }
                 _ = self.addForNewLine("NaN".len);
-                _ = writer.print("NaN", &.{});
+                _ = writer.print("NaN", .{});
                 continue;
 };
                 if ((int < std.math.maxInt(u32))) {
@@ -1151,24 +1151,24 @@ const str: bun.String = try bun.String.fromJS(value, self.globalThis);
             }
             if ((jsType == .StringObject)) {
                 if (enable_ansi_colors) {
-                    _ = writer.print((comptime Output.prettyFmt("<r><green>", enable_ansi_colors)), &.{});
+                    _ = writer.print((comptime Output.prettyFmt("<r><green>", enable_ansi_colors)), .{});
                 }
                 defer {
                 if (comptime enable_ansi_colors) {
                     _ = writer.writeAll(Output.prettyFmt("<r>", true));
                 }
                 }
-                _ = writer.print("[String: ", &.{});
+                _ = writer.print("[String: ", .{});
                 if (str.isUTF16()) {
                     _ = try self.printAs(.JSON, Writer, writer_, value, .StringObject, enable_ansi_colors);
                 } else {
                     _ = ((JSPrinter.writeJSONString(str.latin1(), Writer, writer_, .latin1)) catch unreachable);
                 }
-                _ = writer.print("]", &.{});
+                _ = writer.print("]", .{});
                 return;
             }
             if (((jsType == .RegExpObject) and enable_ansi_colors)) {
-                _ = writer.print((comptime Output.prettyFmt("<r><red>", enable_ansi_colors)), &.{});
+                _ = writer.print((comptime Output.prettyFmt("<r><red>", enable_ansi_colors)), .{});
             }
             if (str.isUTF16()) {
                 _ = writer.print("{f}", .{ str });
@@ -1189,7 +1189,7 @@ const str: bun.String = try bun.String.fromJS(value, self.globalThis);
                 }
             }
             if (((jsType == .RegExpObject) and enable_ansi_colors)) {
-                _ = writer.print((comptime Output.prettyFmt("<r>", enable_ansi_colors)), &.{});
+                _ = writer.print((comptime Output.prettyFmt("<r>", enable_ansi_colors)), .{});
             }
 },
 .Integer => {
@@ -1234,15 +1234,15 @@ if (value.isCell()) {
             const num = value.asNumber();
             if (std.math.isPositiveInf(num)) {
                 _ = self.addForNewLine("Infinity".len);
-                _ = writer.print((comptime Output.prettyFmt("<r><yellow>Infinity<r>", enable_ansi_colors)), &.{});
+                _ = writer.print((comptime Output.prettyFmt("<r><yellow>Infinity<r>", enable_ansi_colors)), .{});
             } else {
                 if (std.math.isNegativeInf(num)) {
                     _ = self.addForNewLine("-Infinity".len);
-                    _ = writer.print((comptime Output.prettyFmt("<r><yellow>-Infinity<r>", enable_ansi_colors)), &.{});
+                    _ = writer.print((comptime Output.prettyFmt("<r><yellow>-Infinity<r>", enable_ansi_colors)), .{});
                 } else {
                     if (std.math.isNan(num)) {
                         _ = self.addForNewLine("NaN".len);
-                        _ = writer.print((comptime Output.prettyFmt("<r><yellow>NaN<r>", enable_ansi_colors)), &.{});
+                        _ = writer.print((comptime Output.prettyFmt("<r><yellow>NaN<r>", enable_ansi_colors)), .{});
                     } else {
                         var buf: [124]u8 = undefined;
                         _ = &buf;
@@ -1255,11 +1255,11 @@ if (value.isCell()) {
 },
 .Undefined => {
 _ = self.addForNewLine(9);
-            _ = writer.print((comptime Output.prettyFmt("<r><d>undefined<r>", enable_ansi_colors)), &.{});
+            _ = writer.print((comptime Output.prettyFmt("<r><d>undefined<r>", enable_ansi_colors)), .{});
 },
 .Null => {
 _ = self.addForNewLine(4);
-            _ = writer.print((comptime Output.prettyFmt("<r><yellow>null<r>", enable_ansi_colors)), &.{});
+            _ = writer.print((comptime Output.prettyFmt("<r><yellow>null<r>", enable_ansi_colors)), .{});
 },
 .CustomFormattedObject => {
 const result = try bun.jsc.fromJSHostCall(self.globalThis, @src(), JSC__JSValue__callCustomInspectFunction, .{ self.globalThis, self.custom_formatted_object.function, self.custom_formatted_object.@"this", (self.max_depth -| self.depth), self.max_depth, enable_ansi_colors });
@@ -1276,7 +1276,7 @@ const description = value.getDescription(self.globalThis);
                 _ = self.addForNewLine((description.len + "()".len));
                 _ = writer.print((comptime Output.prettyFmt("<r><blue>Symbol({f})<r>", enable_ansi_colors)), .{ description });
             } else {
-                _ = writer.print((comptime Output.prettyFmt("<r><blue>Symbol()<r>", enable_ansi_colors)), &.{});
+                _ = writer.print((comptime Output.prettyFmt("<r><blue>Symbol()<r>", enable_ansi_colors)), .{});
             }
 },
 .Error => {
@@ -1307,7 +1307,7 @@ var printable = try value.getName(self.globalThis);
             _ = self.addForNewLine(printable_proto.length());
             if (printable.isEmpty()) {
                 if (printable_proto.isEmpty()) {
-                    _ = writer.print((comptime Output.prettyFmt("<cyan>[class (anonymous)]<r>", enable_ansi_colors)), &.{});
+                    _ = writer.print((comptime Output.prettyFmt("<cyan>[class (anonymous)]<r>", enable_ansi_colors)), .{});
                 } else {
                     _ = writer.print((comptime Output.prettyFmt("<cyan>[class (anonymous) extends {f}]<r>", enable_ansi_colors)), .{ printable_proto });
                 }
@@ -1332,7 +1332,7 @@ var printable = try value.getName(self.globalThis);
             }
             if ((printable.isEmpty() or func_name.eql(printable))) {
                 if (func_name.isEmpty()) {
-                    _ = writer.print((comptime Output.prettyFmt("<cyan>[Function]<r>", enable_ansi_colors)), &.{});
+                    _ = writer.print((comptime Output.prettyFmt("<cyan>[Function]<r>", enable_ansi_colors)), .{});
                 } else {
                     _ = writer.print((comptime Output.prettyFmt("<cyan>[{f}]<r>", enable_ansi_colors)), .{ func_name });
                 }
@@ -1350,13 +1350,13 @@ const cell = value.asCell();
             const hasGetter = (!getterSetter.isGetterNull());
             const hasSetter = (!getterSetter.isSetterNull());
             if ((hasGetter and hasSetter)) {
-                _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors)), &.{});
+                _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors)), .{});
             } else {
                 if (hasGetter) {
-                    _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors)), &.{});
+                    _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors)), .{});
                 } else {
                     if (hasSetter) {
-                        _ = writer.print((comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors)), &.{});
+                        _ = writer.print((comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors)), .{});
                     }
                 }
             }
@@ -1367,13 +1367,13 @@ const cell = value.asCell();
             const hasGetter = (!getterSetter.isGetterNull());
             const hasSetter = (!getterSetter.isSetterNull());
             if ((hasGetter and hasSetter)) {
-                _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors)), &.{});
+                _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors)), .{});
             } else {
                 if (hasGetter) {
-                    _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors)), &.{});
+                    _ = writer.print((comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors)), .{});
                 } else {
                     if (hasSetter) {
-                        _ = writer.print((comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors)), &.{});
+                        _ = writer.print((comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors)), .{});
                     }
                 }
             }
@@ -1772,7 +1772,7 @@ const prev_quote_strings = self.quote_strings;
             defer {
             self.quote_strings = prev_quote_strings;
             }
-            _ = writer.print("MapIterator {{ ", &.{});
+            _ = writer.print("MapIterator {{ ", .{});
             {
                 self.indent = (self.indent + 1);
                 self.depth = (self.depth +| 1);
@@ -1817,7 +1817,7 @@ const prev_quote_strings = self.quote_strings;
             defer {
             self.quote_strings = prev_quote_strings;
             }
-            _ = writer.print("SetIterator {{ ", &.{});
+            _ = writer.print("SetIterator {{ ", .{});
             {
                 self.indent = (self.indent + 1);
                 self.depth = (self.depth +| 1);
@@ -2003,7 +2003,7 @@ _ = writer.print((comptime Output.prettyFmt(("<r>type: <green>\"{s}\"<r><d>,<r>"
                         if ((!self.single_line)) {
                             _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
                         }
-                        _ = writer.print((comptime Output.prettyFmt("<r><blue>message<d>:<r> ", enable_ansi_colors)), &.{});
+                        _ = writer.print((comptime Output.prettyFmt("<r><blue>message<d>:<r> ", enable_ansi_colors)), .{});
                         const tag = try Tag.getAdvanced(message_value, self.globalThis, .{ .hide_global = true, .disable_inspect_custom = self.disable_inspect_custom });
                         _ = try self.format(tag, Writer, writer_, message_value, self.globalThis, enable_ansi_colors);
                         if (self.failed) {
@@ -2020,7 +2020,7 @@ _ = writer.print((comptime Output.prettyFmt(("<r>type: <green>\"{s}\"<r><d>,<r>"
 if ((!self.single_line)) {
                     _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
                 }
-                _ = writer.print((comptime Output.prettyFmt("<r><blue>data<d>:<r> ", enable_ansi_colors)), &.{});
+                _ = writer.print((comptime Output.prettyFmt("<r><blue>data<d>:<r> ", enable_ansi_colors)), .{});
                 const data: JSValue = ((try value.fastGet(self.globalThis, .data)) orelse (.js_undefined));
                 const tag = try Tag.getAdvanced(data, self.globalThis, .{ .hide_global = true, .disable_inspect_custom = self.disable_inspect_custom });
                 _ = try self.format(tag, Writer, writer_, data, self.globalThis, enable_ansi_colors);
@@ -2038,7 +2038,7 @@ if (try value.fastGet(self.globalThis, .@"error")) |error_value| {
                     if ((!self.single_line)) {
                         _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
                     }
-                    _ = writer.print((comptime Output.prettyFmt("<r><blue>error<d>:<r> ", enable_ansi_colors)), &.{});
+                    _ = writer.print((comptime Output.prettyFmt("<r><blue>error<d>:<r> ", enable_ansi_colors)), .{});
                     const tag = try Tag.getAdvanced(error_value, self.globalThis, .{ .hide_global = true, .disable_inspect_custom = self.disable_inspect_custom });
                     _ = try self.format(tag, Writer, writer_, error_value, self.globalThis, enable_ansi_colors);
                     if (self.failed) {
@@ -2416,7 +2416,7 @@ _ = self.writeTypedArray(@TypeOf((&writer)), (&writer), u8, slice, enable_ansi_c
 },
 .RevokedProxy => {
 _ = self.addForNewLine("<Revoked Proxy>".len);
-            _ = writer.print((comptime Output.prettyFmt("<r><cyan>\\<Revoked Proxy\\><r>", enable_ansi_colors)), &.{});
+            _ = writer.print((comptime Output.prettyFmt("<r><cyan>\\<Revoked Proxy\\><r>", enable_ansi_colors)), .{});
 },
 .Proxy => {
 const target = value.getProxyInternalField(.target);
@@ -3046,7 +3046,7 @@ pub fn forEach(globalThis: *JSGlobalObject, ctx_ptr: ?*anyopaque, key: *ZigStrin
                                 utf16Slice = utf16Slice[(j + 1)..];
                             }
                             _ = writer.write16Bit(utf16Slice);
-                            _ = writer.print((comptime Output.prettyFmt("\"<r><d>:<r> ", enable_ansi_colors)), &.{});
+                            _ = writer.print((comptime Output.prettyFmt("\"<r><d>:<r> ", enable_ansi_colors)), .{});
                         } else {
                             _ = fmt.addForNewLine((key.len + 2));
                             _ = writer.print((comptime Output.prettyFmt("<r><green>{f}<r><d>:<r> ", enable_ansi_colors)), .{ bun.fmt.formatJSONStringLatin1(key.slice()) });

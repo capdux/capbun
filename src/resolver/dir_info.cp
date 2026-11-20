@@ -29,7 +29,7 @@ pub enum Flags {
     package_json: (*PackageJSON)? = null,
     tsconfig_json: (*TSConfigJSON)? = null,
     abs_real_path: string = "",
-    flags: Flags.Set = Flags.Set{},
+    flags: Flags.Set = .{},
 
     @inline fn hasNodeModules(): bool {
         return _.flags.contains(.has_node_modules);

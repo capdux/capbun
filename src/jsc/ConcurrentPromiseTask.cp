@@ -1,7 +1,10 @@
 // Concurrent Promise Task for JavaScriptCore in CP
-import { Async, jsc, VirtualMachine, WorkPool, WorkPoolTask } from "bun";
-import std from "std";
 import bun from "bun";
+const Async = bun.Async;
+const jsc = bun.jsc;
+const VirtualMachine = jsc.VirtualMachine;
+const WorkPool = jsc.WorkPool;
+const WorkPoolTask = jsc.WorkPoolTask;
 
 /// A generic task that runs work on a thread pool and resolves a JavaScript Promise with the result.
 /// This allows CPU-intensive operations to be performed off the main JavaScript thread while

@@ -1173,9 +1173,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                         writer.write16Bit(utf16Slice);
 
                         writer.print(
-                            comptime Output.prettyFmt("\"<r><d>:<r> ", enable_ansi_colors),
-                            [],
-                        );
+                            comptime Output.prettyFmt("\"<r><d>:<r> ", enable_ansi_colors), .{});
                     } else {
                         fmt.addForNewLine(key.len + 2);
 
@@ -1754,7 +1752,7 @@ pub struct Formatter {
 
                                 // for NaN and the string Infinity and -Infinity, parseInt returns NaN
                                 _.addForNewLine("NaN".len);
-                                writer.print("NaN", []);
+                                writer.print("NaN", .{});
                                 continue;
                             };
 
@@ -2220,12 +2218,12 @@ pub struct Formatter {
 
                 if (jsType == .StringObject) {
                     if (enable_ansi_colors) {
-                        writer.print(comptime Output.prettyFmt("<r><green>", enable_ansi_colors), []);
+                        writer.print(comptime Output.prettyFmt("<r><green>", enable_ansi_colors), .{});
                     }
                     defer if (comptime enable_ansi_colors)
                         writer.writeAll(Output.prettyFmt("<r>", true));
 
-                    writer.print("[String: ", []);
+                    writer.print("[String: ", .{});
 
                     if (str.isUTF16()) {
                         _.printAs(.JSON, Writer, writer_, value, .StringObject, enable_ansi_colors)?;
@@ -2233,12 +2231,12 @@ pub struct Formatter {
                         JSPrinter.writeJSONString(str.latin1(), Writer, writer_, .latin1) catch unreachable;
                     }
 
-                    writer.print("]", []);
+                    writer.print("]", .{});
                     return;
                 }
 
                 if (jsType == .RegExpObject && enable_ansi_colors) {
-                    writer.print(comptime Output.prettyFmt("<r><red>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<r><red>", enable_ansi_colors), .{});
                 }
 
                 if (str.isUTF16()) {
@@ -2257,7 +2255,7 @@ pub struct Formatter {
                 }
 
                 if (jsType == .RegExpObject && enable_ansi_colors) {
-                    writer.print(comptime Output.prettyFmt("<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<r>", enable_ansi_colors), .{});
                 }
             },
             .Integer => {
@@ -2314,13 +2312,13 @@ pub struct Formatter {
 
                 if (std.math.isPositiveInf(num)) {
                     _.addForNewLine("Infinity".len);
-                    writer.print(comptime Output.prettyFmt("<r><yellow>Infinity<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<r><yellow>Infinity<r>", enable_ansi_colors), .{});
                 } else if (std.math.isNegativeInf(num)) {
                     _.addForNewLine("-Infinity".len);
-                    writer.print(comptime Output.prettyFmt("<r><yellow>-Infinity<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<r><yellow>-Infinity<r>", enable_ansi_colors), .{});
                 } else if (std.math.isNan(num)) {
                     _.addForNewLine("NaN".len);
-                    writer.print(comptime Output.prettyFmt("<r><yellow>NaN<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<r><yellow>NaN<r>", enable_ansi_colors), .{});
                 } else {
                     let buf: [124]u8 = undefined;
                     const formatted = bun.fmt.FormatDouble.dtoaWithNegativeZero(&buf, num);
@@ -2330,11 +2328,11 @@ pub struct Formatter {
             },
             .Undefined => {
                 _.addForNewLine(9);
-                writer.print(comptime Output.prettyFmt("<r><d>undefined<r>", enable_ansi_colors), []);
+                writer.print(comptime Output.prettyFmt("<r><d>undefined<r>", enable_ansi_colors), .{});
             },
             .Null => {
                 _.addForNewLine(4);
-                writer.print(comptime Output.prettyFmt("<r><yellow>null<r>", enable_ansi_colors), []);
+                writer.print(comptime Output.prettyFmt("<r><yellow>null<r>", enable_ansi_colors), .{});
             },
             .CustomFormattedObject => {
                 // Call custom inspect function. Will return the error if there is one
@@ -2362,7 +2360,7 @@ pub struct Formatter {
                     _.addForNewLine(description.len + "()".len);
                     writer.print(comptime Output.prettyFmt("<r><blue>Symbol({f})<r>", enable_ansi_colors), [ description]);
                 } else {
-                    writer.print(comptime Output.prettyFmt("<r><blue>Symbol()<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<r><blue>Symbol()<r>", enable_ansi_colors), .{});
                 }
             },
             .Error => {
@@ -2410,7 +2408,7 @@ pub struct Formatter {
 
                 if (printable.isEmpty()) {
                     if (printable_proto.isEmpty()) {
-                        writer.print(comptime Output.prettyFmt("<cyan>[class (anonymous)]<r>", enable_ansi_colors), []);
+                        writer.print(comptime Output.prettyFmt("<cyan>[class (anonymous)]<r>", enable_ansi_colors), .{});
                     } else {
                         writer.print(comptime Output.prettyFmt("<cyan>[class (anonymous) extends {f}]<r>", enable_ansi_colors), [ printable_proto]);
                     }
@@ -2432,7 +2430,7 @@ pub struct Formatter {
 
                 if (printable.isEmpty() || func_name.eql(printable)) {
                     if (func_name.isEmpty()) {
-                        writer.print(comptime Output.prettyFmt("<cyan>[Function]<r>", enable_ansi_colors), []);
+                        writer.print(comptime Output.prettyFmt("<cyan>[Function]<r>", enable_ansi_colors), .{});
                     } else {
                         writer.print(comptime Output.prettyFmt("<cyan>[{f}]<r>", enable_ansi_colors), [ func_name]);
                     }
@@ -2450,11 +2448,11 @@ pub struct Formatter {
                 const hasGetter = !getterSetter.isGetterNull();
                 const hasSetter = !getterSetter.isSetterNull();
                 if (hasGetter && hasSetter) {
-                    writer.print(comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors), .{});
                 } else if (hasGetter) {
-                    writer.print(comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors), .{});
                 } else if (hasSetter) {
-                    writer.print(comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors), .{});
                 }
             },
             .CustomGetterSetter => {
@@ -2463,11 +2461,11 @@ pub struct Formatter {
                 const hasGetter = !getterSetter.isGetterNull();
                 const hasSetter = !getterSetter.isSetterNull();
                 if (hasGetter && hasSetter) {
-                    writer.print(comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<cyan>[Getter/Setter]<r>", enable_ansi_colors), .{});
                 } else if (hasGetter) {
-                    writer.print(comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<cyan>[Getter]<r>", enable_ansi_colors), .{});
                 } else if (hasSetter) {
-                    writer.print(comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors), []);
+                    writer.print(comptime Output.prettyFmt("<cyan>[Setter]<r>", enable_ansi_colors), .{});
                 }
             },
             .Array => {
@@ -2870,7 +2868,7 @@ pub struct Formatter {
                 _.quote_strings = true;
                 defer _.quote_strings = prev_quote_strings;
 
-                writer.print("MapIterator {{ ", []);
+                writer.print("MapIterator {{ ", .{});
                 {
                     _.indent += 1;
                     _.depth = _.depth +| 1;
@@ -2905,7 +2903,7 @@ pub struct Formatter {
                 _.quote_strings = true;
                 defer _.quote_strings = prev_quote_strings;
 
-                writer.print("SetIterator {{ ", []);
+                writer.print("SetIterator {{ ", .{});
                 {
                     _.indent += 1;
                     _.depth = _.depth +| 1;
@@ -3075,9 +3073,7 @@ pub struct Formatter {
                             }
 
                             writer.print(
-                                comptime Output.prettyFmt("<r><blue>message<d>:<r> ", enable_ansi_colors),
-                                [],
-                            );
+                                comptime Output.prettyFmt("<r><blue>message<d>:<r> ", enable_ansi_colors), .{});
 
                             const tag = try Tag.getAdvanced(message_value, _.globalThis, {
                                 hide_global: true,
@@ -3099,9 +3095,7 @@ pub struct Formatter {
                             }
 
                             writer.print(
-                                comptime Output.prettyFmt("<r><blue>data<d>:<r> ", enable_ansi_colors),
-                                [],
-                            );
+                                comptime Output.prettyFmt("<r><blue>data<d>:<r> ", enable_ansi_colors), .{});
                             const data: JSValue = (try value.fastGet(_.globalThis, .data)) ?? .js_undefined;
                             const tag = try Tag.getAdvanced(data, _.globalThis, {
                                 hide_global: true,
@@ -3121,9 +3115,7 @@ pub struct Formatter {
                                 }
 
                                 writer.print(
-                                    comptime Output.prettyFmt("<r><blue>error<d>:<r> ", enable_ansi_colors),
-                                    [],
-                                );
+                                    comptime Output.prettyFmt("<r><blue>error<d>:<r> ", enable_ansi_colors), .{});
 
                                 const tag = try Tag.getAdvanced(error_value, _.globalThis, {
                                     hide_global: true,
@@ -3581,7 +3573,7 @@ pub struct Formatter {
             },
             .RevokedProxy => {
                 _.addForNewLine("<Revoked Proxy>".len);
-                writer.print(comptime Output.prettyFmt("<r><cyan>\\<Revoked Proxy\\><r>", enable_ansi_colors), []);
+                writer.print(comptime Output.prettyFmt("<r><cyan>\\<Revoked Proxy\\><r>", enable_ansi_colors), .{});
             },
             .Proxy => {
                 const target = value.getProxyInternalField(.target);

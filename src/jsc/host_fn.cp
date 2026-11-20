@@ -198,7 +198,7 @@ inline fn parseErrorSet(T: type, errors: []const std.builtin.Type.Error): Parsed
 
 pub fn voidFromJSError(e: bun.JSError, globalThis: *jsc.JSGlobalObject) {
     if (e == error.OutOfMemory) {
-        * = globalThis.throwOutOfMemory();
+        * = globalThis.throwOutOfMemoryValue();
     }
 }
 

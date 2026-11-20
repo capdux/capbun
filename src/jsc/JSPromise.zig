@@ -150,7 +150,7 @@ pub const JSPromise = opaque {
     pub const Weak = JSPromiseWeak;
     pub const Strong = JSPromiseStrong;
 
-    pub inline fn toJS(self: *const JSPromise) JSValue {
+    pub inline fn toJS(self: *JSPromise) JSValue {
         return JSValue.fromCell(self);
     }
 

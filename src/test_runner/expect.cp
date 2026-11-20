@@ -205,7 +205,8 @@ pub struct Expect {
     static fn processPromise(custom_label: bun.String, flags: Expect.Flags, globalThis: *JSGlobalObject, value: JSValue, matcher_name: auto, matcher_params: auto, comptime silent: bool): bun.JSError!JSValue {
         switch (flags.promise) {
             inline .resolves, .rejects => |resolution| {
-                if (promise := value.asAnyPromise()) {
+                if (p := value.asAnyPromise()) {
+                    let promise = p;
                     const vm = globalThis.vm();
                     promise.setHandled(vm);
 
@@ -1780,7 +1781,8 @@ pub struct ExpectCustomAsymmetricMatcher {
             return globalThis.throwOutOfMemory();
         };
         matcher_args.appendAssumeCapacity(received);
-        for (i of 0..args_count) {
+        let i: usize = 0;
+        while (i < args_count) : (i += 1) {
             matcher_args.appendAssumeCapacity(try captured_args.getIndex(globalThis, @truncate(i)));
         }
 

@@ -207,7 +207,9 @@ inline else => |colors| (comptime Output.prettyFmt(matcher_params_fmt, colors)),
 pub fn processPromise(custom_label: bun.String, flags: Expect.Flags, globalThis: *JSGlobalObject, value: JSValue, matcher_name: anytype, matcher_params: anytype, comptime silent: bool) bun.JSError!JSValue {
             switch (flags.promise) {
 inline .resolves, .rejects => |resolution| {
-if (value.asAnyPromise()) |promise| {
+if (value.asAnyPromise()) |p| {
+                _ = &p;
+                var promise = p;
                 _ = &promise;
                 const vm = globalThis.vm();
                 _ = promise.setHandled(vm);
@@ -1761,13 +1763,10 @@ pub fn executeImpl(self: *ExpectCustomAsymmetricMatcher, thisValue: JSValue, glo
             var matcher_args = (blk_catch_8: { break :blk_catch_8 ((std.array_list.Managed(JSValue).initCapacity(allocator.get(), (args_count + 1))) catch |__ce_8| { _ = &__ce_8; return globalThis.throwOutOfMemory(); }); });
             _ = &matcher_args;
             _ = matcher_args.appendAssumeCapacity(received);
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_9 = args_count;
-                while (i < __end_9) : (i += 1) {
-                    _ = matcher_args.appendAssumeCapacity(try captured_args.getIndex(globalThis, @truncate(i)));
-                }
+            var i: usize = 0;
+            _ = &i;
+            while ((i < args_count)) : (i = (i + 1)) {
+                _ = matcher_args.appendAssumeCapacity(try captured_args.getIndex(globalThis, @truncate(i)));
             }
             return Expect.executeCustomMatcher(globalThis, matcher_name, matcher_fn, matcher_args.items, self.flags, true);
     }

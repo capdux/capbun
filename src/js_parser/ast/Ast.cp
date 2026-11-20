@@ -12,7 +12,7 @@ pub const NamedExports = bun.StringArrayHashMapUnmanaged(NamedExport);
 pub const ConstValuesMap = std.ArrayHashMapUnmanaged(Ref, Expr, RefHashCtx, false);
 pub const TsEnumsMap = std.ArrayHashMapUnmanaged(Ref, bun.StringHashMapUnmanaged(InlinedEnumValue), RefHashCtx, false);
 
-let empty_u32s: [0]u32 = [];
+let empty_u32s: [0]u32 = undefined;
 
 @root struct Ast {
     approximate_newline_count: usize = 0,

@@ -3040,3 +3040,5 @@ Options:
 - [2026-11-20 06:34:49 UTC] 验收并提交 4 处外部根因修复：`shell/EnvMap.cp` (1.034x), `jsc/event_loop.cp` (0.922x，升级 `@root struct EventLoop`), `bun.cp` (1.022x), `http.cp` (0.869x)，4/4 全 PASS。
 
 - [2026-11-20 06:39:17 UTC] 验收并提交 4 处高影响外部根因修复：`crypto/EVP.cp` (0.905x), `node/types.cp` (1.031x), `webcore/Body.cp` (1.011x), `webcore/ReadableStream.cp` (1.007x)，4/4 全 PASS。
+
+- [2026-11-20 06:45:45 UTC] 验收并提交第 5 轮 `zig:check` JSC+Test+Core 簇 12 模块修复（12/12 全 PASS，一举根治 `throwOutOfMemoryValue()`、`ConsoleObject` 27 处 `writer.print` 与 `JSValue` 双重 `*const fn`）。
