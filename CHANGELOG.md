@@ -1627,3 +1627,6 @@
 
 ### 2026-11-20 06:23:10 UTC - zig:check 外部根因（Response/EventLoopTimer）升级 @root struct 入库
 - 完成：`Response.cp` (0.922x) 与 `EventLoopTimer.cp` (1.135x) 完整重构为 `@root struct`，4 项硬门禁全 PASS。
+
+### 2026-11-20 06:27:53 UTC - zig:check 第 4 轮 Runtime/Image/Crypto/WebCore 簇 5 模块语义修复入库
+- 完成：`Image.cp` (18 错清零)/`ffi.cp`/`ResumableSink.cp`/`streams.cp`/`CryptoHasher.cp` 5/5 全 PASS。

@@ -74,8 +74,8 @@ const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
 const Allocator = @import("std:mem").Allocator;
 const math = @import("std").math;
-const FetchTasklet = @import("./fetch").FetchTasklet;
-const S3UploadStreamWrapper = @import("./s3/client").S3UploadStreamWrapper;
+const FetchTasklet = @import("./fetch.zig").FetchTasklet;
+const S3UploadStreamWrapper = @import("./s3/client.zig").S3UploadStreamWrapper;
 pub const ResumableSinkBackpressure = enum {
     want_more,
     backpressure,
@@ -216,9 +216,9 @@ pub fn jsWrite(self: *@This(), globalThis: *JSGlobalObject, callframe: *jsc.Call
                 return globalThis.throwInvalidArguments("ResumableSink.write requires at least 1 argument", .{});
             }
             const buffer = args[0];
-            const sb = try ((jsc.Node.StringOrBuffer.fromJS(globalThis, default_allocator, buffer)) orelse (({
+            const sb = try ((jsc.Node.StringOrBuffer.fromJS(globalThis, default_allocator, buffer)) orelse {
             return globalThis.throwInvalidArguments("ResumableSink.write requires a string or buffer", .{});
-})));
+});
             defer {
             _ = sb.deinit();
             }

@@ -71,8 +71,6 @@ pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_le
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
-pub const jsc = @import("jsc");
-pub const webcore = @import("webcore");
 pub const Start = union(enum) {
     empty: void,
     err: sys.Error,
@@ -832,12 +830,14 @@ const uws = bun.uws;
 const ByteList = bun.ByteList;
 const FD = bun.FD;
 const JSError = bun.JSError;
+const jsc = bun.jsc;
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSPromise = jsc.JSPromise;
 const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 const CommonAbortReason = jsc.CommonAbortReason;
+const webcore = bun.webcore;
 const AutoFlusher = webcore.AutoFlusher;
 const FileSink = webcore.FileSink;
 const Response = webcore.Response;
@@ -927,7 +927,7 @@ pub fn onStart(ptr: *anyopaque) void {
 };
             return SignalVTable{ .close = Functions.onClose, .ready = Functions.onReady, .start = Functions.onStart };
     }
-    pub const OnCloseFn = *const fn(this: *anyopaque, err: ?sys.Error) void;
-    pub const OnReadyFn = *const fn(this: *anyopaque, amount: ?Blob.SizeType, offset: ?Blob.SizeType) void;
-    pub const OnStartFn = *const fn(this: *anyopaque) void;
+    pub const OnCloseFn = *const fn (*anyopaque, ?sys.Error) void;
+    pub const OnReadyFn = *const fn (*anyopaque, ?Blob.SizeType, ?Blob.SizeType) void;
+    pub const OnStartFn = *const fn (*anyopaque) void;
 };

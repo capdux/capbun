@@ -62,7 +62,7 @@ pub const FFI = struct {
     pub const fromJSDirect = js.fromJSDirect;
 
     dylib: ?std.DynLib = null,
-    functions: bun.StringArrayHashMapUnmanaged(Function) = {},
+    functions: bun.StringArrayHashMapUnmanaged(Function) = .{},
     closed: bool = false,
     shared_state: ?*TCC.State = null,
 
@@ -1444,7 +1444,7 @@ pub const FFI = struct {
         state: ?*TCC.State = null,
 
         return_type: ABIType = ABIType.void,
-        arg_types: std.ArrayListUnmanaged(ABIType) = {},
+        arg_types: std.ArrayListUnmanaged(ABIType) = .{},
         step: Step = Step{ .pending = {} },
         threadsafe: bool = false,
         allocator: Allocator,

@@ -1356,3 +1356,6 @@
 
 ### 2026-11-20 06:23:10 UTC - Response 与 EventLoopTimer @root struct 重构经验
 - 根结构体辅助类型提顶层、根字段与方法归入 `@root struct`，彻底恢复 `Response.WeakRef` 与 `EventLoopTimer.less` 等文件根导出。
+
+### 2026-11-20 06:27:53 UTC - zig:check 第 4 轮 Runtime/Image/Crypto 修复经验
+- `Image.cp` 改 `pub const U = union(enum)` 消字段自动指针化与 15 处 `.client()`→`.@"this"()`；`CryptoHasher` 静态函数首参改具名消多余 `self`。

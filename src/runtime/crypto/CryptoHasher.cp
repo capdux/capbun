@@ -689,10 +689,13 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
         }
 
         pub fn getByteLengthStatic(
-            _: *jsc.JSGlobalObject,
-            _: JSValue,
-            _: JSValue,
+            globalThis: *jsc.JSGlobalObject,
+            thisVal: JSValue,
+            propName: JSValue,
         ) jsc.JSValue {
+            * = globalThis;
+            * = thisVal;
+            * = propName;
             return jsc.JSValue.jsNumber(@as(u16, Hasher.digest));
         }
 
@@ -767,7 +770,9 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             }
         }
 
-        pub fn constructor(_: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*@This() {
+        pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!*@This() {
+            * = globalThis;
+            * = callframe;
             const obj = try bun.default_allocator.create(@This());
             obj.* = .{ .hashing = Hasher.init() };
             return obj;

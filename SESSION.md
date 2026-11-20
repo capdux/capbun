@@ -3028,3 +3028,5 @@ Options:
 - [2026-11-20 06:19:59 UTC] 验收并提交 3 处外部根因修复：`http.cp` (0.869x，补齐 18 项 `pub` 重导出)、`NullableAllocator.cp` (1.021x，`@root struct`)、`unicode.cp` (1.006x，恢复 `toUTF16Alloc`)，3/3 全 PASS。
 
 - [2026-11-20 06:23:10 UTC] 验收并提交 `@root struct` 升级：`runtime/webcore/Response.cp` (0.922x) 与 `event_loop/EventLoopTimer.cp` (1.135x)，全部 PASS。
+
+- [2026-11-20 06:27:53 UTC] 验收并提交第 4 轮 `zig:check` Runtime/Image/Crypto/WebCore 簇 5 模块修复（`Image`/`ffi`/`ResumableSink`/`streams`/`CryptoHasher`，5/5 全 PASS）；接力派发 4 处外部根因（`EVP`/`node/types`/`Body`/`ReadableStream`）。

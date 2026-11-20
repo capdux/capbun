@@ -7,7 +7,7 @@ const jsc = bun.jsc;
 extern fn JSC__JSValue__unpinArrayBuffer(v: jsc.JSValue);
 extern fn JSC__JSValue__borrowBytesForOffThread(v: jsc.JSValue, out_ptr: *[*]const u8, out_len: *usize): i32;
 
-pub union(enum) Source {
+pub const Source = union(enum) {
     /// Input is a JS ArrayBuffer/TypedArray held in the wrapper's `sourceJS`
     /// cached slot. We never cache the raw pointer here — it could be detached
     /// or (for resizable, which we reject) reallocated. Each use re-fetches:
@@ -32,16 +32,16 @@ pub union(enum) Source {
     /// source is swapped to `.owned` so subsequent terminals reuse the bytes.
     blob: jsc.Strong.Optional,
 
-    fn deinit(*_) {
-        if (_.* == .owned) {
-            bun.default_allocator.free(_.owned);
-        } else if (_.* == .path) {
-            bun.default_allocator.free(_.path);
-        } else if (_.* == .blob) {
-            _.blob.deinit();
+    pub fn deinit(s: *Source) void {
+        if (s.* == .owned) {
+            bun.default_allocator.free(s.owned);
+        } else if (s.* == .path) {
+            bun.default_allocator.free(s.path);
+        } else if (s.* == .blob) {
+            s.blob.deinit();
         }
     }
-}
+};
 
 pub enum Fit {
     fill,
@@ -102,7 +102,7 @@ pub struct PipelineTaskInput {
     }
 }
 
-pub union(enum) PipelineDeliver {
+pub const PipelineDeliver = union(enum) {
     uint8array: void,
     buffer: void,
     blob: void,
@@ -110,16 +110,16 @@ pub union(enum) PipelineDeliver {
     dataurl: void,
     write_dest: jsc.Strong.Optional,
 
-    fn deinit(*_) {
-        if (_.* == .write_dest) jsc.Strong.Optional.deinit(&_.write_dest);
+    pub fn deinit(d: *PipelineDeliver) void {
+        if (d.* == .write_dest) jsc.Strong.Optional.deinit(&d.write_dest);
     }
-}
+};
 
-pub union(enum) PipelineKind {
-    encode: codecs.EncodeOptions?,
+pub const PipelineKind = union(enum) {
+    encode: ?codecs.EncodeOptions,
     metadata: void,
     placeholder: void,
-}
+};
 
 pub struct EncodedResult {
     out: codecs.Encoded,
@@ -134,12 +134,12 @@ pub struct MetaResult {
     format: codecs.Format,
 }
 
-pub union(enum) PipelineResult {
+pub const PipelineResult = union(enum) {
     encoded: EncodedResult,
     @"meta": MetaResult,
     @"err": codecs.Error,
     io_err: bun.sys.Error,
-}
+};
 
 pub struct EncodeForBodyResult {
     bytes: codecs.Encoded,
@@ -237,7 +237,7 @@ fn finalize(*_) {
     bun.destroy(_);
 }
 
-fn estimatedSize(): usize {
+fn estimatedSize(*_): usize {
     // Only the bytes WE own. .js_buffer is the caller's ArrayBuffer (already
     // counted via the cached value slot); the worker's RGBA scratch is
     // task-scoped and freed before any GC could observe it.
@@ -260,8 +260,9 @@ static fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_val
         // anyway) and decode base64 here. Non-base64 data URLs aren't useful
         // for image bytes.
         if (bun.strings.hasPrefixComptime(s, "data:")) {
-            const comma = bun.strings.indexOfChar(s, ',') ??
-                return global.throwInvalidArguments("Image(): malformed data: URL (no comma)", {});
+            const comma_opt = bun.strings.indexOfChar(s, ',');
+            if (comma_opt == null) return global.throwInvalidArguments("Image(): malformed data: URL (no comma)", {});
+            const comma = comma_opt.?;
             const meta_part = s[5..comma];
             const payload = s[comma + 1 ..];
             if (!bun.strings.contains(meta_part, ";base64")) {
@@ -330,7 +331,7 @@ fn doResize(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSE
         if (v := opt.get(global, "withoutEnlargement")?) r.without_enlargement = v.toBoolean();
     }
     _.pipeline.resize = r;
-    return callframe.client();
+    return callframe.@"this"();
 }
 
 fn doRotate(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -344,17 +345,17 @@ fn doRotate(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSE
     if (deg != 0 && deg != 90 && deg != 180 && deg != 270)
         return global.throwInvalidArguments("rotate: only multiples of 90 are supported", {});
     _.pipeline.rotate = @intCast(deg);
-    return callframe.client();
+    return callframe.@"this"();
 }
 
 fn doFlip(*_, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     _.pipeline.flip = true;
-    return callframe.client();
+    return callframe.@"this"();
 }
 
 fn doFlop(*_, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     _.pipeline.flop = true;
-    return callframe.client();
+    return callframe.@"this"();
 }
 
 fn doModulate(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -378,7 +379,7 @@ fn doModulate(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.J
         }
     }
     _.pipeline.modulate = m;
-    return callframe.client();
+    return callframe.@"this"();
 }
 
 fn setFormat(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, fmt: codecs.Format): bun.JSError!jsc.JSValue {
@@ -406,7 +407,7 @@ fn setFormat(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, fmt: co
         if (p := opt.get(global, "progressive")?) enc.progressive = p.toBoolean();
     }
     _.pipeline.output = enc;
-    return callframe.client();
+    return callframe.@"this"();
 }
 
 fn doFormatJpeg(*_, g: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -481,7 +482,9 @@ fn jsThreadBytes(this_value: jsc.JSValue, global: *jsc.JSGlobalObject): ([]const
 fn pinForTask(this_value: jsc.JSValue, _: *jsc.JSGlobalObject): PinTaskError!PipelineTaskInput {
     switch (_.source) {
         .js_buffer => {
-            const v = js.sourceJSGetCached(this_value) ?? return error.Detached;
+            const v_opt = js.sourceJSGetCached(this_value);
+            if (v_opt == null) return error.Detached;
+            const v = v_opt.?;
             let ptr: [*]const u8 = undefined;
             let len: usize = 0;
             return switch (JSC__JSValue__borrowBytesForOffThread(v, &ptr, &len)) {
@@ -527,20 +530,21 @@ static fn fromClipboard(global: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSE
         let bytes_opt: ([]u8)? = null;
         if (clip := sb.clipboard() catch |e| {
             if (e == error.OutOfMemory) return global.throwOutOfMemory();
-            return .@"null";
+            return jsc.JSValue.null;
         }) {
             bytes_opt = clip;
         }
-        const bytes = bytes_opt ?? return .@"null";
+        if (bytes_opt == null) return jsc.JSValue.null;
+        const bytes = bytes_opt.?;
         let img = Image.new({ source: { owned: bytes } });
         return img.toJS(global);
     }
-    return .@"null";
+    return jsc.JSValue.null;
 }
 
 static fn hasClipboardImage(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     if (sb := comptime codecs.system_backend) return jsc.JSValue.jsBoolean(sb.hasClipboardImage());
-    return .@"false";
+    return jsc.JSValue.false;
 }
 
 /// Monotone counter that increments on every system-wide clipboard write
@@ -569,7 +573,7 @@ fn doMetadata(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.J
     // Header-only probe is a few dozen byte reads — when the bytes are already
     // in memory it's cheaper to do it inline than to bounce off the WorkPool
     // (~0.4 ms roundtrip). Path-backed sources still go async for the file I/O.
-    if (buf := _.jsThreadBytes(callframe.client(), global)) {
+    if (buf := _.jsThreadBytes(callframe.@"this"(), global)) {
         if (p := codecs.probe(buf, _.max_pixels) catch null) {
             let w = p.width;
             let h = p.height;
@@ -592,29 +596,29 @@ fn doMetadata(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.J
             * = probe_err;
         }
     }
-    return _.schedule(global, callframe.client(), .metadata, .uint8array);
+    return _.schedule(global, callframe.@"this"(), .metadata, .uint8array);
 }
 
 fn doBytes(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-    return _.schedule(global, cf.client(), { encode: _.pipeline.output }, .uint8array);
+    return _.schedule(global, cf.@"this"(), { encode: _.pipeline.output }, .uint8array);
 }
 
 fn doBuffer(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-    return _.schedule(global, cf.client(), { encode: _.pipeline.output }, .buffer);
+    return _.schedule(global, cf.@"this"(), { encode: _.pipeline.output }, .buffer);
 }
 
 fn doBlob(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-    return _.schedule(global, cf.client(), { encode: _.pipeline.output }, .blob);
+    return _.schedule(global, cf.@"this"(), { encode: _.pipeline.output }, .blob);
 }
 
 fn doToBase64(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-    return _.schedule(global, cf.client(), { encode: _.pipeline.output }, .base64);
+    return _.schedule(global, cf.@"this"(), { encode: _.pipeline.output }, .base64);
 }
 
 /// `data:image/{format};base64,{…}`. Same encode as `.toBase64()` plus the
 /// MIME prefix, so it drops straight into `<img src>`.
 fn doDataUrl(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-    return _.schedule(global, cf.client(), { encode: _.pipeline.output }, .dataurl);
+    return _.schedule(global, cf.@"this"(), { encode: _.pipeline.output }, .dataurl);
 }
 
 /// `.placeholder()` — ThumbHash-rendered ≤32px PNG `data:` URL. ~28 chars
@@ -633,7 +637,7 @@ fn doPlaceholder(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSErr
         if (!s.eqlComptime("dataurl"))
             return global.throwInvalidArguments("Image.placeholder(): only \"dataurl\" is supported", {});
     }
-    return _.schedule(global, cf.client(), .placeholder, .dataurl);
+    return _.schedule(global, cf.@"this"(), .placeholder, .dataurl);
 }
 
 /// Terminal: encode and write to `path` on the work pool (no round-trip of
@@ -663,7 +667,7 @@ fn doWrite(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc
             else => {},
         };
     }
-    return _.schedule(global, cf.client(), { encode: output }, { write_dest: .create(args[0], global) });
+    return _.schedule(global, cf.@"this"(), { encode: output }, { write_dest: .create(args[0], global) });
 }
 
 fn schedule(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue, kind: PipelineTask.Kind, deliver: PipelineTask.Deliver): bun.JSError!jsc.JSValue {
@@ -718,8 +722,12 @@ fn encodeForBody(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue): bun.
     // the body path is made `.Locked`.
     if (_.source == .blob) {
         const refuse = "Image: fd/S3-backed Bun.file as a Response body — pass `await file.bytes()` or a path string";
-        const blob_js = _.source.blob.get() ?? return global.throw("Image: Blob source was collected", {});
-        const blob = blob_js.@"as"(jsc.WebCore.Blob) ?? return global.throw(refuse, {});
+        const blob_js_opt = _.source.blob.get();
+        if (blob_js_opt == null) return global.throw("Image: Blob source was collected", {});
+        const blob_js = blob_js_opt.?;
+        const blob_opt = blob_js.@"as"(jsc.WebCore.Blob);
+        if (blob_opt == null) return global.throw(refuse, {});
+        const blob = blob_opt.?;
         // Braced so the `else` can't dangle onto the inner `if` — a null
         // store would otherwise fall through to `pinForTask`'s `.blob =>
         // unreachable`. (The Strong-held wrapper makes that nominally

@@ -361,5 +361,5 @@ export enum ResumableSinkBackpressure {
 pub const ResumableFetchSink = ResumableSink(jsc.Codegen.JSResumableFetchSink, FetchTasklet);
 pub const ResumableS3UploadSink = ResumableSink(jsc.Codegen.JSResumableS3UploadSink, S3UploadStreamWrapper);
 
-import { FetchTasklet } from "./fetch";
-import { S3UploadStreamWrapper } from "./s3/client";
+import { FetchTasklet } from "./fetch.zig";
+import { S3UploadStreamWrapper } from "./s3/client.zig";

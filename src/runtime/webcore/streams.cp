@@ -10,7 +10,7 @@ const ByteList = bun.ByteList;
 const FD = bun.FD;
 const JSError = bun.JSError;
 
-import jsc from "jsc";
+const jsc = bun.jsc;
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSPromise = jsc.JSPromise;
@@ -18,7 +18,7 @@ const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 const CommonAbortReason = jsc.CommonAbortReason;
 
-import webcore from "webcore";
+const webcore = bun.webcore;
 const AutoFlusher = webcore.AutoFlusher;
 const FileSink = webcore.FileSink;
 const Response = webcore.Response;
