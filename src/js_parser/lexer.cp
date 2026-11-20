@@ -2138,7 +2138,7 @@ fn NewLexer_(
         }
 
         pub fn scanRegExp(lexer: *LexerType)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
             lexer.regex_flags_start = null;
             while (true) {
                 switch (lexer.code_point) {
@@ -2203,7 +2203,7 @@ fn NewLexer_(
             return strings.toUTF8AllocWithType(lexer.allocator, js)?;
         }
         pub fn nextInsideJSXElement(lexer: *LexerType)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             lexer.has_newline_before = false;
 
@@ -2354,7 +2354,7 @@ fn NewLexer_(
         }
         pub fn parseJSXStringLiteral(lexer: *LexerType, comptime quote: u8)! {
             * = quote;
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             let backslash = logger.Range.None;
             let needs_decode = false;
@@ -2426,7 +2426,7 @@ fn NewLexer_(
         }
 
         pub fn expectJSXElementChild(lexer: *LexerType, token: T)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             if (lexer.token != token) {
                 lexer.expected(token)?;
@@ -2436,7 +2436,7 @@ fn NewLexer_(
         }
 
         pub fn nextJSXElementChild(lexer: *LexerType)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             lexer.has_newline_before = false;
             const original_start = lexer.end;
@@ -2507,7 +2507,7 @@ fn NewLexer_(
         }
 
         pub fn fixWhitespaceAndDecodeJSXEntities(lexer: *LexerType, text: string, decoded: *std.array_list.Managed(u16))! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             let after_last_non_whitespace: u32? = null;
 
@@ -2556,7 +2556,7 @@ fn NewLexer_(
         }
 
         fn maybeDecodeJSXEntity(lexer: *LexerType, text: string, cursor: *strings.CodepointIterator.Cursor) {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             if (length := strings.indexOfChar(text[cursor.width + cursor.i ..], ';')) {
                 const end = cursor.width + cursor.i;
@@ -2588,7 +2588,7 @@ fn NewLexer_(
         }
 
         pub fn decodeJSXEntities(lexer: *LexerType, text: string, out: *std.array_list.Managed(u16))! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             const iterator = strings.CodepointIterator.init(text);
             let cursor = strings.CodepointIterator.Cursor{};
@@ -2613,7 +2613,7 @@ fn NewLexer_(
             }
         }
         pub fn expectInsideJSXElement(lexer: *LexerType, token: T)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             if (lexer.token != token) {
                 lexer.expected(token)?;
@@ -2624,7 +2624,7 @@ fn NewLexer_(
         }
 
         pub fn expectInsideJSXElementWithName(lexer: *LexerType, token: T, name: string)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             if (lexer.token != token) {
                 lexer.expectedString(name)?;
@@ -2635,7 +2635,7 @@ fn NewLexer_(
         }
 
         fn scanRegExpValidateAndStep(lexer: *LexerType)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             if (lexer.code_point == '\\') {
                 lexer.step();
@@ -2656,7 +2656,7 @@ fn NewLexer_(
         }
 
         pub fn rescanCloseBraceAsTemplateToken(lexer: *LexerType)! {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             if (lexer.token != .t_close_brace) {
                 lexer.expected(.t_close_brace)?;
@@ -2671,7 +2671,7 @@ fn NewLexer_(
         }
 
         pub fn rawTemplateContents(lexer: *LexerType): string {
-            lexer.assertNotJSON();
+            assertNotJSON();
 
             let text: string = undefined;
 

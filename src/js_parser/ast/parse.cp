@@ -423,7 +423,8 @@ pub fn Parse(
                     }
 
                     let item = items[i];
-                    const tuple = p.convertExprToBindingAndInitializer(unsafe { &item }, &invalidLog, is_spread);
+                    const item_ptr: *Expr = &item;
+                    const tuple = p.convertExprToBindingAndInitializer(item_ptr, &invalidLog, is_spread);
                     // double allocations
                     args.append(G.Arg{
                         binding: tuple.binding ?? Binding{ data: Prefill.Data.BMissing, loc: item.loc },
@@ -913,7 +914,7 @@ pub fn Parse(
                     );
                     p.lexer.expect(.t_identifier)?;
                     return B.Property{
-                        key: p.newExpr(E.Missing{}, p.lexer.loc()),
+                        key: p.newExpr(std.mem.zeroes(E.Missing), p.lexer.loc()),
 
                         flags: Flags.Property.init({ is_spread: true }),
                         value: value,

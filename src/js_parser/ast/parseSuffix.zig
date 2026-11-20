@@ -278,7 +278,7 @@ pub fn t_question(p: *P, level: Level, errors: ?*DeferredErrors, left: *Expr) an
             return error.next;
     }
 
-pub fn t_exclamation(p: *P, optional_chain: *?*OptionalChain, old_optional_chain: ?OptionalChain) anyerror!Continuation {
+pub fn t_exclamation(p: *P, optional_chain: ?*OptionalChain, old_optional_chain: ?OptionalChain) anyerror!Continuation {
             if (p.lexer.has_newline_before) {
                 return error.done;
             }

@@ -182,7 +182,7 @@ pub fn parseProperty(p: *P, kind_: Property.Kind, opts: *PropertyOpts, errors_: 
             var errors = errors_;
             _ = &errors;
             restart: while (true) {
-                var key: Expr = Expr{ .loc = logger.Loc.Empty, .data = .{ .e_missing = E.Missing } };
+                var key: Expr = Expr{ .loc = logger.Loc.Empty, .data = .{ .e_missing = std.mem.zeroes(E.Missing) } };
                 _ = &key;
                 const key_range = p.lexer.range();
                 var is_computed = false;

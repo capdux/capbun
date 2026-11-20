@@ -112,15 +112,15 @@ pub fn initNone() SourceContentPtr {
     }
 
 pub fn fromProvider(p: *SourceProviderMap) SourceContentPtr {
-            return SourceContentPtr{ .load_hint = .none, .data = (if (comptime @typeInfo(u60) == .@"enum") @as(u60, @enumFromInt(@intFromPtr(p))) else @as(u60, @intFromPtr(p))), .kind = .@"zig" };
+            return SourceContentPtr{ .load_hint = .none, .data = @intCast(@intFromPtr(p)), .kind = .@"zig" };
     }
 
 pub fn fromBakeProvider(p: *BakeSourceProvider) SourceContentPtr {
-            return SourceContentPtr{ .load_hint = .none, .data = (if (comptime @typeInfo(u60) == .@"enum") @as(u60, @enumFromInt(@intFromPtr(p))) else @as(u60, @intFromPtr(p))), .kind = .bake };
+            return SourceContentPtr{ .load_hint = .none, .data = @intCast(@intFromPtr(p)), .kind = .bake };
     }
 
 pub fn fromDevServerProvider(p: *DevServerSourceProvider) SourceContentPtr {
-            return SourceContentPtr{ .load_hint = .none, .data = (if (comptime @typeInfo(u60) == .@"enum") @as(u60, @enumFromInt(@intFromPtr(p))) else @as(u60, @intFromPtr(p))), .kind = .dev_server };
+            return SourceContentPtr{ .load_hint = .none, .data = @intCast(@intFromPtr(p)), .kind = .dev_server };
     }
 
 pub fn provider(self: SourceContentPtr) ?AnySourceProvider {

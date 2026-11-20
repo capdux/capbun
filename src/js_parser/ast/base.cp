@@ -64,12 +64,12 @@ pub struct RefCtx {
 
         if (comptime bun.Environment.allow_assert) {
             return {
-                value: @as(Int, i32(num)),
+                value: @as(Int, @intCast(num)),
             };
         }
 
         return {
-            value: @as(Int, i32(num)),
+            value: @as(Int, @intCast(num)),
         };
     }
 

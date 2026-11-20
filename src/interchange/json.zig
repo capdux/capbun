@@ -411,7 +411,8 @@ _ = try p.lexer.next();
         {
             if (opts.json_warn_duplicate_keys) {
                 duplicates_node.data = duplicates;
-                _ = (if (comptime @typeInfo(@TypeOf(HashMapPool)) == .pointer) (HashMapPool) else &(HashMapPool)).release();
+                const release_fn = HashMapPool.release;
+                _ = release_fn(duplicates_node);
             }
         }
         }

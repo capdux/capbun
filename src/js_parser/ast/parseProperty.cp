@@ -135,7 +135,7 @@ pub fn ParseProperty(
             let errors = errors_;
             // This while loop exists to conserve stack space by reducing (but not completely eliminating) recursion.
             restart: while (true) {
-                let key: Expr = Expr{ loc: logger.Loc.Empty, data: { e_missing: E.Missing{} } };
+                let key: Expr = Expr{ loc: logger.Loc.Empty, data: { e_missing: std.mem.zeroes(E.Missing) } };
                 const key_range = p.lexer.range();
                 let is_computed = false;
 

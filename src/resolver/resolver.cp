@@ -2062,7 +2062,9 @@ pub struct Resolver {
         // https://nodejs.org/api/modules.html#loading-from-the-global-folders
         let node_path: []const u8 = "";
         if (env_loader := r.env_loader) {
-            node_path = env_loader.get("NODE_PATH") ?? "";
+            if (np := env_loader.get("NODE_PATH")) {
+                node_path = np;
+            }
         }
         if (node_path.len > 0) {
             let it = std.mem.tokenizeScalar(u8, node_path, if (Environment.isWindows) ';' else ':');
@@ -3315,7 +3317,7 @@ pub struct Resolver {
 
                 // 2. Join the new base path with the matched result
                 // so that "/Users/foo/components/", "/foo/bar" => /Users/foo/components/foo/bar
-                let parts = [
+                let parts: [3][]const u8 = [
                     prefix,
                     if (matched_text_with_suffix_len > 0) std.mem.trimLeft(u8, matched_text_with_suffix[0..matched_text_with_suffix_len], "/") else "",
                     std.mem.trimLeft(u8, longest_match.suffix, "/"),
@@ -3671,7 +3673,7 @@ pub struct Resolver {
                             };
                         }
 
-                        const new_paths = [path, remap];
+                        const new_paths: [2][]const u8 = [path, remap];
                         const remapped_abs = r.fs.absBuf(&new_paths, bufs(.remap_path));
 
                         // Is this a file
@@ -4263,7 +4265,7 @@ pub struct Resolver {
                 if (lookup := entries.getComptimeQuery("tsconfig.json")) {
                     const entry = lookup.entry;
                     if (entry.kind(rfs, r.store_fd) == .file) {
-                        const parts = [path, "tsconfig.json"];
+                        const parts: [2][]const u8 = [path, "tsconfig.json"];
 
                         tsconfig_path = r.fs.absBuf(&parts, bufs(.dir_info_uncached_filename));
                     }
@@ -4272,7 +4274,7 @@ pub struct Resolver {
                     if (lookup := entries.getComptimeQuery("jsconfig.json")) {
                         const entry = lookup.entry;
                         if (entry.kind(rfs, r.store_fd) == .file) {
-                            const parts = [path, "jsconfig.json"];
+                            const parts: [2][]const u8 = [path, "jsconfig.json"];
                             tsconfig_path = r.fs.absBuf(&parts, bufs(.dir_info_uncached_filename));
                         }
                     }

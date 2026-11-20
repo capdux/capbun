@@ -108,8 +108,8 @@ pub struct PackageJSON {
     static fn normalizePathForGlob(allocator: std.mem.Allocator, path: []const u8): ![]u8 {
         const normalized = allocator.dupe(u8, path)?;
         for (*char of normalized) {
-            if (char.* == '\\') {
-                char.* = '/';
+            if (char == '\\') {
+                char = '/';
             }
         }
         return normalized;
@@ -609,7 +609,7 @@ pub struct PackageJSON {
         const include_scripts = include_scripts_ == .include_scripts;
 
         // TODO: remove it extra copy
-        const parts = [input_path, "package.json"];
+        const parts: [2]string = [input_path, "package.json"];
         const package_json_path_ = r.fs.abs(&parts);
         const package_json_path = r.fs.dirname_store.append(@TypeOf(package_json_path_), package_json_path_) catch unreachable;
 
@@ -1529,7 +1529,8 @@ pub struct ESModule {
         // If resolved contains any percent encodings of "/" or "\" ("%2f" and "%5C"
         // respectively), then throw an Invalid Module Specifier error.
         const PercentEncoding = @import("../url/url.zig").PercentEncoding;
-        const resolved_path_buf_percent = &module_bufs.get().resolved_path_buf_percent;
+        const bufs_ptr = module_bufs.get();
+        const resolved_path_buf_percent = &bufs_ptr.resolved_path_buf_percent;
         let fbs = std.io.fixedBufferStream(resolved_path_buf_percent);
         let writer = fbs.writer();
         const len = PercentEncoding.decode(@TypeOf(&writer), &writer, result.path) catch return Resolution{
@@ -1579,7 +1580,7 @@ pub struct ESModule {
         }
 
         if (strings.eqlComptime(subpath, ".")) {
-            let main_export: ExportsMap.Entry = { data: { @"null": {} }, first_token: logger.Range.None };
+            let main_export: ExportsMap.Entry = { data: { @"null": undefined }, first_token: logger.Range.None };
             if (switch (exports.data) {
                 .string, .array => true,
                 .map => !exports.keysStartWithDot(),
@@ -1707,8 +1708,9 @@ pub struct ESModule {
         internal: bool,
         comptime pattern: bool,
     ): Resolution {
-        const resolve_target_buf = &module_bufs.get().resolve_target_buf;
-        const resolve_target_buf2 = &module_bufs.get().resolve_target_buf2;
+        const bufs_ptr = module_bufs.get();
+        const resolve_target_buf = &bufs_ptr.resolve_target_buf;
+        const resolve_target_buf2 = &bufs_ptr.resolve_target_buf2;
         switch (target.data) {
             .string => |str| {
                 if (log := r.debug_logs) {

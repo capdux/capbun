@@ -936,11 +936,10 @@ pub fn hashForRuntimeTranspiler(self: JSXPragma, hasher: *std.hash.Wyhash) void 
     }
 
 pub fn importSource(self: JSXPragma) []const u8 {
-            return (switch (self.development) {
-true => self.import_source.development,
-false => self.import_source.production,
-else => unreachable,
-});
+            if (self.development) {
+                return self.import_source.development;
+            }
+            return self.import_source.production;
     }
 
 pub fn parsePackageName(str: []const u8) []const u8 {
@@ -1071,11 +1070,10 @@ pub const ResolveFileExtensions = struct {
     default: Group = .{},
 
 pub inline fn group(self: ResolveFileExtensions, is_node_modules: bool) *const Group {
-            return (switch (is_node_modules) {
-true => (&self.node_modules),
-false => (&self.default),
-else => unreachable,
-});
+            if (is_node_modules) {
+                return (&self.node_modules);
+            }
+            return (&self.default);
     }
 
 pub fn kind(self: ResolveFileExtensions, kind_: bun.ImportKind, is_node_modules: bool) []const []const u8 {
@@ -1918,7 +1916,7 @@ pub fn getLoaderAndVirtualSource(specifier_str: []const u8, jsc_vm: *jsc.Virtual
 
 pub fn definesFromTransformOptions(allocator: std.mem.Allocator, log: *logger.Log, maybe_input_define: ?api.StringMap, target: Target, env_loader: ?*DotEnv.Loader, framework_env: ?*const Env, NODE_ENV: ?[]const u8, drop: []const []const u8, omit_unused_global_calls: bool) !*defines.Define {
         const input_user_define = ((maybe_input_define) orelse (std.mem.zeroes(api.StringMap)));
-        var user_defines = stringHashMapFromArrays(defines.RawDefines, allocator, (input_user_define.keys.len + 4), input_user_define.keys, input_user_define.values);
+        var user_defines = try stringHashMapFromArrays(defines.RawDefines, allocator, (input_user_define.keys.len + 4), input_user_define.keys, input_user_define.values);
         _ = &user_defines;
         defer {
         _ = user_defines.deinit();

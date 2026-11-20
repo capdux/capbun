@@ -70,7 +70,7 @@ stmts: []Stmt = empty_stmts[0..0],
 kept_import_equals: bool = false,
 removed_import_equals: bool = false,
 
-pub fn scan(comptime P: type, p: *P, stmts: []Stmt, will_transform_to_common_js: bool, comptime hot_module_reloading_transformations: bool, hot_module_reloading_context: if (hot_module_reloading_transformations) *ConvertESMExportsForHmr else void) ImportScanner!void {
+pub fn scan(comptime P: type, p: *P, stmts: []Stmt, will_transform_to_common_js: bool, comptime hot_module_reloading_transformations: bool, hot_module_reloading_context: if (hot_module_reloading_transformations) *ConvertESMExportsForHmr else void) !ImportScanner {
         var scanner = ImportScanner{  };
         _ = &scanner;
         var stmts_end: usize = 0;
@@ -384,4 +384,4 @@ const ImportItemForNamespaceMap = js_parser.ImportItemForNamespaceMap;
 const Ref = js_parser.Ref;
 const TypeScript = js_parser.TypeScript;
 const options = js_parser.options;
-const empty_stmts: [0]Stmt = &.{};
+const empty_stmts: [0]Stmt = undefined;

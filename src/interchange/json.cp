@@ -173,7 +173,8 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
             defer {
                 if (opts.json_warn_duplicate_keys) {
                     duplicates_node.data = duplicates;
-                    HashMapPool.release(duplicates_node);
+                    const release_fn = HashMapPool.release;
+                    release_fn(duplicates_node);
                 }
             }
 

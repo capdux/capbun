@@ -1268,10 +1268,8 @@ pub struct JSXPragma {
     }
 
     fn importSource(): string {
-        return switch (_.development) {
-            true => _.import_source.development,
-            false => _.import_source.production,
-        };
+        if (_.development) return _.import_source.development;
+        return _.import_source.production;
     }
 
     static fn parsePackageName(str: string): string {
@@ -1437,7 +1435,7 @@ pub fn definesFromTransformOptions(
         input_user_define.keys.len + 4,
         input_user_define.keys,
         input_user_define.values,
-    );
+    )?;
     defer user_defines.deinit();
 
     let environment_defines = defines.UserDefinesArray.init(allocator);
@@ -1604,10 +1602,8 @@ pub struct ResolveFileExtensions {
     default: Group = {},
 
     inline fn group(is_node_modules: bool): *const Group {
-        return switch (is_node_modules) {
-            true => &_.node_modules,
-            false => &_.default,
-        };
+        if (is_node_modules) return &_.node_modules;
+        return &_.default;
     }
 
     fn kind(kind_: bun.ImportKind, is_node_modules: bool): []const string {

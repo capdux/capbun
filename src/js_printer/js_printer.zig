@@ -2085,7 +2085,8 @@ _ = p.printSpaceBeforeIdentifier();
 .e_spread => |e| {
 _ = p.addSourceMapping(expr.loc);
             _ = p.print("..");
-            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, ExprFlag.None);
+            const none_flags = ExprFlag.None;
+            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, none_flags);
 },
 .e_new_target => {
 _ = p.printSpaceBeforeIdentifier();
@@ -3647,7 +3648,7 @@ pub fn printStmt(p: *Printer, stmt: Stmt, tlmtlo: TopLevel) !void {
             const prev_stmt_tag = p.prev_stmt_tag;
             defer {
             {
-                p.prev_stmt_tag = std.req_meta.activeTag(stmt.data);
+                p.prev_stmt_tag = std.meta.activeTag(stmt.data);
             }
             }
             switch (stmt.data) {
@@ -5401,7 +5402,7 @@ pub fn stdWriterWrite(writer: *Self, bytes: []const u8) EmptyError!usize {
     }
 
 pub fn isCopyFileRangeSupported() bool {
-            return (comptime std.req_meta.hasFn(ContextType, "copyFileRange"));
+            return (comptime std.meta.hasFn(ContextType, "copyFileRange"));
     }
 
 pub fn copyFileRange(ctx: ContextType, in_file: FD, start: usize, end: usize) !void {
@@ -5475,13 +5476,13 @@ const written = (blk_catch_1: { break :blk_catch_1 ((writeAllFn((&writer.ctx), s
     }
 
 pub fn flush(writer: *Self) !void {
-            if (std.req_meta.hasFn(ContextType, "flush")) {
+            if (std.meta.hasFn(ContextType, "flush")) {
                 _ = try writer.ctx.flush();
             }
     }
 
 pub fn done(writer: *Self) !void {
-            if (std.req_meta.hasFn(ContextType, "done")) {
+            if (std.meta.hasFn(ContextType, "done")) {
                 _ = try writer.ctx.done();
             }
     }
@@ -5502,7 +5503,9 @@ pub fn getSourceMapBuilder(comptime generate_source_map: GenerateSourceMap, comp
 })) };
 }
 
-pub fn printAst(comptime Writer: type, _writer: Writer, tree: Ast, symbols: js_ast.Symbol.Map, source: *const logger.Source, comptime ascii_only: bool, opts: Options, comptime generate_source_map: bool) !usize {
+pub fn printAst(comptime Writer: type, _writer: Writer, tree: Ast, symbols_: js_ast.Symbol.Map, source: *const logger.Source, comptime ascii_only: bool, opts: Options, comptime generate_source_map: bool) !usize {
+        var symbols = symbols_;
+        _ = &symbols;
         var renamer: rename.Renamer = undefined;
         _ = &renamer;
         var no_op_renamer: rename.NoOpRenamer = undefined;

@@ -2279,7 +2279,7 @@ pub fn newSymbol(p: *P, kind: Symbol.Kind, identifier: []const u8) !Ref {
             if (is_typescript_enabled) {
                 _ = try p.ts_use_counts.append(p.allocator, 0);
             }
-            return Ref{ .inner_index = inner_index, .source_index = u31(p.source.index.get()), .tag = .symbol };
+            return Ref{ .inner_index = inner_index, .source_index = @intCast(p.source.index.get()), .tag = .symbol };
     }
 
 pub fn defaultNameForExpr(p: *P, expr: Expr, loc: logger.Loc) LocRef {
@@ -2644,7 +2644,7 @@ pub fn storeNameInRef(p: *P, name: []const u8) !Ref {
                 }
             }
             if (((@intFromPtr(p.source.contents.ptr) <= @intFromPtr(name.ptr)) and ((@intFromPtr(name.ptr) + name.len) <= (@intFromPtr(p.source.contents.ptr) + p.source.contents.len)))) {
-                return Ref.initSourceEnd(.{ .source_index = u31((@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr))), .inner_index = u31(name.len), .tag = .source_contents_slice });
+                return Ref.initSourceEnd(.{ .source_index = @intCast((@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr))), .inner_index = @intCast(name.len), .tag = .source_contents_slice });
             } else {
                 const inner_index: u31 = (if (comptime @typeInfo(@TypeOf(p.allocated_names.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(p.allocated_names.items.len)) else cp_cast_int(i32, p.allocated_names.items.len));
                 _ = try p.allocated_names.append(p.allocator, name);

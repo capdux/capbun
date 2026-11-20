@@ -427,10 +427,8 @@ else => {
 }
                     var item = items[@as(usize, @intCast(i))];
                     _ = &item;
-                    const tuple = p.convertExprToBindingAndInitializer((blk: {
-                    break :blk item;
-
-}), (&invalidLog), is_spread);
+                    const item_ptr: *Expr = item;
+                    const tuple = p.convertExprToBindingAndInitializer(item_ptr, (&invalidLog), is_spread);
                     _ = ((args.append(G.Arg{ .binding = ((tuple.binding) orelse (Binding{ .data = Prefill.Data.BMissing, .loc = item.loc })), .default = tuple.expr })) catch unreachable);
                 }
                 if ((((p.lexer.token == .t_equals_greater_than) or (((comptime is_typescript_enabled) and (invalidLog.items.len == 0)) and p.trySkipTypeScriptArrowReturnTypeWithBacktracking())) or opts.force_arrow_fn)) {
@@ -768,7 +766,7 @@ pub fn parsePropertyBinding(p: *P) anyerror!B.Property {
 _ = try p.lexer.next();
             const value = p.b(B.Identifier{ .@"ref" = ((p.storeNameInRef(p.lexer.identifier)) catch unreachable) }, p.lexer.loc());
             _ = try p.lexer.expect(.t_identifier);
-            return B.Property{ .key = p.newExpr(E.Missing, p.lexer.loc()), .flags = Flags.Property.init(.{ .is_spread = true }), .value = value };
+            return B.Property{ .key = p.newExpr(std.mem.zeroes(E.Missing), p.lexer.loc()), .flags = Flags.Property.init(.{ .is_spread = true }), .value = value };
 },
 .t_numeric_literal => {
 key = p.newExpr(E.Number{ .value = p.lexer.number }, p.lexer.loc());

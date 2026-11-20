@@ -55,15 +55,15 @@ pub @packed(u64) struct SourceContentPtr {
     }
 
     pub static fn fromProvider(p: *SourceProviderMap): SourceContentPtr {
-        return SourceContentPtr{ load_hint: .none, data: @intFromPtr(p) as u60, kind: .@"zig" };
+        return SourceContentPtr{ load_hint: .none, data: @intCast(@intFromPtr(p)), kind: .@"zig" };
     }
 
     pub static fn fromBakeProvider(p: *BakeSourceProvider): SourceContentPtr {
-        return SourceContentPtr{ load_hint: .none, data: @intFromPtr(p) as u60, kind: .bake };
+        return SourceContentPtr{ load_hint: .none, data: @intCast(@intFromPtr(p)), kind: .bake };
     }
 
     pub static fn fromDevServerProvider(p: *DevServerSourceProvider): SourceContentPtr {
-        return SourceContentPtr{ load_hint: .none, data: @intFromPtr(p) as u60, kind: .dev_server };
+        return SourceContentPtr{ load_hint: .none, data: @intCast(@intFromPtr(p)), kind: .dev_server };
     }
 
     pub fn provider(): AnySourceProvider? {

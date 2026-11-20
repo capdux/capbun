@@ -20,7 +20,7 @@ const TypeScript = js_parser.TypeScript;
 const options = js_parser.options;
 
 type string = []const u8;
-const empty_stmts: [0]Stmt = [];
+const empty_stmts: [0]Stmt = undefined;
 
 @root struct ImportScanner {
     stmts: []Stmt = empty_stmts[0..0],
@@ -34,7 +34,7 @@ const empty_stmts: [0]Stmt = [];
         will_transform_to_common_js: bool,
         comptime hot_module_reloading_transformations: bool,
         hot_module_reloading_context: if (hot_module_reloading_transformations) *ConvertESMExportsForHmr else void,
-    )!ImportScanner {
+    ): ImportScanner! {
         let scanner = ImportScanner{};
         let stmts_end: usize = 0;
         const allocator = p.allocator;

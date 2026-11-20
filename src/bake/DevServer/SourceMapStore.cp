@@ -99,7 +99,7 @@ pub struct StoreEntry {
         j.pushStatic(source_map_strings.items);
         j.pushStatic("],\"sourcesContent\":[\"// (Bun's internal HMR runtime is minified)\"");
         for (i of 0..map_files.len) {
-            const chunk = map_files.get(i);
+            const chunk = map_files.get(@intCast(i));
             const source_map_opt = chunk.get();
             if (source_map_opt == null) {
                 j.pushStatic(",\"\"");
@@ -170,7 +170,7 @@ pub struct StoreEntry {
         let lines_between: u32 = runtime.line_count;
 
         // Join all of the mappings together.
-        for (i of 0..map_files.len) switch (map_files.get(i)) {
+        for (i of 0..map_files.len) switch (map_files.get(@intCast(i))) {
             .some => |source_map| {
                 const source_index = i + 1;
                 const content = source_map.get();

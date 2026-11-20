@@ -7,7 +7,7 @@ pub fn SkipTypescript(
         const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
 
         static fn skipTypescriptReturnType(p: *P): anyerror!void {
-            p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), false, {})?;
+            p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), false, undefined)?;
         }
 
         static fn skipTypescriptReturnTypeWithMetadata(p: *P): anyerror!TypeScript.Metadata {
@@ -561,7 +561,7 @@ pub fn SkipTypescript(
                             if (p.lexer.token == .t_dot_dot_dot) {
                                 p.lexer.next()?;
                             }
-                            p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.allow_tuple_labels), false, {})?;
+                            p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.allow_tuple_labels), false, undefined)?;
                             if (p.lexer.token == .t_question) {
                                 p.lexer.next()?;
                             }
@@ -634,13 +634,13 @@ pub fn SkipTypescript(
                             if (final := left.finishUnion(p)) {
                                 // finish skipping the rest of the type without collecting type metadata.
                                 result.* = final;
-                                p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, {})?;
+                                p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, undefined)?;
                             } else {
                                 p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, get_metadata, result)?;
                                 result.mergeUnion(left);
                             }
                         } else {
-                            p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, {})?;
+                            p.skipTypeScriptTypeWithOpts(.bitwise_or, opts, false, undefined)?;
                         }
                     },
                     .t_ampersand => {
@@ -655,13 +655,13 @@ pub fn SkipTypescript(
                             if (final := left.finishIntersection(p)) {
                                 // finish skipping the rest of the type without collecting type metadata.
                                 result.* = final;
-                                p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, {})?;
+                                p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, undefined)?;
                             } else {
                                 p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, get_metadata, result)?;
                                 result.mergeIntersection(left);
                             }
                         } else {
-                            p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, {})?;
+                            p.skipTypeScriptTypeWithOpts(.bitwise_and, opts, false, undefined)?;
                         }
                     },
                     .t_exclamation => {
@@ -794,7 +794,7 @@ pub fn SkipTypescript(
                 if (p.lexer.token == .t_open_bracket) {
                     // Index signature or computed property
                     p.lexer.next()?;
-                    p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_index_signature), false, {})?;
+                    p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_index_signature), false, undefined)?;
 
                     // "{ [key: string]: number }"
                     // "{ readonly [K in keyof T]: T[K] }"
@@ -1142,21 +1142,22 @@ pub fn SkipTypescript(
                 defer p.lexer.is_log_disabled = old_log_disabled;
                 let backtrack = false;
                 const FnReturnType = bun.@"meta".ReturnOf(func);
-                if (comptime FnReturnType == anyerror!bool || FnReturnType == anyerror!void) {
+                const Payload = @typeInfo(FnReturnType).error_union.payload;
+                if (comptime Payload == bool || Payload == void) {
                     const ok = func(p) catch |e| brk: {
                         if (e == error.Backtrack || p.lexer.did_panic) {
                             backtrack = true;
                         }
-                        break :brk if (comptime FnReturnType == anyerror!bool) false else {};
+                        break :brk if (comptime Payload == bool) false else {};
                     };
                     * = ok;
                     if (backtrack) {
                         p.lexer.restore(&old_lexer);
-                        if (comptime FnReturnType == anyerror!bool) {
+                        if (comptime Payload == bool) {
                             return false;
                         }
                     }
-                    if (comptime FnReturnType == anyerror!bool) {
+                    if (comptime Payload == bool) {
                         return true;
                     }
                     return !backtrack;
@@ -1189,21 +1190,22 @@ pub fn SkipTypescript(
                 defer p.lexer.is_log_disabled = old_log_disabled;
                 let backtrack = false;
                 const FnReturnType = bun.@"meta".ReturnOf(func);
-                if (comptime FnReturnType == anyerror!bool || FnReturnType == anyerror!void) {
+                const Payload = @typeInfo(FnReturnType).error_union.payload;
+                if (comptime Payload == bool || Payload == void) {
                     const ok = @call(.auto, func, args) catch |e| brk: {
                         if (e == error.Backtrack) {
                             backtrack = true;
                         }
-                        break :brk if (comptime FnReturnType == anyerror!bool) false else {};
+                        break :brk if (comptime Payload == bool) false else {};
                     };
                     * = ok;
                     if (backtrack) {
                         p.lexer.restore(&old_lexer);
-                        if (comptime FnReturnType == anyerror!bool) {
+                        if (comptime Payload == bool) {
                             return false;
                         }
                     }
-                    if (comptime FnReturnType == anyerror!bool) {
+                    if (comptime Payload == bool) {
                         return true;
                     }
                     return backtrack;
@@ -1235,7 +1237,7 @@ pub fn SkipTypescript(
 
             static fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset): anyerror!bool {
                 p.lexer.expect(.t_extends)?;
-                p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, {})?;
+                p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, undefined)?;
 
                 if (!flags.contains(.disallow_conditional_types) && p.lexer.token == .t_question) {
                     return error.Backtrack;

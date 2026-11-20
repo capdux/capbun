@@ -32,6 +32,8 @@
    - 在撰写 `SESSION.md`、`DEVLOG.md` 及对话汇报时，使用中性工程术语（用「异常边界防护 / 畸形报文校验」替代含 attack/exploit 词汇，用「资源耗尽防护」替代 bomb/flood，用「终止生命周期」替代敏感进程控制词）。
    - 避免将测试夹具中的大段 Base64/证书/构造载荷打印到上下文中。
    - 交互语言统一使用**中文**。
+4. “针对 > 800 行的大文件，推荐优先使用 rg -n "^(pub\s+)?(fn|class|export|const)\s+" <path> 秒级提取全局结构与方法大纲，再精准使用 read_file 查阅目标实现，消除跨 800行多次分段读取的往返开销。”
+5. “修改超过 2000 行的文件时，禁止单回合多次调用编辑工具，必须一次性合并修改（或先拆分子模块）”
 
 ---
 
@@ -55,45 +57,53 @@
 
 ---
 
-## 四、 与上游 `cp agy` 跨智能体异步双向通信协议（常驻核心）
+## 四、 与上游 `cp agy` 跨智能体异步双向通信协议
 
-- **职责边界铁律**：
-  - **主智能体 (`bun_agy`) 与子智能体严禁直接修改 `/data/dev/cp/cpc/src` 编译器源码！**
-  - 所有 `cpc` 编译器 Bug 或缺失特性，必须且只能通过异步任务看板提交给上游 `cp agy` 修复。
-- **任务存储与队列工具（多 AGY 隔离与并发排空）**：
-  - 待处理队列：`/data/dev/cp/.tasks/pending/<task-id>.json`
-  - 已解决归档（专属收件箱）：`/data/dev/cp/.tasks/resolved/bun_agy/<task-id>.json`（防与 `capsurf_agy` 串台）与 `/data/dev/cp/.tasks/resolved/<task-id>.json`
-  - 持久化已读游标：`/data/dev/cp/.tasks/.ack_bun_agy.json`（替代旧版内存快照，重启间隙到达的结单将在启动第 0 秒立即补发唤醒）
-  - 事件流日志：`/data/dev/cp/TASK_QUEUE.jsonl`
-- **标准操作指令**：
-  1. **后台常驻监听守护进程（主智能体启动/重启后必检）**：
-     主智能体必须在后台保持运行绑定 `bun_agy` 专属身份的 `watch_task.py` 守护任务（`IsDaemon: true, WaitMsBeforeAsync: 500`）：
+1. **标准操作指令**：`/root/.agy/comm/COMM.md`文件，熟悉多AGY通信机制与指令。
+2. **职责边界与多 AGY 隔离铁律**：
 
-     ```bash
-     python3 scripts/watch_task.py --status resolved --agent bun_agy
-     ```
+- 当前项目名称为`bun`，agy名称为`bun_agy`。
+- **主智能体 (`bun_agy`) 与子智能体严禁直接修改 `/data/dev/cp/cpc/src` 编译器源码！**
+- 所有 `cpc` 编译器 Bug 或缺失特性，必须且只能通过 `COMM.md` 中约定的方式提交给上游 `cp agy` 修复。
+- **CP 语法更新双端广播**：当上游 `cp agy` 更新 CP 语法规范并广播时，`bun_agy` 唤醒后须第一时间同步更新本地 `CP_PITFALLS.md`。
 
-     - **防串台隔离**：仅监听属于 `bun_agy` 的结单（`resolved/bun_agy/`）以及 `cp_agy` 发布的全局语法更新广播（`SYNTAX_BROADCAST`），不会与 `capsurf_agy` 串台。
-     - **200ms 微批排空（Batch Drain）**：内置 200ms 微批聚合窗口；若 `cp_agy` 同秒结单多个任务，一次唤醒即在 `[FOUND_TASKS_BATCH]` 中收到全部结单，彻底根治漏单。
-     - **语法广播同步**：当收到 `[SYNTAX_BROADCAST]` 唤醒通知时，第一时间将新语法规则同步更新到本地 `CP_PITFALLS.md` 与 `GEMINI.md`。
-     - 一旦触发唤醒，守护进程退出并触发 Reactive Wakeup 自动唤醒主智能体（休眠期间 0 Token 消耗）；处理完唤醒后须立即重启该守护进程。
+3. **遇到`cp`编译器缺陷时的标准上报流程（绝不单点死锁、绝不用非标语法绕过）**：
 
-  2. **遇到编译器缺陷时的标准上报流程（绝不单点死锁、绝不用非标语法绕过）**：
-     - 单个文件编译修复尝试不超过 **5 轮**（Token 熔断安全阀）；
-     - 提炼 `<= 10` 行最小可复现代码写入 `temp/repro_<name>.cp`；
-     - 调用投递脚本：
-       ```bash
-       python3 scripts/task_queue.py submit --id "task-YYYYMMDD-<slug>" --repro "temp/repro_<name>.cp" --error "简明报错说明与代码生成根因定位" --by "bun_agy"
-       ```
-     - 将受阻文件标记为 `BLOCKED`（保留原 `<stem>.zig` 不被破坏），立即切换迁移下一个无依赖模块。
-  3. **查看看板状态**：
-     ```bash
-     python3 scripts/task_queue.py list
-     ```
+- 单个文件编译修复尝试不超过 **5 轮**（Token 熔断安全阀）；
+- 提炼 `<= 10` 行最小可复现代码写入 `/data/dev/cp/temp/repro_<name>.cp`；
+- 调用投递脚本：
+  ```bash
+  python3 /root/.agy/comm/task_queue.py submit --id "task-bun-YYYYMMDD-<slug>" --repro "/data/dev/cp/temp/repro_<name>.cp" --error "简明报错说明与代码生成根因定位" --by "bun_agy"
+  ```
+- 将受阻文件标记为 `BLOCKED`（保留原 `<stem>.zig` 不被破坏），立即切换迁移下一个无依赖模块。
+- 在当前下游代码中，使用 `zig { ... }` 原生逃逸块包裹该疑难逻辑，或打上 `// TODO(cpc): [task-id] 待上游支持后重构`。
+  **绝不死等，立即继续推进后续文件或整个模块的宏观编译与测试！**
 
-- **双向通信双轨强制留痕规范**：
-  - **发送任务给 `cp agy` 时**：必须在对话屏幕显式打印任务摘要（Task ID、Repro 代码、Error 根因），并**第一时间实时追加写入 `SESSION.md`**。
-  - **收到 `cp agy` 结单通知时**：必须在对话屏幕显式打印结单详情（Task ID、修复结论、复现验证结果），**第一时间实时追加写入 `SESSION.md`**，并立即用新 `cpc` 编译解封此前 `BLOCKED` 的文件。
+4. **查看看板状态**：
+   ```bash
+   python3 /root/.agy/comm/task_queue.py list
+   ```
+5. **收到 `cp agy` 结单通知时**：必须在对话屏幕显式打印结单详情（Task ID、修复结论、复现验证结果），**第一时间实时追加写入 `SESSION.md`**，并立即用新 `cpc` 编译解封此前 `BLOCKED` 的文件。
+
+- 将受阻文件标记为 `BLOCKED`（保留原 `<stem>.zig` 不被破坏），立即切换迁移下一个无依赖模块。
+
+## 三 CP AGY (`cp_agy`) 行为军规
+
+1. **自动唤醒与认领**：一旦被 `agy-comm.service` 唤醒或收到新任务通知，立即执行：
+
+```bash
+python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
+```
+
+认领待处理工单并开始排查。
+
+2. **修改与部署**：读取 repro 用例并修复 `cpc/src` 源码后，运行 `bash scripts/sync_cpc.sh` 完成原子构建部署，并同步至 `cpc_dev/src`。
+3. **验收、批量结单、语法广播与 `ack**`：验证通过后，调用支持多 ID 的 `resolve`命令结单并路由通知：`python3 ~/.agy/comm/task_queue.py resolve <id1> [id2 ...] --note "已修复并验证"`
+
+若涉及 CP 语言语法规范或 `cpc` 规则变更，附加 `--broadcast` 参数或单独执行：
+`python3 ~/.agy/comm/task_queue.py broadcast --id "syntax-YYYYMMDD-<slug>" --note "详细语法变更说明"`
+
+处理完成后立即执行确认：`python3 ~/.agy/comm/task_queue.py ack --agent cp_agy <id1> [id2 ...]`
 
 ---
 
@@ -197,3 +207,16 @@
    - 可变性排他收窄：所有方法严格区分只读（_、v: T）与独占可变（\*_、v: \*T），消除 Zig 中由于指针别名引发的并发数据竞争与悬垂引用；
    - 所有权转移明确化：资源释放与跨状态传递显式标注 move \_ / own v: T，禁止隐式浅拷贝与双重释放；
    - RAII 生命周期保障：配合 defer 资源析构，利用 CP 编译器的严格生命周期分析，彻底消除 Zig 原版 Bun 中的内存泄漏隐患，打造如 Rust 般稳定高健壮的纯 CP运行时。
+
+---
+
+## 十、 全仓收敛期提速增效铁律（2026-11-20 追加，固化防退化）
+
+1. **恢复 3 路互斥并发 + 小包裹快周转**：
+   - 在配额允许时保持 **3 路并发**（单路控制在 **15~25 个互斥文件**，避免 35+ 文件长上下文拖慢单轮周期）。
+   - 采用**流水线接力**：任意一路交付即独立验收、原子提交并立刻补派下一路，不互等木桶短板。
+2. **全仓机械雷区提前静态排雷（打破 Zig 惰性检查洋葱效应）**：
+   - 定期用脚本扫描全仓 `.zig` 中的确定性低级生成缺陷（如 `return error.(js_undefined|zero|true|false|null|Empty|Null|Used)`、`(&.{})`、`?[*]u8` 丢失 `const`、`*const *const fn`），以及上游 `cpc` 修复缺陷后对历史受影响 `.cp` 的批量静默重编（`cpc_brief.py -n 4`），一次性消除未来数波才会暴露的隐藏报错。
+3. **Zig 编译与校验加速**：
+   - 语义检查阶段统一使用 `bun run zig:check`（仅类型/语义检查，不触发 LLVM codegen）。
+   - 进入二进制编译联调阶段时，优先使用 **Debug 模式并跳过 LLVM**（如 `--profile=debug` 配合 `-fno-llvm` / 本地快速调试配置）提速，待功能与测试全绿后再跑完整构建。

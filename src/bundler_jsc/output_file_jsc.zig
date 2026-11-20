@@ -87,25 +87,26 @@ pub fn toJS(globalThis: *jsc.JSGlobalObject, path: []const u8, byte_size: usize)
 const Output = bun.Output;
 const jsc = bun.jsc;
 
-pub fn toJS(self: *OutputFile, owned_pathname: ?[]const u8, globalObject: *jsc.JSGlobalObject) bun.jsc.JSValue {
-        return (switch ((if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value)) {
+pub fn toJS(out: *OutputFile, owned_pathname: ?[]const u8, globalObject: *jsc.JSGlobalObject) bun.jsc.JSValue {
+        const val = (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value);
+        return (switch (val) {
 .move, .pending => @panic("Unexpected pending output file"),
 .noop => .js_undefined,
 .copy => |copy| brk: {
-        const file_blob = (blk_catch_3: { break :blk_catch_3 ((jsc.WebCore.Blob.Store.initFile((if (copy.fd.isValid()) jsc.Node.PathOrFileDescriptor{ .fd = copy.fd } else jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((globalObject.allocator().dupe(u8, copy.pathname)) catch unreachable)) } }), self.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })), globalObject.allocator())) catch |e| { _ = &e; break :blk_catch_3 Output.panic("error: Unable to create file blob: \"{s}\"", .{ @errorName(e) }); }); });
-        var build_output = bun.new(jsc.API.BuildArtifact, .{ .blob = jsc.WebCore.Blob.initWithStore(file_blob, globalObject), .hash = self.hash, .loader = self.input_loader, .output_kind = self.output_kind, .path = (blk_catch_4: { break :blk_catch_4 ((bun.default_allocator.dupe(u8, copy.pathname)) catch |__ce_4| { _ = &__ce_4; @panic("Failed to allocate path"); }); }) });
+        const file_blob = (blk_catch_3: { break :blk_catch_3 ((jsc.WebCore.Blob.Store.initFile((if (copy.fd.isValid()) jsc.Node.PathOrFileDescriptor{ .fd = copy.fd } else jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((globalObject.allocator().dupe(u8, copy.pathname)) catch unreachable)) } }), out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })), globalObject.allocator())) catch |e| { _ = &e; break :blk_catch_3 Output.panic("error: Unable to create file blob: \"{s}\"", .{ @errorName(e) }); }); });
+        var build_output = bun.new(jsc.API.BuildArtifact, .{ .blob = jsc.WebCore.Blob.initWithStore(file_blob, globalObject), .hash = out.hash, .loader = out.input_loader, .output_kind = out.output_kind, .path = (blk_catch_4: { break :blk_catch_4 ((bun.default_allocator.dupe(u8, copy.pathname)) catch |__ce_4| { _ = &__ce_4; @panic("Failed to allocate path"); }); }) });
         _ = &build_output;
-        (if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
+        (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
         break :brk build_output.toJS(globalObject);
 },
 .saved => brk: {
         var build_output = (blk_catch_5: { break :blk_catch_5 ((bun.default_allocator.create(jsc.API.BuildArtifact)) catch |__ce_5| { _ = &__ce_5; @panic("Unable to allocate Artifact"); }); });
         _ = &build_output;
-        const path_to_use = ((owned_pathname) orelse (self.src_path.text));
-        const file_blob = (blk_catch_7: { break :blk_catch_7 ((jsc.WebCore.Blob.Store.initFile(jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((owned_pathname) orelse (((bun.default_allocator.dupe(u8, self.src_path.text)) catch unreachable)))) } }, self.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })), globalObject.allocator())) catch |e| { _ = &e; break :blk_catch_7 Output.panic("error: Unable to create file blob: \"{s}\"", .{ @errorName(e) }); }); });
-        (if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
+        const path_to_use = ((owned_pathname) orelse (out.src_path.text));
+        const file_blob = (blk_catch_7: { break :blk_catch_7 ((jsc.WebCore.Blob.Store.initFile(jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((owned_pathname) orelse (((bun.default_allocator.dupe(u8, out.src_path.text)) catch unreachable)))) } }, out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })), globalObject.allocator())) catch |e| { _ = &e; break :blk_catch_7 Output.panic("error: Unable to create file blob: \"{s}\"", .{ @errorName(e) }); }); });
+        (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
         {
-            build_output.* = jsc.API.BuildArtifact{ .blob = jsc.WebCore.Blob.initWithStore(file_blob, globalObject), .hash = self.hash, .loader = self.input_loader, .output_kind = self.output_kind, .path = (blk_catch_8: { break :blk_catch_8 ((bun.default_allocator.dupe(u8, path_to_use)) catch |__ce_8| { _ = &__ce_8; @panic("Failed to allocate path"); }); }) };
+            build_output.* = jsc.API.BuildArtifact{ .blob = jsc.WebCore.Blob.initWithStore(file_blob, globalObject), .hash = out.hash, .loader = out.input_loader, .output_kind = out.output_kind, .path = (blk_catch_8: { break :blk_catch_8 ((bun.default_allocator.dupe(u8, path_to_use)) catch |__ce_8| { _ = &__ce_8; @panic("Failed to allocate path"); }); }) };
         }
         break :brk build_output.toJS(globalObject);
 },
@@ -113,47 +114,48 @@ pub fn toJS(self: *OutputFile, owned_pathname: ?[]const u8, globalObject: *jsc.J
         var blob = jsc.WebCore.Blob.init(@constCast(buffer.bytes), buffer.allocator, globalObject);
         _ = &blob;
         if ((blob.store != null)) {
-            blob.store.?.mime_type = self.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) }));
+            blob.store.?.mime_type = out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) }));
             blob.content_type = (if (@typeInfo(@TypeOf(blob.store.?.mime_type)) == .@"enum") @intFromEnum(blob.store.?.mime_type) else blob.store.?.mime_type.value);
         } else {
-            blob.content_type = (if (@typeInfo(@TypeOf(self.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })))) == .@"enum") @intFromEnum(self.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) }))) else self.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })).value);
+            blob.content_type = (if (@typeInfo(@TypeOf(out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })))) == .@"enum") @intFromEnum(out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) }))) else out.loader.toMimeType((&.{ ((owned_pathname) orelse ("")) })).value);
         }
         blob.size = (if (comptime @typeInfo(jsc.WebCore.Blob.SizeType) == .@"enum") @as(jsc.WebCore.Blob.SizeType, @enumFromInt(buffer.bytes.len)) else @as(jsc.WebCore.Blob.SizeType, buffer.bytes.len));
         var build_output = (blk_catch_9: { break :blk_catch_9 ((bun.default_allocator.create(jsc.API.BuildArtifact)) catch |__ce_9| { _ = &__ce_9; @panic("Unable to allocate Artifact"); }); });
         _ = &build_output;
         {
-            build_output.* = jsc.API.BuildArtifact{ .blob = blob, .hash = self.hash, .loader = self.input_loader, .output_kind = self.output_kind, .path = ((owned_pathname) orelse (((bun.default_allocator.dupe(u8, self.src_path.text)) catch unreachable))) };
+            build_output.* = jsc.API.BuildArtifact{ .blob = blob, .hash = out.hash, .loader = out.input_loader, .output_kind = out.output_kind, .path = ((owned_pathname) orelse (((bun.default_allocator.dupe(u8, out.src_path.text)) catch unreachable))) };
         }
-        (if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
+        (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
         break :brk build_output.toJS(globalObject);
 },
 });
 }
 
-pub fn toBlob(self: *OutputFile, allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject) !jsc.WebCore.Blob {
-        return (switch ((if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value)) {
+pub fn toBlob(out: *OutputFile, allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject) !jsc.WebCore.Blob {
+        const val = (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value);
+        return (switch (val) {
 .move, .pending => @panic("Unexpected pending output file"),
 .noop => @panic("Cannot convert noop output file to blob"),
 .copy => |copy| brk: {
-        const file_blob = try jsc.WebCore.Blob.Store.initFile((if (copy.fd.isValid()) jsc.Node.PathOrFileDescriptor{ .fd = copy.fd } else jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((allocator.dupe(u8, copy.pathname)) catch unreachable)) } }), self.loader.toMimeType((&.{ self.dest_path, self.src_path.text })), allocator);
-        (if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
+        const file_blob = try jsc.WebCore.Blob.Store.initFile((if (copy.fd.isValid()) jsc.Node.PathOrFileDescriptor{ .fd = copy.fd } else jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((allocator.dupe(u8, copy.pathname)) catch unreachable)) } }), out.loader.toMimeType((&.{ out.dest_path, out.src_path.text })), allocator);
+        (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
         break :brk jsc.WebCore.Blob.initWithStore(file_blob, globalThis);
 },
 .saved => brk: {
-        const file_blob = try jsc.WebCore.Blob.Store.initFile(jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((allocator.dupe(u8, self.src_path.text)) catch unreachable)) } }, self.loader.toMimeType((&.{ self.dest_path, self.src_path.text })), allocator);
-        (if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
+        const file_blob = try jsc.WebCore.Blob.Store.initFile(jsc.Node.PathOrFileDescriptor{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(((allocator.dupe(u8, out.src_path.text)) catch unreachable)) } }, out.loader.toMimeType((&.{ out.dest_path, out.src_path.text })), allocator);
+        (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
         break :brk jsc.WebCore.Blob.initWithStore(file_blob, globalThis);
 },
 .buffer => |buffer| brk: {
         var blob = jsc.WebCore.Blob.init(@constCast(buffer.bytes), buffer.allocator, globalThis);
         _ = &blob;
         if ((blob.store != null)) {
-            blob.store.?.mime_type = self.loader.toMimeType((&.{ self.dest_path, self.src_path.text }));
+            blob.store.?.mime_type = out.loader.toMimeType((&.{ out.dest_path, out.src_path.text }));
             blob.content_type = (if (@typeInfo(@TypeOf(blob.store.?.mime_type)) == .@"enum") @intFromEnum(blob.store.?.mime_type) else blob.store.?.mime_type.value);
         } else {
-            blob.content_type = (if (@typeInfo(@TypeOf(self.loader.toMimeType((&.{ self.dest_path, self.src_path.text })))) == .@"enum") @intFromEnum(self.loader.toMimeType((&.{ self.dest_path, self.src_path.text }))) else self.loader.toMimeType((&.{ self.dest_path, self.src_path.text })).value);
+            blob.content_type = (if (@typeInfo(@TypeOf(out.loader.toMimeType((&.{ out.dest_path, out.src_path.text })))) == .@"enum") @intFromEnum(out.loader.toMimeType((&.{ out.dest_path, out.src_path.text }))) else out.loader.toMimeType((&.{ out.dest_path, out.src_path.text })).value);
         }
-        (if (@typeInfo(@TypeOf(self)) == .@"enum") @intFromEnum(self) else self.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
+        (if (@typeInfo(@TypeOf(out)) == .@"enum") @intFromEnum(out) else out.value) = .{ .buffer = .{ .allocator = bun.default_allocator, .bytes = &.{} } };
         blob.size = (if (comptime @typeInfo(jsc.WebCore.Blob.SizeType) == .@"enum") @as(jsc.WebCore.Blob.SizeType, @enumFromInt(buffer.bytes.len)) else @as(jsc.WebCore.Blob.SizeType, buffer.bytes.len));
         break :brk blob;
 },

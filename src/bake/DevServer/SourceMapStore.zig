@@ -187,7 +187,7 @@ pub fn renderJSON(map: *const StoreEntry, dev: *DevServer, arena_alloc: Allocato
                 _ = &i;
                 const __end_1 = map_files.len;
                 while (i < __end_1) : (i += 1) {
-                    const chunk = map_files.get(i);
+                    const chunk = map_files.get(@intCast(i));
                     const source_map_opt = chunk.get();
                     if ((source_map_opt == null)) {
                         _ = j.pushStatic(",\"\"");
@@ -247,7 +247,7 @@ pub fn joinVLQ(map: *const StoreEntry, kind: ChunkKind, j: *StringJoiner, arena_
                 _ = &i;
                 const __end_2 = map_files.len;
                 while (i < __end_2) : (i += 1) {
-                    switch (map_files.get(i)) {
+                    switch (map_files.get(@intCast(i))) {
 .some => |source_map| {
 const source_index = (i + 1);
                     const content = source_map.get();

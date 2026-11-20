@@ -1525,8 +1525,7 @@ pub fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response
 pub inline fn redirectHandler(comptime path: []const u8, comptime is_ssl: bool) *const fn (*DevServer, *Request, *uws.NewApp(is_ssl).Response) void {
         return struct {
 
-pub fn handle(self: *@This(), _: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) void {
-        _ = self;
+pub fn handle(_: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) void {
             _ = resp.writeStatus("302 Found");
             _ = resp.writeHeader("Location", path);
             _ = resp.end("Redirecting...", false);

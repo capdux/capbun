@@ -130,9 +130,9 @@ pub fn init(num: anytype) Index {
                 return init(num.*);
             }
             if (comptime bun.Environment.allow_assert) {
-                return .{ .value = (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((if (comptime @typeInfo(@TypeOf(num)) == .@"enum") cp_cast_int(i32, @intFromEnum(num)) else cp_cast_int(i32, num)))) else @as(Int, (if (comptime @typeInfo(@TypeOf(num)) == .@"enum") cp_cast_int(i32, @intFromEnum(num)) else cp_cast_int(i32, num)))) };
+                return .{ .value = @as(Int, @intCast(num)) };
             }
-            return .{ .value = (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((if (comptime @typeInfo(@TypeOf(num)) == .@"enum") cp_cast_int(i32, @intFromEnum(num)) else cp_cast_int(i32, num)))) else @as(Int, (if (comptime @typeInfo(@TypeOf(num)) == .@"enum") cp_cast_int(i32, @intFromEnum(num)) else cp_cast_int(i32, num)))) };
+            return .{ .value = @as(Int, @intCast(num)) };
     }
 
 pub inline fn isValid(self: Index) bool {

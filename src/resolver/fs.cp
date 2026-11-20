@@ -373,7 +373,7 @@ pub struct Path {
     fn dupeAlloc(allocator: std.mem.Allocator): !Fs.Path {
         if (_.text.ptr == _.pretty.ptr && _.text.len == _.pretty.len) {
             if (FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.DirnameStore.instance.exists(_.text)) {
-                return _.*;
+                return _;
             }
 
             let new_path = Fs.Path.init(FileSystem.FilenameStore.instance.append(string, _.text)?);
@@ -383,7 +383,7 @@ pub struct Path {
             return new_path;
         } else if (_.pretty.len == 0) {
             if (FileSystem.FilenameStore.instance.exists(_.text) || FileSystem.DirnameStore.instance.exists(_.text)) {
-                return _.*;
+                return _;
             }
 
             let new_path = Fs.Path.init(FileSystem.FilenameStore.instance.append(string, _.text)?);
@@ -696,23 +696,24 @@ pub struct Path {
             const query_hashed = comptime std.hash_map.hashString(&query_var);
             const query = query_var[0..query_str.len].*;
 
+            const Ctx = struct {
+                fn hash(_key: []const u8): @TypeOf(query_hashed) {
+                    const _self = _;
+                    * = _self;
+                    * = _key;
+                    return query_hashed;
+                }
+
+                fn eql(_key: []const u8, b: []const u8): bool {
+                    const _self = _;
+                    * = _self;
+                    * = _key;
+                    return strings.eqlComptime(b, query);
+                }
+            };
             const result = entry.data.getAdapted(
                 @as([]const u8, &query),
-                struct {
-                    fn hash(_key: []const u8): @TypeOf(query_hashed) {
-                        const _self = _;
-                        * = _self;
-                        * = _key;
-                        return query_hashed;
-                    }
-
-                    fn eql(_key: []const u8, b: []const u8): bool {
-                        const _self = _;
-                        * = _self;
-                        * = _key;
-                        return strings.eqlComptime(b, query);
-                    }
-                }{},
+                Ctx{},
             ) ?? return null;
 
             const basename = result.base();
@@ -737,23 +738,24 @@ pub struct Path {
 
             const query_hashed = comptime std.hash_map.hashString(&query);
 
+            const Ctx = struct {
+                fn hash(_key: []const u8): @TypeOf(query_hashed) {
+                    const _self = _;
+                    * = _self;
+                    * = _key;
+                    return query_hashed;
+                }
+
+                fn eql(_key: []const u8, b: []const u8): bool {
+                    const _self = _;
+                    * = _self;
+                    * = _key;
+                    return strings.eqlComptime(b, &query);
+                }
+            };
             return entry.data.containsAdapted(
                 @as([]const u8, &query),
-                struct {
-                    fn hash(_key: []const u8): @TypeOf(query_hashed) {
-                        const _self = _;
-                        * = _self;
-                        * = _key;
-                        return query_hashed;
-                    }
-
-                    fn eql(_key: []const u8, b: []const u8): bool {
-                        const _self = _;
-                        * = _self;
-                        * = _key;
-                        return strings.eqlComptime(b, &query);
-                    }
-                }{},
+                Ctx{},
             );
         }
     }
@@ -1022,7 +1024,7 @@ pub struct RealFS {
                         handle.stdDir(),
 
                         void,
-                        void{},
+                        undefined,
                     ) catch |e| {
                         existing.entries.data.clearAndFree(bun.default_allocator);
                         return _.readDirectoryError(existing.entries.dir, e) catch unreachable;
@@ -1282,10 +1284,10 @@ pub struct RealFS {
                 dir.fd = .fromStdDir(handle);
             }
 
-            while (*_entry := iter.next().unwrap()?) {
+            while (_entry := iter.next().unwrap()?) {
                 debug("readdir entry {s}", .{_entry.name.slice()});
 
-                dir.addEntry(prev_map, _entry, allocator, Iterator, iterator)?;
+                dir.addEntry(prev_map, &_entry, allocator, Iterator, iterator)?;
             }
 
             debug("readdir({f}, {s}) = {d}", .{ printHandle(handle.fd), _dir, dir.data.count() });

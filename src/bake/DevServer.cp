@@ -1047,7 +1047,7 @@ inline fn redirectHandler(comptime path: []const u8, comptime is_ssl: bool): fn 
     resp: *uws.NewApp(is_ssl).Response,
 ): void {
     return struct {
-        fn handle(_: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) {
+        static fn handle(_: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) {
             resp.writeStatus("302 Found");
             resp.writeHeader("Location", path);
             resp.end("Redirecting...", false);

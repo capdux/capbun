@@ -1754,7 +1754,10 @@ else => r.opts.conditions.@"import",
             _ = &node_path;
             if (r.env_loader) |env_loader| {
                 _ = &env_loader;
-                if (node_path == null) { node_path = ""; }
+                if (env_loader.get("NODE_PATH")) |np| {
+                    _ = &np;
+                    node_path = np;
+                }
             }
             if ((node_path.len > 0)) {
                 var it = std.mem.tokenizeScalar(u8, node_path, (if (Environment.isWindows) 59 else 58));
@@ -2635,7 +2638,7 @@ pub fn matchTSConfigPaths(r: *ThisResolver, tsconfig: *const TSConfigJSON, path:
                         continue;
                     }
                     const prefix = prefix_opt.?;
-                    var parts: [][]const u8 = .{ prefix, (if ((matched_text_with_suffix_len > 0)) std.mem.trimLeft(u8, matched_text_with_suffix[0..matched_text_with_suffix_len], "/") else ""), std.mem.trimLeft(u8, longest_match.suffix, "/") };
+                    var parts: [3][]const u8 = .{ prefix, (if ((matched_text_with_suffix_len > 0)) std.mem.trimLeft(u8, matched_text_with_suffix[0..matched_text_with_suffix_len], "/") else ""), std.mem.trimLeft(u8, longest_match.suffix, "/") };
                     _ = &parts;
                     const absolute_original_path_opt = r.fs.absBufChecked((&parts), bufs(.tsconfig_match_full_buf));
                     if ((absolute_original_path_opt == null)) {
@@ -2892,7 +2895,7 @@ pub fn loadAsIndexWithBrowserRemapping(r: *ThisResolver, dir_info: *DirInfo, pat
                                 _path.is_disabled = true;
                                 return MatchResult{ .path_pair = PathPair{ .primary = _path }, .package_json = browser_json };
                             }
-                            const new_paths: [][]const u8 = .{ path, remap };
+                            const new_paths: [2][]const u8 = .{ path, remap };
                             const remapped_abs = r.fs.absBuf((&new_paths), bufs(.remap_path));
                             if (r.loadAsFile(remapped_abs, extension_order)) |file_result| {
                                 _ = &file_result;
@@ -3342,7 +3345,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                         _ = &lookup;
                         const entry = lookup.entry;
                         if ((entry.kind(rfs, r.store_fd) == .file)) {
-                            const parts: [][]const u8 = .{ path, "tsconfig.json" };
+                            const parts: [2][]const u8 = .{ path, "tsconfig.json" };
                             tsconfig_path = r.fs.absBuf((&parts), bufs(.dir_info_uncached_filename));
                         }
                     }
@@ -3351,7 +3354,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                             _ = &lookup;
                             const entry = lookup.entry;
                             if ((entry.kind(rfs, r.store_fd) == .file)) {
-                                const parts: [][]const u8 = .{ path, "jsconfig.json" };
+                                const parts: [2][]const u8 = .{ path, "jsconfig.json" };
                                 tsconfig_path = r.fs.absBuf((&parts), bufs(.dir_info_uncached_filename));
                             }
                         }

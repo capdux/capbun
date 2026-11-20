@@ -548,7 +548,7 @@ pub inline fn isPrettyPathPosix(path: *const Path) bool {
 pub fn dupeAlloc(self: Path, allocator: std.mem.Allocator) !Fs.Path {
             if (((self.text.ptr == self.pretty.ptr) and (self.text.len == self.pretty.len))) {
                 if ((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text))) {
-                    return self.*;
+                    return self;
                 }
                 var new_path = Fs.Path.init(try FileSystem.FilenameStore.instance.append(string, self.text));
                 _ = &new_path;
@@ -559,7 +559,7 @@ pub fn dupeAlloc(self: Path, allocator: std.mem.Allocator) !Fs.Path {
             } else {
                 if ((self.pretty.len == 0)) {
                     if ((FileSystem.FilenameStore.instance.exists(self.text) or FileSystem.DirnameStore.instance.exists(self.text))) {
-                        return self.*;
+                        return self;
                     }
                     var new_path = Fs.Path.init(try FileSystem.FilenameStore.instance.append(string, self.text));
                     _ = &new_path;
@@ -803,7 +803,7 @@ pub fn getComptimeQuery(entry: *const DirEntry, comptime query_str: anytype) ?En
             const query_var = (comptime comptimeToLower(query_str));
             const query_hashed = (comptime std.hash_map.hashString((&query_var)));
             const query = (query_var[0..query_str.len]).*;
-            const result = ((entry.data.getAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), struct {
+            const Ctx = struct {
 
 pub fn hash(self: @This(), _key: []const u8) @TypeOf(query_hashed) {
             const _self = self;
@@ -818,7 +818,8 @@ pub fn eql(self: @This(), _key: []const u8, b: []const u8) bool {
             _ = &_key;
             return strings.eqlComptime(b, query);
     }
-}, .{})) orelse { return null; });
+};
+            const result = ((entry.data.getAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), Ctx{  })) orelse { return null; });
             const basename = result.base();
             if ((!strings.eqlComptime(basename, (comptime query[0..query_str.len])))) {
                 return Entry.Lookup{ .entry = result, .diff_case = Entry.Lookup.DifferentCase{ .dir = entry.dir, .query = (&query), .actual = basename } };
@@ -830,7 +831,7 @@ pub fn hasComptimeQuery(entry: *const DirEntry, comptime query_str: anytype) boo
             const query_var = (comptime comptimeToLower(query_str));
             const query = (query_var[0..query_str.len]).*;
             const query_hashed = (comptime std.hash_map.hashString((&query)));
-            return entry.data.containsAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), struct {
+            const Ctx = struct {
 
 pub fn hash(self: @This(), _key: []const u8) @TypeOf(query_hashed) {
             const _self = self;
@@ -845,7 +846,8 @@ pub fn eql(self: @This(), _key: []const u8, b: []const u8) bool {
             _ = &_key;
             return strings.eqlComptime(b, (&query));
     }
-}, .{});
+};
+            return entry.data.containsAdapted(@as([]const u8, @ptrCast(@alignCast(&(query)))), Ctx{  });
     }
     pub const EntryMap = bun.StringHashMapUnmanaged(*Entry);
     pub const EntryStore = allocators.BSSList(Entry, Preallocate.Counts.files);
@@ -1078,7 +1080,7 @@ pub fn entriesAt(self: *RealFS, index: allocators.IndexType, generation: bun.Gen
                     defer {
                     _ = handle.close();
                     }
-                    const new_entry = (blk_catch_8: { break :blk_catch_8 ((RealFS.readdir(self, false, (&existing.entries.data), existing.entries.dir, generation, handle.stdDir(), void, void, .{})) catch |e| { _ = &e; _ = existing.entries.data.clearAndFree(bun.default_allocator);
+                    const new_entry = (blk_catch_8: { break :blk_catch_8 ((RealFS.readdir(self, false, (&existing.entries.data), existing.entries.dir, generation, handle.stdDir(), void, undefined)) catch |e| { _ = &e; _ = existing.entries.data.clearAndFree(bun.default_allocator);
                     return ((self.readDirectoryError(existing.entries.dir, e)) catch unreachable); }); });
                     _ = existing.entries.data.clearAndFree(bun.default_allocator);
                     existing.entries.* = new_entry;
@@ -1174,9 +1176,9 @@ pub fn readdir(fs: *RealFS, store_fd: bool, prev_map: ?*DirEntry.EntryMap, _dir:
                 _ = FileSystem.setMaxFd(handle.fd);
                 dir.fd = .fromStdDir(handle);
             }
-            while (try iter.next().unwrap()) |*_entry| {
-                _ = debug("readdir entry {s}", .{ (if (@typeInfo(@TypeOf((_entry.*))) == .@"enum" or @typeInfo(@TypeOf((_entry.*))) == .@"union") @tagName((_entry.*)) else (_entry.*).name).slice() });
-                _ = try dir.addEntry(prev_map, (_entry.*), allocator, Iterator, iterator);
+            while (try iter.next().unwrap()) |_entry| {
+                _ = debug("readdir entry {s}", .{ (if (@typeInfo(@TypeOf(_entry)) == .@"enum" or @typeInfo(@TypeOf(_entry)) == .@"union") @tagName(_entry) else _entry.name).slice() });
+                _ = try dir.addEntry(prev_map, (&_entry), allocator, Iterator, iterator);
             }
             _ = debug("readdir({f}, {s}) = {d}", .{ printHandle(handle.fd), _dir, dir.data.count() });
             return dir;

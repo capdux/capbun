@@ -2114,7 +2114,8 @@ fn NewPrinter(
                 .e_spread e => {
                     p.addSourceMapping(expr.loc);
                     p.print("..");
-                    p.printExpr(e.value, .comma, ExprFlag.None());
+                    const none_flags = ExprFlag.None();
+                    p.printExpr(e.value, .comma, none_flags);
                 },
                 .e_new_target => {
                     p.printSpaceBeforeIdentifier();
@@ -3866,7 +3867,7 @@ fn NewPrinter(
             const prev_stmt_tag = p.prev_stmt_tag;
 
             defer {
-                p.prev_stmt_tag = std.req_meta.activeTag(stmt.data);
+                p.prev_stmt_tag = std.meta.activeTag(stmt.data);
             }
 
             switch (stmt.data) {
@@ -5719,7 +5720,7 @@ pub fn NewWriter(
         }
 
         static fn isCopyFileRangeSupported(): bool {
-            return comptime std.req_meta.hasFn(ContextType, "copyFileRange");
+            return comptime std.meta.hasFn(ContextType, "copyFileRange");
         }
 
         static fn copyFileRange(ctx: ContextType, in_file: FD, start: usize, end: usize)! {
@@ -5803,12 +5804,12 @@ pub fn NewWriter(
         }
 
         static fn flush(writer: *Self)! {
-            if (std.req_meta.hasFn(ContextType, "flush")) {
+            if (std.meta.hasFn(ContextType, "flush")) {
                 writer.ctx.flush()?;
             }
         }
         static fn done(writer: *Self)! {
-            if (std.req_meta.hasFn(ContextType, "done")) {
+            if (std.meta.hasFn(ContextType, "done")) {
                 writer.ctx.done()?;
             }
         }
@@ -6012,12 +6013,13 @@ pub fn printAst(
     comptime Writer: type,
     _writer: Writer,
     tree: Ast,
-    symbols: js_ast.Symbol.Map,
+    symbols_: js_ast.Symbol.Map,
     source: *const logger.Source,
     comptime ascii_only: bool,
     opts: Options,
     comptime generate_source_map: bool,
 ): usize! {
+    let symbols = symbols_;
     let renamer: rename.Renamer = undefined;
     let no_op_renamer: rename.NoOpRenamer = undefined;
     let module_scope = tree.module_scope;
