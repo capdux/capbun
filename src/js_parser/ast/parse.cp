@@ -423,8 +423,7 @@ pub fn Parse(
                     }
 
                     let item = items[i];
-                    const item_ptr: *Expr = unsafe { &item };
-                    const tuple = p.convertExprToBindingAndInitializer(item_ptr, &invalidLog, is_spread);
+                    const tuple = p.convertExprToBindingAndInitializer(unsafe { &item }, &invalidLog, is_spread);
                     // double allocations
                     args.append(G.Arg{
                         binding: tuple.binding ?? Binding{ data: Prefill.Data.BMissing, loc: item.loc },
@@ -1087,7 +1086,8 @@ pub fn Parse(
                                 }
                             }
                         } else if (p.lexer.token == .t_string_literal) {
-                            const string_literal_text = (p.lexer.toUTF8EString()?).slice8();
+                            const string_literal_es = p.lexer.toUTF8EString()?;
+                            const string_literal_text = string_literal_es.slice8();
                             inline for (t of comptime std.enums.values(SupportedAttribute)) {
                                 if (strings.eqlComptime(string_literal_text, @tagName(t))) {
                                     break :brk t;
@@ -1104,7 +1104,8 @@ pub fn Parse(
                     p.lexer.expect(.t_colon)?;
 
                     p.lexer.expect(.t_string_literal)?;
-                    const string_literal_text = (p.lexer.toUTF8EString()?).slice8();
+                    const string_literal_es = p.lexer.toUTF8EString()?;
+                    const string_literal_text = string_literal_es.slice8();
                     if (attr := supported_attribute) {
                         switch (attr) {
                             .@"type" => {

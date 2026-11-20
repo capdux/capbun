@@ -286,9 +286,11 @@ pub fn ParseProperty(
                                             if (opts.is_class && is_typescript_enabled && !opts.is_ts_abstract && strings.eqlComptime(raw, "abstract")) {
                                                 opts.is_ts_abstract = true;
                                                 const scope_index = p.scopes_in_order.items.len;
-                                                if (*prop := p.parseProperty(kind, opts, null)?) {
+                                                const prop_opt = p.parseProperty(kind, opts, null)?;
+                                                if (prop_opt != null) {
+                                                    const prop = prop_opt.?;
                                                     if (prop.kind == .normal && prop.value == null && opts.ts_decorators.len > 0) {
-                                                        let prop_ = prop.*;
+                                                        let prop_ = prop;
                                                         prop_.kind = .abstract;
                                                         return prop_;
                                                     }

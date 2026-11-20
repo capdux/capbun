@@ -88,7 +88,7 @@ source: Logger.Source,
 pub fn taskCallback(self: *ServerComponentParseTask, log: *Logger.Log, allocator: std.mem.Allocator) bun.OOM!ParseTask.Result.Success {
         var ab = try AstBuilder.init(allocator, (&self.source), self.ctx.transpiler.options.hot_module_reloading);
         _ = &ab;
-        switch (self.data.*) {
+        switch (self.data) {
 .client_reference_proxy => |data| {
 _ = try self.generateClientReferenceProxy(data, (&ab));
 },

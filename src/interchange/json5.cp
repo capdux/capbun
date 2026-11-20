@@ -447,8 +447,8 @@ const Codepoint = struct {
         }
 
         try this.scan(); // advance past '}'
-        return Expr.init(E.Object, .{
-            .properties = .moveFromList(&properties),
+        return Expr.init(E.Object, E.Object{
+            properties: bun.BabyList(G.Property).moveFromList(&properties),
         }, loc);
     }
 
@@ -496,8 +496,8 @@ const Codepoint = struct {
         }
 
         try this.scan(); // advance past ']'
-        return Expr.init(E.Array, .{
-            .items = .moveFromList(&items),
+        return Expr.init(E.Array, E.Array{
+            items: bun.BabyList(Expr).moveFromList(&items),
         }, loc);
     }
 

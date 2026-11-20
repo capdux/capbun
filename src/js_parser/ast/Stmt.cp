@@ -334,6 +334,9 @@ pub fn StoredData(tag: Tag): type {
     }
 
     static fn alloc(comptime StatementData: type, origData: StatementData, loc: logger.Loc): Stmt {
+        if (@typeInfo(StatementData) == .@"type") {
+            return Stmt.alloc(origData, std.mem.zeroes(origData), loc);
+        }
         Stmt.Data.Store.assert();
 
         icount += 1;

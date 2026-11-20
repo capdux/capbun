@@ -977,7 +977,7 @@ pub fn enqueueServerComponentGeneratedFile(self: *BundleV2, data: ServerComponen
             _ = &new_source;
             const source_index = self.graph.input_files.len;
             new_source.index = Index.init(source_index);
-            _ = self.graph.input_files.append(self.allocator(), .{ .source = new_source, .loader = .js, .side_effects = .has_side_effects });
+            _ = try self.graph.input_files.append(self.allocator(), .{ .source = new_source, .loader = .js, .side_effects = .has_side_effects });
             _ = try self.graph.ast.append(self.allocator(), JSAst.empty);
             const task = bun.new(ServerComponentParseTask, .{ .data = data, .ctx = self, .source = new_source });
             _ = self.incrementScanCounter();
@@ -2280,8 +2280,8 @@ inline .empty, .err => |data| data.source_index.get(),
             _ = &diff;
             defer {
             {
-                _ = logScanCounter("in parse task .pending_items += {d} = {d}\n", .{ diff, ((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) + diff) });
-                graph.pending_items = (if (comptime @typeInfo(@TypeOf(((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) + diff))) == .@"enum") cp_cast_int(i32, @intFromEnum(((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) + diff))) else cp_cast_int(i32, ((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(graph.pending_items)) == .@"enum") cp_cast_int(i32, @intFromEnum(graph.pending_items)) else cp_cast_int(i32, graph.pending_items)))) + diff)));
+                _ = logScanCounter("in parse task .pending_items += {d} = {d}\n", .{ diff, (@as(i32, @intCast(graph.pending_items)) + diff) });
+                graph.pending_items = @intCast((@as(i32, @intCast(graph.pending_items)) + diff));
                 if ((diff < 0)) {
                     _ = bundle.onAfterDecrementScanCounter();
                 }

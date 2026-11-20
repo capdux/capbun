@@ -740,12 +740,12 @@ pub fn SkipTypescript(
 
                         // The type following "extends" is not permitted to be another conditional type
                         let extends_type = TypeScript.Metadata.default;
-                        try p.skipTypeScriptTypeWithOpts(
+                        p.skipTypeScriptTypeWithOpts(
                             .lowest,
                             TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types),
                             get_metadata,
-                            if (get_metadata) &extends_type,
-                        );
+                            if (get_metadata) &extends_type else undefined,
+                        )?;
 
                         if (comptime get_metadata) {
                             // intersection

@@ -399,7 +399,7 @@ fn getAST(
 ): JSAst! {
     switch (loader) {
         .jsx, .tsx, .js, .ts => {
-            const trace = bun.perf.trace("Bundler.ParseJS");
+            let trace = bun.perf.trace("Bundler.ParseJS");
             defer trace.end();
             if (res := resolver.caches.js.parse(
                 transpiler.allocator,
@@ -421,13 +421,13 @@ fn getAST(
             }
         },
         .json, .jsonc => {
-            const trace = bun.perf.trace("Bundler.ParseJSON");
+            let trace = bun.perf.trace("Bundler.ParseJSON");
             defer trace.end();
             const root = (resolver.caches.json.parseJSON(log, source, allocator, if (loader == .jsonc) .jsonc else .json, true)?) ?? Expr.init(E.Object, E.Object{}, Logger.Loc.Empty);
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")?).?);
         },
         .toml => {
-            const trace = bun.perf.trace("Bundler.ParseTOML");
+            let trace = bun.perf.trace("Bundler.ParseTOML");
             defer trace.end();
             let temp_log = bun.logger.Log.init(allocator);
             defer {
@@ -438,7 +438,7 @@ fn getAST(
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, &temp_log, root, source, "")?).?);
         },
         .yaml => {
-            const trace = bun.perf.trace("Bundler.ParseYAML");
+            let trace = bun.perf.trace("Bundler.ParseYAML");
             defer trace.end();
             let temp_log = bun.logger.Log.init(allocator);
             defer {
@@ -449,7 +449,7 @@ fn getAST(
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, &temp_log, root, source, "")?).?);
         },
         .json5 => {
-            const trace = bun.perf.trace("Bundler.ParseJSON5");
+            let trace = bun.perf.trace("Bundler.ParseJSON5");
             defer trace.end();
             let temp_log = bun.logger.Log.init(allocator);
             defer {
@@ -752,7 +752,7 @@ fn getCodeForParseTaskWithoutPlugins(
 ): CacheEntry! {
     return switch (task.contents_or_fd) {
         .fd contents => brk: {
-            const trace = bun.perf.trace("Bundler.readFile");
+            let trace = bun.perf.trace("Bundler.readFile");
             defer trace.end();
 
             // Check FileMap for in-memory files first

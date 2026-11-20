@@ -309,10 +309,11 @@ if (((opts.is_class and is_typescript_enabled) and strings.eqlComptime(raw, "dec
 if ((((opts.is_class and is_typescript_enabled) and (!opts.is_ts_abstract)) and strings.eqlComptime(raw, "abstract"))) {
                                 opts.is_ts_abstract = true;
                                 const scope_index = p.scopes_in_order.items.len;
-                                if (try p.parseProperty(kind, opts, null)) |*prop| {
-                                    _ = &prop;
-                                    if (((((prop.*).kind == .normal) and ((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value) == null)) and (opts.ts_decorators.len > 0))) {
-                                        var prop_ = (prop.*).*;
+                                const prop_opt = try p.parseProperty(kind, opts, null);
+                                if ((prop_opt != null)) {
+                                    const prop = prop_opt.?;
+                                    if ((((prop.kind == .normal) and ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value) == null)) and (opts.ts_decorators.len > 0))) {
+                                        var prop_ = prop;
                                         _ = &prop_;
                                         prop_.kind = .abstract;
                                         return prop_;

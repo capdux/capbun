@@ -263,7 +263,7 @@ pub struct ThreadPool {
         }
 
         fn create(*_, ctx: *BundleV2) {
-            const trace = bun.perf.trace("Bundler.Worker.create");
+            let trace = bun.perf.trace("Bundler.Worker.create");
             defer trace.end();
 
             _.has_created = true;

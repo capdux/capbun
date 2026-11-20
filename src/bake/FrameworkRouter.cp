@@ -745,7 +745,7 @@ pub struct InsertionContext {
             }
         };
         return {
-            opaque_ctx: ctx,
+            opaque_ctx: @ptrCast(ctx),
             vtable: comptime &{
                 getFileIdForRouter: &wrapper.getFileIdForRouter,
                 onRouterSyntaxError: &wrapper.onRouterSyntaxError,
@@ -1120,7 +1120,7 @@ pub fn insert(
     ctx: InsertionContext,
     /// When `error.RouteCollision` is returned, this is set to the existing file index.
     out_colliding_file_id: *OpaqueFileId,
-): !InsertError {
+): InsertError!void {
     // The root route is the index of the type
     const root_route = Type.rootRouteIndex(ty);
 

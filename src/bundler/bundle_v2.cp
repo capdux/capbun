@@ -1507,7 +1507,7 @@ pub struct BundleV2 {
             source: new_source,
             loader: .js,
             side_effects: .has_side_effects,
-        });
+        })?;
         _.graph.ast.append(_.allocator(), JSAst.empty)?;
 
         const task = bun.new(ServerComponentParseTask, {
@@ -3627,8 +3627,8 @@ pub struct BundleV2 {
 
         let diff: i32 = -1;
         defer {
-            logScanCounter("in parse task .pending_items += {d} = {d}\n", [ diff, @as(i32, i32(graph.pending_items)) + diff ]);
-            graph.pending_items = i32(@as(i32, i32(graph.pending_items)) + diff);
+            logScanCounter("in parse task .pending_items += {d} = {d}\n", [ diff, @as(i32, @intCast(graph.pending_items)) + diff ]);
+            graph.pending_items = @intCast(@as(i32, @intCast(graph.pending_items)) + diff);
             if (diff < 0)
                 bundle.onAfterDecrementScanCounter();
         }

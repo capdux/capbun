@@ -2114,7 +2114,8 @@ fn NewPrinter(
                 .e_spread e => {
                     p.addSourceMapping(expr.loc);
                     p.print("..");
-                    p.printExpr(e.value, .comma, ExprFlag.None());
+                    const spread_flags = ExprFlag.None();
+                    p.printExpr(e.value, .comma, spread_flags);
                 },
                 .e_new_target => {
                     p.printSpaceBeforeIdentifier();
@@ -6075,7 +6076,7 @@ pub fn printAst(
             }
         }
 
-        std.sort.pdq(rename.StableSymbolCount, top_level_symbols.items, undefined, rename.StableSymbolCount.lessThan);
+        std.sort.pdq(rename.StableSymbolCount, top_level_symbols.items, @as(void, undefined), rename.StableSymbolCount.lessThan);
 
         minify_renamer.allocateTopLevelSymbolSlots(top_level_symbols)?;
         let minifier = tree.char_freq.?.compile(allocator);

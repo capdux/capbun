@@ -427,7 +427,7 @@ pub fn onRouterCollisionError(opaque_ctx: *void, rel_path: []const u8, other_id:
             return try cast_ctx.onRouterCollisionError(rel_path, other_id, file_kind);
     }
 };
-            return .{ .opaque_ctx = ctx, .vtable = (comptime (&.{ .getFileIdForRouter = (&wrapper.getFileIdForRouter), .onRouterSyntaxError = (&wrapper.onRouterSyntaxError), .onRouterCollisionError = (&wrapper.onRouterCollisionError) })) };
+            return .{ .opaque_ctx = @ptrCast(ctx), .vtable = (comptime (&.{ .getFileIdForRouter = (&wrapper.getFileIdForRouter), .onRouterSyntaxError = (&wrapper.onRouterSyntaxError), .onRouterCollisionError = (&wrapper.onRouterCollisionError) })) };
     }
     const VTable = struct {
         getFileIdForRouter: *const fn (*void, []const u8, Route.Index, Route.FileKind) bun.OOM!OpaqueFileId,
@@ -739,7 +739,7 @@ pub fn scanAll(self: *FrameworkRouter, allocator: Allocator, r: *Resolver, ctx: 
         }
 }
 
-pub fn insert(self: *FrameworkRouter, alloc: Allocator, ty: Type.Index, comptime insertion_kind: InsertKind, pattern: insertion_kind.Pattern(), file_kind: Route.FileKind, file_path: []const u8, ctx: InsertionContext, out_colliding_file_id: *OpaqueFileId) !InsertError {
+pub fn insert(self: *FrameworkRouter, alloc: Allocator, ty: Type.Index, comptime insertion_kind: InsertKind, pattern: insertion_kind.Pattern(), file_kind: Route.FileKind, file_path: []const u8, ctx: InsertionContext, out_colliding_file_id: *OpaqueFileId) InsertError!void {
         const root_route = Type.rootRouteIndex(ty);
         const new_route_index = brk: {
         var input_it = pattern.iterate();

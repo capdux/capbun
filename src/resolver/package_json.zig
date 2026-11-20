@@ -672,9 +672,9 @@ else => {
                             _ = &array_;
                             var array = array_;
                             _ = &array;
-                            var map = SideEffects.Map;
+                            var map: SideEffects.Map = .{};
                             _ = &map;
-                            var glob_list = SideEffects.GlobList;
+                            var glob_list: SideEffects.GlobList = .{};
                             _ = &glob_list;
                             var has_globs = false;
                             _ = &has_globs;
@@ -1061,7 +1061,7 @@ pub fn parse(allocator: std.mem.Allocator, source: *const logger.Source, log: *l
     },
     }
                 _ = ((self.log.addRangeWarning(self.source, first_token, "This value must be a string, an object, an array, or null")) catch unreachable);
-                return Entry{ .data = .{ .invalid = .{} }, .first_token = first_token };
+                return Entry{ .data = .{ .invalid = undefined }, .first_token = first_token };
         }
     };
     pub const Entry = struct {

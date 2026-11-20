@@ -2281,7 +2281,7 @@ pub fn parseFlowSequence(self: *@This()) ParseError!Expr {
                     }
                 }
                 _ = try self.scan(.{});
-                return Expr.init(E.Array, .{ .items = .moveFromList((&seq)) }, sequence_start.loc());
+                return Expr.init(E.Array, E.Array{ .items = bun.BabyList(Expr).moveFromList((&seq)) }, sequence_start.loc());
         }
 
 pub fn parseFlowMapping(self: *@This()) ParseError!Expr {
@@ -2443,7 +2443,7 @@ else => try self.parseNode(.{}),
                         _ = try seq.append(item);
                     }
                 }
-                return Expr.init(E.Array, .{ .items = .moveFromList((&seq)) }, sequence_start.loc());
+                return Expr.init(E.Array, E.Array{ .items = bun.BabyList(Expr).moveFromList((&seq)) }, sequence_start.loc());
         }
 
 pub fn parseBlockMapping(self: *@This(), first_key: Expr, mapping_start: Pos, mapping_indent: Indent, mapping_line: Line) ParseError!Expr {

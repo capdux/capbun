@@ -185,7 +185,7 @@
 
                 const kind: ConsoleLogKind = switch (msg[1]) {
                     'l' => .log,
-                    'e' => .err,
+                    'e' => .e,
                     else => {
                         ws.close();
                         return;
@@ -205,7 +205,7 @@
                         .log => {
                             bun.Output.pretty("<r><d>[browser]<r> {s}<r>\n", [data]);
                         },
-                        .err => {
+                        .e => {
                             bun.Output.prettyError("<r><d>[browser]<r> {s}<r>\n", [data]);
                         },
                     }

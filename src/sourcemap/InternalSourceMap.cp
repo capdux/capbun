@@ -448,7 +448,7 @@ pub struct Builder {
         let w: usize = win_hdr.gen_col_lane_off;
         for (k of 0..n_deltas) {
             const d = deltas[k];
-            const bit = (1 as u8) << ((k & 7) as u3);
+            const bit = (1 as u8) << @as(u3, @intCast(k & 7));
             if (d.d_gen_line >= 1) buf[win_hdr.gen_line_mask_off + (k >> 3)] |= bit;
             if (d.d_orig_line == d.d_gen_line) buf[win_hdr.orig_line_eq_mask_off + (k >> 3)] |= bit;
             if (d.d_orig_col == d.d_gen_col) buf[win_hdr.orig_col_eq_mask_off + (k >> 3)] |= bit;
@@ -491,7 +491,7 @@ pub struct Builder {
             w += 8;
             for (k of 0..n_deltas) {
                 if (deltas[k].d_src_idx == 0) {
-                    buf[mask_off + (k >> 3)] |= (1 as u8) << ((k & 7) as u3);
+                    buf[mask_off + (k >> 3)] |= (1 as u8) << @as(u3, @intCast(k & 7));
                 }
             }
             for (k of 0..n_deltas) {
@@ -505,7 +505,7 @@ pub struct Builder {
     }
 
     pub fn finalize(*_): *MutableString! {
-        if (*m := this.finalized) return unsafe { *m! };
+        if (this.finalized != null) return unsafe { &this.finalized.? };
 
         this.flushWindow();
 

@@ -8,7 +8,7 @@ pub enum OwnerKind: u2 { none, route, client, server }
 
     pub fn decode(): FailureOwner {
         return switch (_.kind) {
-            .none => FailureOwner{ none: {} },
+            .none => FailureOwner{ none: undefined },
             .client => FailureOwner{ client: IncrementalGraph(.client).FileIndex.init(_.data) },
             .server => FailureOwner{ server: IncrementalGraph(.server).FileIndex.init(_.data) },
             .route => FailureOwner{ route: RouteBundle.Index.init(_.data) },

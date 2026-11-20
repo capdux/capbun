@@ -480,7 +480,7 @@ return (if (self.token.data.canStartValue()) error.ExpectedComma else error.Expe
 }
             }
             _ = try self.scan();
-            return Expr.init(E.Object, .{ .properties = .moveFromList((&properties)) }, loc);
+            return Expr.init(E.Object, E.Object{ .properties = bun.BabyList(G.Property).moveFromList((&properties)) }, loc);
     }
 
 pub fn parseObjectKey(self: *JSON5Parser) ParseError!Expr {
@@ -538,7 +538,7 @@ return (if (self.token.data.canStartValue()) error.ExpectedComma else error.Expe
 }
             }
             _ = try self.scan();
-            return Expr.init(E.Array, .{ .items = .moveFromList((&items)) }, loc);
+            return Expr.init(E.Array, E.Array{ .items = bun.BabyList(Expr).moveFromList((&items)) }, loc);
     }
 
 pub fn scanString(self: *JSON5Parser) ParseError![]u8 {

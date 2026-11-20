@@ -427,11 +427,10 @@ else => {
 }
                     var item = items[@as(usize, @intCast(i))];
                     _ = &item;
-                    const item_ptr: *Expr = (blk: {
+                    const tuple = p.convertExprToBindingAndInitializer((blk: {
                     break :blk item;
 
-});
-                    const tuple = p.convertExprToBindingAndInitializer(item_ptr, (&invalidLog), is_spread);
+}), (&invalidLog), is_spread);
                     _ = ((args.append(G.Arg{ .binding = ((tuple.binding) orelse (Binding{ .data = Prefill.Data.BMissing, .loc = item.loc })), .default = tuple.expr })) catch unreachable);
                 }
                 if ((((p.lexer.token == .t_equals_greater_than) or (((comptime is_typescript_enabled) and (invalidLog.items.len == 0)) and p.trySkipTypeScriptArrowReturnTypeWithBacktracking())) or opts.force_arrow_fn)) {
@@ -886,7 +885,8 @@ pub fn parsePath(p: *P) !ParsedPath {
                         }
                     } else {
                         if ((p.lexer.token == .t_string_literal)) {
-                            const string_literal_text = try p.lexer.toUTF8EString().slice8();
+                            const string_literal_es = try p.lexer.toUTF8EString();
+                            const string_literal_text = string_literal_es.slice8();
                             inline for ((comptime std.enums.values(SupportedAttribute))) |t| {
                                 if (strings.eqlComptime(string_literal_text, @tagName(t))) {
                                     break :brk t;
@@ -901,7 +901,8 @@ pub fn parsePath(p: *P) !ParsedPath {
                     _ = try p.lexer.next();
                     _ = try p.lexer.expect(.t_colon);
                     _ = try p.lexer.expect(.t_string_literal);
-                    const string_literal_text = try p.lexer.toUTF8EString().slice8();
+                    const string_literal_es = try p.lexer.toUTF8EString();
+                    const string_literal_text = string_literal_es.slice8();
                     if (supported_attribute) |attr| {
                         _ = &attr;
                         switch (attr) {

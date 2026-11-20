@@ -113,7 +113,7 @@ pub const OwnerPacked = packed struct(u32) {
 
 pub fn decode(self: OwnerPacked) FailureOwner {
             return (switch (self.kind) {
-.none => FailureOwner{ .none = .{} },
+.none => FailureOwner{ .none = undefined },
 .client => FailureOwner{ .client = IncrementalGraph(.client).FileIndex.init(self.data) },
 .server => FailureOwner{ .server = IncrementalGraph(.server).FileIndex.init(self.data) },
 .route => FailureOwner{ .route = RouteBundle.Index.init(self.data) },

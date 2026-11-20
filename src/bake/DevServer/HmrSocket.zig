@@ -257,7 +257,7 @@ if ((msg.len < 2)) {
         }
         const kind: ConsoleLogKind = (switch (msg[1]) {
 'l' => .log,
-'e' => .err,
+'e' => .e,
 else => {
 {
             _ = ws.close();
@@ -280,7 +280,7 @@ else => {
 .log => {
 _ = bun.Output.pretty("<r><d>[browser]<r> {s}<r>\n", .{ data });
 },
-.err => {
+.e => {
 _ = bun.Output.prettyError("<r><d>[browser]<r> {s}<r>\n", .{ data });
 },
 }

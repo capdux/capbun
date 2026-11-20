@@ -2374,7 +2374,7 @@ pub struct Parser<const enc: Encoding> {
 
         _.scan({})?;
 
-        return Expr.init(E.Array, { items: .moveFromList(&seq) }, sequence_start.loc());
+        return Expr.init(E.Array, E.Array{ items: bun.BabyList(Expr).moveFromList(&seq) }, sequence_start.loc());
     }
 
     fn parseFlowMapping(*_): ParseError!Expr {
@@ -2572,7 +2572,7 @@ pub struct Parser<const enc: Encoding> {
             }
         }
 
-        return Expr.init(E.Array, { items: .moveFromList(&seq) }, sequence_start.loc());
+        return Expr.init(E.Array, E.Array{ items: bun.BabyList(Expr).moveFromList(&seq) }, sequence_start.loc());
     }
 
     /// Should only be used with expressions created with the YAML parser. It assumes

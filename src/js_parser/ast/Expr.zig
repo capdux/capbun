@@ -2443,11 +2443,7 @@ _ = @compileError(("Invalid type passed to Expr.init: " ++ @typeName(Type)));
 }
 }
 
-pub fn init(comptime Type: type, st_arg: anytype, loc: logger.Loc) Expr {
-        if ((@typeInfo(Type) == .@"type")) {
-            return Expr.init(st_arg, std.mem.zeroes(st_arg), loc);
-        }
-        const st: Type = st_arg;
+pub fn init(comptime Type: type, st: Type, loc: logger.Loc) Expr {
         icount = (icount + 1);
         _ = Data.Store.assert();
         if (Type == E.NameOfSymbol) {

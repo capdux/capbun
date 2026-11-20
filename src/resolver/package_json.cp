@@ -804,8 +804,8 @@ pub struct PackageJSON {
                 // Handle arrays, including empty arrays
                 if (array_ := side_effects_field.asArray()) {
                     let array = array_;
-                    let map = SideEffects.Map{};
-                    let glob_list = SideEffects.GlobList{};
+                    let map: SideEffects.Map = {};
+                    let glob_list: SideEffects.GlobList = {};
                     let has_globs = false;
                     let has_exact = false;
 
@@ -1207,7 +1207,7 @@ pub struct ExportsMap {
 
             this.log.addRangeWarning(this.source, first_token, "This value must be a string, an object, an array, or null") catch unreachable;
             return Entry{
-                data: { invalid: {} },
+                data: { invalid: undefined },
                 first_token: first_token,
             };
         }

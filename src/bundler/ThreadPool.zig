@@ -292,7 +292,7 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
         }
     
     pub fn create(self: *@This(), ctx: *BundleV2) void {
-                const trace = bun.perf.trace("Bundler.Worker.create");
+                var trace = bun.perf.trace("Bundler.Worker.create");
                 var __trace_moved = false; _ = &__trace_moved;
                 defer if (!__trace_moved) { const __T = @TypeOf(trace); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = trace.release() catch {}; } else { trace.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = trace; _drop_val.release(); } };
                 defer {

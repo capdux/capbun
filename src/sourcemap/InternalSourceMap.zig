@@ -505,7 +505,7 @@ pub fn flushWindow(self: *Builder) void {
                 const __end_5 = n_deltas;
                 while (k < __end_5) : (k += 1) {
                     const d = deltas[@as(usize, @intCast(k))];
-                    const bit = cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)), (if (comptime @typeInfo(u3) == .@"enum") @as(u3, @enumFromInt((k & 7))) else @as(u3, (k & 7))));
+                    const bit = cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)), @as(u3, @intCast((k & 7))));
                     if ((d.d_gen_line >= 1)) {
                         buf[cp_cast_int(usize, (win_hdr.gen_line_mask_off + cp_shr(k, 3)))] = (buf[@as(usize, @intCast((win_hdr.gen_line_mask_off + cp_shr(k, 3))))] | bit);
                     }
@@ -578,7 +578,7 @@ pub fn flushWindow(self: *Builder) void {
                     const __end_9 = n_deltas;
                     while (k < __end_9) : (k += 1) {
                         if ((deltas[@as(usize, @intCast(k))].d_src_idx == 0)) {
-                            buf[cp_cast_int(usize, (mask_off + cp_shr(k, 3)))] = (buf[@as(usize, @intCast((mask_off + cp_shr(k, 3))))] | cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)), (if (comptime @typeInfo(u3) == .@"enum") @as(u3, @enumFromInt((k & 7))) else @as(u3, (k & 7)))));
+                            buf[cp_cast_int(usize, (mask_off + cp_shr(k, 3)))] = (buf[@as(usize, @intCast((mask_off + cp_shr(k, 3))))] | cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)), @as(u3, @intCast((k & 7)))));
                         }
                     }
                 }
@@ -599,10 +599,9 @@ pub fn flushWindow(self: *Builder) void {
     }
 
 pub fn finalize(self: *Builder) *MutableString {
-            if (self.finalized) |*m| {
-                _ = &m;
+            if ((self.finalized != null)) {
                 return (blk: {
-                break :blk @as(*MutableString, @ptrCast(@alignCast((m.*))));
+                break :blk (&self.finalized.?);
 
 });
             }
