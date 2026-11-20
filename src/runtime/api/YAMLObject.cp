@@ -35,7 +35,7 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JS
     value.ensureStillAlive();
 
     if (value.isUndefined() || value.isSymbol() || value.isFunction()) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     if (!replacer.isUndefinedOrNull()) {

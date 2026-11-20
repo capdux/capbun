@@ -650,8 +650,9 @@ pub extern fn ares_library_init_mem(flags: c_int, amalloc: ares_malloc_callback,
 pub extern fn ares_library_initialized(): c_int;
 pub extern fn ares_library_cleanup() ;
 pub extern fn ares_version(version: [*c]c_int): [*c]const u8;
-pub extern fn ares_init(channelptr: **Channel): c_int;
-pub extern fn ares_init_options(channelptr: **Channel, options: *Options?, optmask: c_int): c_int;
+pub type ChannelPtr = *Channel;
+pub extern fn ares_init(channelptr: *ChannelPtr): c_int;
+pub extern fn ares_init_options(channelptr: *ChannelPtr, options: *Options?, optmask: c_int): c_int;
 pub extern fn ares_save_options(channel: *Channel, options: *Options?, optmask: *c_int): c_int;
 pub extern fn ares_destroy_options(options: *Options) ;
 pub extern fn ares_dup(dest: *Channel?, src: *Channel): c_int;

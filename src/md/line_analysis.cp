@@ -209,7 +209,7 @@ pub fn matchHtmlTag(p: &Parser, off: u32, tag: []const u8): bool {
 }
 
 pub fn isBlockLevelHtmlTag(p: &Parser, off: u32): bool {
-    const block_tags = [
+    const block_tags: [62][]const u8 = [
         "address", "article",  "aside",   "base",     "basefont", "blockquote", "body",
         "caption", "center",   "col",     "colgroup", "dd",       "details",    "dialog",
         "dir",     "div",      "dl",      "dt",       "fieldset", "figcaption", "figure",

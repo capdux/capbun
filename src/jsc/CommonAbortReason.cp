@@ -13,7 +13,7 @@ pub enum CommonAbortReason: u8 {
     UserAbort = 2,
     ConnectionClosed = 3,
 
-    fn toJS(global: *JSGlobalObject): JSValue {
-        return WebCore__CommonAbortReason__toJS(global, _);
+    static fn toJS(reason: CommonAbortReason, global: *JSGlobalObject): JSValue {
+        return WebCore__CommonAbortReason__toJS(global, reason);
     }
 }

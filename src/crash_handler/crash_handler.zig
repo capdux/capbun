@@ -684,9 +684,9 @@ _ = @compileError("TODO");
             var trace_buf: std.builtin.StackTrace = undefined;
             _ = &trace_buf;
             const trace = blk: {
-            if (error_return_trace) |ert| {
-                _ = &ert;
-                if (((ert).?.index > 0)) {
+            if ((error_return_trace != null)) {
+                const ert = error_return_trace.?;
+                if ((ert.index > 0)) {
                     break :blk ert;
                 }
             }

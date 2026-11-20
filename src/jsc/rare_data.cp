@@ -175,7 +175,7 @@ pub struct ProxyEnvStorage {
 
 pub struct AWSSignatureCache {
     date: u64 = 0,
-    cache: bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8) = .{},
+    cache: bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8) = bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8).init(bun.default_allocator),
     lock: bun.Mutex = .{},
 
     fn clean(*_) {

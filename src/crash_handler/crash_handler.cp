@@ -285,7 +285,8 @@ pub fn crashHandler(
                 let trace_buf: std.builtin.StackTrace = undefined;
 
                 const trace = blk: {
-                    if (ert := error_return_trace) {
+                    if (error_return_trace != null) {
+                        const ert = error_return_trace.?;
                         if (ert.index > 0) break :blk ert;
                     }
                     trace_buf = std.builtin.StackTrace{

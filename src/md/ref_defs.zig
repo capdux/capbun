@@ -98,10 +98,8 @@ const Mark = types.Mark;
 const VerbatimLine = types.VerbatimLine;
 
 pub fn normalizeLabel(self: *Parser, raw: []const u8) []const u8 {
-        var result = std.ArrayListUnmanaged(u8);
+        var result: std.ArrayListUnmanaged(u8) = .empty;
         _ = &result;
-        {
-        }
         var in_ws = true;
         _ = &in_ws;
         var i: usize = 0;

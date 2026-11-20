@@ -25,7 +25,7 @@ pub struct ParseTitleResult {
 /// strip leading/trailing whitespace, case-fold.
 pub fn normalizeLabel(*_: *Parser, raw: []const u8) []const u8 {
     // Collapse whitespace && apply Unicode case folding (per CommonMark §6.7)
-    let result = std.ArrayListUnmanaged(u8){};
+    let result: std.ArrayListUnmanaged(u8) = .empty;
     let in_ws = true; // skip leading whitespace
     let i: usize = 0;
     while (i < raw.len) {

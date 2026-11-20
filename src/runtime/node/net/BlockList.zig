@@ -289,7 +289,7 @@ if (address.as_v4()) |ip_addr| {
                         }
                     }
                     const one: u32 = 1;
-                    const mask_addr = cp_shl((cp_shl(one, @intCast(s.prefix)) - 1), @intCast((32 - s.prefix)));
+                    const mask_addr = cp_shl((cp_shl(one, @as(u5, @intCast(s.prefix))) - 1), @as(u5, @intCast((32 - s.prefix))));
                     const ip_net: u32 = (@byteSwap(ip_addr) & mask_addr);
                     const subnet_net: u32 = (@byteSwap(subnet_addr) & mask_addr);
                     if ((ip_net == subnet_net)) {
@@ -308,7 +308,7 @@ if (address.as_v4()) |ip_addr| {
                     }
                 }
                 const one: u128 = 1;
-                const mask_addr = cp_shl((cp_shl(one, @intCast(s.prefix)) - 1), @intCast((128 - s.prefix)));
+                const mask_addr = cp_shl((cp_shl(one, @as(u7, @intCast(s.prefix))) - 1), @as(u7, @intCast((128 - s.prefix))));
                 const ip_net: u128 = (@byteSwap(ip_addr) & mask_addr);
                 const subnet_net: u128 = (@byteSwap(subnet_addr) & mask_addr);
                 if ((ip_net == subnet_net)) {

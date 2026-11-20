@@ -94,7 +94,11 @@ pub fn processInlineContent(p: *Parser, content: []const u8, base_off: u32): voi
                 }
             }
             if (emit_end > text_start) p.emitText(.normal, content[text_start..emit_end])?;
-            if (is_hard) p.emitText(.br, "") else try p.emitText(.softbr, "")?;
+            if (is_hard) {
+                p.emitText(.br, "")?;
+            } else {
+                p.emitText(.softbr, "")?;
+            }
             i += 1;
             text_start = i;
             continue;

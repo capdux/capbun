@@ -17,12 +17,15 @@ pub fn stringify(
     global: *jsc.JSGlobalObject,
     callFrame: *jsc.CallFrame,
 ): bun.JSError!jsc.JSValue {
-    const value, const replacer, const space_value = callFrame.argumentsAsArray(3);
+    const args = callFrame.argumentsAsArray(3);
+    const value = args[0];
+    const replacer = args[1];
+    const space_value = args[2];
 
     value.ensureStillAlive();
 
     if (value.isUndefined() || value.isSymbol() || value.isFunction()) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     if (!replacer.isUndefinedOrNull()) {

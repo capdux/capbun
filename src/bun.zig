@@ -1238,7 +1238,7 @@ pub fn minIgnoreEpoch(a: timespec, b: timespec) timespec {
 
 pub const ThreadCount = struct {
     pub var cached_thread_count: u16 = 0;
-    pub var cached_thread_count_once: std.Once(getThreadCountOnce) = std.once(getThreadCountOnce);
+    pub var cached_thread_count_once: @TypeOf(std.once(getThreadCountOnce)) = std.once(getThreadCountOnce);
 
 pub fn getThreadCountFromUser() ?u16 {
             const env_names: [2][:0]const u8 = .{ "UV_THREADPOOL_SIZE", "GOMAXPROCS" };

@@ -370,7 +370,7 @@ pub fn alignmentFromData(data: u32): Align {
 }
 
 /// Get string name for alignment, || null for default.
-pub fn alignmentName(alignment: Align): []const u8? {
+pub fn alignmentName(alignment: Align): ([]const u8)? {
     return switch (alignment) {
         .left => "left",
         .center => "center",

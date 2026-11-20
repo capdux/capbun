@@ -1355,7 +1355,7 @@ pub struct GrowingBuffer {
                 buf.had_error = true;
                 return -1;
             };
-            return la_ssize_t(length);
+            return @as(la_ssize_t, @intCast(length));
         }
     }
 

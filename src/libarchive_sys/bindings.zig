@@ -1267,7 +1267,7 @@ pub fn writeCallback(_: *struct_archive, client_data: *anyopaque, buff: ?*const 
                 const data: [*]const u8 = @as([*]const u8, @ptrCast(@alignCast(buff.?)));
                 _ = (blk_catch_0: { break :blk_catch_0 ((buf.list.appendSlice(buf.allocator, data[0..length])) catch |__ce_0| { _ = &__ce_0; buf.had_error = true;
                 return -1; }); });
-                return la_ssize_t(length);
+                return @as(la_ssize_t, @intCast(length));
             }
     }
 

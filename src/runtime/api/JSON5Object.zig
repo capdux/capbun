@@ -411,12 +411,13 @@ pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
 }
 
 pub fn stringify(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-        const value = undefined;
-        const replacer = undefined;
-        const space_value = callFrame.argumentsAsArray(3);
+        const args = callFrame.argumentsAsArray(3);
+        const value = args[0];
+        const replacer = args[1];
+        const space_value = args[2];
         _ = value.ensureStillAlive();
         if (((value.isUndefined() or value.isSymbol()) or value.isFunction())) {
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         if ((!replacer.isUndefinedOrNull())) {
             return global.throw("JSON5.stringify does not support the replacer argument", .{});

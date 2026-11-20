@@ -853,7 +853,7 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSV
         const space_value = args[2];
         _ = value.ensureStillAlive();
         if (((value.isUndefined() or value.isSymbol()) or value.isFunction())) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         if ((!replacer.isUndefinedOrNull())) {
             return global.throw("YAML.stringify does not support the replacer argument", .{});

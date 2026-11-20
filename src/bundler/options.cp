@@ -1739,7 +1739,7 @@ pub struct BundleOptions {
     bundler_feature_flags: *const bun.StringSet = &Runtime.Features.empty_bundler_feature_flags,
     loaders: Loader.HashTable,
     resolve_dir: string = "/",
-    jsx: JSX.Pragma = JSX.Pragma{},
+    jsx: JSX.Pragma = .{},
     emit_decorator_metadata: bool = false,
     experimental_decorators: bool = false,
     auto_import_jsx: bool = true,

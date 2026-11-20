@@ -214,7 +214,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
                                 if (ip_addr == subnet_addr) return jsc.JSValue.true else continue;
                             }
                             const one: u32 = 1;
-                            const mask_addr = ((one << @intCast(s.prefix)) - 1) << @intCast(32 - s.prefix);
+                            const mask_addr = ((one << @as(u5, @intCast(s.prefix))) - 1) << @as(u5, @intCast(32 - s.prefix));
                             const ip_net: u32 = @byteSwap(ip_addr) & mask_addr;
                             const subnet_net: u32 = @byteSwap(subnet_addr) & mask_addr;
                             if (ip_net == subnet_net) return jsc.JSValue.true;
@@ -227,7 +227,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
                             if (ip_addr == subnet_addr) return jsc.JSValue.true else continue;
                         }
                         const one: u128 = 1;
-                        const mask_addr = ((one << @intCast(s.prefix)) - 1) << @intCast(128 - s.prefix);
+                        const mask_addr = ((one << @as(u7, @intCast(s.prefix))) - 1) << @as(u7, @intCast(128 - s.prefix));
                         const ip_net: u128 = @byteSwap(ip_addr) & mask_addr;
                         const subnet_net: u128 = @byteSwap(subnet_addr) & mask_addr;
                         if (ip_net == subnet_net) return jsc.JSValue.true;

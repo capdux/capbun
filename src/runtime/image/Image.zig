@@ -780,7 +780,7 @@ pub fn schedule(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSVal
         var __task_moved = false; _ = &__task_moved;
         defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
         _ = task.schedule();
-        return (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+        return task.promise.value();
 }
 
 pub fn encodeForBody(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSValue) bun.JSError!EncodeForBodyResult {
@@ -894,7 +894,7 @@ pub fn start(image: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSValue
             var chain = bun.new(BlobReadChain, .{ .image = image, .global = global, .kind = kind, .deliver = deliver, .outer = jsc.JSPromise.Strong.init(global) });
             var __chain_moved = false; _ = &__chain_moved;
             defer if (!__chain_moved) { const __T = @TypeOf(chain); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = chain.release() catch {}; } else { chain.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = chain; _drop_val.release(); } };
-            const promise = (if (@typeInfo(@TypeOf(chain.outer)) == .@"enum") @intFromEnum(chain.outer) else chain.outer.value)();
+            const promise = (chain.outer.strong.get()).?;
             var __promise_moved = false; _ = &__promise_moved;
             defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
             _ = try blob.readBytesToHandler(BlobReadChain, chain, global);

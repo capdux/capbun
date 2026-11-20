@@ -124,7 +124,7 @@ pub const PatchTask = struct {
     manager: *PackageManager,
     tempdir: std.fs.Dir,
     project_dir: []const u8,
-    callback: *PatchTaskCallback,
+    callback: PatchTaskCallback,
     task: ThreadPool.Task = .{ .callback = runFromThreadPool },
     pre: bool = false,
     next: ?*PatchTask = null,
@@ -329,7 +329,7 @@ pub fn apply(self: *PatchTask) bun.OOM!void {
 
 },
 .failure => |reason| {
-return try log.addErrorFmtOpts(self.manager.allocator, "{s} while executing step: {s}", .{ @errorName(reason.err), (if (@typeInfo(@TypeOf(reason.step)) == .@"enum" or @typeInfo(@TypeOf(reason.step)) == .@"union") @tagName(reason.step) else reason.step.name)() }, .{});
+return try log.addErrorFmtOpts(self.manager.allocator, "{s} while executing step: {s}", .{ @errorName(reason.err), reason.step.name() }, .{});
 },
 }
             {

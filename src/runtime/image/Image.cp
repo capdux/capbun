@@ -815,7 +815,7 @@ struct BlobReadChain {
             deliver: deliver,
             outer: jsc.JSPromise.Strong.init(global),
         });
-        const promise = chain.outer.value();
+        const promise = chain.outer.strong.get().?;
         blob.readBytesToHandler(BlobReadChain, chain, global)?;
         return promise;
     }

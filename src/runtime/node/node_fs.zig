@@ -151,7 +151,7 @@ const args: Arguments.Close = task.args;
                 _ = log("uv close({}) SKIPPED", .{ .fd = fd });
                 task.result = .success;
                 _ = task.globalObject.bunVM().eventLoop().enqueueTask(jsc.Task.init(task));
-                return (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+                return task.promise.value();
             }
             const rc = uv.uv_fs_close(loop, (&task.req), fd, (&uv_callback));
             _ = bun.debugAssert((rc == .zero));
@@ -203,7 +203,7 @@ const args_: Arguments.Writev = task.args;
             if ((bufs.len == 0)) {
                 task.result = .success;
                 _ = task.globalObject.bunVM().eventLoop().enqueueTask(jsc.Task.init(task));
-                return (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+                return task.promise.value();
             }
             const pos: i64 = ((args_.position) orelse (-1));
             var sum: u64 = 0;
@@ -227,7 +227,7 @@ else => {
 _ = (comptime unreachable);
 },
 }
-            return (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+            return task.promise.value();
     }
 
 pub fn uv_callback(req: *uv.fs_t) callconv(.c) void {
@@ -266,7 +266,7 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             }
             const globalObject = self.globalObject;
             const success = ((if (comptime @typeInfo(bun.sys.Maybe(ReturnType).Tag) == .@"enum") @as(bun.sys.Maybe(ReturnType).Tag, @enumFromInt(self.result)) else @as(bun.sys.Maybe(ReturnType).Tag, self.result)) == .result);
-            var promise_value = (if (@typeInfo(@TypeOf(self.promise)) == .@"enum") @intFromEnum(self.promise) else self.promise.value)();
+            var promise_value = self.promise.value();
             _ = &promise_value;
             var promise = self.promise.get();
             _ = &promise;
@@ -328,7 +328,7 @@ pub fn create(globalObject: *jsc.JSGlobalObject, _: *bun.api.node.fs.Binding, ar
             _ = task.args.toThreadSafe();
             _ = task.tracker.didSchedule(globalObject);
             _ = jsc.WorkPool.schedule((&task.task));
-            return (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+            return task.promise.value();
     }
 
 pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
@@ -355,7 +355,7 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             _ = tracker.didDispatch(globalObject);
             }
             const success = ((if (comptime @typeInfo(bun.sys.Maybe(ReturnType).Tag) == .@"enum") @as(bun.sys.Maybe(ReturnType).Tag, @enumFromInt(self.result)) else @as(bun.sys.Maybe(ReturnType).Tag, self.result)) == .result);
-            var promise_value = (if (@typeInfo(@TypeOf(self.promise)) == .@"enum") @intFromEnum(self.promise) else self.promise.value)();
+            var promise_value = self.promise.value();
             _ = &promise_value;
             var promise = self.promise.get();
             _ = &promise;
@@ -512,7 +512,7 @@ pub fn create(globalObject: *jsc.JSGlobalObject, args: Arguments.Readdir, vm: *j
             _ = task.args.toThreadSafe();
             _ = task.tracker.didSchedule(globalObject);
             _ = jsc.WorkPool.schedule((&task.task));
-            return (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+            return task.promise.value();
     }
 
 pub fn performWork(self: *AsyncReaddirRecursiveTask, basename: [:0]const u8, buf: *bun.PathBuffer, comptime is_root: bool) void {
@@ -673,7 +673,7 @@ pub fn clearResultList(self: *AsyncReaddirRecursiveTask) void {
 pub fn runFromJSThread(self: *AsyncReaddirRecursiveTask) bun.JSTerminated!void {
             const globalObject = self.globalObject;
             const success = (self.pending_err == null);
-            var promise_value = (if (@typeInfo(@TypeOf(self.promise)) == .@"enum") @intFromEnum(self.promise) else self.promise.value)();
+            var promise_value = self.promise.value();
             _ = &promise_value;
             var promise = self.promise.get();
             _ = &promise;
@@ -2872,7 +2872,7 @@ return .{ .err = e.withPath(args.src.slice()) };
                         if (args.mode.shouldntOverwrite()) {
                             flags = (flags | bun.O.EXCL);
                         }
-                        const dest_fd = (switch (Syscall.open(dest, flags, jsc.Node.this_fs.default_permission)) {
+                        const dest_fd = (switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
 .result => |result| result,
 .err => |e| {
 return .{ .err = e.withPath(args.dest.slice()) };
@@ -2928,7 +2928,7 @@ return .{ .err = e };
                 if (args.mode.shouldntOverwrite()) {
                     flags = (flags | bun.O.EXCL);
                 }
-                const dest_fd = (switch (Syscall.open(dest, flags, jsc.Node.this_fs.default_permission)) {
+                const dest_fd = (switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
 .result => |result| result,
 .err => |e| {
 return .{ .err = e };
@@ -3009,7 +3009,7 @@ return .{ .err = e };
                 if (args.mode.shouldntOverwrite()) {
                     flags_linux = (flags_linux | bun.O.EXCL);
                 }
-                const dest_fd = (switch (Syscall.open(dest, flags_linux, jsc.Node.this_fs.default_permission)) {
+                const dest_fd = (switch (Syscall.open(dest, flags_linux, jsc.Node.fs.default_permission)) {
 .result => |result| result,
 .err => |e| {
 return .{ .err = e };
@@ -5614,7 +5614,7 @@ pub fn onFinish(self: *@This(), result: Maybe(void)) void {
 
 pub fn create(globalObject: *jsc.JSGlobalObject, _: *jsc.Node.fs.Binding, cp_args: Arguments.Cp, vm: *jsc.VirtualMachine, arena_: bun.ArenaAllocator) jsc.JSValue {
             const task = createWithShellTask(globalObject, cp_args, vm, arena_, 0, true);
-            return (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+            return task.promise.value();
     }
 
 pub fn createWithShellTask(globalObject: *jsc.JSGlobalObject, cp_args: Arguments.Cp, vm: *jsc.VirtualMachine, arena_: bun.ArenaAllocator, shelltask: ShellTaskT, comptime enable_promise: bool) *ThisAsyncCpTask {
@@ -5689,7 +5689,7 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             }
             const globalObject = ((self.evtloop.globalObject()) orelse (@panic("No global object, this indicates a bug in Bun. Please file a GitHub issue.")));
             const success = ((if (comptime @typeInfo(bun.sys.Maybe(Return.Cp).Tag) == .@"enum") @as(bun.sys.Maybe(Return.Cp).Tag, @enumFromInt(self.result)) else @as(bun.sys.Maybe(Return.Cp).Tag, self.result)) == .result);
-            var promise_value = (if (@typeInfo(@TypeOf(self.promise)) == .@"enum") @intFromEnum(self.promise) else self.promise.value)();
+            var promise_value = self.promise.value();
             _ = &promise_value;
             var promise = self.promise.get();
             _ = &promise;

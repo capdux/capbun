@@ -37,6 +37,7 @@ pub const ares_sock_config_callback = ?ares_sock_config_callback_fn;
 pub const ares_malloc_callback = ?ares_malloc_callback_fn;
 pub const ares_free_callback = ?ares_free_callback_fn;
 pub const ares_realloc_callback = ?ares_realloc_callback_fn;
+pub const ChannelPtr = *Channel;
 pub const socklen_t = c.socklen_t;
 pub const ares_ssize_t = isize;
 pub const ares_socket_t = (if (bun.Environment.isWindows) std.os.windows.ws2_32.SOCKET else c_int);
@@ -1420,9 +1421,9 @@ pub extern "c" fn ares_library_cleanup() callconv(.c) void;
 
 pub extern "c" fn ares_version(version: [*c]c_int) callconv(.c) [*c]const u8;
 
-pub extern "c" fn ares_init(channelptr: *Channel) callconv(.c) c_int;
+pub extern "c" fn ares_init(channelptr: *ChannelPtr) callconv(.c) c_int;
 
-pub extern "c" fn ares_init_options(channelptr: *Channel, options: ?*Options, optmask: c_int) callconv(.c) c_int;
+pub extern "c" fn ares_init_options(channelptr: *ChannelPtr, options: ?*Options, optmask: c_int) callconv(.c) c_int;
 
 pub extern "c" fn ares_save_options(channel: *Channel, options: ?*Options, optmask: *c_int) callconv(.c) c_int;
 

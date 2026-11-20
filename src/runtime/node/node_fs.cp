@@ -3621,7 +3621,7 @@ pub struct NodeFS {
                         flags |= bun.O.EXCL;
                     }
 
-                    const dest_fd = switch (Syscall.open(dest, flags, jsc.Node.this_fs.default_permission)) {
+                    const dest_fd = switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
                         .result => |result| result,
                         .err => |e| return .{ err: e.withPath(args.dest.slice()) },
                     };
@@ -3674,7 +3674,7 @@ pub struct NodeFS {
             if (args.mode.shouldntOverwrite()) {
                 flags |= bun.O.EXCL;
             }
-            const dest_fd = switch (Syscall.open(dest, flags, jsc.Node.this_fs.default_permission)) {
+            const dest_fd = switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
                 .result => |result| result,
                 .err => |e| return .{ err: e },
             };
@@ -3747,7 +3747,7 @@ pub struct NodeFS {
                 flags_linux |= bun.O.EXCL;
             }
 
-            const dest_fd = switch (Syscall.open(dest, flags_linux, jsc.Node.this_fs.default_permission)) {
+            const dest_fd = switch (Syscall.open(dest, flags_linux, jsc.Node.fs.default_permission)) {
                 .result => |result| result,
                 .err => |e| return .{ err: e },
             };

@@ -80,15 +80,21 @@ pub fn stringToJS(s: *E.String, allocator: std.mem.Allocator, globalObject: *jsc
 
     if (s.isUTF8()) {
         if (utf16 := bun.strings.toUTF16Alloc(allocator, s.slice8(), false, false)?) {
-            let [out, chars] = bun.String.createUninitialized(.utf16, utf16.len);
+            const pair = bun.String.createUninitialized(.utf16, utf16.len);
+            let out = pair[0];
+            const chars = pair[1];
             @memcpy(chars, utf16);
             return out.transferToJS(globalObject);
         }
-        let [out, chars] = bun.String.createUninitialized(.latin1, s.slice8().len);
+        const pair = bun.String.createUninitialized(.latin1, s.slice8().len);
+        let out = pair[0];
+        const chars = pair[1];
         @memcpy(chars, s.slice8());
         return out.transferToJS(globalObject);
     }
-    let [out, chars] = bun.String.createUninitialized(.utf16, s.slice16().len);
+    const pair = bun.String.createUninitialized(.utf16, s.slice16().len);
+    let out = pair[0];
+    const chars = pair[1];
     @memcpy(chars, s.slice16());
     return out.transferToJS(globalObject);
 }

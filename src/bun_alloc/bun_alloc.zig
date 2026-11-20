@@ -130,9 +130,7 @@ pub fn isOverflowing(self: Result, comptime count: usize) bool {
 
 pub const Default = struct {
 
-pub fn allocator(self: *Default) std.mem.Allocator {
-            const self_ref = self;
-            _ = &self_ref;
+pub fn allocator(_: Default) std.mem.Allocator {
             return c_allocator;
     }
     pub const deinit = void;

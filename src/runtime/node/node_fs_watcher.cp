@@ -605,7 +605,7 @@ pub struct FSWatcher {
             _.persistent = true;
             _.poll_ref.ref(_.ctx);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn doUnref(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -613,7 +613,7 @@ pub struct FSWatcher {
             _.persistent = false;
             _.poll_ref.unref(_.ctx);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn hasRef(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -692,7 +692,7 @@ pub struct FSWatcher {
 
     fn doClose(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         _.close();
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     static fn init(args: _Arguments): bun.sys.Maybe(*FSWatcher) {

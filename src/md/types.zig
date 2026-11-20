@@ -351,7 +351,7 @@ pub fn alignmentFromData(data: u32) Align {
         return @enumFromInt(@as(u2, @truncate(data)));
 }
 
-pub fn alignmentName(alignment: Align) []const ?u8 {
+pub fn alignmentName(alignment: Align) ?[]const u8 {
         return (switch (alignment) {
 .left => "left",
 .center => "center",

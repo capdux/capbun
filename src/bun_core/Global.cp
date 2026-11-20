@@ -218,10 +218,10 @@ pub const user_agent = std.fmt.comptimePrint("Bun/{s}", [Global.package_json_ver
 pub const Bun__userAgent: cstr = Global.user_agent;
 
 comptime {
-    @export(&Bun__userAgent, { name: "Bun__userAgent" });
-    @export(&Bun__atexit, { name: "Bun__atexit" });
+    @export(&@field(Global, "Bun__userAgent"), { name: "Bun__userAgent" });
+    @export(&@field(Global, "Bun__atexit"), { name: "Bun__atexit" });
     @export(&bun_is_exiting, { name: "bun_is_exiting" });
-    @export(&Bun__onExit, { name: "Bun__onExit" });
+    @export(&@field(Global, "Bun__onExit"), { name: "Bun__onExit" });
 }
 
 @c pub fn Bun__onExit() {

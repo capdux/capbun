@@ -217,7 +217,7 @@ pub fn deinit(self: *ProxyEnvStorage) void {
 
 pub const AWSSignatureCache = struct {
     date: u64 = 0,
-    cache: bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8) = .{},
+    cache: bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8) = bun.StringArrayHashMap([DIGESTED_HMAC_256_LEN]u8).init(bun.default_allocator),
     lock: bun.Mutex = .{},
 
 pub fn clean(self: *AWSSignatureCache) void {

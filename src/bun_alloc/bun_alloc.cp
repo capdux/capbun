@@ -919,9 +919,7 @@ pub fn unpackNullable(comptime Allocator: type, allocator: Nullable(Allocator)):
 /// The default allocator. This is a zero-sized type whose `allocator` method returns
 /// `bun.default_allocator`.
 pub struct Default {
-    pub fn allocator(*_): std.mem.Allocator {
-        const self_ref = _;
-        * = self_ref;
+    static fn allocator(_: Default): std.mem.Allocator {
         return c_allocator;
     }
 

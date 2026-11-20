@@ -37,7 +37,8 @@ pub fn parse(
     let input_slice = input_value.toSlice(globalThis, bun.default_allocator)?;
     defer input_slice.deinit();
     const source = &logger.Source.initPathString("input.toml", input_slice.slice());
-    const parse_result = TOML.parse(source, &log, allocator, false) catch |e| {
+    const log_ptr: *logger.Log = &log;
+    const parse_result = TOML.parse(source, log_ptr, allocator, false) catch |e| {
         if (e == error.StackOverflow) {
             return globalThis.throwStackOverflow();
         }

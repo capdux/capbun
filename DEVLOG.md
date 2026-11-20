@@ -1393,3 +1393,5 @@
 - **[2026-11-20] Wave 8 Batch A 典型修复**：`Blob` 用 `_BlobCloneSigs` 消除双层 `*const`、`JSSourceMap.memoryCost` 改为 `*_`，彻底清零 `ZigGeneratedClasses.zig` 剩余 2 处错误；`Sink` 升级 `@root struct`、`Store` 取消多余 `export class`；`uws_sys/Response` `_ResHandlerSigs` 补 `static fn`；`html_rewriter` 24 处 `jsUndefined()` 修正为 `js_undefined`。
 
 - **[2026-11-20] Wave 8 里程碑：`codegen/ZigGeneratedClasses.zig` 清零**：全仓所有 JSC 生成类绑定（`ZigGeneratedClasses.zig`）从最初 91 处错误降至 **0**；`c_ares.cp`/`WebSocket.cp` 全部 C 回调 typedef 统一改用 `*const @TypeOf(_sigs.*)` 彻底消除双层 `*const *const fn`。
+
+- **[2026-11-20] Wave 9 Batch B 单错收尾经验**：`Global.cp` 用 `&@field(Global, ...)` 避开大写符号误解析；`c_ares.cp` 用 `ChannelPtr = *Channel` 防二级指针压平；`JSONCObject`/`TOMLObject` 提取 `const log_ptr: *logger.Log = &log;` 防实参取址被剥离；`patch_install.cp` 补 `@value` 恢复值类型存储。

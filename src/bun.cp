@@ -3688,7 +3688,7 @@ struct ThreadCount {
     const max_threads: u16 = 1024;
     const min_threads: u16 = 2;
     static let cached_thread_count: u16 = 0;
-    static let cached_thread_count_once: std.Once(getThreadCountOnce) = std.once(getThreadCountOnce);
+    static let cached_thread_count_once: @TypeOf(std.once(getThreadCountOnce)) = std.once(getThreadCountOnce);
     static fn getThreadCountFromUser(): u16? {
         const env_names: [2][:0]const u8 = [ "UV_THREADPOOL_SIZE", "GOMAXPROCS" ];
         for (envname of env_names) {

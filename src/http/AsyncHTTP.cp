@@ -86,6 +86,9 @@ export struct HTTPChannelContext {
     }
 }
 
+pub let active_requests_count: std.atomic.Value(usize) = std.atomic.Value(usize).init(0);
+pub let max_simultaneous_requests: std.atomic.Value(usize) = std.atomic.Value(usize).init(256);
+
 export @root @value struct AsyncHTTP {
     request: bun.picohttp.Request? = null,
     response: bun.picohttp.Response? = null,
@@ -121,9 +124,6 @@ export @root @value struct AsyncHTTP {
     gzip_elapsed: u64 = 0,
 
     signals: HTTPClient.Signals = {},
-
-    static let active_requests_count: std.atomic.Value(usize) = std.atomic.Value(usize).init(0);
-    static let max_simultaneous_requests: std.atomic.Value(usize) = std.atomic.Value(usize).init(256);
 
     static fn loadEnv(allocator: std.mem.Allocator, logger: auto, env: auto) {
         if (max_http_requests := env.get("BUN_CONFIG_MAX_HTTP_REQUESTS")) {

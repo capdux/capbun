@@ -48,7 +48,7 @@ pub struct PatchApply {
     logger: logger.Log,
 }
 
-pub union(enum) PatchTaskCallback {
+@value pub union(enum) PatchTaskCallback {
     calc_hash: PatchCalcHash,
     apply: PatchApply,
 }

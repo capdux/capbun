@@ -19,7 +19,7 @@ onBeforeDeinit: (*const Callback)? = null,
 pub const Hash = u32;
 pub const Map = std.HashMap(Hash, *RefString, bun.IdentityContext(Hash), 80);
 
-pub fn toJS(client: *RefString, global: *jsc.JSGlobalObject): jsc.JSValue {
+pub fn toJS(client: *RefString, global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     return bun.String.init(client.@"impl").toJS(global);
 }
 
