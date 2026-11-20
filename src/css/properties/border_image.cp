@@ -6,7 +6,7 @@ const PrintErr = css.PrintErr;
 
 const LengthPercentage = css.css_values.length.LengthPercentage;
 const CSSNumber = css.css_values.number.CSSNumber;
-let LengthOrNumber = css.css_values.length.LengthOrNumber;
+const LengthOrNumber = css.css_values.length.LengthOrNumber;
 const Image = css.css_values.image.Image;
 const Rect = css.css_values.rect.Rect;
 const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
@@ -258,7 +258,7 @@ pub struct BorderImageRepeat {
 }
 
 /// A value for the [border-image-width](https://www.w3.org/TR/css-backgrounds-3/#border-image-width) property.
-pub let BorderImageSideWidth = union(enum) {
+pub const BorderImageSideWidth = union(enum) {
     /// A number representing a multiple of the border width.
     number: CSSNumber,
     /// An explicit length or percentage.

@@ -32,7 +32,7 @@ pub struct SnapshotInlineSnapshotToWrite {
 }
 
 pub struct SnapshotFile {
-    id: TestRunner.File.ID,
+    id: jest.File.ID,
     file: std.fs.File,
 }
 
@@ -64,7 +64,7 @@ pub struct Snapshots {
     counts: *bun.StringHashMap(usize),
     _current_file: SnapshotFile? = null,
     snapshot_dir_path: string? = null,
-    inline_snapshots_to_write: *std.AutoArrayHashMap(TestRunner.File.ID, std.array_list.Managed(SnapshotInlineSnapshotToWrite)),
+    inline_snapshots_to_write: *std.AutoArrayHashMap(jest.File.ID, std.array_list.Managed(SnapshotInlineSnapshotToWrite)),
     last_error_snapshot_name: ([]const u8)? = null,
 
     pub const InlineSnapshotToWrite = SnapshotInlineSnapshotToWrite;
@@ -252,7 +252,7 @@ pub struct Snapshots {
         }
     }
 
-    fn addInlineSnapshotToWrite(*_, file_id: TestRunner.File.ID, value: SnapshotInlineSnapshotToWrite): !void {
+    fn addInlineSnapshotToWrite(*_, file_id: jest.File.ID, value: SnapshotInlineSnapshotToWrite): !void {
         const gpres = _.inline_snapshots_to_write.getOrPut(file_id)?;
         if (!gpres.found_existing) {
             gpres.value_ptr.* = std.array_list.Managed(SnapshotInlineSnapshotToWrite).init(_.allocator);
@@ -570,7 +570,7 @@ pub struct Snapshots {
         return success;
     }
 
-    fn getSnapshotFile(*_, file_id: TestRunner.File.ID): !bun.sys.Maybe(void) {
+    fn getSnapshotFile(*_, file_id: jest.File.ID): !bun.sys.Maybe(void) {
         if (_._current_file == null || _._current_file.?.id != file_id) {
             _.writeSnapshotFile()?;
 

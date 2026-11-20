@@ -3597,6 +3597,7 @@ pub fn integer() Notation {
     }
 };
 
+pub const OptionalBundlerTailwindState = ?*BundlerTailwindState;
 pub const SrcIndex = bun.bundle_v2.Index;
 pub const SymbolList = bun.ast.Symbol.List;
 pub const ImportRecord = bun.ImportRecord;
@@ -3615,7 +3616,7 @@ pub const SupportsCondition = css_rules.supports.SupportsCondition;
 pub const CustomMedia = css_rules.custom_media.CustomMediaRule;
 pub const NamespaceRule = css_rules.namespace.NamespaceRule;
 pub const UnknownAtRule = css_rules.unknown.UnknownAtRule;
-pub const ImportRule = css_rules.@"import".ImportRule;
+pub const ImportRule = css_rules.import_rule.ImportRule;
 pub const StyleRule = css_rules.style.StyleRule;
 pub const StyleContext = css_rules.StyleContext;
 pub const SupportsRule = css_rules.supports.SupportsRule;
@@ -3672,7 +3673,7 @@ pub const MinifyErrorKind = errors_.MinifyErrorKind;
 pub const MinifyError = errors_.MinifyError;
 pub const MinifyErr = errors_.MinifyErr;
 pub const HASH_SEED = generic.HASH_SEED;
-pub const ImportConditions = css_rules.@"import".ImportConditions;
+pub const ImportConditions = css_rules.import_rule.ImportConditions;
 pub const Features = targets.Features;
 pub const Feature = compat.Feature;
 pub const fmtPrinterError = errors_.fmtPrinterError;
@@ -5840,7 +5841,7 @@ else => (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @
 
 pub fn TailwindType(comptime AtRule: type) type {
         if ((AtRule == BundlerAtRule)) {
-            return try *BundlerTailwindState;
+            return OptionalBundlerTailwindState;
         }
         return u0;
 }

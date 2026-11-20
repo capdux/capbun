@@ -1320,3 +1320,6 @@
 
 ### 2026-11-20 05:57:46 UTC - zig:check Runtime+Bundler 簇修复经验
 - 沉淀 `import { A as B }`、`&UpperCase.Const` 与函数体内 `*UpperCaseType` 泛参 3 条核心语义坑至 `CP_PITFALLS.md`。
+
+### 2026-11-20 05:58:47 UTC - zig:check 杂项簇修复经验
+- `[0; 3]` 替代 `.{0} ** 3`、`std.mem.zeroes(void)` 替代 `void` 字段 `{}`、`pub const U = union` 避免字段自动指针化。

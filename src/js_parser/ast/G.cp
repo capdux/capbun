@@ -158,7 +158,7 @@ pub struct Property {
     }
 }
 
-const empty_stmts: [0]Stmt = [];
+let empty_stmts: [0]Stmt = undefined;
 
 pub struct FnBody {
     loc: logger.Loc,
@@ -175,7 +175,7 @@ pub struct FnBody {
     }
 }
 
-const empty_args: [0]Arg = [];
+let empty_args: [0]Arg = undefined;
 
 pub struct Fn {
     name: LocRef? = null,

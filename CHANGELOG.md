@@ -1591,3 +1591,6 @@
 
 ### 2026-11-20 05:57:46 UTC - zig:check Runtime+Bundler+Bake 簇 13 模块语义修复入库
 - 完成：`http`/`HTMLBundle`/`FileSink`/`server`/`ServerConfig`/`uws_dispatch`/`Blob`/`encoding`/`TextEncoder`/`IncrementalGraph`/`Chunk`/`cache`/`options` 13/13 全 PASS。
+
+### 2026-11-20 05:58:47 UTC - zig:check Parser/CSS/Install/Test 簇 11 模块语义修复入库
+- 完成：`analytics`/`css_parser`/`border_image`/`GlobWalker`/`bin`/`dependency`/`lifecycle_script_runner`/`resolution`/`ast/G`/`renamer`/`snapshot` 11/11 全 PASS。

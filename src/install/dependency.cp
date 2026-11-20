@@ -416,7 +416,7 @@ pub struct DependencyTarballInfo {
     }
 }
 
-pub union DependencyVersionValue {
+pub const DependencyVersionValue = union {
     uninitialized: void,
 
     npm: DependencyNpmInfo,
@@ -434,11 +434,11 @@ pub union DependencyVersionValue {
     // dep version without 'catalog:' protocol
     // empty string == default catalog
     catalog: String,
-}
+};
 pub struct DependencyVersion {
     tag: DependencyVersionTag = .uninitialized,
     literal: String = {},
-    value: DependencyVersionValue = { uninitialized: {} },
+    value: DependencyVersionValue = { uninitialized: std.mem.zeroes(void) },
 
     pub const toJS = dependency_jsc.versionToJS;
     pub inline fn npm(): DependencyNpmInfo? {

@@ -3004,3 +3004,5 @@ Options:
 - [2026-11-20 05:54:33 UTC] 验收并提交 `zig:check` 基础库与字符串簇 8 模块语义修复（`baby_list`/`multi_array_list`/`bun`/`bun_core/{fmt,output}`/`string/{string,immutable,immutable/unicode}`），消除 50+ 处语义报错，4 项硬门禁全 PASS。
 
 - [2026-11-20 05:57:46 UTC] 验收并提交 `zig:check` Runtime+Bundler+Bake 簇 13 模块语义修复（13/13 全 PASS），并追加 3 条新坑至 `CP_PITFALLS.md`。
+
+- [2026-11-20 05:58:47 UTC] 验收并提交 `zig:check` Parser/CSS/Install/Test 簇 11 模块语义修复（11/11 全 PASS），并定位外部 `SSLConfig.cp` / `PackageManagerTask.cp` 导出形态问题。

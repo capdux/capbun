@@ -87,7 +87,7 @@ pub const LifecycleScriptSubprocess = struct {
     stderr: OutputReader = OutputReader.init(@This()),
     has_called_process_exit: bool = false,
     manager: *PackageManager,
-    envp: ?[:null][*:0]u8,
+    envp: [:null]OptionalEnvStr,
     shell_bin: ?[:0]const u8,
     timer: ?Timer = null,
     has_incremented_alive_count: bool = false,
@@ -500,7 +500,7 @@ pub fn deinitAndDeletePackage(self: *LifecycleScriptSubprocess) void {
             _ = self.deinit();
     }
 
-pub fn spawnPackageScripts(manager: *PackageManager, list: Lockfile.Package.Scripts.List, envp: ?[:null][*:0]u8, shell_bin: ?[:0]const u8, optional: bool, log_level: PackageManager.Options.LogLevel, foreground: bool, ctx: ?InstallCtx) !void {
+pub fn spawnPackageScripts(manager: *PackageManager, list: Lockfile.Package.Scripts.List, envp: [:null]OptionalEnvStr, shell_bin: ?[:0]const u8, optional: bool, log_level: PackageManager.Options.LogLevel, foreground: bool, ctx: ?InstallCtx) !void {
             var lifecycle_subprocess = LifecycleScriptSubprocess.new(.{ .manager = manager, .envp = envp, .shell_bin = shell_bin, .scripts = list, .package_name = list.package_name, .foreground = foreground, .optional = optional, .ctx = ctx });
             _ = &lifecycle_subprocess;
             if (log_level.isVerbose()) {
@@ -528,8 +528,10 @@ pub fn decrementPendingScriptTasks(self: *LifecycleScriptSubprocess) void {
     pub const OutputReader = bun.io.BufferedReader;
 };
 
+const OptionalEnvStr = ?ConstEnvStr;
 const string = []const u8;
 const log = Output.scoped(.Script, .visible);
+const ConstEnvStr = @TypeOf(@as([:0]const u8, "").ptr);
 const PackageManager = install_mod.PackageManager;
 const Timer = std.time.Timer;
 const Environment = bun.Environment;

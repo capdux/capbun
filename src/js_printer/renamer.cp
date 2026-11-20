@@ -455,7 +455,7 @@ const SlotAndCount = packed struct(u64) {
 
 pub const NumberRenamer = struct {
     symbols: js_ast.Symbol.Map,
-    names: []bun.BabyList(string) = &{},
+    names: []bun.BabyList(string) = &.{},
     allocator: std.mem.Allocator,
     temp_allocator: std.mem.Allocator,
     number_scope_pool: bun.HiveArray(NumberScope, 128).Fallback,
@@ -668,7 +668,7 @@ pub const NumberRenamer = struct {
 
     pub const NumberScope = struct {
         parent: ?*NumberScope = null,
-        name_counts: bun.StringHashMapUnmanaged(u32) = {},
+        name_counts: bun.StringHashMapUnmanaged(u32) = .{},
 
         pub fn deinit(this: *NumberScope, allocator: std.mem.Allocator) void {
             this.name_counts.deinit(allocator);

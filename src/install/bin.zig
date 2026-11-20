@@ -99,7 +99,7 @@ pub const FormatStyle = enum {
 
 pub const Bin = extern struct {
     tag: Tag = Tag.none,
-    _padding_tag: [3]u8 = (.{ 0 } * (&3)),
+    _padding_tag: [3]u8 = @as([3]u8, @splat(@as(u8, 0))),
     value: Value = Value{ .map = ExternalStringList{  } },
 
 pub fn count(self: Bin, buf: []u8, extern_strings: []const ExternalString, comptime StringBuilder: type, builder: StringBuilder) u32 {

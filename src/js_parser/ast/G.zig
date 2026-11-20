@@ -250,8 +250,8 @@ pub const PropertyKind = enum(u3) {
         return try writer.write(@tagName(self));
     }
 };
-const empty_stmts: [0]Stmt = &.{};
-const empty_args: [0]Arg = &.{};
+var empty_stmts: [0]Stmt = undefined;
+var empty_args: [0]Arg = undefined;
 const BabyList = bun.BabyList;
 const logger = bun.logger;
 const TypeScript = bun.js_parser.TypeScript;

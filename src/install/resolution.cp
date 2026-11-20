@@ -27,7 +27,7 @@ pub type OldV2Resolution = ResolutionType<u32>;
 pub @c struct ResolutionType<SemverIntType> {
         tag: ResolutionTag = .uninitialized,
         _padding: [7]u8 = .{ 0, 0, 0, 0, 0, 0, 0 },
-        value: Value = { uninitialized: {} },
+        value: Value = { uninitialized: std.mem.zeroes(void) },
 
         const This = @This();
 
@@ -54,7 +54,7 @@ pub @c struct ResolutionType<SemverIntType> {
 
         pub fn fromTextLockfile(res_str: string, string_buf: *String.Buf): FromTextLockfileError!This {
             if (strings.hasPrefixComptime(res_str, "root:")) {
-                return This.init({ root: {} });
+                return This.init({ root: std.mem.zeroes(void) });
             }
 
             if (link := strings.withoutPrefixIfPossibleComptime(res_str, "link:")) {
@@ -269,8 +269,8 @@ pub @c struct ResolutionType<SemverIntType> {
                     .github => Value.init({
                         github: _.value.github.clone(buf, Builder, builder),
                     }),
-                    .root => Value.init({ root: {} }),
-                    .uninitialized => Value.init({ uninitialized: {} }),
+                    .root => Value.init({ root: std.mem.zeroes(void) }),
+                    .uninitialized => Value.init({ uninitialized: std.mem.zeroes(void) }),
                     else => {
                         std.debug.panic("Internal error: unexpected resolution tag: {}", [_.tag]);
                     },
@@ -289,8 +289,8 @@ pub @c struct ResolutionType<SemverIntType> {
                 .single_file_module => .init({ single_file_module: _.value.single_file_module }),
                 .git => .init({ git: _.value.git }),
                 .github => .init({ github: _.value.github }),
-                .root => .init({ root: {} }),
-                .uninitialized => .init({ uninitialized: {} }),
+                .root => .init({ root: std.mem.zeroes(void) }),
+                .uninitialized => .init({ uninitialized: std.mem.zeroes(void) }),
                 else => {
                     std.debug.panic("Internal error: unexpected resolution tag: {}", [_.tag]);
                 },

@@ -94,7 +94,7 @@ pub fn ResolutionType(comptime SemverIntType: type) type {
     return extern struct {
         tag: ResolutionTag = .uninitialized,
         _padding: [7]u8 = .{ 0, 0, 0, 0, 0, 0, 0 },
-        value: Value = .{ .uninitialized = .{} },
+        value: Value = .{ .uninitialized = std.mem.zeroes(void) },
 
 pub inline fn init(value: bun.@"meta".Tagged(Value,Tag)) This {
                 return .{ .tag = std.@"meta".activeTag(value), .value = Value.init(value) };
@@ -110,7 +110,7 @@ pub fn canEnqueueInstallTask(self: @This()) bool {
 
 pub fn fromTextLockfile(res_str: []const u8, string_buf: *String.Buf) FromTextLockfileError!This {
                 if (strings.hasPrefixComptime(res_str, "root:")) {
-                    return This.init(.{ .root = .{} });
+                    return This.init(.{ .root = std.mem.zeroes(void) });
                 }
                 if (strings.withoutPrefixIfPossibleComptime(res_str, "link:")) |link| {
                     _ = &link;
@@ -295,8 +295,8 @@ pub fn clone(self: @This(), buf: []const u8, comptime Builder: type, builder: Bu
 .single_file_module => Value.init(.{ .single_file_module = builder.append(String, self.value.single_file_module.slice(buf)) }),
 .git => Value.init(.{ .git = self.value.git.clone(buf, Builder, builder) }),
 .github => Value.init(.{ .github = self.value.github.clone(buf, Builder, builder) }),
-.root => Value.init(.{ .root = .{} }),
-.uninitialized => Value.init(.{ .uninitialized = .{} }),
+.root => Value.init(.{ .root = std.mem.zeroes(void) }),
+.uninitialized => Value.init(.{ .uninitialized = std.mem.zeroes(void) }),
 else => std.debug.panic("Internal error: unexpected resolution tag: {}", .{ self.tag }),
 }) };
         }
@@ -312,8 +312,8 @@ pub fn copy(self: @This()) Resolution {
 .single_file_module => .init(.{ .single_file_module = self.value.single_file_module }),
 .git => .init(.{ .git = self.value.git }),
 .github => .init(.{ .github = self.value.github }),
-.root => .init(.{ .root = .{} }),
-.uninitialized => .init(.{ .uninitialized = .{} }),
+.root => .init(.{ .root = std.mem.zeroes(void) }),
+.uninitialized => .init(.{ .uninitialized = std.mem.zeroes(void) }),
 else => std.debug.panic("Internal error: unexpected resolution tag: {}", .{ self.tag }),
 });
         }

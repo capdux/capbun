@@ -174,8 +174,10 @@ comptime {
     @export(&Features.heap_snapshot, { name: "Bun__Feature__heap_snapshot" });
     @export(&Features.webview_chrome, { name: "Bun__Feature__webview_chrome" });
     @export(&Features.webview_webkit, { name: "Bun__Feature__webview_webkit" });
-    @export(&GeneratePlatformImpl.Bun__doesMacOSVersionSupportSendRecvMsgX, { name: "Bun__doesMacOSVersionSupportSendRecvMsgX" });
-    @export(&GeneratePlatformImpl.Bun__isEpollPwait2SupportedOnLinuxKernel, { name: "Bun__isEpollPwait2SupportedOnLinuxKernel" });
+    const macos_msgx_fn = GeneratePlatformImpl.Bun__doesMacOSVersionSupportSendRecvMsgX;
+    const epoll_pwait2_fn = GeneratePlatformImpl.Bun__isEpollPwait2SupportedOnLinuxKernel;
+    @export(&macos_msgx_fn, { name: "Bun__doesMacOSVersionSupportSendRecvMsgX" });
+    @export(&epoll_pwait2_fn, { name: "Bun__isEpollPwait2SupportedOnLinuxKernel" });
 }
 
 pub fn validateFeatureName(name: []const u8): void {

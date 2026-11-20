@@ -1,4 +1,6 @@
 const log = Output.scoped(.Script, .visible);
+const ConstEnvStr = @TypeOf(@as([:0]const u8, "").ptr);
+type OptionalEnvStr = ConstEnvStr?;
 
 pub struct TopInstallCtx {
     entry_id: Store.Entry.Id,
@@ -17,7 +19,7 @@ pub struct LifecycleScriptSubprocess {
     stderr: OutputReader = OutputReader.init(@This()),
     has_called_process_exit: bool = false,
     manager: *PackageManager,
-    envp: [:null][*:0]const u8?,
+    envp: [:null]OptionalEnvStr,
     shell_bin: [:0]const u8?,
 
     timer: Timer? = null,
@@ -550,7 +552,7 @@ pub struct LifecycleScriptSubprocess {
     static fn spawnPackageScripts(
         manager: *PackageManager,
         list: Lockfile.Package.Scripts.List,
-        envp: [:null][*:0]const u8?,
+        envp: [:null]OptionalEnvStr,
         shell_bin: [:0]const u8?,
         optional: bool,
         log_level: PackageManager.Options.LogLevel,

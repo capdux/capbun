@@ -456,23 +456,10 @@ pub fn eql(self: DependencyTarballInfo, that: DependencyTarballInfo, this_buf: [
     }
 };
 
-pub const DependencyVersionValue = union {
-    uninitialized: void,
-    npm: DependencyNpmInfo,
-    dist_tag: DependencyTagInfo,
-    tarball: DependencyTarballInfo,
-    folder: String,
-    symlink: String,
-    workspace: String,
-    git: Repository,
-    github: Repository,
-    catalog: String,
-};
-
 pub const DependencyVersion = struct {
     tag: DependencyVersionTag = .uninitialized,
     literal: String = .{},
-    value: *DependencyVersionValue = .{ .uninitialized = .{} },
+    value: DependencyVersionValue = .{ .uninitialized = std.mem.zeroes(void) },
 
 pub inline fn npm(self: DependencyVersion) ?DependencyNpmInfo {
             return (if ((self.tag == .npm)) self.value.npm else null);
@@ -1174,6 +1161,18 @@ pub const External = [size]u8;
 const size = (((@sizeOf(Dependency.Version.External) + @sizeOf(PackageNameHash)) + @sizeOf(Dependency.Behavior)) + @sizeOf(String));
 pub const fromJS = dependency_jsc.dependencyFromJS;
 const string = []const u8;
+pub const DependencyVersionValue = union {
+    uninitialized: void,
+    npm: DependencyNpmInfo,
+    dist_tag: DependencyTagInfo,
+    tarball: DependencyTarballInfo,
+    folder: String,
+    symlink: String,
+    workspace: String,
+    git: Repository,
+    github: Repository,
+    catalog: String,
+};
 const Repository = repository_mod.Repository;
 const Features = Install.Features;
 const PackageManager = Install.PackageManager;

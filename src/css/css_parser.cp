@@ -27,7 +27,7 @@ pub const SupportsCondition = css_rules.supports.SupportsCondition;
 pub const CustomMedia = css_rules.custom_media.CustomMediaRule;
 pub const NamespaceRule = css_rules.namespace.NamespaceRule;
 pub const UnknownAtRule = css_rules.unknown.UnknownAtRule;
-pub const ImportRule = css_rules.@"import".ImportRule;
+pub const ImportRule = css_rules.import_rule.ImportRule;
 pub const StyleRule = css_rules.style.StyleRule;
 pub const StyleContext = css_rules.StyleContext;
 pub const SupportsRule = css_rules.supports.SupportsRule;
@@ -108,7 +108,7 @@ pub const MinifyErr = errors_.MinifyErr;
 import generic from "./generics.zig";
 pub const HASH_SEED = generic.HASH_SEED;
 
-pub const ImportConditions = css_rules.@"import".ImportConditions;
+pub const ImportConditions = css_rules.import_rule.ImportConditions;
 
 import compat from "./compat.zig";
 
@@ -3064,8 +3064,10 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
 pub const OptionalString = ?[]const u8;
 pub const CustomMediaMap = std.StringArrayHashMapUnmanaged(css_rules.custom_media.CustomMediaRule);
 
+pub type OptionalBundlerTailwindState = (*BundlerTailwindState)?;
+
 fn TailwindType(comptime AtRule: type): type {
-    if (AtRule == BundlerAtRule) return (*BundlerTailwindState)?;
+    if (AtRule == BundlerAtRule) return OptionalBundlerTailwindState;
     return u0;
 }
 

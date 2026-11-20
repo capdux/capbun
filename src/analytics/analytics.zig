@@ -39,8 +39,12 @@ comptime {
     _ = @export((&Features.heap_snapshot), .{ .name = "Bun__Feature__heap_snapshot" });
     _ = @export((&Features.webview_chrome), .{ .name = "Bun__Feature__webview_chrome" });
     _ = @export((&Features.webview_webkit), .{ .name = "Bun__Feature__webview_webkit" });
-    _ = @export(*const GeneratePlatformImpl.Bun__doesMacOSVersionSupportSendRecvMsgX, .{ .name = "Bun__doesMacOSVersionSupportSendRecvMsgX" });
-    _ = @export(*const GeneratePlatformImpl.Bun__isEpollPwait2SupportedOnLinuxKernel, .{ .name = "Bun__isEpollPwait2SupportedOnLinuxKernel" });
+    const macos_msgx_fn = GeneratePlatformImpl.Bun__doesMacOSVersionSupportSendRecvMsgX;
+    _ = &macos_msgx_fn;
+    const epoll_pwait2_fn = GeneratePlatformImpl.Bun__isEpollPwait2SupportedOnLinuxKernel;
+    _ = &epoll_pwait2_fn;
+    _ = @export((&macos_msgx_fn), .{ .name = "Bun__doesMacOSVersionSupportSendRecvMsgX" });
+    _ = @export((&epoll_pwait2_fn), .{ .name = "Bun__isEpollPwait2SupportedOnLinuxKernel" });
 
 }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
