@@ -146,11 +146,12 @@ pub union(Tag) Time {
 
     pub fn add(allocator: std.mem.Allocator, other: @This()): Time {
         const addfn = struct {
-            static fn add(_: void, a: f32, b: f32): f32 {
+            static fn add(_: u8, a: f32, b: f32): f32 {
                 return a + b;
             }
         };
-        return _.op(&other, @as(void, {}), addfn.add);
+        const ctx: u8 = 0;
+        return _.op(&other, ctx, addfn.add);
     }
 
     pub fn partialCmp(other: *const Time): std.math.Order? {

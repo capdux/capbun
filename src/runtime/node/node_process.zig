@@ -123,7 +123,8 @@ pub fn setTitle(globalObject: *JSGlobalObject, newvalue: *bun.String) callconv(.
         defer {
         _ = title_mutex.unlock();
         }
-        const new_title = (blk_catch_0: { break :blk_catch_0 ((newvalue.toOwnedSlice(bun.default_allocator)) catch |__ce_0| { _ = &__ce_0; _ = globalObject.throwOutOfMemory();
+        const new_title = (blk_catch_0: { break :blk_catch_0 ((newvalue.toOwnedSlice(bun.default_allocator)) catch |__ce_0| { _ = &__ce_0; const _e = globalObject.throwOutOfMemory();
+        _ = (&_e);
         return; }); });
         if (bun.cli.Bun__Node__ProcessTitle) |slice| {
             _ = &slice;

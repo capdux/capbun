@@ -457,7 +457,7 @@ pub const Object = struct {
     close_brace_loc: logger.Loc = logger.Loc.Empty,
 
 pub fn get(self: Object, key: []const u8) ?Expr {
-            if (Object.asProperty(self, key)) |query| {
+            if (Object.asProperty((&self), key)) |query| {
                 _ = &query;
                 return query.expr;
             }
@@ -477,14 +477,14 @@ pub fn putString(self: *Object, allocator: std.mem.Allocator, key: []const u8, v
             return try self.put(self, allocator, key, Expr.init(E.String, E.String.init(value), logger.Loc.Empty));
     }
 
-pub fn set(self: *Object, key: Expr, allocator: std.mem.Allocator, value: Expr) !SetError {
+pub fn set(self: *Object, key: Expr, allocator: std.mem.Allocator, value: Expr) SetError!void {
             if (self.hasProperty(key.data.e_string.data)) {
                 return error.Clobber;
             }
             _ = try self.properties.append(allocator, .{ .key = key, .value = value });
     }
 
-pub fn setRope(self: *Object, rope: *const Rope, allocator: std.mem.Allocator, value: Expr) !SetError {
+pub fn setRope(self: *Object, rope: *const Rope, allocator: std.mem.Allocator, value: Expr) SetError!void {
             if (self.get(rope.head.data.e_string.data)) |existing| {
                 _ = &existing;
                 switch (existing.data) {
@@ -564,7 +564,7 @@ return error.Clobber;
                 _ = try self.properties.append(allocator, .{ .key = rope.head, .value = obj });
                 return out;
             }
-            const out = Expr.init(E.Object, E.Object, rope.head.loc);
+            const out = Expr.init(E.Object, E.Object{ .properties = G.Property.List{  } }, rope.head.loc);
             _ = try self.properties.append(allocator, .{ .key = rope.head, .value = out });
             return out;
     }
@@ -605,7 +605,7 @@ return error.Clobber;
                 _ = try self.properties.append(allocator, .{ .key = rope.head, .value = obj });
                 return out;
             }
-            const out = Expr.init(E.Array, E.Array, rope.head.loc);
+            const out = Expr.init(E.Array, E.Array{ .items = ExprNodeList{  } }, rope.head.loc);
             _ = try self.properties.append(allocator, .{ .key = rope.head, .value = out });
             return out;
     }

@@ -483,7 +483,7 @@ export class All {
         return ImmediateObject.init(global, id, wrapped_callback, arguments);
     }
 
-    pub fn setTimeout(
+    static fn setTimeout(
         global: *JSGlobalObject,
         callback: JSValue,
         arguments: JSValue,
@@ -500,7 +500,7 @@ export class All {
         return TimeoutObject.init(global, id, .setTimeout, countdown_int, wrapped_callback, arguments);
     }
 
-    pub fn setInterval(
+    static fn setInterval(
         global: *JSGlobalObject,
         callback: JSValue,
         arguments: JSValue,

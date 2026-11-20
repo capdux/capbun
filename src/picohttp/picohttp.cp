@@ -115,7 +115,7 @@ export struct RequestCURLFormatter {
             bun.strings.hasPrefixComptime(content_type, "application/x-www-form-urlencoded");
     }
 
-    pub fn format(*_, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         const request = this.request;
         if (Output.enable_ansi_colors_stderr) {
             * = writer.write(Output.prettyFmt("<r><d>[fetch] $<r> ", true))?;
@@ -190,7 +190,7 @@ export struct Request {
         };
     }
 
-    pub fn format(*_, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
             * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
         }
@@ -267,7 +267,7 @@ export struct Response {
     headers: HeaderList = HeaderList{},
     bytes_read: c_int = 0,
 
-    pub fn format(*_, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
             * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
         }

@@ -2495,10 +2495,10 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
         fn last_tok_tag(self: *@This()): TokenTag? {
             if (self.tokens.items.len == 0) return null;
-            return @as(TokenTag, self.tokens.items[self.tokens.items.len - 1]);
+            return std.@"meta".activeTag(self.tokens.items[self.tokens.items.len - 1]);
         }
 
-        pub fn lex(self: *@This())! {
+        pub fn lex(self: *@This()): LexerError!void {
             while (true) {
                 const input_opt = self.eat();
                 if (input_opt == null) {
@@ -3302,7 +3302,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
         /// __NOTE__: Do not store references to the returned bun.String, it does not have its ref count incremented
         fn eatJSStringRef(self: *@This()): bun.String? {
             if (idx := self.eatJSSubstitutionIdx(
-                LEX_JS_STRING_PREFIX,
+                LEX_JS_STRING_PREFIX[0..],
                 "JS string ref",
                 validateJSStringRefIdx,
             )) {
@@ -3322,7 +3322,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
         fn eatJSObjRef(self: *@This()): Token? {
             if (idx := self.eatJSSubstitutionIdx(
-                LEX_JS_OBJREF_PREFIX,
+                LEX_JS_OBJREF_PREFIX[0..],
                 "JS object ref",
                 validateJSObjRefIdx,
             )) {

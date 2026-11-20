@@ -613,7 +613,7 @@ pub struct Object {
     const Sorter = ObjectSorter;
 
     fn get(key: string): Expr? {
-        if (query := asProperty(_, key)) {
+        if (query := asProperty(&_, key)) {
             return query.expr;
         }
         return null;
@@ -638,7 +638,7 @@ pub struct Object {
 
     pub const SetError = ObjectSetError;
 
-    fn set(*_, key: Expr, allocator: std.mem.Allocator, value: Expr): !SetError {
+    fn set(*_, key: Expr, allocator: std.mem.Allocator, value: Expr): SetError!void {
         if (_.hasProperty(key.data.e_string.data)) return error.Clobber;
         _.properties.append(allocator, {
             key: key,
@@ -647,7 +647,7 @@ pub struct Object {
     }
 
     // this is terribly, shamefully slow
-    fn setRope(*_, rope: *const Rope, allocator: std.mem.Allocator, value: Expr): !SetError {
+    fn setRope(*_, rope: *const Rope, allocator: std.mem.Allocator, value: Expr): SetError!void {
         if (existing := _.get(rope.head.data.e_string.data)) {
             switch (existing.data) {
                 .e_array => |array| {
@@ -737,7 +737,7 @@ pub struct Object {
             return out;
         }
 
-        const out = Expr.init(E.Object, E.Object{}, rope.head.loc);
+        const out = Expr.init(E.Object, E.Object{ properties: G.Property.List{} }, rope.head.loc);
         _.properties.append(allocator, {
             key: rope.head,
             value: out,
@@ -786,7 +786,7 @@ pub struct Object {
             return out;
         }
 
-        const out = Expr.init(E.Array, E.Array{}, rope.head.loc);
+        const out = Expr.init(E.Array, E.Array{ items: ExprNodeList{} }, rope.head.loc);
         _.properties.append(allocator, {
             key: rope.head,
             value: out,

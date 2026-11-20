@@ -1417,3 +1417,5 @@
 - **[2026-11-20] Wave 12 全量收官**：全仓 `bun run zig:check` 从 422 暴跌至 **103 错 / 30 个 `src/` 文件**（97.7% 模块零错误）；`meta.cp`、`expect.cp`（含全部 57 matcher）、`calc.cp` 均清零；`js_bun_spawn_bindings.cp` 用 `pub fn @"spawn"` 规避关键字跳导。
 
 - **[2026-11-20] Wave 13 Batch C 修复要点**：`owned.cp` 补 `switch (comptime info.kind())` 消除 `std/meta.zig:116`；`bun_test.cp` `BunTestRefDataValue` 改值类型联合消除 `Io/Writer.zig:1087`；`Blob.cp` `readBytesToHandler` 返回类型修正为 `void ! bun.JSTerminated`。
+
+- **[2026-11-20] Wave 13 清零收官修复要点**：`sys.cp` 用 `@TypeOf(empty_cstr_slice.ptr)` 保留 `[*:0]const u8` 同步修复 `node_fs.statx`；`Sink.cp` 传 `detachPtrExtern.*` 消除 `std/meta.zig:906`；`Timer.cp` `setTimeout`/`setInterval` 补 `static` 消除 `host_fn` 参数错；`yaml.cp` `Indent`/`Pos`/`Line` 枚举补 `static fn`；`E.cp` 显式字段初始化消除 `Expr.init` 类型错。

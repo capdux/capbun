@@ -159,48 +159,39 @@ pub const Indent = enum(usize) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn @"from"(self: Indent, indent: usize) Indent {
-        _ = self;
+pub fn @"from"(indent: usize) Indent {
             return @enumFromInt(indent);
     }
 
-pub fn cast(self: Indent, indent: Indent) usize {
-        _ = self;
+pub fn cast(indent: Indent) usize {
             return @intFromEnum(indent);
     }
 
-pub fn inc(self: *Indent, indent: *Indent, n: usize) void {
-        _ = self;
+pub fn inc(indent: *Indent, n: usize) void {
             indent.* = @enumFromInt((@intFromEnum(indent.*) + n));
     }
 
-pub fn dec(self: *Indent, indent: *Indent, n: usize) void {
-        _ = self;
+pub fn dec(indent: *Indent, n: usize) void {
             indent.* = @enumFromInt((@intFromEnum(indent.*) - n));
     }
 
-pub fn add(self: Indent, indent: Indent, n: usize) Indent {
-        _ = self;
+pub fn add(indent: Indent, n: usize) Indent {
             return @enumFromInt((@intFromEnum(indent) + n));
     }
 
-pub fn sub(self: Indent, indent: Indent, n: usize) Indent {
-        _ = self;
+pub fn sub(indent: Indent, n: usize) Indent {
             return @enumFromInt((@intFromEnum(indent) - n));
     }
 
-pub fn isLessThan(self: Indent, indent: Indent, other: Indent) bool {
-        _ = self;
+pub fn isLessThan(indent: Indent, other: Indent) bool {
             return (@intFromEnum(indent) < @intFromEnum(other));
     }
 
-pub fn isLessThanOrEqual(self: Indent, indent: Indent, other: Indent) bool {
-        _ = self;
+pub fn isLessThanOrEqual(indent: Indent, other: Indent) bool {
             return (@intFromEnum(indent) <= @intFromEnum(other));
     }
 
-pub fn cmp(self: Indent, l: Indent, r: Indent) std.math.Order {
-        _ = self;
+pub fn cmp(l: Indent, r: Indent) std.math.Order {
             if ((@intFromEnum(l) > @intFromEnum(r))) {
                 return .gt;
             }
@@ -223,48 +214,39 @@ pub const Pos = enum(usize) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn @"from"(self: Pos, pos: usize) Pos {
-        _ = self;
+pub fn @"from"(pos: usize) Pos {
             return @enumFromInt(pos);
     }
 
-pub fn cast(self: Pos, pos: Pos) usize {
-        _ = self;
+pub fn cast(pos: Pos) usize {
             return @intFromEnum(pos);
     }
 
-pub fn loc(self: Pos, pos: Pos) logger.Loc {
-        _ = self;
+pub fn loc(pos: Pos) logger.Loc {
             return .{ .start = (if (comptime @typeInfo(@TypeOf(@intFromEnum(pos))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromEnum(pos))) else cp_cast_int(i32, @intFromEnum(pos))) };
     }
 
-pub fn inc(self: *Pos, pos: *Pos, n: usize) void {
-        _ = self;
+pub fn inc(pos: *Pos, n: usize) void {
             pos.* = @enumFromInt((@intFromEnum(pos.*) + n));
     }
 
-pub fn dec(self: *Pos, pos: *Pos, n: usize) void {
-        _ = self;
+pub fn dec(pos: *Pos, n: usize) void {
             pos.* = @enumFromInt((@intFromEnum(pos.*) - n));
     }
 
-pub fn add(self: Pos, pos: Pos, n: usize) Pos {
-        _ = self;
+pub fn add(pos: Pos, n: usize) Pos {
             return @enumFromInt((@intFromEnum(pos) + n));
     }
 
-pub fn sub(self: Pos, pos: Pos, n: usize) Pos {
-        _ = self;
+pub fn sub(pos: Pos, n: usize) Pos {
             return @enumFromInt((@intFromEnum(pos) - n));
     }
 
-pub fn isLessThan(self: Pos, pos: Pos, other: usize) bool {
-        _ = self;
+pub fn isLessThan(pos: Pos, other: usize) bool {
             return (pos.cast() < other);
     }
 
-pub fn cmp(self: Pos, l: Pos, r: usize) std.math.Order {
-        _ = self;
+pub fn cmp(l: Pos, r: usize) std.math.Order {
             if ((l.cast() < r)) {
                 return .lt;
             }
@@ -282,33 +264,27 @@ pub const Line = enum(usize) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn @"from"(self: Line, line: usize) Line {
-        _ = self;
+pub fn @"from"(line: usize) Line {
             return @enumFromInt(line);
     }
 
-pub fn cast(self: Line, line: Line) usize {
-        _ = self;
+pub fn cast(line: Line) usize {
             return @intFromEnum(line);
     }
 
-pub fn inc(self: *Line, line: *Line, n: usize) void {
-        _ = self;
+pub fn inc(line: *Line, n: usize) void {
             line.* = @enumFromInt((@intFromEnum(line.*) + n));
     }
 
-pub fn dec(self: *Line, line: *Line, n: usize) void {
-        _ = self;
+pub fn dec(line: *Line, n: usize) void {
             line.* = @enumFromInt((@intFromEnum(line.*) - n));
     }
 
-pub fn add(self: Line, line: Line, n: usize) Line {
-        _ = self;
+pub fn add(line: Line, n: usize) Line {
             return @enumFromInt((@intFromEnum(line) + n));
     }
 
-pub fn sub(self: Line, line: Line, n: usize) Line {
-        _ = self;
+pub fn sub(line: Line, n: usize) Line {
             return @enumFromInt((@intFromEnum(line) - n));
     }
 };
@@ -825,7 +801,69 @@ pub fn success(stream: Stream, parser: *const Parser(enc)) ParserParseResult(enc
         }
 
 pub fn fail(e: ParseError, parser: *const Parser(enc)) ParserParseResult(enc) {
-                return .{ .@"err" = (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .OutOfMemory)) {  break :__sw_blk_2 cp_val(.oom); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .StackOverflow)) {  break :__sw_blk_2 cp_val(.stack_overflow); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnexpectedToken)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .unexpected_token = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnexpectedEof)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .unexpected_eof = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidDirective)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .invalid_directive = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnexpectedCharacter)) {  break :__sw_blk_2 cp_val((if ((!parser.pos.isLessThan(parser.input.len))) ParserParseResultError{ .unexpected_eof = ParserErrorPos{ .pos = parser.pos } } else ParserParseResultError{ .unexpected_character = ParserErrorPos{ .pos = parser.pos } })); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnresolvedTagHandle)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .unresolved_tag_handle = ParserErrorPos{ .pos = parser.pos } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnresolvedAlias)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .unresolved_alias = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MultilineImplicitKey)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .multiline_implicit_key = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MultipleAnchors)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .multiple_anchors = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MultipleTags)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .multiple_tags = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnexpectedDocumentStart)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .unexpected_document_start = ParserErrorPos{ .pos = parser.pos } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .UnexpectedDocumentEnd)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .unexpected_document_end = ParserErrorPos{ .pos = parser.pos } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MultipleYamlDirectives)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .multiple_yaml_directives = ParserErrorPos{ .pos = parser.token.start } }); } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .InvalidIndentation)) {  break :__sw_blk_2 cp_val(ParserParseResultError{ .invalid_indentation = ParserErrorPos{ .pos = parser.pos } }); } }  unreachable; }) };
+                if ((e == error.OutOfMemory)) {
+                    return .{ .@"err" = .oom };
+                } else {
+                    if ((e == error.StackOverflow)) {
+                        return .{ .@"err" = .stack_overflow };
+                    } else {
+                        if ((e == error.UnexpectedToken)) {
+                            return .{ .@"err" = ParserParseResultError{ .unexpected_token = ParserErrorPos{ .pos = parser.token.start } } };
+                        } else {
+                            if ((e == error.UnexpectedEof)) {
+                                return .{ .@"err" = ParserParseResultError{ .unexpected_eof = ParserErrorPos{ .pos = parser.token.start } } };
+                            } else {
+                                if ((e == error.InvalidDirective)) {
+                                    return .{ .@"err" = ParserParseResultError{ .invalid_directive = ParserErrorPos{ .pos = parser.token.start } } };
+                                } else {
+                                    if ((e == error.UnexpectedCharacter)) {
+                                        if ((!parser.pos.isLessThan(parser.input.len))) {
+                                            return .{ .@"err" = ParserParseResultError{ .unexpected_eof = ParserErrorPos{ .pos = parser.pos } } };
+                                        }
+                                        return .{ .@"err" = ParserParseResultError{ .unexpected_character = ParserErrorPos{ .pos = parser.pos } } };
+                                    } else {
+                                        if ((e == error.UnresolvedTagHandle)) {
+                                            return .{ .@"err" = ParserParseResultError{ .unresolved_tag_handle = ParserErrorPos{ .pos = parser.pos } } };
+                                        } else {
+                                            if ((e == error.UnresolvedAlias)) {
+                                                return .{ .@"err" = ParserParseResultError{ .unresolved_alias = ParserErrorPos{ .pos = parser.token.start } } };
+                                            } else {
+                                                if ((e == error.MultilineImplicitKey)) {
+                                                    return .{ .@"err" = ParserParseResultError{ .multiline_implicit_key = ParserErrorPos{ .pos = parser.token.start } } };
+                                                } else {
+                                                    if ((e == error.MultipleAnchors)) {
+                                                        return .{ .@"err" = ParserParseResultError{ .multiple_anchors = ParserErrorPos{ .pos = parser.token.start } } };
+                                                    } else {
+                                                        if ((e == error.MultipleTags)) {
+                                                            return .{ .@"err" = ParserParseResultError{ .multiple_tags = ParserErrorPos{ .pos = parser.token.start } } };
+                                                        } else {
+                                                            if ((e == error.UnexpectedDocumentStart)) {
+                                                                return .{ .@"err" = ParserParseResultError{ .unexpected_document_start = ParserErrorPos{ .pos = parser.pos } } };
+                                                            } else {
+                                                                if ((e == error.UnexpectedDocumentEnd)) {
+                                                                    return .{ .@"err" = ParserParseResultError{ .unexpected_document_end = ParserErrorPos{ .pos = parser.pos } } };
+                                                                } else {
+                                                                    if ((e == error.MultipleYamlDirectives)) {
+                                                                        return .{ .@"err" = ParserParseResultError{ .multiple_yaml_directives = ParserErrorPos{ .pos = parser.token.start } } };
+                                                                    } else {
+                                                                        if ((e == error.InvalidIndentation)) {
+                                                                            return .{ .@"err" = ParserParseResultError{ .invalid_indentation = ParserErrorPos{ .pos = parser.pos } } };
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return .{ .@"err" = .oom };
         }
         const Stream = ParserStream(enc);
         const ParseError = Parser(enc).ParseError;
@@ -1082,8 +1120,8 @@ pub fn appendUnknownSourceSlice(self: *@This(), off: Pos, end: Pos) OOM!void {
                 {
                     var _pos: i32 = off.cast();
                     _ = &_pos;
-                    const __end_5 = end.cast();
-                    while (_pos < __end_5) : (_pos += 1) {
+                    const __end_4 = end.cast();
+                    while (_pos < __end_4) : (_pos += 1) {
                         const pos: Pos = .{ .@"from" = _pos };
                         const unit = self.parser.input[@as(usize, @intCast(pos.cast()))];
                         switch (unit) {
@@ -4596,7 +4634,8 @@ pub fn stringBuilder(self: *@This()) String.Builder {
         const Escape = ParserEscape;
         const DecodeHexCodePointError = (OOM or error{UnexpectedCharacter});
         const ScanTagPropertyError = error{ UnresolvedTagHandle, UnexpectedCharacter };
-        const ScanError = (OOM or error{
+        const ScanError = error{
+                OutOfMemory,
                 UnexpectedToken,
                 UnexpectedCharacter,
                 UnresolvedTagHandle,
@@ -4604,7 +4643,7 @@ pub fn stringBuilder(self: *@This()) String.Builder {
                 UnexpectedDocumentEnd,
                 InvalidIndentation,
                 // ScalarTypeMismatch,
-            });
+            };
         const ScanOptions = ParserScanOptions(enc);
         const ScanCtx = ParserScanCtx(enc);
         pub const String = ParserString(enc);

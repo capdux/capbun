@@ -95,7 +95,7 @@ export fn canonicalizeIP(addr_str: string, outIP: *IPTextBuf): string? {
             return null;
         }
     }
-    if (c_ares.ares_inet_ntop(af, &ip_std_text, outIP, outIP.len) == null) {
+    if (unsafe { c_ares.ares_inet_ntop(af, @ptrCast(&ip_std_text), outIP, outIP.len) == null }) {
         return null;
     }
     const size = bun.len(bun.cast(CStrPtr, outIP));
@@ -107,7 +107,7 @@ export fn ip2String(ip: *boring.ASN1_OCTET_STRING, outIP: *IPTextBuf): string? {
     if (ip.length == 4) {
         af = std.posix.AF.INET;
     }
-    if (c_ares.ares_inet_ntop(af, ip.data, outIP, outIP.len) == null) {
+    if (unsafe { c_ares.ares_inet_ntop(af, @ptrCast(ip.data), outIP, outIP.len) == null }) {
         return null;
     }
 

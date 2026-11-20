@@ -89,39 +89,39 @@ pub enum Indent: usize {
     none = 0,
     _,
 
-    pub fn @"from"(indent: usize): Indent {
+    static fn @"from"(indent: usize): Indent {
         return @enumFromInt(indent);
     }
 
-    pub fn cast(indent: Indent): usize {
+    static fn cast(indent: Indent): usize {
         return @intFromEnum(indent);
     }
 
-    pub fn inc(indent: *Indent, n: usize) {
+    static fn inc(indent: *Indent, n: usize) {
         indent.* = @enumFromInt(@intFromEnum(indent.*) + n);
     }
 
-    pub fn dec(indent: *Indent, n: usize) {
+    static fn dec(indent: *Indent, n: usize) {
         indent.* = @enumFromInt(@intFromEnum(indent.*) - n);
     }
 
-    pub fn add(indent: Indent, n: usize): Indent {
+    static fn add(indent: Indent, n: usize): Indent {
         return @enumFromInt(@intFromEnum(indent) + n);
     }
 
-    pub fn sub(indent: Indent, n: usize): Indent {
+    static fn sub(indent: Indent, n: usize): Indent {
         return @enumFromInt(@intFromEnum(indent) - n);
     }
 
-    pub fn isLessThan(indent: Indent, other: Indent): bool {
+    static fn isLessThan(indent: Indent, other: Indent): bool {
         return @intFromEnum(indent) < @intFromEnum(other);
     }
 
-    pub fn isLessThanOrEqual(indent: Indent, other: Indent): bool {
+    static fn isLessThanOrEqual(indent: Indent, other: Indent): bool {
         return @intFromEnum(indent) <= @intFromEnum(other);
     }
 
-    pub fn cmp(l: Indent, r: Indent): std.math.Order {
+    static fn cmp(l: Indent, r: Indent): std.math.Order {
         if (@intFromEnum(l) > @intFromEnum(r)) return .gt;
         if (@intFromEnum(l) < @intFromEnum(r)) return .lt;
         return .eq;
@@ -136,39 +136,39 @@ pub enum Pos: usize {
     zero = 0,
     _,
 
-    pub fn @"from"(pos: usize): Pos {
+    static fn @"from"(pos: usize): Pos {
         return @enumFromInt(pos);
     }
 
-    pub fn cast(pos: Pos): usize {
+    static fn cast(pos: Pos): usize {
         return @intFromEnum(pos);
     }
 
-    pub fn loc(pos: Pos): logger.Loc {
+    static fn loc(pos: Pos): logger.Loc {
         return { start: i32(@intFromEnum(pos)) };
     }
 
-    pub fn inc(pos: *Pos, n: usize) {
+    static fn inc(pos: *Pos, n: usize) {
         pos.* = @enumFromInt(@intFromEnum(pos.*) + n);
     }
 
-    pub fn dec(pos: *Pos, n: usize) {
+    static fn dec(pos: *Pos, n: usize) {
         pos.* = @enumFromInt(@intFromEnum(pos.*) - n);
     }
 
-    pub fn add(pos: Pos, n: usize): Pos {
+    static fn add(pos: Pos, n: usize): Pos {
         return @enumFromInt(@intFromEnum(pos) + n);
     }
 
-    pub fn sub(pos: Pos, n: usize): Pos {
+    static fn sub(pos: Pos, n: usize): Pos {
         return @enumFromInt(@intFromEnum(pos) - n);
     }
 
-    pub fn isLessThan(pos: Pos, other: usize): bool {
+    static fn isLessThan(pos: Pos, other: usize): bool {
         return pos.cast() < other;
     }
 
-    pub fn cmp(l: Pos, r: usize): std.math.Order {
+    static fn cmp(l: Pos, r: usize): std.math.Order {
         if (l.cast() < r) return .lt;
         if (l.cast() > r) return .gt;
         return .eq;
@@ -178,27 +178,27 @@ pub enum Pos: usize {
 pub enum Line: usize {
     _,
 
-    pub fn @"from"(line: usize): Line {
+    static fn @"from"(line: usize): Line {
         return @enumFromInt(line);
     }
 
-    pub fn cast(line: Line): usize {
+    static fn cast(line: Line): usize {
         return @intFromEnum(line);
     }
 
-    pub fn inc(line: *Line, n: usize) {
+    static fn inc(line: *Line, n: usize) {
         line.* = @enumFromInt(@intFromEnum(line.*) + n);
     }
 
-    pub fn dec(line: *Line, n: usize) {
+    static fn dec(line: *Line, n: usize) {
         line.* = @enumFromInt(@intFromEnum(line.*) - n);
     }
 
-    pub fn add(line: Line, n: usize): Line {
+    static fn add(line: Line, n: usize): Line {
         return @enumFromInt(@intFromEnum(line) + n);
     }
 
-    pub fn sub(line: Line, n: usize): Line {
+    static fn sub(line: Line, n: usize): Line {
         return @enumFromInt(@intFromEnum(line) - n);
     }
 }
@@ -646,33 +646,41 @@ pub union(enum) ParserParseResult<const enc: Encoding> {
     }
 
     static fn fail(e: ParseError, parser: *const Parser(enc)): ParserParseResult<enc> {
-        return {
-            @"err": switch (e) {
-                error.OutOfMemory => .oom,
-                error.StackOverflow => .stack_overflow,
-                // error.UnexpectedToken => if (parser.token.data == .eof)
-                //     .{ .unexpected_eof = .{ .pos = parser.token.start } }
-                // else
-                //     .{ .unexpected_token = .{ .pos = parser.token.start } },
-                error.UnexpectedToken => ParserParseResultError{ unexpected_token: ParserErrorPos{ pos: parser.token.start } },
-                error.UnexpectedEof => ParserParseResultError{ unexpected_eof: ParserErrorPos{ pos: parser.token.start } },
-                error.InvalidDirective => ParserParseResultError{ invalid_directive: ParserErrorPos{ pos: parser.token.start } },
-                error.UnexpectedCharacter => if (!parser.pos.isLessThan(parser.input.len))
-                    ParserParseResultError{ unexpected_eof: ParserErrorPos{ pos: parser.pos } }
-                else
-                    ParserParseResultError{ unexpected_character: ParserErrorPos{ pos: parser.pos } },
-                error.UnresolvedTagHandle => ParserParseResultError{ unresolved_tag_handle: ParserErrorPos{ pos: parser.pos } },
-                error.UnresolvedAlias => ParserParseResultError{ unresolved_alias: ParserErrorPos{ pos: parser.token.start } },
-                // error.ScalarTypeMismatch => .{ .scalar_type_mismatch = .{ .pos = parser.token.start } },
-                error.MultilineImplicitKey => ParserParseResultError{ multiline_implicit_key: ParserErrorPos{ pos: parser.token.start } },
-                error.MultipleAnchors => ParserParseResultError{ multiple_anchors: ParserErrorPos{ pos: parser.token.start } },
-                error.MultipleTags => ParserParseResultError{ multiple_tags: ParserErrorPos{ pos: parser.token.start } },
-                error.UnexpectedDocumentStart => ParserParseResultError{ unexpected_document_start: ParserErrorPos{ pos: parser.pos } },
-                error.UnexpectedDocumentEnd => ParserParseResultError{ unexpected_document_end: ParserErrorPos{ pos: parser.pos } },
-                error.MultipleYamlDirectives => ParserParseResultError{ multiple_yaml_directives: ParserErrorPos{ pos: parser.token.start } },
-                error.InvalidIndentation => ParserParseResultError{ invalid_indentation: ParserErrorPos{ pos: parser.pos } },
-            },
-        };
+        if (e == error.OutOfMemory) {
+            return { @"err": .oom };
+        } else if (e == error.StackOverflow) {
+            return { @"err": .stack_overflow };
+        } else if (e == error.UnexpectedToken) {
+            return { @"err": ParserParseResultError{ unexpected_token: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.UnexpectedEof) {
+            return { @"err": ParserParseResultError{ unexpected_eof: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.InvalidDirective) {
+            return { @"err": ParserParseResultError{ invalid_directive: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.UnexpectedCharacter) {
+            if (!parser.pos.isLessThan(parser.input.len)) {
+                return { @"err": ParserParseResultError{ unexpected_eof: ParserErrorPos{ pos: parser.pos } } };
+            }
+            return { @"err": ParserParseResultError{ unexpected_character: ParserErrorPos{ pos: parser.pos } } };
+        } else if (e == error.UnresolvedTagHandle) {
+            return { @"err": ParserParseResultError{ unresolved_tag_handle: ParserErrorPos{ pos: parser.pos } } };
+        } else if (e == error.UnresolvedAlias) {
+            return { @"err": ParserParseResultError{ unresolved_alias: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.MultilineImplicitKey) {
+            return { @"err": ParserParseResultError{ multiline_implicit_key: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.MultipleAnchors) {
+            return { @"err": ParserParseResultError{ multiple_anchors: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.MultipleTags) {
+            return { @"err": ParserParseResultError{ multiple_tags: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.UnexpectedDocumentStart) {
+            return { @"err": ParserParseResultError{ unexpected_document_start: ParserErrorPos{ pos: parser.pos } } };
+        } else if (e == error.UnexpectedDocumentEnd) {
+            return { @"err": ParserParseResultError{ unexpected_document_end: ParserErrorPos{ pos: parser.pos } } };
+        } else if (e == error.MultipleYamlDirectives) {
+            return { @"err": ParserParseResultError{ multiple_yaml_directives: ParserErrorPos{ pos: parser.token.start } } };
+        } else if (e == error.InvalidIndentation) {
+            return { @"err": ParserParseResultError{ invalid_indentation: ParserErrorPos{ pos: parser.pos } } };
+        }
+        return { @"err": .oom };
     }
 }
 
@@ -4358,7 +4366,8 @@ pub struct Parser<const enc: Encoding> {
 
     // fn scanIndentation(self: *@This()) void {}
 
-    const ScanError = OOM || error{
+    const ScanError = error{
+        OutOfMemory,
         UnexpectedToken,
         UnexpectedCharacter,
         UnresolvedTagHandle,

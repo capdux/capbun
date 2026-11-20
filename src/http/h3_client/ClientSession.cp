@@ -9,6 +9,10 @@ import { Stream } from "./Stream.cp";
 import { HTTPClient } from "../http.cp";
 import * as encode from "./encode.cp";
 
+@c {
+    fn us_quic_socket_make_stream(s: *quic.Socket);
+}
+
 enum HeaderResult {
     has_body,
     finished,
@@ -65,7 +69,7 @@ export @root struct ClientSession {
         _.ref();
 
         if (_.handshake_done) {
-            if (qs := _.qsocket) qs.makeStream();
+            if (qs := _.qsocket) us_quic_socket_make_stream(qs);
         }
     }
 

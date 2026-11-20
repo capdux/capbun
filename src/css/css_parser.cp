@@ -7123,7 +7123,8 @@ pub struct to_css {
 
     static fn float32(val: f32, writer: *Printer)! {
         let scratch: [129]u8 = undefined;
-        let [str, *] = dtoa_short(&scratch, val, 6)?;
+        const pair = dtoa_short(&scratch, val, 6)?;
+        const str = pair[0];
         return writer.writeAll(str);
     }
 

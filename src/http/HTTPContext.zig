@@ -239,9 +239,9 @@ pub fn existingSocket(self: *@This(), reject_unauthorized: bool, hostname: []con
                             _ = HTTPContext.terminateSocket(http_socket);
                             continue;
                         }
-                        if (socket.ssl_config) |s| {
+                        if (socket.ssl_config) |*s| {
                             _ = &s;
-                            _ = s.deinit();
+                            _ = (s.*).deinit();
                         }
                         socket.ssl_config = null;
                         var tunnel: ?*ProxyTunnel = (if ((socket.proxy_tunnel != null)) socket.proxy_tunnel.?.leak() else null);
@@ -385,9 +385,9 @@ pub fn deinit(self: *@This()) void {
                     while (iter.next()) |idx| {
                         var pooled = self.pending_sockets.at(@intCast(idx));
                         _ = &pooled;
-                        if (pooled.ssl_config) |s| {
+                        if (pooled.ssl_config) |*s| {
                             _ = &s;
-                            _ = s.deinit();
+                            _ = (s.*).deinit();
                         }
                         pooled.ssl_config = null;
                         if (pooled.proxy_tunnel) |rp| {
@@ -484,7 +484,7 @@ pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_er
                 }
                 if (h2_session) |s| {
                     _ = &s;
-                    _ = (s).?.deref();
+                    _ = s.deref();
                 }
                 _ = HTTPContext.closeSocket(socket);
         }

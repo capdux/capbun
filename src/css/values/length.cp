@@ -263,7 +263,7 @@ pub enum LengthValue {
     }
     const _feature_map_ok = LengthValue._checkFeatureMap();
 
-    pub fn parse(input: *css.Parser): Result(@This()) {
+    static fn parse(input: *css.Parser): Result(@This()) {
         const location = input.currentSourceLocation();
         const token = switch (input.next()) {
             .result => |vv| vv,
@@ -298,7 +298,7 @@ pub enum LengthValue {
 
     pub fn isZero(): bool {
         inline for (field of bun.@"meta".EnumFields(@This())) {
-            if (@intFromEnum(_.*) == field.value) {
+            if (@intFromEnum(_) == field.value) {
                 return @field(_, field.name) == 0.0;
             }
         }
@@ -309,7 +309,7 @@ pub enum LengthValue {
         return this.*;
     }
 
-    pub fn zero(): LengthValue {
+    static fn zero(): LengthValue {
         return { px: 0.0 };
     }
 
@@ -356,14 +356,14 @@ pub enum LengthValue {
         const fields = std.@"meta".fields(@This());
         inline for (i of 0..fields.len) {
             const field = fields[i];
-            if (enum_fields[i].value == @intFromEnum(_.*)) {
+            if (enum_fields[i].value == @intFromEnum(_)) {
                 return css.signfns.signF32(@field(_, field.name));
             }
         }
         unreachable;
     }
 
-    pub fn tryFromToken(token: *const css.Token): css.Maybe(@This(), void) {
+    static fn tryFromToken(token: *const css.Token): css.Maybe(@This(), void) {
         switch (token.*) {
             .dimension => |*dim| {
                 inline for (field of std.@"meta".fields(@This())) {
@@ -382,7 +382,7 @@ pub enum LengthValue {
         const fields = std.@"meta".fields(@This());
         inline for (i of 0..fields.len) {
             const field = fields[i];
-            if (enum_fields[i].value == @intFromEnum(_.*)) {
+            if (enum_fields[i].value == @intFromEnum(_)) {
                 return .{ @field(_, field.name), field.name };
             }
         }
@@ -414,9 +414,9 @@ pub enum LengthValue {
     }
 
     pub fn partialCmp(other: *const LengthValue): std.math.Order? {
-        if (@intFromEnum(_.*) == @intFromEnum(other.*)) {
+        if (@intFromEnum(_) == @intFromEnum(other.*)) {
             inline for (field of bun.@"meta".EnumFields(LengthValue)) {
-                if (field.value == @intFromEnum(_.*)) {
+                if (field.value == @intFromEnum(_)) {
                     const a = @field(_, field.name);
                     const b = @field(other, field.name);
                     return css.generic.partialCmpF32(&a, &b);
@@ -438,9 +438,9 @@ pub enum LengthValue {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) f32,
     ): LengthValue? {
-        if (@intFromEnum(_.*) == @intFromEnum(other.*)) {
+        if (@intFromEnum(_) == @intFromEnum(other.*)) {
             inline for (field of bun.@"meta".EnumFields(LengthValue)) {
-                if (field.value == @intFromEnum(_.*)) {
+                if (field.value == @intFromEnum(_)) {
                     const a = @field(_, field.name);
                     const b = @field(other, field.name);
                     return @unionInit(LengthValue, field.name, op_fn(ctx, a, b));
@@ -463,9 +463,9 @@ pub enum LengthValue {
         ctx: auto,
         comptime op_fn: *const fn (@TypeOf(ctx), a: f32, b: f32) R,
     ): R? {
-        if (@intFromEnum(_.*) == @intFromEnum(other.*)) {
+        if (@intFromEnum(_) == @intFromEnum(other.*)) {
             inline for (field of bun.@"meta".EnumFields(LengthValue)) {
-                if (field.value == @intFromEnum(_.*)) {
+                if (field.value == @intFromEnum(_)) {
                     const a = @field(_, field.name);
                     const b = @field(other, field.name);
                     return op_fn(ctx, a, b);
@@ -487,9 +487,9 @@ pub enum LengthValue {
     }
 
     pub fn tryAdd(_: std.mem.Allocator, rhs: *const LengthValue): LengthValue? {
-        if (@intFromEnum(_.*) == @intFromEnum(rhs.*)) {
+        if (@intFromEnum(_) == @intFromEnum(rhs.*)) {
             inline for (field of bun.@"meta".EnumFields(LengthValue)) {
-                if (field.value == @intFromEnum(_.*)) {
+                if (field.value == @intFromEnum(_)) {
                     return @unionInit(LengthValue, field.name, @field(_, field.name) + @field(rhs, field.name));
                 }
             }

@@ -2869,10 +2869,10 @@ pub fn last_tok_tag(self: *@This()) ?TokenTag {
             if ((self.tokens.items.len == 0)) {
                 return null;
             }
-            return @as(TokenTag, @enumFromInt(self.tokens.items[@as(usize, @intCast((self.tokens.items.len - 1)))]));
+            return std.@"meta".activeTag(self.tokens.items[@as(usize, @intCast((self.tokens.items.len - 1)))]);
     }
 
-pub fn lex(self: *@This()) !void {
+pub fn lex(self: *@This()) LexerError!void {
             while (true) {
                 const input_opt = self.eat();
                 if ((input_opt == null)) {
@@ -3697,7 +3697,7 @@ break;
     }
 
 pub fn eatJSStringRef(self: *@This()) ?bun.String {
-            if (self.eatJSSubstitutionIdx(LEX_JS_STRING_PREFIX, "JS string ref", validateJSStringRefIdx)) |idx| {
+            if (self.eatJSSubstitutionIdx(LEX_JS_STRING_PREFIX[0..], "JS string ref", validateJSStringRefIdx)) |idx| {
                 _ = &idx;
                 return self.string_refs[@as(usize, @intCast(idx))];
             }
@@ -3714,7 +3714,7 @@ pub fn validateJSStringRefIdx(self: *@This(), idx: usize) bool {
     }
 
 pub fn eatJSObjRef(self: *@This()) ?Token {
-            if (self.eatJSSubstitutionIdx(LEX_JS_OBJREF_PREFIX, "JS object ref", validateJSObjRefIdx)) |idx| {
+            if (self.eatJSSubstitutionIdx(LEX_JS_OBJREF_PREFIX[0..], "JS object ref", validateJSObjRefIdx)) |idx| {
                 _ = &idx;
                 return .{ .JSObjRef = @intCast(idx) };
             }

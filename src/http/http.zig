@@ -925,7 +925,7 @@ pub fn writeToStream(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCo
             }
             return;
         }
-        const has_backpressure = (blk_catch_4: { break :blk_catch_4 ((self.writeToStreamUsingBuffer(self, is_ssl, socket, buffer, data)) catch |e| { _ = &e; _ = (if (comptime @typeInfo(@TypeOf(stream_buffer)) == .pointer) (stream_buffer) else &(stream_buffer)).release();
+        const has_backpressure = (blk_catch_4: { break :blk_catch_4 ((self.writeToStreamUsingBuffer(is_ssl, socket, buffer, data)) catch |e| { _ = &e; _ = (if (comptime @typeInfo(@TypeOf(stream_buffer)) == .pointer) (stream_buffer) else &(stream_buffer)).release();
         _ = self.state.original_request_body.stream.detach();
         _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
@@ -1495,9 +1495,9 @@ pub fn handleResponseBodyFromSinglePacket(self: *HTTPClient, incoming_data: []co
         {
             if (self.progress_node) |progress| {
                 _ = &progress;
-                _ = (progress).?.activate();
-                _ = (progress).?.setCompletedItems(incoming_data.len);
-                _ = (progress).?.context.maybeRefresh();
+                _ = progress.activate();
+                _ = progress.setCompletedItems(incoming_data.len);
+                _ = progress.context.maybeRefresh();
             }
         }
         }
@@ -1539,9 +1539,9 @@ pub fn handleResponseBodyFromMultiplePackets(self: *HTTPClient, incoming_data: [
         _ = log("handleResponseBodyFromMultiplePackets {d}", .{ self.state.total_body_received });
         if (self.progress_node) |progress| {
             _ = &progress;
-            _ = (progress).?.activate();
-            _ = (progress).?.setCompletedItems(self.state.total_body_received);
-            _ = (progress).?.context.maybeRefresh();
+            _ = progress.activate();
+            _ = progress.setCompletedItems(self.state.total_body_received);
+            _ = progress.context.maybeRefresh();
         }
         const is_done = ((content_length != null) and (self.state.total_body_received >= content_length.?));
         if (((is_done or self.signals.get(.response_body_streaming)) or (content_length == null))) {
@@ -1550,9 +1550,9 @@ pub fn handleResponseBodyFromMultiplePackets(self: *HTTPClient, incoming_data: [
             self.state.flags.is_libdeflate_fast_path_disabled = true;
             if (self.progress_node) |progress| {
                 _ = &progress;
-                _ = (progress).?.activate();
-                _ = (progress).?.setCompletedItems(self.state.total_body_received);
-                _ = (progress).?.context.maybeRefresh();
+                _ = progress.activate();
+                _ = progress.setCompletedItems(self.state.total_body_received);
+                _ = progress.context.maybeRefresh();
             }
             return (is_done or processed);
         }
@@ -1590,9 +1590,9 @@ return error.InvalidHTTPResponse;
 -2 => {
 if (self.progress_node) |progress| {
             _ = &progress;
-            _ = (progress).?.activate();
-            _ = (progress).?.setCompletedItems(buffer.list.items.len);
-            _ = (progress).?.context.maybeRefresh();
+            _ = progress.activate();
+            _ = progress.setCompletedItems(buffer.list.items.len);
+            _ = progress.context.maybeRefresh();
         }
         if (self.signals.get(.response_body_streaming)) {
             self.state.flags.is_libdeflate_fast_path_disabled = true;
@@ -1605,9 +1605,9 @@ self.state.flags.received_last_chunk = true;
         _ = try self.state.processBodyBuffer(buffer, true);
         if (self.progress_node) |progress| {
             _ = &progress;
-            _ = (progress).?.activate();
-            _ = (progress).?.setCompletedItems(buffer.list.items.len);
-            _ = (progress).?.context.maybeRefresh();
+            _ = progress.activate();
+            _ = progress.setCompletedItems(buffer.list.items.len);
+            _ = progress.context.maybeRefresh();
         }
         return true;
 },
@@ -1641,9 +1641,9 @@ return error.InvalidHTTPResponse;
 -2 => {
 if (self.progress_node) |progress| {
             _ = &progress;
-            _ = (progress).?.activate();
-            _ = (progress).?.setCompletedItems(buffer.len);
-            _ = (progress).?.context.maybeRefresh();
+            _ = progress.activate();
+            _ = progress.setCompletedItems(buffer.len);
+            _ = progress.context.maybeRefresh();
         }
         const body_buffer = self.state.getBodyBuffer();
         _ = try body_buffer.appendSliceExact(buffer);
@@ -1659,9 +1659,9 @@ self.state.flags.received_last_chunk = true;
         _ = assert((self.state.body_out_str.?.list.items.ptr != buffer.ptr));
         if (self.progress_node) |progress| {
             _ = &progress;
-            _ = (progress).?.activate();
-            _ = (progress).?.setCompletedItems(buffer.len);
-            _ = (progress).?.context.maybeRefresh();
+            _ = progress.activate();
+            _ = progress.setCompletedItems(buffer.len);
+            _ = progress.context.maybeRefresh();
         }
         return true;
 },
@@ -1931,8 +1931,7 @@ if (((status_code != 303) and (self.state.original_request_body == .stream))) {
                 if (((((status_code == 301) or (status_code == 302)) and (self.method == .POST)) or (((status_code == 303) and (self.method != .GET)) and (self.method != .HEAD)))) {
                     self.method = .GET;
                     if ((self.header_entries.len > 0)) {
-                        const @"request-body-header" = (&.{ "Content-Encoding", "Content-Language", "Content-Location" });
-                        _ = &@"request-body-header";
+                        const request_body_headers = (&.{ "Content-Encoding", "Content-Language", "Content-Location" });
                         var i: usize = 0;
                         _ = &i;
                         const names = self.header_entries.items(.name);
@@ -1950,7 +1949,7 @@ if (((status_code != 303) and (self.state.original_request_body == .stream))) {
                             } else {
                                 if ((name.len == 16)) {
                                     const hash = hashHeaderName(name);
-                                    inline for (@"request-body-header"()) |hash_value| {
+                                    inline for (request_body_headers) |hash_value| {
                                         if ((hash == hashHeaderConst(hash_value))) {
                                             _ = self.header_entries.orderedRemove(i);
                                             len = self.header_entries.len;
@@ -2448,12 +2447,12 @@ pub fn firstCall(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCont
         }
         if (comptime is_ssl) {
             const ssl_ptr: *bun.BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
-            var proto: ?[*c]const u8 = null;
+            var proto: [*c]const u8 = undefined;
             _ = &proto;
             var proto_len: c_uint = 0;
             _ = &proto_len;
             _ = bun.BoringSSL.c.SSL_get0_alpn_selected(ssl_ptr, (&proto), (&proto_len));
-            if (((((proto != null) and (proto_len == 2)) and ((proto.?)[0] == 104)) and ((proto.?)[1] == 50))) {
+            if (((((proto_len == 2) and (proto != null)) and ((proto.?)[0] == 104)) and ((proto.?)[1] == 50))) {
                 _ = bun.Output.scoped(.fetch, .visible)("ALPN negotiated h2 {s}", .{ client.url.href });
                 const ctx = client.getSslCtx(true);
                 const session = H2.ClientSession.create(ctx, socket, client);

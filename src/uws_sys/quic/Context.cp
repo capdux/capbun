@@ -4,7 +4,7 @@ import { Socket } from "./Socket.cp";
 import { Stream } from "./Stream.cp";
 
 @c {
-    fn us_create_quic_client_context(loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32): *Context?;
+    fn us_create_quic_client_context(loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32): (*Context)?;
     fn us_quic_socket_context_loop(ctx: *Context): *Loop;
     fn us_quic_socket_context_connect(ctx: *Context, host: cstr, port: i32, sni: cstr, reject_unauthorized: i32, out_qs: **Socket?!, out_pending: **PendingConnect?!, user: *!): i32;
     fn us_quic_socket_context_on_hsk_done(ctx: *Context, cb: @c fn(*Socket, i32) void);
@@ -21,7 +21,7 @@ pub union(enum) QuicConnectResult { socket: *Socket, pending: *PendingConnect, e
 
 export @opaque class Context {
     pub const ConnectResult = QuicConnectResult;
-    pub static fn createClient(event_loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32): *Context? { return us_create_quic_client_context(event_loop, ext_size, conn_ext, stream_ext); }
+    pub static fn createClient(event_loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32): (*Context)? { return us_create_quic_client_context(event_loop, ext_size, conn_ext, stream_ext); }
     pub fn loop(*_): *Loop { return us_quic_socket_context_loop(_); }
     pub fn onHskDone(*_, cb: @c fn(*Socket, i32) void) { us_quic_socket_context_on_hsk_done(_, cb); }
     pub fn onGoaway(*_, cb: @c fn(*Socket) void) { us_quic_socket_context_on_goaway(_, cb); }
@@ -35,7 +35,7 @@ export @opaque class Context {
     pub fn connect(*_, host: cstr, port: u16, sni: cstr, reject_unauthorized: bool, user: *!): QuicConnectResult {
         let qs: (*Socket)? = null;
         let pc: (*PendingConnect)? = null;
-        let reject_int = if (reject_unauthorized) 1 else 0;
+        let reject_int: i32 = if (reject_unauthorized) 1 else 0;
         let res = us_quic_socket_context_connect(_, host, port as i32, sni, reject_int, &qs, &pc, user);
         return switch (res) {
             1 => .{ .socket = qs.? },

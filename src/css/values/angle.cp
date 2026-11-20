@@ -190,11 +190,12 @@ pub union(Tag) Angle {
 
     pub fn add(rhs: Angle): Angle {
         const addfn = struct {
-            static fn add(_: void, a: f32, b: f32): f32 {
+            static fn add(_: u8, a: f32, b: f32): f32 {
                 return a + b;
             }
         };
-        return _.op(&rhs, @as(void, {}), addfn.add);
+        const ctx: u8 = 0;
+        return _.op(&rhs, ctx, addfn.add);
     }
 
     pub fn tryAdd(allocator: std.mem.Allocator, rhs: *const Angle): Angle? {

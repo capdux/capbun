@@ -3734,7 +3734,7 @@ pub fn readdirWithEntries(args: Arguments.Readdir, fd: bun.FD, basename: [:0]con
                     if ((ExpectedType == jsc.Node.Dirent)) {
                         _ = dirent_path.ref();
                         const kind = (if ((current.kind == .unknown)) (switch (Syscall.lstatat(fd, (if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).sliceAssumeZ())) {
-.result => |st| bun.sys.kindFromMode((if (comptime @typeInfo(@TypeOf(st.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(st.mode)) else cp_cast_int(i32, st.mode))),
+.result => |st| bun.sys.kindFromMode(@intCast(st.mode)),
 .err => current.kind,
 }) else current.kind);
                         _ = (blk_catch_4: { break :blk_catch_4 ((entries.append(.{ .name = jsc.WebCore.encoding.toBunString(utf8_name, args.encoding), .path = dirent_path, .kind = kind })) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
@@ -3865,7 +3865,7 @@ else => {
                     const stat_result = bun.sys.lstatat(fd, (if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).sliceAssumeZ());
                     switch (stat_result) {
 .result => |st| {
-const real_kind = bun.sys.kindFromMode((if (comptime @typeInfo(@TypeOf(st.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(st.mode)) else cp_cast_int(i32, st.mode)));
+const real_kind = bun.sys.kindFromMode(@intCast(st.mode));
                     effective_kind = real_kind;
                     if (((real_kind == .directory) or (real_kind == .sym_link))) {
                         _ = async_task.enqueue(name_to_copy);
@@ -4016,7 +4016,7 @@ return .{ .err = e.withPath(args.path.slice()) };
                         const stat_result = bun.sys.lstatat(fd, (if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).sliceAssumeZ());
                         switch (stat_result) {
 .result => |st| {
-const real_kind = bun.sys.kindFromMode((if (comptime @typeInfo(@TypeOf(st.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(st.mode)) else cp_cast_int(i32, st.mode)));
+const real_kind = bun.sys.kindFromMode(@intCast(st.mode));
                         effective_kind = real_kind;
                         if (((real_kind == .directory) or (real_kind == .sym_link))) {
                             _ = (blk_catch_11: { break :blk_catch_11 ((stack.writeItem((blk_catch_10: { break :blk_catch_10 ((basename_allocator.dupeZ(u8, name_to_copy)) catch |__ce_10| { _ = &__ce_10; break :enqueue; }); }))) catch |__ce_11| { _ = &__ce_11; break :enqueue; }); });
@@ -4621,7 +4621,7 @@ pub fn rm(self: *NodeFS, args: Arguments.Rm, _: Flavor) Maybe(Return.Rm) {
                 }
                 break :brk .NOENT;
 }); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .InvalidUtf8)) {  break :__sw_blk_5 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .InvalidWtf8)) {  break :__sw_blk_5 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .BadPathName)) {  break :__sw_blk_5 cp_val(.INVAL); } } {  break :__sw_blk_5 cp_val(.FAULT); }  unreachable; });
-                return .{ .e = bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()) }; }); });
+                return .{ .err = bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()) }; }); });
                 return .success;
             }
             {
@@ -4631,7 +4631,7 @@ pub fn rm(self: *NodeFS, args: Arguments.Rm, _: Flavor) Maybe(Return.Rm) {
                 }
                 break :brk .NOENT;
 }); } } {  break :__sw_blk_6 cp_val(.FAULT); }  unreachable; });
-                return .{ .e = bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()) };
+                return .{ .err = bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()) };
             } }); });
             return .success;
     }

@@ -423,7 +423,7 @@ const ConstByteSliceZ = [:0]const u8;
 const ConstU16SliceZ = [:0]const u16;
 const U16SliceZ = [:0]u16;
 const U16PtrZ = [*:0]u16;
-const CStr = [*:0]u8;
+const CStr = @TypeOf(empty_cstr_slice.ptr);
 pub const OptAndroidSigactionHandlerFn = ?AndroidSigactionHandlerFn;
 pub const OptAndroidSigactionFn = ?AndroidSigactionFn;
 pub const OptAndroidSigactionRestorerFn = ?AndroidSigactionRestorerFn;
@@ -653,6 +653,7 @@ const LinuxKernel = enum(u8) {
         return detected;
     }
 };
+const empty_cstr_slice: [:0]const u8 = "";
 pub const mkdirat = (if (Environment.isWindows) mkdiratW else mkdiratPosix);
 const fnctl_int = (if (Environment.isLinux) usize else c_int);
 pub const max_count = (switch (builtin.os.tag) {
@@ -937,7 +938,7 @@ pub fn lstat(path: [:0]const u8) Maybe(bun.Stat) {
             while (true) {
                 var stat_buf = mem.zeroes(bun.Stat);
                 _ = &stat_buf;
-                if (Maybe(bun.Stat).errnoSysP(workaround_symbols.lstat(path, (&stat_buf)), .lstat, path)) |e| {
+                if (Maybe(bun.Stat).errnoSysP(workaround_symbols.lstat(@constCast(path.ptr), (&stat_buf)), .lstat, path)) |e| {
                     _ = &e;
                     if ((e.getErrno() == .INTR)) {
                         continue;
@@ -978,7 +979,7 @@ pub inline fn makedev(major: u32, minor: u32) u64 {
         return ((cp_shl(maj, 8) | (min & 255)) | cp_shl((min & 1048320), 12));
 }
 
-pub fn statxFallback(fd: bun.FD, path: ?[*:0]u8, flags: u32) Maybe(PosixStat) {
+pub fn statxFallback(fd: bun.FD, path: ?CStr, flags: u32) Maybe(PosixStat) {
         if (path) |p| {
             _ = &p;
             const path_span = bun.span(p);
@@ -1010,7 +1011,7 @@ pub fn statxImpl(fd: bun.FD, path: ?CStr, flags: u32, mask: u32) Maybe(PosixStat
         var buf: linux.Statx = undefined;
         _ = &buf;
         while (true) {
-            var statx_path: [*:0]u8 = @ptrCast("");
+            var statx_path: CStr = empty_cstr_slice.ptr;
             _ = &statx_path;
             if (path) |p| {
                 _ = &p;
@@ -1755,7 +1756,7 @@ pub fn writev(fd: bun.FD, buffers: []std.posix.iovec) Maybe(usize) {
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
         } else {
             while (true) {
-                const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, @ptrCast(@alignCast(buffers.ptr))), (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)));
+                const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, @ptrCast(@alignCast(buffers.ptr))), @intCast(buffers.len));
                 if (comptime Environment.allow_assert) {
                     _ = log("writev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
                 }
@@ -1788,7 +1789,7 @@ pub fn pwritev(fd: bun.FD, buffers: []const bun.PlatformIOVecConst, position: is
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
         } else {
             while (true) {
-                const rc = pwritev_sym(fd.cast(), buffers.ptr, (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)), position);
+                const rc = pwritev_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
                 if (comptime Environment.allow_assert) {
                     _ = log("pwritev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
                 }
@@ -1823,7 +1824,7 @@ pub fn readv(fd: bun.FD, buffers: []std.posix.iovec) Maybe(usize) {
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
         } else {
             while (true) {
-                const rc = readv_sym(fd.cast(), buffers.ptr, (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)));
+                const rc = readv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len));
                 if (comptime Environment.allow_assert) {
                     _ = log("readv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
                 }
@@ -1858,7 +1859,7 @@ pub fn preadv(fd: bun.FD, buffers: []std.posix.iovec, position: isize) Maybe(usi
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
         } else {
             while (true) {
-                const rc = preadv_sym(fd.cast(), buffers.ptr, (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)), position);
+                const rc = preadv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
                 if (comptime Environment.allow_assert) {
                     _ = log("preadv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
                 }
@@ -2166,7 +2167,7 @@ pub fn lseek(fd: bun.FD, offset: i64, whence: usize) Maybe(usize) {
                 }
                 return e;
             }
-            return .{ .result = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) };
+            return .{ .result = @as(usize, @intCast(rc)) };
         }
 }
 

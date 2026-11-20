@@ -583,10 +583,9 @@ _ = self.builder.append(.latin1, "\\L");
 169 => {
 _ = self.builder.append(.latin1, "\\P");
 },
-32...33, 35...91, 93...126, 128...132, 134...159, 161...167, 170...65535 => {
+else => {
 _ = self.builder.append(.uchar, c);
 },
-else => unreachable,
 }
             }
             _ = self.builder.append(.lchar, 34);
@@ -712,7 +711,7 @@ i = (i + 1);
 };
 
 pub const ParserCtx = struct {
-    seen_objects: std.AutoHashMap(*void,JSValue),
+    seen_objects: std.AutoHashMap(SeenObjectPtr,JSValue),
     stack_check: bun.StackCheck,
     global: *JSGlobalObject,
     root: Expr,
@@ -732,7 +731,9 @@ pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
                     return;
                 } else {
                     if ((e == error.StackOverflow)) {
-                        ctx.result = (blk_catch_1: { break :blk_catch_1 ((ctx.global.throwStackOverflow()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
+                        const _err = ctx.global.throwStackOverflow();
+                        _ = (&_err);
+                        ctx.result = .zero;
                         return;
                     }
                 }
@@ -808,6 +809,7 @@ return JSValue.js_undefined;
     const ToJSError = error{ JSError, OutOfMemory, JSTerminated, StackOverflow };
 };
 
+const SeenObjectPtr = *anyopaque;
 pub const Name = union(AnchorOrigin) {
     root,
     array_item: usize,
@@ -871,7 +873,7 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSV
         defer {
         _ = stringifier.deinit();
         }
-        _ = (blk_catch_2: { break :blk_catch_2 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+        _ = (blk_catch_1: { break :blk_catch_1 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return global.throwStackOverflow();
         }
         if ((e == error.OutOfMemory)) {
@@ -881,7 +883,7 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSV
             return error.JSTerminated;
         }
         return error.JSError; }); });
-        _ = (blk_catch_3: { break :blk_catch_3 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+        _ = (blk_catch_2: { break :blk_catch_2 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return global.throwStackOverflow();
         }
         if ((e == error.OutOfMemory)) {
@@ -1064,7 +1066,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         _ = log.deinit();
         }
         const source = (&logger.Source.initPathString("input.yaml", input.slice()));
-        const root = (blk_catch_4: { break :blk_catch_4 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        const root = (blk_catch_3: { break :blk_catch_3 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         if ((e == error.StackOverflow)) {

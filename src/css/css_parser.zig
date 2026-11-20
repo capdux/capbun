@@ -3556,9 +3556,8 @@ pub fn integer(comptime T: type, self: T, dest: *Printer) PrintErr!void {
 pub fn float32(val: f32, writer: *Printer) !void {
             var scratch: [129]u8 = undefined;
             _ = &scratch;
-            const _tmp_v4 = try dtoa_short((&scratch), val, 6);
-            var str = cp_unpack_elem(_tmp_v4, 0);
-            _ = &str;
+            const pair = try dtoa_short((&scratch), val, 6);
+            const str = pair[0];
             return writer.writeAll(str);
     }
 
@@ -6322,8 +6321,8 @@ else => null,
         {
             var i: i32 = 1;
             _ = &i;
-            const __end_7 = len;
-            while (i < __end_7) : (i += 1) {
+            const __end_6 = len;
+            while (i < __end_6) : (i += 1) {
                 if ((buf[@as(usize, @intCast(i))] == 46)) {
                     _ = bun.debugAssert((_pos_dot == null));
                     _pos_dot = @intCast(i);
@@ -6381,8 +6380,8 @@ else => null,
             {
                 var i: i32 = new_coeff_end;
                 _ = &i;
-                const __end_8 = pos_dot;
-                while (i < __end_8) : (i += 1) {
+                const __end_7 = pos_dot;
+                while (i < __end_7) : (i += 1) {
                     buf[cp_cast_int(usize, i)] = 48;
                 }
             }
@@ -6412,8 +6411,8 @@ else => null,
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_9 = exp_len;
-                    while (i < __end_9) : (i += 1) {
+                    const __end_8 = exp_len;
+                    while (i < __end_8) : (i += 1) {
                         buf[cp_cast_int(usize, (new_coeff_end + i))] = buf[@as(usize, @intCast((posexp + i)))];
                     }
                 }

@@ -286,11 +286,11 @@ fn JSONLikeParser_(
         list_allocator: std.mem.Allocator,
         stack_check: bun.StackCheck,
 
-        pub fn init(allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log) !Parser {
+        pub fn init(allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log): Parser! {
             return initWithListAllocator(allocator, allocator, source_, log);
         }
 
-        pub fn initWithListAllocator(allocator: std.mem.Allocator, list_allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log) !Parser {
+        pub fn initWithListAllocator(allocator: std.mem.Allocator, list_allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log): Parser! {
             Expr.Data.Store.assert();
             Stmt.Data.Store.assert();
 

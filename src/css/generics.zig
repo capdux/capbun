@@ -663,7 +663,14 @@ pub inline fn deepClone(comptime T: type, self: *const T, allocator: Allocator) 
 pub inline fn tryFromAngle(comptime T: type, angle: Angle) ?T {
         return (if (T == CSSNumber) CSSNumberFns.tryFromAngle(angle) else if (T == Angle) {
 return Angle.tryFromAngle(angle);
-} else T.tryFromAngle(angle));
+} else {
+{
+            if (comptime (@typeInfo(@TypeOf(T.tryFromAngle)).@"fn".params.len == 2)) {
+                return T.tryFromAngle(undefined, angle);
+            }
+            return T.tryFromAngle(angle);
+        }
+});
 }
 
 pub inline fn trySign(comptime T: type, val: *const T) ?f32 {
@@ -711,8 +718,7 @@ pub inline fn tryOp(comptime T: type, lhs: *const T, rhs: *const T, ctx: anytype
 }
 
 pub inline fn partialCmp(comptime T: type, lhs: *const T, rhs: *const T) ?std.math.Order {
-        const AngleT = css_values.angle.Angle;
-        return (if (T == f32) partialCmpF32(lhs, rhs) else if (T == CSSInteger) std.math.order(lhs.*, rhs.*) else if (T == AngleT) AngleT.partialCmp(lhs, rhs) else lhs.partialCmp(rhs));
+        return (if (T == f32) partialCmpF32(lhs, rhs) else if (T == CSSInteger) std.math.order(lhs.*, rhs.*) else lhs.partialCmp(rhs));
 }
 
 pub inline fn partialCmpF32(lhs: *const f32, rhs: *const f32) ?std.math.Order {

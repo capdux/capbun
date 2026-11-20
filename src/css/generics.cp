@@ -502,7 +502,12 @@ pub inline fn tryFromAngle(comptime T: type, angle: Angle): T? {
     return switch (T) {
         CSSNumber => CSSNumberFns.tryFromAngle(angle),
         Angle => return Angle.tryFromAngle(angle),
-        else => T.tryFromAngle(angle),
+        else => {
+            if (comptime @typeInfo(@TypeOf(T.tryFromAngle)).@"fn".params.len == 2) {
+                return T.tryFromAngle(undefined, angle);
+            }
+            return T.tryFromAngle(angle);
+        },
     };
 }
 
@@ -565,11 +570,9 @@ pub inline fn tryOp(
 }
 
 pub inline fn partialCmp(comptime T: type, lhs: *const T, rhs: *const T): std.math.Order? {
-    const AngleT = css_values.angle.Angle;
     return switch (T) {
         f32 => partialCmpF32(lhs, rhs),
         CSSInteger => std.math.order(lhs.*, rhs.*),
-        AngleT => AngleT.partialCmp(lhs, rhs),
         else => lhs.partialCmp(rhs),
     };
 }

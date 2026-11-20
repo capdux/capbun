@@ -207,8 +207,7 @@ pub fn _checkFeatureMap() bool {
             return true;
     }
 
-pub fn parse(self: *LengthValue, input: *css.Parser) Result(@This()) {
-        _ = self;
+pub fn parse(input: *css.Parser) Result(@This()) {
             const location = input.currentSourceLocation();
             const token = (switch (input.next()) {
 .result => |vv| vv,
@@ -248,7 +247,7 @@ pub fn toCss(self: *const LengthValue, dest: *css.Printer) css.PrintErr!void {
 
 pub fn isZero(self: LengthValue) bool {
             inline for (bun.@"meta".EnumFields(@This())) |field| {
-                if ((@intFromEnum(self.*) == (if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value))) {
+                if ((@intFromEnum(self) == (if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value))) {
                     return (@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) == 0.0);
                 }
             }
@@ -259,8 +258,7 @@ pub fn deepClone(self: *const LengthValue, _: std.mem.Allocator) @This() {
             return self.*;
     }
 
-pub fn zero(self: LengthValue) LengthValue {
-        _ = self;
+pub fn zero() LengthValue {
             return .{ .px = 0.0 };
     }
 
@@ -305,15 +303,14 @@ pub fn sign(self: LengthValue) f32 {
             const fields = std.@"meta".fields(@This());
             inline for (0..fields.len) |i| {
                 const field = fields[@as(usize, @intCast(i))];
-                if (((if (@typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(enum_fields[@as(usize, @intCast(i))]) else enum_fields[@as(usize, @intCast(i))].value) == @intFromEnum(self.*))) {
+                if (((if (@typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(enum_fields[@as(usize, @intCast(i))]) else enum_fields[@as(usize, @intCast(i))].value) == @intFromEnum(self))) {
                     return css.signfns.signF32(@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)));
                 }
             }
             _ = unreachable;
     }
 
-pub fn tryFromToken(self: LengthValue, token: *const css.Token) css.Maybe(@This(),void) {
-        _ = self;
+pub fn tryFromToken(token: *const css.Token) css.Maybe(@This(),void) {
             switch (token.*) {
 .dimension => |*dim| {
 inline for (std.@"meta".fields(@This())) |field| {
@@ -334,7 +331,7 @@ pub fn toUnitValue(self: LengthValue) struct { CSSNumber, []const u8 } {
             const fields = std.@"meta".fields(@This());
             inline for (0..fields.len) |i| {
                 const field = fields[@as(usize, @intCast(i))];
-                if (((if (@typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(enum_fields[@as(usize, @intCast(i))]) else enum_fields[@as(usize, @intCast(i))].value) == @intFromEnum(self.*))) {
+                if (((if (@typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(enum_fields[@as(usize, @intCast(i))]) else enum_fields[@as(usize, @intCast(i))].value) == @intFromEnum(self))) {
                     return .{ @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)), (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name) };
                 }
             }
@@ -366,9 +363,9 @@ pub fn tryFromAngle(angle: css.css_values.angle.Angle) ?@This() {
     }
 
 pub fn partialCmp(self: LengthValue, other: *const LengthValue) ?std.math.Order {
-            if ((@intFromEnum(self.*) == @intFromEnum(other.*))) {
+            if ((@intFromEnum(self) == @intFromEnum(other.*))) {
                 inline for (bun.@"meta".EnumFields(LengthValue)) |field| {
-                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self.*))) {
+                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self))) {
                         const a = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
                         const b = @field(other, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
                         return css.generic.partialCmpF32((&a), (&b));
@@ -385,9 +382,9 @@ pub fn partialCmp(self: LengthValue, other: *const LengthValue) ?std.math.Order 
     }
 
 pub fn tryOp(self: LengthValue, other: *const LengthValue, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) f32) ?LengthValue {
-            if ((@intFromEnum(self.*) == @intFromEnum(other.*))) {
+            if ((@intFromEnum(self) == @intFromEnum(other.*))) {
                 inline for (bun.@"meta".EnumFields(LengthValue)) |field| {
-                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self.*))) {
+                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self))) {
                         const a = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
                         const b = @field(other, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
                         return @unionInit(LengthValue, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), op_fn(ctx, a, b));
@@ -404,9 +401,9 @@ pub fn tryOp(self: LengthValue, other: *const LengthValue, ctx: anytype, comptim
     }
 
 pub fn tryOpTo(self: LengthValue, other: *const LengthValue, comptime R: type, ctx: anytype, comptime op_fn: *const fn (@TypeOf(ctx), f32, f32) R) ?R {
-            if ((@intFromEnum(self.*) == @intFromEnum(other.*))) {
+            if ((@intFromEnum(self) == @intFromEnum(other.*))) {
                 inline for (bun.@"meta".EnumFields(LengthValue)) |field| {
-                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self.*))) {
+                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self))) {
                         const a = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
                         const b = @field(other, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
                         return op_fn(ctx, a, b);
@@ -427,9 +424,9 @@ pub fn hash(self: *const LengthValue, hasher: *std.hash.Wyhash) void {
     }
 
 pub fn tryAdd(self: LengthValue, _: std.mem.Allocator, rhs: *const LengthValue) ?LengthValue {
-            if ((@intFromEnum(self.*) == @intFromEnum(rhs.*))) {
+            if ((@intFromEnum(self) == @intFromEnum(rhs.*))) {
                 inline for (bun.@"meta".EnumFields(LengthValue)) |field| {
-                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self.*))) {
+                    if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(self))) {
                         return @unionInit(LengthValue, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), (@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) + @field(rhs, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))));
                     }
                 }

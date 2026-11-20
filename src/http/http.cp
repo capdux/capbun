@@ -414,10 +414,10 @@ pub fn firstCall(
 
     if (comptime is_ssl) {
         const ssl_ptr: *bun.BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
-        let proto: [*c]const u8? = null;
+        let proto: [*c]const u8 = undefined;
         let proto_len: c_uint = 0;
         bun.BoringSSL.c.SSL_get0_alpn_selected(ssl_ptr, &proto, &proto_len);
-        if (proto != null and proto_len == 2 and proto[0] == 'h' and proto[1] == '2') {
+        if (proto_len == 2 and proto != null and proto[0] == 'h' and proto[1] == '2') {
             bun.Output.scoped(.fetch, .visible)("ALPN negotiated h2 {s}", .{client.url.href});
             const ctx = client.getSslCtx(true);
             const session = H2.ClientSession.create(ctx, socket, client);
@@ -634,7 +634,7 @@ export @root @value struct HTTPClient {
     redirect_type: FetchRedirect = .follow,
     redirect: string = "",
     prev_redirect: string = "",
-    progress_node: *bun.Progress.Node? = null,
+    progress_node: (*bun.Progress.Node)? = null,
 
     flags: Flags = {},
 
@@ -1470,7 +1470,7 @@ export @root @value struct HTTPClient {
                 return;
             }
 
-            const has_backpressure = writeToStreamUsingBuffer(this, is_ssl, socket, buffer, data) catch |e| {
+            const has_backpressure = this.writeToStreamUsingBuffer(is_ssl, socket, buffer, data) catch |e| {
                 stream_buffer.release();
                 this.state.original_request_body.stream.detach();
                 this.closeAndFail(e, is_ssl, socket);
@@ -2675,7 +2675,7 @@ export @root @value struct HTTPClient {
                                     // - `Content-Language`
                                     // - `Content-Location`
                                     // - `Content-Type`
-                                    const @"request-body-header" = &.{
+                                    const request_body_headers = &.{
                                         "Content-Encoding",
                                         "Content-Language",
                                         "Content-Location",
@@ -2696,7 +2696,7 @@ export @root @value struct HTTPClient {
                                             }
                                         } else if (name.len == 16) {
                                             const hash = hashHeaderName(name);
-                                            inline for (hash_value of @"request-body-header"()) {
+                                            inline for (hash_value of request_body_headers) {
                                                 if (hash == hashHeaderConst(hash_value)) {
                                                     * = this.header_entries.orderedRemove(i);
                                                     len = this.header_entries.len;

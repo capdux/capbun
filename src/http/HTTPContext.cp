@@ -380,7 +380,7 @@ export class HTTPContext<const ssl: bool> {
         reject_unauthorized: bool,
         hostname: []const u8,
         port: u16,
-        ssl_config: *bun.api.server.ServerConfig.SSLConfig?,
+        ssl_config: (*bun.api.server.ServerConfig.SSLConfig)?,
         want_tunnel: bool,
         target_hostname: []const u8,
         target_port: u16,
@@ -444,9 +444,9 @@ export class HTTPContext<const ssl: bool> {
                     continue;
                 }
 
-                if (s := socket.ssl_config) s.deinit();
+                if (*s := socket.ssl_config) s.deinit();
                 socket.ssl_config = null;
-                let tunnel: *ProxyTunnel? = if (socket.proxy_tunnel != null) socket.proxy_tunnel.?.leak() else null;
+                let tunnel: (*ProxyTunnel)? = if (socket.proxy_tunnel != null) socket.proxy_tunnel.?.leak() else null;
                 socket.proxy_tunnel = null;
                 if (socket.target_hostname.len > 0) {
                     bun.default_allocator.free(socket.target_hostname);
@@ -610,7 +610,7 @@ export class HTTPContext<const ssl: bool> {
             let iter = this.pending_sockets.used.iterator(.{ .kind = .set });
             while (idx := iter.next()) {
                 let pooled = this.pending_sockets.at(@intCast(idx));
-                if (s := pooled.ssl_config) s.deinit();
+                if (*s := pooled.ssl_config) s.deinit();
                 pooled.ssl_config = null;
                 if (rp := pooled.proxy_tunnel) {
                     rp.deref();
@@ -670,11 +670,11 @@ export class HTTPContext<const ssl: bool> {
         hostname: []const u8,
         port: u16,
         ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr?,
-        tunnel: *ProxyTunnel?,
+        tunnel: (*ProxyTunnel)?,
         target_hostname: []const u8,
         target_port: u16,
         proxy_auth_hash: u64,
-        h2_session: *bun.http.H2.ClientSession?,
+        h2_session: (*bun.http.H2.ClientSession)?,
     ) {
         if (bun.Environment.allow_assert) {
             bun.assert(!socket.isClosed());

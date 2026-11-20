@@ -33,7 +33,8 @@ pub struct ProcessParamKV {
     defer title_mutex.unlock();
 
     const new_title = newvalue.toOwnedSlice(bun.default_allocator) catch {
-        * = globalObject.throwOutOfMemory();
+        const _e = globalObject.throwOutOfMemory();
+        * = &_e;
         return;
     };
 

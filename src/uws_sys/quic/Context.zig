@@ -74,7 +74,7 @@ pub const QuicConnectResult = union(enum) {
 
 pub const Context = opaque {
 
-pub fn createClient(event_loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32) *?*Context {
+pub fn createClient(event_loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32) ?*Context {
             return us_create_quic_client_context(event_loop, ext_size, conn_ext, stream_ext);
     }
 
@@ -119,7 +119,7 @@ pub fn connect(self: *Context, host: [*:0]const u8, port: u16, sni: [*:0]const u
             _ = &qs;
             var pc: ?*PendingConnect = null;
             _ = &pc;
-            var reject_int = (if (reject_unauthorized) 1 else 0);
+            var reject_int: i32 = (if (reject_unauthorized) 1 else 0);
             _ = &reject_int;
             var res = us_quic_socket_context_connect(self, host, (if (comptime @typeInfo(@TypeOf(port)) == .@"enum") cp_cast_int(i32, @intFromEnum(port)) else cp_cast_int(i32, port)), sni, reject_int, (&qs), (&pc), user);
             _ = &res;
@@ -133,7 +133,7 @@ else => .err,
 };
 
 
-extern "c" fn us_create_quic_client_context(loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32) callconv(.c) *?*Context;
+extern "c" fn us_create_quic_client_context(loop: *Loop, ext_size: u32, conn_ext: u32, stream_ext: u32) callconv(.c) ?*Context;
 
 extern "c" fn us_quic_socket_context_loop(ctx: *Context) callconv(.c) *Loop;
 

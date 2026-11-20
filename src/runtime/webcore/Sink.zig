@@ -340,7 +340,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8) type {
         }
 
         pub fn detachPtr(globalThis: *JSGlobalObject, ptr: JSValue) JSError!void {
-            return jsc.fromJSHostCallGeneric(globalThis, @src(), detachPtrExtern, .{ptr});
+            return jsc.fromJSHostCallGeneric(globalThis, @src(), detachPtrExtern.*, .{ptr});
         }
 
         pub fn construct(globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {

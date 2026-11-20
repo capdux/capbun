@@ -592,14 +592,7 @@ pub struct Stringifier {
                 0xa8 => _.builder.append(.latin1, "\\L"), // line separator
                 0xa9 => _.builder.append(.latin1, "\\P"), // paragraph separator
 
-                0x20...0x21,
-                0x23...0x5b,
-                0x5d...0x7e,
-                0x80...0x84,
-                0x86...0x9f,
-                0xa1...0xa7,
-                0xaa...0xffff
-                => _.builder.append(.uchar, c),
+                else => _.builder.append(.uchar, c),
             }
         }
 
@@ -978,8 +971,10 @@ pub struct Stringifier {
     return ctx.result;
 }
 
+type SeenObjectPtr = *!;
+
 struct ParserCtx {
-    seen_objects: std.AutoHashMap(*void, JSValue),
+    seen_objects: std.AutoHashMap(SeenObjectPtr, JSValue),
     stack_check: bun.StackCheck,
 
     global: *JSGlobalObject,
@@ -1000,7 +995,9 @@ struct ParserCtx {
                 ctx.result = .zero;
                 return;
             } else if (e == error.StackOverflow) {
-                ctx.result = ctx.global.throwStackOverflow() catch .zero;
+                const _err = ctx.global.throwStackOverflow();
+                * = &_err;
+                ctx.result = .zero;
                 return;
             }
             unreachable;

@@ -601,7 +601,7 @@ pub fn lstat(path: [:0]const u8): Maybe(bun.Stat) {
     } else {
         while (true) {
             let stat_buf = mem.zeroes(bun.Stat);
-            if (e := Maybe(bun.Stat).errnoSysP(workaround_symbols.lstat(path, &stat_buf), .lstat, path)) {
+            if (e := Maybe(bun.Stat).errnoSysP(workaround_symbols.lstat(@constCast(path.ptr), &stat_buf), .lstat, path)) {
                 if (e.getErrno() == .INTR) continue;
                 return e;
             }
@@ -701,7 +701,10 @@ inline fn makedev(major: u32, minor: u32): u64 {
     return (maj << 8) | (min & 0xFF) | ((min & 0xFFF00) << 12);
 }
 
-fn statxFallback(fd: bun.FD, path: [*:0]const u8?, flags: u32): Maybe(PosixStat) {
+const empty_cstr_slice: [:0]const u8 = "";
+type CStr = @TypeOf(empty_cstr_slice.ptr);
+
+fn statxFallback(fd: bun.FD, path: CStr?, flags: u32): Maybe(PosixStat) {
     if (p := path) {
         const path_span = bun.span(p);
         const fallback = if ((flags & linux.AT.SYMLINK_NOFOLLOW) != 0) lstat(path_span) else stat(path_span);
@@ -717,8 +720,6 @@ fn statxFallback(fd: bun.FD, path: [*:0]const u8?, flags: u32): Maybe(PosixStat)
     }
 }
 
-type CStr = [*:0]const u8;
-
 fn statxImpl(fd: bun.FD, path: CStr?, flags: u32, mask: u32): Maybe(PosixStat) {
     if (comptime !Environment.isLinux) {
         @compileError("statx is only supported on Linux");
@@ -727,7 +728,7 @@ fn statxImpl(fd: bun.FD, path: CStr?, flags: u32, mask: u32): Maybe(PosixStat) {
     let buf: linux.Statx = undefined;
 
     while (true) {
-        let statx_path: [*:0]const u8 = @ptrCast("");
+        let statx_path: CStr = empty_cstr_slice.ptr;
         if (p := path) { statx_path = p; }
         const rc = linux.statx(i32(fd.cast()), statx_path, flags, mask, &buf);
 
@@ -1970,7 +1971,7 @@ pub fn writev(fd: bun.FD, buffers: []std.posix.iovec): Maybe(usize) {
         return { result: @as(usize, i32(rc)) };
     } else {
         while (true) {
-            const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, buffers.ptr), i32(buffers.len));
+            const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, buffers.ptr), @intCast(buffers.len));
             if (comptime Environment.allow_assert)
                 log("writev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
@@ -2001,7 +2002,7 @@ pub fn pwritev(fd: bun.FD, buffers: []const bun.PlatformIOVecConst, position: is
         return { result: @as(usize, i32(rc)) };
     } else {
         while (true) {
-            const rc = pwritev_sym(fd.cast(), buffers.ptr, i32(buffers.len), position);
+            const rc = pwritev_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
             if (comptime Environment.allow_assert)
                 log("pwritev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
@@ -2035,7 +2036,7 @@ pub fn readv(fd: bun.FD, buffers: []std.posix.iovec): Maybe(usize) {
         return { result: @as(usize, i32(rc)) };
     } else {
         while (true) {
-            const rc = readv_sym(fd.cast(), buffers.ptr, i32(buffers.len));
+            const rc = readv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len));
             if (comptime Environment.allow_assert)
                 log("readv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
@@ -2069,7 +2070,7 @@ pub fn preadv(fd: bun.FD, buffers: []std.posix.iovec, position: isize): Maybe(us
         return { result: @as(usize, i32(rc)) };
     } else {
         while (true) {
-            const rc = preadv_sym(fd.cast(), buffers.ptr, i32(buffers.len), position);
+            const rc = preadv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
             if (comptime Environment.allow_assert)
                 log("preadv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
@@ -2456,7 +2457,7 @@ pub fn lseek(fd: bun.FD, offset: i64, whence: usize): Maybe(usize) {
             return e;
         }
 
-        return { result: i32(rc) };
+        return { result: @as(usize, @intCast(rc)) };
     }
 }
 

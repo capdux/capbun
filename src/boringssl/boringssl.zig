@@ -149,7 +149,10 @@ pub fn canonicalizeIP(addr_str: []const u8, outIP: *IPTextBuf) ?[]const u8 {
                 return null;
             }
         }
-        if ((c_ares.ares_inet_ntop(af, (&ip_std_text), outIP, outIP.len) == null)) {
+        if ((blk: {
+        break :blk (c_ares.ares_inet_ntop(af, @ptrCast((&ip_std_text)), outIP, outIP.len) == null);
+
+})) {
             return null;
         }
         const size = bun.len(bun.cast(CStrPtr, outIP));
@@ -162,7 +165,10 @@ pub fn ip2String(ip: *boring.ASN1_OCTET_STRING, outIP: *IPTextBuf) ?[]const u8 {
         if ((ip.length == 4)) {
             af = std.posix.AF.INET;
         }
-        if ((c_ares.ares_inet_ntop(af, ip.data, outIP, outIP.len) == null)) {
+        if ((blk: {
+        break :blk (c_ares.ares_inet_ntop(af, @ptrCast(ip.data), outIP, outIP.len) == null);
+
+})) {
             return null;
         }
         const size = bun.len(bun.cast(CStrPtr, outIP));

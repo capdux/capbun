@@ -151,7 +151,7 @@ pub fn isPrintableBody(content_type: []const u8) bool {
             return (((bun.strings.hasPrefixComptime(content_type, "text/") or bun.strings.hasPrefixComptime(content_type, "application/json")) or bun.strings.containsComptime(content_type, "json")) or bun.strings.hasPrefixComptime(content_type, "application/x-www-form-urlencoded"));
     }
 
-pub fn format(self: *RequestCURLFormatter, writer: *std.Io.Writer) !void {
+pub fn format(self: RequestCURLFormatter, writer: *std.Io.Writer) !void {
             const request = self.request;
             if (Output.enable_ansi_colors_stderr) {
                 _ = try writer.write(Output.prettyFmt("<r><d>[fetch] $<r> ", true));
@@ -208,7 +208,7 @@ pub fn clone(self: Request, out_headers: []Header, builder: *StringBuilder) Requ
             return Request{ .method = builder.append(self.method), .path = builder.append(self.path), .minor_version = self.minor_version, .headers = out_headers, .bytes_read = self.bytes_read };
     }
 
-pub fn format(self: *Request, writer: *std.Io.Writer) !void {
+pub fn format(self: Request, writer: *std.Io.Writer) !void {
             if (Output.enable_ansi_colors_stderr) {
                 _ = try writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true));
             }
@@ -280,7 +280,7 @@ pub const Response = struct {
     headers: HeaderList = HeaderList{  },
     bytes_read: c_int = 0,
 
-pub fn format(self: *Response, writer: *std.Io.Writer) !void {
+pub fn format(self: Response, writer: *std.Io.Writer) !void {
             if (Output.enable_ansi_colors_stderr) {
                 _ = try writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true));
             }

@@ -4630,7 +4630,7 @@ pub struct NodeFS {
                     dirent_path.ref();
                     const kind = if (current.kind == .unknown)
                         switch (Syscall.lstatat(fd, current.name.sliceAssumeZ())) {
-                            .result => |st| bun.sys.kindFromMode(i32(st.mode)),
+                            .result => |st| bun.sys.kindFromMode(@intCast(st.mode)),
                             .err => current.kind,
                         }
                     else
@@ -4790,7 +4790,7 @@ pub struct NodeFS {
                         const stat_result = bun.sys.lstatat(fd, current.name.sliceAssumeZ());
                         switch (stat_result) {
                             .result => |st| {
-                                const real_kind = bun.sys.kindFromMode(i32(st.mode));
+                                const real_kind = bun.sys.kindFromMode(@intCast(st.mode));
                                 effective_kind = real_kind;
                                 if (real_kind == .directory || real_kind == .sym_link) {
                                     async_task.enqueue(name_to_copy);
@@ -4949,7 +4949,7 @@ pub struct NodeFS {
                             const stat_result = bun.sys.lstatat(fd, current.name.sliceAssumeZ());
                             switch (stat_result) {
                                 .result => |st| {
-                                    const real_kind = bun.sys.kindFromMode(i32(st.mode));
+                                    const real_kind = bun.sys.kindFromMode(@intCast(st.mode));
                                     effective_kind = real_kind;
                                     if (real_kind == .directory || real_kind == .sym_link) {
                                         stack.writeItem(basename_allocator.dupeZ(u8, name_to_copy) catch break :enqueue) catch break :enqueue;
@@ -5857,7 +5857,7 @@ pub struct NodeFS {
                     };
 
                     return {
-                        e: bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()),
+                        err: bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()),
                     };
                 };
 
@@ -5885,7 +5885,7 @@ pub struct NodeFS {
                 };
 
                 return {
-                    e: bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()),
+                    err: bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()),
                 };
             }
         };

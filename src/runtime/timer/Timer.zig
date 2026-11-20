@@ -513,8 +513,7 @@ pub fn setImmediate(global: *JSGlobalObject, callback: JSValue, arguments: JSVal
             return ImmediateObject.init(global, id, wrapped_callback, arguments);
     }
 
-pub fn setTimeout(self: *All, global: *JSGlobalObject, callback: JSValue, arguments: JSValue, countdown: JSValue) JSError!JSValue {
-        _ = self;
+pub fn setTimeout(global: *JSGlobalObject, callback: JSValue, arguments: JSValue, countdown: JSValue) JSError!JSValue {
             _ = jsc.markBinding(@src());
             _ = bun.debugAssert((((callback != .zero) and (arguments != .zero)) and (countdown != .zero)));
             const vm = global.bunVM();
@@ -525,8 +524,7 @@ pub fn setTimeout(self: *All, global: *JSGlobalObject, callback: JSValue, argume
             return TimeoutObject.init(global, id, .setTimeout, countdown_int, wrapped_callback, arguments);
     }
 
-pub fn setInterval(self: *All, global: *JSGlobalObject, callback: JSValue, arguments: JSValue, countdown: JSValue) JSError!JSValue {
-        _ = self;
+pub fn setInterval(global: *JSGlobalObject, callback: JSValue, arguments: JSValue, countdown: JSValue) JSError!JSValue {
             _ = jsc.markBinding(@src());
             _ = bun.debugAssert((((callback != .zero) and (arguments != .zero)) and (countdown != .zero)));
             const vm = global.bunVM();
