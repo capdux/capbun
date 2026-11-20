@@ -32,7 +32,7 @@ pub struct HtmlRenderer {
 
     pub const OutputBuffer = HtmlOutputBuffer;
 
-    pub fn init(allocator: Allocator, src_text: []const u8, render_opts: RenderOptions): HtmlRenderer {
+    pub static fn init(allocator: Allocator, src_text: []const u8, render_opts: RenderOptions): HtmlRenderer {
         return {
             out: { list: {}, allocator: allocator, oom: false },
             allocator: allocator,

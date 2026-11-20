@@ -1399,3 +1399,5 @@
 - **[2026-11-20] Wave 9 Batch A 典型修复**：`color.cp` 闭包方法补 `static` 同步清零 `meta.zig` 6 错；`uws_sys/Response.cp` 4 处 `SelfPtr` 提结构体级；`Blob.cp` 补全 `initWithStore`/`constructBunFile` 与 `toJSByParseJSON`；`braces.cp` `tokenize` 补 `static`；`ReadableStream.NewSource.deinit` 改实例方法同步修复 `ByteStream`/`ByteBlobLoader`。
 
 - **[2026-11-20] Wave 9 Batch C 收尾经验**：`uws_sys/Loop.cp` 补 `@value` 恢复值类型 `Loop`；`css/error.cp` 用 `@This().Err(...)` 避开枚举字面量 lowering；`resolve_path.cp` 补导出 `join`/`joinZ`；`Timer.cp` `All.setImmediate` 补 `static fn`；`array_buffer.cp` `toJS` 改值接收者；`Execution.cp` `ExpectAssertions` 改 `pub enum` 消除自动指针化。
+
+- **[2026-11-20] `src/interchange/yaml.cp` 完整恢复**：从原始提交恢复 5,743 行 `yaml_.zig` 并完成纯 CP 重构（30+ 嵌套类型提升顶层泛型 + `pub const` 导出保持 API 兼容），`zig:check` 零高危报错。
