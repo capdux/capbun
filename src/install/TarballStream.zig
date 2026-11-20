@@ -760,7 +760,7 @@ client.use_pwrite = false;
         if ((block.offset != client.entry_actual_offset)) {
             _ = seek: {
             if (client.use_lseek) {
-                switch (bun.sys.setFileOffset(fd, (if (comptime @typeInfo(@TypeOf(block.offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(block.offset)) else cp_cast_int(i32, block.offset)))) {
+                switch (bun.sys.setFileOffset(fd, @intCast(block.offset))) {
 .result => {
 client.entry_actual_offset = block.offset;
                 break :seek;

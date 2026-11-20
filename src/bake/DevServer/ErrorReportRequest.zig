@@ -277,7 +277,12 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         }
         if (runtime_lines) |lines| {
             _ = &lines;
-            var adjusted_lines: [][]const u8 = (&lines);
+            var mut_lines = lines;
+            _ = &mut_lines;
+            var adjusted_lines: [][]const u8 = (blk: {
+            break :blk (&mut_lines);
+
+});
             _ = &adjusted_lines;
             while (((adjusted_lines.len > 0) and (adjusted_lines[0].len == 0))) {
                 adjusted_lines = adjusted_lines[1..];

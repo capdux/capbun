@@ -250,7 +250,7 @@ pub fn matchPageWithAllocator(self: *Routes, __: []const u8, url_path: URLPath, 
             defer {
             params.* = matcher.params;
             }
-            if (self.match(allocator, path, MatchContextType, (&matcher))) |route| {
+            if (self.match(allocator, path, MatchContextTypePtr, (&matcher))) |route| {
                 _ = &route;
                 return Match{ .params = params, .name = route.name, .path = route.abs_path.slice(), .pathname = url_path.pathname, .basename = route.basename, .hash = route.full_hash, .file_path = route.abs_path.slice(), .query_string = url_path.query_string, .client_framework_enabled = self.client_framework_enabled };
             }

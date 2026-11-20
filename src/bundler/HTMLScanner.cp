@@ -216,7 +216,7 @@ pub fn HTMLProcessor(
             }
 
             const DoneCallback = struct {
-                pub fn done(_: *T) {}
+                static fn done(_unused: *T) {}
             };
 
             let rewriter = builder.build(

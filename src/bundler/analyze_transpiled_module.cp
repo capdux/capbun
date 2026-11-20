@@ -96,26 +96,25 @@ pub struct ModuleInfoDeserialized {
         const duped = gpa.dupe(u8, source)?;
         errdefer gpa.free(duped);
         let rem: []const u8 = duped;
-        const rem_ptr = unsafe { &rem };
         const res = gpa.create(ModuleInfoDeserialized)?;
         errdefer gpa.destroy(res);
 
-        const record_kinds_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
-        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(rem_ptr, record_kinds_len * @sizeOf(RecordKind))?);
-        * = eat(rem_ptr, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
+        const record_kinds_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(&rem, record_kinds_len * @sizeOf(RecordKind))?);
+        * = eat(&rem, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
 
-        const buffer_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
-        const buffer = std.mem.bytesAsSlice(StringID, eat(rem_ptr, buffer_len * @sizeOf(StringID))?);
+        const buffer_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const buffer = std.mem.bytesAsSlice(StringID, eat(&rem, buffer_len * @sizeOf(StringID))?);
 
-        const requested_modules_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
-        const requested_modules_keys = std.mem.bytesAsSlice(StringID, eat(rem_ptr, requested_modules_len * @sizeOf(StringID))?);
-        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, eat(rem_ptr, requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
+        const requested_modules_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const requested_modules_keys = std.mem.bytesAsSlice(StringID, eat(&rem, requested_modules_len * @sizeOf(StringID))?);
+        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, eat(&rem, requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
 
-        const flags: Flags = @bitCast((eatC(rem_ptr, 1)?)[0]);
-        * = eat(rem_ptr, 3)?; // alignment padding
+        const flags: Flags = @bitCast((eatC(&rem, 1)?)[0]);
+        * = eat(&rem, 3)?; // alignment padding
 
-        const strings_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
-        const strings_lens = std.mem.bytesAsSlice(u32, eat(rem_ptr, strings_len * @sizeOf(u32))?);
+        const strings_len = std.mem.readInt(u32, eatC(&rem, 4)?, .little);
+        const strings_lens = std.mem.bytesAsSlice(u32, eat(&rem, strings_len * @sizeOf(u32))?);
         const strings_buf = rem;
 
         res.* = .{
@@ -383,14 +382,15 @@ pub struct ModuleInfo {
 
         {
             let i: usize = 0;
-            for (*k of _.record_kinds.items) {
-                if (k.* == .export_info_local) {
+            for (idx of 0.._.record_kinds.items.len) {
+                const k = _.record_kinds.items[idx];
+                if (k == .export_info_local) {
                     if (ip := local_name_to_module_name.get(_.buffer.items[i + 1])) {
                         // `import * as z from M; export { z }` is a Namespace export per
                         // spec; encode it as indirect with import_name = .star_namespace
                         // so the record stays the same length and toJSModuleRecord
                         // dispatches to addNamespaceExport.
-                        k.* = .export_info_indirect;
+                        _.record_kinds.items[idx] = .export_info_indirect;
                         _.buffer.items[i + 1] = ip.import_name;
                         _.buffer.items[i + 2] = ip.module_name;
                         // In TypeScript, the re-exported import may target a type-only

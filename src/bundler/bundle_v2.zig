@@ -843,7 +843,10 @@ pub fn cloneAST(self: *BundleV2) !void {
                 _ = &module_scope;
                 for (cp_iter_slice((module_scope.*).children.slice())) |child| {
                     _ = &child;
-                    child.parent = (module_scope.*);
+                    child.parent = (blk: {
+                    break :blk (&(module_scope.*));
+
+});
                 }
                 if (comptime FeatureFlags.help_catch_memory_issues) {
                     _ = self.graph.heap.helpCatchMemoryIssues();
@@ -906,9 +909,9 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
                                 const export_name_string = keys[@as(usize, @intCast(j))];
                                 var client_item = (&client_manifest_items[@as(usize, @intCast(j))]);
                                 _ = &client_item;
-                                const server_key_string = std.fmt.allocPrint(alloc, "{f}S{d:0>8}#{s}", .{ bun.fmt.hexIntLower(self.unique_key), source_id, export_name_string });
+                                const server_key_string = try std.fmt.allocPrint(alloc, "{f}S{d:0>8}#{s}", .{ bun.fmt.hexIntLower(self.unique_key), source_id, export_name_string });
                                 const export_name = server.newExpr(E.String{ .data = export_name_string });
-                                _ = server_manifest_props.append(alloc, .{ .key = server.newExpr(E.String{ .data = server_key_string }), .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, .{ .{ .key = id_string, .value = client_path }, .{ .key = name_string, .value = export_name }, .{ .key = chunks_string, .value = empty_array } }) }) });
+                                _ = try server_manifest_props.append(alloc, .{ .key = server.newExpr(E.String{ .data = server_key_string }), .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, .{ .{ .key = id_string, .value = client_path }, .{ .key = name_string, .value = export_name }, .{ .key = chunks_string, .value = empty_array } }) }) });
                                 client_item.* = .{ .key = export_name, .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, .{ .{ .key = name_string, .value = export_name }, .{ .key = specifier_string, .value = ssr_path } }) }) };
                             }
                         }

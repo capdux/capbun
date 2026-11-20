@@ -195,8 +195,8 @@ pub fn run(target: *T, input: []const u8) !void {
             }
             const DoneCallback = struct {
 
-pub fn done(self: *@This(), _: *T) void {
-        _ = self;
+pub fn done(_unused: *T) void {
+        _ = _unused;
     }
 };
             var rewriter = try builder.build(.UTF8, memory_settings, false, T, target, T.onWriteHTML, DoneCallback.done);

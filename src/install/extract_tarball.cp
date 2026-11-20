@@ -324,7 +324,7 @@ const DirnameReader = struct {
                         extract_destination,
                         null,
                         void,
-                        {},
+                        undefined,
                         .{
                             .log = true,
                             .depth_to_skip = 1,
@@ -337,7 +337,7 @@ const DirnameReader = struct {
                         extract_destination,
                         null,
                         void,
-                        {},
+                        undefined,
                         .{
                             .log = false,
                             .depth_to_skip = 1,

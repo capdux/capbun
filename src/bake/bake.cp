@@ -170,7 +170,7 @@ pub const SplitBundlerOptions = struct {
                 return global.throwInvalidArguments("Expected plugin to have a setup() function", .{});
             }
             const function = maybe_fn.?;
-            const plugin_result = try plugin.addPlugin(function, empty_object, .@"null", false, true);
+            const plugin_result = plugin.addPlugin(function, empty_object, .@"null", false, true)?;
             if (plugin_result.asAnyPromise()) |promise| {
                 promise.setHandled(global.vm());
                 // TODO: remove this call, replace with a promise list that must

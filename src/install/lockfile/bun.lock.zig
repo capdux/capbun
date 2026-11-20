@@ -1695,7 +1695,7 @@ pub fn parseAppendDependencies(lockfile: *BinaryLockfile, allocator: std.mem.All
                 _ = try log.addError(source, item.loc, "Expected a string");
                 return error.InvalidPackageInfo;
 });
-                _ = try optional_peers_buf.put(allocator, name_hash, .{});
+                _ = try optional_peers_buf.put(allocator, name_hash, undefined);
             }
         }
         var path_buf: if (check_for_bundled) bun.PathBuffer else void = undefined;

@@ -455,6 +455,7 @@ pub fn Package(comptime SemverIntType: type): type {
                             }
                         }
 
+                        const empty_version: Dependency.Version = .{};
                         const dependency = Dependency{
                             name: name.value,
                             name_hash: name.hash,
@@ -467,7 +468,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 &sliced,
                                 log,
                                 pm,
-                            ) orelse Dependency.Version{},
+                            ) orelse empty_version,
                         };
 
                         // If a dependency appears in both "dependencies" and "optionalDependencies", it is considered optional!

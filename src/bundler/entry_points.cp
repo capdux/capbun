@@ -253,21 +253,7 @@ pub struct MacroEntryPoint {
             if (strings.eqlComptime(import_path.base, "bun")) {
                 break :brk std.fmt.bufPrint(
                     _.code_buffer[macro_label.len..],
-                    \\//Auto-generated file
-                    \\var Macros;
-                    \\try {{
-                    \\  Macros = globalThis.Bun;
-                    \\}} catch (err) {{
-                    \\   console.error("Error importing macro");
-                    \\   throw err;
-                    \\}}
-                    \\const macro = Macros['{s}'];
-                    \\if (!macro) {{
-                    \\  throw new Error("Macro '{s}' not found in 'bun'");
-                    \\}}
-                    \\
-                    \\Bun.registerMacro({d}, macro);
-                ,
+                    "//Auto-generated file\nvar Macros;\ntry {{\n  Macros = globalThis.Bun;\n}} catch (err) {{\n   console.error(\"Error importing macro\");\n   throw err;\n}}\nconst macro = Macros['{s}'];\nif (!macro) {{\n  throw new Error(\"Macro '{s}' not found in 'bun'\");\n}}\n\nBun.registerMacro({d}, macro);",
                     .{ 
                         function_name,
                         function_name,
@@ -278,20 +264,7 @@ pub struct MacroEntryPoint {
 
             break :brk std.fmt.bufPrint(
                 _.code_buffer[macro_label.len..],
-                \\//Auto-generated file
-                \\var Macros;
-                \\try {{
-                \\  Macros = await import('{f}{f}');
-                \\}} catch (err) {{
-                \\   console.error("Error importing macro");
-                \\   throw err;
-                \\}}
-                \\if (!('{s}' in Macros)) {{
-                \\  throw new Error("Macro '{s}' not found in '{f}{f}'");
-                \\}}
-                \\
-                \\Bun.registerMacro({d}, Macros['{s}']);
-            ,
+                "//Auto-generated file\nvar Macros;\ntry {{\n  Macros = await import('{f}{f}');\n}} catch (err) {{\n   console.error(\"Error importing macro\");\n   throw err;\n}}\nif (!('{s}' in Macros)) {{\n  throw new Error(\"Macro '{s}' not found in '{f}{f}'\");\n}}\n\nBun.registerMacro({d}, Macros['{s}']);",
                 .{ 
                     bun.fmt.fmtPath(u8, dir_to_use, {
                         escape_backslashes: true,

@@ -268,7 +268,8 @@
 
         if (lines := runtime_lines) {
             // trim empty lines
-            let adjusted_lines: [][]const u8 = &lines;
+            let mut_lines = lines;
+            let adjusted_lines: [][]const u8 = unsafe { &mut_lines };
             while (adjusted_lines.len > 0 && adjusted_lines[0].len == 0) {
                 adjusted_lines = adjusted_lines[1..];
                 if (region_of_interest_line > 0) {

@@ -1248,7 +1248,7 @@ pub struct BundleV2 {
 
         for (*module_scope of _.linker.graph.ast.items(.module_scope)) {
             for (child of module_scope.children.slice()) {
-                child.parent = module_scope;
+                child.parent = unsafe { &module_scope };
             }
 
             if (comptime FeatureFlags.help_catch_memory_issues) {
@@ -1335,7 +1335,7 @@ pub struct BundleV2 {
                         bun.fmt.hexIntLower(_.unique_key),
                         source_id,
                         export_name_string,
-                    ]);
+                    ])?;
                     const export_name = server.newExpr(E.String{ data: export_name_string });
 
                     // write dependencies on the underlying module, not the proxy
@@ -1348,7 +1348,7 @@ pub struct BundleV2 {
                                 { key: chunks_string, value: empty_array },
                             ])?,
                         }),
-                    });
+                    })?;
                     client_item.* = {
                         key: export_name,
                         value: server.newExpr(E.Object{

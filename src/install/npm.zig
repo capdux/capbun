@@ -1922,7 +1922,14 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
                 if ((bytes.len < header_bytes.len)) {
                     return null;
                 }
-                const manifest = ((readAll(bytes, scope)) orelse { return try null; });
+                var manifest: PackageManifest = undefined;
+                _ = &manifest;
+                if (try readAll(bytes, scope)) |m| {
+                    _ = &m;
+                    manifest = m;
+                } else {
+                    return null;
+                }
                 if ((manifest.versions.len == 0)) {
                     return null;
                 }

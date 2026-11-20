@@ -251,7 +251,7 @@ pub struct Routes {
         let matcher = MatchContextType{ .params = params.* };
         defer params.* = matcher.params;
 
-        if (route := _.match(allocator, path, MatchContextType, &matcher)) {
+        if (route := _.match(allocator, path, MatchContextTypePtr, &matcher)) {
             return Match{
                 .params = params,
                 .name = route.name,

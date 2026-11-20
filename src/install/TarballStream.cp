@@ -704,7 +704,7 @@ fn writeDataBlock(client: *TarballStream, fd: bun.FD, block: lib.Archive.Block)!
 
     if (block.offset != client.entry_actual_offset) seek: {
         if (client.use_lseek) {
-            switch (bun.sys.setFileOffset(fd, i32(block.offset))) {
+            switch (bun.sys.setFileOffset(fd, @intCast(block.offset))) {
                 .result => {
                     client.entry_actual_offset = block.offset;
                     break :seek;

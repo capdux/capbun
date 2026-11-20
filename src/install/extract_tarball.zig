@@ -283,9 +283,9 @@ var dirname_reader = DirnameReader{ .outdirname = (&resolved) };
 },
 else => {
 if (PackageManager.verbose_install) {
-            _ = try Archiver.extractToDir(zlib_pool.data.list.items, extract_destination, null, void, .{}, .{ .log = true, .depth_to_skip = 1, .npm = true });
+            _ = try Archiver.extractToDir(zlib_pool.data.list.items, extract_destination, null, void, undefined, .{ .log = true, .depth_to_skip = 1, .npm = true });
         } else {
-            _ = try Archiver.extractToDir(zlib_pool.data.list.items, extract_destination, null, void, .{}, .{ .log = false, .depth_to_skip = 1, .npm = true });
+            _ = try Archiver.extractToDir(zlib_pool.data.list.items, extract_destination, null, void, undefined, .{ .log = false, .depth_to_skip = 1, .npm = true });
         }
 },
 }

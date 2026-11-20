@@ -524,8 +524,11 @@ pub struct DependencyVersion {
         return switch (lhs.tag) {
             // if the two versions are identical as strings, it should often be faster to compare that than the actual semver version
             // semver ranges involve a ton of pointer chasing
-            .npm => strings.eqlLong(lhs.literal.slice(lhs_buf), rhs.literal.slice(rhs_buf), true) ||
-                lhs.value.npm.eql(rhs.value.npm, lhs_buf, rhs_buf),
+            .npm => {
+                const slice_fn = @TypeOf(lhs.literal).slice;
+                return strings.eqlLong(slice_fn(lhs.literal, lhs_buf), slice_fn(rhs.literal, rhs_buf), true) ||
+                    lhs.value.npm.eql(rhs.value.npm, lhs_buf, rhs_buf);
+            },
             .folder, .dist_tag => lhs.literal.eql(rhs.literal, lhs_buf, rhs_buf),
             .git => lhs.value.git.eql(&rhs.value.git, lhs_buf, rhs_buf),
             .github => lhs.value.github.eql(&rhs.value.github, lhs_buf, rhs_buf),

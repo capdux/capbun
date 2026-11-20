@@ -2107,7 +2107,7 @@ fn parseAppendDependencies(
                 return error.InvalidPackageInfo;
             };
 
-            optional_peers_buf.put(allocator, name_hash, {})?;
+            optional_peers_buf.put(allocator, name_hash, undefined)?;
         }
     }
 

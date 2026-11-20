@@ -516,7 +516,11 @@ pub fn migrateNPMLockfile(
         if (is_workspace) {
             pkg_name = workspace_entry.?.name;
         } else if (set_name := pkg.get("name")) {
-            pkg_name = set_name.asString(lockfile.allocator) ?? unreachable;
+            if (s := set_name.asString(lockfile.allocator)) {
+                pkg_name = s;
+            } else {
+                unreachable;
+            }
         } else {
             pkg_name = packageNameFromPath(pkg_path);
         }
@@ -1211,7 +1215,11 @@ fn packageNameFromPath(pkg_path: []const u8): []const u8 {
     } else if (strings.hasPrefixComptime(pkg_path, "node_modules/")) {
         pkg_name_start = "node_modules/".len;
     } else {
-        pkg_name_start = strings.lastIndexOf(pkg_path, "/") ?? 0;
+        if (idx := strings.lastIndexOf(pkg_path, "/")) {
+            pkg_name_start = idx;
+        } else {
+            pkg_name_start = 0;
+        }
     }
 
     return pkg_path[pkg_name_start..];

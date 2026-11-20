@@ -1297,7 +1297,12 @@ pub struct PackageManifest {
                 return null;
             }
 
-            const manifest = readAll(bytes, scope) ?? return null?;
+            let manifest: PackageManifest = undefined;
+            if (m := readAll(bytes, scope)?) {
+                manifest = m;
+            } else {
+                return null;
+            }
 
             if (manifest.versions.len == 0) {
                 // it's impossible to publish a package with zero versions, bust

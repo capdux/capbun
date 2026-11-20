@@ -522,7 +522,12 @@ num_extern_strings = (num_extern_strings + @as(u32, @truncate((bin.data.e_object
             } else {
                 if (pkg.get("name")) |set_name| {
                     _ = &set_name;
-                    if (pkg_name == null) { pkg_name = unreachable; }
+                    if (set_name.asString(lockfile.allocator)) |s| {
+                        _ = &s;
+                        pkg_name = s;
+                    } else {
+                        _ = unreachable;
+                    }
                 } else {
                     pkg_name = packageNameFromPath(pkg_path);
                 }
@@ -1093,7 +1098,12 @@ pub fn packageNameFromPath(pkg_path: []const u8) []const u8 {
             if (strings.hasPrefixComptime(pkg_path, "node_modules/")) {
                 pkg_name_start = "node_modules/".len;
             } else {
-                if (pkg_name_start == null) { pkg_name_start = 0; }
+                if (strings.lastIndexOf(pkg_path, "/")) |idx| {
+                    _ = &idx;
+                    pkg_name_start = idx;
+                } else {
+                    pkg_name_start = 0;
+                }
             }
         }
         return pkg_path[pkg_name_start..];
