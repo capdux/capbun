@@ -199,7 +199,7 @@ pub struct BoxShadowHandler {
             const ColorFallbackKind = css.ColorFallbackKind;
             let prefixes = context.targets.prefixes(prefixes2, Feature.box_shadow);
             let fallbacks = ColorFallbackKind{};
-            for (*shadow of box_shadows.slice()) {
+            for (shadow of box_shadows.slice()) {
                 bun.bits.insert(ColorFallbackKind, &fallbacks, shadow.color.getNecessaryFallbacks(context.targets));
             }
 

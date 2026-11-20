@@ -6238,7 +6238,7 @@ pub fn printJSON(
     return @as(usize, @intCast(@max(printer.writer.written, 0)));
 }
 
-pub fn print(
+pub fn @"print"(
     allocator: std.mem.Allocator,
     target: options.Target,
     ast: Ast,

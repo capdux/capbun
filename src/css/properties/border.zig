@@ -277,7 +277,7 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
 
 pub fn setBorder(self: *BorderShorthand, allocator: std.mem.Allocator, border: anytype) void {
             self.width = border.width.deepClone(allocator);
-            self.style = border.style.deepClone(allocator);
+            self.style = css.generic.deepClone(LineStyle, (&border.style), allocator);
             self.color = border.color.deepClone(allocator);
     }
 
@@ -580,7 +580,7 @@ pub fn flushUnparsed(self: *BorderHandler, unparsed: *const UnparsedProperty, de
             const prop = struct {
 
 pub inline fn prop(handler: *BorderHandler, c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime id: []const u8) void {
-            var upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, .{}));
+            var upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, undefined));
             _ = &upppppppppp;
             _ = c.addUnparsedFallbacks((&upppppppppp));
             _ = bun.bits.insert(BorderProperty, (&handler.flushed_properties), @field(BorderProperty, id));
@@ -589,7 +589,7 @@ pub inline fn prop(handler: *BorderHandler, c: *css.PropertyHandlerContext, up: 
             const logical_prop = struct {
 
 pub inline fn logical_prop(c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime ltr: []const u8, comptime rtl: []const u8) void {
-            _ = c.addLogicalRule(c.allocator, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, ltr, .{})) }, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, rtl, .{})) });
+            _ = c.addLogicalRule(c.allocator, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, ltr, undefined)) }, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, rtl, undefined)) });
     }
 }.logical_prop;
             switch (unparsed.property_id) {
@@ -658,12 +658,14 @@ var up = unparsed.deepClone(context.allocator);
         logical_shorthand_supported: bool,
     
     pub inline fn logicalProp(f: *FlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: anytype) void {
-                _ = f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)), @unionInit(css.Property, rtl, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)));
+                const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
+                _ = f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, cloned), @unionInit(css.Property, rtl, cloned));
         }
     
     pub inline fn push(f: *FlushContext, comptime p: []const u8, val: anytype) void {
                 _ = bun.bits.insert(BorderProperty, (&f.self.flushed_properties), @field(BorderProperty, p));
-                _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator))));
+                const cloned = (if (comptime (@typeInfo(@TypeOf(val)) == .pointer)) css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator) else css.generic.deepClone(@TypeOf(val), (&val), f.ctx.allocator));
+                _ = bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, cloned)));
         }
     
     pub inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: anytype) void {

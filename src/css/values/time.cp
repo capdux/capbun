@@ -120,7 +120,7 @@ pub union(Tag) Time {
             else => {},
         }
 
-        return { err: {} };
+        return { err: undefined };
     }
 
     static fn tryFromAngle(angle: css.css_values.angle.Angle): @This()? {

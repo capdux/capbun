@@ -176,7 +176,7 @@ else => {
 
 },
 }
-            return .{ .err = .{} };
+            return .{ .err = undefined };
     }
 
 pub fn tryFromAngle(angle: css.css_values.angle.Angle) ?@This() {

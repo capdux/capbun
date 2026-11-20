@@ -148,7 +148,7 @@ pub fn lookupSymbol(self: *Printer, ref_: bun.bundle_v2.Ref) []const u8 {
 
 pub fn lookupIdentOrRef(self: *Printer, ident: css.css_values.ident.IdentOrRef) []const u8 {
             if (comptime bun.Environment.isDebug) {
-                if (self.in_debug_fmt) {
+                if (This.in_debug_fmt) {
                     return ident.debugIdent();
                 }
             }

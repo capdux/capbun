@@ -388,16 +388,15 @@ pub fn parse_declaration_impl(name: []const u8, input: *css.Parser, declarations
         const Closure = struct {
     property_id: css.PropertyId,
     options: *const css.ParserOptions,
-};
-        var closure = Closure{ .property_id = property_id, .options = options };
-        _ = &closure;
-        const source_location = input.currentSourceLocation();
-        var property = (switch (input.parseUntilBefore(delimiters, css.Property, (&closure), struct {
 
 pub fn parseFn(self: *@This(), input2: *css.Parser) Result(css.Property) {
             return css.Property.parse(self.property_id, input2, self.options);
     }
-}.parseFn)) {
+};
+        var closure = Closure{ .property_id = property_id, .options = options };
+        _ = &closure;
+        const source_location = input.currentSourceLocation();
+        var property = (switch (input.parseUntilBefore(delimiters, css.Property, (&closure), Closure.parseFn)) {
 .err => |e| {
 return .{ .err = e };
 },

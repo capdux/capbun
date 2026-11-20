@@ -977,7 +977,7 @@ pub struct FontHandler {
 
         if (family != null && size != null && style != null && weight != null && stretch != null && line_height != null && variant_caps != null) {
             const caps = variant_caps.?;
-            push(_, decls, context, "font", Font{
+            _.push(decls, context, "font", Font{
                 family: family.?,
                 size: size.?,
                 style: style.?,
@@ -990,35 +990,35 @@ pub struct FontHandler {
             // The `font` property only accepts CSS 2.1 values for font-variant caps.
             // If we have a CSS 3+ value, we need to add a separate property.
             if (!caps.isCss2()) {
-                push(_, decls, context, "font-variant-caps", caps);
+                _.push(decls, context, "font-variant-caps", caps);
             }
         } else {
             if (val := family) {
-                push(_, decls, context, "font-family", val);
+                _.push(decls, context, "font-family", val);
             }
 
             if (val := size) {
-                push(_, decls, context, "font-size", val);
+                _.push(decls, context, "font-size", val);
             }
 
             if (val := style) {
-                push(_, decls, context, "font-style", val);
+                _.push(decls, context, "font-style", val);
             }
 
             if (val := variant_caps) {
-                push(_, decls, context, "font-variant-caps", val);
+                _.push(decls, context, "font-variant-caps", val);
             }
 
             if (val := weight) {
-                push(_, decls, context, "font-weight", val);
+                _.push(decls, context, "font-weight", val);
             }
 
             if (val := stretch) {
-                push(_, decls, context, "font-stretch", val);
+                _.push(decls, context, "font-stretch", val);
             }
 
             if (val := line_height) {
-                push(_, decls, context, "line-height", val);
+                _.push(decls, context, "line-height", val);
             }
         }
     }

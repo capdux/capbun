@@ -113,39 +113,39 @@ pub struct BorderRadiusHandler {
 
     fn handleProperty(*_, property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext): bool {
         switch (property.*) {
-            .@"border-top-left-radius" => |val| propertyHelper(_, dest, context, "top_left", &val[0], val[1]),
-            .@"border-top-right-radius" => |val| propertyHelper(_, dest, context, "top_right", &val[0], val[1]),
-            .@"border-bottom-right-radius" => |val| propertyHelper(_, dest, context, "bottom_right", &val[0], val[1]),
-            .@"border-bottom-left-radius" => |val| propertyHelper(_, dest, context, "bottom_left", &val[0], val[1]),
-            .@"border-start-start-radius" => logicalPropertyHelper(this, dest, context, "start_start", property),
-            .@"border-start-end-radius" => logicalPropertyHelper(this, dest, context, "start_end", property),
-            .@"border-end-end-radius" => logicalPropertyHelper(this, dest, context, "end_end", property),
-            .@"border-end-start-radius" => logicalPropertyHelper(this, dest, context, "end_start", property),
+            .@"border-top-left-radius" => |val| _.propertyHelper(dest, context, "top_left", &val[0], val[1]),
+            .@"border-top-right-radius" => |val| _.propertyHelper(dest, context, "top_right", &val[0], val[1]),
+            .@"border-bottom-right-radius" => |val| _.propertyHelper(dest, context, "bottom_right", &val[0], val[1]),
+            .@"border-bottom-left-radius" => |val| _.propertyHelper(dest, context, "bottom_left", &val[0], val[1]),
+            .@"border-start-start-radius" => _.logicalPropertyHelper(dest, context, "start_start", property),
+            .@"border-start-end-radius" => _.logicalPropertyHelper(dest, context, "start_end", property),
+            .@"border-end-end-radius" => _.logicalPropertyHelper(dest, context, "end_end", property),
+            .@"border-end-start-radius" => _.logicalPropertyHelper(dest, context, "end_start", property),
             .@"border-radius" => |val| {
-                this.start_start = null;
-                this.start_end = null;
-                this.end_end = null;
-                this.end_start = null;
+                _.start_start = null;
+                _.start_end = null;
+                _.end_end = null;
+                _.end_start = null;
 
-                maybeFlush(this, dest, context, "top_left", &val[0].top_left, val[1]);
-                maybeFlush(this, dest, context, "top_right", &val[0].top_right, val[1]);
-                maybeFlush(this, dest, context, "bottom_right", &val[0].bottom_right, val[1]);
-                maybeFlush(this, dest, context, "bottom_left", &val[0].bottom_left, val[1]);
+                _.maybeFlush(dest, context, "top_left", &val[0].top_left, val[1]);
+                _.maybeFlush(dest, context, "top_right", &val[0].top_right, val[1]);
+                _.maybeFlush(dest, context, "bottom_right", &val[0].bottom_right, val[1]);
+                _.maybeFlush(dest, context, "bottom_left", &val[0].bottom_left, val[1]);
 
-                propertyHelper(this, dest, context, "top_left", &val[0].top_left, val[1]);
-                propertyHelper(this, dest, context, "top_right", &val[0].top_right, val[1]);
-                propertyHelper(this, dest, context, "bottom_right", &val[0].bottom_right, val[1]);
-                propertyHelper(this, dest, context, "bottom_left", &val[0].bottom_left, val[1]);
+                _.propertyHelper(dest, context, "top_left", &val[0].top_left, val[1]);
+                _.propertyHelper(dest, context, "top_right", &val[0].top_right, val[1]);
+                _.propertyHelper(dest, context, "bottom_right", &val[0].bottom_right, val[1]);
+                _.propertyHelper(dest, context, "bottom_left", &val[0].bottom_left, val[1]);
             },
             .unparsed => |unparsed| {
                 if (isBorderRadiusProperty(unparsed.property_id)) {
                     // Even if we weren't able to parse the value (e.g. due to var() references),
                     // we can still add vendor prefixes to the property itself.
                     switch (unparsed.property_id) {
-                        .@"border-start-start-radius" => logicalPropertyHelper(_, dest, context, "start_start", property),
-                        .@"border-start-end-radius" => logicalPropertyHelper(_, dest, context, "start_end", property),
-                        .@"border-end-end-radius" => logicalPropertyHelper(_, dest, context, "end_end", property),
-                        .@"border-end-start-radius" => logicalPropertyHelper(_, dest, context, "end_start", property),
+                        .@"border-start-start-radius" => _.logicalPropertyHelper(dest, context, "start_start", property),
+                        .@"border-start-end-radius" => _.logicalPropertyHelper(dest, context, "start_end", property),
+                        .@"border-end-end-radius" => _.logicalPropertyHelper(dest, context, "end_end", property),
+                        .@"border-end-start-radius" => _.logicalPropertyHelper(dest, context, "end_start", property),
                         else => {
                             _.flush(dest, context);
                             bun.handleOom(dest.append(context.allocator, Property{ .unparsed = unparsed.getPrefixed(context.allocator, context.targets, css.prefixes.Feature.border_radius) }));
@@ -178,7 +178,13 @@ pub struct BorderRadiusHandler {
         const end_start = bun.take(&_.end_start);
 
         if (top_left != null && top_right != null && bottom_right != null && bottom_left != null) {
-            const intersection = top_left.?[1].bitwiseAnd(top_right.?[1]).bitwiseAnd(bottom_right.?[1]).bitwiseAnd(bottom_left.?[1]);
+            const intersection = VendorPrefix.bitwiseAnd(
+                VendorPrefix.bitwiseAnd(
+                    VendorPrefix.bitwiseAnd(top_left.?[1], top_right.?[1]),
+                    bottom_right.?[1],
+                ),
+                bottom_left.?[1],
+            );
             if (!intersection.isEmpty()) {
                 const prefix = context.targets.prefixes(intersection, css.prefixes.Feature.border_radius);
                 dest.append(context.allocator, Property{ .@"border-radius" = .{

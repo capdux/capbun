@@ -33,7 +33,8 @@ pub struct Location {
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const s = _;
+        return css.implementHash(@This(), &s, hasher);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {

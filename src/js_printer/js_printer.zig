@@ -5689,6 +5689,17 @@ pub fn printJSON(comptime Writer: type, _writer: Writer, expr: Expr, source: *co
         return @as(usize, @intCast(@max(printer.writer.written, 0)));
 }
 
+pub fn @"print"(allocator: std.mem.Allocator, target: options.Target, ast: Ast, source: *const logger.Source, opts: Options, import_records: []const ImportRecord, parts: []const js_ast.Part, renamer: bun.renamer.Renamer, comptime generate_source_maps: bool) PrintResult {
+        const trace = bun.perf.trace("JSPrinter.print");
+        defer {
+        _ = trace.end();
+        }
+        const buffer_writer = BufferWriter.init(allocator);
+        var buffer_printer = BufferPrinter.init(buffer_writer);
+        _ = &buffer_printer;
+        return printWithWriter(*BufferPrinter, (&buffer_printer), target, ast, source, opts, import_records, parts, renamer, (comptime generate_source_maps));
+}
+
 pub fn printWithWriter(comptime Writer: type, writer: Writer, target: options.Target, ast: Ast, source: *const logger.Source, opts: Options, import_records: []const ImportRecord, parts: []const js_ast.Part, renamer: bun.renamer.Renamer, comptime generate_source_maps: bool) PrintResult {
         return (switch (target.isBun()) {
 inline else => |is_bun| printWithWriterAndPlatform(Writer, writer, is_bun, ast, source, opts, import_records, parts, renamer, generate_source_maps),

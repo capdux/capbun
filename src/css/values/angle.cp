@@ -125,7 +125,7 @@ pub union(Tag) Angle {
                 return { result: { rad: value } };
             }
         }
-        return { err: {} };
+        return { err: undefined };
     }
 
     /// Returns the angle in radians.

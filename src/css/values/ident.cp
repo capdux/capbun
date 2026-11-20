@@ -99,7 +99,8 @@ pub struct DashedIdent {
     const This = @This();
 
     fn toCss(dest: *Printer): PrintErr!void {
-        return dest.writeDashedIdent(_, true);
+        const s = _;
+        return dest.writeDashedIdent(&s, true);
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
@@ -195,7 +196,7 @@ pub struct Ident {
         };
 
         if (comptime bun.Environment.isDebug) {
-            let heap_ptr: *string = bun.handleOom(debug_ident[1].create(string));
+            const heap_ptr = bun.handleOom(debug_ident[1].create(string));
             heap_ptr.* = debug_ident[0];
             res.__ptrbits = @intCast(@intFromPtr(heap_ptr));
         }

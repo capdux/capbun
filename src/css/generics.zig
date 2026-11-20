@@ -368,7 +368,7 @@ pub fn slice(comptime T: type, val: *const T) []const SliceChild(T) {
 
 pub fn isCompatible(comptime T: type, val: *const T, browsers: bun.css.targets.Browsers) bool {
         if (@hasDecl(T, "isCompatible")) {
-            return T.isCompatible(val, browsers);
+            return (if (comptime (@typeInfo(@TypeOf(T.isCompatible)).@"fn".params[0].type.? == T)) T.isCompatible(val.*, browsers) else T.isCompatible(val, browsers));
         }
         const tyinfo = @typeInfo(T);
         if ((tyinfo == .pointer)) {
@@ -597,7 +597,7 @@ return lhs.eql(rhs);
         }
         const Loc = bun.logger.Loc;
         _ = &Loc;
-        return (if (T == f32) (lhs.* == rhs.*) else if (T == CSSInteger) (lhs.* == rhs.*) else if ((T == CustomIdent) or (T == DashedIdent) or (T == Ident)) bun.strings.eql(lhs.v, rhs.v) else if (T == bun.string) bun.strings.eql(lhs.*, rhs.*) else if (T == Loc) lhs.eql(rhs.*) else (if (((@typeInfo(T) == .@"struct") and (@typeInfo(T).@"struct".layout == .@"packed"))) (lhs.* == rhs.*) else (if (comptime (@typeInfo(@TypeOf(T.eql)).@"fn".params[0].type.? == T)) T.eql(lhs.*, rhs) else T.eql(lhs, rhs))));
+        return (if (T == f32) (lhs.* == rhs.*) else if (T == CSSInteger) (lhs.* == rhs.*) else if ((T == CustomIdent) or (T == DashedIdent) or (T == Ident)) bun.strings.eql(lhs.v, rhs.v) else if (T == bun.string) bun.strings.eql(lhs.*, rhs.*) else if (T == Loc) lhs.eql(rhs.*) else (if (((@typeInfo(T) == .@"struct") and (@typeInfo(T).@"struct".layout == .@"packed"))) (lhs.* == rhs.*) else (if (comptime (@typeInfo(@TypeOf(T.eql)).@"fn".params.len == 3)) T.eql(lhs.*, lhs, rhs) else (if (comptime (@typeInfo(@TypeOf(T.eql)).@"fn".params[0].type.? == T)) T.eql(lhs.*, rhs) else T.eql(lhs, rhs)))));
 }
 
 pub fn canTransitivelyImplementDeepClone(comptime T: type) bool {

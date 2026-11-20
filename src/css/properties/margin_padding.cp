@@ -772,9 +772,11 @@ fn NewSizeHandler(
             }
         }
 
+        type OptProperty = Property?;
+
         static inline fn logicalSideHelper(
-            start: *Property?,
-            end: *Property?,
+            start: *OptProperty,
+            end: *OptProperty,
             comptime start_name: []const u8,
             comptime end_name: []const u8,
             comptime shorthand_property: css.PropertyIdTag,

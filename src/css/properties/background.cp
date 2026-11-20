@@ -231,7 +231,7 @@ pub struct Background {
     }
 
     inline fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -239,79 +239,81 @@ pub struct Background {
     }
 }
 
+pub struct BackgroundSizeExplicit {
+    /// The width of the background.
+    width: css.css_values.length.LengthPercentageOrAuto,
+    /// The height of the background.
+    height: css.css_values.length.LengthPercentageOrAuto,
+
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
+
+    pub inline fn deepClone(allocator: Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
+    }
+}
+
 /// A value for the [background-size](https://www.w3.org/TR/css-backgrounds-3/#background-size) property.
-pub const BackgroundSize = union(enum) {
+pub union(enum) BackgroundSize {
     /// An explicit background size.
-    explicit: struct {
-        /// The width of the background.
-        width: css.css_values.length.LengthPercentageOrAuto,
-        /// The height of the background.
-        height: css.css_values.length.LengthPercentageOrAuto,
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub inline fn deepClone(this: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
+    explicit: BackgroundSizeExplicit,
     /// The `cover` keyword. Scales the background image to cover both the width and height of the element.
-    cover,
+    cover: void,
     /// The `contain` keyword. Scales the background image so that it fits within the element.
-    contain,
+    contain: void,
 
-    pub fn parse(input: *css.Parser) css.Result(@This()) {
-        if (input.tryParse(LengthPercentageOrAuto.parse, .{}).asValue()) |width| {
-            const height = input.tryParse(LengthPercentageOrAuto.parse, .{}).unwrapOr(.auto);
-            return .{ .result = .{ .explicit = .{ .width = width, .height = height } } };
+    static fn parse(input: *css.Parser): css.Result(@This()) {
+        if (width := input.tryParse(LengthPercentageOrAuto.parse, {}).asValue()) {
+            const height = input.tryParse(LengthPercentageOrAuto.parse, {}).unwrapOr(.auto);
+            return { result: { explicit: { width: width, height: height } } };
         }
 
         const location = input.currentSourceLocation();
         const ident = switch (input.expectIdent()) {
             .result => |v| v,
-            .err => |e| return .{ .err = e },
+            .err => |e| return { err: e },
         };
 
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "cover")) {
-            return .{ .result = .cover };
+            return { result: .cover };
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "contain")) {
-            return .{ .result = .contain };
+            return { result: .contain };
         } else {
-            return .{ .err = location.newBasicUnexpectedTokenError(.{ .ident = ident }) };
+            return { err: location.newBasicUnexpectedTokenError({ ident: ident }) };
         }
     }
 
-    pub fn toCss(this: *const BackgroundSize, dest: *Printer) PrintErr!void {
-        return switch (this.*) {
+    pub fn toCss(dest: *Printer): PrintErr!void {
+        return switch (_) {
             .cover => dest.writeStr("cover"),
             .contain => dest.writeStr("contain"),
             .explicit => |explicit| {
-                try explicit.width.toCss(dest);
+                explicit.width.toCss(dest)?;
                 if (explicit.height != .auto) {
-                    try dest.writeStr(" ");
-                    try explicit.height.toCss(dest);
+                    dest.writeStr(" ")?;
+                    explicit.height.toCss(dest)?;
                 }
                 return;
             },
         };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn default() @This() {
-        return BackgroundSize{ .explicit = .{
-            .width = .auto,
-            .height = .auto,
+    static fn default(): @This() {
+        return BackgroundSize{ explicit: {
+            width: .auto,
+            height: .auto,
         } };
     }
 
-    pub inline fn deepClone(this: *const @This(), allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    pub inline fn deepClone(allocator: Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
-};
+}
 
 /// A value for the [background-position](https://drafts.csswg.org/css-backgrounds/#background-position) shorthand property.
 pub struct BackgroundPosition {
@@ -355,7 +357,7 @@ pub struct BackgroundPosition {
     }
 
     pub inline fn deepClone(_: *const @This(), allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -674,11 +676,11 @@ pub struct BackgroundHandler {
                 }
             },
             .background => |*val| {
-                let images = SmallList(Image, 1).initCapacity(allocator, val.len());
+                let bg_images = SmallList(Image, 1).initCapacity(allocator, val.len());
                 for (*b of val.slice()) {
-                    images.appendAssumeCapacity(b.image.deepClone(allocator));
+                    bg_images.appendAssumeCapacity(b.image.deepClone(allocator));
                 }
-                _.backgroundHelper(allocator, SmallList(Image, 1), &images, property, dest, context);
+                _.backgroundHelper(allocator, SmallList(Image, 1), &bg_images, property, dest, context);
                 const color = val.last().?.color.deepClone(allocator);
                 _.flushHelper(allocator, "color", CssColor, &color, dest, context);
                 let clips = SmallList(BackgroundClip, 1).initCapacity(allocator, val.len());

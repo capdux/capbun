@@ -405,7 +405,7 @@ pub const DefaultAtRuleParser = struct {
     
     pub fn ruleWithoutBlock(self: *@This(), _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
             _ = self;
-                return .{ .err = .{} };
+                return .{ .err = undefined };
         }
     
     pub fn onImportRule(self: *@This(), _: *ImportRule, _: u32, _: u32) void {
@@ -416,25 +416,20 @@ pub const DefaultAtRuleParser = struct {
             _ = self;
         }
     
-    pub fn enclosingLayerLength(self: *@This()) u32 {
-            _ = self;
+    pub fn enclosingLayerLength(_: *This) u32 {
                 return 0;
         }
     
-    pub fn setEnclosingLayer(self: *@This(), _: LayerName) void {
-            _ = self;
+    pub fn setEnclosingLayer(_: *This, _: LayerName) void {
         }
     
-    pub fn pushToEnclosingLayer(self: *@This(), _: LayerName) void {
-            _ = self;
+    pub fn pushToEnclosingLayer(_: *This, _: LayerName) void {
         }
     
-    pub fn resetEnclosingLayer(self: *@This(), _: u32) void {
-            _ = self;
+    pub fn resetEnclosingLayer(_: *This, _: u32) void {
         }
     
-    pub fn bumpAnonLayerCount(self: *@This(), _: i32) void {
-            _ = self;
+    pub fn bumpAnonLayerCount(_: *This, _: i32) void {
         }
         pub const Prelude = void;
         pub const AtRule = DefaultAtRule;
@@ -493,7 +488,7 @@ pub const BundlerAtRuleParser = struct {
     },
     });
                 }
-                return .{ .err = .{} };
+                return .{ .err = undefined };
         }
     
     pub fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) void {
@@ -522,27 +517,27 @@ pub const BundlerAtRuleParser = struct {
                 }
         }
     
-    pub fn enclosingLayerLength(self: *@This()) u32 {
-                return self.enclosing_layer.v.len();
+    pub fn enclosingLayerLength(b: *This) u32 {
+                return b.enclosing_layer.v.len();
         }
     
-    pub fn setEnclosingLayer(self: *@This(), layer: LayerName) void {
-                self.enclosing_layer = layer;
+    pub fn setEnclosingLayer(b: *This, layer: LayerName) void {
+                b.enclosing_layer = layer;
         }
     
-    pub fn pushToEnclosingLayer(self: *@This(), name: LayerName) void {
-                _ = self.enclosing_layer.v.appendSlice(self.allocator, name.v.slice());
+    pub fn pushToEnclosingLayer(b: *This, name: LayerName) void {
+                _ = b.enclosing_layer.v.appendSlice(b.allocator, name.v.slice());
         }
     
-    pub fn resetEnclosingLayer(self: *@This(), len: u32) void {
-                _ = self.enclosing_layer.v.setLen(len);
+    pub fn resetEnclosingLayer(b: *This, len: u32) void {
+                _ = b.enclosing_layer.v.setLen(len);
         }
     
-    pub fn bumpAnonLayerCount(self: *@This(), amount: i32) void {
+    pub fn bumpAnonLayerCount(b: *This, amount: i32) void {
                 if ((amount > 0)) {
-                    self.anon_layer_count = (self.anon_layer_count + (if (comptime @typeInfo(@TypeOf(amount)) == .@"enum") cp_cast_int(u32, @intFromEnum(amount)) else cp_cast_int(u32, amount)));
+                    b.anon_layer_count = (b.anon_layer_count + (if (comptime @typeInfo(@TypeOf(amount)) == .@"enum") cp_cast_int(u32, @intFromEnum(amount)) else cp_cast_int(u32, amount)));
                 } else {
-                    self.anon_layer_count = (self.anon_layer_count - (if (comptime @typeInfo(@TypeOf(@abs(amount))) == .@"enum") cp_cast_int(u32, @intFromEnum(@abs(amount))) else cp_cast_int(u32, @abs(amount))));
+                    b.anon_layer_count = (b.anon_layer_count - (if (comptime @typeInfo(@TypeOf(@abs(amount))) == .@"enum") cp_cast_int(u32, @intFromEnum(@abs(amount))) else cp_cast_int(u32, @abs(amount))));
                 }
         }
         pub const Prelude = (if (ENABLE_TAILWIND_PARSING) union(enum) {
@@ -917,9 +912,9 @@ return .success;
 });
                 switch (tok.*) {
 .function, .open_paren, .open_square, .open_curly => {
-if (self.parseNestedBlock(void, .{}, struct {
+if (self.parseNestedBlock(void, @as(void, undefined), struct {
 
-pub fn parse(_: anytype, i: *Parser) Result(void) {
+pub fn parse(_: void, i: *Parser) Result(void) {
             if (i.expectNoErrorToken().asErr()) |err_val| {
                 _ = &err_val;
                 return .{ .err = err_val };
@@ -1493,14 +1488,14 @@ pub fn parse_number_saturate(allocator: Allocator, str: []const u8) Maybe(i32,vo
             const tok = (switch (parser.nextIncludingWhitespaceAndComments()) {
 .result => |v| v,
 .err => {
-return .{ .err = .{} };
+return .{ .err = undefined };
 },
 });
             const int = (if (((tok.* == .number) and (tok.number.int_value != null))) tok.number.int_value.? else ({
-            return .{ .err = .{} };
+            return .{ .err = undefined };
 }));
             if ((!parser.isExhausted())) {
-                return .{ .err = .{} };
+                return .{ .err = undefined };
             }
             return .{ .result = int };
     }
@@ -1518,7 +1513,7 @@ pub fn parse_n_dash_digits(allocator: Allocator, str: []const u8) Maybe(i32,void
 })) {
                 return parse_number_saturate(allocator, str[1..]);
             } else {
-                return .{ .err = .{} };
+                return .{ .err = undefined };
             }
     }
 
@@ -2835,7 +2830,8 @@ pub fn eql(lhs: *const Token, rhs: *const Token) bool {
     }
 
 pub fn hash(self: Token, hasher: *std.hash.Wyhash) void {
-            return implementHash(@This(), self, hasher);
+            const _self = self;
+            return implementHash(@This(), _self, hasher);
     }
 
 pub fn isParseError(self: Token) bool {
@@ -4308,7 +4304,7 @@ return .{ .err = e };
                                 _ = &field;
                                 if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(matched))) {
                                     if (comptime is_union_enum) {
-                                        return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), .{}) };
+                                        return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), undefined) };
                                     }
                                     return .{ .result = @enumFromInt((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value)) };
                                 }
@@ -4901,9 +4897,9 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                                 };
                                 return .{
                                     .result = .{
-                                        .custom_media = .{
-                                            custom_media_name,
-                                            media,
+                                        .custom_media = CustomMediaPreludeTuple{
+                                            .name = custom_media_name,
+                                            .query = media,
                                         },
                                     },
                                 };
@@ -4956,8 +4952,8 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                         .namespace => {
                             parser.state = State.namespaces;
     
-                            const prefix = prelude.namespace[0];
-                            const url = prelude.namespace[1];
+                            const prefix = prelude.namespace.prefix;
+                            const url = prelude.namespace.url;
     
                             parser.rules.v.append(parser.allocator, .{
                                 .namespace = NamespaceRule{
@@ -5268,7 +5264,7 @@ return .{ .err = e };
                 return .success;
         }
     };
-                    if (input.parseNestedBlock(void, .{}, Fn.parsefn).asErr()) |e| {
+                    if (input.parseNestedBlock(void, @as(void, undefined), Fn.parsefn).asErr()) |e| {
                         _ = &e;
                         return .{ .err = e };
                     }
@@ -5824,7 +5820,7 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
 },
 .unparsed => |u| std.meta.activeTag(u.property_id),
 .composes => continue,
-else => (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(prop.*)) else @as(PropertyIdTag, prop.*)),
+else => std.meta.activeTag(prop.*),
 });
             const int: u16 = @intFromEnum(tag);
             _ = bitset.set(int);
@@ -5840,7 +5836,7 @@ else => (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @
 },
 .unparsed => |u| std.meta.activeTag(u.property_id),
 .composes => continue,
-else => (if (comptime @typeInfo(PropertyIdTag) == .@"enum") @as(PropertyIdTag, @enumFromInt(prop.*)) else @as(PropertyIdTag, prop.*)),
+else => std.meta.activeTag(prop.*),
 });
             const int: u16 = @intFromEnum(tag);
             _ = bitset.set(int);
@@ -5923,7 +5919,7 @@ pub fn toCssWithWriterImpl(self: *const @This(), allocator: Allocator, printer: 
                 _ = &references;
                 const cfg_ptr: *const css_modules.Config = (&self.options.css_modules.?);
                 printer.css_module = CssModule.new(allocator, cfg_ptr, (&self.sources), project_root, (&references));
-                _ = try self.rules.toCss(printer);
+                _ = try @constCast((&self.rules)).toCss(printer);
                 _ = try printer.newline();
                 return ToCssResultInternal{ .dependencies = printer.dependencies, .exports = exports: {
                 const val = printer.css_module.?.exports_by_source_index.items[0];
@@ -5931,7 +5927,7 @@ pub fn toCssWithWriterImpl(self: *const @This(), allocator: Allocator, printer: 
                 break :exports val;
 }, .references = references };
             } else {
-                _ = try self.rules.toCss(printer);
+                _ = try @constCast((&self.rules)).toCss(printer);
                 _ = try printer.newline();
                 return ToCssResultInternal{ .dependencies = printer.dependencies, .exports = null, .references = null };
             }

@@ -239,9 +239,9 @@ pub fn flush(self: *BoxShadowHandler, dest: *css.DeclarationList, context: *css.
                 _ = &prefixes;
                 var fallbacks = ColorFallbackKind{  };
                 _ = &fallbacks;
-                for (cp_mut_slice(&(box_shadows).?.slice())) |*shadow| {
+                for (cp_iter_slice((box_shadows).?.slice())) |shadow| {
                     _ = &shadow;
-                    _ = bun.bits.insert(ColorFallbackKind, (&fallbacks), (shadow.*).color.getNecessaryFallbacks(context.targets));
+                    _ = bun.bits.insert(ColorFallbackKind, (&fallbacks), shadow.color.getNecessaryFallbacks(context.targets));
                 }
                 if (fallbacks.rgb) {
                     var rgb = SmallList(BoxShadow, 1).initCapacity(context.allocator, box_shadows.len());

@@ -6218,7 +6218,7 @@ pub fn deepClone(self: Property, allocator: std.mem.Allocator) Property {
 .opacity => |*v| Property{ .opacity = v.deepClone(allocator) },
 .color => |*v| Property{ .color = v.deepClone(allocator) },
 .display => |*v| Property{ .display = v.deepClone(allocator) },
-.visibility => |*v| Property{ .visibility = v.*.deepClone(allocator) },
+.visibility => |*v| Property{ .visibility = css.generic.deepClone(display.Visibility, v, allocator) },
 .width => |*v| Property{ .width = v.deepClone(allocator) },
 .height => |*v| Property{ .height = v.deepClone(allocator) },
 .@"min-width" => |*v| Property{ .@"min-width" = v.deepClone(allocator) },
@@ -7934,1477 +7934,1477 @@ pub fn fromNameAndPrefix(name1: []const u8, pre: VendorPrefix) ?PropertyId {
                 switch (prop) {
 .@"background-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-color";
                 }
 },
 .@"background-image" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-image";
                 }
 },
 .@"background-position-x" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-position-x";
                 }
 },
 .@"background-position-y" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-position-y";
                 }
 },
 .@"background-position" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-position";
                 }
 },
 .@"background-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-size";
                 }
 },
 .@"background-repeat" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-repeat";
                 }
 },
 .@"background-attachment" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-attachment";
                 }
 },
 .@"background-clip" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"background-clip" = pre };
                 }
 },
 .@"background-origin" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"background-origin";
                 }
 },
 .background => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .background;
                 }
 },
 .@"box-shadow" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-shadow" = pre };
                 }
 },
 .opacity => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .opacity;
                 }
 },
 .color => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .color;
                 }
 },
 .display => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .display;
                 }
 },
 .visibility => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .visibility;
                 }
 },
 .width => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .width;
                 }
 },
 .height => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .height;
                 }
 },
 .@"min-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"min-width";
                 }
 },
 .@"min-height" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"min-height";
                 }
 },
 .@"max-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"max-width";
                 }
 },
 .@"max-height" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"max-height";
                 }
 },
 .@"block-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"block-size";
                 }
 },
 .@"inline-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"inline-size";
                 }
 },
 .@"min-block-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"min-block-size";
                 }
 },
 .@"min-inline-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"min-inline-size";
                 }
 },
 .@"max-block-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"max-block-size";
                 }
 },
 .@"max-inline-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"max-inline-size";
                 }
 },
 .@"box-sizing" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-sizing" = pre };
                 }
 },
 .@"aspect-ratio" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"aspect-ratio";
                 }
 },
 .overflow => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .overflow;
                 }
 },
 .@"overflow-x" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"overflow-x";
                 }
 },
 .@"overflow-y" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"overflow-y";
                 }
 },
 .@"text-overflow" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .o = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"text-overflow" = pre };
                 }
 },
 .position => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .position;
                 }
 },
 .top => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .top;
                 }
 },
 .bottom => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .bottom;
                 }
 },
 .left => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .left;
                 }
 },
 .right => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .right;
                 }
 },
 .@"inset-block-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"inset-block-start";
                 }
 },
 .@"inset-block-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"inset-block-end";
                 }
 },
 .@"inset-inline-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"inset-inline-start";
                 }
 },
 .@"inset-inline-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"inset-inline-end";
                 }
 },
 .@"inset-block" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"inset-block";
                 }
 },
 .@"inset-inline" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"inset-inline";
                 }
 },
 .inset => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .inset;
                 }
 },
 .@"border-spacing" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-spacing";
                 }
 },
 .@"border-top-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-top-color";
                 }
 },
 .@"border-bottom-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-bottom-color";
                 }
 },
 .@"border-left-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-left-color";
                 }
 },
 .@"border-right-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-right-color";
                 }
 },
 .@"border-block-start-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-start-color";
                 }
 },
 .@"border-block-end-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-end-color";
                 }
 },
 .@"border-inline-start-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-start-color";
                 }
 },
 .@"border-inline-end-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-end-color";
                 }
 },
 .@"border-top-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-top-style";
                 }
 },
 .@"border-bottom-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-bottom-style";
                 }
 },
 .@"border-left-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-left-style";
                 }
 },
 .@"border-right-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-right-style";
                 }
 },
 .@"border-block-start-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-start-style";
                 }
 },
 .@"border-block-end-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-end-style";
                 }
 },
 .@"border-inline-start-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-start-style";
                 }
 },
 .@"border-inline-end-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-end-style";
                 }
 },
 .@"border-top-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-top-width";
                 }
 },
 .@"border-bottom-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-bottom-width";
                 }
 },
 .@"border-left-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-left-width";
                 }
 },
 .@"border-right-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-right-width";
                 }
 },
 .@"border-block-start-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-start-width";
                 }
 },
 .@"border-block-end-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-end-width";
                 }
 },
 .@"border-inline-start-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-start-width";
                 }
 },
 .@"border-inline-end-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-end-width";
                 }
 },
 .@"border-top-left-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"border-top-left-radius" = pre };
                 }
 },
 .@"border-top-right-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"border-top-right-radius" = pre };
                 }
 },
 .@"border-bottom-left-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"border-bottom-left-radius" = pre };
                 }
 },
 .@"border-bottom-right-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"border-bottom-right-radius" = pre };
                 }
 },
 .@"border-start-start-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-start-start-radius";
                 }
 },
 .@"border-start-end-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-start-end-radius";
                 }
 },
 .@"border-end-start-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-end-start-radius";
                 }
 },
 .@"border-end-end-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-end-end-radius";
                 }
 },
 .@"border-radius" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"border-radius" = pre };
                 }
 },
 .@"border-image-source" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-image-source";
                 }
 },
 .@"border-image-outset" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-image-outset";
                 }
 },
 .@"border-image-repeat" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-image-repeat";
                 }
 },
 .@"border-image-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-image-width";
                 }
 },
 .@"border-image-slice" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-image-slice";
                 }
 },
 .@"border-image" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .o = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"border-image" = pre };
                 }
 },
 .@"border-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-color";
                 }
 },
 .@"border-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-style";
                 }
 },
 .@"border-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-width";
                 }
 },
 .@"border-block-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-color";
                 }
 },
 .@"border-block-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-style";
                 }
 },
 .@"border-block-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-width";
                 }
 },
 .@"border-inline-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-color";
                 }
 },
 .@"border-inline-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-style";
                 }
 },
 .@"border-inline-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-width";
                 }
 },
 .border => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .border;
                 }
 },
 .@"border-top" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-top";
                 }
 },
 .@"border-bottom" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-bottom";
                 }
 },
 .@"border-left" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-left";
                 }
 },
 .@"border-right" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-right";
                 }
 },
 .@"border-block" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block";
                 }
 },
 .@"border-block-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-start";
                 }
 },
 .@"border-block-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-block-end";
                 }
 },
 .@"border-inline" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline";
                 }
 },
 .@"border-inline-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-start";
                 }
 },
 .@"border-inline-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"border-inline-end";
                 }
 },
 .outline => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .outline;
                 }
 },
 .@"outline-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"outline-color";
                 }
 },
 .@"outline-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"outline-style";
                 }
 },
 .@"outline-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"outline-width";
                 }
 },
 .@"flex-direction" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-direction" = pre };
                 }
 },
 .@"flex-wrap" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-wrap" = pre };
                 }
 },
 .@"flex-flow" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-flow" = pre };
                 }
 },
 .@"flex-grow" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-grow" = pre };
                 }
 },
 .@"flex-shrink" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-shrink" = pre };
                 }
 },
 .@"flex-basis" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-basis" = pre };
                 }
 },
 .flex => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .flex = pre };
                 }
 },
 .order => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .order = pre };
                 }
 },
 .@"align-content" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"align-content" = pre };
                 }
 },
 .@"justify-content" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"justify-content" = pre };
                 }
 },
 .@"place-content" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"place-content";
                 }
 },
 .@"align-self" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"align-self" = pre };
                 }
 },
 .@"justify-self" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"justify-self";
                 }
 },
 .@"place-self" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"place-self";
                 }
 },
 .@"align-items" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"align-items" = pre };
                 }
 },
 .@"justify-items" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"justify-items";
                 }
 },
 .@"place-items" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"place-items";
                 }
 },
 .@"row-gap" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"row-gap";
                 }
 },
 .@"column-gap" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"column-gap";
                 }
 },
 .gap => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .gap;
                 }
 },
 .@"box-orient" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-orient" = pre };
                 }
 },
 .@"box-direction" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-direction" = pre };
                 }
 },
 .@"box-ordinal-group" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-ordinal-group" = pre };
                 }
 },
 .@"box-align" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-align" = pre };
                 }
 },
 .@"box-flex" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-flex" = pre };
                 }
 },
 .@"box-flex-group" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-flex-group" = pre };
                 }
 },
 .@"box-pack" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-pack" = pre };
                 }
 },
 .@"box-lines" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"box-lines" = pre };
                 }
 },
 .@"flex-pack" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-pack" = pre };
                 }
 },
 .@"flex-order" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-order" = pre };
                 }
 },
 .@"flex-align" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-align" = pre };
                 }
 },
 .@"flex-item-align" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-item-align" = pre };
                 }
 },
 .@"flex-line-pack" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-line-pack" = pre };
                 }
 },
 .@"flex-positive" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-positive" = pre };
                 }
 },
 .@"flex-negative" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-negative" = pre };
                 }
 },
 .@"flex-preferred-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"flex-preferred-size" = pre };
                 }
 },
 .@"margin-top" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-top";
                 }
 },
 .@"margin-bottom" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-bottom";
                 }
 },
 .@"margin-left" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-left";
                 }
 },
 .@"margin-right" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-right";
                 }
 },
 .@"margin-block-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-block-start";
                 }
 },
 .@"margin-block-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-block-end";
                 }
 },
 .@"margin-inline-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-inline-start";
                 }
 },
 .@"margin-inline-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-inline-end";
                 }
 },
 .@"margin-block" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-block";
                 }
 },
 .@"margin-inline" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"margin-inline";
                 }
 },
 .margin => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .margin;
                 }
 },
 .@"padding-top" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-top";
                 }
 },
 .@"padding-bottom" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-bottom";
                 }
 },
 .@"padding-left" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-left";
                 }
 },
 .@"padding-right" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-right";
                 }
 },
 .@"padding-block-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-block-start";
                 }
 },
 .@"padding-block-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-block-end";
                 }
 },
 .@"padding-inline-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-inline-start";
                 }
 },
 .@"padding-inline-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-inline-end";
                 }
 },
 .@"padding-block" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-block";
                 }
 },
 .@"padding-inline" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"padding-inline";
                 }
 },
 .padding => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .padding;
                 }
 },
 .@"scroll-margin-top" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-top";
                 }
 },
 .@"scroll-margin-bottom" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-bottom";
                 }
 },
 .@"scroll-margin-left" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-left";
                 }
 },
 .@"scroll-margin-right" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-right";
                 }
 },
 .@"scroll-margin-block-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-block-start";
                 }
 },
 .@"scroll-margin-block-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-block-end";
                 }
 },
 .@"scroll-margin-inline-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-inline-start";
                 }
 },
 .@"scroll-margin-inline-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-inline-end";
                 }
 },
 .@"scroll-margin-block" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-block";
                 }
 },
 .@"scroll-margin-inline" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin-inline";
                 }
 },
 .@"scroll-margin" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-margin";
                 }
 },
 .@"scroll-padding-top" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-top";
                 }
 },
 .@"scroll-padding-bottom" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-bottom";
                 }
 },
 .@"scroll-padding-left" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-left";
                 }
 },
 .@"scroll-padding-right" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-right";
                 }
 },
 .@"scroll-padding-block-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-block-start";
                 }
 },
 .@"scroll-padding-block-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-block-end";
                 }
 },
 .@"scroll-padding-inline-start" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-inline-start";
                 }
 },
 .@"scroll-padding-inline-end" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-inline-end";
                 }
 },
 .@"scroll-padding-block" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-block";
                 }
 },
 .@"scroll-padding-inline" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding-inline";
                 }
 },
 .@"scroll-padding" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"scroll-padding";
                 }
 },
 .@"font-weight" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"font-weight";
                 }
 },
 .@"font-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"font-size";
                 }
 },
 .@"font-stretch" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"font-stretch";
                 }
 },
 .@"font-family" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"font-family";
                 }
 },
 .@"font-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"font-style";
                 }
 },
 .@"font-variant-caps" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"font-variant-caps";
                 }
 },
 .@"line-height" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"line-height";
                 }
 },
 .font => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .font;
                 }
 },
 .@"transition-property" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"transition-property" = pre };
                 }
 },
 .@"transition-duration" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"transition-duration" = pre };
                 }
 },
 .@"transition-delay" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"transition-delay" = pre };
                 }
 },
 .@"transition-timing-function" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"transition-timing-function" = pre };
                 }
 },
 .transition => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .ms = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .transition = pre };
                 }
 },
 .transform => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .ms = true, .o = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .transform = pre };
                 }
 },
 .@"transform-origin" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true, .ms = true, .o = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"transform-origin" = pre };
                 }
 },
 .@"transform-style" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"transform-style" = pre };
                 }
 },
 .@"transform-box" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"transform-box";
                 }
 },
 .@"backface-visibility" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"backface-visibility" = pre };
                 }
 },
 .perspective => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .perspective = pre };
                 }
 },
 .@"perspective-origin" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"perspective-origin" = pre };
                 }
 },
 .translate => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .translate;
                 }
 },
 .rotate => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .rotate;
                 }
 },
 .scale => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .scale;
                 }
 },
 .@"text-decoration-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true, .moz = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"text-decoration-color" = pre };
                 }
 },
 .@"text-emphasis-color" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"text-emphasis-color" = pre };
                 }
 },
 .@"text-shadow" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"text-shadow";
                 }
 },
 .direction => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .direction;
                 }
 },
 .composes => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .composes;
                 }
 },
 .@"mask-image" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-image" = pre };
                 }
 },
 .@"mask-mode" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-mode";
                 }
 },
 .@"mask-repeat" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-repeat" = pre };
                 }
 },
 .@"mask-position-x" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-position-x";
                 }
 },
 .@"mask-position-y" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-position-y";
                 }
 },
 .@"mask-position" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-position" = pre };
                 }
 },
 .@"mask-clip" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-clip" = pre };
                 }
 },
 .@"mask-origin" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-origin" = pre };
                 }
 },
 .@"mask-size" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-size" = pre };
                 }
 },
 .@"mask-composite" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-composite";
                 }
 },
 .@"mask-type" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-type";
                 }
 },
 .mask => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .mask = pre };
                 }
 },
 .@"mask-border-source" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-border-source";
                 }
 },
 .@"mask-border-mode" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-border-mode";
                 }
 },
 .@"mask-border-slice" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-border-slice";
                 }
 },
 .@"mask-border-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-border-width";
                 }
 },
 .@"mask-border-outset" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-border-outset";
                 }
 },
 .@"mask-border-repeat" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-border-repeat";
                 }
 },
 .@"mask-border" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"mask-border";
                 }
 },
 .@"-webkit-mask-composite" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"-webkit-mask-composite";
                 }
 },
 .@"mask-source-type" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-source-type" = pre };
                 }
 },
 .@"mask-box-image" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-box-image" = pre };
                 }
 },
 .@"mask-box-image-source" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-box-image-source" = pre };
                 }
 },
 .@"mask-box-image-slice" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-box-image-slice" = pre };
                 }
 },
 .@"mask-box-image-width" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-box-image-width" = pre };
                 }
 },
 .@"mask-box-image-outset" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-box-image-outset" = pre };
                 }
 },
 .@"mask-box-image-repeat" => {
 const allowed_prefixes = VendorPrefix{ .none = true, .webkit = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return PropertyId{ .@"mask-box-image-repeat" = pre };
                 }
 },
 .@"color-scheme" => {
 const allowed_prefixes = VendorPrefix{ .none = true };
-                if (allowed_prefixes.contains(pre)) {
+                if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) {
                     return .@"color-scheme";
                 }
 },
@@ -9699,7 +9699,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"background-clip" => |*p| p.insert(pre),
+.@"background-clip" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"background-origin" => {
 {
             }
@@ -9708,7 +9708,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"box-shadow" => |*p| p.insert(pre),
+.@"box-shadow" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .opacity => {
 {
             }
@@ -9773,7 +9773,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"box-sizing" => |*p| p.insert(pre),
+.@"box-sizing" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"aspect-ratio" => {
 {
             }
@@ -9790,7 +9790,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"text-overflow" => |*p| p.insert(pre),
+.@"text-overflow" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .position => {
 {
             }
@@ -9939,10 +9939,10 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"border-top-left-radius" => |*p| p.insert(pre),
-.@"border-top-right-radius" => |*p| p.insert(pre),
-.@"border-bottom-left-radius" => |*p| p.insert(pre),
-.@"border-bottom-right-radius" => |*p| p.insert(pre),
+.@"border-top-left-radius" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"border-top-right-radius" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"border-bottom-left-radius" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"border-bottom-right-radius" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"border-start-start-radius" => {
 {
             }
@@ -9959,7 +9959,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"border-radius" => |*p| p.insert(pre),
+.@"border-radius" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"border-image-source" => {
 {
             }
@@ -9980,7 +9980,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"border-image" => |*p| p.insert(pre),
+.@"border-image" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"border-color" => {
 {
             }
@@ -10077,21 +10077,21 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"flex-direction" => |*p| p.insert(pre),
-.@"flex-wrap" => |*p| p.insert(pre),
-.@"flex-flow" => |*p| p.insert(pre),
-.@"flex-grow" => |*p| p.insert(pre),
-.@"flex-shrink" => |*p| p.insert(pre),
-.@"flex-basis" => |*p| p.insert(pre),
-.flex => |*p| p.insert(pre),
-.order => |*p| p.insert(pre),
-.@"align-content" => |*p| p.insert(pre),
-.@"justify-content" => |*p| p.insert(pre),
+.@"flex-direction" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-wrap" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-flow" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-grow" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-shrink" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-basis" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.flex => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.order => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"align-content" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"justify-content" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"place-content" => {
 {
             }
 },
-.@"align-self" => |*p| p.insert(pre),
+.@"align-self" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"justify-self" => {
 {
             }
@@ -10100,7 +10100,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"align-items" => |*p| p.insert(pre),
+.@"align-items" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"justify-items" => {
 {
             }
@@ -10121,22 +10121,22 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"box-orient" => |*p| p.insert(pre),
-.@"box-direction" => |*p| p.insert(pre),
-.@"box-ordinal-group" => |*p| p.insert(pre),
-.@"box-align" => |*p| p.insert(pre),
-.@"box-flex" => |*p| p.insert(pre),
-.@"box-flex-group" => |*p| p.insert(pre),
-.@"box-pack" => |*p| p.insert(pre),
-.@"box-lines" => |*p| p.insert(pre),
-.@"flex-pack" => |*p| p.insert(pre),
-.@"flex-order" => |*p| p.insert(pre),
-.@"flex-align" => |*p| p.insert(pre),
-.@"flex-item-align" => |*p| p.insert(pre),
-.@"flex-line-pack" => |*p| p.insert(pre),
-.@"flex-positive" => |*p| p.insert(pre),
-.@"flex-negative" => |*p| p.insert(pre),
-.@"flex-preferred-size" => |*p| p.insert(pre),
+.@"box-orient" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"box-direction" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"box-ordinal-group" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"box-align" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"box-flex" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"box-flex-group" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"box-pack" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"box-lines" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-pack" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-order" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-align" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-item-align" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-line-pack" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-positive" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-negative" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"flex-preferred-size" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"margin-top" => {
 {
             }
@@ -10345,21 +10345,21 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"transition-property" => |*p| p.insert(pre),
-.@"transition-duration" => |*p| p.insert(pre),
-.@"transition-delay" => |*p| p.insert(pre),
-.@"transition-timing-function" => |*p| p.insert(pre),
-.transition => |*p| p.insert(pre),
-.transform => |*p| p.insert(pre),
-.@"transform-origin" => |*p| p.insert(pre),
-.@"transform-style" => |*p| p.insert(pre),
+.@"transition-property" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"transition-duration" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"transition-delay" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"transition-timing-function" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.transition => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.transform => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"transform-origin" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"transform-style" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"transform-box" => {
 {
             }
 },
-.@"backface-visibility" => |*p| p.insert(pre),
-.perspective => |*p| p.insert(pre),
-.@"perspective-origin" => |*p| p.insert(pre),
+.@"backface-visibility" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.perspective => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"perspective-origin" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .translate => {
 {
             }
@@ -10372,8 +10372,8 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"text-decoration-color" => |*p| p.insert(pre),
-.@"text-emphasis-color" => |*p| p.insert(pre),
+.@"text-decoration-color" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"text-emphasis-color" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"text-shadow" => {
 {
             }
@@ -10386,12 +10386,12 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"mask-image" => |*p| p.insert(pre),
+.@"mask-image" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"mask-mode" => {
 {
             }
 },
-.@"mask-repeat" => |*p| p.insert(pre),
+.@"mask-repeat" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"mask-position-x" => {
 {
             }
@@ -10400,10 +10400,10 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"mask-position" => |*p| p.insert(pre),
-.@"mask-clip" => |*p| p.insert(pre),
-.@"mask-origin" => |*p| p.insert(pre),
-.@"mask-size" => |*p| p.insert(pre),
+.@"mask-position" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-clip" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-origin" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-size" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"mask-composite" => {
 {
             }
@@ -10412,7 +10412,7 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.mask => |*p| p.insert(pre),
+.mask => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"mask-border-source" => {
 {
             }
@@ -10445,13 +10445,13 @@ pub fn addPrefix(self: *PropertyId, pre: VendorPrefix) void {
 {
             }
 },
-.@"mask-source-type" => |*p| p.insert(pre),
-.@"mask-box-image" => |*p| p.insert(pre),
-.@"mask-box-image-source" => |*p| p.insert(pre),
-.@"mask-box-image-slice" => |*p| p.insert(pre),
-.@"mask-box-image-width" => |*p| p.insert(pre),
-.@"mask-box-image-outset" => |*p| p.insert(pre),
-.@"mask-box-image-repeat" => |*p| p.insert(pre),
+.@"mask-source-type" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-box-image" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-box-image-source" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-box-image-slice" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-box-image-width" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-box-image-outset" => |*p| bun.bits.insert(VendorPrefix, p, pre),
+.@"mask-box-image-repeat" => |*p| bun.bits.insert(VendorPrefix, p, pre),
 .@"color-scheme" => {
 {
             }

@@ -58,7 +58,7 @@ pub const Resolution = union(enum) {
                 {
                     return { result: { dppx: value } };
                 } else {
-                    return { err: {} };
+                    return { err: undefined };
                 }
             },
             else => return { err: {} },

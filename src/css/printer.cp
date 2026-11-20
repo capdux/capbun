@@ -146,7 +146,7 @@ pub struct Printer {
 
     fn lookupIdentOrRef(*_, ident: css.css_values.ident.IdentOrRef): []const u8 {
         if (comptime bun.Environment.isDebug) {
-            if (in_debug_fmt) {
+            if (This.in_debug_fmt) {
                 return ident.debugIdent();
             }
         }

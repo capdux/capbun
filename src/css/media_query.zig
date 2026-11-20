@@ -780,7 +780,8 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: MediaQuery, dest: *Printer) !void {
-            if (self.qualifier) |qual| {
+            if ((self.qualifier != null)) {
+                var qual = self.qualifier.?;
                 _ = &qual;
                 _ = try qual.toCss(dest);
                 _ = try dest.writeChar(32);

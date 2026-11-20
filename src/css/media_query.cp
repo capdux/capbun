@@ -222,7 +222,8 @@ pub struct MediaQuery {
     }
 
     fn toCss(dest: *Printer)! {
-        if (qual := _.qualifier) {
+        if (_.qualifier != null) {
+            let qual = _.qualifier.?;
             qual.toCss(dest)?;
             dest.writeChar(' ')?;
         }

@@ -2819,7 +2819,8 @@ pub fn parse_one_simple_selector(
                             }
                         };
 
-                        const names = switch (input.parseNestedBlock([]Impl.SelectorImpl.Identifier, &Closure{ .parser = parser }, Closure.parsefn)) {
+                        const IdentSlice = []Impl.SelectorImpl.Identifier;
+                        const names = switch (input.parseNestedBlock(IdentSlice, &Closure{ .parser = parser }, Closure.parsefn)) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
                         };
@@ -3524,7 +3525,6 @@ pub fn parse_qualified_name(
                             .err => |e| {
                                 return .{ .err = e };
                             },
-                            else => unreachable,
                         }
                     } else {
                         return .{ .result = parse_qualified_name_default_namespace_helper(Impl, parser, null) };
@@ -3591,7 +3591,7 @@ pub fn LocalName(comptime Impl: type): type {
         lower_name: Impl.SelectorImpl.LocalName,
 
         pub fn toCss(this: *const @This(), dest: *Printer): PrintErr!void {
-            return css.IdentFns.toCss(&this.name, dest);
+            return css.IdentFns.toCss(this.name, dest);
         }
 
         pub fn __generateEql() void {}
@@ -3685,10 +3685,10 @@ pub const ViewTransitionPartName = union(enum) {
     pub fn toCss(this: *const @This(), dest: *css.Printer): css.PrintErr!void {
         return switch (this.*) {
             .all => try dest.writeStr("*"),
-            .name => |name| try css.CustomIdentFns.toCss(&name, dest),
+            .name => |name| try css.CustomIdentFns.toCss(name, dest),
             .class => |name| {
                 try dest.writeChar('.');
-                try css.CustomIdentFns.toCss(&name, dest);
+                try css.CustomIdentFns.toCss(name, dest);
             },
         };
     }

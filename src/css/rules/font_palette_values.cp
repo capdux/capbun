@@ -114,7 +114,7 @@ pub const FontPaletteValuesProperty = union(enum) {
     }
 
     pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        return css.implementDeepClone(@This(), _, allocator);
     }
 }
 
@@ -198,7 +198,7 @@ pub union(enum) BasePalette {
     }
 
     pub fn deepClone(*_, allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        return css.implementDeepClone(@This(), _, allocator);
     }
 }
 

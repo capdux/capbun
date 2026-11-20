@@ -566,7 +566,7 @@ pub struct TokenList {
 
             if (tok.isParseError()) {
                 return {
-                    e: {
+                    err: {
                         kind: { basic: { unexpected_token: tok.* } },
                         location: state.sourceLocation(),
                     },
@@ -639,7 +639,9 @@ pub struct TokenList {
         }
 
         if (!lowest_fallback.isEmpty()) {
-            for (*token_or_value of _.v.items) {
+            let idx: usize = 0;
+            while (idx < _.v.items.len) : (idx += 1) {
+                const token_or_value = &_.v.items[idx];
                 switch (token_or_value.*) {
                     .color => |*color| {
                         color.* = color.getFallback(allocator, lowest_fallback);
@@ -1449,7 +1451,7 @@ pub struct UnparsedProperty {
     }
 
     fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -1497,7 +1499,7 @@ pub struct CustomProperty {
     }
 
     fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -1532,7 +1534,7 @@ pub const CustomPropertyName = union(enum) {
     }
 
     pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

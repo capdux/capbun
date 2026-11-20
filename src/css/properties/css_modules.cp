@@ -27,7 +27,7 @@ pub struct Composes {
             names.append(input.allocator(), name);
         }
 
-        if (names.len() == 0) return { err: input.newCustomError(css.ParserError{ .invalid_declaration = {} }) };
+        if (names.len() == 0) return { err: input.newCustomError(css.ParserError.invalid_declaration) };
 
         let from_val: Specifier? = null;
         if (input.tryParse(css.Parser.expectIdentMatching, .{"from"}).isOk()) {
@@ -102,7 +102,7 @@ fn parseSpecifier(input: *css.Parser): css.Result(Specifier) {
         return { result: .global };
     }
 
-    return { err: input.newCustomError(css.ParserError{ .invalid_declaration = {} }) };
+    return { err: input.newCustomError(css.ParserError.invalid_declaration) };
 }
 
 pub const Specifier = union(enum) {

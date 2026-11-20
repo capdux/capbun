@@ -20,7 +20,7 @@ pub struct CssModule {
         references: *CssModuleReferences,
     ): CssModule {
         // TODO: this is BAAAAAAAAAAD we are going to remove it
-        const StringList = ArrayList(bun.string);
+        const StringList = ArrayList(Str);
         let hashes = bun.handleOom(StringList.initCapacity(allocator, sources.items.len));
         for (path of sources.items) {
             let alloced = false;

@@ -205,7 +205,7 @@ _ = try css.CSSIntegerFns.toCss((&@as(i32, @intCast(self.integer))), dest);
     }
 
 pub fn deepClone(self: *BasePalette, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            return css.implementDeepClone(@This(), self, allocator);
     }
 };
 
@@ -341,7 +341,7 @@ _ = try dest.writeStr((if (@typeInfo(@TypeOf(custom)) == .@"enum" or @typeInfo(@
     }
 
 pub fn deepClone(self: *@This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            return css.implementDeepClone(@This(), self, allocator);
     }
     const This = @This();
 };

@@ -282,7 +282,7 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 const delay_prefixes: *VendorPrefix = (&_delays.?[1]);
                 const timing_functions: *SmallList(EasingFunction,1) = (&_timing_functions.?[0]);
                 const timing_prefixes: *VendorPrefix = (&_timing_functions.?[1]);
-                const intersection = property_prefixes.bitwiseAnd(duration_prefixes.*).bitwiseAnd(delay_prefixes.*).bitwiseAnd(timing_prefixes.*);
+                const intersection = VendorPrefix.bitwiseAnd(VendorPrefix.bitwiseAnd(VendorPrefix.bitwiseAnd(property_prefixes.*, duration_prefixes.*), delay_prefixes.*), timing_prefixes.*);
                 if ((!intersection.isEmpty())) {
                     const transitions = TransitionHandler.getTransitions(context, properties, durations, delays, timing_functions);
                     if (rtl_properties) |*rtl_properties2| {

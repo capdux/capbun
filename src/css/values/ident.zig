@@ -147,7 +147,8 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: DashedIdent, dest: *Printer) PrintErr!void {
-            return dest.writeDashedIdent(self, true);
+            const s = self;
+            return dest.writeDashedIdent((&s), true);
     }
 
 pub fn deepClone(self: DashedIdent, allocator: std.mem.Allocator) @This() {
@@ -218,8 +219,7 @@ pub fn fromRef(ref_val: bun.bundle_v2.Ref, debug_ident: DebugIdent) @This() {
             var res = IdentOrRef{ .__len = @bitCast(ref_val), .__ref_bit = true };
             _ = &res;
             if (comptime bun.Environment.isDebug) {
-                var heap_ptr: []u8 = bun.handleOom(debug_ident[1].create(string));
-                _ = &heap_ptr;
+                const heap_ptr = bun.handleOom(debug_ident[1].create(string));
                 heap_ptr.* = debug_ident[0];
                 res.__ptrbits = @intCast(@intFromPtr(heap_ptr));
             }

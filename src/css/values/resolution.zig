@@ -119,7 +119,7 @@ const value = (if (@typeInfo(@TypeOf(dim.num)) == .@"enum") @intFromEnum(dim.num
                     if ((bun.strings.eqlCaseInsensitiveASCIIICheckLength(unit, "dppx") or bun.strings.eqlCaseInsensitiveASCIIICheckLength(unit, "x"))) {
                         return .{ .result = .{ .dppx = value } };
                     } else {
-                        return .{ .err = .{} };
+                        return .{ .err = undefined };
                     }
                 }
             }

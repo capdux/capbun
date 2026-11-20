@@ -44,7 +44,8 @@ pub enum SyntaxString {
     const This = @This();
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
@@ -302,7 +303,8 @@ pub struct SyntaxComponent {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -420,7 +422,8 @@ pub enum SyntaxComponentKind {
 
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -431,7 +434,8 @@ pub struct RepeatedComponent {
     multiplier: Multiplier,
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -510,7 +514,8 @@ pub enum ParsedComponent {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 

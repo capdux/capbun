@@ -290,7 +290,7 @@ pub fn parseQuestionMarks(input: *css.Parser) Result(void) {
 
 pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
             var text = (if (((_text.len > 0) and (_text[0] == 43))) _text[1..] else ({
-            return .{ .err = .{} };
+            return .{ .err = undefined };
 }));
             _ = &text;
             const _tmp_v0 = consumeHex(text);
@@ -301,7 +301,7 @@ pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
             const question_marks = consumeQuestionMarks(text);
             const consumed = (hex_digit_count + question_marks);
             if (((consumed == 0) or (consumed > 6))) {
-                return .{ .err = .{} };
+                return .{ .err = undefined };
             }
             if ((question_marks > 0)) {
                 if ((text.len == 0)) {
@@ -324,7 +324,7 @@ pub fn parseConcatenated(_text: []const u8) css.Maybe(UnicodeRange,void) {
                     }
                 }
             }
-            return .{ .err = .{} };
+            return .{ .err = undefined };
     }
 
 pub fn consumeQuestionMarks(text: *[]const u8) usize {
@@ -496,7 +496,8 @@ _ = try dest.writeStr(self.string);
     }
 
 pub fn deepClone(self: FontFormat, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), s, allocator);
     }
 };
 
@@ -548,7 +549,8 @@ _ = try dest.writeStr("local(");
     }
 
 pub fn deepClone(self: Source, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 };
 
@@ -615,7 +617,8 @@ pub fn toCss(self: UrlSource, dest: *Printer) PrintErr!void {
     }
 
 pub fn deepClone(self: UrlSource, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
 };
 
@@ -646,7 +649,8 @@ pub fn toCss(self: FontFaceRule, dest: *Printer) PrintErr!void {
     }
 
 pub fn deepClone(self: FontFaceRule, allocator: std.mem.Allocator) This {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const s = self;
+            return css.implementDeepClone(@This(), (&s), allocator);
     }
     const This = @This();
 };

@@ -41,7 +41,7 @@ pub enum FlexDirection {
     }
 
     fn to2009(): OrientAndDirection {
-        return switch (_.*) {
+        return switch (_) {
             .row => .{ .horizontal, .normal },
             .column => .{ .vertical, .normal },
             .@"row-reverse" => .{ .horizontal, .reverse },
@@ -616,7 +616,8 @@ pub struct FlexHandler {
                 maybeFlush(handler, d, ctx, prop, val, vp);
 
                 // Otherwise, update the value and add the prefix
-                if (*field := @field(handler, prop)) {
+                if (@field(handler, prop) != null) {
+                    const field = &@field(handler, prop).?;
                     @field(field.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
                     bun.bits.insert(css.VendorPrefix, &field[1], vp.*);
                 } else {
@@ -779,7 +780,7 @@ pub struct FlexHandler {
             const wrapinner = &wrap.?[0];
             const wrap_prefix = &wrap.?[1];
 
-            const intersection = dir_prefix.bitwiseAnd(wrap_prefix.*);
+            const intersection = VendorPrefix.bitwiseAnd(dir_prefix.*, wrap_prefix.*);
             if (!intersection.isEmpty()) {
                 let prefix = context.targets.prefixes(intersection, css.prefixes.Feature.flex_flow);
                 // Firefox only implemented the 2009 spec prefixed.
@@ -824,7 +825,7 @@ pub struct FlexHandler {
             const b = basis.?[0];
             const b_prefix = &basis.?[1];
 
-            const intersection = g_prefix.bitwiseAnd(s_prefix.bitwiseAnd(b_prefix.*));
+            const intersection = VendorPrefix.bitwiseAnd(g_prefix.*, VendorPrefix.bitwiseAnd(s_prefix.*, b_prefix.*));
             if (!intersection.isEmpty()) {
                 let prefix = context.targets.prefixes(intersection, css.prefixes.Feature.flex);
                 // Firefox only implemented the 2009 spec prefixed.

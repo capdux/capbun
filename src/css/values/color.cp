@@ -567,7 +567,7 @@ pub const CssColor = union(enum) {
             if (!targets.shouldCompileSame(.p3_colors)) {
                 fallbacks.rgb = false;
             } else if (fallbacks.highest() != ColorFallbackKind.P3 and
-                (targets.browsers == null or !css.compat.Feature.isPartiallyCompatible(&css.compat.Feature.p3_colors, targets.browsers.?)))
+                (targets.browsers == null or !css.compat.Feature.isPartiallyCompatible(css.compat.Feature.p3_colors, targets.browsers.?)))
             {
                 // Remove P3 if it isn't supported by any targets, and wasn't the
                 // original authored color.

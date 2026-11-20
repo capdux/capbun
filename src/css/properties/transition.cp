@@ -244,7 +244,13 @@ pub struct TransitionHandler {
             // Find the intersection of prefixes with the same value.
             // Remove that from the prefixes of each of the properties. The remaining
             // prefixes will be handled by outputting individual properties below.
-            const intersection = property_prefixes.bitwiseAnd(duration_prefixes.*).bitwiseAnd(delay_prefixes.*).bitwiseAnd(timing_prefixes.*);
+            const intersection = VendorPrefix.bitwiseAnd(
+                VendorPrefix.bitwiseAnd(
+                    VendorPrefix.bitwiseAnd(property_prefixes.*, duration_prefixes.*),
+                    delay_prefixes.*,
+                ),
+                timing_prefixes.*,
+            );
             if (!intersection.isEmpty()) {
                 const transitions = getTransitions(context, properties, durations, delays, timing_functions);
 

@@ -551,7 +551,7 @@ const SerializePseudoElementHelpers = struct {
         try d.writeStr("::");
         // If the printer has a vendor prefix override, use that.
         const vp = if (!d.vendor_prefix.isEmpty())
-            bits.@"&&"(css.VendorPrefix, d.vendor_prefix, prefix).orNone()
+            bun.bits.@"and"(css.VendorPrefix, d.vendor_prefix, prefix).orNone()
         else
             prefix;
         try vp.toCss(d);
@@ -635,7 +635,7 @@ pub const serialize = struct {
             // Skip implicit :scope in relative selectors (e.g. :has(:scope > foo) -> :has(> foo))
             if (is_relative && compound.len >= 1 && compound[0] == .scope) {
                 if (combinator := combinators.next()) {
-                    try serializeCombinator(combinator, dest);
+                    try serializeCombinator(&combinator, dest);
                 }
                 compound = compound[1..];
                 is_relative = false;
@@ -1404,7 +1404,7 @@ pub const tocss_servo = struct {
                 try dest.writeStr("*|");
             },
             .namespace ns => {
-                try css.IdentFns.toCss(&ns.prefix, dest);
+                try css.IdentFns.toCss(ns.prefix, dest);
                 try dest.writeChar('|');
             },
             .attribute_in_no_namespace_exists v => {

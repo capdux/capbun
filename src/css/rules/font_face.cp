@@ -226,14 +226,14 @@ pub struct UnicodeRange {
 
     static fn parseConcatenated(_text: []const u8): css.Maybe(UnicodeRange, void) {
         let text = if (_text.len > 0 && _text[0] == '+') _text[1..] else {
-            return { err: {} };
+            return { err: undefined };
         };
         let [first_hex_value, hex_digit_count] = consumeHex(&text);
         const question_marks = consumeQuestionMarks(&text);
         const consumed = hex_digit_count + question_marks;
 
         if (consumed == 0 || consumed > 6) {
-            return { err: {} };
+            return { err: undefined };
         }
 
         if (question_marks > 0) {
@@ -258,7 +258,7 @@ pub struct UnicodeRange {
                 }
             }
         }
-        return { err: {} };
+        return { err: undefined };
     }
 
     static fn consumeQuestionMarks(text: *[]const u8): usize {
@@ -418,7 +418,8 @@ pub union(enum) FontFormat {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -467,7 +468,8 @@ pub union(enum) Source {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -595,7 +597,8 @@ pub struct UrlSource {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 
@@ -632,7 +635,8 @@ pub struct FontFaceRule {
     }
 
     fn deepClone(allocator: std.mem.Allocator): This {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const s = _;
+        return css.implementDeepClone(@This(), &s, allocator);
     }
 }
 

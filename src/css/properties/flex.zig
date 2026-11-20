@@ -79,7 +79,7 @@ pub fn default() FlexDirection {
     }
 
 pub fn to2009(self: FlexDirection) OrientAndDirection {
-            return (switch (self.*) {
+            return (switch (self) {
 .row => .{ .horizontal, .normal },
 .column => .{ .vertical, .normal },
 .@"row-reverse" => .{ .horizontal, .reverse },
@@ -573,10 +573,10 @@ pub fn maybeFlush(handler: *FlexHandler, d: *css.DeclarationList, ctx: *css.Prop
 
 pub fn propertyHelper(handler: *FlexHandler, ctx: *css.PropertyHandlerContext, d: *css.DeclarationList, comptime prop: []const u8, val: anytype, vp: *const VendorPrefix) void {
             _ = maybeFlush(handler, d, ctx, prop, val, vp);
-            if (@field(handler, prop)) |*field| {
-                _ = &field;
-                @field((field.*).*, "0") = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
-                _ = bun.bits.insert(css.VendorPrefix, (&(field.*)[1]), vp.*);
+            if ((@field(handler, prop) != null)) {
+                const field = (&(@field(handler, prop)).?);
+                @field(field.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
+                _ = bun.bits.insert(css.VendorPrefix, (&field[1]), vp.*);
             } else {
                 @field(handler, prop) = .{ css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator), vp.* };
                 handler.has_any = true;
@@ -763,7 +763,7 @@ pub fn flush(self: *FlexHandler, dest: *css.DeclarationList, context: *css.Prope
                 const dir_prefix = (&direction.?[1]);
                 const wrapinner = (&wrap.?[0]);
                 const wrap_prefix = (&wrap.?[1]);
-                const intersection = dir_prefix.bitwiseAnd(wrap_prefix.*);
+                const intersection = VendorPrefix.bitwiseAnd(dir_prefix.*, wrap_prefix.*);
                 if ((!intersection.isEmpty())) {
                     var prefix = context.targets.prefixes(intersection, css.prefixes.Feature.flex_flow);
                     _ = &prefix;
@@ -801,7 +801,7 @@ pub fn flush(self: *FlexHandler, dest: *css.DeclarationList, context: *css.Prope
                 const s_prefix = (&shrink.?[1]);
                 const b = basis.?[0];
                 const b_prefix = (&basis.?[1]);
-                const intersection = g_prefix.bitwiseAnd(s_prefix.bitwiseAnd(b_prefix.*));
+                const intersection = VendorPrefix.bitwiseAnd(g_prefix.*, VendorPrefix.bitwiseAnd(s_prefix.*, b_prefix.*));
                 if ((!intersection.isEmpty())) {
                     var prefix = context.targets.prefixes(intersection, css.prefixes.Feature.flex);
                     _ = &prefix;

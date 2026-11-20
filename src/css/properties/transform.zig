@@ -347,9 +347,9 @@ const transform_val = val[0];
                     _ = self.flush(allocator, dest, context);
                 }
             }
-            if (self.transform) |*transform| {
-                _ = &transform;
-                (transform.*).* = .{ transform_val.deepClone(allocator), bun.bits.@"or"(css.VendorPrefix, (transform.*).*[1], vp) };
+            if ((self.transform != null)) {
+                const transform = (&self.transform.?);
+                transform.* = .{ transform_val.deepClone(allocator), bun.bits.@"or"(css.VendorPrefix, transform.*[1], vp) };
             } else {
                 self.transform = .{ transform_val.deepClone(allocator), vp };
                 self.has_any = true;

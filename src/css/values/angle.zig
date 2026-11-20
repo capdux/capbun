@@ -178,7 +178,7 @@ pub fn tryFromToken(token: *const css.Token) css.Maybe(Angle,void) {
                     }
                 }
             }
-            return .{ .err = .{} };
+            return .{ .err = undefined };
     }
 
 pub fn toRadians(self: Angle) CSSNumber {

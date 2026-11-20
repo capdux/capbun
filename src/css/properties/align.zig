@@ -787,7 +787,7 @@ pub fn flushLegacyProperty(self: *AlignHandler, dest: *css.DeclarationList, cont
                 _ = &prefix;
                 prefix = context.targets.prefixes(prefix, feature);
                 if (prefix.none) {
-                    if (comptime (prop_2009 != null)) {
+                    if (comptime (@TypeOf(prop_2009) != @TypeOf(null))) {
                         const p2009 = (comptime prop_2009.?);
                         if (context.targets.browsers) |targets| {
                             _ = &targets;
@@ -816,7 +816,7 @@ pub fn flushLegacyProperty(self: *AlignHandler, dest: *css.DeclarationList, cont
                     }
                 }
                 if (prefix.ms) {
-                    if (comptime (prop_2012 != null)) {
+                    if (comptime (@TypeOf(prop_2012) != @TypeOf(null))) {
                         const p2012 = (comptime prop_2012.?);
                         const s = brk: {
                         const T = (comptime p2012[0]);
@@ -864,7 +864,7 @@ pub fn flushShorthandHelper(dest: *css.DeclarationList, context: *css.PropertyHa
                 if ((justify_val.* != null)) {
                     const __v2 = (&justify_val.*.?);
                     const justify = __v2;
-                    const intersection = align_prefix.bitwiseAnd((if (comptime (justify_prop != null)) __v2.*[1] else align_prefix.*));
+                    const intersection = VendorPrefix.bitwiseAnd(align_prefix.*, (if (comptime (@TypeOf(justify_prop) != @TypeOf(null))) __v2.*[1] else align_prefix.*));
                     if (intersection.none) {
                         align_prefix.* = flushPrefixesHelper(context, align_prop.feature);
                         align_prefix.none = false;

@@ -313,17 +313,16 @@ pub fn parse_declaration_impl(
     const Closure = struct {
         property_id: css.PropertyId,
         options: *const css.ParserOptions,
+        pub fn parseFn(*_, input2: *css.Parser): Result(css.Property) {
+            return css.Property.parse(_.property_id, input2, _.options);
+        }
     };
     let closure = Closure{
         property_id: property_id,
         options: options,
     };
     const source_location = input.currentSourceLocation();
-    let property = switch (input.parseUntilBefore(delimiters, css.Property, &closure, struct {
-        pub fn parseFn(*_, input2: *css.Parser): Result(css.Property) {
-            return css.Property.parse(_.property_id, input2, _.options);
-        }
-    }.parseFn)) {
+    let property = switch (input.parseUntilBefore(delimiters, css.Property, &closure, Closure.parseFn)) {
         .err => |e| return { err: e },
         .result => |v| v,
     };

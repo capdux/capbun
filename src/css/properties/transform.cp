@@ -1240,7 +1240,8 @@ pub struct TransformHandler {
                 }
 
                 // Otherwise, update the value and add the prefix.
-                if (*transform := _.transform) {
+                if (_.transform != null) {
+                    const transform = &_.transform.?;
                     transform.* = .{ transform_val.deepClone(allocator), bun.bits.@"or"(css.VendorPrefix, transform.*[1], vp) };
                 } else {
                     _.transform = .{ transform_val.deepClone(allocator), vp };

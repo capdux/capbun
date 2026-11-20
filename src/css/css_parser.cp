@@ -774,7 +774,7 @@ pub fn DeriveParse(comptime T: type): type {
                 if (matched := Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) {
                     inline for (void_fields) |field| {
                         if (field.value == @intFromEnum(matched)) {
-                            if (comptime is_union_enum) return { result: @unionInit(T, field.name, {}) };
+                            if (comptime is_union_enum) return { result: @unionInit(T, field.name, undefined) };
                             return { result: @enumFromInt(field.value) };
                         }
                     }
@@ -1323,24 +1323,24 @@ pub struct DefaultAtRuleParser {
         }
 
         fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(CustomAtRuleParser.AtRule, void) {
-            return { err: {} };
+            return { err: undefined };
         }
 
         fn onImportRule(_: *This, _: *ImportRule, _: u32, _: u32) void {}
 
         fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName, 1)) void {}
 
-        fn enclosingLayerLength(_: *This): u32 {
+        static fn enclosingLayerLength(_: *This): u32 {
             return 0;
         }
 
-        fn setEnclosingLayer(_: *This, _: LayerName) void {}
+        static fn setEnclosingLayer(_: *This, _: LayerName) void {}
 
-        fn pushToEnclosingLayer(_: *This, _: LayerName) void {}
+        static fn pushToEnclosingLayer(_: *This, _: LayerName) void {}
 
-        fn resetEnclosingLayer(_: *This, _: u32) void {}
+        static fn resetEnclosingLayer(_: *This, _: u32) void {}
 
-        fn bumpAnonLayerCount(_: *This, _: i32) void {}
+        static fn bumpAnonLayerCount(_: *This, _: i32) void {}
     };
 }
 
@@ -1415,7 +1415,7 @@ pub struct BundlerAtRuleParser {
                     .tailwind => |v| return { result: v },
                 };
             }
-            return { err: {} };
+            return { err: undefined };
         }
 
         static fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) {
@@ -1449,27 +1449,27 @@ pub struct BundlerAtRuleParser {
             }
         }
 
-        fn enclosingLayerLength(*_): u32 {
-            return _.enclosing_layer.v.len();
+        static fn enclosingLayerLength(b: *This): u32 {
+            return b.enclosing_layer.v.len();
         }
 
-        fn setEnclosingLayer(*_, layer: LayerName) {
-            _.enclosing_layer = layer;
+        static fn setEnclosingLayer(b: *This, layer: LayerName) {
+            b.enclosing_layer = layer;
         }
 
-        fn pushToEnclosingLayer(*_, name: LayerName) {
-            _.enclosing_layer.v.appendSlice(_.allocator, name.v.slice());
+        static fn pushToEnclosingLayer(b: *This, name: LayerName) {
+            b.enclosing_layer.v.appendSlice(b.allocator, name.v.slice());
         }
 
-        fn resetEnclosingLayer(*_, len: u32) {
-            _.enclosing_layer.v.setLen(len);
+        static fn resetEnclosingLayer(b: *This, len: u32) {
+            b.enclosing_layer.v.setLen(len);
         }
 
-        fn bumpAnonLayerCount(*_, amount: i32) {
+        static fn bumpAnonLayerCount(b: *This, amount: i32) {
             if (amount > 0) {
-                _.anon_layer_count += u32(amount);
+                b.anon_layer_count += u32(amount);
             } else {
-                _.anon_layer_count -= u32(@abs(amount));
+                b.anon_layer_count -= u32(@abs(amount));
             }
         }
     };
@@ -1810,9 +1810,9 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                             };
                             return .{
                                 .result = .{
-                                    .custom_media = .{
-                                        custom_media_name,
-                                        media,
+                                    .custom_media = CustomMediaPreludeTuple{
+                                        .name = custom_media_name,
+                                        .query = media,
                                     },
                                 },
                             };
@@ -1865,8 +1865,8 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                     .namespace => {
                         parser.state = State.namespaces;
 
-                        const prefix = prelude.namespace[0];
-                        const url = prelude.namespace[1];
+                        const prefix = prelude.namespace.prefix;
+                        const url = prelude.namespace.url;
 
                         parser.rules.v.append(parser.allocator, .{
                             .namespace = NamespaceRule{
@@ -2127,7 +2127,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     return .success;
                                 }
                             };
-                            if (input.parseNestedBlock(void, {}, Fn.parsefn).asErr()) |e| return .{ .err = e };
+                            if (input.parseNestedBlock(void, @as(void, undefined), Fn.parsefn).asErr()) |e| return .{ .err = e };
                             break :brk .moz_document;
                         },
                         .layer => {
@@ -3055,7 +3055,7 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
             },
             .unparsed => |u| std.meta.activeTag(u.property_id),
             .composes => continue,
-            else => @as(PropertyIdTag, prop.*),
+            else => std.meta.activeTag(prop.*),
         };
         const int: u16 = @intFromEnum(tag);
         bitset.set(int);
@@ -3068,7 +3068,7 @@ pub fn fillPropertyBitSet(allocator: Allocator, bitset: *PropertyBitset, block: 
             },
             .unparsed => |u| std.meta.activeTag(u.property_id),
             .composes => continue,
-            else => @as(PropertyIdTag, prop.*),
+            else => std.meta.activeTag(prop.*),
         };
         const int: u16 = @intFromEnum(tag);
         bitset.set(int);
@@ -3215,7 +3215,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
                 const cfg_ptr: *const css_modules.Config = &self.options.css_modules.?;
                 printer.css_module = CssModule.new(allocator, cfg_ptr, &self.sources, project_root, &references);
 
-                try self.rules.toCss(printer);
+                try @constCast(&self.rules).toCss(printer);
                 try printer.newline();
 
                 return ToCssResultInternal{
@@ -3229,7 +3229,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
                     .references = references,
                 };
             } else {
-                try self.rules.toCss(printer);
+                try @constCast(&self.rules).toCss(printer);
                 try printer.newline();
                 return ToCssResultInternal{
                     .dependencies = printer.dependencies,
@@ -4100,8 +4100,8 @@ pub struct Parser {
             };
             switch (tok.*) {
                 .function, .open_paren, .open_square, .open_curly => {
-                    if (e := _.parseNestedBlock(void, {}, struct {
-                        static fn parse(_: auto, i: *Parser): Result(void) {
+                    if (e := _.parseNestedBlock(void, @as(void, undefined), struct {
+                        static fn parse(_: void, i: *Parser): Result(void) {
                             if (err_val := i.expectNoErrorToken().asErr()) {
                                 return .{ .err = err_val };
                             }
@@ -4661,14 +4661,14 @@ pub struct nth {
         const tok = switch (parser.nextIncludingWhitespaceAndComments()) {
             .result => |v| v,
             .err => {
-                return { err: {} };
+                return { err: undefined };
             },
         };
         const int = if (tok.* == .number && tok.number.int_value != null) tok.number.int_value.? else {
-            return { err: {} };
+            return { err: undefined };
         };
         if (!parser.isExhausted()) {
-            return { err: {} };
+            return { err: undefined };
         }
         return { result: int };
     }
@@ -4686,7 +4686,7 @@ pub struct nth {
         {
             return parse_number_saturate(allocator, str[1..]); // Include the minus sign
         } else {
-            return { err: {} };
+            return { err: undefined };
         }
     }
 
@@ -6197,7 +6197,8 @@ pub union(TokenKind) Token {
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return implementHash(@This(), &_, hasher);
+        const _self = _;
+        return implementHash(@This(), &_self, hasher);
     }
 
     /// Return whether this token represents a parse error.

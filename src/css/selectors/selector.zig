@@ -138,7 +138,7 @@ const SerializePseudoElementHelpers = struct {
 
 pub fn writePrefix(d: *Printer, prefix: css.VendorPrefix) PrintErr!css.VendorPrefix {
             _ = try d.writeStr("::");
-            const vp = (if ((!d.vendor_prefix.isEmpty())) bits.@"&&"(css.VendorPrefix, d.vendor_prefix, prefix).orNone() else prefix);
+            const vp = (if ((!d.vendor_prefix.isEmpty())) bun.bits.@"and"(css.VendorPrefix, d.vendor_prefix, prefix).orNone() else prefix);
             _ = try vp.toCss(d);
             _ = debug("VENDOR PREFIX {d} OVERRIDE {d}", .{ vp.asBits(), d.vendor_prefix.asBits() });
             return vp;
@@ -200,7 +200,7 @@ pub fn serializeSelector(selector: *const parser.Selector, dest: *css.Printer, c
                 if (((is_relative and (compound.len >= 1)) and (compound[0] == .scope))) {
                     if (combinators.next()) |combinator| {
                         _ = &combinator;
-                        _ = try serializeCombinator(combinator, dest);
+                        _ = try serializeCombinator((&combinator), dest);
                     }
                     compound = compound[1..];
                     is_relative = false;
@@ -918,7 +918,7 @@ _ = try dest.writeChar(124);
 _ = try dest.writeStr("*|");
 },
 .namespace => |ns| {
-_ = try css.IdentFns.toCss((&ns.prefix), dest);
+_ = try css.IdentFns.toCss(ns.prefix, dest);
             _ = try dest.writeChar(124);
 },
 .attribute_in_no_namespace_exists => |v| {

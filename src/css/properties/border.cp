@@ -539,7 +539,7 @@ struct BorderShorthand {
 
     fn setBorder(*_, allocator: std.mem.Allocator, border: auto) {
         _.width = border.width.deepClone(allocator);
-        _.style = border.style.deepClone(allocator);
+        _.style = css.generic.deepClone(LineStyle, &border.style, allocator);
         _.color = border.color.deepClone(allocator);
     }
 
@@ -861,12 +861,20 @@ pub struct BorderHandler {
         logical_shorthand_supported: bool,
 
         inline fn logicalProp(f: *FlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: auto) {
-            f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)), @unionInit(css.Property, rtl, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)));
+            const cloned = if (comptime @typeInfo(@TypeOf(val)) == .pointer)
+                css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)
+            else
+                css.generic.deepClone(@TypeOf(val), &val, f.ctx.allocator);
+            f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, cloned), @unionInit(css.Property, rtl, cloned));
         }
 
         inline fn push(f: *FlushContext, comptime p: []const u8, val: auto) {
             bun.bits.insert(BorderProperty, &f.self.flushed_properties, @field(BorderProperty, p));
-            bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator))));
+            const cloned = if (comptime @typeInfo(@TypeOf(val)) == .pointer)
+                css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)
+            else
+                css.generic.deepClone(@TypeOf(val), &val, f.ctx.allocator);
+            bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, cloned)));
         }
 
         inline fn fallbacks(f: *FlushContext, comptime p: []const u8, _val: auto) {
@@ -1419,7 +1427,7 @@ pub struct BorderHandler {
 
         const prop = struct {
             inline fn prop(handler: *BorderHandler, c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime id: []const u8) {
-                let upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, {}));
+                let upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, undefined));
                 c.addUnparsedFallbacks(&upppppppppp);
                 bun.bits.insert(BorderProperty, &handler.flushed_properties, @field(BorderProperty, id));
             }
@@ -1437,13 +1445,13 @@ pub struct BorderHandler {
                     css.Property{
                         unparsed: up.withPropertyId(
                             c.allocator,
-                            @unionInit(css.PropertyId, ltr, {}),
+                            @unionInit(css.PropertyId, ltr, undefined),
                         ),
                     },
                     css.Property{
                         unparsed: up.withPropertyId(
                             c.allocator,
-                            @unionInit(css.PropertyId, rtl, {}),
+                            @unionInit(css.PropertyId, rtl, undefined),
                         ),
                     },
                 );

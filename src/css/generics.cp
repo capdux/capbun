@@ -244,7 +244,12 @@ pub fn slice(comptime T: type, val: *const T): []const SliceChild(T) {
 }
 
 pub fn isCompatible(comptime T: type, val: *const T, browsers: bun.css.targets.Browsers): bool {
-    if (@hasDecl(T, "isCompatible")) return T.isCompatible(val, browsers);
+    if (@hasDecl(T, "isCompatible")) {
+        return if (comptime @typeInfo(@TypeOf(T.isCompatible)).@"fn".params[0].type.? == T)
+            T.isCompatible(val.*, browsers)
+        else
+            T.isCompatible(val, browsers);
+    }
     const tyinfo = @typeInfo(T);
     if (tyinfo == .pointer) {
         const TT = std.@"meta".Child(T);
@@ -438,6 +443,8 @@ pub inline fn eql(comptime T: type, lhs: *const T, rhs: *const T): bool {
         Loc => lhs.eql(rhs.*),
         else => if (@typeInfo(T) == .@"struct" && @typeInfo(T).@"struct".layout == .@"packed")
             lhs.* == rhs.*
+        else if (comptime @typeInfo(@TypeOf(T.eql)).@"fn".params.len == 3)
+            T.eql(lhs.*, lhs, rhs)
         else if (comptime @typeInfo(@TypeOf(T.eql)).@"fn".params[0].type.? == T)
             T.eql(lhs.*, rhs)
         else

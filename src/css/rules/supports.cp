@@ -31,9 +31,14 @@ pub const SeenDeclKey = struct {
 
 const SeenDeclContext = struct {
     pub fn hash(s: SeenDeclKey): u32 {
+        const _ctx = _;
+        * = _ctx;
         return std.array_hash_map.hashString(s[1]) +% @intFromEnum(s[0]);
     }
-    pub fn eql(a: SeenDeclKey, b: SeenDeclKey, _: usize): bool {
+    pub fn eql(a: SeenDeclKey, b: SeenDeclKey, b_idx: usize): bool {
+        const _ctx = _;
+        * = _ctx;
+        * = b_idx;
         return seenDeclKeyEql(a, b);
     }
 
@@ -297,7 +302,7 @@ pub union(enum) SupportsCondition {
     }
 
     pub fn toCss(dest: *css.Printer): css.PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .not => |condition| {
                 dest.writeStr(" not ")?;
                 condition.toCssWithParensIfNeeded(dest, condition.needsParens(_))?;

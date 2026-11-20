@@ -297,7 +297,7 @@ return .{ .err = location.newUnexpectedTokenError(tok.*) };
     }
 
 pub fn toCss(self: SupportsCondition, dest: *css.Printer) css.PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .not => |condition| {
 _ = try dest.writeStr(" not ");
             _ = try condition.toCssWithParensIfNeeded(dest, condition.needsParens(self));
@@ -392,11 +392,16 @@ pub const SeenDeclKey = struct {
 };
 const SeenDeclContext = struct {
 
-pub fn hash(s: SeenDeclKey) u32 {
+pub fn hash(self: @This(), s: SeenDeclKey) u32 {
+            const _ctx = self;
+            _ = &_ctx;
             return (std.array_hash_map.hashString(s[1]) +% @intFromEnum(s[0]));
     }
 
-pub fn eql(a: SeenDeclKey, b: SeenDeclKey, _: usize) bool {
+pub fn eql(self: @This(), a: SeenDeclKey, b: SeenDeclKey, b_idx: usize) bool {
+            const _ctx = self;
+            _ = &_ctx;
+            _ = &b_idx;
             return seenDeclKeyEql(a, b);
     }
 

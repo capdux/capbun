@@ -189,7 +189,7 @@ pub struct BorderImage {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn eql(other: *const BorderImage): bool {
@@ -253,7 +253,7 @@ pub struct BorderImageRepeat {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -269,7 +269,7 @@ pub const BorderImageSideWidth = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn deinit(allocator: std.mem.Allocator) {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         switch (_.*) {
             .length_percentage => |*l| l.deinit(allocator),
             .number => {},
@@ -281,12 +281,12 @@ pub const BorderImageSideWidth = union(enum) {
         return { number: 1.0 };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    pub fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     pub fn eql(other: *const BorderImageSideWidth): bool {
-        return switch (_.*) {
+        return switch (_) {
             .number => |*a| switch (other.*) {
                 .number => |*b| a.* == b.*,
                 else => false,
@@ -385,7 +385,7 @@ pub struct BorderImageSlice {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 
@@ -596,7 +596,8 @@ pub struct BorderImageHandler {
             bun.handleOom(dest.append(allocator, Property{ .@"border-image" = .{ border_image, prefix } }));
             bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.@"border-image");
         } else {
-            if (*mut_source := source) {
+            if (source != null) {
+                const mut_source = &source.?;
                 if (!bun.bits.contains(BorderImageProperty, this.flushed_properties, BorderImageProperty.@"border-image-source")) {
                     for (fallback of mut_source.getFallbacks(allocator, context.targets).slice()) {
                         bun.handleOom(dest.append(allocator, Property{ .@"border-image-source" = fallback }));

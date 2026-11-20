@@ -403,7 +403,7 @@ fn parseFitContent(input: *css.Parser): css.Result(LengthPercentage) {
     pub fn tryFromPropertyIdTag(property_id: PropertyIdTag): SizeProperty? {
         inline for (field of std.@"meta".fields(@This())) {
             if (comptime std.mem.eql(u8, field.name, "__unused")) continue;
-            if (@intFromEnum(@field(PropertyIdTag, field.name)) == @intFromEnum(@as(PropertyIdTag, property_id))) {
+            if (@intFromEnum(@field(PropertyIdTag, field.name)) == @intFromEnum(property_id)) {
                 let ret: SizeProperty = {};
                 @field(ret, field.name) = true;
                 return ret;
@@ -469,18 +469,18 @@ pub struct SizeHandler {
         return true;
     }
 
-    inline fn logicalUnparsedHelper(*_: *@This(), property: *const Property, unparsed: *const UnparsedProperty, comptime physical: PropertyIdTag, logical_supported: bool, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
+    inline fn logicalUnparsedHelper(*_, property: *const Property, unparsed: *const UnparsedProperty, comptime physical: PropertyIdTag, logical_supported: bool, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
         if (logical_supported) {
-            bun.bits.insert(SizeProperty, &this.flushed_properties, SizeProperty.tryFromPropertyIdTag(std.meta.activeTag(unparsed.property_id)).?);
+            bun.bits.insert(SizeProperty, &_.flushed_properties, SizeProperty.tryFromPropertyIdTag(std.meta.activeTag(unparsed.property_id)).?);
             bun.handleOom(dest.append(context.allocator, property.deepClone(context.allocator)));
         } else {
             dest.append(context.allocator, Property{
                 unparsed: unparsed.withPropertyId(
                     context.allocator,
-                    @unionInit(PropertyId, @tagName(physical), {}),
+                    @unionInit(PropertyId, @tagName(physical), undefined),
                 ),
             }) catch |e| bun.handleOom(e);
-            @field(this.flushed_properties, @tagName(physical)) = true;
+            @field(_.flushed_properties, @tagName(physical)) = true;
         }
     }
 
