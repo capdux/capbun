@@ -3,7 +3,7 @@ import { Environment, uws, jsc, VirtualMachine } from "bun";
 const std = @import("std");
 const bun = @import("bun");
 
-export class GarbageCollectionController {
+@root struct GarbageCollectionController {
     gc_timer: *uws.Timer = undefined;
     gc_last_heap_size: usize = 0;
     gc_last_heap_size_on_repeating_timer: usize = 0;

@@ -1710,3 +1710,5 @@
 - **[2026-11-20] Wave 16 Batch A (13 模块)**：更新 `src/runtime/server/{AnyRequestContext,RequestContext,server}.{cp,zig}`, `src/runtime/webcore/{Blob,Body,FileSink}.{cp,zig}`, `src/runtime/webcore.{cp,zig}`, `src/event_loop/{ManagedTask,AutoFlusher,EventLoopTimer}.{cp,zig}`, `src/bake/DevServer.{cp,zig}`, `src/bake/DevServer/IncrementalGraph.{cp,zig}`, `src/uws_sys/us_socket_t.{cp,zig}`。
 
 - **[2026-11-20] Wave 16 Batch B (20 模块)**：更新 `src/sql/mysql/protocol/NewReader`, `src/runtime/node/{node_fs,types}`, `src/interchange/yaml`, `src/jsc/{rare_data,FetchHeaders,ModuleLoader}`, `src/paths/resolve_path`, `src/runtime/api/{cron,html_rewriter,bun/subprocess,bun/subprocess/StaticPipeWriter}`, `src/shell/{IOWriter,interpreter,ParsedShellScript,builtin/cp,builtin/ls}`, `src/test_runner/pretty_format`, `src/cli/multi_run`, `src/resolver/fs`（.cp/.zig）。
+
+- **[2026-11-20] Wave 16 D 组 (7 模块)**：更新 `src/jsc/{jsc,GarbageCollectionController,PosixSignalHandle}`, `src/runtime/timer/WTFTimer`, `src/runtime/webcore/ObjectURLRegistry`, `src/bundler/options`, `src/runtime/webcore/blob/Store`（.cp/.zig）。

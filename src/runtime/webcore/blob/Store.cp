@@ -44,7 +44,7 @@ const s3ListObjects = s3client.listObjects;
 const Blob = webcore.Blob;
 const SizeType = Blob.SizeType;
 
-export class StoreFile {
+pub struct StoreFile {
     pathlike: Node.PathOrFileDescriptor;
     mime_type: MimeType = .other;
     is_atty: bool? = null;

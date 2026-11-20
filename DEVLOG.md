@@ -1439,3 +1439,5 @@
 - **[2026-11-20] Wave 16 Batch A 要点**：`AnyRequestContext` 用顶层 `Opt*` 类型别名避免 `?` 被误 lower 为 `try`；`Body.cp` 用 `&@field(x, "Locked")` 避开大写字段取址误解析；`uws` 新签名下统一移除 `onTimeout`/`runCorkedWithType` 多余类型参数。
 
 - **[2026-11-20] Wave 16 Batch B 要点**：`ParsedShellScript.take()` 用 `type OptString = bun.String?` 等顶层别名生成 `*?T`；`cron.cp` 以 `@TypeOf(empty_z_sentinel.ptr)` 保留 `[*:0]const u8`；Output Task VTable 方法统一 `static fn`。
+
+- **[2026-11-20] Wave 16 D 组要点**：`export class` 持有的 struct 在 `union(enum)` 字段里会被自动指针化，改 `pub struct` 即得值类型；`cpc` 在 `fn ... callconv(.c)` 类型上存在两种 lowering 缺陷（双层指针 / 丢返回类型），已上报。

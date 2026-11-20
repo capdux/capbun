@@ -1,4 +1,5 @@
 type string = []const u8;
+type OptSource = logger.Source?;
 
 import bun from "bun";
 const Environment = bun.Environment;
@@ -816,7 +817,7 @@ pub enum Loader: u8 {
         [ "markdown", .md  ],
     ]);
 
-    pub fn fromString(slice_: string): Loader? {
+    static fn fromString(slice_: string): Loader? {
         let slice = slice_;
         if (slice.len > 0 && slice[0] == '.') {
             slice = slice[1..];
@@ -832,7 +833,7 @@ pub enum Loader: u8 {
         };
     }
 
-    pub fn toAPI(loader: Loader): api.Loader {
+    static fn toAPI(loader: Loader): api.Loader {
         return switch (loader) {
             .jsx => .jsx,
             .js => .js,
@@ -997,7 +998,7 @@ struct LoaderResult {
 pub fn getLoaderAndVirtualSource(
     specifier_str: string,
     jsc_vm: *jsc.VirtualMachine,
-    virtual_source_to_use: *logger.Source?,
+    virtual_source_to_use: *OptSource,
     blob_to_deinit: *jsc.WebCore.Blob?,
     type_attribute_str: string?,
 ): LoaderResult! {

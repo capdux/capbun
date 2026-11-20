@@ -80,8 +80,6 @@ pub const StoreFile = struct {
     seekable: ?bool = null,
     max_size: SizeType = Blob.max_size,
     last_modified: jsc.JSTimeType = jsc.init_timestamp,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.mime_type = .other; self_ptr.is_atty = null; self_ptr.mode = 0; self_ptr.seekable = null; self_ptr.max_size = Blob.max_size; self_ptr.last_modified = jsc.init_timestamp; return self_ptr; }
 
 pub fn unlink(self: *const StoreFile, globalThis: *JSGlobalObject) JSError!JSValue {
             return (switch (self.pathlike) {
@@ -104,7 +102,7 @@ pub fn isSeekable(self: *const StoreFile) ?bool {
             return null;
     }
 
-pub fn init(pathlike: Node.PathOrFileDescriptor, mime_type: ?MimeType) *StoreFile {
+pub fn init(pathlike: Node.PathOrFileDescriptor, mime_type: ?MimeType) StoreFile {
             return StoreFile{ .pathlike = pathlike, .mime_type = ((mime_type) orelse (.other)), .is_atty = null, .mode = 0, .seekable = null, .max_size = Blob.max_size, .last_modified = jsc.init_timestamp };
     }
 };
@@ -572,7 +570,7 @@ pub fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator) !*Store
     pub const Map = std.HashMap(u64, *WebCore.Blob.Store, IdentityContext(u64), 80);
     pub const Data = union(enum) {
         bytes: StoreBytes,
-        file: *StoreFile,
+        file: StoreFile,
         s3: StoreS3,
     };
     pub const SerializeTag = enum(u8) {

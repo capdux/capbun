@@ -64,95 +64,95 @@ fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTarge
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const ObjectURLRegistry = @This();
+
+lock: bun.Mutex = .{},
+map: std.AutoHashMap(UUID,*Entry) = std.AutoHashMap(UUID, *Entry).init(bun.default_allocator),
+
+pub fn register(self: *ObjectURLRegistry, vm: *jsc.VirtualMachine, blob: *const jsc.WebCore.Blob) UUID {
+        const uuid = vm.rareData().nextUUID();
+        const entry = Entry.init(blob);
+        _ = self.lock.lock();
+        defer {
+        _ = self.lock.unlock();
+        }
+        _ = bun.handleOom(self.map.put(uuid, entry));
+        return uuid;
+}
+
+pub fn singleton() *ObjectURLRegistry {
+        _ = singleton_once.call();
+        return (&singleton_registry);
+}
+
+pub fn getDupedBlob(self: *ObjectURLRegistry, uuid: *const UUID) ?jsc.WebCore.Blob {
+        _ = self.lock.lock();
+        defer {
+        _ = self.lock.unlock();
+        }
+        const entry = ((self.map.get(uuid.*)) orelse { return null; });
+        return entry.blob.dupeWithContentType(true);
+}
+
+pub fn uuidFromPathname(pathname: []const u8) ?UUID {
+        return (blk_catch_0: { break :blk_catch_0 ((UUID.parse(pathname)) catch |__ce_0| { _ = &__ce_0; return null; }); });
+}
+
+pub fn resolveAndDupe(self: *ObjectURLRegistry, pathname: []const u8) ?jsc.WebCore.Blob {
+        const uuid = ((ObjectURLRegistry.uuidFromPathname(pathname)) orelse { return null; });
+        _ = self.lock.lock();
+        defer {
+        _ = self.lock.unlock();
+        }
+        const entry = ((self.map.get(uuid)) orelse { return null; });
+        return entry.blob.dupeWithContentType(true);
+}
+
+pub fn resolveAndDupeToJS(self: *ObjectURLRegistry, pathname: []const u8, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+        var blob = jsc.WebCore.Blob.new(((self.resolveAndDupe(pathname)) orelse { return null; }));
+        _ = &blob;
+        return blob.toJS(globalObject);
+}
+
+pub fn revoke(self: *ObjectURLRegistry, pathname: []const u8) void {
+        const uuid = ((ObjectURLRegistry.uuidFromPathname(pathname)) orelse { return; });
+        _ = self.lock.lock();
+        defer {
+        _ = self.lock.unlock();
+        }
+        const entry = ((self.map.fetchRemove(uuid)) orelse { return; });
+        _ = (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).deinit();
+}
+
+pub fn has(self: *ObjectURLRegistry, pathname: []const u8) bool {
+        const uuid = ((ObjectURLRegistry.uuidFromPathname(pathname)) orelse { return false; });
+        _ = self.lock.lock();
+        defer {
+        _ = self.lock.unlock();
+        }
+        return self.map.contains(uuid);
+}
 const bun = @import("bun");
 const UUID = bun.UUID;
 const jsc = bun.jsc;
 var singleton_registry: ObjectURLRegistry = undefined;
 var singleton_once = std.once(singleton_get);
-pub const ObjectURLRegistry = struct {
-    lock: bun.Mutex = .{},
-    map: std.AutoHashMap(UUID,*Entry) = std.AutoHashMap(UUID, *Entry).init(bun.default_allocator),
+pub const Entry = struct {
+    blob: jsc.WebCore.Blob,
 
-pub fn register(self: *@This(), vm: *jsc.VirtualMachine, blob: *const jsc.WebCore.Blob) UUID {
-            const uuid = vm.rareData().nextUUID();
-            const entry = Entry.init(blob);
-            _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
-            _ = bun.handleOom(self.map.put(uuid, entry));
-            return uuid;
+pub fn init(blob: *const jsc.WebCore.Blob) *Entry {
+            return Entry.new(.{ .blob = blob.dupeWithContentType(true) });
     }
 
-pub fn singleton() *ObjectURLRegistry {
-            _ = singleton_once.call();
-            return (&singleton_registry);
+pub fn release(self: *@This()) void {
+            _ = self.blob.deinit();
     }
 
-pub fn getDupedBlob(self: *@This(), uuid: *const UUID) ?jsc.WebCore.Blob {
-            _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
-            const entry = ((self.map.get(uuid.*)) orelse { return null; });
-            return entry.blob.dupeWithContentType(true);
+pub fn deinit(self: *@This()) void {
+            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = bun.destroy(self);
     }
-
-pub fn uuidFromPathname(pathname: []const u8) ?UUID {
-            return (blk_catch_0: { break :blk_catch_0 ((UUID.parse(pathname)) catch |__ce_0| { _ = &__ce_0; return null; }); });
-    }
-
-pub fn resolveAndDupe(self: *@This(), pathname: []const u8) ?jsc.WebCore.Blob {
-            const uuid = ((uuidFromPathname(pathname)) orelse { return null; });
-            _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
-            const entry = ((self.map.get(uuid)) orelse { return null; });
-            return entry.blob.dupeWithContentType(true);
-    }
-
-pub fn resolveAndDupeToJS(self: *@This(), pathname: []const u8, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
-            var blob = jsc.WebCore.Blob.new(((self.resolveAndDupe(pathname)) orelse { return null; }));
-            _ = &blob;
-            return blob.toJS(globalObject);
-    }
-
-pub fn revoke(self: *@This(), pathname: []const u8) void {
-            const uuid = ((uuidFromPathname(pathname)) orelse { return; });
-            _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
-            const entry = ((self.map.fetchRemove(uuid)) orelse { return; });
-            _ = (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).deinit();
-    }
-
-pub fn has(self: *@This(), pathname: []const u8) bool {
-            const uuid = ((uuidFromPathname(pathname)) orelse { return false; });
-            _ = self.lock.lock();
-            defer {
-            _ = self.lock.unlock();
-            }
-            return self.map.contains(uuid);
-    }
-    pub const Entry = struct {
-        blob: jsc.WebCore.Blob,
-    
-    pub fn init(blob: *const jsc.WebCore.Blob) *Entry {
-                return Entry.new(.{ .blob = blob.dupeWithContentType(true) });
-        }
-    
-    pub fn release(self: *@This()) void {
-                _ = self.blob.deinit();
-        }
-    
-    pub fn deinit(self: *@This()) void {
-                _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
-                _ = bun.destroy(self);
-        }
-        pub const new = bun.TrivialNew(Entry);
-    };
+    pub const new = bun.TrivialNew(Entry);
 };
 pub const specifier_len = ("blob:".len + UUID.stringLength);
 
@@ -187,7 +187,7 @@ pub fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.
         if ((!arguments.ptr[0].isString())) {
             return globalObject.throwInvalidArguments("revokeObjectURL expects a string", .{});
         }
-        const str = (blk_catch_0: { break :blk_catch_0 ((arguments.ptr[0].toBunString(globalObject)) catch |__ce_0| { _ = &__ce_0; @panic("unreachable"); }); });
+        const str = (blk_catch_1: { break :blk_catch_1 ((arguments.ptr[0].toBunString(globalObject)) catch |__ce_1| { _ = &__ce_1; @panic("unreachable"); }); });
         if ((!str.hasPrefixComptime("blob:"))) {
             return jsc.JSValue.js_undefined;
         }

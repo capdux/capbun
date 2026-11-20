@@ -407,8 +407,7 @@ pub fn stdinName(self: Loader) []const u8 {
             return stdin_name.get(self);
     }
 
-pub fn fromString(self: Loader, slice_: []const u8) ?Loader {
-        _ = self;
+pub fn fromString(slice_: []const u8) ?Loader {
             var slice = slice_;
             _ = &slice;
             if (((slice.len > 0) and (slice[0] == 46))) {
@@ -424,8 +423,7 @@ else => false,
 });
     }
 
-pub fn toAPI(self: Loader, loader: Loader) api.Loader {
-        _ = self;
+pub fn toAPI(loader: Loader) api.Loader {
             return (switch (loader) {
 .jsx => .jsx,
 .js => .js,
@@ -1746,6 +1744,7 @@ _ = try PathTemplate.writeReplacingSlashesOnWindows(writer, self.placeholder.tar
 };
 
 const string = []const u8;
+const OptSource = ?logger.Source;
 const Environment = bun.Environment;
 const Global = bun.Global;
 const Output = bun.Output;
@@ -1843,7 +1842,7 @@ pub fn normalizeSpecifier(jsc_vm: *bun.jsc.VirtualMachine, slice_: []const u8) S
         return SpecifierParts{ .file_path = slice, .specifier = specifier, .query = query };
 }
 
-pub fn getLoaderAndVirtualSource(specifier_str: []const u8, jsc_vm: *jsc.VirtualMachine, virtual_source_to_use: ?*logger.Source, blob_to_deinit: ?*jsc.WebCore.Blob, type_attribute_str: ?[]const u8) !LoaderResult {
+pub fn getLoaderAndVirtualSource(specifier_str: []const u8, jsc_vm: *jsc.VirtualMachine, virtual_source_to_use: *OptSource, blob_to_deinit: ?*jsc.WebCore.Blob, type_attribute_str: ?[]const u8) !LoaderResult {
         const spec_res = normalizeSpecifier(jsc_vm, specifier_str);
         const normalized_file_path_from_specifier = spec_res.file_path;
         const specifier = spec_res.specifier;

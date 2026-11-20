@@ -6,7 +6,7 @@ const VirtualMachine = jsc.VirtualMachine;
 
 /// This is WTF::RunLoop::TimerBase from WebKit
 @opaque
-export struct RunLoopTimer {
+pub struct RunLoopTimer {
     pub fn fire(*_) {
         WTFTimer__fire(_);
     }
@@ -17,7 +17,7 @@ export struct RunLoopTimer {
 }
 
 /// A timer created by WTF code and invoked by Bun's event loop
-export class WTFTimer {
+@root struct WTFTimer {
     vm: *VirtualMachine;
     run_loop_timer: *RunLoopTimer;
     event_loop_timer: EventLoopTimer;

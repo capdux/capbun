@@ -11,31 +11,31 @@ fn singleton_get() {
     singleton_registry = .{};
 }
 
-pub const ObjectURLRegistry = struct {
+pub const Entry = struct {
+    blob: jsc.WebCore.Blob,
+
+    pub const new = bun.TrivialNew(Entry);
+    pub fn init(blob: *const jsc.WebCore.Blob) *Entry {
+        return Entry.new(.{
+            .blob = blob.dupeWithContentType(true),
+        });
+    }
+
+    pub fn release(this: *Entry) void {
+        this.blob.deinit();
+    }
+
+    pub fn deinit(this: *Entry) void {
+        this.release();
+        bun.destroy(this);
+    }
+};
+
+@root struct ObjectURLRegistry {
     lock: bun.Mutex = .{},
     map: std.AutoHashMap(UUID, *Entry) = std.AutoHashMap(UUID, *Entry).init(bun.default_allocator),
 
-    pub const Entry = struct {
-        blob: jsc.WebCore.Blob,
-
-        pub const new = bun.TrivialNew(Entry);
-        pub fn init(blob: *const jsc.WebCore.Blob) *Entry {
-            return Entry.new(.{
-                .blob = blob.dupeWithContentType(true),
-            });
-        }
-
-        pub fn release(this: *Entry) void {
-            this.blob.deinit();
-        }
-
-        pub fn deinit(this: *Entry) void {
-            this.release();
-            bun.destroy(this);
-        }
-    };
-
-    pub fn register(this: *ObjectURLRegistry, vm: *jsc.VirtualMachine, blob: *const jsc.WebCore.Blob) UUID {
+    pub fn register(*_: *ObjectURLRegistry, vm: *jsc.VirtualMachine, blob: *const jsc.WebCore.Blob): UUID {
         const uuid = vm.rareData().nextUUID();
         const entry = Entry.init(blob);
 
@@ -50,18 +50,18 @@ pub const ObjectURLRegistry = struct {
         return &singleton_registry;
     }
 
-    fn getDupedBlob(this: *ObjectURLRegistry, uuid: *const UUID) ?jsc.WebCore.Blob {
+    fn getDupedBlob(*_: *ObjectURLRegistry, uuid: *const UUID): jsc.WebCore.Blob? {
         this.lock.lock();
         defer this.lock.unlock();
         const entry = this.map.get(uuid.*) orelse return null;
         return entry.blob.dupeWithContentType(true);
     }
 
-    fn uuidFromPathname(pathname: []const u8) ?UUID {
+    fn uuidFromPathname(pathname: []const u8): UUID? {
         return UUID.parse(pathname) catch return null;
     }
 
-    pub fn resolveAndDupe(this: *ObjectURLRegistry, pathname: []const u8) ?jsc.WebCore.Blob {
+    pub fn resolveAndDupe(*_: *ObjectURLRegistry, pathname: []const u8): jsc.WebCore.Blob? {
         const uuid = uuidFromPathname(pathname) orelse return null;
         this.lock.lock();
         defer this.lock.unlock();
@@ -69,12 +69,12 @@ pub const ObjectURLRegistry = struct {
         return entry.blob.dupeWithContentType(true);
     }
 
-    pub fn resolveAndDupeToJS(this: *ObjectURLRegistry, pathname: []const u8, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+    pub fn resolveAndDupeToJS(*_: *ObjectURLRegistry, pathname: []const u8, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         let blob = jsc.WebCore.Blob.new(this.resolveAndDupe(pathname) orelse return null);
         return blob.toJS(globalObject);
     }
 
-    pub fn revoke(this: *ObjectURLRegistry, pathname: []const u8) void {
+    pub fn revoke(*_: *ObjectURLRegistry, pathname: []const u8)  {
         const uuid = uuidFromPathname(pathname) orelse return;
         this.lock.lock();
         defer this.lock.unlock();
@@ -82,13 +82,13 @@ pub const ObjectURLRegistry = struct {
         entry.value.deinit();
     }
 
-    pub fn has(this: *ObjectURLRegistry, pathname: []const u8) bool {
+    pub fn has(*_: *ObjectURLRegistry, pathname: []const u8): bool {
         const uuid = uuidFromPathname(pathname) orelse return false;
         this.lock.lock();
         defer this.lock.unlock();
         return this.map.contains(uuid);
     }
-};
+}
 
 pub const specifier_len = "blob:".len + UUID.stringLength;
 

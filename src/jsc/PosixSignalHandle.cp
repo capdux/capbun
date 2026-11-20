@@ -6,7 +6,7 @@ const bun = @import("bun");
 const buffer_size: usize = 8192;
 const log = Output.scoped(.PosixSignalHandle, .hidden);
 
-export class PosixSignalHandle {
+@root struct PosixSignalHandle {
     signals: [buffer_size]u8 = undefined;
 
     // Producer index (signal handler writes)
@@ -87,9 +87,11 @@ export class PosixSignalHandle {
     }
 }
 
-extern fn Bun__onSignalForJS(number: i32, globalObject: *jsc.JSGlobalObject);
+@c {
+    fn Bun__onSignalForJS(number: i32, globalObject: *jsc.JSGlobalObject);
+}
 
-export class PosixSignalTask {
+pub struct PosixSignalTask {
     number: u8;
 
     pub const new = bun.TrivialNew(@This());
