@@ -159,7 +159,7 @@ pub fn assertStreamingDisabled(globalThis: *jsc.JSGlobalObject, async_local_stor
         if ((!getStoreFn.isCallable())) {
             return globalThis.throwInvalidArguments("\"getStore\" must be a function", .{});
         }
-        const store_value = try getStoreFn.call(globalThis, async_local_storage, (&.{}));
+        const store_value = try getStoreFn.call(globalThis, async_local_storage, &.{});
         const streaming_val = ((try store_value.getPropertyValue(globalThis, "streaming")) orelse { return globalThis.throwInvalidArguments("store value must have a \"streaming\" field", .{}); });
         if ((!streaming_val.isBoolean())) {
             return globalThis.throwInvalidArguments("\"streaming\" field must be a boolean", .{});

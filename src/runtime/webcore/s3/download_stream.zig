@@ -72,15 +72,15 @@ pub const S3HttpDownloadStreamingTask = struct {
     signal_store: bun.http.Signals.Store = .{},
     signals: bun.http.Signals = .{},
     poll_ref: bun.Async.KeepAlive = bun.Async.KeepAlive.init(),
-    response_buffer: bun.MutableString = .{ .allocator = bun.default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } },
+    response_buffer: bun.MutableString = .{ .allocator = bun.default_allocator, .list = .{ .items = empty_u8[0..0], .capacity = 0 } },
     mutex: bun.Mutex = .{},
-    reported_response_buffer: bun.MutableString = .{ .allocator = bun.default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } },
+    reported_response_buffer: bun.MutableString = .{ .allocator = bun.default_allocator, .list = .{ .items = empty_u8[0..0], .capacity = 0 } },
     state: State.AtomicType = State.AtomicType.init(@bitCast(State{  })),
     concurrent_task: jsc.ConcurrentTask = .{},
     range: []const ?u8,
     proxy_url: []const u8,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.has_schedule_callback = std.atomic.Value(bool).init(false); self_ptr.signal_store = .{}; self_ptr.signals = .{}; self_ptr.poll_ref = bun.Async.KeepAlive.init(); self_ptr.response_buffer = .{ .allocator = bun.default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }; self_ptr.mutex = .{}; self_ptr.reported_response_buffer = .{ .allocator = bun.default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }; self_ptr.state = State.AtomicType.init(@bitCast(State{  })); self_ptr.concurrent_task = .{}; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.has_schedule_callback = std.atomic.Value(bool).init(false); self_ptr.signal_store = .{}; self_ptr.signals = .{}; self_ptr.poll_ref = bun.Async.KeepAlive.init(); self_ptr.response_buffer = .{ .allocator = bun.default_allocator, .list = .{ .items = empty_u8[0..0], .capacity = 0 } }; self_ptr.mutex = .{}; self_ptr.reported_response_buffer = .{ .allocator = bun.default_allocator, .list = .{ .items = empty_u8[0..0], .capacity = 0 } }; self_ptr.state = State.AtomicType.init(@bitCast(State{  })); self_ptr.concurrent_task = .{}; return self_ptr; }
 
 pub fn init(self: *S3HttpDownloadStreamingTask, http: bun.http.AsyncHTTP, vm: *jsc.VirtualMachine, sign_result: SignResult, headers: bun.http.Headers, callback_context: *anyopaque, callback: *const fn (bun.MutableString, bool, ?S3Error, *anyopaque) void, has_schedule_callback: std.atomic.Value(bool), signal_store: bun.http.Signals.Store, signals: bun.http.Signals, poll_ref: bun.Async.KeepAlive, response_buffer: bun.MutableString, mutex: bun.Mutex, reported_response_buffer: bun.MutableString, state: State.AtomicType, concurrent_task: jsc.ConcurrentTask, range: []const ?u8, proxy_url: []const u8) void {
         var __http_moved = false; _ = &__http_moved;
@@ -353,3 +353,4 @@ const bun = @import("bun");
 const jsc = bun.jsc;
 const strings = bun.strings;
 const log = bun.Output.scoped(.S3, .hidden);
+var empty_u8: [0]u8 = &.{};

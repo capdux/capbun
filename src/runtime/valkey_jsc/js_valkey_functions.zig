@@ -228,7 +228,7 @@ pub fn @"()"(comptime name: []const u8, comptime command: []const u8, comptime c
 
 pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
             _ = try testCorrectState(client, name, client_state_requirement);
-            const promise = (blk_catch_0: { break :blk_catch_0 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = command, .args = .{ .args = (&.{}) } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, ("Failed to send " ++ command), e); }); });
+            const promise = (blk_catch_0: { break :blk_catch_0 ((valkeySend(client, globalObject, callframe.this(), (&Command{ .command = command, .args = .{ .args = &.{} } }))) catch |e| { _ = &e; return protocol.valkeyErrorToJS(globalObject, ("Failed to send " ++ command), e); }); });
             return promise.toJS();
     }
 };

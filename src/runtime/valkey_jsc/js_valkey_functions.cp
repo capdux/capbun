@@ -1342,7 +1342,7 @@ const compile = struct {
                     callframe.this(),
                     &Command{
             command: command,
-                        args: .{ .args = &.{} },
+                        args: .{ .args = [] },
                     },
                 ) catch |e| {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);

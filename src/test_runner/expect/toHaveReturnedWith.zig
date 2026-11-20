@@ -128,7 +128,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
             }
         }
         if ((pass != client.flags.not)) {
-            return error.js_undefined;
+            return JSValue.js_undefined;
         }
         var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true };
         _ = &formatter;

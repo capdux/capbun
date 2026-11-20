@@ -11,6 +11,7 @@ const AnyServer = jsc.API.AnyServer;
 const JSBundler = jsc.API.JSBundler;
 const uws = bun.uws;
 const HTTPResponse = bun.uws.AnyResponse;
+const empty_paths: [0][]const u8 = [];
 
 //! This object is a description of an HTML bundle. It is created by importing an
 //! HTML file, and can be passed to the `static` option in `Bun.serve`. The build
@@ -388,7 +389,7 @@ pub const Route = struct {
                     let headers = bun.http.Headers{ .allocator = bun.default_allocator };
                     const content_type = blob.Blob.contentTypeOrMimeType() orelse brk: {
                         bun.debugAssert(false); // should be populated by `output_file.toBlob`
-                        break :brk output_file.loader.toMimeType(&.{}).value;
+                        break :brk output_file.loader.toMimeType(empty_paths[0..0]).value;
                     };
                     bun.handleOom(headers.append("Content-Type", content_type));
                     // Do not apply etags to html.

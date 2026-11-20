@@ -87,6 +87,7 @@ const AnyServer = jsc.API.AnyServer;
 const JSBundler = jsc.API.JSBundler;
 const uws = bun.uws;
 const HTTPResponse = bun.uws.AnyResponse;
+const empty_paths: [0][]const u8 = &.{};
 pub const HTMLBundleRoute = Route;
 pub const Route = struct {
     /// One HTMLBundle.Route can be specified multiple times
@@ -416,7 +417,7 @@ pub const Route = struct {
                     var headers = bun.http.Headers{ .allocator = bun.default_allocator };
                     const content_type = blob.Blob.contentTypeOrMimeType() orelse brk: {
                         bun.debugAssert(false); // should be populated by `output_file.toBlob`
-                        break :brk output_file.loader.toMimeType(&.{}).value;
+                        break :brk output_file.loader.toMimeType(empty_paths[0..0]).value;
                     };
                     bun.handleOom(headers.append("Content-Type", content_type));
                     // Do not apply etags to html.

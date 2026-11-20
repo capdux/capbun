@@ -83,6 +83,7 @@ pub const Types = struct {
     pub const U16SliceAligned = []u16;
     pub const U16Ptr = [*]align(1) u16;
 };
+var empty_u8: [0]u8 = &.{};
 
 pub export fn Bun__encoding__writeLatin1(input: [*]const u8, len: usize, to: [*]u8, to_len: usize, encoding: u8) callconv(.c) usize {
         return (blk_catch_0: { break :blk_catch_0 (((switch (@as(Encoding, @enumFromInt(encoding))) {
@@ -494,20 +495,20 @@ pub fn constructFrom(comptime T: type, input: []const T, allocator: Allocator, c
 
 pub fn constructFromU8(input: [*]const u8, len: usize, allocator: Allocator, comptime encoding: Encoding) []u8 {
         if ((len == 0)) {
-            return (&.{});
+            return empty_u8[0..0];
         }
         switch (encoding) {
 .buffer, .latin1, .ascii => {
-var to = (blk_catch_10: { break :blk_catch_10 ((allocator.alloc(u8, len)) catch |__ce_10| { _ = &__ce_10; return (&.{}); }); });
+var to = (blk_catch_10: { break :blk_catch_10 ((allocator.alloc(u8, len)) catch |__ce_10| { _ = &__ce_10; return empty_u8[0..0]; }); });
         _ = &to;
         _ = @memcpy(to[0..len], input[0..len]);
         return to;
 },
 .utf8 => {
-return (blk_catch_11: { break :blk_catch_11 ((strings.allocateLatin1IntoUTF8(allocator, input[0..len])) catch |__ce_11| { _ = &__ce_11; return (&.{}); }); });
+return (blk_catch_11: { break :blk_catch_11 ((strings.allocateLatin1IntoUTF8(allocator, input[0..len])) catch |__ce_11| { _ = &__ce_11; return empty_u8[0..0]; }); });
 },
 .ucs2, .utf16le => {
-var to = (blk_catch_12: { break :blk_catch_12 ((allocator.alloc(u16, len)) catch |__ce_12| { _ = &__ce_12; return (&.{}); }); });
+var to = (blk_catch_12: { break :blk_catch_12 ((allocator.alloc(u16, len)) catch |__ce_12| { _ = &__ce_12; return empty_u8[0..0]; }); });
         _ = &to;
         const _copied = strings.copyLatin1IntoUTF16(Types.U16SliceAligned, to, input[0..len]);
         _ = &_copied;
@@ -515,28 +516,28 @@ var to = (blk_catch_12: { break :blk_catch_12 ((allocator.alloc(u16, len)) catch
 },
 .hex => {
 if ((len < 2)) {
-            return (&.{});
+            return empty_u8[0..0];
         }
-        var to = (blk_catch_13: { break :blk_catch_13 ((allocator.alloc(u8, (len / 2))) catch |__ce_13| { _ = &__ce_13; return (&.{}); }); });
+        var to = (blk_catch_13: { break :blk_catch_13 ((allocator.alloc(u8, (len / 2))) catch |__ce_13| { _ = &__ce_13; return empty_u8[0..0]; }); });
         _ = &to;
         const wrote = strings.decodeHexToBytesTruncate(to, u8, input[0..len]);
         if ((wrote == 0)) {
             _ = allocator.free(to);
-            return (&.{});
+            return empty_u8[0..0];
         }
         return to[0..wrote];
 },
 .base64, .base64url => {
 const slice = strings.trim(input[0..len], "\r\n\t \x0b");
         if ((slice.len == 0)) {
-            return (&.{});
+            return empty_u8[0..0];
         }
         const outlen = base64.decodeLen(slice);
-        const to = (blk_catch_14: { break :blk_catch_14 ((allocator.alloc(u8, outlen)) catch |__ce_14| { _ = &__ce_14; return (&.{}); }); });
+        const to = (blk_catch_14: { break :blk_catch_14 ((allocator.alloc(u8, outlen)) catch |__ce_14| { _ = &__ce_14; return empty_u8[0..0]; }); });
         const wrote = base64.decode(to[0..outlen], slice).count;
         if ((wrote == 0)) {
             _ = allocator.free(to);
-            return (&.{});
+            return empty_u8[0..0];
         }
         return to[0..wrote];
 },
@@ -545,20 +546,20 @@ const slice = strings.trim(input[0..len], "\r\n\t \x0b");
 
 pub fn constructFromU16(input: [*]const u16, len: usize, allocator: Allocator, comptime encoding: Encoding) []u8 {
         if ((len == 0)) {
-            return (&.{});
+            return empty_u8[0..0];
         }
         switch (encoding) {
 .utf8 => {
-return (blk_catch_15: { break :blk_catch_15 ((strings.toUTF8AllocWithType(allocator, input[0..len])) catch |__ce_15| { _ = &__ce_15; return (&.{}); }); });
+return (blk_catch_15: { break :blk_catch_15 ((strings.toUTF8AllocWithType(allocator, input[0..len])) catch |__ce_15| { _ = &__ce_15; return empty_u8[0..0]; }); });
 },
 .latin1, .buffer, .ascii => {
-var to = (blk_catch_16: { break :blk_catch_16 ((allocator.alloc(u8, len)) catch |__ce_16| { _ = &__ce_16; return (&.{}); }); });
+var to = (blk_catch_16: { break :blk_catch_16 ((allocator.alloc(u8, len)) catch |__ce_16| { _ = &__ce_16; return empty_u8[0..0]; }); });
         _ = &to;
         _ = strings.copyU16IntoU8(to[0..len], input[0..len]);
         return to;
 },
 .ucs2, .utf16le => {
-var to = mem.sliceAsBytes((blk_catch_17: { break :blk_catch_17 ((allocator.alloc(u16, len)) catch |__ce_17| { _ = &__ce_17; return (&.{}); }); }));
+var to = mem.sliceAsBytes((blk_catch_17: { break :blk_catch_17 ((allocator.alloc(u16, len)) catch |__ce_17| { _ = &__ce_17; return empty_u8[0..0]; }); }));
         _ = &to;
         const bytes = mem.sliceAsBytes(input[0..len]);
         _ = @memcpy(to[0..bytes.len], bytes);
@@ -566,19 +567,19 @@ var to = mem.sliceAsBytes((blk_catch_17: { break :blk_catch_17 ((allocator.alloc
 },
 .hex => {
 if ((len < 2)) {
-            return (&.{});
+            return empty_u8[0..0];
         }
-        var to = (blk_catch_18: { break :blk_catch_18 ((allocator.alloc(u8, (len / 2))) catch |__ce_18| { _ = &__ce_18; return (&.{}); }); });
+        var to = (blk_catch_18: { break :blk_catch_18 ((allocator.alloc(u8, (len / 2))) catch |__ce_18| { _ = &__ce_18; return empty_u8[0..0]; }); });
         _ = &to;
         const wrote = strings.decodeHexToBytesTruncate(to, u16, input[0..len]);
         if ((wrote == 0)) {
             _ = allocator.free(to);
-            return (&.{});
+            return empty_u8[0..0];
         }
         return to[0..wrote];
 },
 .base64, .base64url => {
-const transcoded = (blk_catch_19: { break :blk_catch_19 ((strings.toUTF8Alloc(allocator, input[0..len])) catch |__ce_19| { _ = &__ce_19; return (&.{}); }); });
+const transcoded = (blk_catch_19: { break :blk_catch_19 ((strings.toUTF8Alloc(allocator, input[0..len])) catch |__ce_19| { _ = &__ce_19; return empty_u8[0..0]; }); });
         defer {
         _ = allocator.free(transcoded);
         }

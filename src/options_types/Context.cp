@@ -74,8 +74,8 @@ export struct ContextData {
     args: api.TransformOptions;
     log: *logger.Log;
     allocator: std.mem.Allocator;
-    positionals: []const string = &.{};
-    passthrough: []const string = &.{};
+    positionals: []const string = [];
+    passthrough: []const string = [];
     install: OptBunInstall = null;
 
     debug: DebugOptions = .{};
@@ -83,14 +83,14 @@ export struct ContextData {
     bundler_options: BundlerOptions = .{};
     runtime_options: RuntimeOptions = .{};
 
-    filters: []const []const u8 = &.{};
+    filters: []const []const u8 = [];
     workspaces: bool = false;
     if_present: bool = false;
     parallel: bool = false;
     sequential: bool = false;
     no_exit_on_error: bool = false;
 
-    preloads: []const string = &.{};
+    preloads: []const string = [];
     has_loaded_global_config: bool = false;
 
     pub const BundlerOptions = BundlerOptions_;
@@ -153,7 +153,7 @@ export struct TestOptions {
     concurrent_test_glob: StringListOpt = null;
     bail: u32 = 0;
     coverage: CodeCoverageOptions = .{};
-    path_ignore_patterns: []const []const u8 = &.{};
+    path_ignore_patterns: []const []const u8 = [];
     path_ignore_patterns_from_cli: bool = false;
     test_filter_pattern: string? = null;
     /// `?*bun.jsc.RegularExpression` — typed as opaque to keep this file free
@@ -239,7 +239,7 @@ export struct RuntimeOptions {
     redis_preconnect: bool = false;
     sql_preconnect: bool = false;
     eval: EvalOptions = .{};
-    preconnect: []const []const u8 = &.{};
+    preconnect: []const []const u8 = [];
     experimental_http2_fetch: bool = false;
     experimental_http3_fetch: bool = false;
     dns_result_order: []const u8 = "verbatim";

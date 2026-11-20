@@ -161,8 +161,8 @@ pub struct PathWatcher {
         }
     };
 
-    pub const Callback = *const fn (ctx: *!?, event: Event, is_file: bool) void;
-    pub const UpdateEndCallback = *const fn (ctx: *!?) void;
+    pub const Callback = fn (ctx: *!?, event: Event, is_file: bool) void;
+    pub const UpdateEndCallback = fn (ctx: *!?) void;
 
     /// Called from the platform reader thread with `manager.mutex` held.
     /// `rel_path` is borrowed — `onPathUpdatePosix` dupes it before enqueuing.

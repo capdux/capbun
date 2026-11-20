@@ -121,7 +121,7 @@ export struct SslContextCacheEntry {
 pub type OnInitErrorFn = fn (error_val: InitError, opts: InitOpts);
 
 export struct InitOpts {
-    ca: []const cstring = &.{},
+    ca: []const cstring = [],
     abs_ca_file_name: cstring = "",
     for_install: bool = false,
     onInitError: OnInitErrorFn? = null,
@@ -172,7 +172,7 @@ export @root @value struct HTTPThread {
                     .heap = HeapRequestBodyBuffer.init(),
                 };
             }
-            return .{ .heap = bun.take(&this.lazy_request_body_buffer).? };
+            return .{ .heap = bun.take(unsafe { &this.lazy_request_body_buffer }).? };
         }
         return .{
             .stack = std.heap.stackFallback(request_body_send_stack_buffer_size, bun.default_allocator),

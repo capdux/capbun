@@ -53,7 +53,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
     }
 
     if (pass != client.flags.not) {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     // Handle failure

@@ -178,7 +178,8 @@ pub fn exePath(self: CompileTarget, buf: *bun.PathBuffer, version_str: [:0]const
 }
 
 pub fn downloadToPath(self: *CompileTarget, env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8) !void {
-        _ = HTTP.HTTPThread.init((&.{}));
+        const _init_opts = HTTP.HTTPThread.InitOpts{  };
+        _ = HTTP.HTTPThread.init((&_init_opts));
         var refresher = bun.Progress{  };
         _ = &refresher;
         {

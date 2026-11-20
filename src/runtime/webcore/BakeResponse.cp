@@ -158,7 +158,7 @@ fn assertStreamingDisabled(
     if (!getStoreFn.isCallable()) {
         return globalThis.throwInvalidArguments("\"getStore\" must be a function", .{});
     }
-    const store_value = getStoreFn.call(globalThis, async_local_storage, &.{}) ?;
+    const store_value = getStoreFn.call(globalThis, async_local_storage, []) ?;
     const streaming_val = (store_value.getPropertyValue(globalThis, "streaming") ?) ?? return globalThis.throwInvalidArguments("store value must have a \"streaming\" field", .{});
     if (!streaming_val.isBoolean()) {
         return globalThis.throwInvalidArguments("\"streaming\" field must be a boolean", .{});

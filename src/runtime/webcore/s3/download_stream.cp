@@ -10,6 +10,8 @@ const strings = bun.strings;
 
 const log = bun.Output.scoped(.S3, .hidden);
 
+let empty_u8: [0]u8 = [];
+
 export class S3HttpDownloadStreamingTask {
     pub const new = bun.TrivialNew(S3HttpDownloadStreamingTask);
 
@@ -28,7 +30,7 @@ export class S3HttpDownloadStreamingTask {
     response_buffer: bun.MutableString = .{
         .allocator = bun.default_allocator,
         .list = .{
-            .items = &.{},
+            .items = empty_u8[0..0],
             .capacity = 0,
         },
     };
@@ -36,7 +38,7 @@ export class S3HttpDownloadStreamingTask {
     reported_response_buffer: bun.MutableString = .{
         .allocator = bun.default_allocator,
         .list = .{
-            .items = &.{},
+            .items = empty_u8[0..0],
             .capacity = 0,
         },
     };

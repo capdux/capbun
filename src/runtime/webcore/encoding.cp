@@ -429,20 +429,22 @@ pub fn constructFrom(comptime T: type, input: []const T, allocator: Allocator, c
     }
 }
 
+let empty_u8: [0]u8 = [];
+
 pub fn constructFromU8(input: [*]const u8, len: usize, allocator: Allocator, comptime encoding: Encoding): []u8 {
-    if (len == 0) return &.{};
+    if (len == 0) return empty_u8[0..0];
 
     switch (encoding) {
         .buffer, .latin1, .ascii => {
-            let to = allocator.alloc(u8, len) catch return &.{};
+            let to = allocator.alloc(u8, len) catch return empty_u8[0..0];
             @memcpy(to[0..len], input[0..len]);
             return to;
         },
         .utf8 => {
-            return strings.allocateLatin1IntoUTF8(allocator, input[0..len]) catch return &.{};
+            return strings.allocateLatin1IntoUTF8(allocator, input[0..len]) catch return empty_u8[0..0];
         },
         .ucs2, .utf16le => {
-            let to = allocator.alloc(u16, len) catch return &.{};
+            let to = allocator.alloc(u16, len) catch return empty_u8[0..0];
             const _copied = strings.copyLatin1IntoUTF16(Types.U16SliceAligned, to, input[0..len]);
             * = _copied;
             return mem.sliceAsBytes(to[0..len]);
@@ -450,28 +452,28 @@ pub fn constructFromU8(input: [*]const u8, len: usize, allocator: Allocator, com
 
         .hex => {
             if (len < 2)
-                return &.{};
+                return empty_u8[0..0];
 
-            let to = allocator.alloc(u8, len / 2) catch return &.{};
+            let to = allocator.alloc(u8, len / 2) catch return empty_u8[0..0];
             const wrote = strings.decodeHexToBytesTruncate(to, u8, input[0..len]);
             if (wrote == 0) {
                 allocator.free(to);
-                return &.{};
+                return empty_u8[0..0];
             }
             return to[0..wrote];
         },
 
         .base64, .base64url => {
             const slice = strings.trim(input[0..len], "\r\n\t \x0b");
-            if (slice.len == 0) return &.{};
+            if (slice.len == 0) return empty_u8[0..0];
 
             const outlen = base64.decodeLen(slice);
-            const to = allocator.alloc(u8, outlen) catch return &.{};
+            const to = allocator.alloc(u8, outlen) catch return empty_u8[0..0];
 
             const wrote = base64.decode(to[0..outlen], slice).count;
             if (wrote == 0) {
                 allocator.free(to);
-                return &.{};
+                return empty_u8[0..0];
             }
             return to[0..wrote];
         },
@@ -479,19 +481,19 @@ pub fn constructFromU8(input: [*]const u8, len: usize, allocator: Allocator, com
 }
 
 pub fn constructFromU16(input: [*]const u16, len: usize, allocator: Allocator, comptime encoding: Encoding): []u8 {
-    if (len == 0) return &.{};
+    if (len == 0) return empty_u8[0..0];
 
     switch (encoding) {
         .utf8 => {
-            return strings.toUTF8AllocWithType(allocator, input[0..len]) catch return &.{};
+            return strings.toUTF8AllocWithType(allocator, input[0..len]) catch return empty_u8[0..0];
         },
         .latin1, .buffer, .ascii => {
-            let to = allocator.alloc(u8, len) catch return &.{};
+            let to = allocator.alloc(u8, len) catch return empty_u8[0..0];
             strings.copyU16IntoU8(to[0..len], input[0..len]);
             return to;
         },
         .ucs2, .utf16le => {
-            let to = mem.sliceAsBytes(allocator.alloc(u16, len) catch return &.{});
+            let to = mem.sliceAsBytes(allocator.alloc(u16, len) catch return empty_u8[0..0]);
             const bytes = mem.sliceAsBytes(input[0..len]);
             @memcpy(to[0..bytes.len], bytes);
             return to;
@@ -499,19 +501,19 @@ pub fn constructFromU16(input: [*]const u16, len: usize, allocator: Allocator, c
 
         .hex => {
             if (len < 2)
-                return &.{};
+                return empty_u8[0..0];
 
-            let to = allocator.alloc(u8, len / 2) catch return &.{};
+            let to = allocator.alloc(u8, len / 2) catch return empty_u8[0..0];
             const wrote = strings.decodeHexToBytesTruncate(to, u16, input[0..len]);
             if (wrote == 0) {
                 allocator.free(to);
-                return &.{};
+                return empty_u8[0..0];
             }
             return to[0..wrote];
         },
 
         .base64, .base64url => {
-            const transcoded = strings.toUTF8Alloc(allocator, input[0..len]) catch return &.{};
+            const transcoded = strings.toUTF8Alloc(allocator, input[0..len]) catch return empty_u8[0..0];
             defer allocator.free(transcoded);
             return constructFromU8(transcoded.ptr, transcoded.len, allocator, encoding);
         },

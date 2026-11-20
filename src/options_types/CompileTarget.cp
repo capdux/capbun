@@ -136,7 +136,8 @@ export @root struct CompileTarget {
     }
 
     pub fn downloadToPath(*_, env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8): ! {
-        HTTP.HTTPThread.init(&{});
+        const _init_opts = HTTP.HTTPThread.InitOpts{};
+        HTTP.HTTPThread.init(&_init_opts);
         let refresher = bun.Progress{};
 
         {

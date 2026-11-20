@@ -18,5 +18,5 @@ export struct CodeCoverageOptions {
     ignore_sourcemap: bool = false,
     enabled: bool = false,
     fail_on_low_coverage: bool = false,
-    ignore_patterns: []const string = &.{},
+    ignore_patterns: []const string = [],
 }
