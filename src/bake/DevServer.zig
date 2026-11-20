@@ -1022,7 +1022,7 @@ pub fn init(options: Options) bun.JSOOM!*DevServer {
         defer {
         _ = dev.graph_safety_lock.unlock();
         }
-        const generic_action: []const u8 = "while initializing development server";
+        const generic_action: [:0]const u8 = "while initializing development server";
         const fs = (blk_catch_4: { break :blk_catch_4 ((bun.fs.FileSystem.init(options.root)) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
         dev.bun_watcher = (blk_catch_5: { break :blk_catch_5 ((Watcher.init(DevServer, dev, fs, bun.default_allocator)) catch |e| { _ = &e; return global.throwError(e, "while initializing file watcher for development server"); }); });
         errdefer {
@@ -1263,7 +1263,7 @@ pub fn deinit(dev: *DevServer) void {
             }
             _ = dev.barrel_needed_exports.deinit(alloc);
         }
-        _ = dev.assets.deinit((&dev.assets), alloc);
+        _ = dev.assets.deinit(alloc);
         _ = dev.incremental_result.client_components_added.deinit(alloc);
         _ = dev.incremental_result.framework_routes_affected.deinit(alloc);
         _ = dev.incremental_result.client_components_removed.deinit(alloc);
@@ -1292,9 +1292,9 @@ pub fn deinit(dev: *DevServer) void {
         _ = dev.directory_watchers.dependencies.deinit(alloc);
         _ = dev.directory_watchers.dependencies_free_list.deinit(alloc);
         _ = dev.html_router.map.deinit(alloc);
-        for (cp_iter_slice(dev.bundling_failures.keys())) |failure| {
+        for (cp_mut_slice(&dev.bundling_failures.keys())) |*failure| {
             _ = &failure;
-            _ = failure.deinit(dev);
+            _ = (failure.*).deinit(dev);
         }
         _ = dev.bundling_failures.deinit(alloc);
         if ((dev.current_bundle != null)) {
@@ -1359,13 +1359,11 @@ pub fn dev_allocator(dev: *const DevServer) DevAllocator {
 }
 
 pub fn memoryCost(dev: *DevServer) usize {
-        const mc: MemoryCost = undefined;
-        return mc.memoryCost(dev);
+        return MemoryCost.memoryCost(dev);
 }
 
-pub fn memoryCostDetailed(dev: *DevServer) MemoryCost {
-        const mc: MemoryCost = undefined;
-        return mc.memoryCostDetailed(dev);
+pub fn memoryCostDetailed(dev: *DevServer) MemoryCost.MemoryCostStruct {
+        return MemoryCost.memoryCostDetailed(dev);
 }
 
 pub fn initServerRuntime(dev: *DevServer) void {
@@ -1400,12 +1398,12 @@ pub fn setRoutes(dev: *DevServer, server: anytype) !bool {
         dev.server = bun.jsc.API.AnyServer.@"from"(server);
         const app = server.app.?;
         const is_ssl = @typeInfo(@TypeOf(app)).pointer.child.is_ssl;
-        _ = app.get((client_prefix ++ "/:route"), *DevServer, dev, wrapGenericRequestHandler(onJsRequest, is_ssl));
-        _ = app.get((asset_prefix ++ "/:asset"), *DevServer, dev, wrapGenericRequestHandler(onAssetRequest, is_ssl));
-        _ = app.get((internal_prefix ++ "/src/*"), *DevServer, dev, wrapGenericRequestHandler(onSrcRequest, is_ssl));
-        _ = app.post((internal_prefix ++ "/report_error"), *DevServer, dev, wrapGenericRequestHandler(ErrorReportRequest.run, is_ssl));
-        _ = app.post((internal_prefix ++ "/unref"), *DevServer, dev, wrapGenericRequestHandler(UnrefSourceMapRequest.run, is_ssl));
-        _ = app.any(internal_prefix, *DevServer, dev, wrapGenericRequestHandler(onNotFound, is_ssl));
+        _ = app.get((client_prefix ++ "/:route"), dev, wrapGenericRequestHandler(onJsRequest, is_ssl));
+        _ = app.get((asset_prefix ++ "/:asset"), dev, wrapGenericRequestHandler(onAssetRequest, is_ssl));
+        _ = app.get((internal_prefix ++ "/src/*"), dev, wrapGenericRequestHandler(onSrcRequest, is_ssl));
+        _ = app.post((internal_prefix ++ "/report_error"), dev, wrapGenericRequestHandler(ErrorReportRequest.run, is_ssl));
+        _ = app.post((internal_prefix ++ "/unref"), dev, wrapGenericRequestHandler(UnrefSourceMapRequest.run, is_ssl));
+        _ = app.any(internal_prefix, dev, wrapGenericRequestHandler(onNotFound, is_ssl));
         _ = app.ws((internal_prefix ++ "/hmr"), dev, 0, uws.WebSocketBehavior.Wrap(DevServer, HmrSocket, is_ssl).apply(.{}));
         if (bun.FeatureFlags.bake_debugging_features) {
             _ = app.get((internal_prefix ++ "/incremental_visualizer"), *DevServer, dev, wrapGenericRequestHandler(onIncrementalVisualizer, is_ssl));
@@ -1414,7 +1412,7 @@ pub fn setRoutes(dev: *DevServer, server: anytype) !bool {
             _ = app.get((internal_prefix ++ "/mv"), *DevServer, dev, redirectHandler((internal_prefix ++ "/memory_visualizer"), is_ssl));
         }
         if ((dev.framework.file_system_router_types.len > 0)) {
-            _ = app.any("/*", *DevServer, dev, wrapGenericRequestHandler(onRequest, is_ssl));
+            _ = app.any("/*", dev, wrapGenericRequestHandler(onRequest, is_ssl));
             return true;
         } else {
             return false;
@@ -1699,7 +1697,7 @@ pub fn deferRequest(dev: *DevServer, requests_array: *DeferredRequest.List, rout
 });
         deferred.data = .{ .route_bundle_index = route_bundle_index, .dev = dev, .handler = (switch (kind) {
 .bundled_html_page => brk: {
-        _ = resp.onAborted(*DeferredRequest, DeferredRequest.onAbort, (&deferred.data));
+        _ = resp.onAborted((&deferred.data), DeferredRequest.onAbort);
         break :brk .{ .bundled_html_page = .{ .response = resp, .method = method } };
 },
 .server_handler => brk: {
@@ -3288,9 +3286,7 @@ const incremental_graph_index = try dev.client_graph.insertStaleExtra(html.bundl
         bundle_data = .{ .html = .{ .html_bundle = .initRef(html), .bundled_file = incremental_graph_index, .script_injection_offset = .none, .cached_response = null, .bundled_html_text = null } };
 },
 }
-        const bundle_data_ptr = bun.handleOom(dev.allocator().create(RouteBundle.RouteBundleData));
-        bundle_data_ptr.* = bundle_data;
-        _ = dev.route_bundles.appendAssumeCapacity(.{ .data = bundle_data_ptr, .client_script_generation = std.crypto.random.int(u32), .server_state = .unqueued, .client_bundle = null, .active_viewers = 0 });
+        _ = dev.route_bundles.appendAssumeCapacity(.{ .data = bundle_data, .client_script_generation = std.crypto.random.int(u32), .server_state = .unqueued, .client_bundle = null, .active_viewers = 0 });
         index_location.* = bundle_index.toOptional();
         return bundle_index;
 }
@@ -3574,7 +3570,7 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
 pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(u8)) !void {
         _ = payload.appendAssumeCapacity(MessageId.visualizer.char());
         const w = payload.writer();
-        inline for (.{ .client, .server }) |side| {
+        inline for (@as([2]bake.Side, .{ .client, .server })) |side| {
             const g = (if ((side == .client)) (&dev.client_graph) else (&dev.server_graph));
             _ = try w.writeInt(u32, @intCast(g.bundled_files.count()), .little);
             const bf_keys = g.bundled_files.keys();

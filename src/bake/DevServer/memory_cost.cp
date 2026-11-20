@@ -119,13 +119,13 @@ pub const MemoryCost = @This();
         return acc;
     }
 
-    pub fn memoryCostArrayList(slice: auto): usize {
+    static fn memoryCostArrayList(slice: auto): usize {
         return slice.capacity * @sizeOf(@typeInfo(@TypeOf(slice.items)).pointer.child);
     }
-    pub fn memoryCostSlice(slice: auto): usize {
+    static fn memoryCostSlice(slice: auto): usize {
         return slice.len * @sizeOf(@typeInfo(@TypeOf(slice)).pointer.child);
     }
-    pub fn memoryCostArrayHashMap(map: auto): usize {
+    static fn memoryCostArrayHashMap(map: auto): usize {
         return @TypeOf(map.entries).capacityInBytes(map.entries.capacity);
     }
 }

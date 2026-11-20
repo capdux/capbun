@@ -97,7 +97,7 @@ pub struct Pipe {
             pub fn pipe(ptr: *void, stream: streams.Result, allocator: std.mem.Allocator) {
                 unsafe {
                     function(
-                        @ptrCast(ptr),
+                        @ptrCast(@alignCast(ptr)),
                         stream,
                         allocator,
                     );

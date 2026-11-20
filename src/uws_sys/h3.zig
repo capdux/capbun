@@ -170,7 +170,7 @@ pub fn forEachHeader(self: *Request, ctx: anytype, comptime cb: anytype) void {
             var Wrap = struct {
 
 pub fn each(n: [*c]const u8, nl: usize, v: [*c]const u8, vl: usize, ud: ?*anyopaque) callconv(.c) void {
-            _ = cb(@ptrCast(ud), n[0..nl], v[0..vl]);
+            _ = cb(@ptrCast(@alignCast(ud)), n[0..nl], v[0..vl]);
     }
 };
             _ = &Wrap;
@@ -393,11 +393,11 @@ pub fn cb(p: ?*anyopaque) callconv(.c) void {
 
 pub const App = opaque {
 
-pub fn create(opts: BunSocketContextOptions, idle_timeout_s: u32) *?*App {
+pub fn create(opts: BunSocketContextOptions, idle_timeout_s: u32) ?*App {
             return uws_h3_create_app(opts, idle_timeout_s);
     }
 
-pub fn addServerNameWithOptions(self: *App, hostname: []const u8, opts: BunSocketContextOptions) !void {
+pub fn addServerNameWithOptions(self: *App, hostname: [:0]const u8, opts: BunSocketContextOptions) !void {
             if ((!uws_h3_app_add_server_name(self, hostname.ptr, opts))) {
                 return error.FailedToAddServerName;
             }
@@ -419,7 +419,7 @@ pub fn route(self: *App, comptime f: anytype, pattern: []const u8, ud: anytype, 
             const W = struct {
 
 pub fn cb(res: *Response, req: *Request, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(p), req, res);
+            _ = handler(@ptrCast(@alignCast(p)), req, res);
     }
 };
             _ = f(self, pattern.ptr, pattern.len, W.cb, @ptrCast(ud));
@@ -496,7 +496,7 @@ pub fn listenWithConfig(self: *App, ud: anytype, comptime handler: anytype, conf
             const W = struct {
 
 pub fn cb(ls: ?*ListenSocket, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(p), ls);
+            _ = handler(@ptrCast(@alignCast(p)), ls);
     }
 };
             _ = uws_h3_app_listen_with_config(self, config.host, config.port, config.options, W.cb, @ptrCast(ud));
@@ -541,7 +541,7 @@ pub const VoidHandlerFn = *const @TypeOf(_h3_cb_sigs.void_h);
 pub const DataHandlerFn = *const @TypeOf(_h3_cb_sigs.data);
 pub const CorkHandler = *const @TypeOf(_h3_cb_sigs.cork);
 
-extern "c" fn uws_h3_create_app(opts: BunSocketContextOptions, idle_timeout: u32) callconv(.c) *?*App;
+extern "c" fn uws_h3_create_app(opts: BunSocketContextOptions, idle_timeout: u32) callconv(.c) ?*App;
 
 extern "c" fn uws_h3_app_destroy(app: *App) callconv(.c) void;
 

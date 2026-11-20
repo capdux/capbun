@@ -453,7 +453,8 @@ const ServePlugins = struct {
                         return;
                     },
                     .rejected => {
-                        const value = promise.result(global.vm());
+                        var pm = promise;
+                        const value = pm.result(global.vm());
                         handleOnReject(this, global, value);
                         return;
                     },
@@ -1140,11 +1141,11 @@ pub fn writeStatus(comptime ssl: bool, resp_ptr: ?*uws.NewApp(ssl).Response, sta
             _ = &resp;
             if (HTTPStatusText.get(status)) |text| {
                 _ = &text;
-                _ = (resp).?.writeStatus(text);
+                _ = resp.writeStatus(text);
             } else {
                 var status_text_buf: [48]u8 = undefined;
                 _ = &status_text_buf;
-                _ = (resp).?.writeStatus(((std.fmt.bufPrint((&status_text_buf), "{d} HM", .{ status })) catch unreachable));
+                _ = resp.writeStatus(((std.fmt.bufPrint((&status_text_buf), "{d} HM", .{ status })) catch unreachable));
             }
         }
 }
@@ -2600,7 +2601,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             this.listener = socket;
             this.vm.event_loop_handle = Async.Loop.get();
             if (!ssl_enabled)
-                this.vm.addListeningSocketForWatchMode(socket.?.socket().fd());
+                this.vm.addListeningSocketForWatchMode(socket.?.socket(ssl_enabled).fd());
         }
 
         pub fn h3AltSvc(this: *ThisServer) ?[]const u8 {
@@ -2771,8 +2772,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                             break :brk .{ .success = {} };
                         },
                         .rejected => {
-                            promise.setHandled(globalThis.vm());
-                            break :brk .{ .rejection = promise.result(globalThis.vm()) };
+                            var pm = promise;
+                            pm.setHandled(globalThis.vm());
+                            break :brk .{ .rejection = pm.result(globalThis.vm()) };
                         },
                         .pending => {
                             globalThis.handleRejectedPromises();
@@ -3118,11 +3120,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             // this happens - but limit it to only warn once.
             if (shouldAddTimeoutHandlerForWarning(this)) {
                 // We need to pass it a pointer, any pointer should do.
-                resp.onTimeout(*void, struct {
+                resp.onTimeout(&did_send_idletimeout_warning_once, struct {
                     fn warn(p: *void, _: *Ctx.Resp) void {
                         onTimeoutForIdleWarn(p, null);
                     }
-                }.warn, &did_send_idletimeout_warning_once);
+                }.warn);
             }
 
             const pool_allocator = if (comptime Ctx.is_h3) this.h3_request_pool_allocator else this.request_pool_allocator;
@@ -3198,7 +3200,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     };
                     ctx.flags.is_waiting_for_request_body = true;
 
-                    resp.onData(*Ctx, Ctx.onBufferedBodyChunk, ctx);
+                    resp.onData(ctx, Ctx.onBufferedBodyChunk);
                 }
             }
 
@@ -3494,11 +3496,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
             // --- 4. Register negative routes ---
             for (this.config.negative_routes.items) |route_path| {
-                app.head(route_path, *ThisServer, this, onRequest);
+                app.head(route_path, this, onRequest);
                 app.any(route_path, this, onRequest);
                 if (comptime has_h3) {
                     if (this.h3_app) |h3_app| {
-                        h3_app.head(route_path, *ThisServer, this, onH3Request);
+                        h3_app.head(route_path, this, onH3Request);
                         h3_app.any(route_path, this, onH3Request);
                     }
                 }
@@ -3564,7 +3566,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
             // --- 7. Debug mode specific routes ---
             if (debug_mode) {
-                app.get("/bun:info", *ThisServer, this, onBunInfoRequest);
+                app.get("/bun:info", this, onBunInfoRequest);
             }
 
             // Snapshot "/*" coverage from user/static routes before DevServer
@@ -3609,10 +3611,10 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 while (iter.next()) |method_to_cover| {
                     switch (this.config.onNodeHTTPRequest) {
                         .zero => switch (this.config.onRequest) {
-                            .zero => app.method(method_to_cover, "/*", *ThisServer, this, on404),
-                            else => app.method(method_to_cover, "/*", *ThisServer, this, onRequest),
+                            .zero => app.method(method_to_cover, "/*", this, on404),
+                            else => app.method(method_to_cover, "/*", this, onRequest),
                         },
-                        else => app.method(method_to_cover, "/*", *ThisServer, this, onNodeHTTPRequest),
+                        else => app.method(method_to_cover, "/*", this, onNodeHTTPRequest),
                     }
                 }
             } else {
@@ -3640,9 +3642,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         var iter = uncovered.iterator();
                         while (iter.next()) |m| {
                             if (this.config.onRequest != .zero) {
-                                h3_app.method(m, "/*", *ThisServer, this, onH3Request);
+                                h3_app.method(m, "/*", this, onH3Request);
                             } else {
-                                h3_app.method(m, "/*", *ThisServer, this, onH3404);
+                                h3_app.method(m, "/*", this, onH3404);
                             }
                         }
                     } else if (this.config.onRequest != .zero) {
@@ -3654,7 +3656,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }
 
             if (should_add_chrome_devtools_json_route) {
-                app.get(chrome_devtools_route, *ThisServer, this, onChromeDevToolsJSONRequest);
+                app.get(chrome_devtools_route, this, onChromeDevToolsJSONRequest);
             }
 
             // If onNodeHTTPRequest is configured, it might be needed for Node.js compatibility layer
@@ -3719,7 +3721,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 if (ssl_config.server_name) |server_name_ptr| {
                     const server_name: [:0]const u8 = std.mem.span(server_name_ptr);
                     if (server_name.len > 0) {
-                        app.addServerNameWithOptions(server_name, ssl_options) catch {
+                        app.addServerNameWithOptions(@constCast(server_name.ptr), ssl_options) catch {
                             if (!globalThis.hasException()) {
                                 if (!throwSSLErrorIfNecessary(globalThis)) {
                                     globalThis.throw("Failed to add serverName: {s}", .{server_name}) catch {};
@@ -3734,7 +3736,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                             return .zero;
                         }
 
-                        app.domain(server_name);
+                        app.domain(@constCast(server_name.ptr));
                         if (throwSSLErrorIfNecessary(globalThis)) {
                             this.deinit();
                             return .zero;
@@ -3758,7 +3760,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                                     this.deinit();
                                     return .zero;
                                 };
-                            app.addServerNameWithOptions(sni_servername, sni_ssl_config.asUSockets()) catch {
+                            app.addServerNameWithOptions(@constCast(sni_servername.ptr), sni_ssl_config.asUSockets()) catch {
                                 if (!globalThis.hasException()) {
                                     if (!throwSSLErrorIfNecessary(globalThis)) {
                                         globalThis.throw("Failed to add serverName: {s}", .{sni_servername}) catch {};
@@ -3769,7 +3771,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                                 return .zero;
                             };
 
-                            app.domain(sni_servername);
+                            app.domain(@constCast(sni_servername.ptr));
 
                             if (throwSSLErrorIfNecessary(globalThis)) {
                                 this.deinit();
@@ -3815,9 +3817,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     }
 
                     if (this.config.http1) {
-                        app.listenWithConfig(*ThisServer, this, onListen, .{
+                        app.listenWithConfig(this, onListen, .{
                             .port = tcp.port,
-                            .host = host,
+                            .host = @constCast(host), // TODO(cpc): [task-bun-20261120-sentinel-ptr-const]
                             .options = this.config.getUsocketsOptions(),
                         });
                     }
@@ -3826,9 +3828,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         if (this.h3_app) |h3_app| {
                             // Same UDP port as the TCP listener so Alt-Svc works.
                             const h3_port: u16 = if (this.listener) |ls| @intCast(ls.getLocalPort()) else tcp.port;
-                            h3_app.listenWithConfig(*ThisServer, this, onH3Listen, .{
+                            h3_app.listenWithConfig(this, onH3Listen, .{
                                 .port = h3_port,
-                                .host = host,
+                                .host = @constCast(host), // TODO(cpc): [task-bun-20261120-sentinel-ptr-const]
                                 .options = this.config.getUsocketsOptions(),
                             });
                             if (this.h3_listener == null) {
@@ -3853,7 +3855,6 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         this.h3_app = null;
                     };
                     app.listenOnUnixSocket(
-                        *ThisServer,
                         this,
                         onListen,
                         unix,
@@ -4046,21 +4047,23 @@ extern "c" fn NodeHTTPServer__onRequest_http(any_server: usize, globalThis: *jsc
 
 extern "c" fn NodeHTTPServer__onRequest_https(any_server: usize, globalThis: *jsc.JSGlobalObject, self: jsc.JSValue, callback: jsc.JSValue, methodString: jsc.JSValue, request: *uws.Request, response: *uws.NewApp(true).Response, upgrade_ctx: ?*uws.WebSocketUpgradeContext, node_response_ptr: *?*NodeHTTPResponse) callconv(.c) jsc.JSValue;
 
-extern "c" fn Bun__createNodeHTTPServerSocketForClientError(_: bool, _: *void, _: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue;
+extern "c" fn Bun__createNodeHTTPServerSocketForClientError(_: bool, _: *anyopaque, _: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue;
 
 extern "c" fn Bun__ServerRouteList__callRoute(globalObject: *jsc.JSGlobalObject, index: u32, requestPtr: *Request, serverObject: jsc.JSValue, routeListObject: jsc.JSValue, requestObject: *jsc.JSValue, req: *uws.Request) callconv(.c) jsc.JSValue;
 
-extern "c" fn Bun__ServerRouteList__callRouteH3(globalObject: *jsc.JSGlobalObject, index: u32, requestPtr: *Request, serverObject: jsc.JSValue, routeListObject: jsc.JSValue, requestObject: *jsc.JSValue, req: *void) callconv(.c) jsc.JSValue;
+extern "c" fn Bun__ServerRouteList__callRouteH3(globalObject: *jsc.JSGlobalObject, index: u32, requestPtr: *Request, serverObject: jsc.JSValue, routeListObject: jsc.JSValue, requestObject: *jsc.JSValue, req: *anyopaque) callconv(.c) jsc.JSValue;
 
 extern "c" fn Bun__ServerRouteList__create(globalObject: *jsc.JSGlobalObject, callbacks: [*]jsc.JSValue, paths: [*]ZigString, pathsLength: usize) callconv(.c) jsc.JSValue;
 
 pub fn throwSSLErrorIfNecessary(globalThis: *jsc.JSGlobalObject) bool {
-        const err_code = BoringSSL.ERR_get_error;
+        const getErr = BoringSSL.ERR_get_error;
+        const err_code = getErr();
         if ((err_code != 0)) {
             defer {
             _ = BoringSSL.ERR_clear_error;
             }
-            _ = (blk_catch_2: { break :blk_catch_2 ((globalThis.throwValue(jsc.API.Bun.Crypto.createCryptoError(globalThis, err_code))) catch |__ce_2| { _ = &__ce_2;  }); });
+            if ((globalThis.throwValue(jsc.API.Bun.Crypto.createCryptoError(globalThis, err_code)) == error.JSError)) {
+            }
             return true;
         }
         return false;
@@ -4068,4 +4071,4 @@ pub fn throwSSLErrorIfNecessary(globalThis: *jsc.JSGlobalObject) bool {
 
 extern "c" fn NodeHTTP_assignOnNodeJSCompat(_: bool, _: *void) callconv(.c) void;
 
-extern "c" fn NodeHTTP_setUsingCustomExpectHandler(_: bool, _: *void, _: bool) callconv(.c) void;
+extern "c" fn NodeHTTP_setUsingCustomExpectHandler(_: bool, _: *anyopaque, _: bool) callconv(.c) void;

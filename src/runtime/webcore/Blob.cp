@@ -1137,6 +1137,13 @@ pub struct BlobInternal {
         return _.bytes.capacity;
     }
 
+    fn contentType(): []const u8 {
+        if (_.was_string) {
+            return MimeType.text.value;
+        }
+        return MimeType.other.value;
+    }
+
     fn deinit(*_) {
         _.bytes.clearAndFree();
     }
@@ -1198,7 +1205,7 @@ pub union(enum) BlobAny {
     }
 
     fn memoryCost(): usize {
-        switch (_.*) {
+        switch (_) {
             .Blob(b) => {
                 if (s := b.store) return s.memoryCost();
                 return 0;
@@ -1212,7 +1219,7 @@ pub union(enum) BlobAny {
     }
 
     inline fn fastSize(): Blob.SizeType {
-        return switch (_.*) {
+        return switch (_) {
             .Blob => _.Blob.size,
             .WTFStringImpl => @truncate(_.WTFStringImpl.byteLength()),
             .InternalBlob => @truncate(_.slice().len),
@@ -1220,7 +1227,7 @@ pub union(enum) BlobAny {
     }
 
     inline fn size(): Blob.SizeType {
-        return switch (_.*) {
+        return switch (_) {
             .Blob => _.Blob.size,
             .WTFStringImpl => @truncate(_.WTFStringImpl.utf8ByteLength()),
             else => @truncate(_.slice().len),
@@ -1228,7 +1235,7 @@ pub union(enum) BlobAny {
     }
 
     fn slice(): []const u8 {
-        switch (_.*) {
+        switch (_) {
             .Blob(b) => return b.sharedView(),
             .InternalBlob(b) => return b.sliceConst(),
             .WTFStringImpl(s) => return s.latin1Slice(),
@@ -1330,15 +1337,46 @@ pub union(enum) BlobAny {
     }
 
     fn isDetached(): bool {
-        switch (_.*) {
+        switch (_) {
             .Blob b => return b.isDetached(),
             .InternalBlob ib => return ib.bytes.items.len == 0,
             .WTFStringImpl w => return w.length() == 0,
         }
     }
 
+    fn store(): (*Blob.Store)? {
+        if (_ == .Blob) {
+            return _.Blob.store;
+        }
+        return null;
+    }
+
+    fn wasString(): bool {
+        return switch (_) {
+            .Blob => _.Blob.charset == .all_ascii,
+            .WTFStringImpl => true,
+            .InternalBlob => _.InternalBlob.was_string,
+        };
+    }
+
+    fn contentType(): []const u8 {
+        return switch (_) {
+            .Blob => _.Blob.content_type,
+            .WTFStringImpl => MimeType.text.value,
+            .InternalBlob => _.InternalBlob.contentType(),
+        };
+    }
+
+    fn getFileName(): ([]const u8)? {
+        return switch (_) {
+            .Blob => _.Blob.getFileName(),
+            .WTFStringImpl => null,
+            .InternalBlob => null,
+        };
+    }
+
     fn needsToReadFile(): bool {
-        switch (_.*) {
+        switch (_) {
             .Blob b => return b.needsToReadFile(),
             .InternalBlob => return false,
             .WTFStringImpl => return false,
@@ -1972,6 +2010,23 @@ pub struct BlobExternalSharedDescriptor {
         return ArrayBuffer.fromDefaultAllocator(global, copy, TypedArrayView);
     }
 
+    fn getFileName(): ([]const u8)? {
+        if (store := _.store) {
+            if (store.data == .file) {
+                if (store.data.file.pathlike == .path) {
+                    return store.data.file.pathlike.path.slice();
+                }
+            } else if (store.data == .bytes) {
+                if (store.data.bytes.stored_name.slice().len > 0) {
+                    return store.data.bytes.stored_name.slice();
+                }
+            } else if (store.data == .s3) {
+                return store.data.s3.path();
+            }
+        }
+        return null;
+    }
+
     fn needsToReadFile(): bool {
         if (store := _.store) {
             return store.data == .file;
@@ -2532,7 +2587,7 @@ pub struct BlobExternalSharedDescriptor {
 
             let sink = jsc.WebCore.FileSink.init(bun.invalid_fd, _.globalThis.bunVM().eventLoop());
 
-            const input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
+            let input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
                 if (store.data.file.pathlike == .fd) {
                     break :brk .{ .fd = store.data.file.pathlike.fd };
                 } else {
@@ -2587,6 +2642,7 @@ pub struct BlobExternalSharedDescriptor {
 
             assignment_result.ensureStillAlive();
             if (promise := assignment_result.asAnyPromise()) {
+                let promise_mut = promise;
                 switch (promise.status()) {
                     .pending => {
                         const wrapper = FileStreamWrapper.new(.{
@@ -2612,7 +2668,7 @@ pub struct BlobExternalSharedDescriptor {
                     .rejected => {
                         file_sink.deref();
                         readable_stream.cancel(globalThis);
-                        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, promise.result(globalThis.vm()));
+                        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, promise_mut.result(globalThis.vm()));
                     },
                 }
             } else {

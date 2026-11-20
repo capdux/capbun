@@ -29,7 +29,7 @@ import { State, WriteResult } from "./Response.cp";
 import { BunSocketContextOptions } from "./SocketContext.cp";
 
 @c {
-    fn uws_h3_create_app(opts: BunSocketContextOptions, idle_timeout: u32): *App?;
+    fn uws_h3_create_app(opts: BunSocketContextOptions, idle_timeout: u32): (*App)?;
     fn uws_h3_app_destroy(app: *App);
     fn uws_h3_app_close(app: *App);
     fn uws_h3_app_clear_routes(app: *App);
@@ -173,7 +173,7 @@ export @opaque class Request {
     ) {
         let Wrap = struct {
             pub fn each(n: [*c]const u8, nl: usize, v: [*c]const u8, vl: usize, ud: *!?) callconv(.c) void {
-                cb(@ptrCast(ud), n[0..nl], v[0..vl]);
+                cb(@ptrCast(@alignCast(ud)), n[0..nl], v[0..vl]);
             }
         };
         uws_h3_req_for_each_header(this, Wrap.each, @ptrCast(ctx));
@@ -389,11 +389,11 @@ export @opaque class Response {
 }
 
 export @opaque class App {
-    pub static fn create(opts: BunSocketContextOptions, idle_timeout_s: u32): *App? {
+    pub static fn create(opts: BunSocketContextOptions, idle_timeout_s: u32): (*App)? {
         return uws_h3_create_app(opts, idle_timeout_s);
     }
 
-    pub fn addServerNameWithOptions(*_, hostname: string, opts: BunSocketContextOptions): void? {
+    pub fn addServerNameWithOptions(*_, hostname: [:0]const u8, opts: BunSocketContextOptions): void? {
         if (!uws_h3_app_add_server_name(this, hostname.ptr, opts)) return error.FailedToAddServerName;
     }
 
@@ -418,7 +418,7 @@ export @opaque class App {
     ) {
         const W = struct {
             pub fn cb(res: *Response, req: *Request, p: *!?) callconv(.c) void {
-                handler(@ptrCast(p), req, res);
+                handler(@ptrCast(@alignCast(p)), req, res);
             }
         };
         f(this, pattern.ptr, pattern.len, W.cb, @ptrCast(ud));
@@ -485,7 +485,7 @@ export @opaque class App {
     ) {
         const W = struct {
             pub fn cb(ls: ?*ListenSocket, p: *!?) callconv(.c) void {
-                handler(@ptrCast(p), ls);
+                handler(@ptrCast(@alignCast(p)), ls);
             }
         };
         uws_h3_app_listen_with_config(this, config.host, config.port, config.options, W.cb, @ptrCast(ud));

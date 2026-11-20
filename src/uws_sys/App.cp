@@ -19,7 +19,7 @@ export type uws_app_t = uws_app_s;
 
 export @extern @value class uws_app_listen_config_t {
     port: i32,
-    host: [*:0]const u8? = null,
+    host: ([*:0]const u8)? = null,
     options: i32 = 0,
 }
 
@@ -293,7 +293,7 @@ pub fn NewApp(comptime ssl: bool): type {
     ): void {
         const Wrapper = struct {
             pub fn handle(socket: ?*UwsListenSocket, conf: uws_app_listen_config_t, data: *!?) callconv(.c) void {
-                handler(@ptrCast(data), socket, conf);
+                handler(@ptrCast(@alignCast(data)), socket, conf);
             }
         };
         uws_app_listen(ssl_flag, bun.cast(*uws_app_t, this), null, port, 0, Wrapper.handle, @ptrCast(user_data));
@@ -308,7 +308,7 @@ pub fn NewApp(comptime ssl: bool): type {
             pub fn handle(data: *!?, code: i32, socket: *us_socket_t, error_code: u8, raw_packet: [*c]u8, raw_packet_length: i32) callconv(.c) void {
                 * = code;
                 const bytes = if (raw_packet_length > 0) unsafe { raw_packet[0..@intCast(raw_packet_length)] } else "";
-                handler(@ptrCast(data), socket, error_code, bytes);
+                handler(@ptrCast(@alignCast(data)), socket, error_code, bytes);
             }
         };
         uws_app_set_on_clienterror(ssl_flag, bun.cast(*uws_app_s, this), Wrapper.handle, @ptrCast(user_data));
@@ -322,7 +322,7 @@ pub fn NewApp(comptime ssl: bool): type {
     ): void {
         const Wrapper = struct {
             pub fn handle(socket: ?*UwsListenSocket, data: *!?) callconv(.c) void {
-                handler(@ptrCast(data), socket);
+                handler(@ptrCast(@alignCast(data)), socket);
             }
         };
         uws_app_listen_with_config(ssl_flag, bun.cast(*uws_app_t, this), config.host, @intCast(config.port), config.options, Wrapper.handle, @ptrCast(user_data));
@@ -339,7 +339,7 @@ pub fn NewApp(comptime ssl: bool): type {
             pub fn handle(socket: *UwsListenSocket, domain_str: [*:0]const u8, fl: i32, data: *!?) callconv(.c) void {
                 * = domain_str;
                 * = fl;
-                handler(@ptrCast(data), socket);
+                handler(@ptrCast(@alignCast(data)), socket);
             }
         };
         const domainZ: [*:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));

@@ -94,7 +94,7 @@ pub inline fn dispatch(self: AnyRequestContext, comptime Ret: type, default: Ret
 }
 
 pub fn setAdditionalOnAbortCallback(self: AnyRequestContext, cb: ?AdditionalOnAbortCallback) void {
-        _ = self.dispatch(void, .{}, cbSetAdditionalOnAbortCallback, .{ cb });
+        _ = self.dispatch(void, undefined, cbSetAdditionalOnAbortCallback, .{ cb });
 }
 
 pub fn memoryCost(self: AnyRequestContext) usize {
@@ -110,11 +110,11 @@ pub fn setTimeout(self: AnyRequestContext, seconds: c_uint) bool {
 }
 
 pub fn setCookies(self: AnyRequestContext, cookie_map: ?*jsc.WebCore.CookieMap) void {
-        _ = self.dispatch(void, .{}, cbSetCookies, .{ cookie_map });
+        _ = self.dispatch(void, undefined, cbSetCookies, .{ cookie_map });
 }
 
 pub fn enableTimeoutEvents(self: AnyRequestContext) void {
-        _ = self.dispatch(void, .{}, cbEnableTimeoutEvents, .{});
+        _ = self.dispatch(void, undefined, cbEnableTimeoutEvents, .{});
 }
 
 pub fn getRemoteSocketInfo(self: AnyRequestContext) ?uws.SocketAddress {
@@ -122,11 +122,11 @@ pub fn getRemoteSocketInfo(self: AnyRequestContext) ?uws.SocketAddress {
 }
 
 pub fn detachRequest(self: AnyRequestContext) void {
-        _ = self.dispatch(void, .{}, cbDetachRequest, .{});
+        _ = self.dispatch(void, undefined, cbDetachRequest, .{});
 }
 
 pub fn setRequest(self: AnyRequestContext, req: *uws.Request) void {
-        _ = self.dispatch(void, .{}, cbSetRequest, .{ req });
+        _ = self.dispatch(void, undefined, cbSetRequest, .{ req });
 }
 
 pub fn getRequest(self: AnyRequestContext) ?*uws.Request {
@@ -134,15 +134,15 @@ pub fn getRequest(self: AnyRequestContext) ?*uws.Request {
 }
 
 pub fn onAbort(self: AnyRequestContext, response: uws.AnyResponse) void {
-        _ = self.dispatch(void, .{}, cbOnAbort, .{ response });
+        _ = self.dispatch(void, undefined, cbOnAbort, .{ response });
 }
 
 pub fn ref(self: AnyRequestContext) void {
-        _ = self.dispatch(void, .{}, cbRef, .{});
+        _ = self.dispatch(void, undefined, cbRef, .{});
 }
 
 pub fn setSignalAborted(self: AnyRequestContext, reason: bun.jsc.CommonAbortReason) void {
-        _ = self.dispatch(void, .{}, cbSetSignalAborted, .{ reason });
+        _ = self.dispatch(void, undefined, cbSetSignalAborted, .{ reason });
 }
 
 pub fn devServer(self: AnyRequestContext) ?*bun.bake.DevServer {
@@ -150,7 +150,7 @@ pub fn devServer(self: AnyRequestContext) ?*bun.bake.DevServer {
 }
 
 pub fn deref(self: AnyRequestContext) void {
-        _ = self.dispatch(void, .{}, cbDeref, .{});
+        _ = self.dispatch(void, undefined, cbDeref, .{});
 }
 pub const Null: AnyRequestContext = AnyRequestContext{ .tagged_pointer = Pointer.Null };
 const OptSocketAddress = ?uws.SocketAddress;

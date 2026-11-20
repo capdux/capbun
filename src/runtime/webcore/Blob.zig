@@ -156,6 +156,13 @@ pub fn memoryCost(self: BlobInternal) usize {
             return self.bytes.capacity;
     }
 
+pub fn contentType(self: BlobInternal) []const u8 {
+            if (self.was_string) {
+                return (if (@typeInfo(@TypeOf(MimeType.text)) == .@"enum") @intFromEnum(MimeType.text) else MimeType.text.value);
+            }
+            return (if (@typeInfo(@TypeOf(MimeType.other)) == .@"enum") @intFromEnum(MimeType.other) else MimeType.other.value);
+    }
+
 pub fn deinit(self: *BlobInternal) void {
             _ = self.bytes.clearAndFree();
     }
@@ -237,7 +244,7 @@ pub fn fromArrayList(list: std.array_list.Managed(u8)) @This() {
     }
 
 pub fn memoryCost(self: BlobAny) usize {
-            switch (self.*) {
+            switch (self) {
 .Blob => |b| {
 if (b.store) |s| {
                 _ = &s;
@@ -258,7 +265,7 @@ return b.memoryCost();
     }
 
 pub inline fn fastSize(self: BlobAny) Blob.SizeType {
-            return (switch (self.*) {
+            return (switch (self) {
 .Blob => self.Blob.size,
 .WTFStringImpl => @truncate(self.WTFStringImpl.byteLength()),
 .InternalBlob => @truncate(self.slice().len),
@@ -266,7 +273,7 @@ pub inline fn fastSize(self: BlobAny) Blob.SizeType {
     }
 
 pub inline fn size(self: BlobAny) Blob.SizeType {
-            return (switch (self.*) {
+            return (switch (self) {
 .Blob => self.Blob.size,
 .WTFStringImpl => @truncate(self.WTFStringImpl.utf8ByteLength()),
 else => @truncate(self.slice().len),
@@ -274,7 +281,7 @@ else => @truncate(self.slice().len),
     }
 
 pub fn slice(self: BlobAny) []const u8 {
-            switch (self.*) {
+            switch (self) {
 .Blob => |b| {
 return b.sharedView();
 },
@@ -422,7 +429,7 @@ const str = String.init(self.WTFStringImpl);
     }
 
 pub fn isDetached(self: BlobAny) bool {
-            switch (self.*) {
+            switch (self) {
 .Blob => |b| {
 return b.isDetached();
 },
@@ -435,8 +442,39 @@ return (w.length() == 0);
 }
     }
 
+pub fn store(self: BlobAny) ?*Blob.Store {
+            if ((self == .Blob)) {
+                return self.Blob.store;
+            }
+            return null;
+    }
+
+pub fn wasString(self: BlobAny) bool {
+            return (switch (self) {
+.Blob => (self.Blob.charset == .all_ascii),
+.WTFStringImpl => true,
+.InternalBlob => self.InternalBlob.was_string,
+});
+    }
+
+pub fn contentType(self: BlobAny) []const u8 {
+            return (switch (self) {
+.Blob => self.Blob.content_type,
+.WTFStringImpl => (if (@typeInfo(@TypeOf(MimeType.text)) == .@"enum") @intFromEnum(MimeType.text) else MimeType.text.value),
+.InternalBlob => self.InternalBlob.contentType(),
+});
+    }
+
+pub fn getFileName(self: BlobAny) ?[]const u8 {
+            return (switch (self) {
+.Blob => self.Blob.getFileName(),
+.WTFStringImpl => null,
+.InternalBlob => null,
+});
+    }
+
 pub fn needsToReadFile(self: BlobAny) bool {
-            switch (self.*) {
+            switch (self) {
 .Blob => |b| {
 return b.needsToReadFile();
 },
@@ -1079,6 +1117,28 @@ pub fn toArrayBufferView(self: *Blob, global: *JSGlobalObject, comptime lifetime
         return ArrayBuffer.fromDefaultAllocator(global, copy, TypedArrayView);
 }
 
+pub fn getFileName(self: Blob) ?[]const u8 {
+        if (self.store) |store| {
+            _ = &store;
+            if ((store.data == .file)) {
+                if ((store.data.file.pathlike == .path)) {
+                    return store.data.file.pathlike.path.slice();
+                }
+            } else {
+                if ((store.data == .bytes)) {
+                    if ((store.data.bytes.stored_name.slice().len > 0)) {
+                        return store.data.bytes.stored_name.slice();
+                    }
+                } else {
+                    if ((store.data == .s3)) {
+                        return store.data.s3.path();
+                    }
+                }
+            }
+        }
+        return null;
+}
+
 pub fn needsToReadFile(self: Blob) bool {
         if (self.store) |store| {
             _ = &store;
@@ -1617,13 +1677,14 @@ else => {
         var sink = jsc.WebCore.FileSink.init(bun.invalid_fd, self.globalThis.bunVM().eventLoop());
         var __sink_moved = false; _ = &__sink_moved;
         defer if (!__sink_moved) { const __T = @TypeOf(sink); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sink.release() catch {}; } else { sink.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sink; _drop_val.release(); } };
-        const input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
+        var input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
         if ((store.data.file.pathlike == .fd)) {
             break :brk .{ .fd = store.data.file.pathlike.fd };
         } else {
             break :brk .{ .path = bun.handleOom(ZigString.Slice.initDupe(bun.default_allocator, store.data.file.pathlike.path.slice())) };
         }
 };
+        _ = &input_path;
         defer {
         _ = input_path.deinit();
         }
@@ -1663,6 +1724,8 @@ else => {
             _ = assignment_result.ensureStillAlive();
             if (assignment_result.asAnyPromise()) |promise| {
                 _ = &promise;
+                var promise_mut = promise;
+                _ = &promise_mut;
                 switch (promise.status()) {
 .pending => {
 const wrapper = FileStreamWrapper.new(.{ .promise = jsc.JSPromise.Strong.init(globalThis), .readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable_stream, globalThis), .sink = file_sink });
@@ -1682,7 +1745,7 @@ _ = file_sink.deref();
 .rejected => {
 _ = file_sink.deref();
                 _ = readable_stream.cancel(globalThis);
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, promise.result(globalThis.vm()));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, promise_mut.result(globalThis.vm()));
 },
 }
             } else {

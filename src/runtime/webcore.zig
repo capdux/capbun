@@ -66,7 +66,7 @@ pub fn Wrap(comptime Type: type, comptime function: anytype) type {
 
 pub fn pipe(ptr: *void, stream: streams.Result, allocator: std.mem.Allocator) void {
             {
-                _ = function(@ptrCast(ptr), stream, allocator);
+                _ = function(@ptrCast(@alignCast(ptr)), stream, allocator);
             }
     }
 

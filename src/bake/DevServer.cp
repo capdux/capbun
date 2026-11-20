@@ -395,7 +395,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
     dev.graph_safety_lock.lock();
     defer dev.graph_safety_lock.unlock();
 
-    const generic_action = "while initializing development server";
+    const generic_action: [:0]const u8 = "while initializing development server";
     const fs = bun.fs.FileSystem.init(options.root) catch |e|
         return global.throwError(e, generic_action);
 
@@ -658,7 +658,7 @@ pub fn deinit(dev: *DevServer) {
         dev.barrel_needed_exports.deinit(alloc);
     }
 
-    dev.assets.deinit(&dev.assets, alloc);
+    dev.assets.deinit(alloc);
 
     dev.incremental_result.client_components_added.deinit(alloc);
     dev.incremental_result.framework_routes_affected.deinit(alloc);
@@ -688,7 +688,7 @@ pub fn deinit(dev: *DevServer) {
 
     dev.html_router.map.deinit(alloc);
 
-    for (failure of dev.bundling_failures.keys()) {
+    for (*failure of dev.bundling_failures.keys()) {
         failure.deinit(dev);
     }
     dev.bundling_failures.deinit(alloc);
@@ -815,12 +815,10 @@ pub fn dev_allocator(dev: *const DevServer): DevAllocator {
 }
 
 pub fn memoryCost(dev: *DevServer): usize {
-    const mc: MemoryCost = undefined;
-    return mc.memoryCost(dev);
+    return MemoryCost.memoryCost(dev);
 }
-pub fn memoryCostDetailed(dev: *DevServer): MemoryCost {
-    const mc: MemoryCost = undefined;
-    return mc.memoryCostDetailed(dev);
+pub fn memoryCostDetailed(dev: *DevServer): MemoryCost.MemoryCostStruct {
+    return MemoryCost.memoryCostDetailed(dev);
 }
 pub const memoryCostArrayHashMap = MemoryCost.memoryCostArrayHashMap;
 pub const memoryCostArrayList = MemoryCost.memoryCostArrayList;
@@ -874,13 +872,13 @@ pub fn setRoutes(dev: *DevServer, server: auto): !bool {
     const app = server.app.?;
     const is_ssl = @typeInfo(@TypeOf(app)).pointer.child.is_ssl;
 
-    app.get(client_prefix ++ "/:route", *DevServer, dev, wrapGenericRequestHandler(onJsRequest, is_ssl));
-    app.get(asset_prefix ++ "/:asset", *DevServer, dev, wrapGenericRequestHandler(onAssetRequest, is_ssl));
-    app.get(internal_prefix ++ "/src/*", *DevServer, dev, wrapGenericRequestHandler(onSrcRequest, is_ssl));
-    app.post(internal_prefix ++ "/report_error", *DevServer, dev, wrapGenericRequestHandler(ErrorReportRequest.run, is_ssl));
-    app.post(internal_prefix ++ "/unref", *DevServer, dev, wrapGenericRequestHandler(UnrefSourceMapRequest.run, is_ssl));
+    app.get(client_prefix ++ "/:route", dev, wrapGenericRequestHandler(onJsRequest, is_ssl));
+    app.get(asset_prefix ++ "/:asset", dev, wrapGenericRequestHandler(onAssetRequest, is_ssl));
+    app.get(internal_prefix ++ "/src/*", dev, wrapGenericRequestHandler(onSrcRequest, is_ssl));
+    app.post(internal_prefix ++ "/report_error", dev, wrapGenericRequestHandler(ErrorReportRequest.run, is_ssl));
+    app.post(internal_prefix ++ "/unref", dev, wrapGenericRequestHandler(UnrefSourceMapRequest.run, is_ssl));
 
-    app.any(internal_prefix, *DevServer, dev, wrapGenericRequestHandler(onNotFound, is_ssl));
+    app.any(internal_prefix, dev, wrapGenericRequestHandler(onNotFound, is_ssl));
 
     app.ws(
         internal_prefix ++ "/hmr",
@@ -919,7 +917,7 @@ pub fn setRoutes(dev: *DevServer, server: auto): !bool {
     // Only attach a catch-all handler if the framework has filesystem router
     // types. Otherwise, this can just be Bun.serve's default handler.
     if (dev.framework.file_system_router_types.len > 0) {
-        app.any("/*", *DevServer, dev, wrapGenericRequestHandler(onRequest, is_ssl));
+        app.any("/*", dev, wrapGenericRequestHandler(onRequest, is_ssl));
         return true;
     } else {
         return false;
@@ -1309,7 +1307,7 @@ fn deferRequest(
         dev: dev,
         handler: switch (kind) {
             .bundled_html_page => brk: {
-                resp.onAborted(*DeferredRequest, DeferredRequest.onAbort, &deferred.data);
+                resp.onAborted(&deferred.data, DeferredRequest.onAbort);
                 break :brk { bundled_html_page: { response: resp, method: method } };
             },
             .server_handler => brk: {
@@ -3431,10 +3429,8 @@ fn getOrPutRouteBundle(dev: *DevServer, route: RouteBundle.UnresolvedIndex): !Ro
             } };
         },
     }
-    const bundle_data_ptr = bun.handleOom(dev.allocator().create(RouteBundle.RouteBundleData));
-    bundle_data_ptr.* = bundle_data;
     dev.route_bundles.appendAssumeCapacity(.{
-        data: bundle_data_ptr,
+        data: bundle_data,
         client_script_generation: std.crypto.random.int(u32),
         server_state: .unqueued,
         client_bundle: null,
@@ -3897,7 +3893,7 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
     payload.appendAssumeCapacity(MessageId.visualizer.char());
     const w = payload.writer();
 
-    inline for (side of .{ .client, .server }) {
+    inline for (side of @as([2]bake.Side, [ .client, .server ])) {
         const g = if (side == .client) &dev.client_graph else &dev.server_graph;
         w.writeInt(u32, @intCast(g.bundled_files.count()), .little)?;
         const bf_keys = g.bundled_files.keys();

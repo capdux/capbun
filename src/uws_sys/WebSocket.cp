@@ -272,47 +272,48 @@ export @extern @value class WebSocketBehavior {
     close: uws_websocket_close_handler = null,
 
     pub static fn wrap(comptime ServerType: type, comptime Type: type, comptime ssl: bool, behavior: WebSocketBehavior): WebSocketBehavior {
-        let Wrap = struct {
+        const Wrap = struct {
             pub fn onOpen(raw_ws: *RawWebSocket) callconv(.c) void {
-                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WebSocket(1), raw_ws)) else AnyWebSocket.tcp(bun.cast(*WebSocket(0), raw_ws));
+                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
                 const this_val = ws.as(Type).?;
                 Type.onOpen(this_val, ws);
             }
 
             pub fn onMessage(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode) callconv(.c) void {
-                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WebSocket(1), raw_ws)) else AnyWebSocket.tcp(bun.cast(*WebSocket(0), raw_ws));
+                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
                 const this_val = ws.as(Type).?;
                 Type.onMessage(this_val, ws, if (length > 0) message[0..length] else "", opcode);
             }
 
             pub fn onDrain(raw_ws: *RawWebSocket) callconv(.c) void {
-                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WebSocket(1), raw_ws)) else AnyWebSocket.tcp(bun.cast(*WebSocket(0), raw_ws));
+                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
                 const this_val = ws.as(Type).?;
                 Type.onDrain(this_val, ws);
             }
 
             pub fn onPing(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) void {
-                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WebSocket(1), raw_ws)) else AnyWebSocket.tcp(bun.cast(*WebSocket(0), raw_ws));
+                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
                 const this_val = ws.as(Type).?;
                 Type.onPing(this_val, ws, if (length > 0) message[0..length] else "");
             }
 
             pub fn onPong(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) void {
-                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WebSocket(1), raw_ws)) else AnyWebSocket.tcp(bun.cast(*WebSocket(0), raw_ws));
+                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
                 const this_val = ws.as(Type).?;
                 Type.onPong(this_val, ws, if (length > 0) message[0..length] else "");
             }
 
             pub fn onClose(raw_ws: *RawWebSocket, code: i32, message: [*c]const u8, length: usize) callconv(.c) void {
-                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WebSocket(1), raw_ws)) else AnyWebSocket.tcp(bun.cast(*WebSocket(0), raw_ws));
+                let ws = if (ssl) AnyWebSocket.ssl(bun.cast(*WSSsl, raw_ws)) else AnyWebSocket.tcp(bun.cast(*WSTcp, raw_ws));
                 const this_val = ws.as(Type).?;
-                Type.onClose(this_val, ws, code, if (length > 0 and message != null) message[0..length] else "");
+                Type.onClose(this_val, ws, code, if (length > 0) message[0..length] else "");
             }
 
             pub fn onUpgrade(ptr: *!?, res: *uws_res, req: *Request, context: *bun.uws.WebSocketUpgradeContext, id: usize) callconv(.c) void {
+                const resp_any = if (ssl) bun.cast(*WSRespSsl, res) else bun.cast(*WSRespTcp, res);
                 ServerType.onWebSocketUpgrade(
                     bun.cast(*ServerType, ptr),
-                    bun.cast(*bun.uws.Response(if (ssl) 1 else 0), res),
+                    resp_any,
                     req,
                     context,
                     id,
@@ -339,3 +340,8 @@ export @extern @value class WebSocketBehavior {
         };
     }
 }
+
+type WSSsl = WebSocket(1);
+type WSTcp = WebSocket(0);
+type WSRespSsl = bun.uws.NewApp(true).Response;
+type WSRespTcp = bun.uws.NewApp(false).Response;

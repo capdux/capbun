@@ -203,7 +203,7 @@ pub fn appendStaticRoute(self: *ServerConfig, path: []const u8, route: AnyRoute,
         _ = try self.static_routes.append(StaticRouteEntry{ .path = try bun.default_allocator.dupe(u8, path), .route = route, .method = method });
 }
 
-pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, entry: *T, path: []const u8, method: HTTP.Method.Optional) void {
+pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, entry: T, path: []const u8, method: HTTP.Method.Optional) void {
         entry.server = server;
         const handler_wrap = struct {
 
@@ -225,23 +225,23 @@ else => unreachable,
 };
         var __handler_wrap_moved = false; _ = &__handler_wrap_moved;
         defer if (!__handler_wrap_moved) { const __T = @TypeOf(handler_wrap); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = handler_wrap.release() catch {}; } else { handler_wrap.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = handler_wrap; _drop_val.release(); } };
-        _ = app.head(path, T, entry, handler_wrap.HEAD);
+        _ = app.head(path, entry, handler_wrap.HEAD);
         switch (method) {
 .@"any" => {
-_ = app.@"any"(path, T, entry, handler_wrap.handler);
+_ = app.@"any"(path, entry, handler_wrap.handler);
 },
 .method => |*m| {
 var iter = m.iterator();
         var __iter_moved = false; _ = &__iter_moved;
         defer if (!__iter_moved) { const __T = @TypeOf(iter); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = iter.release() catch {}; } else { iter.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = iter; _drop_val.release(); } };
         while (iter.next()) |method_| {
-            _ = app.method(method_, path, T, entry, handler_wrap.handler);
+            _ = app.method(method_, path, entry, handler_wrap.handler);
         }
 },
 }
 }
 
-pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type, entry: *T, path: []const u8, method: HTTP.Method.Optional) void {
+pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type, entry: T, path: []const u8, method: HTTP.Method.Optional) void {
         entry.server = server;
         const handler_wrap = struct {
 
@@ -255,17 +255,17 @@ pub fn HEAD(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) void {
 };
         var __handler_wrap_moved = false; _ = &__handler_wrap_moved;
         defer if (!__handler_wrap_moved) { const __T = @TypeOf(handler_wrap); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = handler_wrap.release() catch {}; } else { handler_wrap.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = handler_wrap; _drop_val.release(); } };
-        _ = app.head(path, T, entry, handler_wrap.HEAD);
+        _ = app.head(path, entry, handler_wrap.HEAD);
         switch (method) {
 .@"any" => {
-_ = app.@"any"(path, T, entry, handler_wrap.handler);
+_ = app.@"any"(path, entry, handler_wrap.handler);
 },
 .method => |*m| {
 var iter = m.iterator();
         var __iter_moved = false; _ = &__iter_moved;
         defer if (!__iter_moved) { const __T = @TypeOf(iter); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = iter.release() catch {}; } else { iter.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = iter; _drop_val.release(); } };
         while (iter.next()) |method_| {
-            _ = app.method(method_, path, T, entry, handler_wrap.handler);
+            _ = app.method(method_, path, entry, handler_wrap.handler);
         }
 },
 }

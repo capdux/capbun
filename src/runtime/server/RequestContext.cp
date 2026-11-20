@@ -126,7 +126,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (this.flags.has_abort_handler) return;
             if (this.resp) |resp| {
                 this.flags.has_abort_handler = true;
-                resp.onAborted(*RequestContext, RequestContext.onAbort, this);
+                resp.onAborted(this, RequestContext.onAbort);
             }
         }
 
@@ -2665,7 +2665,7 @@ fn NewFlags(comptime debug_mode: bool): type {
     };
 }
 
-fn getContentType(headers: *WebCore.FetchHeaders?, blob: *const WebCore.Blob.Any, allocator: std.mem.Allocator): [MimeType, bool, bool] {
+fn getContentType(headers: (*WebCore.FetchHeaders)?, blob: *const WebCore.Blob.Any, allocator: std.mem.Allocator): [MimeType, bool, bool] {
     let needs_content_type = true;
     let content_type_needs_free = false;
 

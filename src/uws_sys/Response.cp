@@ -60,10 +60,10 @@ export @opaque class uws_res {}
 @c {
     fn uws_res_mark_wrote_content_length_header(ssl: i32, res: *uws_res);
     fn uws_res_write_mark(ssl: i32, res: *uws_res);
-    fn us_socket_mark_needs_more_not_ssl(socket: *uws_res?!);
+    fn us_socket_mark_needs_more_not_ssl(socket: *uws_res);
     fn uws_res_state(ssl: i32, res: *const uws_res): State;
     fn uws_res_is_connect_request(ssl: i32, res: *uws_res): bool;
-    fn uws_res_get_remote_address_info(res: *uws_res, dest: *[*c]const u8, port: *i32, is_ipv6: *bool): usize;
+    fn uws_res_get_remote_address_info(res: *uws_res, dest: *[*]const u8!, port: *i32, is_ipv6: *bool): usize;
     fn uws_res_uncork(ssl: i32, res: *uws_res);
     fn uws_res_end(ssl: i32, res: *uws_res, data: [*]const u8!, length: usize, close_conn: bool);
     fn uws_res_flush_headers(ssl: i32, res: *uws_res, flushImmediately: bool);
@@ -650,7 +650,7 @@ export enum AnyResponse {
         switch (this) {
             .SSL(r) => r.onAborted(optional_data, wrapper.ssl_cb),
             .TCP(r) => r.onAborted(optional_data, wrapper.tcp_cb),
-            .H3(r) => r.onAborted(UserDataType, wrapper.h3_cb, optional_data),
+            .H3(r) => r.onAborted(optional_data, wrapper.h3_cb),
         }
     }
 

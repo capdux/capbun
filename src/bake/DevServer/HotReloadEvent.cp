@@ -82,7 +82,7 @@ fn GetDebugMutex(comptime is_debug: bool): type {
     }
 
     /// Invalidates items in IncrementalGraph, appending all new items to `entry_points`
-    pub fn processFileList(
+    static fn processFileList(
         event: *HotReloadEvent,
         dev: *DevServer,
         entry_points: *EntryPointList,

@@ -74,7 +74,7 @@ pub const uws_app_s = opaque {
 
 pub const uws_app_listen_config_t = extern struct {
     port: i32,
-    host: ?[*:0]u8 = null,
+    host: ?[*:0]const u8 = null,
     options: i32 = 0,
 };
 
@@ -141,15 +141,15 @@ extern "c" fn uws_app_any(ssl: i32, app: *uws_app_t, pattern: [*]const u8, patte
 
 extern "c" fn uws_app_run(ssl: i32, app: *uws_app_t) callconv(.c) void;
 
-extern "c" fn uws_app_domain(ssl: i32, app: *uws_app_t, domain_str: [*:0]u8) callconv(.c) void;
+extern "c" fn uws_app_domain(ssl: i32, app: *uws_app_t, domain_str: [*:0]const u8) callconv(.c) void;
 
 extern "c" fn uws_app_set_flags(ssl: i32, app: *uws_app_t, require_host: bool, strict_method: bool) callconv(.c) void;
 
 extern "c" fn uws_app_set_max_http_header_size(ssl: i32, app: *uws_app_t, max_sz: u64) callconv(.c) void;
 
-extern "c" fn uws_app_listen(ssl: i32, app: *uws_app_t, host: ?[*:0]u8, port: i32, options: i32, handler: ListenHandler, user_data: ?*anyopaque) callconv(.c) void;
+extern "c" fn uws_app_listen(ssl: i32, app: *uws_app_t, host: ?[*:0]const u8, port: i32, options: i32, handler: ListenHandler, user_data: ?*anyopaque) callconv(.c) void;
 
-extern "c" fn uws_app_listen_with_config(ssl: i32, app: *uws_app_t, host: ?[*:0]u8, port: u16, options: i32, handler: ListenConfigHandler, user_data: ?*anyopaque) callconv(.c) void;
+extern "c" fn uws_app_listen_with_config(ssl: i32, app: *uws_app_t, host: ?[*:0]const u8, port: u16, options: i32, handler: ListenConfigHandler, user_data: ?*anyopaque) callconv(.c) void;
 
 extern "c" fn uws_constructor_failed(ssl: i32, app: *uws_app_t) callconv(.c) bool;
 
@@ -159,11 +159,11 @@ extern "c" fn uws_publish(ssl: i32, app: *uws_app_t, topic: [*]const u8, tl: usi
 
 extern "c" fn uws_get_native_handle(ssl: i32, app: ?*anyopaque) callconv(.c) ?*anyopaque;
 
-extern "c" fn uws_remove_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]u8) callconv(.c) void;
+extern "c" fn uws_remove_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8) callconv(.c) void;
 
-extern "c" fn uws_add_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]u8) callconv(.c) void;
+extern "c" fn uws_add_server_name(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8) callconv(.c) void;
 
-extern "c" fn uws_add_server_name_with_options(ssl: i32, app: *uws_app_t, pattern: [*:0]u8, opts: BunSocketContextOptions) callconv(.c) i32;
+extern "c" fn uws_add_server_name_with_options(ssl: i32, app: *uws_app_t, pattern: [*:0]const u8, opts: BunSocketContextOptions) callconv(.c) i32;
 
 extern "c" fn uws_missing_server_name(ssl: i32, app: *uws_app_t, handler: MissingServerHandler, user_data: ?*anyopaque) callconv(.c) void;
 
@@ -171,7 +171,7 @@ extern "c" fn uws_filter(ssl: i32, app: *uws_app_t, handler: FilterHandler, user
 
 extern "c" fn uws_app_clear_routes(ssl: i32, app: *uws_app_t) callconv(.c) void;
 
-extern "c" fn uws_app_listen_domain_with_options(ssl: i32, app: *uws_app_t, domain_str: [*:0]u8, pathlen: usize, flags: i32, cb: ListenDomainHandler, ud: ?*anyopaque) callconv(.c) void;
+extern "c" fn uws_app_listen_domain_with_options(ssl: i32, app: *uws_app_t, domain_str: [*:0]const u8, pathlen: usize, flags: i32, cb: ListenDomainHandler, ud: ?*anyopaque) callconv(.c) void;
 
 extern "c" fn uws_ws(ssl: i32, app: *uws_app_t, ctx: *anyopaque, pattern: [*]const u8, pattern_len: usize, id: usize, behavior: *WebSocketBehavior) callconv(.c) void;
 
@@ -306,7 +306,7 @@ else => {
 }
     }
 
-pub fn domain(self: *@This(), pattern: [*:0]u8) void {
+pub fn domain(self: *@This(), pattern: [*:0]const u8) void {
             _ = uws_app_domain(ssl_flag, bun.cast(*uws_app_t, self), pattern);
     }
 
@@ -326,15 +326,15 @@ pub fn getNativeHandle(self: *@This()) ?*anyopaque {
         _ = self;
     }
 
-pub fn removeServerName(self: *@This(), hostname_pattern: [*:0]u8) void {
+pub fn removeServerName(self: *@This(), hostname_pattern: [*:0]const u8) void {
             _ = uws_remove_server_name(ssl_flag, bun.cast(*uws_app_t, self), hostname_pattern);
     }
 
-pub fn addServerName(self: *@This(), hostname_pattern: [*:0]u8) void {
+pub fn addServerName(self: *@This(), hostname_pattern: [*:0]const u8) void {
             _ = uws_add_server_name(ssl_flag, bun.cast(*uws_app_t, self), hostname_pattern);
     }
 
-pub fn addServerNameWithOptions(self: *@This(), hostname_pattern: [*:0]u8, opts: BunSocketContextOptions) !void {
+pub fn addServerNameWithOptions(self: *@This(), hostname_pattern: [*:0]const u8, opts: BunSocketContextOptions) !void {
             if ((uws_add_server_name_with_options(ssl_flag, bun.cast(*uws_app_t, self), hostname_pattern, opts) != 0)) {
                 return error.FailedToAddServerName;
             }
@@ -358,7 +358,7 @@ pub fn listen(self: *@This(), port: i32, user_data: anytype, comptime handler: a
             const Wrapper = struct {
 
 pub fn handle(socket: ?*UwsListenSocket, conf: uws_app_listen_config_t, data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(data), socket, conf);
+            _ = handler(@ptrCast(@alignCast(data)), socket, conf);
     }
 };
             _ = uws_app_listen(ssl_flag, bun.cast(*uws_app_t, self), null, port, 0, Wrapper.handle, @ptrCast(user_data));
@@ -373,7 +373,7 @@ pub fn handle(data: ?*anyopaque, code: i32, socket: *us_socket_t, error_code: u8
             break :blk raw_packet[0..@intCast(raw_packet_length)];
 
 }) else "");
-            _ = handler(@ptrCast(data), socket, error_code, bytes);
+            _ = handler(@ptrCast(@alignCast(data)), socket, error_code, bytes);
     }
 };
             _ = uws_app_set_on_clienterror(ssl_flag, bun.cast(*uws_app_s, self), Wrapper.handle, @ptrCast(user_data));
@@ -383,7 +383,7 @@ pub fn listenWithConfig(self: *@This(), user_data: anytype, comptime handler: an
             const Wrapper = struct {
 
 pub fn handle(socket: ?*UwsListenSocket, data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(data), socket);
+            _ = handler(@ptrCast(@alignCast(data)), socket);
     }
 };
             _ = uws_app_listen_with_config(ssl_flag, bun.cast(*uws_app_t, self), config.host, @intCast(config.port), config.options, Wrapper.handle, @ptrCast(user_data));
@@ -392,13 +392,13 @@ pub fn handle(socket: ?*UwsListenSocket, data: ?*anyopaque) callconv(.c) void {
 pub fn listenOnUnixSocket(self: *@This(), user_data: anytype, comptime handler: anytype, domain_name: []const u8, flags: i32) void {
             const Wrapper = struct {
 
-pub fn handle(socket: *UwsListenSocket, domain_str: [*:0]u8, fl: i32, data: ?*anyopaque) callconv(.c) void {
+pub fn handle(socket: *UwsListenSocket, domain_str: [*:0]const u8, fl: i32, data: ?*anyopaque) callconv(.c) void {
             _ = &domain_str;
             _ = &fl;
-            _ = handler(@ptrCast(data), socket);
+            _ = handler(@ptrCast(@alignCast(data)), socket);
     }
 };
-            const domainZ: [*:0]u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
+            const domainZ: [*:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
             defer {
             _ = bun.default_allocator.free(domainZ);
             }

@@ -536,7 +536,7 @@ _ = r.onAborted(optional_data, wrapper.ssl_cb);
 _ = r.onAborted(optional_data, wrapper.tcp_cb);
 },
 .H3 => |r| {
-_ = r.onAborted(UserDataType, wrapper.h3_cb, optional_data);
+_ = r.onAborted(optional_data, wrapper.h3_cb);
 },
 }
     }
@@ -738,13 +738,13 @@ extern "c" fn uws_res_mark_wrote_content_length_header(ssl: i32, res: *uws_res) 
 
 extern "c" fn uws_res_write_mark(ssl: i32, res: *uws_res) callconv(.c) void;
 
-extern "c" fn us_socket_mark_needs_more_not_ssl(socket: *?*uws_res) callconv(.c) void;
+extern "c" fn us_socket_mark_needs_more_not_ssl(socket: *uws_res) callconv(.c) void;
 
 extern "c" fn uws_res_state(ssl: i32, res: *const uws_res) callconv(.c) State;
 
 extern "c" fn uws_res_is_connect_request(ssl: i32, res: *uws_res) callconv(.c) bool;
 
-extern "c" fn uws_res_get_remote_address_info(res: *uws_res, dest: *[*c]const u8, port: *i32, is_ipv6: *bool) callconv(.c) usize;
+extern "c" fn uws_res_get_remote_address_info(res: *uws_res, dest: *[*]const u8, port: *i32, is_ipv6: *bool) callconv(.c) usize;
 
 extern "c" fn uws_res_uncork(ssl: i32, res: *uws_res) callconv(.c) void;
 

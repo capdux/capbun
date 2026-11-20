@@ -157,7 +157,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (this.flags.has_abort_handler) return;
             if (this.resp) |resp| {
                 this.flags.has_abort_handler = true;
-                resp.onAborted(*RequestContext, RequestContext.onAbort, this);
+                resp.onAborted(this, RequestContext.onAbort);
             }
         }
 
@@ -2693,7 +2693,7 @@ pub fn getContentType(headers: ?*WebCore.FetchHeaders, blob: *const WebCore.Blob
         _ = &content_type_needs_free;
         if (headers) |headers_| {
             _ = &headers_;
-            if ((headers_).?.fastGet(.ContentType)) |content| {
+            if (headers_.fastGet(.ContentType)) |content| {
                 _ = &content;
                 needs_content_type = false;
                 var content_slice = content.toSlice(allocator);

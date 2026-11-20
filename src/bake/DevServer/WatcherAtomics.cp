@@ -35,7 +35,7 @@ const cache_line = std.atomic.cache_line;
     dbg_watcher_event: DbgEventPtr = if (Environment.allow_assert) null else {},
     dbg_server_event: DbgEventPtr = if (Environment.allow_assert) null else {},
 
-    pub fn init(dev: *DevServer): Self {
+    static fn init(dev: *DevServer): Self {
         let s = Self{ events: undefined };
         for (i of 0..s.events.len) {
             s.events[i] = HotReloadEvent.initEmpty(dev);

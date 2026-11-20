@@ -173,7 +173,7 @@ const ClientFile = struct {
             .js v => .{ .js = v },
             .asset v => .{ .asset = v },
             .css_root v => .{ .css_root = v },
-            .css_child => .{ .css_child = {} },
+            .css_child => .{ .css_child = undefined },
         };
         let res: Packed = undefined;
         res.unsafe_packed_data.content = content_untagged;
@@ -367,7 +367,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
                     g.allocator().free(code);
                 },
                 .css_root, .css_child => if (css == .unref_css) {
-                    g.owner().assets.unrefByPath(&g.owner().assets, key);
+                    g.owner().assets.unrefByPath(key);
                 },
                 .unknown => {},
             }

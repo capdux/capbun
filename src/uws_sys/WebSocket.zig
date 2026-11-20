@@ -236,55 +236,55 @@ pub const WebSocketBehavior = extern struct {
     close: uws_websocket_close_handler = null,
 
 pub fn wrap(comptime ServerType: type, comptime Type: type, comptime ssl: bool, behavior: WebSocketBehavior) WebSocketBehavior {
-            var Wrap = struct {
+            const Wrap = struct {
 
 pub fn onOpen(raw_ws: *RawWebSocket) callconv(.c) void {
-            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast((&WebSocket(1)), raw_ws) } else AnyWebSocket{ .tcp = bun.cast((&WebSocket(0)), raw_ws) });
+            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast(*WSSsl, raw_ws) } else AnyWebSocket{ .tcp = bun.cast(*WSTcp, raw_ws) });
             _ = &ws;
             const this_val = (ws.as(Type)).?;
             _ = Type.onOpen(this_val, ws);
     }
 
 pub fn onMessage(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize, opcode: bun.uws.Opcode) callconv(.c) void {
-            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast((&WebSocket(1)), raw_ws) } else AnyWebSocket{ .tcp = bun.cast((&WebSocket(0)), raw_ws) });
+            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast(*WSSsl, raw_ws) } else AnyWebSocket{ .tcp = bun.cast(*WSTcp, raw_ws) });
             _ = &ws;
             const this_val = (ws.as(Type)).?;
             _ = Type.onMessage(this_val, ws, (if ((length > 0)) message[0..length] else ""), opcode);
     }
 
 pub fn onDrain(raw_ws: *RawWebSocket) callconv(.c) void {
-            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast((&WebSocket(1)), raw_ws) } else AnyWebSocket{ .tcp = bun.cast((&WebSocket(0)), raw_ws) });
+            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast(*WSSsl, raw_ws) } else AnyWebSocket{ .tcp = bun.cast(*WSTcp, raw_ws) });
             _ = &ws;
             const this_val = (ws.as(Type)).?;
             _ = Type.onDrain(this_val, ws);
     }
 
 pub fn onPing(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) void {
-            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast((&WebSocket(1)), raw_ws) } else AnyWebSocket{ .tcp = bun.cast((&WebSocket(0)), raw_ws) });
+            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast(*WSSsl, raw_ws) } else AnyWebSocket{ .tcp = bun.cast(*WSTcp, raw_ws) });
             _ = &ws;
             const this_val = (ws.as(Type)).?;
             _ = Type.onPing(this_val, ws, (if ((length > 0)) message[0..length] else ""));
     }
 
 pub fn onPong(raw_ws: *RawWebSocket, message: [*c]const u8, length: usize) callconv(.c) void {
-            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast((&WebSocket(1)), raw_ws) } else AnyWebSocket{ .tcp = bun.cast((&WebSocket(0)), raw_ws) });
+            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast(*WSSsl, raw_ws) } else AnyWebSocket{ .tcp = bun.cast(*WSTcp, raw_ws) });
             _ = &ws;
             const this_val = (ws.as(Type)).?;
             _ = Type.onPong(this_val, ws, (if ((length > 0)) message[0..length] else ""));
     }
 
 pub fn onClose(raw_ws: *RawWebSocket, code: i32, message: [*c]const u8, length: usize) callconv(.c) void {
-            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast((&WebSocket(1)), raw_ws) } else AnyWebSocket{ .tcp = bun.cast((&WebSocket(0)), raw_ws) });
+            var ws = (if (ssl) AnyWebSocket{ .ssl = bun.cast(*WSSsl, raw_ws) } else AnyWebSocket{ .tcp = bun.cast(*WSTcp, raw_ws) });
             _ = &ws;
             const this_val = (ws.as(Type)).?;
-            _ = Type.onClose(this_val, ws, code, (if (((length > 0) and (message != null))) (message.?)[0..length] else ""));
+            _ = Type.onClose(this_val, ws, code, (if ((length > 0)) message[0..length] else ""));
     }
 
 pub fn onUpgrade(ptr: ?*anyopaque, res: *uws_res, req: *Request, context: *bun.uws.WebSocketUpgradeContext, id: usize) callconv(.c) void {
-            _ = ServerType.onWebSocketUpgrade(bun.cast(*ServerType, ptr), bun.cast((&bun.uws.Response((if (ssl) 1 else 0))), res), req, context, id);
+            const resp_any = (if (ssl) bun.cast(*WSRespSsl, res) else bun.cast(*WSRespTcp, res));
+            _ = ServerType.onWebSocketUpgrade(bun.cast(*ServerType, ptr), resp_any, req, context, id);
     }
 };
-            _ = &Wrap;
             return WebSocketBehavior{ .compression = behavior.compression, .maxPayloadLength = behavior.maxPayloadLength, .idleTimeout = behavior.idleTimeout, .maxBackpressure = behavior.maxBackpressure, .closeOnBackpressureLimit = behavior.closeOnBackpressureLimit, .resetIdleTimeoutOnSend = behavior.resetIdleTimeoutOnSend, .sendPingsAutomatically = behavior.sendPingsAutomatically, .maxLifetime = behavior.maxLifetime, .upgrade = Wrap.onUpgrade, .open = Wrap.onOpen, .message = (if (@hasDecl(Type, "onMessage")) Wrap.onMessage else null), .drain = (if (@hasDecl(Type, "onDrain")) Wrap.onDrain else null), .ping = (if (@hasDecl(Type, "onPing")) Wrap.onPing else null), .pong = (if (@hasDecl(Type, "onPong")) Wrap.onPong else null), .close = Wrap.onClose };
     }
 };
@@ -297,6 +297,10 @@ pub const uws_websocket_message_handler = ?uws_websocket_message_handler_fn;
 pub const uws_websocket_close_handler = ?uws_websocket_close_handler_fn;
 pub const uws_websocket_upgrade_handler = ?uws_websocket_upgrade_handler_fn;
 pub const uws_websocket_ping_pong_handler = ?uws_websocket_ping_pong_handler_fn;
+const WSSsl = WebSocket(1);
+const WSTcp = WebSocket(0);
+const WSRespSsl = bun.uws.NewApp(true).Response;
+const WSRespTcp = bun.uws.NewApp(false).Response;
 const _ws_cb_sigs = struct {
 
 pub fn cork(_: OpaquePtr) callconv(.c) void {

@@ -109,7 +109,7 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn setAdditionalOnAbortCallback(cb: AdditionalOnAbortCallback?) {
-        _.dispatch(void, {}, cbSetAdditionalOnAbortCallback, .{cb});
+        _.dispatch(void, undefined, cbSetAdditionalOnAbortCallback, .{cb});
     }
 
     fn memoryCost(): usize {
@@ -125,11 +125,11 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn setCookies(cookie_map: (*jsc.WebCore.CookieMap)?) {
-        _.dispatch(void, {}, cbSetCookies, .{cookie_map});
+        _.dispatch(void, undefined, cbSetCookies, .{cookie_map});
     }
 
     fn enableTimeoutEvents() {
-        _.dispatch(void, {}, cbEnableTimeoutEvents, .{});
+        _.dispatch(void, undefined, cbEnableTimeoutEvents, .{});
     }
 
     fn getRemoteSocketInfo(): uws.SocketAddress? {
@@ -137,11 +137,11 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn detachRequest() {
-        _.dispatch(void, {}, cbDetachRequest, .{});
+        _.dispatch(void, undefined, cbDetachRequest, .{});
     }
 
     fn setRequest(req: *uws.Request) {
-        _.dispatch(void, {}, cbSetRequest, .{req});
+        _.dispatch(void, undefined, cbSetRequest, .{req});
     }
 
     fn getRequest(): (*uws.Request)? {
@@ -149,15 +149,15 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn onAbort(response: uws.AnyResponse) {
-        _.dispatch(void, {}, cbOnAbort, .{response});
+        _.dispatch(void, undefined, cbOnAbort, .{response});
     }
 
     fn ref() {
-        _.dispatch(void, {}, cbRef, .{});
+        _.dispatch(void, undefined, cbRef, .{});
     }
 
     fn setSignalAborted(reason: bun.jsc.CommonAbortReason) {
-        _.dispatch(void, {}, cbSetSignalAborted, .{reason});
+        _.dispatch(void, undefined, cbSetSignalAborted, .{reason});
     }
 
     fn devServer(): (*bun.bake.DevServer)? {
@@ -165,6 +165,6 @@ fn cbDeref(comptime _: type, ctx: auto) {
     }
 
     fn deref() {
-        _.dispatch(void, {}, cbDeref, .{});
+        _.dispatch(void, undefined, cbDeref, .{});
     }
 }

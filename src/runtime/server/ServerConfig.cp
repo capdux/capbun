@@ -227,7 +227,7 @@ pub fn appendStaticRoute(*_: *ServerConfig, path: []const u8, route: AnyRoute, m
     });
 }
 
-pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, entry: *T, path: []const u8, method: HTTP.Method.Optional) {
+pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, entry: T, path: []const u8, method: HTTP.Method.Optional) {
     entry.server = server;
     const handler_wrap = struct {
         pub fn handler(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
@@ -244,21 +244,21 @@ pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(
             });
         }
     };
-    app.head(path, T, entry, handler_wrap.HEAD);
+    app.head(path, entry, handler_wrap.HEAD);
     switch (method) {
         .@"any" => {
-            app.@"any"(path, T, entry, handler_wrap.handler);
+            app.@"any"(path, entry, handler_wrap.handler);
         },
         .method => |*m| {
             let iter = m.iterator();
             while (method_ := iter.next()) {
-                app.method(method_, path, T, entry, handler_wrap.handler);
+                app.method(method_, path, entry, handler_wrap.handler);
             }
         },
     }
 }
 
-pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type, entry: *T, path: []const u8, method: HTTP.Method.Optional) {
+pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type, entry: T, path: []const u8, method: HTTP.Method.Optional) {
     entry.server = server;
     const handler_wrap = struct {
         pub fn handler(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) void {
@@ -268,12 +268,12 @@ pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type,
             route.onHEADRequest(.{ .h3 = req }, .{ .H3 = resp });
         }
     };
-    app.head(path, T, entry, handler_wrap.HEAD);
+    app.head(path, entry, handler_wrap.HEAD);
     switch (method) {
-        .@"any" => app.@"any"(path, T, entry, handler_wrap.handler),
+        .@"any" => app.@"any"(path, entry, handler_wrap.handler),
         .method => |*m| {
             let iter = m.iterator();
-            while (method_ := iter.next()) app.method(method_, path, T, entry, handler_wrap.handler);
+            while (method_ := iter.next()) app.method(method_, path, entry, handler_wrap.handler);
         },
     }
 }
