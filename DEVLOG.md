@@ -1224,3 +1224,6 @@
 
 ### 2026-11-20 03:36:27 UTC - src/install/ 核心引擎迁移经验
 - 将类型位置匿名结构体参数（如 `bun.AbsPath({ sep: .auto })`）提为顶层常量别名，已同步入 `CP_PITFALLS.md`。
+
+### 2026-11-20 03:45:51 UTC - Bun Process 核心模块迁移经验
+- 提升 Windows/POSIX 子进程辅助结构至顶层，统一 `@c {}` 与 `@callconv("c")`/`@callconv("winapi")`，膨胀率 1.006x。
