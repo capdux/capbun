@@ -9,6 +9,7 @@
 /// schtasks (Windows). Async, event-loop-integrated via bun.spawn.
 
 pub const CronClearMode = enum { reload, teardown };
+type OptConstCString = ConstCString?;
 
 const ScheduleMonthInfo = struct {
     cron: CronExpression,
@@ -1242,7 +1243,6 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
 
     let envp_arena = std.heap.ArenaAllocator.init(bun.default_allocator);
     defer envp_arena.deinit();
-    const OptConstCString = ConstCString?;
     const envp: ([*:null]OptConstCString)? = if (comptime bun.Environment.isPosix)
         @ptrCast(@constCast(std.c.environ))
     else

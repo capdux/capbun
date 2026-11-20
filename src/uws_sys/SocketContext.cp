@@ -2,7 +2,7 @@
 import bun from "bun";
 
 @c {
-    fn us_ssl_ctx_from_options(options: BunSocketContextOptions, err: *bun.uws.create_bun_socket_error_t): *bun.BoringSSL.c.SSL_CTX?!;
+    fn us_ssl_ctx_from_options(options: BunSocketContextOptions, err: *bun.uws.create_bun_socket_error_t): (*bun.BoringSSL.c.SSL_CTX)?;
     fn us_ssl_ctx_live_count(): i64;
 }
 
@@ -14,11 +14,11 @@ export @extern @value class BunSocketContextOptions {
     ca_file_name: cstr? = null,
     ssl_ciphers: cstr? = null,
     ssl_prefer_low_memory_usage: i32 = 0,
-    key: [*]cstr?! = null,
+    key: OptCstrArr? = null,
     key_count: u32 = 0,
-    cert: [*]cstr?! = null,
+    cert: OptCstrArr? = null,
     cert_count: u32 = 0,
-    ca: [*]cstr?! = null,
+    ca: OptCstrArr? = null,
     ca_count: u32 = 0,
     secure_options: u32 = 0,
     reject_unauthorized: i32 = 0,

@@ -13,9 +13,9 @@ pub fn operatingSystemIsMatch(globalObject: *jsc.JSGlobalObject, callframe: *jsc
         const slice = item.toSlice(globalObject, bun.default_allocator)?;
         defer slice.deinit();
         operating_system.apply(slice.slice());
-        if (globalObject.hasException()) return .zero;
+        if (globalObject.hasException()) return jsc.JSValue.zero;
     }
-    if (globalObject.hasException()) return .zero;
+    if (globalObject.hasException()) return jsc.JSValue.zero;
     return jsc.JSValue.jsBoolean(operating_system.combine().isMatch(npm.OperatingSystem.current));
 }
 
@@ -27,9 +27,9 @@ pub fn libcIsMatch(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
         const slice = item.toSlice(globalObject, bun.default_allocator);
         defer slice.deinit();
         libc.apply(slice.slice());
-        if (globalObject.hasException()) return .zero;
+        if (globalObject.hasException()) return jsc.JSValue.zero;
     }
-    if (globalObject.hasException()) return .zero;
+    if (globalObject.hasException()) return jsc.JSValue.zero;
     return jsc.JSValue.jsBoolean(libc.combine().isMatch(npm.Libc.current));
 }
 
@@ -41,9 +41,9 @@ pub fn architectureIsMatch(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Ca
         const slice = item.toSlice(globalObject, bun.default_allocator)?;
         defer slice.deinit();
         architecture.apply(slice.slice());
-        if (globalObject.hasException()) return .zero;
+        if (globalObject.hasException()) return jsc.JSValue.zero;
     }
-    if (globalObject.hasException()) return .zero;
+    if (globalObject.hasException()) return jsc.JSValue.zero;
     return jsc.JSValue.jsBoolean(architecture.combine().isMatch(npm.Architecture.current));
 }
 

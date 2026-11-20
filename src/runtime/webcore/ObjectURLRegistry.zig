@@ -33,18 +33,18 @@ fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
 comptime {
-    const Bun__createObjectURL = jsc.toJSHostFn(Bun__createObjectURL_);
-    _ = &Bun__createObjectURL;
+    const bun_create_object_url = jsc.toJSHostFn(Bun__createObjectURL_);
+    _ = &bun_create_object_url;
     {
-        _ = @export(*const Bun__createObjectURL, .{ .name = "Bun__createObjectURL" });
+        _ = @export((&bun_create_object_url), .{ .name = "Bun__createObjectURL" });
     }
 
 }
 comptime {
-    const Bun__revokeObjectURL = jsc.toJSHostFn(Bun__revokeObjectURL_);
-    _ = &Bun__revokeObjectURL;
+    const bun_revoke_object_url = jsc.toJSHostFn(Bun__revokeObjectURL_);
+    _ = &bun_revoke_object_url;
     {
-        _ = @export(*const Bun__revokeObjectURL, .{ .name = "Bun__revokeObjectURL" });
+        _ = @export((&bun_revoke_object_url), .{ .name = "Bun__revokeObjectURL" });
     }
 
 }

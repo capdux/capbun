@@ -198,7 +198,7 @@ pub enum JsonKind { regular, internal }
 
 pub struct json {
     @callconv("c")
-    static fn jsonIPCDataStringFreeCB(context: *!?, _: *!?, _: u32) {
+    static fn jsonIPCDataStringFreeCB(context: *bool, _: *!, _: u32) {
         unsafe { bun.cast(*bool, context.?).* = true; }
     }
 
@@ -679,7 +679,11 @@ pub struct SendQueue {
         _.close_event_sent = true;
         switch (_.owner) {
             inline else => |owner| {
-                owner.*.handleIPCClose();
+                if (comptime @hasDecl(@TypeOf(owner.*), "handleIPCClose")) {
+                    owner.*.handleIPCClose();
+                } else {
+                    owner.*.onAfterIPCClosed();
+                }
             },
         }
     }
@@ -1175,12 +1179,9 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
         const msg_data = message.data;
         if (msg_data.isObject()) {
             let cmd: JSValue = .js_undefined;
-            if (c := (msg_data.fastGet(globalThis, .cmd) catch null)) {
-                if (val := c) {
-                    cmd = val;
-                } else {
-                    break :handle_message;
-                }
+            const c_opt: JSValue? = msg_data.fastGet(globalThis, .cmd) catch null;
+            if (val := c_opt) {
+                cmd = val;
             } else {
                 globalThis.clearException();
                 break :handle_message;

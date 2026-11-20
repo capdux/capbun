@@ -111,7 +111,7 @@ pub fn @"export"() void {
     pub const profile_folder_name = ((("bun-" ++ triplet) ++ suffix) ++ "-profile");
     pub const profile_zip_filename = (profile_folder_name ++ ".zip");
     const current_version: []const u8 = ("bun-v" ++ Global.package_json_version);
-    pub const Bun__githubURL: [*:0]u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{ Global.package_json_version, zip_filename });
+    pub const Bun__githubURL: [*:0]const u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{ Global.package_json_version, zip_filename });
     pub const Bun__githubBaselineURL: [:0]const u8 = std.fmt.comptimePrint("https://github.com/oven-sh/bun/releases/download/bun-v{s}/{s}", .{ Global.package_json_version, baseline_zip_filename });
 };
 
@@ -666,7 +666,7 @@ pub fn generate(global: *jsc.JSGlobalObject) jsc.JSValue {
 
 pub fn jsOpenTempDirWithoutSharingDelete(self: *upgrade_js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!bun.jsc.JSValue {
             if (comptime (!Environment.isWindows)) {
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
             }
             const w = std.os.windows;
             var buf: bun.WPathBuffer = undefined;
@@ -674,7 +674,7 @@ pub fn jsOpenTempDirWithoutSharingDelete(self: *upgrade_js_bindings, _: *jsc.JSG
             const tmpdir_path = fs.FileSystem.RealFS.getDefaultTempDir();
             const path = (switch (bun.sys.normalizePathWindows(u8, bun.invalid_fd, tmpdir_path, (&buf), .{})) {
 .err => {
-return error.js_undefined;
+return jsc.JSValue.js_undefined;
 },
 .result => |norm| norm,
 });
@@ -697,18 +697,18 @@ else => {
 
 },
 }
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn jsCloseTempDirHandle(self: *upgrade_js_bindings, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
             if (comptime (!Environment.isWindows)) {
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
             }
             if (self.tempdir_fd) |fd| {
                 _ = &fd;
                 _ = fd.close();
             }
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
     const jsc = bun.jsc;
     const JSValue = jsc.JSValue;

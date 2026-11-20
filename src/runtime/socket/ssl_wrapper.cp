@@ -45,7 +45,9 @@ pub fn SSLWrapper(comptime T: type): type {
 
         pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers): anyerror!This {
             bun.BoringSSL.load();
-            const ssl = BoringSSL.SSL_new(ctx) orelse return error.OutOfMemory;
+            const ssl = BoringSSL.SSL_new(ctx) orelse {
+                return @as(anyerror!This, error.OutOfMemory);
+            };
             errdefer BoringSSL.SSL_free(ssl);
 
             if (is_client) {
@@ -61,9 +63,13 @@ pub fn SSLWrapper(comptime T: type): type {
                 BoringSSL.SSL_set_renegotiate_mode(ssl, BoringSSL.ssl_renegotiate_never);
                 BoringSSL.SSL_set_accept_state(ssl);
             }
-            const input = BoringSSL.BIO_new(BoringSSL.BIO_s_mem()) orelse return error.OutOfMemory;
+            const input = BoringSSL.BIO_new(BoringSSL.BIO_s_mem()) orelse {
+                return @as(anyerror!This, error.OutOfMemory);
+            };
             errdefer _ = BoringSSL.BIO_free(input);
-            const output = BoringSSL.BIO_new(BoringSSL.BIO_s_mem()) orelse return error.OutOfMemory;
+            const output = BoringSSL.BIO_new(BoringSSL.BIO_s_mem()) orelse {
+                return @as(anyerror!This, error.OutOfMemory);
+            };
             _ = BoringSSL.BIO_set_mem_eof_return(input, -1);
             _ = BoringSSL.BIO_set_mem_eof_return(output, -1);
             BoringSSL.SSL_set_bio(ssl, input, output);

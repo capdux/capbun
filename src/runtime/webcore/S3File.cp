@@ -1,5 +1,6 @@
 import { Output, S3, strings, http, jsc, JSError, JSTerminated, default_allocator, handleOom, destroy, TrivialNew } from "bun";
 import { S3Client } from "./S3Client.zig";
+import * as S3ClientNS from "./S3Client.zig";
 import { S3Stat } from "./S3Stat.zig";
 
 const JSTerminatedError = JSTerminated;
@@ -69,7 +70,7 @@ pub fn writeFormat(
         formatter.printComma(@typeOf(writer), writer, enable_ansi_colors)?;
     }
 
-    S3Client.writeFormatCredentials(credentials, s3.options, s3.acl, Formatter, formatter, writer, enable_ansi_colors)?;
+    S3ClientNS.writeFormatCredentials(credentials, s3.options, s3.acl, Formatter, formatter, writer, enable_ansi_colors)?;
     formatter.writeIndent(@typeOf(writer), writer)?;
     writer.writeAll("}")?;
     formatter.resetLine();

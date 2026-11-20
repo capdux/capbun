@@ -325,7 +325,7 @@ pub fn serialize(writer: *bun.io.StreamBuffer, global: *jsc.JSGlobalObject, valu
 
 pub const json = struct {
 
-pub fn jsonIPCDataStringFreeCB(context: ?*anyopaque, _: ?*anyopaque, _: u32) callconv(.c) void {
+pub fn jsonIPCDataStringFreeCB(context: *bool, _: *anyopaque, _: u32) callconv(.c) void {
             {
                 (bun.cast(*bool, context.?)).* = true;
             }
@@ -659,7 +659,11 @@ pub fn _onAfterIPCClosed(self: *SendQueue) void {
             self.close_event_sent = true;
             switch (self.owner) {
 inline else => |owner| {
-_ = owner.*.handleIPCClose();
+if (comptime @hasDecl(@TypeOf(owner.*), "handleIPCClose")) {
+                _ = owner.*.handleIPCClose();
+            } else {
+                _ = owner.*.onAfterIPCClosed();
+            }
 },
 }
     }
@@ -1394,14 +1398,10 @@ _ = log("received ipc message: internal: {f}", .{ jsvalue.toFmt((&formatter)) })
             if (msg_data.isObject()) {
                 var cmd: JSValue = .js_undefined;
                 _ = &cmd;
-                if ((blk_catch_12: { break :blk_catch_12 ((msg_data.fastGet(globalThis, .cmd)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 null; }); })) |c| {
-                    _ = &c;
-                    if (c) |val| {
-                        _ = &val;
-                        cmd = val;
-                    } else {
-                        break :handle_message;
-                    }
+                const c_opt: ?JSValue = (blk_catch_12: { break :blk_catch_12 ((msg_data.fastGet(globalThis, .cmd)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 null; }); });
+                if (c_opt) |val| {
+                    _ = &val;
+                    cmd = val;
                 } else {
                     _ = globalThis.clearException();
                     break :handle_message;

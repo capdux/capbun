@@ -172,7 +172,9 @@ const rc_len: usize = @intCast(rc);
                 read_eventlist_bytes = self.eventlist_bytes[0..rc_len];
                 _ = log("{f} read {} bytes", .{ self.fd, read_eventlist_bytes.len });
                 if ((read_eventlist_bytes.len == 0)) {
-                    return .{ .result = (&&.{}) };
+                    var empty_ptrs: [0]UnalignedEventPtr = &.{};
+                    _ = &empty_ptrs;
+                    return .{ .result = empty_ptrs[0..0] };
                 }
                 const double_read_threshold = (Event.largest_size * (max_count / 2));
                 if ((read_eventlist_bytes.len < double_read_threshold)) {
@@ -344,7 +346,7 @@ pub fn processINotifyEventBatch(watcher: *bun.Watcher, event_count: usize, temp_
         _ = &name_off;
         var all_events = watcher.watch_events[0..event_count];
         _ = &all_events;
-        _ = std.sort.pdq(WatchEvent, all_events, .{}, WatchEvent.sortByIndex);
+        _ = std.sort.pdq(WatchEvent, all_events, @as(void, .{}), WatchEvent.sortByIndex);
         var last_event_index: usize = 0;
         _ = &last_event_index;
         var last_event_id: EventListIndex = std.math.maxInt(EventListIndex);

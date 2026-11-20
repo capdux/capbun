@@ -81,11 +81,11 @@ pub const BunSocketContextOptions = extern struct {
     ca_file_name: ?[*:0]const u8 = null,
     ssl_ciphers: ?[*:0]const u8 = null,
     ssl_prefer_low_memory_usage: i32 = 0,
-    key: ?[*][*:0]u8 = null,
+    key: ?OptCstrArr = null,
     key_count: u32 = 0,
-    cert: ?[*][*:0]u8 = null,
+    cert: ?OptCstrArr = null,
     cert_count: u32 = 0,
-    ca: ?[*][*:0]u8 = null,
+    ca: ?OptCstrArr = null,
     ca_count: u32 = 0,
     secure_options: u32 = 0,
     reject_unauthorized: i32 = 0,
@@ -255,6 +255,6 @@ pub fn approxCertBytes(self: BunSocketContextOptions) usize {
 };
 
 
-extern "c" fn us_ssl_ctx_from_options(options: BunSocketContextOptions, err: *bun.uws.create_bun_socket_error_t) callconv(.c) *?bun.BoringSSL.c.SSL_CTX;
+extern "c" fn us_ssl_ctx_from_options(options: BunSocketContextOptions, err: *bun.uws.create_bun_socket_error_t) callconv(.c) ?*bun.BoringSSL.c.SSL_CTX;
 
 extern "c" fn us_ssl_ctx_live_count() callconv(.c) i64;

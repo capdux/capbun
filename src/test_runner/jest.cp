@@ -205,7 +205,7 @@ pub struct Jest {
 
     @callconv("c")
     pub static fn Bun__Jest__createTestModuleObject(globalObject: *JSGlobalObject): JSValue {
-        return createTestModule(globalObject) catch return .zero;
+        return createTestModule(globalObject) catch return JSValue.zero;
     }
 
     pub static fn createTestModule(globalObject: *JSGlobalObject): bun.JSError!JSValue {
@@ -222,7 +222,7 @@ pub struct Jest {
         const describe_scope_functions = bun_test.ScopeFunctions.createBound(globalObject, .describe, .zero, {}, bun_test.ScopeFunctions.strings.describe)?;
         module.put(globalObject, ZigString.static("describe"), describe_scope_functions);
 
-        const xdescribe_scope_functions = bun_test.ScopeFunctions.createBound(globalObject, .describe, .zero, { self_mode: .skip }, bun_test.ScopeFunctions.strings.xdescribe) catch return .zero;
+        const xdescribe_scope_functions = bun_test.ScopeFunctions.createBound(globalObject, .describe, .zero, { self_mode: .skip }, bun_test.ScopeFunctions.strings.xdescribe) catch return JSValue.zero;
         module.put(globalObject, ZigString.static("xdescribe"), xdescribe_scope_functions);
 
         module.put(globalObject, ZigString.static("beforeEach"), jsc.JSFunction.create(globalObject, "beforeEach", bun_test.js_fns.genericHook(.beforeEach).hookFn, 1, .{}));
@@ -327,7 +327,7 @@ pub struct Jest {
             test_runner.default_timeout_override = timeout_ms;
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 }
 

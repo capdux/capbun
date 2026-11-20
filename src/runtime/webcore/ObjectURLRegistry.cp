@@ -97,8 +97,8 @@ pub fn isBlobURL(url: []const u8): bool {
 }
 
 comptime {
-    const Bun__createObjectURL = jsc.toJSHostFn(Bun__createObjectURL_);
-    unsafe { @export(&Bun__createObjectURL, .{ .name = "Bun__createObjectURL" }); }
+    const bun_create_object_url = jsc.toJSHostFn(Bun__createObjectURL_);
+    unsafe { @export(&bun_create_object_url, .{ .name = "Bun__createObjectURL" }); }
 }
 
 fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -116,8 +116,8 @@ fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
 }
 
 comptime {
-    const Bun__revokeObjectURL = jsc.toJSHostFn(Bun__revokeObjectURL_);
-    unsafe { @export(&Bun__revokeObjectURL, .{ .name = "Bun__revokeObjectURL" }); }
+    const bun_revoke_object_url = jsc.toJSHostFn(Bun__revokeObjectURL_);
+    unsafe { @export(&bun_revoke_object_url, .{ .name = "Bun__revokeObjectURL" }); }
 }
 
 fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {

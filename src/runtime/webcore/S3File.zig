@@ -74,6 +74,7 @@ const handleOom = @import("bun").handleOom;
 const destroy = @import("bun").destroy;
 const TrivialNew = @import("bun").TrivialNew;
 const S3Client = @import("./S3Client.zig").S3Client;
+pub const S3ClientNS = @import("./S3Client.zig");
 const S3Stat = @import("./S3Stat.zig").S3Stat;
 pub const S3BlobStatTask = struct {
     promise: JSPromise.Strong,
@@ -246,7 +247,7 @@ pub fn writeFormat(s3: *Blob.Store.S3, comptime Formatter: type, formatter: *For
             _ = try writer.print(comptime (Output.prettyFmt("offset<d>:<r> <yellow>{d}<r>", enable_ansi_colors)), .{ offset });
             _ = try formatter.printComma(@TypeOf(writer), writer, enable_ansi_colors);
         }
-        _ = try S3Client.writeFormatCredentials(credentials, s3.options, s3.acl, Formatter, formatter, writer, enable_ansi_colors);
+        _ = try S3ClientNS.writeFormatCredentials(credentials, s3.options, s3.acl, Formatter, formatter, writer, enable_ansi_colors);
         _ = try formatter.writeIndent(@TypeOf(writer), writer);
         _ = try writer.writeAll("}");
         _ = formatter.resetLine();

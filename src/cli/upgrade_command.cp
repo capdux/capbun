@@ -928,13 +928,13 @@ pub struct upgrade_js_bindings {
     /// For testing upgrades when the temp directory has an open handle without FILE_SHARE_DELETE.
     /// Windows only
     fn jsOpenTempDirWithoutSharingDelete(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!bun.jsc.JSValue {
-        if (comptime !Environment.isWindows) return .js_undefined;
+        if (comptime !Environment.isWindows) return jsc.JSValue.js_undefined;
         const w = std.os.windows;
 
         let buf: bun.WPathBuffer = undefined;
         const tmpdir_path = fs.FileSystem.RealFS.getDefaultTempDir();
         const path = switch (bun.sys.normalizePathWindows(u8, bun.invalid_fd, tmpdir_path, &buf, {})) {
-            .err => return .js_undefined,
+            .err => return jsc.JSValue.js_undefined,
             .result => |norm| norm,
         };
 
@@ -978,17 +978,17 @@ pub struct upgrade_js_bindings {
             else => {},
         }
 
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn jsCloseTempDirHandle(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-        if (comptime !Environment.isWindows) return .js_undefined;
+        if (comptime !Environment.isWindows) return jsc.JSValue.js_undefined;
 
         if (fd := tempdir_fd) {
             fd.close();
         }
 
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 }
 

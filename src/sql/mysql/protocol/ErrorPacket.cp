@@ -44,7 +44,7 @@ export struct MySQLErrorOptions {
             reader.skip(-1);
         }
 
-        const peeked = reader.peek();
+        const peeked: []const u8 = reader.peek();
         this.error_message = reader.read(peeked.len)?;
     }
 

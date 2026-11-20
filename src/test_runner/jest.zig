@@ -241,7 +241,7 @@ pub const Jest = struct {
     pub var runner: ?*TestRunner = null;
 
 pub fn Bun__Jest__createTestModuleObject(globalObject: *JSGlobalObject) callconv(.c) JSValue {
-            return (blk_catch_2: { break :blk_catch_2 ((createTestModule(globalObject)) catch |__ce_2| { _ = &__ce_2; return .zero; }); });
+            return (blk_catch_2: { break :blk_catch_2 ((createTestModule(globalObject)) catch |__ce_2| { _ = &__ce_2; return JSValue.zero; }); });
     }
 
 pub fn createTestModule(globalObject: *JSGlobalObject) bun.JSError!JSValue {
@@ -254,7 +254,7 @@ pub fn createTestModule(globalObject: *JSGlobalObject) bun.JSError!JSValue {
             _ = module.put(globalObject, ZigString.static("xit"), xtest_scope_functions);
             const describe_scope_functions = try bun_test.ScopeFunctions.createBound(globalObject, .describe, .zero, .{}, bun_test.ScopeFunctions.strings.describe);
             _ = module.put(globalObject, ZigString.static("describe"), describe_scope_functions);
-            const xdescribe_scope_functions = (blk_catch_3: { break :blk_catch_3 ((bun_test.ScopeFunctions.createBound(globalObject, .describe, .zero, .{ .self_mode = .skip }, bun_test.ScopeFunctions.strings.xdescribe)) catch |__ce_3| { _ = &__ce_3; return error.zero; }); });
+            const xdescribe_scope_functions = (blk_catch_3: { break :blk_catch_3 ((bun_test.ScopeFunctions.createBound(globalObject, .describe, .zero, .{ .self_mode = .skip }, bun_test.ScopeFunctions.strings.xdescribe)) catch |__ce_3| { _ = &__ce_3; return JSValue.zero; }); });
             _ = module.put(globalObject, ZigString.static("xdescribe"), xdescribe_scope_functions);
             _ = module.put(globalObject, ZigString.static("beforeEach"), jsc.JSFunction.create(globalObject, "beforeEach", bun_test.js_fns.genericHook(.beforeEach).hookFn, 1, .{}));
             _ = module.put(globalObject, ZigString.static("beforeAll"), jsc.JSFunction.create(globalObject, "beforeAll", bun_test.js_fns.genericHook(.beforeAll).hookFn, 1, .{}));
@@ -351,7 +351,7 @@ pub fn jsSetDefaultTimeout(globalObject: *JSGlobalObject, callframe: *CallFrame)
                 _ = &test_runner;
                 test_runner.default_timeout_override = timeout_ms;
             }
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 };
 

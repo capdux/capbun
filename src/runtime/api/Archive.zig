@@ -279,10 +279,7 @@ pub fn run(self: *FilesContext) std.mem.Allocator.Error!Result {
             }
             var entry: *lib.Archive.Entry = undefined;
             _ = &entry;
-            while ((archive.readNextHeader((blk: {
-            break :blk entry;
-
-})) == .ok)) {
+            while ((archive.readNextHeader(entry) == .ok)) {
                 if ((entry.filetype() != @intFromEnum(lib.FileType.regular))) {
                     continue;
                 }
@@ -607,10 +604,7 @@ pub fn countFilesInArchive(data: []const u8) u32 {
         _ = &count;
         var entry: *libarchive.lib.Archive.Entry = undefined;
         _ = &entry;
-        while ((archive.readNextHeader((blk: {
-        break :blk entry;
-
-})) == .ok)) {
+        while ((archive.readNextHeader(entry) == .ok)) {
             if ((entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular))) {
                 count = (count + 1);
             }
@@ -733,10 +727,7 @@ pub fn extractToDiskFiltered(file_buffer: []const u8, root: []const u8, glob_pat
         _ = &count;
         var entry: *lib.Archive.Entry = undefined;
         _ = &entry;
-        while ((archive.readNextHeader((blk: {
-        break :blk entry;
-
-})) == .ok)) {
+        while ((archive.readNextHeader(entry) == .ok)) {
             const pathname = entry.pathnameUtf8();
             if ((!isSafePath(pathname))) {
                 continue;

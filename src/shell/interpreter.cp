@@ -972,7 +972,7 @@ pub struct Interpreter {
         jsobjs: []JSValue,
         export_env_: EnvMap?,
         pathbuf: *bun.PathBuffer,
-    ): *ThisInterpreter! {
+    ): anyerror!*ThisInterpreter {
         let export_env = brk: {
             if (event_loop == .js) break :brk (export_env_ ?? EnvMap.init(allocator));
 

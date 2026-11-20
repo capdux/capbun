@@ -28,7 +28,7 @@ pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFram
     const vm = globalThis.bunVM();
 
     if (vm.ipc == null) {
-        return .false;
+        return jsc.JSValue.@"false";
     }
     if (message.isUndefined()) {
         return globalThis.throwMissingArgumentsValue(&.{ "message" });
@@ -61,7 +61,7 @@ pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFram
             const arguments_ = callframe_.arguments_old(1).slice();
             const ex = arguments_[0];
             Process__emitErrorEvent(globalThis_, ex.toError() ?? ex);
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
     };
 
@@ -72,7 +72,7 @@ pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFram
         ex.put(globalThis, ZigString.static("syscall"), (bun.String.static("write").toJS(globalThis))?);
         const fnvalue = jsc.JSFunction.create(globalThis, "", S.@"impl", 1, .{});
         fnvalue.callNextTick(globalThis, .{ ex })?;
-        return .false;
+        return jsc.JSValue.@"false";
     }
 
     return if (good == .success) .true else .false;
@@ -85,7 +85,7 @@ pub fn onInternalMessageChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
     child_singleton.worker = .create(arguments[0], globalThis);
     child_singleton.cb = .create(arguments[1], globalThis);
     child_singleton.flush(globalThis)?;
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 pub fn handleInternalMessageChild(globalThis: *jsc.JSGlobalObject, message: jsc.JSValue): bun.JSError!void {
@@ -189,7 +189,7 @@ pub fn sendHelperPrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     const callback = arguments[3];
 
     const ipc_opt = subprocess.ipc();
-    if (ipc_opt == null) return .false;
+    if (ipc_opt == null) return jsc.JSValue.@"false";
     const ipc_data = ipc_opt.?;
 
     if (message.isUndefined()) {
@@ -220,13 +220,13 @@ pub fn onInternalMessagePrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc
     const arguments = callframe.arguments_old(3).ptr;
     const subprocess = arguments[0].@"as"(bun.jsc.Subprocess).?;
     const ipc_opt = subprocess.ipc();
-    if (ipc_opt == null) return .js_undefined;
+    if (ipc_opt == null) return jsc.JSValue.js_undefined;
     const ipc_data = ipc_opt.?;
 
     // TODO: remove these strongs.
     ipc_data.internal_msg_queue.worker = .create(arguments[1], globalThis);
     ipc_data.internal_msg_queue.cb = .create(arguments[2], globalThis);
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 pub fn handleInternalMessagePrimary(globalThis: *jsc.JSGlobalObject, subprocess: *jsc.Subprocess, message: jsc.JSValue): bun.JSError!void {
@@ -283,7 +283,7 @@ pub fn setRef(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
     } else {
         vm.channel_ref.unref(vm);
     }
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 export fn Bun__refChannelUnlessOverridden(globalObject: *jsc.JSGlobalObject) {
@@ -301,7 +301,7 @@ export fn Bun__unrefChannelUnlessOverridden(globalObject: *jsc.JSGlobalObject) {
 pub fn channelIgnoreOneDisconnectEventListener(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const vm = globalObject.bunVM();
     vm.channel_ref_should_ignore_one_disconnect_event_listener = true;
-    return .false;
+    return jsc.JSValue.@"false";
 }
 export fn Bun__shouldIgnoreOneDisconnectEventListener(globalObject: *jsc.JSGlobalObject): bool {
     const vm = globalObject.bunVM();

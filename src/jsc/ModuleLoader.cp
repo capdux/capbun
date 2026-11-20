@@ -178,7 +178,8 @@ pub fn transpileSourceCode(
             let fd: FD? = null;
             let package_json: (*PackageJSON)? = null;
 
-            if (index := jsc_vm.bun_watcher.indexOf(hash)) {
+            const indexOfFn = @TypeOf(jsc_vm.bun_watcher.*).indexOf;
+            if (index := indexOfFn(jsc_vm.bun_watcher, hash)) {
                 fd = jsc_vm.bun_watcher.watchlist().items(.fd)[index].unwrapValid();
                 package_json = jsc_vm.bun_watcher.watchlist().items(.package_json)[index];
             }
@@ -899,7 +900,7 @@ pub export fn Bun__transpileFile(
     }
 
     let virtual_source_to_use: logger.Source? = null;
-    let blob_to_deinit: jsc.WebCore.Blob? = null;
+    let blob_to_deinit: (*jsc.WebCore.Blob)? = null;
     let lr = options.getLoaderAndVirtualSource(_specifier.slice(), jsc_vm, &virtual_source_to_use, &blob_to_deinit, type_attribute_str) catch {
         ret.* = jsc.ErrorableResolvedSource.err(error.JSErrorObject, globalObject.ERR(.MODULE_NOT_FOUND, "Blob not found", {}).toJS());
         return null;

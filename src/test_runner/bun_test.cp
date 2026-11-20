@@ -87,7 +87,7 @@ pub struct js_fns {
                     group.log("genericHook in preload", .{});
 
                     * = bunTestRoot.hook_scope.appendHook(bunTestRoot.gpa, tag, args.callback, cfg, .{}, .preload)?;
-                    return .js_undefined;
+                    return jsc.JSValue.js_undefined;
                 }
                 const bunTest = bunTestOpt.?;
 
@@ -98,7 +98,7 @@ pub struct js_fns {
                         }
                         * = bunTest.collection.active_scope.appendHook(bunTest.gpa, tag, args.callback, cfg, .{}, .collection)?;
 
-                        return .js_undefined;
+                        return jsc.JSValue.js_undefined;
                     },
                     .execution => {
                         const active = bunTest.getCurrentStateData();
@@ -143,7 +143,7 @@ pub struct js_fns {
                         bun.handleOom(bunTest.extra_execution_entries.append(new_item));
                         append_point.next = new_item;
 
-                        return .js_undefined;
+                        return jsc.JSValue.js_undefined;
                     },
                     .done => return globalThis.throw("Cannot call {s}() after the test run has completed", .{ @tagName(tag) }),
                 }
@@ -539,11 +539,11 @@ pub struct BunTest {
     }
     static fn bunTestThen(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         bunTestThenOrCatch(globalThis, callframe, false)?;
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
     static fn bunTestCatch(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         bunTestThenOrCatch(globalThis, callframe, true)?;
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
     static fn bunTestDoneCallback(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         group.begin(@src());
@@ -569,7 +569,7 @@ pub struct BunTest {
             }
         }
         dcb.called = true;
-        if (dcb.ref == null) return .js_undefined;
+        if (dcb.ref == null) return jsc.JSValue.js_undefined;
         const ref_in = dcb.ref.?;
         defer dcb.ref = null;
         defer ref_in.deref();
@@ -580,17 +580,17 @@ pub struct BunTest {
         const has_one_ref = ref_in.ref_count.hasOneRef();
         const should_run = has_one_ref || was_error;
 
-        if (!should_run) return .js_undefined;
+        if (!should_run) return jsc.JSValue.js_undefined;
 
         const strong_opt = ref_in.buntest_weak.upgrade();
-        if (strong_opt == null) return .js_undefined;
+        if (strong_opt == null) return jsc.JSValue.js_undefined;
         let strong = strong_opt.?;
         defer strong.deinit();
         const buntest = strong.get();
         buntest.addResult(ref_in.phase);
         BunTest.runNextTick(ref_in.buntest_weak, globalThis, ref_in.phase);
 
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
     static fn bunTestTimeoutCallback(this_strong: BunTestPtr, _: *const bun.timespec, vm: *jsc.VirtualMachine) {
         group.begin(@src());

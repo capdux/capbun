@@ -31,11 +31,11 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, input: jsc.JSValue): jsc.JSValue 
             all_positionals.append(slice.slice())?;
         }
     } else {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     if (all_positionals.items.len == 0) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     let array = UpdateRequest.Array{};
@@ -43,7 +43,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, input: jsc.JSValue): jsc.JSValue 
     const update_requests = UpdateRequest.parseWithError(allocator, null, &log, all_positionals.items, &array, .add, false) catch {
         return globalThis.throwValue(log.toJS(globalThis, bun.default_allocator, "Failed to parse dependencies")?);
     };
-    if (update_requests.len == 0) return .js_undefined;
+    if (update_requests.len == 0) return jsc.JSValue.js_undefined;
 
     if (log.msgs.items.len > 0) {
         return globalThis.throwValue(log.toJS(globalThis, bun.default_allocator, "Failed to parse dependencies")?);

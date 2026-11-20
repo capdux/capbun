@@ -2778,7 +2778,8 @@ pub fn todoPanic(
 ): noreturn {
     @branchHint(.cold);
     analytics.Features.todo_panic = 1;
-    Output.panic("TODO: " ++ format ++ " ({s}:{d})", args ++ .{ src.file, src.line });
+    const actual_args = if (@typeInfo(@TypeOf(args)) == .pointer) args.* else args;
+    Output.panic("TODO: " ++ format ++ " ({s}:{d})", actual_args ++ .{ src.file, src.line });
 }
 
 /// Wrapper around allocator.create(T) that safely initializes the pointer. Prefer this over

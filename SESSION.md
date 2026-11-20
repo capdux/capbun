@@ -3142,3 +3142,5 @@ Options:
 - **[2026-11-20 22:32] Wave 20 B 组验收提交（23 模块全绿）**：完成 3 个外部根因（`walker_skippable`/`hot_reloader`/`shell`）+ 20 个 2~4 错模块独立验收（23/23 PASS，ratio 0.773x~1.038x）并原子提交；静待 Wave 20 A 组（`65d84f45`）完成后跑全仓 `zig:check` 并启动全仓机械清雷提速。
 
 - **[2026-11-20 22:34] Wave 20 A 组验收提交（24 模块全绿）**：完成 JSParser 10 模块 + Resolver/Bundler/Dotenv/Router 9 模块 + Bake/QUIC 4 模块 + `Parser.cp` 共 24 模块独立验收（24/24 PASS，ratio 0.704x~1.089x）并原子提交。
+
+- **[2026-11-20 22:38] Wave 21 B 组验收提交（25 模块全绿：14 多错 + 11 提前排雷）**：完成 `bun`/`S3File`/`ObjectURLRegistry`/`ModuleLoader`/`ipc`/`Archive`/`js_bun_spawn_bindings`/`cron`/`ssl_wrapper`/`interpreter`/`ErrorPacket`/`MySQLConnection`/`SocketContext`/`INotifyWatcher` 14 模块及 `upgrade_command`/`crash_handler_jsc`/`UnsafeObject`/`update_request_jsc`/`npm_jsc`/`dependency_jsc`/`PasswordObject`/`node_cluster_binding`/`node_util_binding`/`jest`/`bun_test` 11 个机械排雷模块独立验收（25/25 PASS，ratio 0.784x~1.123x）并原子提交；静待 A 组（`5a39b9ec`）完成。

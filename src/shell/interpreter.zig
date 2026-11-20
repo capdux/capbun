@@ -431,7 +431,7 @@ pub fn init(ctx: bun.cli.Command.Context, event_loop: jsc.EventLoopHandle, alloc
             return .{ .result = interpreter };
     }
 
-pub fn initImpl(sys: *ShellCatch, ctx: bun.cli.Command.Context, event_loop: jsc.EventLoopHandle, allocator: Allocator, shargs: *ShellArgs, jsobjs: []JSValue, export_env_: ?EnvMap, pathbuf: *bun.PathBuffer) *ThisInterpreter {
+pub fn initImpl(sys: *ShellCatch, ctx: bun.cli.Command.Context, event_loop: jsc.EventLoopHandle, allocator: Allocator, shargs: *ShellArgs, jsobjs: []JSValue, export_env_: ?EnvMap, pathbuf: *bun.PathBuffer) anyerror!*ThisInterpreter {
             var export_env = brk: {
             if ((event_loop == .js)) {
                 break :brk ((export_env_) orelse (EnvMap.init(allocator)));

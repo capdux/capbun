@@ -806,7 +806,7 @@ pub class JSPasswordObject {
                 if (!globalObject.hasException()) {
                     return globalObject.throwInvalidArgumentType("verify", "algorithm", unknown_password_algorithm_message);
                 }
-                return .zero;
+                return jsc.JSValue.zero;
             }
             algorithm = maybe_alg;
         }
@@ -828,11 +828,11 @@ pub class JSPasswordObject {
         defer hash_.deinit();
 
         if (hash_.slice().len == 0) {
-            return .false;
+            return jsc.JSValue.@"false";
         }
 
         if (password.slice().len == 0) {
-            return .false;
+            return jsc.JSValue.@"false";
         }
 
         return verify(globalObject, password.slice(), hash_.slice(), algorithm, true);

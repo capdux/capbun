@@ -212,7 +212,7 @@ pub fn normalizeEncoding(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     defer str.deref();
     if (str.length() == 0) return jsc.Node.Encoding.utf8.toJS(globalThis);
     if (enc := str.inMapCaseInsensitive(jsc.Node.Encoding.map)) return enc.toJS(globalThis);
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 pub fn parseEnv(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {

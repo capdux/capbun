@@ -62,7 +62,7 @@ pub fn versionToJS(dep: &Dependency.Version, buf: []const u8, globalThis: *jsc.J
 pub fn tagInferFromJS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
     const arguments = callframe.arguments_old(1).slice();
     if (arguments.len == 0 || !arguments[0].isString()) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     const dependency_str = arguments[0].toBunString(globalObject)?;
@@ -88,13 +88,13 @@ pub fn dependencyFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFra
     const alias_value: jsc.JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
 
     if (!alias_value.isString()) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
     const alias_slice = alias_value.toSlice(globalThis, allocator)?;
     defer alias_slice.deinit();
 
     if (alias_slice.len == 0) {
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     const name_value: jsc.JSValue = if (arguments.len > 1) arguments[1] else .js_undefined;
@@ -120,7 +120,7 @@ pub fn dependencyFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFra
         if (log.msgs.items.len > 0) {
             return globalThis.throwValue(log.toJS(globalThis, bun.default_allocator, "Failed to parse dependency")?);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
     const dep: Dependency.Version = maybe_dep.?;
 

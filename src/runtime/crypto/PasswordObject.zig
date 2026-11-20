@@ -655,7 +655,7 @@ pub fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe
                     if ((!globalObject.hasException())) {
                         return globalObject.throwInvalidArgumentType("verify", "algorithm", unknown_password_algorithm_message);
                     }
-                    return error.zero;
+                    return jsc.JSValue.zero;
                 }
                 algorithm = maybe_alg;
             }
@@ -685,10 +685,10 @@ pub fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe
             _ = hash_.deinit();
             }
             if ((hash_.slice().len == 0)) {
-                return error.false;
+                return jsc.JSValue.@"false";
             }
             if ((password.slice().len == 0)) {
-                return error.false;
+                return jsc.JSValue.@"false";
             }
             return verify(globalObject, password.slice(), hash_.slice(), algorithm, true);
     }

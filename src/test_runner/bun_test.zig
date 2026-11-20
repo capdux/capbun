@@ -146,7 +146,7 @@ pub fn hookFn(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JS
                 }
                 _ = group.log("genericHook in preload", .{});
                 _ = try bunTestRoot.hook_scope.appendHook(bunTestRoot.gpa, tag, args.callback, cfg, .{}, .preload);
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
             }
             const bunTest = bunTestOpt.?;
             switch (bunTest.phase) {
@@ -155,7 +155,7 @@ if ((tag == .onTestFinished)) {
                 return globalThis.throw("Cannot call {s}() outside of a test. It can only be called inside a test.", .{ @tagName(tag) });
             }
             _ = try bunTest.collection.active_scope.appendHook(bunTest.gpa, tag, args.callback, cfg, .{}, .collection);
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
 },
 .execution => {
 const active = bunTest.getCurrentStateData();
@@ -198,7 +198,7 @@ return globalThis.throw("Cannot call {s}() inside a test. Call it inside describ
             new_item.next = append_point.next;
             _ = bun.handleOom(bunTest.extra_execution_entries.append(new_item));
             append_point.next = new_item;
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
 },
 .done => {
 return globalThis.throw("Cannot call {s}() after the test run has completed", .{ @tagName(tag) });
@@ -428,12 +428,12 @@ pub fn bunTestThenOrCatch(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallF
 
 pub fn bunTestThen(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = try bunTestThenOrCatch(globalThis, callframe, false);
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn bunTestCatch(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = try bunTestThenOrCatch(globalThis, callframe, true);
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn bunTestDoneCallback(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -456,7 +456,7 @@ pub fn bunTestDoneCallback(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
             }
             dcb.called = true;
             if ((dcb.ref == null)) {
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
             }
             const ref_in = dcb.ref.?;
             defer {
@@ -468,11 +468,11 @@ pub fn bunTestDoneCallback(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
             const has_one_ref = ref_in.ref_count.hasOneRef();
             const should_run = (has_one_ref or was_error);
             if ((!should_run)) {
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
             }
             const strong_opt = ref_in.buntest_weak.upgrade();
             if ((strong_opt == null)) {
-                return error.js_undefined;
+                return jsc.JSValue.js_undefined;
             }
             var strong = strong_opt.?;
             _ = &strong;
@@ -482,7 +482,7 @@ pub fn bunTestDoneCallback(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
             const buntest = strong.get();
             _ = buntest.addResult(ref_in.phase);
             _ = BunTest.runNextTick(ref_in.buntest_weak, globalThis, ref_in.phase);
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn bunTestTimeoutCallback(this_strong: BunTestPtr, _: *const bun.timespec, vm: *jsc.VirtualMachine) void {

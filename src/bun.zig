@@ -2948,7 +2948,8 @@ pub noinline fn outOfMemory() noreturn {
 pub fn todoPanic(src: std.builtin.SourceLocation, comptime format: []const u8, args: anytype) noreturn {
         @branchHint(.cold);
         analytics.Features.todo_panic = 1;
-        _ = Output.panic((("TODO: " ++ format) ++ " ({s}:{d})"), (args ++ .{ src.file, src.line }));
+        const actual_args = (if ((@typeInfo(@TypeOf(args)) == .pointer)) args.* else args);
+        _ = Output.panic((("TODO: " ++ format) ++ " ({s}:{d})"), (actual_args ++ .{ src.file, src.line }));
 }
 
 pub fn create(allocator: std.mem.Allocator, comptime T: type, t: T) *T {
