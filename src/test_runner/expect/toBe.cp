@@ -36,10 +36,10 @@ pub fn toBe(
     const signature = comptime getSignature("toBe", "<green>expected<r>", false);
     if (left.deepEquals(right, globalThis)? || left.strictDeepEquals(right, globalThis)?) {
         if (!client.custom_label.isEmpty()) {
-            const fmt = "\n\nExpected: <green>{f}<r>\nReceived: serializes to the same string\n";
+            const fmt: [:0]const u8 = "\n\nExpected: <green>{f}<r>\nReceived: serializes to the same string\n";
             return client.throw(globalThis, signature, fmt, .{ right.toFmt(&formatter) });
         } else {
-            const fmt = "\n\n<d>If this test should pass, replace \"toBe\" with \"toEqual\" or \"toStrictEqual\"<r>\n\nExpected: <green>{f}<r>\nReceived: serializes to the same string\n";
+            const fmt: [:0]const u8 = "\n\n<d>If this test should pass, replace \"toBe\" with \"toEqual\" or \"toStrictEqual\"<r>\n\nExpected: <green>{f}<r>\nReceived: serializes to the same string\n";
             return client.throw(globalThis, signature, fmt, .{ right.toFmt(&formatter) });
         }
     }

@@ -428,7 +428,7 @@ pub struct Expect {
             let tup: ArgsTupleType(T) = undefined;
             comptime let i: usize = 0;
             inline while (i < fields.len) : (i += 1) {
-                tup[i] = @field(args, fields[i].name);
+                @field(tup, std.fmt.comptimePrint("{d}", .{i})) = @field(args, fields[i].name);
             }
             return tup;
         }
@@ -2149,12 +2149,13 @@ pub struct mock {
                 return;
             }
 
-            for (i of 0..calls_count) {
+            let i: u32 = 0;
+            while (i < calls_count) : (i += 1) {
                 if (printed_once) try writer.writeAll("\n");
                 printed_once = true;
 
                 writer.print("           {d: >4}: ", .{ i + 1 })?;
-                const call_args = self.calls.getIndex(self.globalThis, i32(i)) catch |e| return bun.deprecated.jsErrorToWriteError(e);
+                const call_args = self.calls.getIndex(self.globalThis, i) catch |e| return bun.deprecated.jsErrorToWriteError(e);
                 writer.print("{f}", .{ call_args.toFmt(self.formatter) })?;
             }
         }

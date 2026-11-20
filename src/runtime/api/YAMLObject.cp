@@ -547,7 +547,8 @@ pub struct Stringifier {
     fn appendDoubleQuotedString(*_, str: String) {
         _.builder.append(.lchar, '"');
 
-        for (i of 0..str.length()) {
+        let i: usize = 0;
+        while (i < str.length()) : (i += 1) {
             const c = str.charAt(i);
 
             switch (c) {
@@ -663,7 +664,7 @@ pub struct Stringifier {
             else => {},
         }
 
-        const keywords = [
+        const keywords: [32][]const u8 = [
             "true",
             "True",
             "TRUE",
@@ -1006,7 +1007,7 @@ struct ParserCtx {
         };
     }
 
-    const ToJSError = JSError || bun.StackOverflow;
+    const ToJSError = error{ JSError, OutOfMemory, JSTerminated, StackOverflow };
 
     static fn toJS(ctx: *ParserCtx, args: *MarkedArgumentBuffer, expr: Expr): ToJSError!JSValue {
         if (!ctx.stack_check.isSafeToRecurse()) {

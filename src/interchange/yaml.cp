@@ -2051,10 +2051,10 @@ pub struct Parser<const enc: Encoding> {
         return {
             input: input,
             allocator: allocator,
-            pos: .@"from"(0),
+            pos: Pos.@"from"(0),
             line_indent: .none,
-            line: .@"from"(1),
-            token: .eof({ start: .@"from"(0), indent: .none, line: .@"from"(1) }),
+            line: Line.@"from"(1),
+            token: Token(enc).eof({ start: Pos.@"from"(0), indent: .none, line: Line.@"from"(1) }),
             // .key = null,
             // .literal = null,
             context: .init(allocator),
@@ -2090,7 +2090,8 @@ pub struct Parser<const enc: Encoding> {
         return _.parseStream()?;
     }
 
-    const ParseError = OOM || error{
+    const ParseError = error{
+        OutOfMemory,
         UnexpectedToken,
         UnexpectedEof,
         InvalidDirective,

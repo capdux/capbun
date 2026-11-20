@@ -461,13 +461,11 @@ _ = self.builder.append(.lchar, 10);
 
 pub fn appendDoubleQuotedString(self: *Stringifier, str: String) void {
             _ = self.builder.append(.lchar, 34);
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_2 = str.length();
-                while (i < __end_2) : (i += 1) {
-                    const c = str.charAt(i);
-                    switch (c) {
+            var i: usize = 0;
+            _ = &i;
+            while ((i < str.length())) : (i = (i + 1)) {
+                const c = str.charAt(i);
+                switch (c) {
 0 => {
 _ = self.builder.append(.latin1, "\\0");
 },
@@ -590,7 +588,6 @@ _ = self.builder.append(.uchar, c);
 },
 else => unreachable,
 }
-                }
             }
             _ = self.builder.append(.lchar, 34);
     }
@@ -623,7 +620,7 @@ else => {
 
 },
 }
-            const keywords: [][]const u8 = .{ "true", "True", "TRUE", "false", "False", "FALSE", "yes", "Yes", "YES", "no", "No", "NO", "on", "On", "ON", "off", "Off", "OFF", "n", "N", "y", "Y", "null", "Null", "NULL", "~", ".inf", ".Inf", ".INF", ".nan", ".NaN", ".NAN" };
+            const keywords: [32][]const u8 = .{ "true", "True", "TRUE", "false", "False", "FALSE", "yes", "Yes", "YES", "no", "No", "NO", "on", "On", "ON", "off", "Off", "OFF", "n", "N", "y", "Y", "null", "Null", "NULL", "~", ".inf", ".Inf", ".INF", ".nan", ".NaN", ".NAN" };
             inline for (keywords) |keyword| {
                 if (str.eqlComptime(keyword)) {
                     return true;
@@ -808,7 +805,7 @@ return JSValue.js_undefined;
 },
 }
     }
-    const ToJSError = (JSError or bun.StackOverflow);
+    const ToJSError = error{ JSError, OutOfMemory, JSTerminated, StackOverflow };
 };
 
 pub const Name = union(AnchorOrigin) {

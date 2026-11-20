@@ -3265,7 +3265,7 @@ pub fn lstat(self: *NodeFS, args: Arguments.Lstat, _: Flavor) Maybe(Return.Lstat
 .result => |result| .{ .result = .{ .stats = .init((&result), args.big_int) } },
 .err => |e| brk: {
                 if (((!args.throw_if_no_entry) and (e.getErrno() == .NOENT))) {
-                    return .{ .result = .{ .not_found = .{} } };
+                    return .{ .result = .not_found };
                 }
                 break :brk .{ .err = e.withPath(args.path.slice()) };
 },
@@ -3275,7 +3275,7 @@ pub fn lstat(self: *NodeFS, args: Arguments.Lstat, _: Flavor) Maybe(Return.Lstat
 .result => |result| .{ .result = .{ .stats = .init((&Syscall.PosixStat.init((&result))), args.big_int) } },
 .err => |e| brk: {
                 if (((!args.throw_if_no_entry) and (e.getErrno() == .NOENT))) {
-                    return .{ .result = .{ .not_found = .{} } };
+                    return .{ .result = .not_found };
                 }
                 break :brk .{ .err = e.withPath(args.path.slice()) };
 },
@@ -3293,13 +3293,14 @@ pub fn mkdir(self: *NodeFS, args: Arguments.Mkdir, _: Flavor) Maybe(Return.Mkdir
 pub fn mkdirNonRecursive(self: *NodeFS, args: Arguments.Mkdir) Maybe(Return.Mkdir) {
             const path = args.path.sliceZ((&self.sync_error_buf));
             return (switch (Syscall.mkdir(path, args.mode)) {
-.result => .{ .result = .{ .none = {} } },
+.result => .{ .result = .none },
 .err => |e| .{ .err = e.withPath(args.path.slice()) },
 });
     }
 
 pub fn mkdirRecursive(self: *NodeFS, args: Arguments.Mkdir) Maybe(Return.Mkdir) {
-            return self.mkdirRecursiveImpl(args, void, .{});
+            const empty_void: void = undefined;
+            return self.mkdirRecursiveImpl(args, void, empty_void);
     }
 
 pub fn mkdirRecursiveImpl(self: *NodeFS, args: Arguments.Mkdir, comptime Ctx: type, ctx: Ctx) Maybe(Return.Mkdir) {
@@ -3570,18 +3571,18 @@ pub fn readv(self: *NodeFS, args: Arguments.Readv, _: Flavor) Maybe(Return.Readv
             if ((args.buffers.buffers.items.len == 0)) {
                 return .{ .result = .{ .bytes_read = 0 } };
             }
-            return (if ((args.position != null)) self.preadvInner(self, args) else self.readvInner(self, args));
+            return (if ((args.position != null)) self.preadvInner(args) else self.readvInner(args));
     }
 
 pub fn writev(self: *NodeFS, args: Arguments.Writev, _: Flavor) Maybe(Return.Writev) {
             if ((args.buffers.buffers.items.len == 0)) {
                 return .{ .result = .{ .bytes_written = 0 } };
             }
-            return (if ((args.position != null)) self.pwritevInner(self, args) else self.writevInner(self, args));
+            return (if ((args.position != null)) self.pwritevInner(args) else self.writevInner(args));
     }
 
 pub fn write(self: *NodeFS, args: Arguments.Write, _: Flavor) Maybe(Return.Write) {
-            return (if ((args.position != null)) self.pwriteInner(self, args) else self.writeInner(self, args));
+            return (if ((args.position != null)) self.pwriteInner(args) else self.writeInner(args));
     }
 
 pub fn uv_write(self: *NodeFS, args: Arguments.Write, rc: i64) Maybe(Return.Write) {
@@ -3687,7 +3688,7 @@ pub fn readdirWithEntries(args: Arguments.Readdir, fd: bun.FD, basename: [:0]con
                 _ = dirent_path.deref();
             }
             }
-            const dir_enc = (if (is_u16) DirIterator.Encoding.u16 else DirIterator.Encoding.u8);
+            const dir_enc = (if (is_u16) DirIterator.PathType.u16 else DirIterator.PathType.u8);
             var iterator = DirIterator.iterate(fd, dir_enc);
             _ = &iterator;
             var entry = iterator.next();
@@ -3813,7 +3814,7 @@ else => {
                 }
             }
             }
-            var iterator = DirIterator.iterate(fd, DirIterator.Encoding.u8);
+            var iterator = DirIterator.iterate(fd, DirIterator.PathType.u8);
             _ = &iterator;
             var entry = iterator.next();
             _ = &entry;
@@ -3970,7 +3971,7 @@ return .{ .err = e };
                     }
                 }
                 }
-                var iterator = DirIterator.iterate(fd, DirIterator.Encoding.u8);
+                var iterator = DirIterator.iterate(fd, DirIterator.PathType.u8);
                 _ = &iterator;
                 var entry = iterator.next();
                 _ = &entry;
@@ -4100,7 +4101,7 @@ pub fn readdirInner(buf: *bun.PathBuffer, args: Arguments.Readdir, comptime Expe
                         }
                     }
                     _ = entries.deinit();
-                    return .{ .e = e };
+                    return .{ .err = e };
                 }
 },
 .result => .{ .result = @unionInit(Return.Readdir, file_type, entries.items) },
@@ -4126,7 +4127,7 @@ return .{ .err = e.withPath(args.path.slice()) };
             _ = &entries;
             return (switch (readdirWithEntries(args, fd, path, ExpectedType, (&entries))) {
 .err => |e| {
-return .{ .e = e };
+return .{ .err = e };
 },
 .result => .{ .result = @unionInit(Return.Readdir, file_type, entries.items) },
 });
@@ -4209,7 +4210,7 @@ return .{ .err = e.withPath(args.path.path.slice()) };
             _ = &did_succeed;
             var total: usize = 0;
             _ = &total;
-            const async_stack_buf_len: usize = (if ((flavor == .sync)) (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)) else (if (comptime @typeInfo(@TypeOf((256 * 1024))) == .@"enum") cp_cast_int(usize, @intFromEnum((256 * 1024))) else cp_cast_int(usize, (256 * 1024))));
+            const async_stack_buf_len = (comptime (if ((flavor == .sync)) 0 else (256 * 1024)));
             _ = &async_stack_buf_len;
             var async_stack_buffer: [async_stack_buf_len]u8 = undefined;
             _ = &async_stack_buffer;
@@ -4272,7 +4273,7 @@ if (comptime (string_type == .default)) {
             }
             const stat_ = (switch (Syscall.fstat(fd)) {
 .err => |e| {
-return .{ .e = e };
+return .{ .err = e };
 },
 .result => |stat_| stat_,
 });
@@ -4310,7 +4311,7 @@ total = (total + amt);
                 if (args.limit_size_for_javascript) {
                     if (NodeFS.shouldThrowOutOfMemoryEarlyForJavaScript(args.encoding, total, .read)) |e| {
                         _ = &e;
-                        return .{ .e = e.withPathLike(args.path) };
+                        return .{ .err = e.withPathLike(args.path) };
                     }
                 }
                 if ((((total > size) and (amt != 0)) and (!has_max_size))) {
@@ -4425,7 +4426,7 @@ return .{ .err = e.withPath(args.file.path.slice()) };
             while ((buf.len > 0)) {
                 switch (bun.sys.write(fd, buf)) {
 .err => |e| {
-return .{ .e = e };
+return .{ .err = e };
 },
 .result => |amt| {
 buf = buf[amt..];
@@ -4648,9 +4649,9 @@ pub fn stat(self: *NodeFS, args: Arguments.Stat, _: Flavor) Maybe(Return.Stat) {
             const path = args.path.sliceZ((&self.sync_error_buf));
             if (bun.StandaloneModuleGraph.get()) |graph| {
                 _ = &graph;
-                if (graph.stat(path)) |*result| {
+                if (graph.stat(path)) |result| {
                     _ = &result;
-                    return .{ .result = .{ .stats = .init((&Syscall.PosixStat.init((result.*))), args.big_int) } };
+                    return .{ .result = .{ .stats = .init((&Syscall.PosixStat.init((&result))), args.big_int) } };
                 }
             }
             if ((Environment.isLinux and Syscall.supports_statx_on_linux.load(.monotonic))) {
@@ -4658,7 +4659,7 @@ pub fn stat(self: *NodeFS, args: Arguments.Stat, _: Flavor) Maybe(Return.Stat) {
 .result => |result| .{ .result = .{ .stats = .init((&result), args.big_int) } },
 .err => |e| brk: {
                 if (((!args.throw_if_no_entry) and (e.getErrno() == .NOENT))) {
-                    return .{ .result = .{ .not_found = .{} } };
+                    return .{ .result = .not_found };
                 }
                 break :brk .{ .err = e.withPath(args.path.slice()) };
 },
@@ -4668,7 +4669,7 @@ pub fn stat(self: *NodeFS, args: Arguments.Stat, _: Flavor) Maybe(Return.Stat) {
 .result => |result| .{ .result = .{ .stats = .init((&Syscall.PosixStat.init((&result))), args.big_int) } },
 .err => |e| brk: {
                 if (((!args.throw_if_no_entry) and (e.getErrno() == .NOENT))) {
-                    return .{ .result = .{ .not_found = .{} } };
+                    return .{ .result = .not_found };
                 }
                 break :brk .{ .err = e.withPath(args.path.slice()) };
 },
@@ -4937,7 +4938,7 @@ return .{ .err = e };
 
 },
 }
-            const dir_enc2 = (if (Environment.isWindows) DirIterator.Encoding.u16 else DirIterator.Encoding.u8);
+            const dir_enc2 = (if (Environment.isWindows) DirIterator.PathType.u16 else DirIterator.PathType.u8);
             var iterator = DirIterator.iterate(fd, dir_enc2);
             _ = &iterator;
             var entry = iterator.next();
@@ -6085,9 +6086,10 @@ pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []con
                 _ = dir.close();
             }
             }
-            var dir_name_buf: struct { std.fs.max_path_bytes } = undefined;
+            const max_path_bytes = std.fs.max_path_bytes;
+            _ = &max_path_bytes;
+            var dir_name_buf: [max_path_bytes]u8 = undefined;
             _ = &dir_name_buf;
-            u8 = undefined;
             var dir_name: []const u8 = sub_path;
             _ = &dir_name;
             scan_dir: while (true) {

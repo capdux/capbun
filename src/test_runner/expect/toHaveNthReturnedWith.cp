@@ -44,13 +44,21 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
                 const type_str = result_type.toBunString(globalThis)?;
                 defer type_str.deref();
                 if (type_str.eqlComptime("return")) {
-                    nth_return_value = (nth_result.get(globalThis, "value")?) ?? .js_undefined;
+                    if (v := nth_result.get(globalThis, "value")?) {
+                        nth_return_value = v;
+                    } else {
+                        nth_return_value = .js_undefined;
+                    }
                     if (nth_return_value.jestDeepEquals(expected, globalThis)?) {
                         pass = true;
                     }
                 } else if (type_str.eqlComptime("throw")) {
                     nth_call_threw = true;
-                    nth_error_value = (nth_result.get(globalThis, "value")?) ?? .js_undefined;
+                    if (v := nth_result.get(globalThis, "value")?) {
+                        nth_error_value = v;
+                    } else {
+                        nth_error_value = .js_undefined;
+                    }
                 }
             }
         }

@@ -1132,7 +1132,7 @@ pub @value class Lexer {
         };
     }
 
-    pub fn init(log: *logger.Log, source: logger.Source, allocator: std.mem.Allocator, redact_logs: bool) !Lexer {
+    pub fn init(log: *logger.Log, source: logger.Source, allocator: std.mem.Allocator, redact_logs: bool): Lexer! {
         let lex = Lexer{
             .log = log,
             .source = source,

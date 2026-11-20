@@ -123,7 +123,7 @@ pub fn setTitle(globalObject: *JSGlobalObject, newvalue: *bun.String) callconv(.
         defer {
         _ = title_mutex.unlock();
         }
-        const new_title = (blk_catch_0: { break :blk_catch_0 ((newvalue.toOwnedSlice(bun.default_allocator)) catch |__ce_0| { _ = &__ce_0; _ = (blk_catch_1: { break :blk_catch_1 ((globalObject.throwOutOfMemory()) catch |__ce_1| { _ = &__ce_1;  }); });
+        const new_title = (blk_catch_0: { break :blk_catch_0 ((newvalue.toOwnedSlice(bun.default_allocator)) catch |__ce_0| { _ = &__ce_0; _ = globalObject.throwOutOfMemory();
         return; }); });
         if (bun.cli.Bun__Node__ProcessTitle) |slice| {
             _ = &slice;
@@ -137,7 +137,7 @@ pub fn createArgv0(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
 }
 
 pub fn getExecPath(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
-        const out = (blk_catch_2: { break :blk_catch_2 ((bun.selfExePath()) catch |__ce_2| { _ = &__ce_2; return createArgv0(globalObject); }); });
+        const out = (blk_catch_1: { break :blk_catch_1 ((bun.selfExePath()) catch |__ce_1| { _ = &__ce_1; return createArgv0(globalObject); }); });
         return jsc.ZigString.fromUTF8(out).toJS(globalObject);
 }
 
@@ -283,7 +283,7 @@ pub fn createArgv(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
             _ = &worker;
             args_count = worker.argv.len;
         }
-        const args = (blk_catch_3: { break :blk_catch_3 ((allocator.alloc(bun.String, (args_count + 2))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+        const args = (blk_catch_2: { break :blk_catch_2 ((allocator.alloc(bun.String, (args_count + 2))) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
         defer {
         _ = allocator.free(args);
         }
@@ -292,7 +292,7 @@ pub fn createArgv(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
         if ((vm.standalone_module_graph != null)) {
             _ = args_list.appendAssumeCapacity(bun.String.static("bun"));
         } else {
-            const exe_path = (blk_catch_4: { break :blk_catch_4 ((bun.selfExePath()) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); });
+            const exe_path = (blk_catch_3: { break :blk_catch_3 ((bun.selfExePath()) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); });
             var argv0_str = bun.String.static("bun");
             _ = &argv0_str;
             if (exe_path) |str| {
@@ -321,7 +321,7 @@ pub fn createArgv(globalObject: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
                 _ = args_list.appendAssumeCapacity(str);
             }
         }
-        return (blk_catch_5: { break :blk_catch_5 ((bun.String.toJSArray(globalObject, args_list.items)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 .zero; }); });
+        return (blk_catch_4: { break :blk_catch_4 ((bun.String.toJSArray(globalObject, args_list.items)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 .zero; }); });
 }
 
 extern "c" fn Bun__Process__getArgv(global: *JSGlobalObject) callconv(.c) JSValue;
@@ -366,7 +366,7 @@ pub fn setCwd_(globalObject: *jsc.JSGlobalObject, to: *jsc.ZigString) bun.JSErro
         const fs = vm.transpiler.fs;
         var buf: bun.PathBuffer = undefined;
         _ = &buf;
-        const slice = (blk_catch_6: { break :blk_catch_6 ((to.sliceZBuf((&buf))) catch |__ce_6| { _ = &__ce_6; return globalObject.throw("Invalid path", .{}); }); });
+        const slice = (blk_catch_5: { break :blk_catch_5 ((to.sliceZBuf((&buf))) catch |__ce_5| { _ = &__ce_5; return globalObject.throw("Invalid path", .{}); }); });
         switch (Syscall.chdir(fs.top_level_dir, slice)) {
 .result => {
 const into_cwd_buf = (switch (bun.sys.getcwd((&buf))) {

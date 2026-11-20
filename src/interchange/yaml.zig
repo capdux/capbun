@@ -2020,7 +2020,7 @@ pub fn Parser(comptime enc: Encoding) type {
         stack_check: bun.StackCheck,
 
 pub fn init(allocator: std.mem.Allocator, input: []const enc.unit()) @This() {
-                return .{ .input = input, .allocator = allocator, .pos = .{ .@"from" = 0 }, .line_indent = .none, .line = .{ .@"from" = 1 }, .token = .eof(.{ .start = .{ .@"from" = 0 }, .indent = .none, .line = .{ .@"from" = 1 } }), .context = .init(allocator), .block_indents = .init(allocator), .explicit_document_start_line = null, .anchors = .init(allocator), .tag_handles = .init(allocator), .whitespace_buf = .init(allocator), .stack_check = .init() };
+                return .{ .input = input, .allocator = allocator, .pos = Pos.@"from"(0), .line_indent = .none, .line = Line.@"from"(1), .token = Token(enc).eof(.{ .start = Pos.@"from"(0), .indent = .none, .line = Line.@"from"(1) }), .context = .init(allocator), .block_indents = .init(allocator), .explicit_document_start_line = null, .anchors = .init(allocator), .tag_handles = .init(allocator), .whitespace_buf = .init(allocator), .stack_check = .init() };
         }
 
 pub fn deinit(self: *@This()) void {
@@ -4548,7 +4548,8 @@ pub fn stringBuilder(self: *@This()) String.Builder {
         const chars = enc.chars();
         const Whitespace = ParserWhitespace(enc);
         pub const ParseResult = ParserParseResult(enc);
-        const ParseError = (OOM or error{
+        const ParseError = error{
+                OutOfMemory,
                 UnexpectedToken,
                 UnexpectedEof,
                 InvalidDirective,
@@ -4567,7 +4568,7 @@ pub fn stringBuilder(self: *@This()) String.Builder {
         
                 // InvalidSyntax,
                 // UnexpectedDirective,
-            });
+            };
         const MappingProps = ParserMappingProps;
         const NodeProperties = ParserNodeProperties(enc);
         const ParseNodeOptions = ParserParseNodeOptions(enc);

@@ -3078,3 +3078,5 @@ Options:
 - **[2026-11-20 19:40] Wave 11 Batch B 验收提交（34 模块全绿）+ Wave 12 `zig:check` 里程碑**：完成 34 模块独立验收（34/34 PASS，ratio 0.823x~1.123x）；Wave 12 `bun run zig:check` 报错文件数由 **119 骤降至 43**（**1,250 / 1,293 = 96.7% 模块已 0 错误**），剩余 422 处报错中 88.6% 高度集中于前 8 个泛型/CSS/Expect 文件。
 
 - **[2026-11-20 19:49] Wave 12 总攻 A 组验收提交（Meta + CSS 泛型 9 模块全绿，覆盖 275 / 422 错）**：完成 `meta`/`generics`/`calc`/`angle`/`time`/`length`/`css_parser`/`printer`/`number` 9 模块独立验收（9/9 PASS，ratio 0.964x~1.067x）并原子提交；静待 B 组（`fe53f27f`）与 C 组（`cab05504`）完成后执行 Wave 13 `zig:check` 冲击 0 错误。
+
+- **[2026-11-20 19:50] Wave 12 总攻 B 组验收提交（Expect + Node FS + Interchange 14 模块全绿，覆盖 120 错）**：完成 `expect`/`ScopeFunctions`/`Execution`/`pretty_format`/`toBe`/`toHaveLastReturnedWith`/`toHaveNthReturnedWith`/`toThrow`/`node_fs`/`node_process`/`YAMLObject`/`yaml`/`json`/`toml/lexer` 14 模块独立验收并原子提交；静待 C 组（`cab05504`）完成后跑 Wave 13 `zig:check`。

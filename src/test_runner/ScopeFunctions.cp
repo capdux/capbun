@@ -224,7 +224,15 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
     if (timeout := timeout_option) {
         timeout_option_ms = std.math.lossyCast(u32, timeout);
     }
-    result.options.timeout = timeout_option_ms ?? override_timeout_ms ?? default_timeout_ms ?? 0;
+    if (t := timeout_option_ms) {
+        result.options.timeout = t;
+    } else if (t := override_timeout_ms) {
+        result.options.timeout = t;
+    } else if (t := default_timeout_ms) {
+        result.options.timeout = t;
+    } else {
+        result.options.timeout = 0;
+    }
 
     return result;
 }
@@ -307,7 +315,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         defer buntest_strong.deinit();
         const bunTest = buntest_strong.get();
 
-        const args = parseArguments(globalThis, callFrame, .{ scope_functions: client }, bunTest.gpa, {
+        let args = parseArguments(globalThis, callFrame, .{ scope_functions: client }, bunTest.gpa, {
             callback: if (client.cfg.self_mode == .todo) .allow else .require,
             kind: .test_or_describe,
         })?;

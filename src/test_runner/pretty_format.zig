@@ -98,12 +98,12 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
                         if ((level == .Error)) {
                             _ = ((writer.writeAll((comptime Output.prettyFmt("<r><red>", true)))) catch unreachable);
                         }
-                        _ = try fmt.format(tag, @TypeOf(writer), writer, (vals[0]).*, global, true);
+                        _ = try fmt.format(tag, @TypeOf(writer), writer, vals[0], global, true);
                         if ((level == .Error)) {
                             _ = ((writer.writeAll((comptime Output.prettyFmt("<r>", true)))) catch unreachable);
                         }
                     } else {
-                        _ = try fmt.format(tag, @TypeOf(writer), writer, (vals[0]).*, global, false);
+                        _ = try fmt.format(tag, @TypeOf(writer), writer, vals[0], global, false);
                     }
                     if (options.add_newline) {
                         _ = (blk_catch_2: { break :blk_catch_2 ((writer.writeAll("\n")) catch |__ce_2| { _ = &__ce_2;  }); });
@@ -117,9 +117,9 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
                     }
                     }
                     if (options.enable_colors) {
-                        _ = try fmt.format(tag, *std.Io.Writer, writer, (vals[0]).*, global, true);
+                        _ = try fmt.format(tag, *std.Io.Writer, writer, vals[0], global, true);
                     } else {
-                        _ = try fmt.format(tag, *std.Io.Writer, writer, (vals[0]).*, global, false);
+                        _ = try fmt.format(tag, *std.Io.Writer, writer, vals[0], global, false);
                     }
                     if (options.add_newline) {
                         _ = (blk_catch_4: { break :blk_catch_4 ((writer.write("\n")) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); });
@@ -135,7 +135,7 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
                 }
             }
             }
-            var this_value: JSValue = (vals[0]).*;
+            var this_value = vals[0];
             _ = &this_value;
             fmt = Formatter{ .remaining_values = vals[0..len][1..], .globalThis = global, .quote_strings = options.quote_strings };
             var tag: Formatter.Tag.Result = undefined;

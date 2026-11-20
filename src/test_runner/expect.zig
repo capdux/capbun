@@ -495,7 +495,7 @@ pub fn argsToTuple(args: anytype) ArgsTupleType(@TypeOf(args)) {
                 comptime var i: usize = 0;
                 _ = &i;
                 inline while ((i < fields.len)) : (i = (i + 1)) {
-                    tup[cp_cast_int(usize, i)] = @field(args, (if (@typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"union") @tagName(fields[@as(usize, @intCast(i))]) else fields[@as(usize, @intCast(i))].name));
+                    @field(tup, std.fmt.comptimePrint("{d}", .{ i })) = @field(args, (if (@typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(fields[@as(usize, @intCast(i))])) == .@"union") @tagName(fields[@as(usize, @intCast(i))]) else fields[@as(usize, @intCast(i))].name));
                 }
                 return tup;
             }
@@ -2142,19 +2142,16 @@ pub fn jestMockReturnObject_value(globalThis: *JSGlobalObject, value: bun.jsc.JS
                     _ = try writer.writeAll("(no calls)");
                     return;
                 }
-                {
-                    var i: i32 = 0;
-                    _ = &i;
-                    const __end_0 = calls_count;
-                    while (i < __end_0) : (i += 1) {
-                        if (printed_once) {
-                            _ = try writer.writeAll("\n");
-                        }
-                        printed_once = true;
-                        _ = try writer.print("           {d: >4}: ", .{ (i + 1) });
-                        const call_args = (blk_catch_1: { break :blk_catch_1 ((self.calls.getIndex(self.globalThis, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
-                        _ = try writer.print("{f}", .{ call_args.toFmt(self.formatter) });
+                var i: u32 = 0;
+                _ = &i;
+                while ((i < calls_count)) : (i = (i + 1)) {
+                    if (printed_once) {
+                        _ = try writer.writeAll("\n");
                     }
+                    printed_once = true;
+                    _ = try writer.print("           {d: >4}: ", .{ (i + 1) });
+                    const call_args = (blk_catch_1: { break :blk_catch_1 ((self.calls.getIndex(self.globalThis, i)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+                    _ = try writer.print("{f}", .{ call_args.toFmt(self.formatter) });
                 }
         }
     };

@@ -76,7 +76,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
                 result.fastGet(globalThis, .message)?
             else
                 JSValue.fromCell(result.toJSString(globalThis)?)) ?? .js_undefined;
-            if (globalThis.hasException()) return .zero;
+            if (globalThis.hasException()) return JSValue.zero;
 
             // TODO: remove this allocation
             // partial match
@@ -100,7 +100,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             else
                 JSValue.fromCell(result.toJSString(globalThis)?)) ?? .js_undefined;
 
-            if (globalThis.hasException()) return .zero;
+            if (globalThis.hasException()) return JSValue.zero;
             // TODO: REMOVE THIS GETTER! Expose a binding to call .test on the RegExp object directly.
             if (test_fn := expected_value.get(globalThis, "test")?) {
                 const matches = test_fn.call(globalThis, expected_value, &.{ received_message }) catch |e| globalThis.takeException(e);
@@ -118,7 +118,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
                 result.fastGet(globalThis, .message)?
             else
                 JSValue.fromCell(result.toJSString(globalThis)?)) ?? .js_undefined;
-            if (globalThis.hasException()) return .zero;
+            if (globalThis.hasException()) return JSValue.zero;
 
             // no partial match for this case
             if (!(expected_message.isSameValue(received_message, globalThis)?)) return JSValue.js_undefined;
@@ -207,7 +207,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             const is_equal = result.jestStrictDeepEquals(expected_value, globalThis)?;
 
             if (globalThis.hasException()) {
-                return .zero;
+                return JSValue.zero;
             }
 
             if (is_equal) {

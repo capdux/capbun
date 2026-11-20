@@ -304,15 +304,17 @@ pub fn getCurrentAndValidExecutionSequence(self: *Execution, data: bun_test.BunT
             _ = groupLog.log("runOneCompleted: the data did not know which entry was active in the group", .{});
             return null;
         }
-        if ((self.activeGroup() != data.group(self.bunTest()))) {
+        var data_mut = data;
+        _ = &data_mut;
+        if ((self.activeGroup() != data_mut.group(self.bunTest()))) {
             _ = groupLog.log("runOneCompleted: the data is for a different group", .{});
             return null;
         }
-        const group = ((data.group(self.bunTest())) orelse {
+        const group = ((data_mut.group(self.bunTest())) orelse {
         _ = groupLog.log("runOneCompleted: the data did not know the group", .{});
         return null;
 });
-        const sequence = ((data.sequence(self.bunTest())) orelse {
+        const sequence = ((data_mut.sequence(self.bunTest())) orelse {
         _ = groupLog.log("runOneCompleted: the data did not know the sequence", .{});
         return null;
 });

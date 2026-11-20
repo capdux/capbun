@@ -292,15 +292,16 @@ pub fn init(_: std.mem.Allocator): Execution {
             groupLog.log("runOneCompleted: the data did not know which entry was active in the group", .{});
             return null;
         }
-        if (_.activeGroup() != data.group(_.bunTest())) {
+        let data_mut = data;
+        if (_.activeGroup() != data_mut.group(_.bunTest())) {
             groupLog.log("runOneCompleted: the data is for a different group", .{});
             return null;
         }
-        const group = data.group(_.bunTest()) orelse {
+        const group = data_mut.group(_.bunTest()) orelse {
             groupLog.log("runOneCompleted: the data did not know the group", .{});
             return null;
         };
-        const sequence = data.sequence(_.bunTest()) orelse {
+        const sequence = data_mut.sequence(_.bunTest()) orelse {
             groupLog.log("runOneCompleted: the data did not know the sequence", .{});
             return null;
         };

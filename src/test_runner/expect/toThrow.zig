@@ -130,7 +130,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             if (expected_value.isString()) {
                 const received_message: JSValue = (((if (result.isObject()) try result.fastGet(globalThis, .message) else JSValue.fromCell(try result.toJSString(globalThis)))) orelse (.js_undefined));
                 if (globalThis.hasException()) {
-                    return error.zero;
+                    return JSValue.zero;
                 }
                 {
                     const expected_slice = try expected_value.toSliceOrNull(globalThis);
@@ -150,7 +150,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             if (expected_value.isRegExp()) {
                 const received_message: JSValue = (((if (result.isObject()) try result.fastGet(globalThis, .message) else JSValue.fromCell(try result.toJSString(globalThis)))) orelse (.js_undefined));
                 if (globalThis.hasException()) {
-                    return error.zero;
+                    return JSValue.zero;
                 }
                 if (try expected_value.get(globalThis, "test")) |test_fn| {
                     _ = &test_fn;
@@ -165,7 +165,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
                 _ = &expected_message;
                 const received_message: JSValue = (((if (result.isObject()) try result.fastGet(globalThis, .message) else JSValue.fromCell(try result.toJSString(globalThis)))) orelse (.js_undefined));
                 if (globalThis.hasException()) {
-                    return error.zero;
+                    return JSValue.zero;
                 }
                 if ((!try expected_message.isSameValue(received_message, globalThis))) {
                     return JSValue.js_undefined;
@@ -255,7 +255,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
                 const signature = (comptime getSignature("toThrow", "<green>expected<r>", false));
                 const is_equal = try result.jestStrictDeepEquals(expected_value, globalThis);
                 if (globalThis.hasException()) {
-                    return error.zero;
+                    return JSValue.zero;
                 }
                 if (is_equal) {
                     return JSValue.js_undefined;

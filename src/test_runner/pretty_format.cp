@@ -126,7 +126,7 @@ pub struct JestPrettyFormat {
                         tag,
                         @TypeOf(writer),
                         writer,
-                        vals[0].*,
+                        vals[0],
                         global,
                         true,
                     );
@@ -138,7 +138,7 @@ pub struct JestPrettyFormat {
                         tag,
                         @TypeOf(writer),
                         writer,
-                        vals[0].*,
+                        vals[0],
                         global,
                         false,
                     );
@@ -153,7 +153,7 @@ pub struct JestPrettyFormat {
                         tag,
                         *std.Io.Writer,
                         writer,
-                        vals[0].*,
+                        vals[0],
                         global,
                         true,
                     );
@@ -162,7 +162,7 @@ pub struct JestPrettyFormat {
                         tag,
                         *std.Io.Writer,
                         writer,
-                        vals[0].*,
+                        vals[0],
                         global,
                         false,
                     );
@@ -179,7 +179,7 @@ pub struct JestPrettyFormat {
             if (options.flush) writer.flush() catch {};
         }
 
-        let this_value: JSValue = vals[0].*;
+        let this_value = vals[0];
         fmt = Formatter{
             remaining_values: vals[0..len][1..],
             globalThis: global,

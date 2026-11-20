@@ -671,9 +671,9 @@ const JSONParserForMacro = JSONLikeParser(
     },
 );
 
-let empty_object = E.Object{};
-let empty_array = E.Array{};
-let empty_string = E.String{};
+let empty_object: E.Object = {};
+let empty_array: E.Array = {};
+let empty_string: E.String = {};
 const ExprData = Expr.Data;
 let empty_string_data = ExprData{ e_string: &empty_string };
 let empty_object_data = ExprData{ e_object: &empty_object };

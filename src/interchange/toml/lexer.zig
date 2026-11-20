@@ -1069,7 +1069,7 @@ pub fn range(self: Lexer) logger.Range {
             return logger.Range{ .loc = logger.usize2Loc(self.start), .len = std.math.lossyCast(i32, (self.end - self.start)) };
     }
 
-pub fn init(log: *logger.Log, source: logger.Source, allocator: std.mem.Allocator, redact_logs: bool) Lexer!void {
+pub fn init(log: *logger.Log, source: logger.Source, allocator: std.mem.Allocator, redact_logs: bool) !Lexer {
             var lex = Lexer{ .log = log, .source = source, .prev_error_loc = logger.Loc.Empty, .allocator = allocator, .should_redact_logs = redact_logs };
             _ = &lex;
             _ = lex.step();

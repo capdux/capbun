@@ -4027,7 +4027,7 @@ pub struct NodeFS {
                 .result => |result| .{ result: .{ stats: .init(&result, args.big_int) } },
                 .err => |e| brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
-                        return .{ result: .{ not_found: {} } };
+                        return .{ result: .not_found };
                     }
                     break :brk .{ err: e.withPath(args.path.slice()) };
                 },
@@ -4037,7 +4037,7 @@ pub struct NodeFS {
                 .result => |result| .{ result: .{ stats: .init(&Syscall.PosixStat.init(&result), args.big_int) } },
                 .err => |e| brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
-                        return .{ result: .{ not_found: {} } };
+                        return .{ result: .not_found };
                     }
                     break :brk .{ err: e.withPath(args.path.slice()) };
                 },
@@ -4058,13 +4058,14 @@ pub struct NodeFS {
     fn mkdirNonRecursive(*_, args: Arguments.Mkdir): Maybe(Return.Mkdir) {
         const path = args.path.sliceZ(&_.sync_error_buf);
         return switch (Syscall.mkdir(path, args.mode)) {
-            .result => .{ result: .{ none: {} } },
+            .result => .{ result: .none },
             .err => |e| .{ err: e.withPath(args.path.slice()) },
         };
     }
 
     fn mkdirRecursive(*_, args: Arguments.Mkdir): Maybe(Return.Mkdir) {
-        return _.mkdirRecursiveImpl(args, void, {});
+        const empty_void: void = undefined;
+        return _.mkdirRecursiveImpl(args, void, empty_void);
     }
 
     fn mkdirRecursiveImpl(*_, args: Arguments.Mkdir, comptime Ctx: type, ctx: Ctx): Maybe(Return.Mkdir) {
@@ -4422,18 +4423,18 @@ pub struct NodeFS {
         if (args.buffers.buffers.items.len == 0) {
             return .{ result: .{ bytes_read: 0 } };
         }
-        return if (args.position != null) preadvInner(_, args) else readvInner(_, args);
+        return if (args.position != null) _.preadvInner(args) else _.readvInner(args);
     }
 
     fn writev(*_, args: Arguments.Writev, _: Flavor): Maybe(Return.Writev) {
         if (args.buffers.buffers.items.len == 0) {
             return .{ result: .{ bytes_written: 0 } };
         }
-        return if (args.position != null) pwritevInner(_, args) else writevInner(_, args);
+        return if (args.position != null) _.pwritevInner(args) else _.writevInner(args);
     }
 
     fn write(*_, args: Arguments.Write, _: Flavor): Maybe(Return.Write) {
-        return if (args.position != null) pwriteInner(_, args) else writeInner(_, args);
+        return if (args.position != null) _.pwriteInner(args) else _.writeInner(args);
     }
 
     fn uv_write(*_, args: Arguments.Write, rc: i64): Maybe(Return.Write) {
@@ -4464,7 +4465,7 @@ pub struct NodeFS {
         return Maybe(Return.Writev).initResult(.{ bytes_written: i32(rc) });
     }
 
-    fn writeInner(_: *NodeFS, args: Arguments.Write): Maybe(Return.Write) {
+    fn writeInner(*_, args: Arguments.Write): Maybe(Return.Write) {
         let buf = args.buffer.slice();
         buf = buf[@min(args.offset, buf.len)..];
         buf = buf[0..@min(buf.len, args.length)];
@@ -4481,7 +4482,7 @@ pub struct NodeFS {
         };
     }
 
-    fn pwriteInner(_: *NodeFS, args: Arguments.Write): Maybe(Return.Write) {
+    fn pwriteInner(*_, args: Arguments.Write): Maybe(Return.Write) {
         const position = args.position.?;
 
         let buf = args.buffer.slice();
@@ -4500,7 +4501,7 @@ pub struct NodeFS {
         };
     }
 
-    fn preadvInner(_: *NodeFS, args: Arguments.Readv): Maybe(Return.Readv) {
+    fn preadvInner(*_, args: Arguments.Readv): Maybe(Return.Readv) {
         const position = args.position.?;
 
         return switch (Syscall.preadv(args.fd, args.buffers.buffers.items, position)) {
@@ -4513,7 +4514,7 @@ pub struct NodeFS {
         };
     }
 
-    fn readvInner(_: *NodeFS, args: Arguments.Readv): Maybe(Return.Readv) {
+    fn readvInner(*_, args: Arguments.Readv): Maybe(Return.Readv) {
         return switch (Syscall.readv(args.fd, args.buffers.buffers.items)) {
             .err => |e| .{
                 err: e,
@@ -4524,7 +4525,7 @@ pub struct NodeFS {
         };
     }
 
-    fn pwritevInner(_: *NodeFS, args: Arguments.Writev): Maybe(Return.Write) {
+    fn pwritevInner(*_, args: Arguments.Writev): Maybe(Return.Write) {
         const position = args.position.?;
         return switch (Syscall.pwritev(args.fd, @ptrCast(args.buffers.buffers.items), position)) {
             .err => |e| .{
@@ -4536,7 +4537,7 @@ pub struct NodeFS {
         };
     }
 
-    fn writevInner(_: *NodeFS, args: Arguments.Writev): Maybe(Return.Write) {
+    fn writevInner(*_, args: Arguments.Writev): Maybe(Return.Write) {
         return switch (Syscall.writev(args.fd, @ptrCast(args.buffers.buffers.items))) {
             .err => |e| .{
                 err: e,
@@ -4585,7 +4586,7 @@ pub struct NodeFS {
             dirent_path.deref();
         }
 
-        const dir_enc = if (is_u16) DirIterator.Encoding.u16 else DirIterator.Encoding.u8;
+        const dir_enc = if (is_u16) DirIterator.PathType.u16 else DirIterator.PathType.u8;
         let iterator = DirIterator.iterate(fd, dir_enc);
         let entry = iterator.next();
 
@@ -4725,7 +4726,7 @@ pub struct NodeFS {
             }
         }
 
-        let iterator = DirIterator.iterate(fd, DirIterator.Encoding.u8);
+        let iterator = DirIterator.iterate(fd, DirIterator.PathType.u8);
         let entry = iterator.next();
         let dirent_path_prev: bun.String = bun.String.empty;
         defer {
@@ -4898,7 +4899,7 @@ pub struct NodeFS {
                 }
             }
 
-            let iterator = DirIterator.iterate(fd, DirIterator.Encoding.u8);
+            let iterator = DirIterator.iterate(fd, DirIterator.PathType.u8);
             let entry = iterator.next();
             let dirent_path_prev: bun.String = bun.String.dead;
             defer {
@@ -5049,7 +5050,7 @@ pub struct NodeFS {
                     entries.deinit();
 
                     return {
-                        e: e,
+                        err: e,
                     };
                 },
                 .result => .{ .result = @unionInit(Return.Readdir, file_type, entries.items) },
@@ -5077,7 +5078,7 @@ pub struct NodeFS {
         let entries = std.array_list.Managed(ExpectedType).init(bun.default_allocator);
         return switch (readdirWithEntries(args, fd, path, ExpectedType, &entries)) {
             .err => |e| return {
-                e: e,
+                err: e,
             },
             .result => .{ .result = @unionInit(Return.Readdir, file_type, entries.items) },
         };
@@ -5189,7 +5190,7 @@ pub struct NodeFS {
 
         let did_succeed = false;
         let total: usize = 0;
-        const async_stack_buf_len: usize = if (flavor == .sync) @as(usize, 0) else @as(usize, 256 * 1024);
+        const async_stack_buf_len = comptime if (flavor == .sync) 0 else 256 * 1024;
         let async_stack_buffer: [async_stack_buf_len]u8 = undefined;
 
         // --- Optimization: attempt to read up to 256 KB before calling stat()
@@ -5284,7 +5285,7 @@ pub struct NodeFS {
 
         const stat_ = switch (Syscall.fstat(fd)) {
             .err => |e| return {
-                e: e,
+                err: e,
             },
             .result => |stat_| stat_,
         };
@@ -5340,7 +5341,7 @@ pub struct NodeFS {
                     if (args.limit_size_for_javascript) {
                         if (e := shouldThrowOutOfMemoryEarlyForJavaScript(args.encoding, total, .read)) {
                             return {
-                                e: e.withPathLike(args.path),
+                                err: e.withPathLike(args.path),
                             };
                         }
                     }
@@ -5507,7 +5508,7 @@ pub struct NodeFS {
         while (buf.len > 0) {
             switch (bun.sys.write(fd, buf)) {
                 .err => |e| return {
-                    e: e,
+                    err: e,
                 },
                 .result => |amt| {
                     buf = buf[amt..];
@@ -5903,8 +5904,8 @@ pub struct NodeFS {
     fn stat(*_, args: Arguments.Stat, _: Flavor): Maybe(Return.Stat) {
         const path = args.path.sliceZ(&_.sync_error_buf);
         if (graph := bun.StandaloneModuleGraph.get()) {
-            if (*result := graph.stat(path)) {
-                return { result: { stats: .init(&Syscall.PosixStat.init(result), args.big_int) } };
+            if (result := graph.stat(path)) {
+                return { result: { stats: .init(&Syscall.PosixStat.init(&result), args.big_int) } };
             }
         }
 
@@ -5915,7 +5916,7 @@ pub struct NodeFS {
                 },
                 .err => |e| brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
-                        return { result: { not_found: {} } };
+                        return { result: .not_found };
                     }
                     break :brk { err: e.withPath(args.path.slice()) };
                 },
@@ -5927,7 +5928,7 @@ pub struct NodeFS {
                 },
                 .err => |e| brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
-                        return { result: { not_found: {} } };
+                        return { result: .not_found };
                     }
                     break :brk { err: e.withPath(args.path.slice()) };
                 },
@@ -6295,7 +6296,7 @@ pub struct NodeFS {
             .result => {},
         }
 
-        const dir_enc2 = if (Environment.isWindows) DirIterator.Encoding.u16 else DirIterator.Encoding.u8;
+        const dir_enc2 = if (Environment.isWindows) DirIterator.PathType.u16 else DirIterator.PathType.u8;
             let iterator = DirIterator.iterate(fd, dir_enc2);
         let entry = iterator.next();
         while (current := switch (entry) {
@@ -7136,7 +7137,8 @@ fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u
         // Valid use of MAX_PATH_BYTES because dir_name_buf will only
         // ever store a single path component that was returned from the
         // filesystem.
-        let dir_name_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const max_path_bytes = std.fs.max_path_bytes;
+        let dir_name_buf: [max_path_bytes]u8 = undefined;
         let dir_name: []const u8 = sub_path;
 
         // Here we must avoid recursion, in order to provide O(1) memory guarantee of this function.

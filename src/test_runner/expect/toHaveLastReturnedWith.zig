@@ -93,14 +93,24 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
                     _ = type_str.deref();
                     }
                     if (type_str.eqlComptime("return")) {
-                        if (last_return_value == null) { last_return_value = .js_undefined; }
+                        if (try last_result.get(globalThis, "value")) |v| {
+                            _ = &v;
+                            last_return_value = v;
+                        } else {
+                            last_return_value = .js_undefined;
+                        }
                         if (try last_return_value.jestDeepEquals(expected, globalThis)) {
                             pass = true;
                         }
                     } else {
                         if (type_str.eqlComptime("throw")) {
                             last_call_threw = true;
-                            if (last_error_value == null) { last_error_value = .js_undefined; }
+                            if (try last_result.get(globalThis, "value")) |v| {
+                                _ = &v;
+                                last_error_value = v;
+                            } else {
+                                last_error_value = .js_undefined;
+                            }
                         }
                     }
                 }

@@ -106,14 +106,24 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
                     _ = type_str.deref();
                     }
                     if (type_str.eqlComptime("return")) {
-                        if (nth_return_value == null) { nth_return_value = .js_undefined; }
+                        if (try nth_result.get(globalThis, "value")) |v| {
+                            _ = &v;
+                            nth_return_value = v;
+                        } else {
+                            nth_return_value = .js_undefined;
+                        }
                         if (try nth_return_value.jestDeepEquals(expected, globalThis)) {
                             pass = true;
                         }
                     } else {
                         if (type_str.eqlComptime("throw")) {
                             nth_call_threw = true;
-                            if (nth_error_value == null) { nth_error_value = .js_undefined; }
+                            if (try nth_result.get(globalThis, "value")) |v| {
+                                _ = &v;
+                                nth_error_value = v;
+                            } else {
+                                nth_error_value = .js_undefined;
+                            }
                         }
                     }
                 }

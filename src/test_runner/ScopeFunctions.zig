@@ -224,7 +224,8 @@ pub fn callAsFunction(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JS
         _ = buntest_strong.deinit();
         }
         const bunTest = buntest_strong.get();
-        const args = try parseArguments(globalThis, callFrame, .{ .scope_functions = client }, bunTest.gpa, .{ .callback = (if ((client.cfg.self_mode == .todo)) .allow else .require), .kind = .test_or_describe });
+        var args = try parseArguments(globalThis, callFrame, .{ .scope_functions = client }, bunTest.gpa, .{ .callback = (if ((client.cfg.self_mode == .todo)) .allow else .require), .kind = .test_or_describe });
+        _ = &args;
         defer {
         _ = args.deinit(bunTest.gpa);
         }
@@ -634,7 +635,22 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             _ = &timeout;
             timeout_option_ms = std.math.lossyCast(u32, timeout);
         }
-        if (result.options.timeout == null) { result.options.timeout = ((override_timeout_ms) orelse (((default_timeout_ms) orelse (0)))); }
+        if (timeout_option_ms) |t| {
+            _ = &t;
+            result.options.timeout = t;
+        } else {
+            if (override_timeout_ms) |t| {
+                _ = &t;
+                result.options.timeout = t;
+            } else {
+                if (default_timeout_ms) |t| {
+                    _ = &t;
+                    result.options.timeout = t;
+                } else {
+                    result.options.timeout = 0;
+                }
+            }
+        }
         return result;
 }
 
