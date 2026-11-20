@@ -2074,8 +2074,7 @@ pub const StatFS = switch (Environment.os) {
     .wasm => unreachable,
 };
 
-let empty_argv: [0][:0]const u8 = [];
-pub let argv: [][:0]const u8 = empty_argv[0..0];
+pub let argv: [][:0]const u8 = [];
 /// Number of arguments injected by BUN_OPTIONS environment variable.
 /// Used by standalone executables to include these in the parsed options window.
 pub let bun_options_argc: usize = 0;
@@ -3091,6 +3090,8 @@ pub fn linuxKernelVersion(): Semver.Version {
     return analytics.GenerateHeader.GeneratePlatform.kernelVersion();
 }
 
+type SliceZ = [:0]u8;
+
 struct SelfExePathMemo {
     static let set: bool = false;
     // TODO open zig issue to make 'std.fs.selfExePath' return [:0]u8 directly
@@ -3100,7 +3101,7 @@ struct SelfExePathMemo {
     static let len: usize = 0;
     static let lock: Mutex = {};
 
-    static fn load(): [:0]u8! {
+    static fn load(): SliceZ! {
         const init = std.fs.selfExePath(&value)?;
         SelfExePathMemo.len = init.len;
         value[SelfExePathMemo.len] = 0;
@@ -3109,7 +3110,7 @@ struct SelfExePathMemo {
     }
 }
 
-pub fn selfExePath(): [:0]u8! {
+pub fn selfExePath(): SliceZ! {
     const memo = SelfExePathMemo;
 
     // try without a lock

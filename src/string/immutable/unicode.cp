@@ -380,7 +380,9 @@ pub fn toUTF8AppendToList(list: *std.array_list.Managed(u8), utf16: []const u16)
     convertUTF16ToUTF8Append(list, utf16)?;
 }
 
-pub fn toUTF8FromLatin1(allocator: std.mem.Allocator, latin1: []const u8): !std.array_list.Managed?(u8) {
+type ManagedU8List = std.array_list.Managed(u8);
+
+pub fn toUTF8FromLatin1(allocator: std.mem.Allocator, latin1: []const u8): ManagedU8List?! {
     if (isAllASCII(latin1))
         return null;
 
@@ -388,7 +390,7 @@ pub fn toUTF8FromLatin1(allocator: std.mem.Allocator, latin1: []const u8): !std.
     return allocateLatin1IntoUTF8WithList(list, 0, latin1)?;
 }
 
-pub fn toUTF8FromLatin1Z(allocator: std.mem.Allocator, latin1: []const u8): !std.array_list.Managed?(u8) {
+pub fn toUTF8FromLatin1Z(allocator: std.mem.Allocator, latin1: []const u8): ManagedU8List?! {
     if (isAllASCII(latin1))
         return null;
 
@@ -398,7 +400,7 @@ pub fn toUTF8FromLatin1Z(allocator: std.mem.Allocator, latin1: []const u8): !std
     return list1;
 }
 
-pub fn toUTF8ListWithTypeBun(list: *std.array_list.Managed(u8), utf16: []const u16, comptime skip_trailing_replacement: bool): OOM!(if (skip_trailing_replacement) u16 else std.array_list.Managed(u8))? {
+pub fn toUTF8ListWithTypeBun(list: *std.array_list.Managed(u8), utf16: []const u16, comptime skip_trailing_replacement: bool): (if (skip_trailing_replacement) u16? else std.array_list.Managed(u8)) ! OOM {
     let utf16_remaining = utf16;
 
     while (i := firstNonASCII16(utf16_remaining)) {
@@ -443,7 +445,7 @@ pub fn toUTF8ListWithTypeBun(list: *std.array_list.Managed(u8), utf16: []const u
     log("UTF16 {d} -> {d} UTF8", .{ utf16.len, list.items.len });
 
     if (comptime skip_trailing_replacement) {
-        return null;
+        return @as(u16?, null);
     }
     return list.*;
 }
@@ -484,7 +486,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                         {
                             const bytes = @as(Int, @bitCast(latin1[0..size].*));
                             // https://dotat.at/@/2022-06-27-tolower-swar.html
-                            const mask = bytes & @as(Int, 0x8080808080808080);
+                            const mask = bytes & @as(Int, (@as(u64, 0x80808080) << 32) | 0x80808080);
 
                             if (mask > 0) {
                                 const first_set_byte = @ctz(mask) / 8;
@@ -504,7 +506,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                         if (comptime ascii_vector_size >= 16) {
                             const bytes = @as(Int, @bitCast(latin1[0..size].*));
                             // https://dotat.at/@/2022-06-27-tolower-swar.html
-                            const mask = bytes & @as(Int, 0x8080808080808080);
+                            const mask = bytes & @as(Int, (@as(u64, 0x80808080) << 32) | 0x80808080);
 
                             if (mask > 0) {
                                 const first_set_byte = @ctz(mask) / 8;
@@ -531,7 +533,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
 
                 const bytes = @as(Int, @bitCast(latin1[0..size].*));
                 // https://dotat.at/@/2022-06-27-tolower-swar.html
-                const mask = bytes & @as(Int, 0x8080808080808080);
+                const mask = bytes & @as(Int, (@as(u64, 0x80808080) << 32) | 0x80808080);
 
                 if (mask > 0) {
                     const first_set_byte = @ctz(mask) / 8;
@@ -731,7 +733,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                         {
                             const bytes = @as(Int, @bitCast(latin1[0..size].*));
                             // https://dotat.at/@/2022-06-27-tolower-swar.html
-                            const mask = bytes & @as(Int, 0x8080808080808080);
+                            const mask = bytes & @as(Int, (@as(u64, 0x80808080) << 32) | 0x80808080);
 
                             buf[0..size].* = @as([size]u8, @bitCast(bytes));
 
@@ -751,7 +753,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                         if (comptime ascii_vector_size >= 16) {
                             const bytes = @as(Int, @bitCast(latin1[0..size].*));
                             // https://dotat.at/@/2022-06-27-tolower-swar.html
-                            const mask = bytes & @as(Int, 0x8080808080808080);
+                            const mask = bytes & @as(Int, (@as(u64, 0x80808080) << 32) | 0x80808080);
 
                             buf[0..size].* = @as([size]u8, @bitCast(bytes));
 
@@ -781,7 +783,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
 
                     // https://dotat.at/@/2022-06-27-tolower-swar.html
 
-                    const mask = bytes & @as(Int, 0x8080808080808080);
+                    const mask = bytes & @as(Int, (@as(u64, 0x80808080) << 32) | 0x80808080);
 
                     if (mask > 0) {
                         const first_set_byte = @ctz(mask) / 8;
@@ -978,7 +980,7 @@ pub fn copyLatin1IntoASCII(dest: []u8, src: []const u8) {
     }
 
     for (*to_byte of to) {
-        to_byte.* = @as(u8, @as(u7, @truncate(remain[0])));
+        to_byte = @as(u8, @as(u7, @truncate(remain[0])));
         remain = remain[1..];
     }
 }
@@ -1914,21 +1916,21 @@ pub fn encodeUTF8Comptime(comptime codepoint: u32): []const u8 {
 // This is a clone of golang's "utf8.EncodeRune" that has been modified to encode using
 // WTF-8 instead. See https://simonsapin.github.io/wtf-8/ for more info.
 pub fn encodeWTF8Rune(p: *[4]u8, r: i32): u3_fast {
-    return encodeWTF8RuneT(p, u32, i32(r));
+    return encodeWTF8RuneT(p, u32, @intCast(r));
 }
 
 pub fn encodeWTF8RuneT(p: *[4]u8, comptime R: type, r: R): u3_fast {
     switch (r) {
-        0..0x7F => {
-            p[0] = @as(u8, i32(r));
+        0..=0x7F => {
+            p[0] = @as(u8, @intCast(r));
             return 1;
         },
-        (0x7F + 1)..0x7FF => {
+        0x80..=0x7FF => {
             p[0] = @as(u8, @truncate(0xC0 | ((r >> 6))));
             p[1] = @as(u8, @truncate(0x80 | (r & 0x3F)));
             return 2;
         },
-        (0x7FF + 1)..0xFFFF => {
+        0x800..=0xFFFF => {
             p[0] = @as(u8, @truncate(0xE0 | ((r >> 12))));
             p[1] = @as(u8, @truncate(0x80 | ((r >> 6) & 0x3F)));
             p[2] = @as(u8, @truncate(0x80 | (r & 0x3F)));

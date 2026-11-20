@@ -1078,7 +1078,7 @@ pub const SelfExePathMemo = struct {
     pub var len: usize = 0;
     pub var lock: CpBareMutex = .{};
 
-pub fn load() [:0]u8 {
+pub fn load() !SliceZ {
             const init = try std.fs.selfExePath((&value));
             SelfExePathMemo.len = init.len;
             value[cp_cast_int(usize, SelfExePathMemo.len)] = 0;
@@ -1297,6 +1297,7 @@ pub fn isSafeToRecurse(self: StackCheck) bool {
 const Str = []const u8;
 const OptCStr = ?[*:0]u8;
 const ArgvPtr = [*:null]OptCStr;
+const SliceZ = [:0]u8;
 const bun = @This();
 pub const @"meta" = meta_mod;
 pub const @"trait" = trait_mod;
@@ -1444,8 +1445,7 @@ pub const StatFS = (switch (Environment.os) {
 .windows => windows.libuv.uv_statfs_t,
 .wasm => unreachable,
 });
-var empty_argv: [0][:0]const u8 = &.{};
-pub var argv: [][:0]const u8 = empty_argv[0..0];
+pub var argv: [][:0]const u8 = &.{};
 pub var bun_options_argc: usize = 0;
 pub const spawn = @import("./runtime/api/bun/spawn.zig").PosixSpawn;
 pub const handleOom = @import("./crash_handler/handle_oom.zig").handleOom;
@@ -3127,7 +3127,7 @@ pub fn linuxKernelVersion() Semver.Version {
         return analytics.GenerateHeader.GeneratePlatform.kernelVersion();
 }
 
-pub fn selfExePath() [:0]u8 {
+pub fn selfExePath() !SliceZ {
         const memo = SelfExePathMemo;
         if (memo.set) {
             return (if (@typeInfo(@TypeOf(memo)) == .@"enum") @intFromEnum(memo) else memo.value)[0..memo.len :0];

@@ -79,7 +79,7 @@ pub const SizeData = struct {
     size_index: usize,
     alignment: usize,
 
-pub fn lessThan(context: void, lhs: SizeData, rhs: SizeData) bool {
+pub fn lessThan(context: anytype, lhs: SizeData, rhs: SizeData) bool {
             _ = &context;
             return (lhs.alignment > rhs.alignment);
     }

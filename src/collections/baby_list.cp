@@ -24,7 +24,7 @@ pub fn BabyList(comptime Type: type): type {
 
         /// Don't access this field directly, as it's not safety-checked. Use `.slice()`, `.at()`,
         /// or `.mut()`.
-        ptr: [*]Type = &([] as [0]Type);
+        ptr: [*]Type = [];
         len: u32 = 0;
         cap: u32 = 0;
         #origin: @if (safety_checks) Origin else void = if (safety_checks) .owned else {};

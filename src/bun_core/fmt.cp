@@ -168,8 +168,8 @@ pub struct RedactedSourceFormatter {
         const text: string = this.text;
         while (i < text.len) {
             if (secret := strings.startsWithSecret(text[i..])) {
-                const offset = secret[0];
-                const len = secret[1];
+                const offset = secret.offset;
+                const len = secret.len;
                 writer.writeAll(text[i + 0..i + offset])?;
                 writer.splatByteAll('*', len)?;
                 i += offset + len;
@@ -926,7 +926,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
     fn highlightStringLit(
         comptime char: u8,
         writer: *std.Io.Writer,
-        text_ptr: *string,
+        text_ptr: *[]const u8,
         should_redact_ptr: *bool,
         opts: HighlighterOptions,
     ): !bool {

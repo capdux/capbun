@@ -3000,3 +3000,5 @@ Options:
 - [2026-11-20 05:49:30 UTC] 同步重编译 281 个旧 prelude `.zig` 产物并修复 `src/sys/sys.cp` 导入 `./Error.zig`；首次全仓 `bun run zig:check` 仅报 156 处跨模块语义错，已派发 3 路并发子智能体攻坚清零。
 
 - [2026-11-20 05:53:46 UTC] 验收并提交 `zig:check` JSC 核心簇 4 模块语义修复：`host_fn.cp` (1.007x), `JSValue.cp` (1.001x), `GeneratedBindings.cp` (1.043x), `ZigString.cp` (1.006x)，消除 28 处跨模块语义错。
+
+- [2026-11-20 05:54:33 UTC] 验收并提交 `zig:check` 基础库与字符串簇 8 模块语义修复（`baby_list`/`multi_array_list`/`bun`/`bun_core/{fmt,output}`/`string/{string,immutable,immutable/unicode}`），消除 50+ 处语义报错，4 项硬门禁全 PASS。

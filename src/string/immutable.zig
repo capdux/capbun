@@ -527,7 +527,7 @@ return indexOfChar(slice, str[0]);
 else => {
 if (bun.highway.indexOfAnyChar(slice, str)) |i| {
             _ = &i;
-            return (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i));
+            return @intCast(i);
         }
         return null;
 },
@@ -548,7 +548,7 @@ pub fn indexOfAnyT(comptime T: type, str: []const T, comptime chars: anytype) ?O
             _ = &c;
             inline for (chars) |a| {
                 if ((c == a)) {
-                    return (if (comptime @typeInfo(OptionalUsize) == .@"enum") @as(OptionalUsize, @enumFromInt((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else @as(OptionalUsize, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))));
+                    return @as(OptionalUsize, @intCast(i));
                 }
             }
             i = (i + 1);
@@ -740,7 +740,7 @@ pub fn startsWithNpmSecret(str: []const u8) u8 {
         if ((!strings.hasPrefixCaseInsensitive(str, "npm"))) {
             return 0;
         }
-        var i: usize = "npm".len;
+        var i: u8 = @intCast("npm".len);
         _ = &i;
         if ((str[@as(usize, @intCast(i))] == 95)) {
             i = (i + 1);
@@ -887,8 +887,8 @@ pub fn findUrlPassword(text: []const u8) ?TextRange {
         if (((colon == -1) or (colon == (at - 1)))) {
             return null;
         }
-        offset = (offset + (if (comptime @typeInfo(@TypeOf((colon + 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((colon + 1))) else cp_cast_int(i32, (colon + 1))));
-        const len: usize = (at - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((colon + 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((colon + 1))) else cp_cast_int(i32, (colon + 1))))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf((colon + 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((colon + 1))) else cp_cast_int(i32, (colon + 1))))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf((colon + 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((colon + 1))) else cp_cast_int(i32, (colon + 1))))));
+        offset = (offset + @as(usize, @intCast((colon + 1))));
+        const len: usize = (at - @as(usize, @intCast((colon + 1))));
         return TextRange{ .offset = offset, .len = len };
 }
 

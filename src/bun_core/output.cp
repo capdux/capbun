@@ -71,8 +71,8 @@ pub struct Source {
 
     pub raw_stream: StreamType,
     pub raw_error_stream: StreamType,
-    pub out_buffer: []u8 = &[],
-    pub err_buffer: []u8 = &[],
+    pub out_buffer: []u8 = [];
+    pub err_buffer: []u8 = [];
 
     pub fn init(
         *_,
@@ -661,21 +661,18 @@ inline fn printElapsedToWithCtx(elapsed: f64, comptime printerFn: auto, comptime
     switch (@as(i64, @intFromFloat(@round(elapsed)))) {
         0..=1500 => {
             const fmt = "<r><d>[<b>{d:>.2}ms<r><d>]<r>";
-            const args = [elapsed];
             if (comptime has_ctx) {
-                printerFn(ctx, fmt, args);
+                printerFn(ctx, fmt, [elapsed]);
             } else {
-                printerFn(fmt, args);
+                printerFn(fmt, [elapsed]);
             }
         },
         else => {
             const fmt = "<r><d>[<b>{d:>.2}s<r><d>]<r>";
-            const args = [elapsed / 1000.0];
-
             if (comptime has_ctx) {
-                printerFn(ctx, fmt, args);
+                printerFn(ctx, fmt, [elapsed / 1000.0]);
             } else {
-                printerFn(fmt, args);
+                printerFn(fmt, [elapsed / 1000.0]);
             }
         },
     }
@@ -744,7 +741,14 @@ noinline fn writeBytes(dest: Destination, bytes: []const u8) {
 }
 
 inline fn hasNoArgs(comptime Args: type): bool {
-    return @typeInfo(Args).@"struct".fields.len == 0;
+    const info = @typeInfo(Args);
+    if (info == .@"struct") return info.@"struct".fields.len == 0;
+    if (info == .pointer && info.pointer.size == .one) {
+        const child = @typeInfo(info.pointer.child);
+        if (child == .@"struct") return child.@"struct".fields.len == 0;
+        if (child == .array) return child.array.len == 0;
+    }
+    return false;
 }
 
 inline fn printTo(dest: Destination, comptime fmt: string, args: auto) {

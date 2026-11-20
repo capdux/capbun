@@ -4,12 +4,16 @@ import string_jsc from "../jsc/bun_string_jsc.zig";
 import immutable from "./immutable.zig";
 import HashedString from "./HashedString.zig";
 import MutableString from "./MutableString.zig";
-import { PathString } from "./PathString.zig";
+import PathStringMod from "./PathString.zig";
 import { SmolStr } from "./SmolStr.zig";
 import StringBuilder from "./StringBuilder.zig";
 import StringJoiner from "./StringJoiner.zig";
 import wtf from "./wtf.zig";
-import { WTFString, WTFStringImpl, WTFStringImplStruct } from "./wtf.zig";
+
+pub const PathString = PathStringMod.PathString;
+pub const WTFString = wtf.WTFString;
+pub const WTFStringImpl = wtf.WTFStringImpl;
+pub const WTFStringImplStruct = wtf.WTFStringImplStruct;
 
 const OOM = bun.OOM;
 const AsciiStatus = bun.strings.AsciiStatus;
@@ -37,13 +41,13 @@ export enum Tag : u8 {
     Empty = 4,
 }
 
-export @c union StringImpl {
+pub const StringImpl = extern union {
     ZigString: ZigString,
     WTFStringImpl: WTFStringImpl,
     StaticZigString: ZigString,
     Dead: void,
     Empty: void,
-}
+};
 
 export enum StringWTFEncoding {
     latin1,

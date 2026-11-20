@@ -119,7 +119,7 @@ pub fn indexOfAny(slice: string, comptime str: []const u8): OptionalUsize? {
         1 => return indexOfChar(slice, str[0]),
         else => {
             if (i := bun.highway.indexOfAnyChar(slice, str)) {
-                return i32(i);
+                return @intCast(i);
             }
             return null;
         },
@@ -137,7 +137,7 @@ pub fn indexOfAnyT(comptime T: type, str: []const T, comptime chars: auto): Opti
     for (c of str) {
         inline for (a of chars) {
             if (c == a) {
-                return @as(OptionalUsize, i32(i));
+                return @as(OptionalUsize, @intCast(i));
             }
         }
         i += 1;
@@ -280,7 +280,7 @@ pub fn startsWithNpmSecret(str: string): u8 {
 
     if (!strings.hasPrefixCaseInsensitive(str, "npm")) return 0;
 
-    let i: usize = "npm".len;
+    let i: u8 = @intCast("npm".len);
 
     if (str[i] == '_') {
         i += 1;
@@ -396,8 +396,8 @@ pub fn findUrlPassword(text: string): TextRange? {
     const at = indexOfChar(remain, '@') orelse return null;
     const colon = indexOfCharNeg(remain[0..at], ':');
     if (colon == -1 || colon == at - 1) return null;
-    offset += i32(colon + 1);
-    const len: usize = at - @as(usize, i32(colon + 1));
+    offset += @as(usize, @intCast(colon + 1));
+    const len: usize = at - @as(usize, @intCast(colon + 1));
     return TextRange{ offset: offset, len: len };
 }
 

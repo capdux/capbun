@@ -80,14 +80,11 @@ pub const string_jsc = @import("../jsc/bun_string_jsc.zig");
 pub const immutable = @import("./immutable.zig");
 pub const HashedString = @import("./HashedString.zig");
 pub const MutableString = @import("./MutableString.zig");
-const PathString = @import("./PathString.zig").PathString;
+pub const PathStringMod = @import("./PathString.zig");
 const SmolStr = @import("./SmolStr.zig").SmolStr;
 pub const StringBuilder = @import("./StringBuilder.zig");
 pub const StringJoiner = @import("./StringJoiner.zig");
 pub const wtf = @import("./wtf.zig");
-const WTFString = @import("./wtf.zig").WTFString;
-const WTFStringImpl = @import("./wtf.zig").WTFStringImpl;
-const WTFStringImplStruct = @import("./wtf.zig").WTFStringImplStruct;
 pub const Tag = enum(u8) {
     Dead = 0,
     WTFStringImpl = 1,
@@ -116,17 +113,9 @@ pub fn Byte(self: StringWTFEncoding) type {
     }
 };
 
-pub const StringImpl = extern union {
-    ZigString: ZigString,
-    WTFStringImpl: WTFStringImpl,
-    StaticZigString: ZigString,
-    Dead: void,
-    Empty: void,
-};
-
 pub const String = extern struct {
     tag: Tag,
-    value: *StringImpl,
+    value: StringImpl,
 
 pub fn toInt32(self: *const String) ?i32 {
             const val = bun.cpp.BunString__toInt32(self);
@@ -1053,11 +1042,22 @@ const ExternalFreeCallback = *const fn (*anyopaque, *anyopaque, u32) callconv(.c
 const MutableBytes = []u8;
 const MutableBytesZ = [:0]u8;
 const OwnedSliceAscii = struct { []u8, bool };
+pub const PathString = PathStringMod.PathString;
+pub const WTFString = wtf.WTFString;
+pub const WTFStringImpl = wtf.WTFStringImpl;
+pub const WTFStringImplStruct = wtf.WTFStringImplStruct;
 const OOM = bun.OOM;
 const AsciiStatus = bun.strings.AsciiStatus;
 const jsc = bun.jsc;
 const ZigString = bun.jsc.ZigString;
 const empty_u16_buf: [0]u16 = &.{};
+pub const StringImpl = extern union {
+    ZigString: ZigString,
+    WTFStringImpl: WTFStringImpl,
+    StaticZigString: ZigString,
+    Dead: void,
+    Empty: void,
+};
 const string_empty = String{ .tag = .Empty, .value = .{ .ZigString = .Empty } };
 const string_dead = String{ .tag = .Dead, .value = .{ .Dead = .{} } };
 

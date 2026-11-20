@@ -191,7 +191,7 @@ struct SizeData {
     size_index: usize;
     alignment: usize;
 
-    pub static fn lessThan(context: void, lhs: SizeData, rhs: SizeData): bool {
+    pub static fn lessThan(context: auto, lhs: SizeData, rhs: SizeData): bool {
         * = context;
         return lhs.alignment > rhs.alignment;
     }

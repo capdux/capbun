@@ -215,6 +215,7 @@ else => 4,
 
 const string = []const u8;
 pub const SimdScanFn = *const fn ([]const u8) ?usize;
+const ManagedU8List = std.array_list.Managed(u8);
 pub const UTF16BufferedResult = struct { []u16, [3]u8, u2 };
 const CodePoint = bun.CodePoint;
 const Environment = bun.Environment;
@@ -531,7 +532,26 @@ pub fn toUTF8AppendToList(list: *std.array_list.Managed(u8), utf16: []const u16)
         _ = try convertUTF16ToUTF8Append(list, utf16);
 }
 
-pub fn toUTF8ListWithTypeBun(list: *std.array_list.Managed(u8), utf16: []const u16, comptime skip_trailing_replacement: bool) OOM!?if (skip_trailing_replacement) u16 else std.array_list.Managed(u8) {
+pub fn toUTF8FromLatin1(allocator: std.mem.Allocator, latin1: []const u8) !?ManagedU8List {
+        if (isAllASCII(latin1)) {
+            return null;
+        }
+        const list = try std.array_list.Managed(u8).initCapacity(allocator, latin1.len);
+        return try allocateLatin1IntoUTF8WithList(list, 0, latin1);
+}
+
+pub fn toUTF8FromLatin1Z(allocator: std.mem.Allocator, latin1: []const u8) !?ManagedU8List {
+        if (isAllASCII(latin1)) {
+            return null;
+        }
+        const list = try std.array_list.Managed(u8).initCapacity(allocator, (latin1.len + 1));
+        var list1 = try allocateLatin1IntoUTF8WithList(list, 0, latin1);
+        _ = &list1;
+        _ = try list1.append(0);
+        return list1;
+}
+
+pub fn toUTF8ListWithTypeBun(list: *std.array_list.Managed(u8), utf16: []const u16, comptime skip_trailing_replacement: bool) OOM!if (skip_trailing_replacement) ?u16 else std.array_list.Managed(u8) {
         var utf16_remaining = utf16;
         _ = &utf16_remaining;
         while (firstNonASCII16(utf16_remaining)) |i| {
@@ -564,7 +584,7 @@ pub fn toUTF8ListWithTypeBun(list: *std.array_list.Managed(u8), utf16: []const u
         }
         _ = log("UTF16 {d} -> {d} UTF8", .{ utf16.len, list.items.len });
         if (comptime skip_trailing_replacement) {
-            return null;
+            return @as(?u16, null);
         }
         return list.*;
 }
@@ -601,7 +621,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                     if (comptime (ascii_vector_size >= 8)) {
                         {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(-9187201950435737472)) else @as(Int, -9187201950435737472)));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             if ((mask > 0)) {
                                 const first_set_byte = (@ctz(mask) / 8);
                                 if (comptime Environment.allow_assert) {
@@ -618,7 +638,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                         }
                         if (comptime (ascii_vector_size >= 16)) {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(-9187201950435737472)) else @as(Int, -9187201950435737472)));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             if ((mask > 0)) {
                                 const first_set_byte = (@ctz(mask) / 8);
                                 if (comptime Environment.allow_assert) {
@@ -641,7 +661,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                 const Int = u64;
                 const size = @sizeOf(Int);
                 const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(-9187201950435737472)) else @as(Int, -9187201950435737472)));
+                const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                 if ((mask > 0)) {
                     const first_set_byte = (@ctz(mask) / 8);
                     if (comptime Environment.allow_assert) {
@@ -738,7 +758,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                         const size = @sizeOf(Int);
                         {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(-9187201950435737472)) else @as(Int, -9187201950435737472)));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             (buf[0..size]).* = @as([size]u8, @bitCast(bytes));
                             if ((mask > 0)) {
                                 const first_set_byte = (@ctz(mask) / 8);
@@ -754,7 +774,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                         }
                         if (comptime (ascii_vector_size >= 16)) {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(-9187201950435737472)) else @as(Int, -9187201950435737472)));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             (buf[0..size]).* = @as([size]u8, @bitCast(bytes));
                             if (comptime Environment.allow_assert) {
                                 _ = assert((mask > 0));
@@ -780,7 +800,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                 while ((@min(buf.len, latin1.len) >= size)) {
                     const bytes = @as(Int, @bitCast((latin1[0..size]).*));
                     (buf[0..size]).* = @as([size]u8, @bitCast(bytes));
-                    const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(-9187201950435737472)) else @as(Int, -9187201950435737472)));
+                    const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                     if ((mask > 0)) {
                         const first_set_byte = (@ctz(mask) / 8);
                         if (comptime stop) {
@@ -956,7 +976,7 @@ pub fn copyLatin1IntoASCII(dest: []u8, src: []const u8) void {
         }
         for (cp_mut_slice(&to)) |*to_byte| {
             _ = &to_byte;
-            (to_byte.*).* = (if (comptime @typeInfo(@TypeOf(@as(u7, @truncate(remain[0])))) == .@"enum") cp_cast_int(u8, @intFromEnum(@as(u7, @truncate(remain[0])))) else cp_cast_int(u8, @as(u7, @truncate(remain[0]))));
+            (to_byte.*) = (if (comptime @typeInfo(@TypeOf(@as(u7, @truncate(remain[0])))) == .@"enum") cp_cast_int(u8, @intFromEnum(@as(u7, @truncate(remain[0])))) else cp_cast_int(u8, @as(u7, @truncate(remain[0]))));
             remain = remain[1..];
         }
 }
@@ -1473,12 +1493,34 @@ else => @compileError("Invalid UTF-8 codepoint!"),
 }
 
 pub fn encodeWTF8Rune(p: *[4]u8, r: i32) u3_fast {
-        return encodeWTF8RuneT(p, u32, (if (comptime @typeInfo(@TypeOf(r)) == .@"enum") cp_cast_int(i32, @intFromEnum(r)) else cp_cast_int(i32, r)));
+        return encodeWTF8RuneT(p, u32, @intCast(r));
 }
 
 pub fn encodeWTF8RuneT(p: *[4]u8, comptime R: type, r: R) u3_fast {
-    _ = p;
-    _ = r;
+        switch (r) {
+0...127 => {
+p[cp_cast_int(usize, 0)] = @as(u8, @intCast(r));
+        return 1;
+},
+128...2047 => {
+p[cp_cast_int(usize, 0)] = @as(u8, @truncate((192 | cp_shr(r, 6))));
+        p[cp_cast_int(usize, 1)] = @as(u8, @truncate((128 | (r & 63))));
+        return 2;
+},
+2048...65535 => {
+p[cp_cast_int(usize, 0)] = @as(u8, @truncate((224 | cp_shr(r, 12))));
+        p[cp_cast_int(usize, 1)] = @as(u8, @truncate((128 | (cp_shr(r, 6) & 63))));
+        p[cp_cast_int(usize, 2)] = @as(u8, @truncate((128 | (r & 63))));
+        return 3;
+},
+else => {
+p[cp_cast_int(usize, 0)] = @as(u8, @truncate((240 | cp_shr(r, 18))));
+        p[cp_cast_int(usize, 1)] = @as(u8, @truncate((128 | (cp_shr(r, 12) & 63))));
+        p[cp_cast_int(usize, 2)] = @as(u8, @truncate((128 | (cp_shr(r, 6) & 63))));
+        p[cp_cast_int(usize, 3)] = @as(u8, @truncate((128 | (r & 63))));
+        return 4;
+},
+}
 }
 
 pub fn wtf8Sequence(code_point: u32) [4]u8 {

@@ -138,7 +138,7 @@ pub fn BabyList(comptime Type: type) type {
         },
     };
         return struct {
-    ptr: [*]Type = (&@as([0]Type, &.{})),
+    ptr: [*]Type = &.{},
     len: u32 = 0,
     cap: u32 = 0,
     #origin: if (safety_checks) Origin else void = (if (safety_checks) .owned else ({

@@ -1314,3 +1314,6 @@
 
 ### 2026-11-20 05:53:46 UTC - zig:check JSC 核心簇修复经验
 - `toJSHostCall` 用 `@as(JSValue ! HostFnError, ...)` 避误包 `.{ .ok = ... }`；纯 error set 调用改 `* = expr` 替代 `catch {}`；`NotCellMask` 安全转 `u64` 位掩码。
+
+### 2026-11-20 05:54:33 UTC - zig:check 基础库与字符串簇修复经验
+- `ptr: [*]T = [];` 替代 `&([] as [0]T)`；`[:0]u8!` 需拆 `type SliceZ = [:0]u8; : SliceZ!`；`u64` 大十六进制常量用移位构造避免 `i64` 溢出。
