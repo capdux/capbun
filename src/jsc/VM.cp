@@ -4,7 +4,7 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
-const APILockCallback = *const fn (ctx: *!?) callconv(.c) void;
+type APILockCallback = *const fn (ctx: *!?) callconv(.c) void;
 err ThrowError { JSError }
 
 @c {

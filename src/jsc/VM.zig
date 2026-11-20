@@ -164,10 +164,10 @@ pub fn performOpportunisticallyScheduledTasks(self: *VM, until: f64) void {
     pub const Lock = VMLock;
 };
 
+const APILockCallback = *const fn (?*anyopaque) callconv(.c) void;
 const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
-const APILockCallback = *const *const fn(ctx: ?*anyopaque) callconv(.c) void;
 
 extern "c" fn JSC__VM__create(heap_type: u8) callconv(.c) *VM;
 

@@ -81,7 +81,7 @@ pub const PGNummericString = union {
     static: []const u8,
     dynamic: []const u8,
 
-pub fn slice(self: *const PGNummericString) []const u8 {
+pub fn slice(self: PGNummericString) []const u8 {
             return (switch (self) {
 .static => |value| value,
 .dynamic => |value| value,
@@ -113,7 +113,7 @@ pub fn toJS(self: *Putter, globalObject: *jsc.JSGlobalObject, array: JSValue, st
             return SQLDataCell.constructObjectFromDataCell(globalObject, array, structure, self.list.ptr, @truncate(self.fields.len), flags, @intFromEnum(result_mode), names, names_count);
     }
 
-pub fn putImpl(self: *Putter, index: u32, optional_bytes: ?*Data, comptime is_raw: bool) anyerror!bool {
+pub fn putImpl(self: *Putter, index: u32, optional_bytes: ?*Data, comptime is_raw: bool) !bool {
             if ((index >= self.fields.len)) {
                 _ = debug("putImpl: index {d} >= fields.len {d}, ignoring extra field", .{ index, self.fields.len });
                 return false;
@@ -153,11 +153,11 @@ else => @intCast(index),
             return true;
     }
 
-pub fn putRaw(self: *Putter, index: u32, optional_bytes: ?*Data) anyerror!bool {
+pub fn putRaw(self: *Putter, index: u32, optional_bytes: ?*Data) !bool {
             return self.putImpl(index, optional_bytes, true);
     }
 
-pub fn put(self: *Putter, index: u32, optional_bytes: ?*Data) anyerror!bool {
+pub fn put(self: *Putter, index: u32, optional_bytes: ?*Data) !bool {
             return self.putImpl(index, optional_bytes, false);
     }
 };

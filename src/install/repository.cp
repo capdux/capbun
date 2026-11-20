@@ -103,7 +103,7 @@ struct SloppyGlobalGitConfig {
     }
 }
 
-struct SharedEnv {
+pub struct SharedEnv {
     env: DotEnv.Map? = null,
     pub fn get(*_, allocator: std.mem.Allocator, other: *DotEnv.Loader): DotEnv.Map {
         return _.env ?? brk: {
@@ -135,7 +135,6 @@ struct SharedEnv {
     }
 }
 
-pub let shared_env: SharedEnv = {};
 
 pub struct TopStorePathFormatter {
     repo: *const Repository,
@@ -204,6 +203,7 @@ pub struct TopFormatter {
 }
 
 @c pub struct Repository {
+    static let shared_env: SharedEnv = {};
     owner: String = {},
     repo: String = {},
     committish: String = {},
@@ -599,7 +599,7 @@ pub struct TopFormatter {
 
         return std.mem.trim(u8, exec(
             allocator,
-            shared_env.get(allocator, env),
+            Repository.shared_env.get(allocator, env),
             if (committish.len > 0) &argv_with_commit else &argv_no_commit,
         ) catch |e| {
             const err_args = .{ committish, name };

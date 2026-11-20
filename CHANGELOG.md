@@ -1792,3 +1792,5 @@
 - **[2026-11-20] Wave 26 A 组 (20 模块)**：更新 `options_types/CompileTarget`, `bake/DevServer{,/WatcherAtomics,/SerializedFailure}`, `bundler/{bundle_v2,analyze_transpiled_module,defines,OutputFile,ParseTask,entry_points}`, `bundler_jsc/output_file_jsc`, `js_printer/js_printer`, `js_parser/ast/{CharFreq,ImportScanner,P,Parser,visit}`, `cli/test_command`, `standalone_graph/StandaloneModuleGraph`, `sourcemap_jsc/CodeCoverage`。
 
 - **[2026-11-20] Wave 26 C 组 (23 模块)**：更新 `shell/{shell,states/Pipeline}`, `paths/resolve_path`, `runtime/{api/{JSTranspiler,Archive,bun/{js_bun_spawn_bindings,spawn}},node/path_watcher,server/server,socket/UpgradedDuplex,webcore/{ResumableSink,blob/{Store,copy_file,write_file},s3/{multipart,simple_request}}}`, `http/HTTPThread`, `http_jsc/headers_jsc`, `libarchive/libarchive`, `ptr/owned`, `router/router`, `string/immutable/exact_size_matcher`, `watcher/INotifyWatcher`。
+
+- **[2026-11-20] Wave 26 D 组 (3 跨模块根因)**：更新 `install/repository`, `jsc/VM`, `sql_jsc/postgres/DataCell`。

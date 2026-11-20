@@ -868,7 +868,7 @@ export struct Putter {
         );
     }
 
-    fn putImpl(*_, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool): anyerror!bool {
+    fn putImpl(*_, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool): bool! {
         if (index >= this.fields.len) {
             debug("putImpl: index {d} >= fields.len {d}, ignoring extra field", .{ index, this.fields.len });
             return false;
@@ -913,11 +913,11 @@ export struct Putter {
         return true;
     }
 
-    pub fn putRaw(*_, index: u32, optional_bytes: (*Data)?): anyerror!bool {
+    pub fn putRaw(*_, index: u32, optional_bytes: (*Data)?): bool! {
         return this.putImpl(index, optional_bytes, true);
     }
 
-    pub fn put(*_, index: u32, optional_bytes: (*Data)?): anyerror!bool {
+    pub fn put(*_, index: u32, optional_bytes: (*Data)?): bool! {
         return this.putImpl(index, optional_bytes, false);
     }
 }

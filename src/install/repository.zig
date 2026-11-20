@@ -281,6 +281,7 @@ pub const Repository = extern struct {
     committish: String = .{},
     resolved: String = .{},
     package_name: String = .{},
+    pub var shared_env: SharedEnv = .{};
 
 pub fn parseAppendGit(input: []const u8, buf: *String.Buf) OOM!Repository {
             var remain = input;
@@ -564,7 +565,7 @@ pub fn findCommit(allocator: std.mem.Allocator, env: *DotEnv.Loader, log: *logge
             _ = &repo_dir;
             const argv_with_commit: [7][]const u8 = .{ "git", "-C", path, "log", "--format=%H", "-1", committish };
             const argv_no_commit: [6][]const u8 = .{ "git", "-C", path, "log", "--format=%H", "-1" };
-            return std.mem.trim(u8, (blk_catch_8: { break :blk_catch_8 ((exec(allocator, shared_env.get(allocator, env), (if ((committish.len > 0)) (&argv_with_commit) else (&argv_no_commit)))) catch |e| { _ = &e; const err_args: struct { []const u8, []const u8 } = .{ committish, name };
+            return std.mem.trim(u8, (blk_catch_8: { break :blk_catch_8 ((exec(allocator, Repository.shared_env.get(allocator, env), (if ((committish.len > 0)) (&argv_with_commit) else (&argv_no_commit)))) catch |e| { _ = &e; const err_args: struct { []const u8, []const u8 } = .{ committish, name };
             _ = ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "no commit matching \"{s}\" found for \"{s}\" (but repository exists)", err_args)) catch unreachable);
             return e; }); }), " \t\r\n");
     }
@@ -640,7 +641,6 @@ const tl_bufs = bun.ThreadlocalBuffers(struct {
 });
 var sloppy_holder: SloppyGlobalGitConfig = .{};
 var sloppy_load_and_parse_once = std.once(SloppyGlobalGitConfig.loadAndParse);
-pub var shared_env: SharedEnv = .{};
 const FileSystem = fs_mod.FileSystem;
 const ExtractData = Install.ExtractData;
 const PackageManager = Install.PackageManager;
