@@ -75,7 +75,12 @@ fn dataURLResponse(
     return JSPromise.resolvedPromiseValue(globalThis, response.toJS(globalThis));
 }
 
-@c pub fn Bun__fetchPreconnect(
+comptime {
+    const Bun__fetchPreconnect = jsc.toJSHostFn(Bun__fetchPreconnect_);
+    @export(&Bun__fetchPreconnect, .{ name: "Bun__fetchPreconnect" });
+}
+
+pub fn Bun__fetchPreconnect_(
     globalObject: *JSGlobalObject,
     callframe: *CallFrame,
 ): JSError!JSValue {
@@ -127,7 +132,12 @@ export class StringOrURL {
     }
 }
 
-@c pub fn Bun__fetch(
+comptime {
+    const Bun__fetch = jsc.toJSHostFn(Bun__fetch_);
+    @export(&Bun__fetch, .{ name: "Bun__fetch" });
+}
+
+pub fn Bun__fetch_(
     globalThis: **JSGlobalObject,
     callframe: *CallFrame,
 ): JSError!JSValue {

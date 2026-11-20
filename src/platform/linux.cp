@@ -77,7 +77,7 @@ export fn ioctl_ficlone(dest_fd: bun.FD, srcfd: bun.FD): usize {
     return std.os.linux.ioctl(dest_fd.native(), bun.c.FICLONE, @intCast(srcfd.native()));
 }
 
-@c pub fn sys_epoll_pwait2(epfd: i32, events: [*]std.os.linux.epoll_event?!, maxevents: i32, timeout: *const std.os.linux.timespec!?, sigmask: *const std.os.linux.sigset_t!?): isize {
+@c pub export fn sys_epoll_pwait2(epfd: i32, events: [*]std.os.linux.epoll_event?!, maxevents: i32, timeout: *const std.os.linux.timespec!?, sigmask: *const std.os.linux.sigset_t!?): isize {
     unsafe {
         return @bitCast(
             std.os.linux.syscall6(

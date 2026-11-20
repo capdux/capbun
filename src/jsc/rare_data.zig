@@ -33,6 +33,15 @@ fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+comptime {
+    const js_setTLSDefaultCiphers = jsc.toJSHostFn(setTLSDefaultCiphersFromJS);
+    _ = &js_setTLSDefaultCiphers;
+    _ = @export((&js_setTLSDefaultCiphers), .{ .name = "Bun__setTLSDefaultCiphers" });
+    const js_getTLSDefaultCiphers = jsc.toJSHostFn(getTLSDefaultCiphersFromJS);
+    _ = &js_getTLSDefaultCiphers;
+    _ = @export((&js_getTLSDefaultCiphers), .{ .name = "Bun__getTLSDefaultCiphers" });
+
+}
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -881,4 +890,26 @@ else => unreachable,
             return StdinFdType.socket;
         }
         return StdinFdType.file;
+}
+
+pub fn setTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const vm = globalThis.bunVM();
+        const args = callframe.arguments();
+        const ciphers = (if ((args.len > 0)) args[0] else .js_undefined);
+        if ((!ciphers.isString())) {
+            return globalThis.throwInvalidArgumentTypeValue("ciphers", "string", ciphers);
+        }
+        var sliced = try ciphers.toSlice(globalThis, bun.default_allocator);
+        _ = &sliced;
+        defer {
+        _ = sliced.deinit();
+        }
+        _ = vm.rareData().setTLSDefaultCiphers(sliced.slice());
+        return error.js_undefined;
+}
+
+pub fn getTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const vm = globalThis.bunVM();
+        const ciphers = ((vm.rareData().tlsDefaultCiphers()) orelse { return .{ .ok = try bun.String.createUTF8ForJS(globalThis, bun.uws.get_default_ciphers()) }; });
+        return try bun.String.createUTF8ForJS(globalThis, ciphers);
 }

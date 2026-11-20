@@ -32,6 +32,18 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+comptime {
+    const Bun__fetchPreconnect = jsc.toJSHostFn(Bun__fetchPreconnect_);
+    _ = &Bun__fetchPreconnect;
+    _ = @export(*const Bun__fetchPreconnect, .{ .name = "Bun__fetchPreconnect" });
+
+}
+comptime {
+    const Bun__fetch = jsc.toJSHostFn(Bun__fetch_);
+    _ = &Bun__fetch;
+    _ = @export(*const Bun__fetch, .{ .name = "Bun__fetch" });
+
+}
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -138,7 +150,7 @@ pub fn dataURLResponse(_data_url: DataURL, globalThis: *JSGlobalObject, allocato
         return JSPromise.resolvedPromiseValue(globalThis, response.toJS(globalThis));
 }
 
-pub fn Bun__fetchPreconnect(globalObject: *JSGlobalObject, callframe: *CallFrame) callconv(.c) JSError!JSValue {
+pub fn Bun__fetchPreconnect_(globalObject: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         var arguments = callframe.arguments_old(1).slice();
         _ = &arguments;
         if ((arguments.len < 1)) {
@@ -176,7 +188,7 @@ pub fn Bun__fetchPreconnect(globalObject: *JSGlobalObject, callframe: *CallFrame
         return JSValue.js_undefined;
 }
 
-pub fn Bun__fetch(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(.c) JSError!JSValue {
+pub fn Bun__fetch_(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         return fetchImpl(false, globalThis, callframe);
 }
 

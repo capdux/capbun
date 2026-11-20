@@ -1620,24 +1620,22 @@ export fn Bun__reportError(globalObject: *JSGlobalObject, e: jsc.JSValue) {
     * = jsc.VirtualMachine.get().uncaughtException(globalObject, e, false);
 }
 
-pub struct JSZlib {
-    @callconv("c")
-    static fn reader_deallocator(_: *!?, ctx: *!?) {
-        let reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
-        reader.list.deinit(reader.allocator);
-        reader.deinit();
-    }
-    @callconv("c")
-    static fn global_deallocator(_: *!?, ctx: *!?) {
-        bun.allocators.freeWithoutSize(ctx);
-    }
-    export fn compressor_deallocator(_: *!?, ctx: *!?) {
-        let compressor: *zlib.ZlibCompressorArrayList = bun.cast(*zlib.ZlibCompressorArrayList, ctx.?);
-        compressor.list.deinit(compressor.allocator);
-        compressor.deinit();
-    }
+export fn reader_deallocator(_: *!?, ctx: *!?) {
+    let reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
+    reader.list.deinit(reader.allocator);
+    reader.deinit();
+}
+export fn global_deallocator(_: *!?, ctx: *!?) {
+    bun.allocators.freeWithoutSize(ctx);
+}
+export fn compressor_deallocator(_: *!?, ctx: *!?) {
+    let compressor: *zlib.ZlibCompressorArrayList = bun.cast(*zlib.ZlibCompressorArrayList, ctx.?);
+    compressor.list.deinit(compressor.allocator);
+    compressor.deinit();
+}
 
-    const Library = enum {
+pub struct JSZlib {
+    pub const Library = enum {
         zlib,
         libdeflate,
 

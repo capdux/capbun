@@ -655,7 +655,7 @@ pub struct TestingAPIs {
     }
 }
 
-@c pub unsafe fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject, jsvalue: JSValue) {
+@c pub export unsafe fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject, jsvalue: JSValue) {
     const this_sink: *FileSink = FileSink.JSSink.fromJS(jsvalue) orelse return;
 
     if (!Environment.isWindows) {

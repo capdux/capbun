@@ -176,7 +176,7 @@ pub fn onThreadExit() {
     unsafe { bun_clear_loop_at_thread_exit(); }
 }
 
-@c pub fn BUN__warn__extra_ca_load_failed(filename: [*c]const u8, error_msg: [*c]const u8) {
+@c pub export fn BUN__warn__extra_ca_load_failed(filename: [*c]const u8, error_msg: [*c]const u8) {
     bun.Output.warn("ignoring extra certs from {s}, load failed: {s}", [ filename, error_msg ]);
 }
 

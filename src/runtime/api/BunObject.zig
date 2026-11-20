@@ -387,25 +387,6 @@ pub fn getEnvValue(globalObject: *jsc.JSGlobalObject, name: ZigString) ?ZigStrin
 
 pub const JSZlib = struct {
 
-pub fn reader_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
-            var reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
-            _ = &reader;
-            _ = reader.list.deinit(reader.allocator);
-            _ = reader.deinit();
-    }
-
-pub fn global_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
-            _ = bun.allocators.freeWithoutSize(ctx);
-    }
-
-pub fn compressor_deallocator(self: JSZlib, _: ?*anyopaque, ctx: ?*anyopaque) void {
-        _ = self;
-            var compressor: *zlib.ZlibCompressorArrayList = bun.cast(*zlib.ZlibCompressorArrayList, ctx.?);
-            _ = &compressor;
-            _ = compressor.list.deinit(compressor.allocator);
-            _ = compressor.deinit();
-    }
-
 pub inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!ZlibOptionsTuple {
             const arguments = callframe.arguments_old(2).slice();
             const buffer_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
@@ -660,7 +641,7 @@ const compressor_opt = bun.libdeflate.Compressor.alloc(((level) orelse (6)));
 },
 }
     }
-    const Library = enum {
+    pub const Library = enum {
             zlib,
             libdeflate,
     
@@ -1996,6 +1977,24 @@ pub fn getCSRFObject(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JS
 
 pub fn Bun__reportError(globalObject: *JSGlobalObject, e: jsc.JSValue) void {
         _ = jsc.VirtualMachine.get().uncaughtException(globalObject, e, false);
+}
+
+pub fn reader_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) void {
+        var reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
+        _ = &reader;
+        _ = reader.list.deinit(reader.allocator);
+        _ = reader.deinit();
+}
+
+pub fn global_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) void {
+        _ = bun.allocators.freeWithoutSize(ctx);
+}
+
+pub fn compressor_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) void {
+        var compressor: *zlib.ZlibCompressorArrayList = bun.cast(*zlib.ZlibCompressorArrayList, ctx.?);
+        _ = &compressor;
+        _ = compressor.list.deinit(compressor.allocator);
+        _ = compressor.deinit();
 }
 
 pub fn createBunStdin(globalThis: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {

@@ -664,6 +664,14 @@ pub fn constructInternal(
     return blob.isS3();
 }
 
+comptime {
+    @export(&@field(exports, "JSS3File__presign"), .{ name: "JSS3File__presign" });
+    @export(&construct, .{ name: "JSS3File__construct" });
+    @export(&hasInstance, .{ name: "JSS3File__hasInstance" });
+    @export(&getBucket, .{ name: "JSS3File__bucket" });
+    @export(&getStat, .{ name: "JSS3File__stat" });
+}
+
 pub const exports = struct {
     pub const JSS3File__presign = jsc.toJSHostFnWithContext(Blob, getPresignUrl);
     pub const JSS3File__stat = jsc.toJSHostFnWithContext(Blob, getStat);

@@ -130,6 +130,11 @@ fn randomData(
     }
 }
 
+comptime {
+    const Bun__randomUUIDv7 = jsc.toJSHostFn(Bun__randomUUIDv7_);
+    @export(&Bun__randomUUIDv7, .{ name: "Bun__randomUUIDv7" });
+}
+
 pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
     const arguments = callframe.argumentsUndef(2).slice();
 
@@ -182,6 +187,11 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
     }
 
     return encoding.encodeWithMaxSize(globalThis, 32, &uuid.bytes);
+}
+
+comptime {
+    const Bun__randomUUIDv5 = jsc.toJSHostFn(Bun__randomUUIDv5_);
+    @export(&Bun__randomUUIDv5, .{ name: "Bun__randomUUIDv5" });
 }
 
 pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {

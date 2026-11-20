@@ -2767,17 +2767,215 @@ pub struct BlobExternalSharedDescriptor {
     }
 }
 
-@c pub fn Bun__Blob__getSizeForBindings(blob: *Blob): usize {
+@c pub export fn Bun__Blob__getSizeForBindings(blob: *Blob): usize {
     return blob.getSizeForBindings();
 }
 
-@c pub fn Blob__ref(blob: *Blob) {
+@c pub export fn Blob__ref(blob: *Blob) {
     blob.ref_count.increment();
 }
 
-@c pub fn Blob__deref(blob: *Blob) {
+@c pub export fn Blob__deref(blob: *Blob) {
     if (blob.ref_count.decrement() == .should_destroy) {
         blob.ref_count.increment();
         blob.deinit();
     }
+}
+
+@c pub export fn Blob__dupeFromJS(value: JSValue): (*Blob)? {
+    const b = Blob.fromJS(value) orelse return null;
+    return Blob.new(b.dupeWithContentType(true));
+}
+
+@c pub export fn Blob__setAsFile(blob: *Blob, path_str: *String) {
+    blob.is_jsdom_file = true;
+    if (*store := blob.store) {
+        if (store.data == .bytes) {
+            if (store.data.bytes.stored_name.len == 0) {
+                const utf8 = path_str.toUTF8Bytes(default_allocator);
+                store.data.bytes.stored_name = bun.PathString.init(utf8);
+            }
+        }
+    }
+}
+
+@c pub export fn Blob__dupe(blob: *Blob): *Blob {
+    return Blob.new(blob.dupeWithContentType(true));
+}
+
+@c pub export fn Blob__getFileNameString(blob: *Blob): String {
+    if (filename := blob.getFileName()) {
+        return String.fromBytes(filename);
+    }
+    return String.empty;
+}
+
+@c pub export fn Blob__getDataPtr(value: JSValue): *!? {
+    const blob = Blob.fromJS(value) orelse return null;
+    const data = blob.sharedView();
+    if (data.len == 0) return null;
+    return @constCast(data.ptr);
+}
+
+@c pub export fn Blob__getSize(value: JSValue): usize {
+    const blob = Blob.fromJS(value) orelse return 0;
+    const data = blob.sharedView();
+    return data.len;
+}
+
+@c pub export fn Blob__fromBytes(globalThis: *JSGlobalObject, ptr_arg: ([*]const u8)?, len: usize): *Blob {
+    if (ptr_arg == null || len == 0) {
+        return Blob.new(Blob.initEmpty(globalThis));
+    }
+    const bytes = bun.handleOom(default_allocator.dupe(u8, ptr_arg.?[0..len]));
+    const store = BlobStore.init(bytes, default_allocator);
+    return Blob.new(Blob.initWithStore(store, globalThis));
+}
+
+@c pub export fn Blob__fromBytesWithType(globalThis: *JSGlobalObject, ptr_arg: ([*]const u8)?, len: usize, mime: [*:0]const u8): *Blob {
+    const blob = Blob__fromBytes(globalThis, ptr_arg, len);
+    const mime_slice = std.mem.span(mime);
+    if (mime_slice.len > 0) {
+        blob.content_type = mime_slice;
+        blob.content_type_was_set = true;
+    }
+    return blob;
+}
+
+pub const MmapFreeInterface = if (Environment.isPosix) struct {
+    fn alloc(_: *!, _: usize, _: std.mem.Alignment, _: usize): ([*]u8)? {
+        return null;
+    }
+    fn free(_: *!, buf: []u8, _: std.mem.Alignment, _: usize) {
+        sys.munmap(@ptrCast(@alignCast(buf))).unwrap() catch |e| {
+            Output.debugWarn("Blob mmap-store munmap failed: {}", .{e});
+        };
+    }
+    const vtable_: std.mem.Allocator.VTable = .{
+        alloc: &alloc,
+        resize: &std.mem.Allocator.noResize,
+        remap: &std.mem.Allocator.noRemap,
+        free: &free,
+    };
+    pub const vtable: *const std.mem.Allocator.VTable = &vtable_;
+} else struct {};
+
+@c pub export fn Blob__fromMmapWithType(globalThis: *JSGlobalObject, ptr_arg: [*]u8, len: usize, mime: [*:0]const u8): *Blob {
+    if (!Environment.isPosix) {
+        return Blob__fromBytesWithType(globalThis, ptr_arg, len, mime);
+    }
+    const store = BlobStore.init(ptr_arg[0..len], .{
+        ptr: undefined,
+        vtable: MmapFreeInterface.vtable,
+    });
+    const blob = Blob.new(Blob.initWithStore(store, globalThis));
+    const mime_slice = std.mem.span(mime);
+    if (mime_slice.len > 0) {
+        blob.content_type = mime_slice;
+        blob.content_type_was_set = true;
+    }
+    return blob;
+}
+
+pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!*Blob {
+    jsc.markBinding(@src());
+    const allocator = default_allocator;
+    let blob: Blob = undefined;
+    let arguments = callframe.arguments_old(3);
+    const args = arguments.slice();
+
+    if (args.len < 2) {
+        return globalThis.throwInvalidArguments("new File(bits, name) expects at least 2 arguments", .{});
+    }
+    {
+        const name_value_str = String.fromJS(args[1], globalThis)?;
+        defer name_value_str.deref();
+
+        blob = Blob.get(globalThis, args[0], false, true)?;
+        if (*store_ := blob.store) {
+            switch (store_.data) {
+                .bytes => |*bytes| {
+                    bytes.stored_name = bun.PathString.init(
+                        name_value_str.toUTF8Bytes(default_allocator),
+                    );
+                },
+                .s3, .file => {
+                    blob.name = name_value_str.dupeRef();
+                },
+            }
+        } else if (!name_value_str.isEmpty()) {
+            blob.store = BlobStore.new(.{
+                data: .{
+                    bytes: BlobStore.Bytes.initEmptyWithName(
+                        bun.PathString.init(name_value_str.toUTF8Bytes(default_allocator)),
+                        allocator,
+                    ),
+                },
+                allocator: allocator,
+                ref_count: .init(1),
+            });
+        }
+    }
+
+    let set_last_modified = false;
+
+    if (args.len > 2) {
+        const options = args[2];
+        if (options.isObject()) {
+            if (content_type := options.get(globalThis, "type")?) {
+                inner: {
+                    if (content_type.isString()) {
+                        let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
+                        defer content_type_str.deinit();
+                        const slice = content_type_str.slice();
+                        if (!strings.isAllASCII(slice)) {
+                            break :inner;
+                        }
+                        blob.content_type_was_set = true;
+
+                        if (mime := globalThis.bunVM().mimeType(slice)) {
+                            blob.content_type = mime.value;
+                            break :inner;
+                        }
+                        const content_type_buf = bun.handleOom(allocator.alloc(u8, slice.len));
+                        blob.content_type = strings.copyLowercase(slice, content_type_buf);
+                        blob.content_type_allocated = true;
+                    }
+                }
+            }
+
+            if (last_modified := options.getTruthy(globalThis, "lastModified")?) {
+                set_last_modified = true;
+                blob.last_modified = last_modified.coerce(f64, globalThis)?;
+            }
+        }
+    }
+
+    if (!set_last_modified) {
+        blob.last_modified = @floatFromInt(std.time.milliTimestamp());
+    }
+
+    if (blob.content_type.len == 0) {
+        blob.content_type = "";
+        blob.content_type_was_set = false;
+    }
+
+    let blob_ = Blob.new(blob);
+    blob_.is_jsdom_file = true;
+    return blob_;
+}
+
+export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv): (*Blob)? {
+    return JSDOMFile__construct_(globalThis, callframe) catch |e| {
+        if (e == error.OutOfMemory) {
+            globalThis.throwOutOfMemory() catch {};
+        }
+        return null;
+    };
+}
+
+pub export fn JSDOMFile__hasInstance(_: JSValue, _: *JSGlobalObject, value: JSValue) callconv(jsc.conv): bool {
+    jsc.markBinding(@src());
+    const blob = value.as(Blob) orelse return false;
+    return blob.is_jsdom_file;
 }

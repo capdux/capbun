@@ -884,3 +884,28 @@ pub export fn Bun__Process__getStdinFdType(vm: *jsc.VirtualMachine, fd: i32): St
     }
     return StdinFdType.file;
 }
+
+fn setTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
+    const vm = globalThis.bunVM();
+    const args = callframe.arguments();
+    const ciphers = if (args.len > 0) args[0] else .js_undefined;
+    if (!ciphers.isString()) return globalThis.throwInvalidArgumentTypeValue("ciphers", "string", ciphers);
+    let sliced = ciphers.toSlice(globalThis, bun.default_allocator)?;
+    defer sliced.deinit();
+    vm.rareData().setTLSDefaultCiphers(sliced.slice());
+    return .js_undefined;
+}
+
+fn getTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
+    const vm = globalThis.bunVM();
+    const ciphers = vm.rareData().tlsDefaultCiphers() ?? return bun.String.createUTF8ForJS(globalThis, bun.uws.get_default_ciphers())?;
+
+    return bun.String.createUTF8ForJS(globalThis, ciphers)?;
+}
+
+comptime {
+    const js_setTLSDefaultCiphers = jsc.toJSHostFn(setTLSDefaultCiphersFromJS);
+    @export(&js_setTLSDefaultCiphers, { name: "Bun__setTLSDefaultCiphers" });
+    const js_getTLSDefaultCiphers = jsc.toJSHostFn(getTLSDefaultCiphersFromJS);
+    @export(&js_getTLSDefaultCiphers, { name: "Bun__getTLSDefaultCiphers" });
+}

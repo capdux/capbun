@@ -1866,3 +1866,4 @@
 - **[2026-11-21] Wave 48 B 组 (4 模块)**：更新 `bake/DevServer`, `jsc/CachedBytecode`, `install/{lockfile/bun.lock,pnpm}`。
 - **[2026-11-21] Wave 49 A+B 组 (6 模块)**：更新 `css/{printer,rules/container}`, `bake/DevServer`, `bundler/linker_context/generateChunksInParallel`, `install/{bin,pnpm}`。
 - **[2026-11-21] Wave 50 (8 模块 / 全仓 `zig:check` 0 errors)**：更新 `bundler/{bundle_v2,linker_context/MetafileBuilder}`, `install/{bin,lockfile/bun.lock,migration,pnpm,repository}`, `js_parser/ast/Expr`。
+- **[2026-11-21] Export 补齐 A+B 组 (13 模块)**：补齐 `bun_core/Global`, `jsc/rare_data`, `paths/resolve_path`, `platform/linux`, `runtime/api/BunObject`, `runtime/crypto/PasswordObject`, `runtime/webcore/{Blob,Crypto,FileSink,S3File,fetch,fetch/FetchTasklet}`, `uws/uws` 的 C ABI 导出声明。

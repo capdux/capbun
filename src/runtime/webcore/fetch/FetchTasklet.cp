@@ -958,7 +958,7 @@ export class FetchTasklet {
         _.ignore_data = true;
     }
 
-    @c pub static fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) {
+    @c pub export static fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) {
         log("onResponseFinalize", .{});
         if (response := tasklet.native_response) {
             const body = response.getBodyValue();

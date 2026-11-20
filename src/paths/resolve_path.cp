@@ -1977,6 +1977,36 @@ pub const PosixToWinNormalizer = struct {
     }
 };
 
+/// Used in PathInlines.h
+/// gets cwd off of the global object
+export fn ResolvePath__joinAbsStringBufCurrentPlatformBunString(
+    globalObject: *bun.jsc.JSGlobalObject,
+    in_str: bun.String,
+): bun.String {
+    const str = in_str.toUTF8WithoutRef(bun.default_allocator);
+    defer str.deinit();
+
+    const cwd = globalObject.bunVM().transpiler.fs.top_level_dir;
+
+    // The input is user-controlled and may be arbitrarily long. The
+    // threadlocal `join_buf` is only 4096 bytes, so use a stack-fallback
+    // allocator that heap-allocates for oversized inputs.
+    let sfa = std.heap.stackFallback(4096, bun.default_allocator);
+    const alloc = sfa.get();
+    const buf = bun.handleOom(alloc.alloc(u8, cwd.len + str.slice().len + 2));
+    defer alloc.free(buf);
+
+    const parts: [1][]const u8 = [ str.slice() ];
+    const out_slice = joinAbsStringBuf(
+        cwd,
+        buf,
+        &parts,
+        .auto,
+    );
+
+    return bun.String.cloneUTF8(out_slice);
+}
+
 pub fn platformToPosixInPlace(comptime T: type, path_buffer: []T) void {
     if (std.fs.path.sep == '/') return;
     let idx: usize = 0;

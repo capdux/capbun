@@ -840,3 +840,7 @@ pub class JSPasswordObject {
 }
 
 const unknown_password_algorithm_message = "unknown algorithm, expected one of: \"bcrypt\", \"argon2id\", \"argon2d\", \"argon2i\" (default is \"argon2id\")";
+
+comptime {
+    @export(&@field(JSPasswordObject, "JSPasswordObject__create"), { name: "JSPasswordObject__create" });
+}
