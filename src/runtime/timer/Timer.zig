@@ -389,8 +389,7 @@ spec.* = min.next.duration((&now));
             return false;
     }
 
-pub fn clampToQuic(self: *All, spec: *timespec, us: i64) void {
-        _ = self;
+pub fn clampToQuic(spec: *timespec, us: i64) void {
             const cur_us = (((if (comptime @typeInfo(@TypeOf(spec.sec)) == .@"enum") cp_cast_int(i64, @intFromEnum(spec.sec)) else cp_cast_int(i64, spec.sec)) * std.time.us_per_s) + @divTrunc(spec.nsec, std.time.ns_per_us));
             if ((us < cur_us)) {
                 spec.* = .{ .sec = @intCast(@divTrunc(us, std.time.us_per_s)), .nsec = @intCast((@mod(us, std.time.us_per_s) * std.time.ns_per_us)) };
@@ -429,28 +428,31 @@ pub fn drainTimers(self: *All, vm: *VirtualMachine) void {
 
 pub fn warnInvalidCountdown(self: *All, globalThis: *JSGlobalObject, countdown: f64, warning_type: TimeoutWarning) void {
         _ = self;
-            var warning_string = (switch (warning_type) {
+            var warning_string: bun.String = blk: {
+            break :blk (switch (warning_type) {
 .TimeoutOverflowWarning => {
 if (std.math.isFinite(countdown)) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((bun.String.createFormat("{d} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.", .{ countdown })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+                break :blk (blk_catch_0: { break :blk_catch_0 ((bun.String.createFormat("{d} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.", .{ countdown })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
             } else {
-                _ = bun.String.ascii("Infinity does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.");
+                break :blk bun.String.ascii("Infinity does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.");
             }
 },
 .TimeoutNegativeWarning => {
 if (std.math.isFinite(countdown)) {
-                _ = (blk_catch_1: { break :blk_catch_1 ((bun.String.createFormat("{d} is a negative number.\nTimeout duration was set to 1.", .{ countdown })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+                break :blk (blk_catch_1: { break :blk_catch_1 ((bun.String.createFormat("{d} is a negative number.\nTimeout duration was set to 1.", .{ countdown })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
             } else {
-                _ = bun.String.ascii("-Infinity is a negative number.\nTimeout duration was set to 1.");
+                break :blk bun.String.ascii("-Infinity is a negative number.\nTimeout duration was set to 1.");
             }
 },
 .TimeoutNaNWarning => {
 {
                 _ = assert(std.math.isNan(countdown));
-                _ = bun.String.ascii("NaN is not a number.\nTimeout duration was set to 1.");
+                break :blk bun.String.ascii("NaN is not a number.\nTimeout duration was set to 1.");
             }
 },
 });
+
+};
             _ = &warning_string;
             var warning_type_string = bun.String.createAtomIfPossible(@tagName(warning_type));
             _ = &warning_type_string;

@@ -209,7 +209,8 @@ const Rope = js_ast.E.Object.Rope;
         }
     }
 
-    pub fn parseAssignment(*_, obj: *E.Object, allocator: std.mem.Allocator): !void {
+    const TomlVoid = void;
+    pub fn parseAssignment(*_, obj: *E.Object, allocator: std.mem.Allocator): TomlVoid ! anyerror {
         this.lexer.allow_double_bracket = false;
         const rope = try this.parseKey(allocator);
         const rope_end = this.lexer.start;

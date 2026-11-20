@@ -2,9 +2,10 @@
 //! Dispatch lives in codecs.zig; this file is the codec body.
 
 pub extern fn WebPGetInfo(data: [*]const u8, len: usize, w: *c_int, h: *c_int): c_int ;
-extern fn WebPDecodeRGBA(data: [*]const u8, len: usize, w: *c_int, h: *c_int): [*]u8? ;
-extern fn WebPEncodeRGBA(rgba: [*]const u8, w: c_int, h: c_int, stride: c_int, q: f32, out: *[*]u8?): usize ;
-extern fn WebPEncodeLosslessRGBA(rgba: [*]const u8, w: c_int, h: c_int, stride: c_int, out: *[*]u8?): usize ;
+type OptU8MultiPtr = ([*]u8)?;
+extern fn WebPDecodeRGBA(data: [*]const u8, len: usize, w: *c_int, h: *c_int): OptU8MultiPtr ;
+extern fn WebPEncodeRGBA(rgba: [*]const u8, w: c_int, h: c_int, stride: c_int, q: f32, out: *OptU8MultiPtr): usize ;
+extern fn WebPEncodeLosslessRGBA(rgba: [*]const u8, w: c_int, h: c_int, stride: c_int, out: *OptU8MultiPtr): usize ;
 pub extern fn WebPFree(ptr: *!?) ;
 
 // ─── libwebpmux / libwebpdemux ──────────────────────────────────────────────
@@ -79,7 +80,9 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     const w: u32 = @intCast(cw);
     const h: u32 = @intCast(ch);
     codecs.guard(w, h, max_pixels)?;
-    const ptr = WebPDecodeRGBA(bytes.ptr, bytes.len, &cw, &ch) ?? return error.DecodeFailed;
+    const ptr_opt = WebPDecodeRGBA(bytes.ptr, bytes.len, &cw, &ch);
+    if (ptr_opt == null) return error.DecodeFailed;
+    const ptr = ptr_opt.?;
     defer WebPFree(ptr);
     // `bytes` is a borrowed view of a JS ArrayBuffer the user can still WRITE
     // (the pin only blocks detach), so a hostile caller can swap in a smaller

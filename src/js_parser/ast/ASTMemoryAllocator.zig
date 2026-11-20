@@ -116,7 +116,7 @@ pub fn initWithoutStack(self: *ASTMemoryAllocator, arena_allocator: std.mem.Allo
         self.bump_allocator = self.stack_allocator.get();
 }
 const SFA = std.heap.StackFallbackAllocator(@min(8192, std.heap.page_size_min));
-var empty_buf: [0]u8 = &.{};
+var empty_buf: [0]u8 = undefined;
 const js_ast = bun.ast;
 const Expr = js_ast.Expr;
 const Stmt = js_ast.Stmt;

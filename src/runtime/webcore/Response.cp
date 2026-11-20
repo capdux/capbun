@@ -373,7 +373,8 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
         return null;
     }
 
-    fn writeFormat(*_, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool)! {
+    const RespVoid = void;
+    fn writeFormat(*_, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool): RespVoid ! anyerror {
         const Writer = @TypeOf(writer);
         writer.print("Response ({f}) {{\n", .{bun.fmt.size(_.#body.len(), .{})})?;
 

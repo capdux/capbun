@@ -175,10 +175,6 @@ pub fn onProcessExit(self: *ProcessHandle, _: *bun.spawn.Process, status: bun.sp
                 (proc.*).status = status;
             }
             self.end_time = (blk_catch_2: { break :blk_catch_2 ((std.time.Instant.now()) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); });
-            _ = self.stdout_reader.reader.drain();
-            _ = self.stderr_reader.reader.drain();
-            _ = self.stdout_reader.reader.deinit();
-            _ = self.stderr_reader.reader.deinit();
             _ = (blk_catch_3: { break :blk_catch_3 ((self.state.processExit(self)) catch |__ce_3| { _ = &__ce_3;  }); });
     }
 
@@ -429,7 +425,7 @@ pub const FilteredPackage = struct {
 };
 
 const string = []const u8;
-const cstr = [*:0]u8;
+const cstr = [*:0]const u8;
 const ScriptsMap = *const bun.StringArrayHashMap(string);
 const colors: [6][]const u8 = .{ "\x1b[36m", "\x1b[33m", "\x1b[35m", "\x1b[32m", "\x1b[34m", "\x1b[31m" };
 const reset = "\x1b[0m";

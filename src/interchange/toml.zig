@@ -213,7 +213,7 @@ _ = try self.parseAssignment(head, key_allocator);
             }
     }
 
-pub fn parseAssignment(self: *TOML, obj: *E.Object, allocator: std.mem.Allocator) !void {
+pub fn parseAssignment(self: *TOML, obj: *E.Object, allocator: std.mem.Allocator) anyerror!TomlVoid {
             self.lexer.allow_double_bracket = false;
             const rope = try self.parseKey(allocator);
             const rope_end = self.lexer.start;
@@ -360,6 +360,7 @@ pub fn parseMaybeTrailingComma(self: *TOML, closer: lexer.TokenType) !bool {
             return true;
     }
     pub const T = lexer.T;
+    const TomlVoid = void;
 };
 
 const IdentityContext = @import("../collections/identity_context.zig").IdentityContext;

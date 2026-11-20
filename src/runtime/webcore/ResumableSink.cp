@@ -72,7 +72,8 @@ pub fn ResumableSink(
                 .context = context,
                 .ref_count = RefCount.initExactRefs(ref_count),
             });
-            if (stream.isLocked(globalThis) or stream.isDisturbed(globalThis)) {
+            const is_locked_fn = jsc.WebCore.ReadableStream.isLocked;
+            if (is_locked_fn(stream, globalThis) or stream.isDisturbed(globalThis)) {
                 const err = jsc.SystemError{
                     .code = BunString.static(@tagName(jsc.Node.ErrorCode.ERR_STREAM_CANNOT_PIPE)),
                     .message = BunString.static("Stream already used, please create a new one"),
@@ -335,7 +336,7 @@ pub fn ResumableSink(
                 } else {
                     stream_.done(globalObject);
                 }
-                const stream_prev = this.stream;
+                let stream_prev = this.stream;
                 this.stream = .{};
                 stream_prev.deinit();
             }

@@ -418,7 +418,14 @@ pub struct FSWatcher {
 
         if (watcher.verbose) {
             switch (event) {
-                .rename, .change => |value| {
+                .rename value => {
+                    if (is_file) {
+                        Output.prettyErrorln("<r> <d>File changed: {s}<r>", .{ value });
+                    } else {
+                        Output.prettyErrorln("<r> <d>Dir changed: {s}<r>", .{ value });
+                    }
+                },
+                .change value => {
                     if (is_file) {
                         Output.prettyErrorln("<r> <d>File changed: {s}<r>", .{ value });
                     } else {
@@ -438,7 +445,14 @@ pub struct FSWatcher {
 
         if (watcher.verbose) {
             switch (event) {
-                .rename, .change => |value| {
+                .rename value => {
+                    if (is_file) {
+                        Output.prettyErrorln("<r> <d>File changed: {f}<r>", .{ value });
+                    } else {
+                        Output.prettyErrorln("<r> <d>Dir changed: {f}<r>", .{ value });
+                    }
+                },
+                .change value => {
                     if (is_file) {
                         Output.prettyErrorln("<r> <d>File changed: {f}<r>", .{ value });
                     } else {

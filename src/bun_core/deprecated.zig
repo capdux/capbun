@@ -184,7 +184,7 @@ pub inline fn r32(p: []const u8) u64 {
 
 const debug = std.debug;
 const assert = debug.assert;
-const RAPID_SECRET: [3]u64 = .{ 3257665815644502181, -8378864009470890807, 5418857496715711651 };
+const RAPID_SECRET: [3]u64 = .{ 3257665815644502181, (if (@typeInfo(@TypeOf(-8378864009470890807)) == .@"enum") cp_cast_int(u64, @intFromEnum(-8378864009470890807)) else cp_cast_int(u64, -8378864009470890807)), 5418857496715711651 };
 
 pub fn BufferedReader(comptime buffer_size: usize, comptime ReaderType: type) type {
         return struct {

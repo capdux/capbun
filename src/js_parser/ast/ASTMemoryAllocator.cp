@@ -1,6 +1,6 @@
 const SFA = std.heap.StackFallbackAllocator(@min(8192, std.heap.page_size_min));
 
-let empty_buf: [0]u8 = [];
+let empty_buf: [0]u8 = undefined;
 
 pub struct Scope {
     current: (*ASTMemoryAllocator)? = null,

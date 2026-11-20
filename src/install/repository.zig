@@ -244,9 +244,10 @@ pub fn format(self: TopFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!vo
                 _ = bun.assert((self.label.len > 0));
             }
             _ = try writer.writeAll(self.label);
-            const repo = cp_iter_slice(self.repository.repo)[@intCast(self.buf)..];
+            const sliceFn = @TypeOf(self.repository.repo).slice;
+            const repo = sliceFn(self.repository.repo, self.buf);
             if ((!self.repository.owner.isEmpty())) {
-                _ = try writer.writeAll(cp_iter_slice(self.repository.owner)[@intCast(self.buf)..]);
+                _ = try writer.writeAll(sliceFn(self.repository.owner, self.buf));
                 _ = try writer.writeAll("/");
             } else {
                 if (Dependency.isSCPLikePath(repo)) {

@@ -91,13 +91,14 @@ export @root struct LinuxMemFdAllocator {
         // size rounded up to nearest page
         size = std.mem.alignForward(usize, size, std.heap.pageSize());
 
-        flags.TYPE = .SHARED;
+        let f = flags;
+        f.TYPE = .SHARED;
 
         switch (bun.sys.mmap(
             null,
             @min(size, this.size),
             std.posix.PROT.READ | std.posix.PROT.WRITE,
-            flags,
+            f,
             this.fd,
             offset,
         )) {

@@ -111,9 +111,14 @@ pub fn resolvePromise(self: *Handlers, value: JSValue) bun.JSTerminated!void {
         }
         if (self.promise.trySwap()) |promise| {
             _ = &promise;
-            if (promise.asAnyPromise()) |*anyPromise| {
-                _ = &anyPromise;
-                _ = try (anyPromise.*).resolve(self.globalObject, value);
+            const ap_opt = promise.asAnyPromise();
+            var __ap_opt_moved = false; _ = &__ap_opt_moved;
+            defer if (!__ap_opt_moved) { const __T = @TypeOf(ap_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ap_opt.release() catch {}; } else { ap_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ap_opt; _drop_val.release(); } };
+            if ((ap_opt != null)) {
+                var anyPromise = ap_opt.?;
+                var __anyPromise_moved = false; _ = &__anyPromise_moved;
+                defer if (!__anyPromise_moved) { const __T = @TypeOf(anyPromise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = anyPromise.release() catch {}; } else { anyPromise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = anyPromise; _drop_val.release(); } };
+                _ = try anyPromise.resolve(self.globalObject, value);
             }
         }
 }

@@ -146,7 +146,8 @@ pub const AnyRoute = union(enum) {
         if (!argument.isObject()) return null;
 
         const index_opt = argument.getOptional(init_ctx.global, "index", ZigString.Slice)?;
-        const index = index_opt ?? return null;
+        if (index_opt == null) return null;
+        const index = index_opt.?;
         defer index.deinit();
 
         const files_opt = argument.getArray(init_ctx.global, "files")?;
@@ -275,7 +276,8 @@ pub const AnyRoute = union(enum) {
             return .{ .file = file_route };
         }
         const static_route_opt = StaticRoute.fromJS(global, argument)?;
-        const static_route = static_route_opt ?? return null;
+        if (static_route_opt == null) return null;
+        const static_route = static_route_opt.?;
         return .{ .static = static_route };
     }
 };

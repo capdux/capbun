@@ -2047,7 +2047,7 @@ pub fn resolvePosixT(comptime T: type, paths: []const []const T, buf: []T, buf2:
             if ((i_i64 >= 0)) {
                 path = paths[@as(usize, @intCast((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i_i64)) == .@"enum") cp_cast_int(i32, @intFromEnum(i_i64)) else cp_cast_int(i32, i_i64))))))];
             } else {
-                const max_path_sz = MAX_PATH_SIZE(T);
+                const max_path_sz = (comptime MAX_PATH_SIZE(T));
                 _ = &max_path_sz;
                 var tmpBuf: [max_path_sz]T = undefined;
                 _ = &tmpBuf;
@@ -2137,7 +2137,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                         _ = &u16Buf;
                         var deviceRootKey: [4]u16 = undefined;
                         _ = &deviceRootKey;
-                        const key_w: [*:0]u16 = brk: {
+                        const key_w: [*:0]const u16 = brk: {
                         if (((resolvedDeviceLen == 2) and (resolvedDevice[1] == CHAR_COLON))) {
                             deviceRootKey[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(@TypeOf(61)) == .@"enum") cp_cast_int(u16, @intFromEnum(61)) else cp_cast_int(u16, 61));
                             deviceRootKey[cp_cast_int(usize, 1)] = (if (comptime @typeInfo(@TypeOf(resolvedDevice[0])) == .@"enum") cp_cast_int(u16, @intFromEnum(resolvedDevice[0])) else cp_cast_int(u16, resolvedDevice[0]));
@@ -2154,7 +2154,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                             buf2[cp_cast_int(usize, bufSize)] = asT(T, 0);
                             const slice: [:0]const T = buf2[0..bufSize :0];
                             break :brk (blk: {
-                            break :blk @as([*:0]u16, @ptrCast(slice.ptr));
+                            break :blk @as([*:0]const u16, @ptrCast(slice.ptr));
 
 });
                         } else {

@@ -228,7 +228,7 @@ pub enum StandaloneLazySourceMap {
                 }
                 const decompressed_contents_slice = slices[count..][0..count];
                 for (i of 0..count) {
-                    file_names[@intCast(i)] = serialized.sourceFileNameAt(@intCast(i)).slice(serialized.bytes);
+                    file_names[@as(usize, @intCast(i))] = serialized.sourceFileNameAt(@as(usize, @intCast(i))).slice(serialized.bytes);
                 }
 
                 @memset(decompressed_contents_slice, null);
@@ -268,7 +268,7 @@ pub struct StandaloneFile {
     pub const blob = StandaloneGraphJsc.fileBlob;
 
     pub fn appearsInEmbeddedFilesArray(): bool {
-        return _.side == .client || !_.loader.isJavaScriptLike(_.loader);
+        return _.side == .client || !_.loader.isJavaScriptLike();
     }
 
     pub fn stat(): bun.Stat {
@@ -667,7 +667,7 @@ pub struct StandaloneModuleGraph {
                     .js, .jsx, .ts, .tsx => .latin1,
                     else => .binary,
                 },
-                module_format: if (output_file.loader.isJavaScriptLike(output_file.loader)) switch (output_format) {
+                module_format: if (output_file.loader.isJavaScriptLike()) switch (output_format) {
                     .cjs => .cjs,
                     .esm => .esm,
                     else => .none,

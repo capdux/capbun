@@ -785,7 +785,7 @@ pub fn schedule(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSVal
 
 pub fn encodeForBody(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSValue) bun.JSError!EncodeForBodyResult {
         if ((self.source == .blob)) {
-            const refuse: []const u8 = "Image: fd/S3-backed Bun.file as a Response body — pass `await file.bytes()` or a path string";
+            const refuse: [:0]const u8 = "Image: fd/S3-backed Bun.file as a Response body — pass `await file.bytes()` or a path string";
             const blob_js_opt = self.source.blob.get();
             var __blob_js_opt_moved = false; _ = &__blob_js_opt_moved;
             defer if (!__blob_js_opt_moved) { const __T = @TypeOf(blob_js_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_js_opt.release() catch {}; } else { blob_js_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_js_opt; _drop_val.release(); } };

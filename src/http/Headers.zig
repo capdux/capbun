@@ -177,7 +177,7 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
         _ = &buf_len;
         if (fetch_headers_ref) |headers_ref| {
             _ = &headers_ref;
-            _ = (headers_ref).?.count((&header_count), (&buf_len));
+            _ = headers_ref.count((&header_count), (&buf_len));
         }
         var headers: Headers = .{ .entries = .{}, .buf = .{}, .allocator = allocator };
         var __headers_moved = false; _ = &__headers_moved;
@@ -191,7 +191,7 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
             _ = &has_ct;
             if (fetch_headers_ref) |headers_ref2| {
                 _ = &headers_ref2;
-                has_ct = (headers_ref2).?.fastHas(.ContentType);
+                has_ct = headers_ref2.fastHas(.ContentType);
             }
             if (((body).?.hasContentTypeFromUser() and (!has_ct))) {
                 header_count = (header_count + 1);
@@ -214,7 +214,7 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
         defer if (!__values_moved) { const __T = @TypeOf(values); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = values.release() catch {}; } else { values.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = values; _drop_val.release(); } };
         if (fetch_headers_ref) |headers_ref| {
             _ = &headers_ref;
-            _ = (headers_ref).?.copyTo(names.ptr, values.ptr, headers.buf.items.ptr);
+            _ = headers_ref.copyTo(names.ptr, values.ptr, headers.buf.items.ptr);
         }
         if (needs_content_type) {
             _ = bun.copy(u8, headers.buf.items[buf_len_before_content_type..], "Content-Type");

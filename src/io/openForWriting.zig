@@ -75,11 +75,11 @@ const SentinelConstU8 = [:0]const u8;
 const SentinelU8 = [:0]u8;
 const Environment = bun.Environment;
 
-pub fn openForWriting(dir: bun.FD, input_path: anytype, input_flags: i32, mode: bun.Mode, pollable: *bool, is_socket: *bool, force_sync: bool, out_nonblocking: *bool, comptime Ctx: type, ctx: anytype, comptime onForceSyncOrIsaTTY: anytype, comptime isPollable: *const fn (bun.Mode) bool) bun.sys.Maybe(bun.FD) {
+pub fn openForWriting(dir: bun.FD, input_path: anytype, input_flags: i32, mode: bun.Mode, pollable: *bool, is_socket: *bool, force_sync: bool, out_nonblocking: *bool, comptime Ctx: type, ctx: anytype, comptime onForceSyncOrIsaTTY: *const fn (Ctx) void, comptime isPollable: *const fn (bun.Mode) bool) bun.sys.Maybe(bun.FD) {
         return openForWritingImpl(dir, input_path, input_flags, mode, pollable, is_socket, force_sync, out_nonblocking, Ctx, ctx, onForceSyncOrIsaTTY, isPollable, bun.sys.openat);
 }
 
-pub fn openForWritingImpl(dir: bun.FD, input_path: anytype, input_flags: i32, mode: bun.Mode, pollable: *bool, is_socket: *bool, force_sync: bool, out_nonblocking: *bool, comptime Ctx: type, ctx: anytype, comptime onForceSyncOrIsaTTY: anytype, comptime isPollable: *const fn (bun.Mode) bool, comptime openat: *const fn (bun.FD, [:0]const u8, i32, bun.Mode) bun.sys.Maybe(bun.FD)) bun.sys.Maybe(bun.FD) {
+pub fn openForWritingImpl(dir: bun.FD, input_path: anytype, input_flags: i32, mode: bun.Mode, pollable: *bool, is_socket: *bool, force_sync: bool, out_nonblocking: *bool, comptime Ctx: type, ctx: anytype, comptime onForceSyncOrIsaTTY: *const fn (Ctx) void, comptime isPollable: *const fn (bun.Mode) bool, comptime openat: *const fn (bun.FD, [:0]const u8, i32, bun.Mode) bun.sys.Maybe(bun.FD)) bun.sys.Maybe(bun.FD) {
         _ = &Ctx;
         const PathT = @TypeOf(input_path);
         if ((((PathT != bun.webcore.PathOrFileDescriptor) and (PathT != SentinelConstU8)) and (PathT != SentinelU8))) {

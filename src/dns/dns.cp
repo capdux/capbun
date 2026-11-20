@@ -250,10 +250,10 @@ pub fn addressToString(address: *const std.net.Address): !bun.String {
         return String.createFormat("{}.{}.{}.{}", .{ b0, b1, b2, b3 });
     } else if (address.any.family == std.posix.AF.INET6) {
         let stack = std.heap.stackFallback(512, default_allocator);
-        const allocator = stack.get();
+        const alloc = stack.get();
         const addr_val = address.*;
-        let out = std.fmt.allocPrint(allocator, "{f}", .{ addr_val })?;
-        defer allocator.free(out);
+        let out = std.fmt.allocPrint(alloc, "{f}", .{ addr_val })?;
+        defer alloc.free(out);
         const in6_port = address.in6.getPort();
         return String.cloneLatin1(out[1 .. out.len - 1 - std.fmt.count("{d}", .{ in6_port }) - 1]);
     } else if (address.any.family == std.posix.AF.UNIX) {

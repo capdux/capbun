@@ -218,8 +218,8 @@ pub const Data = union {
 pub const PackageManagerTask = @This();
 
 tag: Tag,
-request: *Request,
-data: *Data,
+request: Request,
+data: Data,
 status: Status = Status.waiting,
 threadpool_task: ThreadPool.Task = ThreadPool.Task{ .callback = (&callback) },
 log: logger.Log,

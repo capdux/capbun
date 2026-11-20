@@ -41,13 +41,8 @@ pub const empty_watch_dep: WatchDep = WatchDep{
 
     pub const empty = empty_directory_watch_store;
 
-    fn ownerFromRaw(raw: *!): *DevServer {
-        const store_ptr: *DirectoryWatchStore = unsafe { @ptrCast(@alignCast(raw)) };
-        return @fieldParentPtr("directory_watchers", store_ptr);
-    }
-
     pub fn owner(*_): *DevServer {
-        return ownerFromRaw(@ptrCast(_));
+        return unsafe { @alignCast(@fieldParentPtr("directory_watchers", _)) };
     }
 
     pub fn trackResolutionFailure(*_, import_source: []const u8, specifier: []const u8, renderer: bake.Graph, loader: bun.options.Loader): !bun.OOM {
@@ -73,14 +68,14 @@ pub const empty_watch_dep: WatchDep = WatchDep{
 
         let owned_file_path: []const u8 = "";
         {
-            const dev = ownerFromRaw(@ptrCast(_));
+            const dev = _.owner();
             dev.graph_safety_lock.lock();
             owned_file_path = switch (renderer) {
                 .client => (dev.client_graph.insertEmpty(import_source, .unknown)?).key,
                 .server, .ssr => (dev.server_graph.insertEmpty(import_source, .unknown)?).key,
             };
         }
-        defer ownerFromRaw(@ptrCast(_)).graph_safety_lock.unlock();
+        defer _.owner().graph_safety_lock.unlock();
 
         _.insert(dir, owned_file_path, specifier) catch |e| {
             if (e == error.OutOfMemory) return error.OutOfMemory;
@@ -98,7 +93,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
     )! {
         assert(specifier.len > 0);
         // TODO: watch the parent dir too.
-        const alloc = ownerFromRaw(@ptrCast(_)).allocator();
+        const alloc = _.owner().allocator();
 
         debug.log("DirectoryWatchStore.insert({f}, {f}, {f})", [
             bun.fmt.quote(dir_name_to_watch),
@@ -130,7 +125,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
 
         // Try to use an existing open directory handle
         let cache_fd: bun.FD? = null;
-        if (cache := ownerFromRaw(@ptrCast(_)).server_transpiler.resolver.readDirInfo(dir_name_to_watch) catch null) {
+        if (cache := _.owner().server_transpiler.resolver.readDirInfo(dir_name_to_watch) catch null) {
             cache_fd = cache.getFileDescriptor().unwrapValid();
         }
 
@@ -179,7 +174,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
 
         gop.key_ptr.* = bun.strings.withoutTrailingSlashWindowsPath(dir_name);
 
-        const watch_index = switch (ownerFromRaw(@ptrCast(_)).bun_watcher.addDirectory(fd, dir_name, bun.Watcher.getHash(dir_name), false)) {
+        const watch_index = switch (_.owner().bun_watcher.addDirectory(fd, dir_name, bun.Watcher.getHash(dir_name), false)) {
             .err => return error.Ignore,
             .result => |id| id,
         };
@@ -217,7 +212,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
             entry.dir,
         ]);
 
-        ownerFromRaw(@ptrCast(_)).bun_watcher.removeAtIndex(entry.watch_index, 0, [], .file);
+        _.owner().bun_watcher.removeAtIndex(entry.watch_index, 0, [], .file);
 
         defer if (entry.dir_fd_owned) entry.dir.close();
 

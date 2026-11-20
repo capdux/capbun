@@ -1828,7 +1828,7 @@ pub const FFI = struct {
                 first = false;
                 try writer.writeAll("    ");
 
-                const lengthBuf = std.fmt.printInt(arg_buf["arg".len..], i, 10, .lower, {});
+                const lengthBuf = std.fmt.printInt(arg_buf["arg".len..], i, 10, .lower, std.fmt.Options{});
                 const argName = arg_buf[0 .. 3 + lengthBuf];
                 if (arg.needsACastInC()) {
                     try writer.print("{f}", .{arg.toC(argName)});
@@ -1933,7 +1933,7 @@ pub const FFI = struct {
 
                 arg_buf[0.."arg".len].* = "arg".*;
                 for (this.arg_types.items, 0..) |arg, i| {
-                    const printed = std.fmt.printInt(arg_buf["arg".len..], i, 10, .lower, {});
+                    const printed = std.fmt.printInt(arg_buf["arg".len..], i, 10, .lower, std.fmt.Options{});
                     const arg_name = arg_buf[0 .. "arg".len + printed];
                     try writer.print("arguments[{d}] = {f}.asZigRepr;\n", .{ i, arg.toJS(arg_name) });
                 }

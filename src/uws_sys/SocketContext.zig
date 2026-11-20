@@ -93,7 +93,7 @@ pub const BunSocketContextOptions = extern struct {
     client_renegotiation_limit: u32 = 3,
     client_renegotiation_window: u32 = 600,
 
-pub fn createSSLContext(options: BunSocketContextOptions, err: anytype) *?bun.BoringSSL.c.SSL_CTX {
+pub fn createSSLContext(options: BunSocketContextOptions, err: anytype) ?SSLCtxPtr {
             return us_ssl_ctx_from_options(options, err);
     }
 
@@ -116,7 +116,7 @@ pub fn feedZ(hp: *bun.sha.Hashers.SHA256, s: ?[*:0]const u8) void {
             _ = hp.update((&term));
     }
 
-pub fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: ?[*][*:0]u8, n: u32) void {
+pub fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: ?OptCstrArr, n: u32) void {
             var flag: [1]u8 = .{ (if ((arr != null)) 1 else 0) };
             _ = &flag;
             _ = hp.update((&flag));
@@ -249,6 +249,9 @@ pub fn approxCertBytes(self: BunSocketContextOptions) usize {
             }
             return n;
     }
+    pub const SSLCtxPtr = *bun.BoringSSL.c.SSL_CTX;
+    pub const OptCstr = ?[*:0]const u8;
+    pub const OptCstrArr = [*]OptCstr;
 };
 
 

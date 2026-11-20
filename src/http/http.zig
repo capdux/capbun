@@ -791,7 +791,7 @@ pub fn onPreconnect(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCon
         _ = self.result_callback.run(@fieldParentPtr("client", self), HTTPClientResult{ .fail = null, .metadata = null, .has_more = false });
 }
 
-pub noinline fn sendInitialRequestPayload(self: *HTTPClient, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) InitialRequestPayloadResult!void {
+pub noinline fn sendInitialRequestPayload(self: *HTTPClient, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) !InitialRequestPayloadResult {
         var request_body_buffer = self.getRequestBodySendBuffer();
         _ = &request_body_buffer;
         defer {

@@ -26,7 +26,8 @@ pub fn run(self: *DeferredTaskQueue) void {
         while ((i < last)) {
             if (self.map.keys()[@as(usize, @intCast(i))]) |key| {
                 _ = &key;
-                if ((!self.map.values()[@as(usize, @intCast(i))](key))) {
+                const task_fn = self.map.values()[@as(usize, @intCast(i))];
+                if ((!task_fn(key))) {
                     _ = self.map.swapRemoveAt(i);
                     last = self.map.count();
                 } else {
@@ -44,4 +45,4 @@ pub fn deinit(self: *DeferredTaskQueue) void {
 }
 pub const RawContext = ?*anyopaque;
 pub const TaskContext = *anyopaque;
-pub const DeferredRepeatingTask = *const *const fn(TaskContext) bool;
+pub const DeferredRepeatingTask = *const fn(TaskContext) bool;

@@ -137,9 +137,9 @@ pub struct PluginRunner {
         }
     }
 
-    pub fn onResolveJSC(namespace: bun.String, specifier: bun.String, importer: bun.String, target: jsc.JSGlobalObject.BunPluginTarget): jsc.ErrorableString? ! bun.JSError {
+    pub fn onResolveJSC(namespace: bun.String, specifier: bun.String, importer: bun.String, target: jsc.JSGlobalObject.BunPluginTarget): (jsc.ErrorableString?) ! bun.JSError {
         let global = this.global_object;
-        const on_resolve_plugin = global.runOnResolvePlugins(
+        const on_resolve_plugin_opt = global.runOnResolvePlugins(
             if (namespace.length() > 0 && !namespace.eqlComptime("file"))
                 namespace
             else
@@ -147,9 +147,13 @@ pub struct PluginRunner {
             specifier,
             importer,
             target,
-        )? ?? return null;
+        )?;
+        if (on_resolve_plugin_opt == null) return null;
+        const on_resolve_plugin = on_resolve_plugin_opt.?;
         if (!on_resolve_plugin.isObject()) return null;
-        const path_value = on_resolve_plugin.get(global, "path")? ?? return null;
+        const path_value_opt = on_resolve_plugin.get(global, "path")?;
+        if (path_value_opt == null) return null;
+        const path_value = path_value_opt.?;
         if (path_value.isEmptyOrUndefinedOrNull()) return null;
         if (!path_value.isString()) {
             return jsc.ErrorableString.err(

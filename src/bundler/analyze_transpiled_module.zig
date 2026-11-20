@@ -135,10 +135,22 @@ pub fn create(source: []const u8, gpa: std.mem.Allocator) !*ModuleInfoDeserializ
             errdefer {
             _ = gpa.destroy(res);
             }
-            const record_kinds_len = std.mem.readInt(u32, try eatC(rem, 4), .little);
-            const record_kinds = std.mem.bytesAsSlice(RecordKind, try eat(rem, (record_kinds_len * @sizeOf(RecordKind))));
-            _ = try eat(rem, ((4 - (record_kinds_len % 4)) % 4));
-            const buffer_len = std.mem.readInt(u32, try eatC(rem, 4), .little);
+            const record_kinds_len = std.mem.readInt(u32, try eatC((blk: {
+            break :blk rem;
+
+}), 4), .little);
+            const record_kinds = std.mem.bytesAsSlice(RecordKind, try eat((blk: {
+            break :blk rem;
+
+}), (record_kinds_len * @sizeOf(RecordKind))));
+            _ = try eat((blk: {
+            break :blk rem;
+
+}), ((4 - (record_kinds_len % 4)) % 4));
+            const buffer_len = std.mem.readInt(u32, try eatC((blk: {
+            break :blk rem;
+
+}), 4), .little);
             const buffer = std.mem.bytesAsSlice(StringID, try eat(rem, (buffer_len * @sizeOf(StringID))));
             const requested_modules_len = std.mem.readInt(u32, try eatC(rem, 4), .little);
             const requested_modules_keys = std.mem.bytesAsSlice(StringID, try eat(rem, (requested_modules_len * @sizeOf(StringID))));
@@ -464,6 +476,6 @@ pub fn zig__ModuleInfoDeserialized__deinit(info: *ModuleInfoDeserialized) void {
         _ = info.deinit();
 }
 
-pub fn zig_log(msg: [*:0]u8) void {
+pub fn zig_log(msg: [*:0]const u8) void {
         _ = (blk_catch_5: { break :blk_catch_5 ((bun.Output.errorWriter().print("{s}\n", .{ std.mem.span(msg) })) catch |__ce_5| { _ = &__ce_5;  }); });
 }

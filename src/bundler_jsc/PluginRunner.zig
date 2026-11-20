@@ -143,11 +143,19 @@ pub fn onResolve(self: *PluginRunner, specifier: []const u8, importer: []const u
 pub fn onResolveJSC(self: PluginRunner, namespace: bun.String, specifier: bun.String, importer: bun.String, target: jsc.JSGlobalObject.BunPluginTarget) bun.JSError!?jsc.ErrorableString {
             var global = self.global_object;
             _ = &global;
-            const on_resolve_plugin = ((try global.runOnResolvePlugins((if (((namespace.length() > 0) and (!namespace.eqlComptime("file")))) namespace else bun.String.static("")), specifier, importer, target)) orelse { return .{ .ok = null }; });
+            const on_resolve_plugin_opt = try global.runOnResolvePlugins((if (((namespace.length() > 0) and (!namespace.eqlComptime("file")))) namespace else bun.String.static("")), specifier, importer, target);
+            if ((on_resolve_plugin_opt == null)) {
+                return null;
+            }
+            const on_resolve_plugin = on_resolve_plugin_opt.?;
             if ((!on_resolve_plugin.isObject())) {
                 return null;
             }
-            const path_value = ((try on_resolve_plugin.get(global, "path")) orelse { return .{ .ok = null }; });
+            const path_value_opt = try on_resolve_plugin.get(global, "path");
+            if ((path_value_opt == null)) {
+                return null;
+            }
+            const path_value = path_value_opt.?;
             if (path_value.isEmptyOrUndefinedOrNull()) {
                 return null;
             }

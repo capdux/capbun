@@ -304,7 +304,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
     };
 }
 
-const RAPID_SECRET: [3]u64 = [0x2d358dccaa6c78a5, 0x8bb84b93962eacc9, 0x4b33a62ed433d4a3];
+const RAPID_SECRET: [3]u64 = [0x2d358dccaa6c78a5, @as(u64, 0x8bb84b93962eacc9), 0x4b33a62ed433d4a3];
 
 pub static struct RapidHash {
     const readInt = std.mem.readInt;

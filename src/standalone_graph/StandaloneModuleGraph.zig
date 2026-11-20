@@ -149,7 +149,7 @@ const blob = ((serialized.mappingBlob()) orelse {
                 _ = &i;
                 const __end_0 = count;
                 while (i < __end_0) : (i += 1) {
-                    file_names[cp_cast_int(usize, @intCast(i))] = serialized.sourceFileNameAt(@intCast(i)).slice(serialized.bytes);
+                    file_names[cp_cast_int(usize, @as(usize, @intCast(i)))] = serialized.sourceFileNameAt(@as(usize, @intCast(i))).slice(serialized.bytes);
                 }
             }
             _ = @memset(decompressed_contents_slice, null);
@@ -379,7 +379,7 @@ pub const StandaloneFile = struct {
     side: StandaloneFileSide = .server,
 
 pub fn appearsInEmbeddedFilesArray(self: StandaloneFile) bool {
-            return ((self.side == .client) or (!self.loader.isJavaScriptLike(self.loader)));
+            return ((self.side == .client) or (!self.loader.isJavaScriptLike()));
     }
 
 pub fn stat(self: StandaloneFile) bun.Stat {
@@ -673,7 +673,7 @@ defer {
                 var module = StandaloneCompiledModuleGraphFile{ .name = string_builder.fmtAppendCountZ("{s}{s}", .{ prefix, dest_path }), .loader = output_file.loader, .contents = string_builder.appendCountZ((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value).buffer.bytes), .encoding = (switch (output_file.loader) {
 .js, .jsx, .ts, .tsx => .latin1,
 else => .binary,
-}), .module_format = (if (output_file.loader.isJavaScriptLike(output_file.loader)) (switch (output_format) {
+}), .module_format = (if (output_file.loader.isJavaScriptLike()) (switch (output_format) {
 .cjs => .cjs,
 .esm => .esm,
 else => .none,

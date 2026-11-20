@@ -88,7 +88,8 @@ pub fn decodeInternal(self: *ErrorPacket, comptime Context: type, reader: NewRea
         } else {
             _ = reader.skip(-1);
         }
-        self.error_message = try reader.read((reader.peek()).?.len);
+        const peeked = reader.peek();
+        self.error_message = try reader.read((peeked).?.len);
 }
 pub const createMySQLError = ErrorPacketJsc.createMySQLError;
 pub const toJS = ErrorPacketJsc.toJS;

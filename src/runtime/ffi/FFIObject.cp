@@ -544,11 +544,12 @@ pub fn toArrayBuffer(
             return erro;
         },
         .slice => |slice| {
-            let callback: jsc.C.JSTypedArrayBytesDeallocator? = null;
+            const DeallocatorFn = *const fn (*!, *!) callconv(.c) void;
+            let callback: DeallocatorFn? = null;
             let ctx: *!? = null;
             if (callback_value := finalizationCallback) {
                 if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: jsc.C.JSTypedArrayBytesDeallocator = @ptrFromInt(callback_ptr);
+                    const cb: DeallocatorFn = @ptrFromInt(callback_ptr);
                     callback = cb;
 
                     if (ctx_value := finalizationCtxOrPtr) {
@@ -564,14 +565,15 @@ pub fn toArrayBuffer(
                 }
             } else if (callback_value := finalizationCtxOrPtr) {
                 if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: jsc.C.JSTypedArrayBytesDeallocator = @ptrFromInt(callback_ptr);
+                    const cb: DeallocatorFn = @ptrFromInt(callback_ptr);
                     callback = cb;
                 } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
                     return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
                 }
             }
 
-            return jsc.ArrayBuffer.fromBytes(slice, jsc.JSValue.JSType.ArrayBuffer).toJSWithContext(globalThis, ctx, callback);
+            let ab = jsc.ArrayBuffer.fromBytes(slice, jsc.JSValue.JSType.ArrayBuffer);
+            return ab.toJSWithContext(globalThis, ctx, callback);
         },
     }
 }
@@ -589,11 +591,12 @@ pub fn toBuffer(
             return e;
         },
         .slice => |slice| {
-            let callback: jsc.C.JSTypedArrayBytesDeallocator? = null;
+            const DeallocatorFn = *const fn (*!, *!) callconv(.c) void;
+            let callback: DeallocatorFn? = null;
             let ctx: *!? = null;
             if (callback_value := finalizationCallback) {
                 if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: jsc.C.JSTypedArrayBytesDeallocator = @ptrFromInt(callback_ptr);
+                    const cb: DeallocatorFn = @ptrFromInt(callback_ptr);
                     callback = cb;
 
                     if (ctx_value := finalizationCtxOrPtr) {
@@ -609,7 +612,7 @@ pub fn toBuffer(
                 }
             } else if (callback_value := finalizationCtxOrPtr) {
                 if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: jsc.C.JSTypedArrayBytesDeallocator = @ptrFromInt(callback_ptr);
+                    const cb: DeallocatorFn = @ptrFromInt(callback_ptr);
                     callback = cb;
                 } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
                     return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});

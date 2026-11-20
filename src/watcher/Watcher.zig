@@ -263,7 +263,8 @@ pub fn flushEvictions(self: *Watcher) void {
         defer {
         self.evict_list_i = 0;
         }
-        _ = std.sort.insertion(WatchItemIndex, self.evict_list[0..self.evict_list_i], .{}, (comptime std.sort.desc(WatchItemIndex)));
+        const empty_ctx: void = undefined;
+        _ = std.sort.insertion(WatchItemIndex, self.evict_list[0..self.evict_list_i], empty_ctx, (comptime std.sort.desc(WatchItemIndex)));
         var slice = self.watchlist.slice();
         _ = &slice;
         const fds = slice.items(.fd);

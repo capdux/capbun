@@ -35,13 +35,17 @@ fn is_cp_result(comptime __T: type) bool {
 comptime {
     const Bun__createObjectURL = jsc.toJSHostFn(Bun__createObjectURL_);
     _ = &Bun__createObjectURL;
-    _ = @export(*const Bun__createObjectURL, .{ .name = "Bun__createObjectURL" });
+    {
+        _ = @export(*const Bun__createObjectURL, .{ .name = "Bun__createObjectURL" });
+    }
 
 }
 comptime {
     const Bun__revokeObjectURL = jsc.toJSHostFn(Bun__revokeObjectURL_);
     _ = &Bun__revokeObjectURL;
-    _ = @export(*const Bun__revokeObjectURL, .{ .name = "Bun__revokeObjectURL" });
+    {
+        _ = @export(*const Bun__revokeObjectURL, .{ .name = "Bun__revokeObjectURL" });
+    }
 
 }
 comptime {

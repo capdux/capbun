@@ -172,11 +172,11 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
 
     let chunk = chunk_;
     let state = state_;
-    if (*max := _.max_size) {
-        const c = chunk_[0..@min(chunk_.len, max.*)];
-        max.* = max.* -| c.len;
+    if (_.max_size != null) {
+        const c = chunk_[0..@min(chunk_.len, _.max_size.?)];
+        _.max_size.? = _.max_size.? -| c.len;
         chunk = c;
-        if (state_ != .eof && max.* == 0) {
+        if (state_ != .eof && _.max_size.? == 0) {
             if (comptime !bun.Environment.isPosix) _.reader.pause();
             _.eof_task = jsc.AnyTask.New(FileResponseStream, FileResponseStream.onReaderDone).init(_);
             _.vm.eventLoop().enqueueTask(jsc.Task.init(&_.eof_task.?));
@@ -388,7 +388,12 @@ pub fn release(_: *FileResponseStream) {
     log("release", .{});
     if (_.mode == .reader) _.reader.deinit();
     if (_.auto_close) {
-        bun.Async.Closer.close(_.fd, if (comptime bun.Environment.isWindows) bun.windows.libuv.Loop.get());
+        if (comptime bun.Environment.isWindows) {
+            bun.Async.Closer.close(_.fd, bun.windows.libuv.Loop.get());
+        } else {
+            const empty_loop: void = undefined;
+            bun.Async.Closer.close(_.fd, empty_loop);
+        }
     }
     bun.destroy(_);
 }

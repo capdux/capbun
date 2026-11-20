@@ -725,7 +725,7 @@ export struct Reader {
         }
     }
 
-    pub fn handleCommand(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
+    pub fn handleCommand(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): ! {
         const request = this.queue.current() orelse {
             debug("Received unexpected command response", .{});
             return error.UnexpectedPacket;

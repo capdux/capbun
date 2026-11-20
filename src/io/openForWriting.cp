@@ -13,8 +13,8 @@ type SentinelU8 = [:0]u8;
         force_sync: bool,
         out_nonblocking: *bool,
         comptime Ctx: type,
-        ctx: anytype,
-        comptime onForceSyncOrIsaTTY: anytype,
+        ctx: auto,
+        comptime onForceSyncOrIsaTTY: *const fn (Ctx),
         comptime isPollable: *const fn (mode: bun.Mode) bool,
     ): bun.sys.Maybe(bun.FD) {
         return openForWritingImpl(
@@ -44,8 +44,8 @@ type SentinelU8 = [:0]u8;
         force_sync: bool,
         out_nonblocking: *bool,
         comptime Ctx: type,
-        ctx: anytype,
-        comptime onForceSyncOrIsaTTY: anytype,
+        ctx: auto,
+        comptime onForceSyncOrIsaTTY: *const fn (Ctx),
         comptime isPollable: *const fn (mode: bun.Mode) bool,
         comptime openat: *const fn (dir: bun.FD, path: [:0]const u8, flags: i32, mode: bun.Mode) bun.sys.Maybe(bun.FD),
     ): bun.sys.Maybe(bun.FD) {

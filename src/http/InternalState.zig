@@ -260,14 +260,14 @@ Encoding.brotli, Encoding.gzip, Encoding.deflate, Encoding.zstd => {
 _ = try self.decompress(buffer, body_out, is_final_chunk);
 },
 else => {
-if ((!(body_out).?.owns(buffer.list.items))) {
-                _ = (blk_catch_1: { break :blk_catch_1 (((body_out).?.append(buffer.list.items)) catch |e| { _ = &e; _ = bun.Output.prettyErrorln("<r><red>Failed to append to body buffer: {s}<r>", .{ bun.asByteSlice(@errorName(e)) });
+if ((!body_out.owns(buffer.list.items))) {
+                _ = (blk_catch_1: { break :blk_catch_1 ((body_out.append(buffer.list.items)) catch |e| { _ = &e; _ = bun.Output.prettyErrorln("<r><red>Failed to append to body buffer: {s}<r>", .{ bun.asByteSlice(@errorName(e)) });
                 _ = bun.Output.flush();
                 return e; }); });
             }
 },
 }
-            return ((body_out).?.list.items.len > 0);
+            return (body_out.list.items.len > 0);
         }
         return false;
 }

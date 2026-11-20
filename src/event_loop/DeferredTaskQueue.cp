@@ -49,7 +49,8 @@ pub const DeferredRepeatingTask = *const fn (TaskContext) bool;
         let last: usize = _.map.count();
         while (i < last) {
             if (key := _.map.keys()[i]) {
-                if (!_.map.values()[i](key)) {
+                const task_fn = _.map.values()[i];
+                if (!task_fn(key)) {
                     _.map.swapRemoveAt(i);
                     last = _.map.count();
                 } else {

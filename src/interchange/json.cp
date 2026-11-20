@@ -21,7 +21,7 @@ const HashMapPool = struct {
     pub const HashMap = PoolHashMap;
     pub const LinkedList = PoolLinkedList;
 
-    pub fn get(_: std.mem.Allocator) *PoolLinkedList.Node {
+    static fn get(_: std.mem.Allocator): *PoolLinkedList.Node {
         if (pool_loaded) {
             if (pool_list.popFirst()) |node| {
                 node.data.clearRetainingCapacity();

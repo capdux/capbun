@@ -111,8 +111,8 @@ pub const PipelineState = union(enum) {
     fn setupCommands(*_): (Yield)? {
         const cmd_count = brk: {
             let count: u32 = 0;
-            for (*item of _.node.items) {
-                if (switch (item.*) {
+            for (item of _.node.items) {
+                if (switch (item) {
                     .assigns => false,
                     else => true,
                 }) count += 1;
@@ -295,7 +295,7 @@ pub const PipelineState = union(enum) {
     fn deinit(*_) {
         if (cmds := _.cmds) {
             for (*cmd_or_result of cmds) {
-                if (cmd_or_result.* == .cmd) {
+                if (cmd_or_result == .cmd) {
                     cmd_or_result.cmd.call("deinit", .{}, void);
                 }
             }

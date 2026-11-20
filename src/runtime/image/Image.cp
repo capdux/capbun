@@ -719,7 +719,7 @@ fn encodeForBody(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue): bun.
     // BunFiles would block or need network; refuse with a clear message until
     // the body path is made `.Locked`.
     if (_.source == .blob) {
-        const refuse = "Image: fd/S3-backed Bun.file as a Response body — pass `await file.bytes()` or a path string";
+        const refuse: [:0]const u8 = "Image: fd/S3-backed Bun.file as a Response body — pass `await file.bytes()` or a path string";
         const blob_js_opt = _.source.blob.get();
         if (blob_js_opt == null) return global.throw("Image: Blob source was collected", {});
         const blob_js = blob_js_opt.?;

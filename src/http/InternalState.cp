@@ -52,7 +52,7 @@ export @root @value struct InternalState {
     chunked_decoder: bun.picohttp.phr_chunked_decoder = {},
     decompressor: Decompressor = .none,
     stage: Stage = Stage.pending,
-    body_out_str: *bun.MutableString? = null,
+    body_out_str: (*bun.MutableString)? = null,
     compressed_body: bun.MutableString = undefined,
     content_length: usize? = null,
     total_body_received: usize = 0,

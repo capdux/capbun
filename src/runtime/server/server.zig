@@ -211,7 +211,10 @@ pub fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitCon
                 return null;
             }
             const index_opt = try argument.getOptional(init_ctx.global, "index", ZigString.Slice);
-            const index = ((index_opt) orelse { return .{ .ok = null }; });
+            if ((index_opt == null)) {
+                return null;
+            }
+            const index = index_opt.?;
             defer {
             _ = index.deinit();
             }
@@ -310,7 +313,10 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
                 return .{ .file = file_route };
             }
             const static_route_opt = try StaticRoute.fromJS(global, argument);
-            const static_route = ((static_route_opt) orelse { return .{ .ok = null }; });
+            if ((static_route_opt == null)) {
+                return null;
+            }
+            const static_route = static_route_opt.?;
             return .{ .static = static_route };
     }
     pub const ServerInitContext = struct {

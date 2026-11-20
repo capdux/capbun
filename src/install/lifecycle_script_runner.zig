@@ -172,7 +172,7 @@ pub fn spawnNextScript(self: *LifecycleScriptSubprocess, next_script_index: u8) 
             {
                 if (self.has_incremented_alive_count) {
                     self.has_incremented_alive_count = false;
-                    _ = self.alive_count.fetchSub(1, .monotonic);
+                    _ = LifecycleScriptSubprocess.alive_count.fetchSub(1, .monotonic);
                 }
                 _ = self.ensureNotInHeap();
             }
@@ -325,7 +325,7 @@ pub fn handleExit(self: *LifecycleScriptSubprocess, status: bun.spawn.Status) vo
             _ = log("{s} - {s} finished {f}", .{ self.package_name, self.scriptName(), status });
             if (self.has_incremented_alive_count) {
                 self.has_incremented_alive_count = false;
-                _ = self.alive_count.fetchSub(1, .monotonic);
+                _ = LifecycleScriptSubprocess.alive_count.fetchSub(1, .monotonic);
             }
             _ = self.ensureNotInHeap();
             switch (status) {

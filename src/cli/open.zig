@@ -155,7 +155,7 @@ pub fn byFallbackPathForEditor(editor: Editor, out: ?*[]const u8) bool {
                 _ = &paths;
                 for (cp_iter_slice(paths)) |path| {
                     _ = &path;
-                    if (std.fs.cwd().openFile(path, .{})) |opened| {
+                    if ((blk_catch_0: { break :blk_catch_0 ((std.fs.cwd().openFile(path, .{})) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |opened| {
                         _ = &opened;
                         _ = opened.close();
                         if ((out != null)) {
@@ -331,11 +331,11 @@ pub const EditorContext = struct {
     path: []const u8 = "",
 
 pub fn openInEditor(self: *EditorContext, editor_: Editor, blob: []const u8, id: []const u8, tmpdir: std.fs.Dir, line: []const u8, column: []const u8) void {
-            _ = (blk_catch_0: { break :blk_catch_0 ((EditorContext._openInEditor(self.path, editor_, blob, id, tmpdir, line, column)) catch |e| { _ = &e; if ((editor_ != .other)) {
+            _ = (blk_catch_1: { break :blk_catch_1 ((EditorContext._openInEditor(self.path, editor_, blob, id, tmpdir, line, column)) catch |e| { _ = &e; if ((editor_ != .other)) {
                 _ = Output.prettyErrorln("Error {s} opening in {s}", .{ @errorName(e), @tagName(editor_) });
             }
             self.editor = Editor.none;
-            break :blk_catch_0 @as(void, {}); }); });
+            break :blk_catch_1 @as(void, {}); }); });
     }
 
 pub fn _openInEditor(path: []const u8, editor_: Editor, blob: []const u8, id: []const u8, tmpdir: std.fs.Dir, line: []const u8, column: []const u8) !void {
@@ -443,7 +443,7 @@ pub fn openURL(url: stringZ) void {
         _ = &two_args;
         const args_buf: []const stringZ = (if (comptime Environment.isAndroid) (&am_args) else (&two_args));
         _ = maybe_fallback: {
-        break :maybe_fallback (switch ((blk_catch_6: { break :blk_catch_6 ((bun.spawnSync((&.{ .argv = args_buf, .envp = null, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |__ce_6| { _ = &__ce_6; break :maybe_fallback; }); })) {
+        break :maybe_fallback (switch ((blk_catch_7: { break :blk_catch_7 ((bun.spawnSync((&.{ .argv = args_buf, .envp = null, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else null) }))) catch |__ce_7| { _ = &__ce_7; break :maybe_fallback; }); })) {
 .result => |result| {
 if (result.isOK()) {
             return;
@@ -464,6 +464,6 @@ pub fn autoClose(spawned: *SpawnedEditorContext) void {
         _ = bun.default_allocator.destroy(spawned);
         }
         _ = Global.setThreadName("Open Editor");
-        _ = (blk_catch_7: { break :blk_catch_7 ((spawned.child_process.spawn()) catch |__ce_7| { _ = &__ce_7; return; }); });
-        _ = (blk_catch_8: { break :blk_catch_8 ((spawned.child_process.wait()) catch |__ce_8| { _ = &__ce_8;  }); });
+        _ = (blk_catch_8: { break :blk_catch_8 ((spawned.child_process.spawn()) catch |__ce_8| { _ = &__ce_8; return; }); });
+        _ = (blk_catch_9: { break :blk_catch_9 ((spawned.child_process.wait()) catch |__ce_9| { _ = &__ce_9;  }); });
 }

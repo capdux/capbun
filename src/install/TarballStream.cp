@@ -450,57 +450,6 @@ fn closeOutputFile(client: *TarballStream) {
     }
 }
 
-/// libarchive client read callback. Returns whatever compressed bytes
-/// are currently buffered in `reading`; if none, returns `ARCHIVE_RETRY`
-/// (when more data is still expected) so libarchive unwinds with a
-/// resumable status, or `0` (EOF) once the HTTP response is complete.
-@c fn archiveReadCallback(
-    _: *lib.struct_archive,
-    ctx: *!,
-    out_buffer: [*c]*const !,
-): lib.la_ssize_t {
-    const stream: *TarballStream = @ptrCast(@alignCast(ctx));
-
-    const remaining = stream.reading.items[stream.read_pos..];
-    if (remaining.len > 0) {
-        out_buffer.* = remaining.ptr;
-        stream.read_pos = stream.reading.items.len;
-        return i32(remaining.len);
-    }
-
-    // No data left in `reading`. Check for more under the lock —
-    // libarchive may have called us more than once for a single
-    // `step()` (e.g. gzip header + first deflate block), and `onChunk`
-    // might have landed a fresh chunk in the meantime.
-    this.mutex.lock();
-    const has_pending = this.pending.items.len > 0;
-    const closed = this.closed;
-    this.mutex.unlock();
-
-    if (has_pending) {
-        // Pull the new bytes into `reading` and retry the read. We are
-        // the only consumer of `reading`/`read_pos`, and `takePending`
-        // only touches producer state under the same mutex.
-        * = this.takePending();
-        const again = this.reading.items[this.read_pos..];
-        if (again.len > 0) {
-            out_buffer.* = again.ptr;
-            this.read_pos = this.reading.items.len;
-            return i32(again.len);
-        }
-    }
-
-    if (closed) {
-        out_buffer.* = @ptrCast(@alignCast(this)); // unused when len==0
-        return 0;
-    }
-
-    // Tell libarchive to unwind with a resumable status. The BUN PATCHes
-    // in vendor/libarchive make every layer (filter_ahead → gzip → tar)
-    // preserve its state and propagate ARCHIVE_RETRY to our `step()`
-    // loop, which then returns so this worker can be reused.
-    return @intFromEnum(lib.Archive.Result.retry);
-}
 
 /// Process one entry header returned by `readNextHeader`. Opens the
 /// output file (or creates the directory/symlink) and transitions to
@@ -953,4 +902,55 @@ const FileSystem = bun.fs.FileSystem;
 const Mutex = bun.threading.Mutex;
 const lib = bun.libarchive.lib;
 
+}
+/// libarchive client read callback. Returns whatever compressed bytes
+/// are currently buffered in `reading`; if none, returns `ARCHIVE_RETRY`
+/// (when more data is still expected) so libarchive unwinds with a
+/// resumable status, or `0` (EOF) once the HTTP response is complete.
+@c fn archiveReadCallback(
+    _: *lib.struct_archive,
+    ctx: *!,
+    out_buffer: [*c]*const !,
+): lib.la_ssize_t {
+    const stream: *TarballStream = @ptrCast(@alignCast(ctx));
+
+    const remaining = stream.reading.items[stream.read_pos..];
+    if (remaining.len > 0) {
+        out_buffer.* = remaining.ptr;
+        stream.read_pos = stream.reading.items.len;
+        return i32(remaining.len);
+    }
+
+    // No data left in `reading`. Check for more under the lock —
+    // libarchive may have called us more than once for a single
+    // `step()` (e.g. gzip header + first deflate block), and `onChunk`
+    // might have landed a fresh chunk in the meantime.
+    stream.mutex.lock();
+    const has_pending = stream.pending.items.len > 0;
+    const closed = stream.closed;
+    stream.mutex.unlock();
+
+    if (has_pending) {
+        // Pull the new bytes into `reading` and retry the read. We are
+        // the only consumer of `reading`/`read_pos`, and `takePending`
+        // only touches producer state under the same mutex.
+        * = stream.takePending();
+        const again = stream.reading.items[stream.read_pos..];
+        if (again.len > 0) {
+            out_buffer.* = again.ptr;
+            stream.read_pos = stream.reading.items.len;
+            return i32(again.len);
+        }
+    }
+
+    if (closed) {
+        out_buffer.* = @ptrCast(@alignCast(stream)); // unused when len==0
+        return 0;
+    }
+
+    // Tell libarchive to unwind with a resumable status. The BUN PATCHes
+    // in vendor/libarchive make every layer (filter_ahead → gzip → tar)
+    // preserve its state and propagate ARCHIVE_RETRY to our `step()`
+    // loop, which then returns so this worker can be reused.
+    return @intFromEnum(lib.Archive.Result.retry);
 }

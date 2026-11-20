@@ -146,7 +146,7 @@ pub struct Opts {
                 return _.bltn().stdin.fd.start();
             },
             .exec_filepath_args => {
-                let exec = &*_.state.exec_filepath_args;
+                const exec = &_.state.exec_filepath_args;
                 if (exec.idx >= exec.args.len) {
                     exec.deinit();
                     return _.bltn().done(0);
@@ -200,7 +200,7 @@ pub struct Opts {
                     return _.bltn().done(e.getErrno());
                 },
                 .exec_filepath_args => {
-                    let exec = &*_.state.exec_filepath_args;
+                    const exec = &_.state.exec_filepath_args;
                     if (r := exec.reader) {
                         r.removeReader(_);
                     }

@@ -99,9 +99,9 @@ pub fn setupCommands(self: *Pipeline) ?Yield {
         const cmd_count = brk: {
         var count: u32 = 0;
         _ = &count;
-        for (self.node.items) |*item| {
+        for (self.node.items) |item| {
             _ = &item;
-            if ((switch ((item.*).*) {
+            if ((switch (item) {
 .assigns => false,
 else => true,
 })) {
@@ -321,7 +321,7 @@ pub fn deinit(self: *Pipeline) void {
             _ = &cmds;
             for (cp_mut_slice(&cmds)) |*cmd_or_result| {
                 _ = &cmd_or_result;
-                if (((cmd_or_result.*).* == .cmd)) {
+                if (((cmd_or_result.*) == .cmd)) {
                     _ = (cmd_or_result.*).cmd.call("deinit", .{}, void);
                 }
             }

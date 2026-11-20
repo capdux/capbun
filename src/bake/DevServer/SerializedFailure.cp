@@ -27,11 +27,11 @@ pub union(enum) FailureOwner {
     pub const Packed = OwnerPacked;
 
     pub fn encode(): OwnerPacked {
-        return switch (_.*) {
+        return switch (_) {
             .none => OwnerPacked{ kind: .none, data: 0 },
-            .client => |data| OwnerPacked{ kind: .client, data: data.get() },
-            .server => |data| OwnerPacked{ kind: .server, data: data.get() },
-            .route => |data| OwnerPacked{ kind: .route, data: data.get() },
+            .client data => OwnerPacked{ kind: .client, data: data.get() },
+            .server data => OwnerPacked{ kind: .server, data: data.get() },
+            .route data => OwnerPacked{ kind: .route, data: data.get() },
         };
     }
 }

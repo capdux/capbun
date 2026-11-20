@@ -114,7 +114,8 @@ pub fn init(globalThis: *JSGlobalObject, stream: ReadableStream, context: *Conte
 
 pub fn initExactRefs(globalThis: *JSGlobalObject, stream: ReadableStream, context: *Context, ref_count: u32) *ThisSink {
             const sink: *ThisSink = ThisSink.new(.{ .globalThis = globalThis, .context = context, .ref_count = RefCount.initExactRefs(ref_count) });
-            if (((if (comptime @typeInfo(@TypeOf(stream)) == .pointer) (stream) else &(stream)).isLocked() or stream.isDisturbed(globalThis))) {
+            const is_locked_fn = jsc.WebCore.ReadableStream.isLocked;
+            if ((is_locked_fn(stream, globalThis) or stream.isDisturbed(globalThis))) {
                 const err = jsc.SystemError{ .code = BunString.static(@tagName(jsc.Node.ErrorCode.ERR_STREAM_CANNOT_PIPE)), .message = BunString.static("Stream already used, please create a new one") };
                 const err_instance = err.toErrorInstance(globalThis);
                 _ = err_instance.ensureStillAlive();
@@ -378,7 +379,8 @@ pub fn endPipe(self: *@This(), err: ?JSValue) void {
                 } else {
                     _ = stream_.done(globalObject);
                 }
-                const stream_prev = self.stream;
+                var stream_prev = self.stream;
+                _ = &stream_prev;
                 self.stream = .{};
                 _ = stream_prev.deinit();
             }

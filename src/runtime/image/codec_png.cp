@@ -147,7 +147,9 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, level: i8, icc_profile: ([]const
         return error.EncodeFailed;
     let len: usize = 0;
     let e: c_int = 0;
-    const buf = spng_get_png_buffer(ctx, &len, &e) ?? return error.EncodeFailed;
+    const buf_opt = spng_get_png_buffer(ctx, &len, &e);
+    if (buf_opt == null) return error.EncodeFailed;
+    const buf = buf_opt.?;
     // spng_get_png_buffer transfers ownership (libc malloc); hand to JS
     // with libc `free` as the finalizer instead of duping.
     return { bytes: buf[0..len], free: codecs.Encoded.wrap(std.c.free) };
@@ -193,7 +195,9 @@ pub fn encodeIndexed(rgba: []const u8, w: u32, h: u32, level: i8, colors: u16, d
 
     let len: usize = 0;
     let e: c_int = 0;
-    const buf = spng_get_png_buffer(ctx, &len, &e) ?? return error.EncodeFailed;
+    const buf_opt = spng_get_png_buffer(ctx, &len, &e);
+    if (buf_opt == null) return error.EncodeFailed;
+    const buf = buf_opt.?;
     return { bytes: buf[0..len], free: codecs.Encoded.wrap(std.c.free) };
 }
 

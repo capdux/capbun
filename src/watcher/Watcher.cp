@@ -265,10 +265,11 @@ pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
         if (this.evict_list_i == 0) return;
         defer this.evict_list_i = 0;
 
+        const empty_ctx: void = undefined;
         std.sort.insertion(
             WatchItemIndex,
             this.evict_list[0..this.evict_list_i],
-            {},
+            empty_ctx,
             comptime std.sort.desc(WatchItemIndex),
         );
 

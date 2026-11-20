@@ -1313,7 +1313,7 @@ export @root @value struct HTTPClient {
             try_sending_more_data: bool,
         };
 
-        noinline fn sendInitialRequestPayload(*_: *HTTPClient, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) !InitialRequestPayloadResult {
+        noinline fn sendInitialRequestPayload(*_, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket): InitialRequestPayloadResult! {
             let request_body_buffer = this.getRequestBodySendBuffer();
             defer request_body_buffer.deinit();
             let temporary_send_buffer = request_body_buffer.toArrayList();

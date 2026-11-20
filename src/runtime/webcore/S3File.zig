@@ -73,8 +73,8 @@ const default_allocator = @import("bun").default_allocator;
 const handleOom = @import("bun").handleOom;
 const destroy = @import("bun").destroy;
 const TrivialNew = @import("bun").TrivialNew;
-const S3Client = @import("./S3Client").S3Client;
-const S3Stat = @import("./S3Stat").S3Stat;
+const S3Client = @import("./S3Client.zig").S3Client;
+const S3Stat = @import("./S3Stat.zig").S3Stat;
 pub const S3BlobStatTask = struct {
     promise: JSPromise.Strong,
     global: *JSGlobalObject,

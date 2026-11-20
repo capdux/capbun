@@ -122,14 +122,6 @@ pub struct ProcessHandle {
         }
         _.end_time = std.time.Instant.now() catch null;
 
-        // Flush remaining output from pipes
-        _.stdout_reader.reader.drain();
-        _.stderr_reader.reader.drain();
-
-        // Close pipe readers
-        _.stdout_reader.reader.deinit();
-        _.stderr_reader.reader.deinit();
-
         _.state.processExit(_) catch {};
     }
 

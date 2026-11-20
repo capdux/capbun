@@ -352,7 +352,7 @@ return try log.addErrorFmtOpts(self.manager.allocator, "failed adding bun tag: {
             }
             var path_in_tmpdir_buf: bun.PathBuffer = undefined;
             _ = &path_in_tmpdir_buf;
-            const tmp_parts = .{ tempdir_name };
+            const tmp_parts: [1][]const u8 = .{ tempdir_name };
             const path_in_tmpdir = bun.path.joinZBuf((&path_in_tmpdir_buf), tmp_parts[0..], .auto);
             if (bun.sys.renameatConcurrently(.fromStdDir(system_tmpdir), path_in_tmpdir, .fromStdDir(self.callback.apply.cache_dir), self.callback.apply.cache_dir_subpath, .{ .move_fallback = true }).asErr()) |e| {
                 _ = &e;

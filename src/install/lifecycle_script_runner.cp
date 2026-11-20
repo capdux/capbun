@@ -137,7 +137,7 @@ pub struct LifecycleScriptSubprocess {
             if (_.has_incremented_alive_count) {
                 _.has_incremented_alive_count = false;
                 // .monotonic is okay because because this value is only used by hoisted installs.
-                * = alive_count.fetchSub(1, .monotonic);
+                * = LifecycleScriptSubprocess.alive_count.fetchSub(1, .monotonic);
             }
 
             _.ensureNotInHeap();
@@ -335,7 +335,7 @@ pub struct LifecycleScriptSubprocess {
             _.has_incremented_alive_count = false;
             // .monotonic is okay because because this value is only used by hoisted installs, which
             // only use this type on the main thread.
-            * = alive_count.fetchSub(1, .monotonic);
+            * = LifecycleScriptSubprocess.alive_count.fetchSub(1, .monotonic);
         }
 
         _.ensureNotInHeap();

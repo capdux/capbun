@@ -530,34 +530,6 @@ pub fn closeOutputFile(client: *TarballStream) void {
         }
 }
 
-pub fn archiveReadCallback(self: *TarballStream, _: *lib.struct_archive, ctx: *anyopaque, out_buffer: [*c]*const anyopaque) callconv(.c) lib.la_ssize_t {
-        const stream: *TarballStream = @ptrCast(@alignCast(ctx));
-        const remaining = stream.reading.items[stream.read_pos..];
-        if ((remaining.len > 0)) {
-            out_buffer.* = remaining.ptr;
-            stream.read_pos = stream.reading.items.len;
-            return (if (comptime @typeInfo(@TypeOf(remaining.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(remaining.len)) else cp_cast_int(i32, remaining.len));
-        }
-        _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).lock();
-        const has_pending = (self.pending.items.len > 0);
-        const closed = self.closed;
-        _ = (if (comptime @typeInfo(@TypeOf(self.mutex)) == .pointer) (self.mutex) else &(self.mutex)).unlock();
-        if (has_pending) {
-            _ = self.takePending();
-            const again = self.reading.items[self.read_pos..];
-            if ((again.len > 0)) {
-                out_buffer.* = again.ptr;
-                self.read_pos = self.reading.items.len;
-                return (if (comptime @typeInfo(@TypeOf(again.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(again.len)) else cp_cast_int(i32, again.len));
-            }
-        }
-        if (closed) {
-            out_buffer.* = @ptrCast(@alignCast(self));
-            return 0;
-        }
-        return @intFromEnum(lib.Archive.Result.retry);
-}
-
 pub fn beginEntry(client: *TarballStream, entry: *lib.Archive.Entry) !void {
         var pathname: bun.OSPathSliceZ = (if (comptime Environment.isWindows) entry.pathnameW() else entry.pathname());
         _ = &pathname;
@@ -935,3 +907,31 @@ const FileSystem = bun.fs.FileSystem;
 const Mutex = bun.threading.Mutex;
 const lib = bun.libarchive.lib;
 const string = []const u8;
+
+pub fn archiveReadCallback(_: *lib.struct_archive, ctx: *anyopaque, out_buffer: [*c]*const anyopaque) callconv(.c) lib.la_ssize_t {
+        const stream: *TarballStream = @ptrCast(@alignCast(ctx));
+        const remaining = stream.reading.items[stream.read_pos..];
+        if ((remaining.len > 0)) {
+            out_buffer.* = remaining.ptr;
+            stream.read_pos = stream.reading.items.len;
+            return (if (comptime @typeInfo(@TypeOf(remaining.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(remaining.len)) else cp_cast_int(i32, remaining.len));
+        }
+        _ = (if (comptime @typeInfo(@TypeOf(stream.mutex)) == .pointer) (stream.mutex) else &(stream.mutex)).lock();
+        const has_pending = (stream.pending.items.len > 0);
+        const closed = stream.closed;
+        _ = (if (comptime @typeInfo(@TypeOf(stream.mutex)) == .pointer) (stream.mutex) else &(stream.mutex)).unlock();
+        if (has_pending) {
+            _ = stream.takePending();
+            const again = stream.reading.items[stream.read_pos..];
+            if ((again.len > 0)) {
+                out_buffer.* = again.ptr;
+                stream.read_pos = stream.reading.items.len;
+                return (if (comptime @typeInfo(@TypeOf(again.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(again.len)) else cp_cast_int(i32, again.len));
+            }
+        }
+        if (closed) {
+            out_buffer.* = @ptrCast(@alignCast(stream));
+            return 0;
+        }
+        return @intFromEnum(lib.Archive.Result.retry);
+}

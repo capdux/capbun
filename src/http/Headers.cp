@@ -141,7 +141,7 @@ export @root @value struct Headers {
         return result;
     }
 
-    static fn from(fetch_headers_ref: *bun.webcore.FetchHeaders?, allocator: std.mem.Allocator, options: Options): Headers! {
+    static fn from(fetch_headers_ref: (*bun.webcore.FetchHeaders)?, allocator: std.mem.Allocator, options: Options): Headers! {
         let header_count: u32 = 0;
         let buf_len: u32 = 0;
         if (headers_ref := fetch_headers_ref) {

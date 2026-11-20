@@ -116,8 +116,10 @@ pub fn alloc(self: *LinuxMemFdAllocator, len: usize, offset: usize, flags: std.p
         var size = len;
         _ = &size;
         size = std.mem.alignForward(usize, size, std.heap.pageSize());
-        flags.TYPE = .SHARED;
-        switch (bun.sys.mmap(null, @min(size, self.size), (std.posix.PROT.READ | std.posix.PROT.WRITE), flags, self.fd, offset)) {
+        var f = flags;
+        _ = &f;
+        f.TYPE = .SHARED;
+        switch (bun.sys.mmap(null, @min(size, self.size), (std.posix.PROT.READ | std.posix.PROT.WRITE), f, self.fd, offset)) {
 .result => |slice| {
 return .{ .result = Bytes{ .cap = @truncate(slice.len), .ptr = slice.ptr, .len = @truncate(len), .allocator = self.allocator() } };
 },

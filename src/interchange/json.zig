@@ -222,8 +222,7 @@ threadlocal var pool_list: PoolLinkedList = undefined;
 threadlocal var pool_loaded: bool = false;
 const HashMapPool = struct {
 
-pub fn get(self: @This(), _: std.mem.Allocator) *PoolLinkedList.Node {
-        _ = self;
+pub fn get(_: std.mem.Allocator) *PoolLinkedList.Node {
             if (pool_loaded) {
                 if (pool_list.popFirst()) |node| {
                     _ = &node;

@@ -1,6 +1,6 @@
 import { Output, S3, strings, http, jsc, JSError, JSTerminated, default_allocator, handleOom, destroy, TrivialNew } from "bun";
-import { S3Client } from "./S3Client";
-import { S3Stat } from "./S3Stat";
+import { S3Client } from "./S3Client.zig";
+import { S3Stat } from "./S3Stat.zig";
 
 const JSTerminatedError = JSTerminated;
 const Method = http.Method;

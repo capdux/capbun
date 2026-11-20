@@ -361,7 +361,7 @@ pub fn header(self: Response, name: bun.webcore.FetchHeaders.HTTPHeaderName) ?[]
         return null;
 }
 
-pub fn writeFormat(self: *Response, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool) !void {
+pub fn writeFormat(self: *Response, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool) anyerror!RespVoid {
         const Writer = @TypeOf(writer);
         _ = try writer.print("Response ({f}) {{\n", .{ bun.fmt.size(self.#body.len(), .{}) });
         {
@@ -822,6 +822,7 @@ pub const getArrayBuffer = ResponseMixin.getArrayBuffer;
 pub const getBlob = ResponseMixin.getBlob;
 pub const getBlobWithoutCallFrame = ResponseMixin.getBlobWithoutCallFrame;
 pub const getFormData = ResponseMixin.getFormData;
+const RespVoid = void;
 const Output = bun.Output;
 const default_allocator = bun.default_allocator;
 const s3 = bun.S3;

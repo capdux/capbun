@@ -177,9 +177,10 @@ pub struct TopFormatter {
         if (comptime Environment.allow_assert) bun.assert(_.label.len > 0);
         writer.writeAll(_.label)?;
 
-        const repo = _.repository.repo.slice(_.buf);
+        const sliceFn = @TypeOf(_.repository.repo).slice;
+        const repo = sliceFn(_.repository.repo, _.buf);
         if (!_.repository.owner.isEmpty()) {
-            writer.writeAll(_.repository.owner.slice(_.buf))?;
+            writer.writeAll(sliceFn(_.repository.owner, _.buf))?;
             writer.writeAll("/")?;
         } else if (Dependency.isSCPLikePath(repo)) {
             writer.writeAll("ssh://")?;

@@ -26,7 +26,8 @@ export @extern @value class BunSocketContextOptions {
     client_renegotiation_limit: u32 = 3,
     client_renegotiation_window: u32 = 600,
 
-    pub static fn createSSLContext(options: BunSocketContextOptions, err: *anytype): *bun.BoringSSL.c.SSL_CTX?! {
+    pub type SSLCtxPtr = *bun.BoringSSL.c.SSL_CTX;
+    pub static fn createSSLContext(options: BunSocketContextOptions, err: *auto): SSLCtxPtr? {
         return us_ssl_ctx_from_options(options, err);
     }
 
@@ -46,7 +47,9 @@ export @extern @value class BunSocketContextOptions {
         hp.update(&term);
     }
 
-    static fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: [*]cstr?!, n: u32) {
+    pub type OptCstr = cstr?;
+    pub type OptCstrArr = [*]OptCstr;
+    static fn feedArr(hp: *bun.sha.Hashers.SHA256, arr: OptCstrArr?, n: u32) {
         let flag: [1]u8 = .{(if (arr != null) 1 else 0)};
         hp.update(&flag);
         hp.update(std.mem.asBytes(&n));

@@ -337,7 +337,7 @@ export class All {
         return false;
     }
 
-    fn clampToQuic(spec: *timespec, us: i64) {
+    static fn clampToQuic(spec: *timespec, us: i64) {
         const cur_us = @as(i64, spec.sec) * std.time.us_per_s + @divTrunc(spec.nsec, std.time.ns_per_us);
         if (us < cur_us) spec.* = .{
             .sec = @intCast(@divTrunc(us, std.time.us_per_s)),
@@ -374,31 +374,33 @@ export class All {
     }
 
     fn warnInvalidCountdown(*_, globalThis: *JSGlobalObject, countdown: f64, warning_type: TimeoutWarning) {
-        let warning_string = switch (warning_type) {
-            .TimeoutOverflowWarning => {
-                if (std.math.isFinite(countdown)) {
-                    bun.String.createFormat(
-                        "{d} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.",
-                        .{ countdown }
-                    ) catch |e| bun.handleOom(e)
-                } else {
-                    bun.String.ascii("Infinity does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.")
-                }
-            },
-            .TimeoutNegativeWarning => {
-                if (std.math.isFinite(countdown)) {
-                    bun.String.createFormat(
-                        "{d} is a negative number.\nTimeout duration was set to 1.",
-                        .{ countdown }
-                    ) catch |e| bun.handleOom(e)
-                } else {
-                    bun.String.ascii("-Infinity is a negative number.\nTimeout duration was set to 1.")
-                }
-            },
-            .TimeoutNaNWarning => {
-                assert(std.math.isNan(countdown));
-                bun.String.ascii("NaN is not a number.\nTimeout duration was set to 1.")
-            },
+        let warning_string: bun.String = blk: {
+            switch (warning_type) {
+                .TimeoutOverflowWarning => {
+                    if (std.math.isFinite(countdown)) {
+                        break :blk bun.String.createFormat(
+                            "{d} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.",
+                            .{ countdown }
+                        ) catch |e| bun.handleOom(e);
+                    } else {
+                        break :blk bun.String.ascii("Infinity does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.");
+                    }
+                },
+                .TimeoutNegativeWarning => {
+                    if (std.math.isFinite(countdown)) {
+                        break :blk bun.String.createFormat(
+                            "{d} is a negative number.\nTimeout duration was set to 1.",
+                            .{ countdown }
+                        ) catch |e| bun.handleOom(e);
+                    } else {
+                        break :blk bun.String.ascii("-Infinity is a negative number.\nTimeout duration was set to 1.");
+                    }
+                },
+                .TimeoutNaNWarning => {
+                    assert(std.math.isNan(countdown));
+                    break :blk bun.String.ascii("NaN is not a number.\nTimeout duration was set to 1.");
+                },
+            }
         };
         let warning_type_string = bun.String.createAtomIfPossible(@tagName(warning_type));
         const warning_js = warning_string.transferToJS(globalThis) catch {

@@ -47,7 +47,9 @@ const TJPF_RGBA = 7;
 const TJSAMP_420 = 2;
 
 pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): codecs.Error!codecs.Decoded {
-    const h = tj3Init(1) ?? return error.OutOfMemory;
+    const h_opt = tj3Init(1);
+    if (h_opt == null) return error.OutOfMemory;
+    const h = h_opt.?;
     defer tj3Destroy(h);
     // Ask libjpeg-turbo to keep the APP2/ICC_PROFILE markers so we can pull
     // the profile out after header parse. Must be set PRE-header — the
@@ -144,7 +146,9 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
 }
 
 pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool, icc_profile: ([]const u8)?): codecs.Error!codecs.Encoded {
-    const h = tj3Init(0) ?? return error.OutOfMemory;
+    const h_opt = tj3Init(0);
+    if (h_opt == null) return error.OutOfMemory;
+    const h = h_opt.?;
     defer tj3Destroy(h);
     * = tj3Set(h, TJPARAM_QUALITY, @intCast(@min(@max(quality, 1), 100)));
     * = tj3Set(h, TJPARAM_SUBSAMP, TJSAMP_420);

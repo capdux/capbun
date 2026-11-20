@@ -715,7 +715,7 @@ _ = debug("Unexpected auth packet: 0x{x:0>2}", .{ first_byte });
 }
 }
 
-pub fn handleCommand(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
+pub fn handleCommand(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context), header_length: u24) !void {
         const request = ((self.queue.current()) orelse {
         _ = debug("Received unexpected command response", .{});
         return error.UnexpectedPacket;

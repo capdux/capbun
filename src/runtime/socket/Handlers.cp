@@ -75,7 +75,9 @@ pub struct HandlersScope {
         }
 
         if (promise := _.promise.trySwap()) {
-            if (*anyPromise := promise.asAnyPromise()) {
+            const ap_opt = promise.asAnyPromise();
+            if (ap_opt != null) {
+                let anyPromise = ap_opt.?;
                 anyPromise.resolve(_.globalObject, value)?;
             }
         }

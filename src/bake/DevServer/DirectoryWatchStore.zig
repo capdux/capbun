@@ -89,16 +89,11 @@ watches: bun.StringArrayHashMapUnmanaged(Entry),
 dependencies: ArrayListUnmanaged(Dep),
 dependencies_free_list: ArrayListUnmanaged(Dep.Index),
 
-pub fn ownerFromRaw(raw: *anyopaque) *DevServer {
-        const store_ptr: *DirectoryWatchStore = (blk: {
-        break :blk @ptrCast(@alignCast(raw));
+pub fn owner(self: *DirectoryWatchStore) *DevServer {
+        return (blk: {
+        break :blk @alignCast(@fieldParentPtr("directory_watchers", self));
 
 });
-        return @fieldParentPtr("directory_watchers", store_ptr);
-}
-
-pub fn owner(self: *DirectoryWatchStore) *DevServer {
-        return DirectoryWatchStore.ownerFromRaw(@ptrCast(self));
 }
 
 pub fn trackResolutionFailure(self: *DirectoryWatchStore, import_source: []const u8, specifier: []const u8, renderer: bake.Graph, loader: bun.options.Loader) !bun.OOM {
@@ -130,7 +125,7 @@ _ = bun.debugAssert(false);
         var owned_file_path: []const u8 = "";
         _ = &owned_file_path;
         {
-            const dev = DirectoryWatchStore.ownerFromRaw(@ptrCast(self));
+            const dev = self.owner();
             _ = dev.graph_safety_lock.lock();
             owned_file_path = (switch (renderer) {
 .client => try dev.client_graph.insertEmpty(import_source, .unknown).key,
@@ -138,7 +133,7 @@ _ = bun.debugAssert(false);
 });
         }
         defer {
-        _ = DirectoryWatchStore.ownerFromRaw(@ptrCast(self)).graph_safety_lock.unlock();
+        _ = self.owner().graph_safety_lock.unlock();
         }
         _ = (blk_catch_0: { break :blk_catch_0 ((self.insert(dir, owned_file_path, specifier)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
@@ -147,7 +142,7 @@ _ = bun.debugAssert(false);
 
 pub fn insert(self: *DirectoryWatchStore, dir_name_to_watch: []const u8, file_path: []const u8, specifier: []const u8) !void {
         _ = assert((specifier.len > 0));
-        const alloc = DirectoryWatchStore.ownerFromRaw(@ptrCast(self)).allocator();
+        const alloc = self.owner().allocator();
         _ = debug.log("DirectoryWatchStore.insert({f}, {f}, {f})", .{ bun.fmt.quote(dir_name_to_watch), bun.fmt.quote(file_path), bun.fmt.quote(specifier) });
         if ((self.dependencies_free_list.items.len == 0)) {
             _ = try self.dependencies.ensureUnusedCapacity(alloc, 1);
@@ -168,7 +163,7 @@ pub fn insert(self: *DirectoryWatchStore, dir_name_to_watch: []const u8, file_pa
         }
         var cache_fd: ?bun.FD = null;
         _ = &cache_fd;
-        if ((blk_catch_1: { break :blk_catch_1 ((DirectoryWatchStore.ownerFromRaw(@ptrCast(self)).server_transpiler.resolver.readDirInfo(dir_name_to_watch)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |cache| {
+        if ((blk_catch_1: { break :blk_catch_1 ((self.owner().server_transpiler.resolver.readDirInfo(dir_name_to_watch)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |cache| {
             _ = &cache;
             cache_fd = cache.getFileDescriptor().unwrapValid();
         }
@@ -217,7 +212,7 @@ _ = bun.todoPanic(@src(), "log watcher error", &.{});
         _ = alloc.free(dir_name);
         }
         gop.key_ptr.* = bun.strings.withoutTrailingSlashWindowsPath(dir_name);
-        const watch_index = (switch (DirectoryWatchStore.ownerFromRaw(@ptrCast(self)).bun_watcher.addDirectory(fd, dir_name, bun.Watcher.getHash(dir_name), false)) {
+        const watch_index = (switch (self.owner().bun_watcher.addDirectory(fd, dir_name, bun.Watcher.getHash(dir_name), false)) {
 .err => {
 return error.Ignore;
 },
@@ -240,7 +235,7 @@ pub fn freeDependencyIndex(self: *DirectoryWatchStore, alloc: Allocator, index: 
 pub fn freeEntry(self: *DirectoryWatchStore, alloc: Allocator, entry_index: usize) void {
         const entry = self.watches.values()[@as(usize, @intCast(entry_index))];
         _ = debug.log("DirectoryWatchStore.freeEntry({d}, {f})", .{ entry_index, entry.dir });
-        _ = DirectoryWatchStore.ownerFromRaw(@ptrCast(self)).bun_watcher.removeAtIndex(entry.watch_index, 0, &.{}, .file);
+        _ = self.owner().bun_watcher.removeAtIndex(entry.watch_index, 0, &.{}, .file);
         defer {
         if (entry.dir_fd_owned) {
             _ = entry.dir.close();

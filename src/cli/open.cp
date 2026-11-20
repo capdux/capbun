@@ -145,7 +145,7 @@ pub enum Editor: u8 {
     static fn byFallbackPathForEditor(editor: Editor, out: (*[]const u8)?): bool {
         if (paths := Editor.bin_path.get(editor)) {
             for (path of paths) {
-                if (opened := std.fs.cwd().openFile(path, .{})) {
+                if (opened := std.fs.cwd().openFile(path, .{}) catch null) {
                     opened.close();
                     if (out != null) {
                         out.?.* = bun.asByteSlice(path);

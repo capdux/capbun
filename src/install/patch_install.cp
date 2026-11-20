@@ -372,7 +372,7 @@ pub struct PatchTask {
 
         // 6. rename to cache dir
         let path_in_tmpdir_buf: bun.PathBuffer = undefined;
-        const tmp_parts = [tempdir_name];
+        const tmp_parts: [1][]const u8 = [tempdir_name];
         const path_in_tmpdir = bun.path.joinZBuf(&path_in_tmpdir_buf, tmp_parts[0..], .auto);
 
         if (e := bun.sys.renameatConcurrently(
