@@ -1521,3 +1521,6 @@
 
 ### 2026-11-20 04:30:19 UTC - src/js_printer/ 100% 目录闭环（js_printer.cp 6495行入库）
 - 完成：`js_printer.cp` (1.011x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 04:30:41 UTC - src/cli/multi_run.cp 解封 PASS 入库
+- 完成：`src/cli/multi_run.cp` (1.009x)，4 项硬门禁全 PASS。

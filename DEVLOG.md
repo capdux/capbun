@@ -1251,3 +1251,6 @@
 
 ### 2026-11-20 04:30:19 UTC - JS Printer 6400行大模块迁移经验
 - 提升 9 个 `return struct` 内嵌子类型至顶层、`NewPrinter`/`NewWriter` 统一 `static fn`、拆分多 tag switch 捕获，膨胀率 1.011x。
+
+### 2026-11-20 04:30:41 UTC - 复检历史受阻模块
+- `multi_run.cp` 已随新 `cpc` 解封 PASS；`options.cp` 与 `pm_pkg_command.cp` 各仅余 1 处 `cpc` codegen 缺陷，已写入最小复现重新投递 SQLite 队列。

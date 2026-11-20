@@ -2956,3 +2956,5 @@ Options:
 - [2026-11-20 04:24:26 UTC] [发送至 cp_agy] 工单 `task-bun-20261120-pub-const-error-collision`（复现 `/data/dev/cp/temp/repro_pub_const_error_collision.cp`）：含 `.err` switch 分支时 `cpc` 无条件注入 `pub const Error = Err;` 与用户导出 `pub const Error` 冲突；`src/sys/sys.cp` (4758行, 1.012x) 已完成全部 CP 改写暂标 BLOCKED，原 `src/sys/sys.zig` 已还原保护。
 
 - [2026-11-20 04:30:19 UTC] 验收并提交 `src/js_printer/js_printer.cp` (6495行, 1.011x)——`src/js_printer/` 100% 目录闭环。
+
+- [2026-11-20 04:30:41 UTC] 复检解封并提交 `src/cli/multi_run.cp` (1.009x PASS)；重新向 `cp_agy` 投递 2 项历史遗留 prelude/enum 缺陷工单 `task-bun-20261120-prelude-target-shadow`（阻断 `options.cp`）与 `task-bun-20261120-enum-tag-get-fromname`（阻断 `pm_pkg_command.cp`）。
