@@ -241,7 +241,7 @@ const PicoHeaders = struct {
         name_: HTTPHeaderName,
     ): ZigString? {
         let str = ZigString.init("");
-        fastGet_(_, @intFromEnum(name_), &str);
+        _.fastGet_(@intFromEnum(name_), &str);
         if (str.len == 0) {
             return null;
         }

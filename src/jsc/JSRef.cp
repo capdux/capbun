@@ -198,7 +198,7 @@ pub const JSRef = union(enum) {
 
     pub fn finalize(this: *@This()) {
         this.deinit();
-        this.* = { finalized: {} };
+        this.* = .finalized;
     }
 
     pub fn update(this: *@This(), globalThis: *jsc.JSGlobalObject, value: JSValue) {

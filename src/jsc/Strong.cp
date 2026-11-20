@@ -15,7 +15,7 @@ const jsc = bun.jsc;
         return Bun__StrongRef__new(global, value);
     }
 
-    fn get(): jsc.JSValue {
+    fn get(*_): jsc.JSValue {
         const js_value: *jsc.DecodedJSValue = @ptrCast(@alignCast(_));
         return js_value.encode();
     }

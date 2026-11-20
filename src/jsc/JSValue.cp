@@ -460,7 +460,7 @@ pub const JSValue = enum(i64) {
             return null;
         }
 
-        if (comptime @hasDecl(ZigType, "fromJS") and @TypeOf(ZigType.fromJS) == fn (jsc.JSValue) ?*ZigType) {
+        if (comptime @hasDecl(ZigType, "fromJS") and @TypeOf(&ZigType.fromJS) == fn (jsc.JSValue) ?*ZigType) {
             if (comptime ZigType == jsc.WebCore.Blob) {
                 if (ZigType.fromJS(value)) |blob| {
                     return blob;

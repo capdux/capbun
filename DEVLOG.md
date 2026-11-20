@@ -1359,3 +1359,6 @@
 
 ### 2026-11-20 06:27:53 UTC - zig:check 第 4 轮 Runtime/Image/Crypto 修复经验
 - `Image.cp` 改 `pub const U = union(enum)` 消字段自动指针化与 15 处 `.client()`→`.@"this"()`；`CryptoHasher` 静态函数首参改具名消多余 `self`。
+
+### 2026-11-20 06:29:07 UTC - zig:check 第 4 轮 JSC+TestRunner 修复经验
+- `ConsoleObject` 用 `@TypeOf(&writer)` 规避 `*@TypeOf` 误解析、`Strong` opaque 类型方法用 `*_` 禁止按值传参、`expect`/`ScopeFunctions` 消除 `?? return` 误包 `.{ .ok = ... }`。

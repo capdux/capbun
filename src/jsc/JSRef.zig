@@ -183,7 +183,7 @@ _ = self.strong.deinit();
 
 pub fn finalize(self: *@This()) void {
             _ = self.deinit();
-            self.* = .{ .finalized = .{} };
+            self.* = .finalized;
     }
 
 pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, value: JSValue) void {

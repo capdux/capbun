@@ -3030,3 +3030,5 @@ Options:
 - [2026-11-20 06:23:10 UTC] 验收并提交 `@root struct` 升级：`runtime/webcore/Response.cp` (0.922x) 与 `event_loop/EventLoopTimer.cp` (1.135x)，全部 PASS。
 
 - [2026-11-20 06:27:53 UTC] 验收并提交第 4 轮 `zig:check` Runtime/Image/Crypto/WebCore 簇 5 模块修复（`Image`/`ffi`/`ResumableSink`/`streams`/`CryptoHasher`，5/5 全 PASS）；接力派发 4 处外部根因（`EVP`/`node/types`/`Body`/`ReadableStream`）。
+
+- [2026-11-20 06:29:07 UTC] 验收并提交第 4 轮 `zig:check` JSC+TestRunner 簇 10 模块修复（消除 44 处报错，10/10 全 PASS）；接力派发 `FileReader`/`ByteBlobLoader`/`ByteStream` 升级 `@root struct`。

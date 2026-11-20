@@ -136,7 +136,7 @@ pub fn fastHas(self: *FetchHeaders, name_: HTTPHeaderName) bool {
 pub fn fastGet(self: *FetchHeaders, name_: HTTPHeaderName) ?ZigString {
             var str = ZigString.init("");
             _ = &str;
-            _ = self.fastGet_(self, @intFromEnum(name_), (&str));
+            _ = self.fastGet_(@intFromEnum(name_), (&str));
             if ((str.len == 0)) {
                 return null;
             }

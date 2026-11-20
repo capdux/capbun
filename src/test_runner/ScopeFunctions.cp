@@ -466,7 +466,9 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
         if (cfg.self_mode == .failing && _.mode == .describe) return globalThis.throw("Cannot {s} on {f}", .{ name, _ });
         if (cfg.self_only) errorInCI(globalThis, ".only")?;
-        const extended = _.cfg.extend(cfg) ?? return globalThis.throw("Cannot {s} on {f}", .{ name, _ });
+        const extended_opt = _.cfg.extend(cfg);
+        if (extended_opt == null) return globalThis.throw("Cannot {s} on {f}", .{ name, _ });
+        const extended = extended_opt.?;
         return createBound(globalThis, _.mode, _.each, extended, fn_name);
     }
 
@@ -486,10 +488,10 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         switch (_.cfg.self_mode) {
             .todo => writer.print(".todo", .{})?,
             .skip => writer.print(".skip", .{})?,
-            .only => writer.print(".only", .{})?,
             .failing => writer.print(".failing", .{})?,
             else => {},
         }
+        if (_.cfg.self_only) writer.print(".only", .{})?;
 
         if (_.each != .zero) writer.print(".each()", .{})?;
     }
@@ -523,7 +525,13 @@ pub fn bind(value: JSValue, globalThis: *JSGlobalObject, name: bun.String): bun.
     groupLog.begin(@src());
     defer groupLog.end();
 
-    const callFn = value.get(globalThis, "call")?.as(jsc.JSFunction) ?? return globalThis.throw("Expected call to be a function", .{});
+    const call_val = value.get(globalThis, "call")?;
+    let callFn_opt: (*jsc.JSFunction)? = null;
+    if (cv := call_val) {
+        callFn_opt = cv.as(jsc.JSFunction);
+    }
+    if (callFn_opt == null) return globalThis.throw("Expected call to be a function", .{});
+    const callFn = callFn_opt.?;
     const bound = callFn.bind(globalThis, value, &name, 1, &.{})?;
     bound.setPrototypeDirect(value.getPrototype(globalThis), globalThis)?;
     return bound;

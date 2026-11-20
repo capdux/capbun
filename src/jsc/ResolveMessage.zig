@@ -95,7 +95,7 @@ const code: []const u8 = brk: {
             return atom.toJS(globalObject);
 },
 else => {
-return error.js_undefined;
+return jsc.JSValue.js_undefined;
 },
 }
     }

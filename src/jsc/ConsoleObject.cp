@@ -1091,7 +1091,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
             }
 
             @callconv("c")
-            pub fn forEach(
+            static fn forEach(
                 globalThis: *JSGlobalObject,
                 ctx_ptr: *!?,
                 key: *ZigString,
@@ -1102,35 +1102,35 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                 if (key.eqlComptime("constructor")) return;
 
                 if (ctx_ptr == null) return;
-                let ctx: *@This() = bun.cast(*@This(), ctx_ptr.?);
-                let this = ctx.formatter;
-                if (this.failed) return;
+                let ctx: *@This() = @ptrCast(@alignCast(ctx_ptr.?));
+                let fmt = ctx.formatter;
+                if (fmt.failed) return;
                 const writer_ = ctx.writer;
                 const Wrapped = Formatter.WrappedWriter(Writer);
                 let writer = Wrapped{
                     ctx: writer_,
                     failed: false,
-                    estimated_line_length: &this.estimated_line_length,
+                    estimated_line_length: &fmt.estimated_line_length,
                 };
 
                 const tag = Formatter.Tag.getAdvanced(value, globalThis, {
                     hide_global: true,
-                    disable_inspect_custom: this.disable_inspect_custom,
+                    disable_inspect_custom: fmt.disable_inspect_custom,
                 }) catch { return; };
 
                 if (tag.cell.isHidden()) return;
                 if (ctx.i == 0) {
                     handleFirstProperty(ctx, globalThis, ctx.parent) catch { return; };
                 } else {
-                    this.printComma(Writer, writer_, enable_ansi_colors) catch unreachable;
+                    fmt.printComma(Writer, writer_, enable_ansi_colors) catch unreachable;
                 }
 
                 defer ctx.i += 1;
                 if (ctx.i > 0) {
-                    if (!this.single_line && (ctx.always_newline || this.always_newline_scope || this.goodTimeForANewLine())) {
+                    if (!fmt.single_line && (ctx.always_newline || fmt.always_newline_scope || fmt.goodTimeForANewLine())) {
                         writer.writeAll("\n");
-                        this.writeIndent(Writer, writer_) catch {};
-                        this.resetLine();
+                        fmt.writeIndent(Writer, writer_) catch {};
+                        fmt.resetLine();
                     } else {
                         writer.space();
                     }
@@ -1139,15 +1139,15 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                 if (!is_symbol) {
 
                     // TODO: make this one pass?
-                    if (!key.is16Bit() && (!this.quote_keys && JSLexer.isLatin1Identifier(@TypeOf(key.slice()), key.slice()))) {
-                        this.addForNewLine(key.len + 1);
+                    if (!key.is16Bit() && (!fmt.quote_keys && JSLexer.isLatin1Identifier(@TypeOf(key.slice()), key.slice()))) {
+                        fmt.addForNewLine(key.len + 1);
 
                         writer.print(
                             comptime Output.prettyFmt("<r>{f}<d>:<r> ", enable_ansi_colors),
                             [ key ],
                         );
-                    } else if (key.is16Bit() && (!this.quote_keys && JSLexer.isLatin1Identifier(@TypeOf(key.utf16SliceAligned()), key.utf16SliceAligned()))) {
-                        this.addForNewLine(key.len + 1);
+                    } else if (key.is16Bit() && (!fmt.quote_keys && JSLexer.isLatin1Identifier(@TypeOf(key.utf16SliceAligned()), key.utf16SliceAligned()))) {
+                        fmt.addForNewLine(key.len + 1);
 
                         writer.print(
                             comptime Output.prettyFmt("<r>{f}<d>:<r> ", enable_ansi_colors),
@@ -1156,7 +1156,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                     } else if (key.is16Bit()) {
                         let utf16Slice = key.utf16SliceAligned();
 
-                        this.addForNewLine(utf16Slice.len + 2);
+                        fmt.addForNewLine(utf16Slice.len + 2);
 
                         if (comptime enable_ansi_colors) {
                             writer.writeAll(comptime Output.prettyFmt("<r><green>", true));
@@ -1177,7 +1177,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                             [],
                         );
                     } else {
-                        this.addForNewLine(key.len + 2);
+                        fmt.addForNewLine(key.len + 2);
 
                         writer.print(
                             comptime Output.prettyFmt("<r><green>{f}<r><d>:<r> ", enable_ansi_colors),
@@ -1185,7 +1185,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                         );
                     }
                 } else if (Environment.isDebug && is_private_symbol) {
-                    this.addForNewLine(1 + "$:".len + key.len);
+                    fmt.addForNewLine(1 + "$:".len + key.len);
                     writer.print(
                         comptime Output.prettyFmt("<r><magenta>{s}{f}<r><d>:<r> ", enable_ansi_colors),
                         [ 
@@ -1194,7 +1194,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                         ],
                     );
                 } else {
-                    this.addForNewLine(1 + "[Symbol()]:".len + key.len);
+                    fmt.addForNewLine(1 + "[Symbol()]:".len + key.len);
                     writer.print(
                         comptime Output.prettyFmt("<r><d>[<r><blue>Symbol({f})<r><d>]:<r> ", enable_ansi_colors),
                         [ key ],
@@ -1207,7 +1207,7 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                     }
                 }
 
-                this.format(tag, Writer, ctx.writer, value, globalThis, enable_ansi_colors) catch {}; // TODO:
+                fmt.format(tag, Writer, ctx.writer, value, globalThis, enable_ansi_colors) catch {}; // TODO:
 
                 if (tag.cell.isStringLike()) {
                     if (comptime enable_ansi_colors) {
@@ -1226,43 +1226,43 @@ pub fn getAdvancedFormatterTag(value: JSValue, globalThis: *JSGlobalObject, opts
 
             switch (value) {
                 .zero, .js_undefined => return Formatter.Tag.Result{
-                    tag: { Undefined: {} },
+                    tag: .Undefined,
                 },
                 .null => return Formatter.Tag.Result{
-                    tag: { Null: {} },
+                    tag: .Null,
                 },
                 else => {},
             }
 
             if (value.isInt32()) {
                 return {
-                    tag: { Integer: {} },
+                    tag: .Integer,
                 };
             } else if (value.isNumber()) {
                 return {
-                    tag: { Double: {} },
+                    tag: .Double,
                 };
             } else if (value.isBoolean()) {
                 return {
-                    tag: { Boolean: {} },
+                    tag: .Boolean,
                 };
             }
 
             if (!value.isCell())
                 return {
-                    tag: { NativeCode: {} },
+                    tag: .NativeCode,
                 };
 
             const js_type = value.jsType();
 
             if (js_type.isHidden()) return {
-                tag: { NativeCode: {} },
+                tag: .NativeCode,
                 cell: js_type,
             };
 
             if (js_type == .Cell) {
                 return {
-                    tag: { NativeCode: {} },
+                    tag: .NativeCode,
                     cell: js_type,
                 };
             }
@@ -1287,7 +1287,7 @@ pub fn getAdvancedFormatterTag(value: JSValue, globalThis: *JSGlobalObject, opts
 
             if (js_type == .DOMWrapper) {
                 return {
-                    tag: { Private: {} },
+                    tag: .Private,
                     cell: js_type,
                 };
             }
@@ -1297,7 +1297,7 @@ pub fn getAdvancedFormatterTag(value: JSValue, globalThis: *JSGlobalObject, opts
             if (js_type != .Object && js_type != .ProxyObject && value.isCallable()) {
                 if (value.isClass(globalThis)) {
                     return {
-                        tag: { Class: {} },
+                        tag: .Class,
                         cell: js_type,
                     };
                 }
@@ -1320,7 +1320,7 @@ pub fn getAdvancedFormatterTag(value: JSValue, globalThis: *JSGlobalObject, opts
                     );
                 }
                 return {
-                    tag: { GlobalObject: {} },
+                    tag: .GlobalObject,
                     cell: js_type,
                 };
             }
@@ -1338,7 +1338,7 @@ pub fn getAdvancedFormatterTag(value: JSValue, globalThis: *JSGlobalObject, opts
                         typeof_symbol.isSameValue(.symbolFor(globalThis, &react_element_transitional), globalThis)? ||
                         typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis)?)
                     {
-                        return { tag: { JSX: {} }, cell: js_type };
+                        return { tag: .JSX, cell: js_type };
                     }
                 }
             }
@@ -1989,70 +1989,70 @@ pub struct Formatter {
             writer: Writer,
             count: usize = 0,
             @callconv("c")
-            pub fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+            static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
                 if (ctx == null) return;
-                let this: *@This() = bun.cast(*@This(), ctx.?);
-                if (this.formatter.failed) return;
-                if (single_line && this.count > 0) {
-                    this.formatter.printComma(Writer, this.writer, enable_ansi_colors) catch unreachable;
-                    this.writer.writeAll(" ") catch unreachable;
+                let it: *@This() = @ptrCast(@alignCast(ctx.?));
+                if (it.formatter.failed) return;
+                if (single_line && it.count > 0) {
+                    it.formatter.printComma(Writer, it.writer, enable_ansi_colors) catch unreachable;
+                    it.writer.writeAll(" ") catch unreachable;
                 }
                 if (!is_iterator) {
                     const key = nextValue.getIndex(globalObject, 0) catch { return; };
                     const value = nextValue.getIndex(globalObject, 1) catch { return; };
 
                     if (!single_line) {
-                        this.formatter.writeIndent(Writer, this.writer) catch unreachable;
+                        it.formatter.writeIndent(Writer, it.writer) catch unreachable;
                     }
                     const key_tag = Tag.getAdvanced(key, globalObject, {
                         hide_global: true,
-                        disable_inspect_custom: this.formatter.disable_inspect_custom,
+                        disable_inspect_custom: it.formatter.disable_inspect_custom,
                     }) catch { return; };
 
-                    this.formatter.format(
+                    it.formatter.format(
                         key_tag,
                         Writer,
-                        this.writer,
+                        it.writer,
                         key,
-                        this.formatter.globalThis,
+                        it.formatter.globalThis,
                         enable_ansi_colors,
                     ) catch {}; // TODO:
-                    this.writer.writeAll(": ") catch unreachable;
+                    it.writer.writeAll(": ") catch unreachable;
                     const value_tag = Tag.getAdvanced(value, globalObject, {
                         hide_global: true,
-                        disable_inspect_custom: this.formatter.disable_inspect_custom,
+                        disable_inspect_custom: it.formatter.disable_inspect_custom,
                     }) catch { return; };
-                    this.formatter.format(
+                    it.formatter.format(
                         value_tag,
                         Writer,
-                        this.writer,
+                        it.writer,
                         value,
-                        this.formatter.globalThis,
+                        it.formatter.globalThis,
                         enable_ansi_colors,
                     ) catch {}; // TODO:
                 } else {
                     if (!single_line) {
-                        this.writer.writeAll("\n") catch unreachable;
-                        this.formatter.writeIndent(Writer, this.writer) catch unreachable;
+                        it.writer.writeAll("\n") catch unreachable;
+                        it.formatter.writeIndent(Writer, it.writer) catch unreachable;
                     }
                     const tag = Tag.getAdvanced(nextValue, globalObject, {
                         hide_global: true,
-                        disable_inspect_custom: this.formatter.disable_inspect_custom,
+                        disable_inspect_custom: it.formatter.disable_inspect_custom,
                     }) catch { return; };
-                    this.formatter.format(
+                    it.formatter.format(
                         tag,
                         Writer,
-                        this.writer,
+                        it.writer,
                         nextValue,
-                        this.formatter.globalThis,
+                        it.formatter.globalThis,
                         enable_ansi_colors,
                     ) catch {}; // TODO:
                 }
-                this.count += 1;
+                it.count += 1;
                 if (!single_line) {
-                    this.formatter.printComma(Writer, this.writer, enable_ansi_colors) catch unreachable;
+                    it.formatter.printComma(Writer, it.writer, enable_ansi_colors) catch unreachable;
                     if (!is_iterator) {
-                        this.writer.writeAll("\n") catch unreachable;
+                        it.writer.writeAll("\n") catch unreachable;
                     }
                 }
             }
@@ -2065,35 +2065,35 @@ pub struct Formatter {
             writer: Writer,
             is_first: bool = true,
             @callconv("c")
-            pub fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+            static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
                 if (ctx == null) return;
-                let this: *@This() = bun.cast(*@This(), ctx.?);
-                if (this.formatter.failed) return;
+                let it: *@This() = @ptrCast(@alignCast(ctx.?));
+                if (it.formatter.failed) return;
                 if (single_line) {
-                    if (!this.is_first) {
-                        this.formatter.printComma(Writer, this.writer, enable_ansi_colors) catch unreachable;
-                        this.writer.writeAll(" ") catch unreachable;
+                    if (!it.is_first) {
+                        it.formatter.printComma(Writer, it.writer, enable_ansi_colors) catch unreachable;
+                        it.writer.writeAll(" ") catch unreachable;
                     }
-                    this.is_first = false;
+                    it.is_first = false;
                 } else {
-                    this.formatter.writeIndent(Writer, this.writer) catch {};
+                    it.formatter.writeIndent(Writer, it.writer) catch {};
                 }
                 const key_tag = Tag.getAdvanced(nextValue, globalObject, {
                     hide_global: true,
-                    disable_inspect_custom: this.formatter.disable_inspect_custom,
+                    disable_inspect_custom: it.formatter.disable_inspect_custom,
                 }) catch { return; };
-                this.formatter.format(
+                it.formatter.format(
                     key_tag,
                     Writer,
-                    this.writer,
+                    it.writer,
                     nextValue,
-                    this.formatter.globalThis,
+                    it.formatter.globalThis,
                     enable_ansi_colors,
                 ) catch {}; // TODO:
 
                 if (!single_line) {
-                    this.formatter.printComma(Writer, this.writer, enable_ansi_colors) catch unreachable;
-                    this.writer.writeAll("\n") catch unreachable;
+                    it.formatter.printComma(Writer, it.writer, enable_ansi_colors) catch unreachable;
+                    it.writer.writeAll("\n") catch unreachable;
                 }
             }
         };
@@ -2279,7 +2279,8 @@ pub struct Formatter {
                 writer.print(comptime Output.prettyFmt("<r><yellow>{d}<r>", enable_ansi_colors), [ int]);
             },
             .BigInt => {
-                const out_str = (try value.getZigString(_.globalThis)).slice();
+                const zig_str = value.getZigString(_.globalThis)?;
+                const out_str = zig_str.slice();
                 _.addForNewLine(out_str.len);
 
                 writer.print(comptime Output.prettyFmt("<r><yellow>{s}n<r>", enable_ansi_colors), [ out_str]);
@@ -2820,7 +2821,8 @@ pub struct Formatter {
                 writer.writeAll(comptime Output.prettyFmt("<cyan>" ++ fmt ++ "<r>", enable_ansi_colors));
             },
             .Map => {
-                const length_value = value.get(_.globalThis, "size") ?? jsc.JSValue.jsNumberFromInt32(0)?;
+                const size_opt = value.get(_.globalThis, "size")?;
+                const length_value = size_opt ?? jsc.JSValue.jsNumberFromInt32(0);
                 const length = length_value.coerce(i32, _.globalThis)?;
 
                 const prev_quote_strings = _.quote_strings;
@@ -2930,7 +2932,8 @@ pub struct Formatter {
                 writer.writeAll("}");
             },
             .Set => {
-                const length_value = value.get(_.globalThis, "size") ?? jsc.JSValue.jsNumberFromInt32(0)?;
+                const size_opt = value.get(_.globalThis, "size")?;
+                const length_value = size_opt ?? jsc.JSValue.jsNumberFromInt32(0);
                 const length = length_value.coerce(i32, _.globalThis)?;
 
                 const prev_quote_strings = _.quote_strings;
@@ -2975,7 +2978,7 @@ pub struct Formatter {
             },
             .toJSON => {
                 if (func := value.get(_.globalThis, "toJSON")?) {
-                    if (result := func.call(_.globalThis, value, [])) {
+                    if (result := func.call(_.globalThis, value, []) catch null) {
                         const prev_quote_keys = _.quote_keys;
                         _.quote_keys = true;
                         defer _.quote_keys = prev_quote_keys;
@@ -3498,63 +3501,63 @@ pub struct Formatter {
 
                 switch (jsType) {
                     .Int8Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         i8,
                         @alignCast(std.mem.bytesAsSlice(i8, slice)),
                         enable_ansi_colors,
                     ),
                     .Int16Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         i16,
                         @alignCast(std.mem.bytesAsSlice(i16, slice)),
                         enable_ansi_colors,
                     ),
                     .Uint16Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         u16,
                         @alignCast(std.mem.bytesAsSlice(u16, slice)),
                         enable_ansi_colors,
                     ),
                     .Int32Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         i32,
                         @alignCast(std.mem.bytesAsSlice(i32, slice)),
                         enable_ansi_colors,
                     ),
                     .Uint32Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         u32,
                         @alignCast(std.mem.bytesAsSlice(u32, slice)),
                         enable_ansi_colors,
                     ),
                     .Float16Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         f16,
                         @alignCast(std.mem.bytesAsSlice(f16, slice)),
                         enable_ansi_colors,
                     ),
                     .Float32Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         f32,
                         @alignCast(std.mem.bytesAsSlice(f32, slice)),
                         enable_ansi_colors,
                     ),
                     .Float64Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         f64,
                         @alignCast(std.mem.bytesAsSlice(f64, slice)),
                         enable_ansi_colors,
                     ),
                     .BigInt64Array => _.writeTypedArray(
-                        *@TypeOf(writer),
+                        @TypeOf(&writer),
                         &writer,
                         i64,
                         @alignCast(std.mem.bytesAsSlice(i64, slice)),
@@ -3562,7 +3565,7 @@ pub struct Formatter {
                     ),
                     .BigUint64Array => {
                         _.writeTypedArray(
-                            *@TypeOf(writer),
+                            @TypeOf(&writer),
                             &writer,
                             u64,
                             @as([]align(std.@"meta".alignment([]u64)) u64, @alignCast(std.mem.bytesAsSlice(u64, slice))),
@@ -3571,7 +3574,7 @@ pub struct Formatter {
                     },
 
                     // Uint8Array, Uint8ClampedArray, DataView, ArrayBuffer
-                    else => _.writeTypedArray(*@TypeOf(writer), &writer, u8, slice, enable_ansi_colors),
+                    else => _.writeTypedArray(@TypeOf(&writer), &writer, u8, slice, enable_ansi_colors),
                 }
 
                 writer.writeAll(" ]");

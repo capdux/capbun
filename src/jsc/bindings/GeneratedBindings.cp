@@ -138,7 +138,7 @@ const binding_internals = struct {
         out.* = @as(bun.JSError!usize, import_DevServer.getDeinitCountForTesting(
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -155,7 +155,7 @@ const binding_internals = struct {
             arg_str_utf8.slice(),
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -171,7 +171,7 @@ const binding_internals = struct {
             arg_b.*,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = arg_global.throwOutOfMemory();
+                arg_global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -193,7 +193,7 @@ const binding_internals = struct {
             if (buf.d_set) buf.d_value else null,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -211,7 +211,7 @@ const binding_internals = struct {
             arg_formatter.*,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = arg_global.throwOutOfMemory();
+                arg_global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -235,7 +235,7 @@ const binding_internals = struct {
             arg_force.*,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -255,7 +255,7 @@ const binding_internals = struct {
         out.* = @as(bun.JSError!u64, import_node_os.freemem(
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -269,7 +269,7 @@ const binding_internals = struct {
             arg_pid.*,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = arg_global.throwOutOfMemory();
+                arg_global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -282,7 +282,7 @@ const binding_internals = struct {
             arg_global,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = arg_global.throwOutOfMemory();
+                arg_global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -315,7 +315,7 @@ const binding_internals = struct {
         out.* = @as(bun.JSError!bun.String, import_node_os.release(
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -327,7 +327,7 @@ const binding_internals = struct {
         out.* = @as(bun.JSError!u64, import_node_os.totalmem(
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -340,7 +340,7 @@ const binding_internals = struct {
             arg_global,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = arg_global.throwOutOfMemory();
+                arg_global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -360,7 +360,7 @@ const binding_internals = struct {
         out.* = @as(bun.JSError!bun.String, import_node_os.version(
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = global.throwOutOfMemory();
+                global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -375,7 +375,7 @@ const binding_internals = struct {
             arg_priority.*,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = arg_global.throwOutOfMemory();
+                arg_global.throwOutOfMemory() catch {};
             }
             return false;
         };
@@ -389,7 +389,7 @@ const binding_internals = struct {
             arg_priority.*,
         )) catch |e| {
             if (e == error.OutOfMemory) {
-                * = arg_global.throwOutOfMemory();
+                arg_global.throwOutOfMemory() catch {};
             }
             return false;
         };

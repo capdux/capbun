@@ -1630,3 +1630,6 @@
 
 ### 2026-11-20 06:27:53 UTC - zig:check 第 4 轮 Runtime/Image/Crypto/WebCore 簇 5 模块语义修复入库
 - 完成：`Image.cp` (18 错清零)/`ffi.cp`/`ResumableSink.cp`/`streams.cp`/`CryptoHasher.cp` 5/5 全 PASS。
+
+### 2026-11-20 06:29:07 UTC - zig:check 第 4 轮 JSC+TestRunner 簇 10 模块语义修复入库
+- 完成：`expect`/`ScopeFunctions`/`ConsoleObject`/`GeneratedBindings`/`JSValue`/`DecodedJSValue`/`FetchHeaders`/`JSRef`/`ResolveMessage`/`Strong` 10/10 全 PASS（消除 44 处语义错）。

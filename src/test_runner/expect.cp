@@ -294,7 +294,7 @@ pub struct Expect {
             } else if (instance := ExpectArrayContaining.fromJS(instanceValue)) {
                 break :flags instance.flags;
             } else {
-                break :flags Expect.Flags{};
+                const default_flags: Expect.Flags = {}; break :flags default_flags;
             }
         };
 
@@ -1392,8 +1392,11 @@ pub struct ExpectStatic {
     fn createAsymmetricMatcherWithFlags(*_, comptime T: type, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
         const instance_jsvalue = T.call(globalThis, callFrame)?;
         if (instance_jsvalue != .zero && !instance_jsvalue.isAnyError()) {
-            let instance = T.fromJS(instance_jsvalue) orelse return globalThis.throwOutOfMemory();
-            instance.flags = _.flags;
+            if (instance := T.fromJS(instance_jsvalue)) {
+                instance.flags = _.flags;
+            } else {
+                return globalThis.throwOutOfMemory();
+            }
         }
         return instance_jsvalue;
     }
@@ -1471,8 +1474,7 @@ pub struct ExpectStringMatching {
         const args = callFrame.arguments();
 
         if (args.len == 0 || (!args[0].isString() && !args[0].isRegExp())) {
-            const fmt = "<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string or regular expression\n";
-            return globalThis.throwPretty(fmt, .{});
+            return globalThis.throwPretty("<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string or regular expression\n", .{});
         }
 
         const test_value = args[0];
@@ -1550,8 +1552,7 @@ pub struct ExpectObjectContaining {
         const args = callFrame.arguments_old(1).slice();
 
         if (args.len == 0 || !args[0].isObject()) {
-            const fmt = "<d>expect.<r>objectContaining<d>(<r>object<d>)<r>\n\nExpected an object\n";
-            return globalThis.throwPretty(fmt, .{});
+            return globalThis.throwPretty("<d>expect.<r>objectContaining<d>(<r>object<d>)<r>\n\nExpected an object\n", .{});
         }
 
         const object_value = args[0];
@@ -1585,8 +1586,7 @@ pub struct ExpectStringContaining {
         const args = callFrame.arguments_old(1).slice();
 
         if (args.len == 0 || !args[0].isString()) {
-            const fmt = "<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string\n";
-            return globalThis.throwPretty(fmt, .{});
+            return globalThis.throwPretty("<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string\n", .{});
         }
 
         const string_value = args[0];
@@ -1627,8 +1627,7 @@ pub struct ExpectAny {
         const constructor = arguments[0];
         constructor.ensureStillAlive();
         if (!constructor.isConstructor()) {
-            const fmt = "<d>expect.<r>any<d>(<r>constructor<d>)<r>\n\nExpected a constructor\n";
-            return globalThis.throwPretty(fmt, .{});
+            return globalThis.throwPretty("<d>expect.<r>any<d>(<r>constructor<d>)<r>\n\nExpected a constructor\n", .{});
         }
 
         const asymmetric_matcher_constructor_type = Expect.Flags.AsymmetricMatcherConstructorType.fromJS(globalThis, constructor)?;
@@ -1674,8 +1673,7 @@ pub struct ExpectArrayContaining {
         const args = callFrame.arguments_old(1).slice();
 
         if (args.len == 0 || !args[0].jsType().isArray()) {
-            const fmt = "<d>expect.<r>arrayContaining<d>(<r>array<d>)<r>\n\nExpected a array\n";
-            return globalThis.throwPretty(fmt, .{});
+            return globalThis.throwPretty("<d>expect.<r>arrayContaining<d>(<r>array<d>)<r>\n\nExpected a array\n", .{});
         }
 
         const array_value = args[0];
@@ -1792,13 +1790,13 @@ pub struct ExpectCustomAsymmetricMatcher {
     /// Function called by c++ function "matchAsymmetricMatcher" to execute the custom matcher against the provided leftValue
     @callconv("c")
     fn execute(*_, thisValue: JSValue, globalThis: *JSGlobalObject, received: JSValue): bool {
-        return executeImpl(_, thisValue, globalThis, received) catch false;
+        return _.executeImpl(thisValue, globalThis, received) catch false;
     }
 
     fn asymmetricMatch(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
         const arguments = callframe.arguments_old(1).slice();
         const received_value = if (arguments.len < 1) .js_undefined else arguments[0];
-        const matched = executeImpl(_, callframe.@"this"(), globalThis, received_value)?;
+        const matched = _.executeImpl(callframe.@"this"(), globalThis, received_value)?;
         return JSValue.jsBoolean(matched);
     }
 
@@ -2050,7 +2048,7 @@ pub struct ExpectTypeOf {
     }
 
     fn fnOneArgumentReturnsVoid(_: *ExpectTypeOf, _: *JSGlobalObject, _: *CallFrame): bun.JSError!JSValue {
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
     fn fnOneArgumentReturnsExpectTypeOf(_: *ExpectTypeOf, globalThis: *JSGlobalObject, _: *CallFrame): bun.JSError!JSValue {
         const self_ref = _;

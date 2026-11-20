@@ -62,7 +62,7 @@ pub struct ResolveMessage {
                 defer atom.deref();
                 return atom.toJS(globalObject);
             },
-            else => return .js_undefined,
+            else => return jsc.JSValue.js_undefined,
         }
     }
 

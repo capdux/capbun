@@ -30,7 +30,7 @@ import builtin from "builtin";
 
     /// Equivalent to `JSC::JSValue::isCell`. Note that like JSC, this method treats 0 as a cell.
     pub fn isCell(): bool {
-        return _.asU64() & ffi.NotCellMask == 0;
+        return (_.asU64() & ffi.NotCellMask) == 0;
     }
 
     /// Equivalent to `JSC::JSValue::asCell`.

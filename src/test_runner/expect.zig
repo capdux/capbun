@@ -347,7 +347,8 @@ pub fn readFlagsAndProcessPromise(instanceValue: JSValue, globalThis: *JSGlobalO
                                             _ = &instance;
                                             break :flags instance.flags;
                                         } else {
-                                            break :flags Expect.Flags;
+                                            const default_flags: Expect.Flags = .{};
+                                            break :flags default_flags;
                                         }
                                     }
                                 }
@@ -1444,9 +1445,12 @@ else => unreachable,
 pub fn createAsymmetricMatcherWithFlags(self: *ExpectStatic, comptime T: type, globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
             const instance_jsvalue = try T.call(globalThis, callFrame);
             if (((instance_jsvalue != .zero) and (!instance_jsvalue.isAnyError()))) {
-                var instance = ((T.fromJS(instance_jsvalue)) orelse { return .{ .ok = globalThis.throwOutOfMemory() }; });
-                _ = &instance;
-                instance.flags = self.flags;
+                if (T.fromJS(instance_jsvalue)) |instance| {
+                    _ = &instance;
+                    instance.flags = self.flags;
+                } else {
+                    return globalThis.throwOutOfMemory();
+                }
             }
             return instance_jsvalue;
     }
@@ -1517,8 +1521,7 @@ pub fn finalize(self: *ExpectStringMatching) callconv(.c) void {
 pub fn call(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
             const args = callFrame.arguments();
             if (((args.len == 0) or ((!args[0].isString()) and (!args[0].isRegExp())))) {
-                const fmt: []const u8 = "<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string or regular expression\n";
-                return globalThis.throwPretty(fmt, .{});
+                return globalThis.throwPretty("<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string or regular expression\n", .{});
             }
             const test_value = args[0];
             const string_matching = try globalThis.bunVM().allocator.create(ExpectStringMatching);
@@ -1585,8 +1588,7 @@ pub fn finalize(self: *ExpectObjectContaining) callconv(.c) void {
 pub fn call(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
             const args = callFrame.arguments_old(1).slice();
             if (((args.len == 0) or (!args[0].isObject()))) {
-                const fmt: []const u8 = "<d>expect.<r>objectContaining<d>(<r>object<d>)<r>\n\nExpected an object\n";
-                return globalThis.throwPretty(fmt, .{});
+                return globalThis.throwPretty("<d>expect.<r>objectContaining<d>(<r>object<d>)<r>\n\nExpected an object\n", .{});
             }
             const object_value = args[0];
             const instance = try globalThis.bunVM().allocator.create(ExpectObjectContaining);
@@ -1614,8 +1616,7 @@ pub fn finalize(self: *ExpectStringContaining) callconv(.c) void {
 pub fn call(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
             const args = callFrame.arguments_old(1).slice();
             if (((args.len == 0) or (!args[0].isString()))) {
-                const fmt: []const u8 = "<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string\n";
-                return globalThis.throwPretty(fmt, .{});
+                return globalThis.throwPretty("<d>expect.<r>stringContaining<d>(<r>string<d>)<r>\n\nExpected a string\n", .{});
             }
             const string_value = args[0];
             const string_containing = try globalThis.bunVM().allocator.create(ExpectStringContaining);
@@ -1649,8 +1650,7 @@ pub fn call(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSVa
             const constructor = arguments[0];
             _ = constructor.ensureStillAlive();
             if ((!constructor.isConstructor())) {
-                const fmt: []const u8 = "<d>expect.<r>any<d>(<r>constructor<d>)<r>\n\nExpected a constructor\n";
-                return globalThis.throwPretty(fmt, .{});
+                return globalThis.throwPretty("<d>expect.<r>any<d>(<r>constructor<d>)<r>\n\nExpected a constructor\n", .{});
             }
             const asymmetric_matcher_constructor_type = try Expect.Flags.AsymmetricMatcherConstructorType.fromJS(globalThis, constructor);
             if (globalThis.hasException()) {
@@ -1684,8 +1684,7 @@ pub fn finalize(self: *ExpectArrayContaining) callconv(.c) void {
 pub fn call(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JSError!JSValue {
             const args = callFrame.arguments_old(1).slice();
             if (((args.len == 0) or (!args[0].jsType().isArray()))) {
-                const fmt: []const u8 = "<d>expect.<r>arrayContaining<d>(<r>array<d>)<r>\n\nExpected a array\n";
-                return globalThis.throwPretty(fmt, .{});
+                return globalThis.throwPretty("<d>expect.<r>arrayContaining<d>(<r>array<d>)<r>\n\nExpected a array\n", .{});
             }
             const array_value = args[0];
             const array_containing = try globalThis.bunVM().allocator.create(ExpectArrayContaining);
@@ -1774,13 +1773,13 @@ pub fn executeImpl(self: *ExpectCustomAsymmetricMatcher, thisValue: JSValue, glo
     }
 
 pub fn execute(self: *ExpectCustomAsymmetricMatcher, thisValue: JSValue, globalThis: *JSGlobalObject, received: JSValue) callconv(.c) bool {
-            return (blk_catch_9: { break :blk_catch_9 ((self.executeImpl(self, thisValue, globalThis, received)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 @as(bool, false); }); });
+            return (blk_catch_9: { break :blk_catch_9 ((self.executeImpl(thisValue, globalThis, received)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 @as(bool, false); }); });
     }
 
 pub fn asymmetricMatch(self: *ExpectCustomAsymmetricMatcher, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
             const arguments = callframe.arguments_old(1).slice();
             const received_value = (if ((arguments.len < 1)) .js_undefined else arguments[0]);
-            const matched = try self.executeImpl(self, callframe.@"this"(), globalThis, received_value);
+            const matched = try self.executeImpl(callframe.@"this"(), globalThis, received_value);
             return JSValue.jsBoolean(matched);
     }
 
@@ -2031,7 +2030,7 @@ pub fn create(globalThis: *JSGlobalObject) bun.JSError!JSValue {
 
 pub fn fnOneArgumentReturnsVoid(self: *ExpectTypeOf, _: *JSGlobalObject, _: *CallFrame) bun.JSError!JSValue {
         _ = self;
-            return error.js_undefined;
+            return JSValue.js_undefined;
     }
 
 pub fn fnOneArgumentReturnsExpectTypeOf(self: *ExpectTypeOf, globalThis: *JSGlobalObject, _: *CallFrame) bun.JSError!JSValue {
