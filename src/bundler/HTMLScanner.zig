@@ -167,11 +167,16 @@ pub fn run(target: *T, input: []const u8) !void {
                 _ = selector.deinit();
             }
             }
-            for (cp_iter_slice(tag_handlers)) |tag_info| {
-                _ = &tag_info;
-                const selector = try lol.HTMLSelector.parse(tag_info.selector);
-                _ = selectors.appendAssumeCapacity(selector);
-                _ = try builder.addElementContentHandlers(selector, T, (comptime generateHandlerForTag(tag_info)), target, void, null, null, void, null, null);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_1 = tag_handlers.len;
+                while (i < __end_1) : (i += 1) {
+                    const tag_info = tag_handlers[@as(usize, @intCast(i))];
+                    const selector = try lol.HTMLSelector.parse(tag_info.selector);
+                    _ = selectors.appendAssumeCapacity(selector);
+                    _ = try builder.addElementContentHandlers(selector, T, (comptime generateHandlerForTag(tag_info)), target, void, null, null, void, null, null);
+                }
             }
             if (visit_document_tags) {
                 inline for (.{ .{ .tag = "body", .cb = T.onBodyTag }, .{ .tag = "head", .cb = T.onHeadTag }, .{ .tag = "html", .cb = T.onHtmlTag } }) |pair| {

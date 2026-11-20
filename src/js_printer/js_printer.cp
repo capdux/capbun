@@ -522,6 +522,8 @@ pub union(enum) PrintResult {
 // stage1 compiler bug:
 // > /optional-chain-with-function.js: Evaluation failed: TypeError: (intermediate value) is not a function
 // this test failure was caused by the packed struct implementation
+type U16Slice = []const u16;
+
 enum ExprFlag {
     forbid_call,
     forbid_in,
@@ -2021,7 +2023,7 @@ fn NewPrinter(
         static fn canPrintIdentifierUTF16(p: *Printer, name: []const u16): bool {
             * = p;
             if (comptime ascii_only || ascii_only_always_on_unless_minifying) {
-                return js_lexer.isLatin1Identifier([]const u16, name);
+                return js_lexer.isLatin1Identifier(U16Slice, name);
             } else {
                 return js_lexer.isIdentifierUTF16(name);
             }
@@ -2289,7 +2291,8 @@ fn NewPrinter(
                     p.addSourceMapping(expr.loc);
                     p.print("new");
                     p.printSpace();
-                    p.printExpr(e.target, .@"new", ExprFlag.ForbidCall());
+                    const forbid_call = ExprFlag.ForbidCall;
+                    p.printExpr(e.target, .@"new", forbid_call());
                     const args = e.args.slice();
                     if (args.len > 0 || level.gte(.postfix)) {
                         p.print("(");
@@ -4887,7 +4890,8 @@ fn NewPrinter(
                     }
 
                     p.stmt_start = p.writer.written;
-                    p.printExpr(s.value, .lowest, ExprFlag.ExprResultIsUnused());
+                    const result_unused = ExprFlag.ExprResultIsUnused;
+                    p.printExpr(s.value, .lowest, result_unused());
                     p.printSemicolonAfterStatement();
                 },
                 else => |tag| {
@@ -5761,7 +5765,7 @@ pub fn NewWriter(
             return @call(bun.callmod_inline, getLastLastByte, .{&writer.ctx});
         }
 
-        static fn reserve(writer: *Self, count: u64): [*]u8! {
+        static fn reserve(writer: *Self, count: u64): ([*]u8)! {
             return reserveNext(&writer.ctx, count)?;
         }
 

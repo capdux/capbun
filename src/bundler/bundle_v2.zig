@@ -743,7 +743,7 @@ for (cp_iter_slice(data)) |entry_point| {
                         }
                     }
                     const resolved = (blk_catch_12: { break :blk_catch_12 ((self.transpiler.resolveEntryPoint(entry_point)) catch |__ce_12| { _ = &__ce_12; continue; }); });
-                    _ = self.enqueueEntryItem(resolved, true, brk: {
+                    _ = try self.enqueueEntryItem(resolved, true, brk: {
                     const main_target = self.transpiler.options.target;
                     if (main_target.isServerSide()) {
                         if (resolved.pathConst()) |path| {

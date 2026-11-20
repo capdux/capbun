@@ -3858,9 +3858,10 @@ pub fn dumpStateDueToCrash(dev: *DevServer) !void {
         _ = payload.deinit();
         }
         _ = try dev.writeVisualizerMessage((&payload));
-        var buf: struct { bun.base64.encodeLenFromSize(4096) } = undefined;
+        const buf_len = (comptime bun.base64.encodeLenFromSize(4096));
+        _ = &buf_len;
+        var buf: [buf_len]u8 = undefined;
         _ = &buf;
-        u8 = undefined;
         var it = std.mem.window(u8, payload.items, 4096, 4096);
         _ = &it;
         while (it.next()) |chunk| {

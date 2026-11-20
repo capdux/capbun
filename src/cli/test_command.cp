@@ -530,10 +530,10 @@ pub struct JunitReporter {
                 }
                 _.contents.appendSlice(bun.default_allocator, ">\n")?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
-                _.contents.writer(bun.default_allocator).print(
-                    \\  <failure message="Expected to have assertions, but none were run" type="AssertionError"/>
-                    \\
-                , {})?;
+                _.contents.appendSlice(
+                    bun.default_allocator,
+                    "  <failure message=\"Expected to have assertions, but none were run\" type=\"AssertionError\"/>\n",
+                )?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.appendSlice(bun.default_allocator, "</testcase>\n")?;
             },

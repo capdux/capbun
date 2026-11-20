@@ -3206,3 +3206,5 @@ Options:
 - **[2026-11-20 23:43] Wave 27 C 组验收提交（14 模块全绿）**：完成 Runtime/HTTP/Libarchive/Shell/String/Watcher 14 模块独立验收（14/14 PASS，ratio 0.644x~1.022x）并原子提交；静待 A/B 组完成。
 
 - **[2026-11-20 23:44] Wave 27 B 组验收提交（16 模块全绿）**：完成 Install/JSC/SQL 16 模块独立验收（16/16 PASS，4 项门禁全绿，ratio 0.891x~1.102x）并原子提交；静待 A 组（`ba0433cd`）完成。
+
+- **[2026-11-20 23:45] Wave 27 A 组验收提交（15 模块全绿）**：完成 `CompileTarget`（消除 20 错）、`toml`（`std.mem.zeroInit` 消除 `#origin` 与 `Expr.init` 错）、`js_printer`（12 错）、AST/DevServer/Bundler/CLI/Sourcemap/Router 共 15 模块独立验收（15/15 PASS，4 项门禁全绿）并原子提交；静待 D 组（`01b025d9`）完成即跑 Wave 28 `zig:check`。

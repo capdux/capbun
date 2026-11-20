@@ -4402,7 +4402,8 @@ fn dumpStateDueToCrash(dev: *DevServer)! {
     defer payload.deinit();
     dev.writeVisualizerMessage(&payload)?;
 
-    let buf: [bun.base64.encodeLenFromSize(4096)]u8 = undefined;
+    const buf_len = comptime bun.base64.encodeLenFromSize(4096);
+    let buf: [buf_len]u8 = undefined;
     let it = std.mem.window(u8, payload.items, 4096, 4096);
     while (chunk := it.next()) {
         file.writeAll(buf[0..bun.base64.encode(&buf, chunk)])?;

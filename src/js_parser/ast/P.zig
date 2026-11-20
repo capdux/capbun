@@ -3142,10 +3142,16 @@ for (cp_mut_slice(&ex.properties.slice())) |*property| {
 },
 .e_call => |ex| {
 if ((ex.can_be_unwrapped_if_unused != .never)) {
-                for (cp_mut_slice(&ex.args.slice())) |*arg| {
-                    _ = &arg;
-                    if ((!(p.exprCanBeRemovedIfUnusedWithoutDCECheck((arg.*)) or ((ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe) and (arg.*).data.isSafeToString())))) {
-                        return false;
+                const args = ex.args.slice();
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_43 = args.len;
+                    while (i < __end_43) : (i += 1) {
+                        const arg = (&args[@as(usize, @intCast(i))]);
+                        if ((!(p.exprCanBeRemovedIfUnusedWithoutDCECheck(arg) or ((ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe) and arg.data.isSafeToString())))) {
+                            return false;
+                        }
                     }
                 }
                 return true;
@@ -3153,10 +3159,16 @@ if ((ex.can_be_unwrapped_if_unused != .never)) {
 },
 .e_new => |ex| {
 if ((ex.can_be_unwrapped_if_unused != .never)) {
-                for (cp_mut_slice(&ex.args.slice())) |*arg| {
-                    _ = &arg;
-                    if ((!(p.exprCanBeRemovedIfUnusedWithoutDCECheck((arg.*)) or ((ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe) and (arg.*).data.isSafeToString())))) {
-                        return false;
+                const args = ex.args.slice();
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_44 = args.len;
+                    while (i < __end_44) : (i += 1) {
+                        const arg = (&args[@as(usize, @intCast(i))]);
+                        if ((!(p.exprCanBeRemovedIfUnusedWithoutDCECheck(arg) or ((ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe) and arg.data.isSafeToString())))) {
+                            return false;
+                        }
                     }
                 }
                 return true;

@@ -92,9 +92,8 @@ if ((!st.is_export)) {
             st.is_export = false;
             var new_len: usize = 0;
             _ = &new_len;
-            for (cp_mut_slice(&st.decls.slice())) |*decl_ptr| {
-                _ = &decl_ptr;
-                const decl = (decl_ptr.*).*;
+            for (cp_iter_slice(st.decls.slice())) |decl| {
+                _ = &decl;
                 const opt_val = (if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value);
                 if ((opt_val == null)) {
                     (st.decls.mut(new_len)).* = decl;

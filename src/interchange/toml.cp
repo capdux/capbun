@@ -146,7 +146,7 @@ const Rope = js_ast.E.Object.Rope;
     }
 
     fn runParser(*_): !Expr {
-        let root = this.e(std.mem.zeroes(E.Object), this.lexer.loc());
+        let root = this.e(std.mem.zeroInit(E.Object, {}), this.lexer.loc());
         let head = root.data.e_object;
 
         let stack = std.heap.stackFallback(@sizeOf(Rope) * 6, this.allocator);
@@ -196,7 +196,7 @@ const Rope = js_ast.E.Object.Rope;
                         }
                         return err_val;
                     };
-                    const new_head = this.e(std.mem.zeroes(E.Object), loc);
+                    const new_head = this.e(std.mem.zeroInit(E.Object, {}), loc);
                     try array.data.e_array.push(this.allocator, new_head);
                     head = new_head.data.e_object;
                     stack.fixed_buffer_allocator.reset();
@@ -295,7 +295,7 @@ const Rope = js_ast.E.Object.Rope;
                 let is_single_line = !this.lexer.has_newline_before;
                 let stack = std.heap.stackFallback(@sizeOf(Rope) * 6, this.allocator);
                 const key_allocator = stack.get();
-                const expr = this.e(std.mem.zeroes(E.Object), loc);
+                const expr = this.e(std.mem.zeroInit(E.Object, {}), loc);
                 const obj = expr.data.e_object;
 
                 while (this.lexer.token != .t_close_brace) {
@@ -325,12 +325,12 @@ const Rope = js_ast.E.Object.Rope;
             .t_empty_array => {
                 try this.lexer.next();
                 this.lexer.allow_double_bracket = true;
-                return this.e(std.mem.zeroes(E.Array), loc);
+                return this.e(std.mem.zeroInit(E.Array, {}), loc);
             },
             .t_open_bracket => {
                 try this.lexer.next();
                 let is_single_line = !this.lexer.has_newline_before;
-                const array_ = this.e(std.mem.zeroes(E.Array), loc);
+                const array_ = this.e(std.mem.zeroInit(E.Array, {}), loc);
                 let array = array_.data.e_array;
                 const allocator = this.allocator;
                 this.lexer.allow_double_bracket = false;

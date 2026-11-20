@@ -443,7 +443,13 @@ export @root struct CompileTarget {
     }
 
     static fn makeDefineValues(comptime os: Environment.OperatingSystem, comptime arch: Environment.Architecture, comptime libc: Libc): []const []const u8 {
-        const plat: string = if (libc == .android) "\"android\"" else "\"" ++ os.nameString() ++ "\"";
+        const plat: string = if (libc == .android) "\"android\"" else switch (os) {
+            .mac => "\"darwin\"",
+            .linux => "\"linux\"",
+            .freebsd => "\"freebsd\"",
+            .windows => "\"win32\"",
+            .wasm => "\"wasm\"",
+        };
         const arch_str: string = switch (arch) {
             .x64 => "\"x64\"",
             .arm64 => "\"arm64\"",

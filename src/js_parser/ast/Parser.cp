@@ -1063,7 +1063,8 @@ pub struct Parser {
                 wrap_mode = .bun_commonjs;
 
                 const import_record: (*const ImportRecord)? = brk: {
-                    for (*import_record of p.import_records.items) {
+                    for (i of 0..p.import_records.items.len) {
+                        const import_record = &p.import_records.items[i];
                         if (import_record.flags.is_internal || import_record.flags.is_unused) continue;
                         if (import_record.kind == .stmt) break :brk import_record;
                     }

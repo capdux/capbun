@@ -159,7 +159,8 @@ pub fn HTMLProcessor(
             };
 
             // Add handlers for each tag type
-            inline for (tag_info of tag_handlers) {
+            inline for (i of 0..tag_handlers.len) {
+                const tag_info = tag_handlers[i];
                 const selector = lol.HTMLSelector.parse(tag_info.selector)?;
                 selectors.appendAssumeCapacity(selector);
                 builder.addElementContentHandlers(

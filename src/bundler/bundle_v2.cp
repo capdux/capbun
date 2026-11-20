@@ -1122,7 +1122,7 @@ pub struct BundleV2 {
                         // Check FileMap first for in-memory entry points
                         if (file_map := _.file_map) {
                             if (file_map_result := file_map.resolve("", entry_point)) {
-                                _.enqueueEntryItem(
+                                * = _.enqueueEntryItem(
                                     file_map_result,
                                     true,
                                     _.transpiler.options.target,
@@ -1135,7 +1135,7 @@ pub struct BundleV2 {
                         const resolved = _.transpiler.resolveEntryPoint(entry_point) catch
                             continue;
 
-                        _.enqueueEntryItem(
+                        * = _.enqueueEntryItem(
                             resolved,
                             true,
                             brk: {
@@ -1154,7 +1154,7 @@ pub struct BundleV2 {
 
                                 break :brk main_target;
                             },
-                        );
+                        )?;
                     }
                 },
                 .dev_server => {

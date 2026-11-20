@@ -697,6 +697,7 @@ pub fn flush(ctx: *BufferWriter) !void {
 pub const OpaquePtr = *anyopaque;
 pub const SourceMapHandlerCallback = *const fn (*anyopaque, SourceMap.Chunk, *const logger.Source) anyerror!void;
 pub const RequireOrImportMetaCallbackFn = *const fn (OpaquePtr, u32, bool) RequireOrImportMeta;
+const U16Slice = []const u16;
 const string = []const u8;
 const hex_chars = "0123456789ABCDEF";
 const empty_comments: [0]G.Comment = &.{};
@@ -2006,6 +2007,7 @@ pub fn printClauseItemAs(p: *Printer, item: js_ast.ClauseItem, comptime @"as": @
 pub fn canPrintIdentifierUTF16(p: *Printer, name: []const u16) bool {
             _ = &p;
             if (comptime (ascii_only or ascii_only_always_on_unless_minifying)) {
+                return js_lexer.isLatin1Identifier(U16Slice, name);
             } else {
                 return js_lexer.isIdentifierUTF16(name);
             }
@@ -2251,7 +2253,8 @@ const has_pure_comment = ((e.can_be_unwrapped_if_unused == .if_unused) and p.opt
             _ = p.addSourceMapping(expr.loc);
             _ = p.print("new");
             _ = p.printSpace();
-            _ = p.printExpr(e.target, .@"new", ExprFlag.ForbidCall);
+            const forbid_call = ExprFlag.ForbidCall;
+            _ = p.printExpr(e.target, .@"new", forbid_call());
             const args = e.args.slice();
             if (((args.len > 0) or level.gte(.postfix))) {
                 _ = p.print("(");
@@ -4670,7 +4673,8 @@ if (((!p.options.minify_whitespace) and (p.options.indent.count > 0))) {
                 _ = p.printIndent();
             }
             p.stmt_start = p.writer.written;
-            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, ExprFlag.ExprResultIsUnused);
+            const result_unused = ExprFlag.ExprResultIsUnused;
+            _ = p.printExpr((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value), .lowest, result_unused());
             _ = p.printSemicolonAfterStatement();
 },
 else => |tag| {
@@ -5440,7 +5444,7 @@ pub fn prevPrevChar(writer: *const Self) u8 {
             return @call(bun.callmod_inline, getLastLastByte, .{ (&writer.ctx) });
     }
 
-pub fn reserve(writer: *Self, count: u64) [*]u8 {
+pub fn reserve(writer: *Self, count: u64) ![*]u8 {
             return try reserveNext((&writer.ctx), count);
     }
 

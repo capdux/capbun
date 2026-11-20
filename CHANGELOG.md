@@ -1800,3 +1800,5 @@
 - **[2026-11-20] Wave 27 C 组 (14 模块)**：更新 `http/AsyncHTTP`, `libarchive/libarchive`, `runtime/{api/{Archive,JSTranspiler,bun/{js_bun_spawn_bindings,process}},server/{ServerConfig,server},socket/UpgradedDuplex,webcore/{blob/copy_file,s3/multipart}}`, `shell/shell`, `string/immutable/unicode`, `watcher/INotifyWatcher`。
 
 - **[2026-11-20] Wave 27 B 组 (16 模块)**：更新 `install/{resolvers/folder_resolver,PackageManager/PackageManagerEnqueue,NetworkTask,TarballStream,dependency,extract_tarball,lockfile/{CatalogMap,Package/WorkspaceMap,bun.lock},npm}`, `jsc/{ModuleLoader,RuntimeTranspilerStore,VirtualMachine}`, `sql/postgres/protocol/DataRow`, `sql_jsc/postgres/{DataCell,PostgresSQLConnection}`。
+
+- **[2026-11-20] Wave 27 A 组 (15 模块)**：更新 `options_types/CompileTarget`, `interchange/toml`, `js_printer/js_printer`, `js_parser/ast/{CharFreq,ConvertESMExportsForHmr,P,Parser,visit}`, `bake/DevServer`, `bundler/{HTMLScanner,analyze_transpiled_module,bundle_v2}`, `cli/test_command`, `sourcemap_jsc/CodeCoverage`, `router/router`。

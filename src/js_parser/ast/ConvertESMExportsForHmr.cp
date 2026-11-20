@@ -54,8 +54,7 @@ pub struct DeduplicatedImportResult {
                     st.is_export = false;
 
                     let new_len: usize = 0;
-                    for (*decl_ptr of st.decls.slice()) {
-                        const decl = decl_ptr.*; // explicit copy to avoid aliasinng
+                    for (decl of st.decls.slice()) {
                         const opt_val = decl.value;
                         if (opt_val == null) {
                             st.decls.mut(new_len).* = decl;

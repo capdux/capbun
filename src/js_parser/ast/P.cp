@@ -4505,7 +4505,9 @@ pub fn NewParser_(
                     // A call that has been marked "__PURE__" can be removed if all arguments
                     // can be removed. The annotation causes us to ignore the target.
                     if (ex.can_be_unwrapped_if_unused != .never) {
-                        for (*arg of ex.args.slice()) {
+                        const args = ex.args.slice();
+                        for (i of 0..args.len) {
+                            const arg = &args[i];
                             if (!(p.exprCanBeRemovedIfUnusedWithoutDCECheck(arg) || (ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe && arg.data.isSafeToString()))) {
                                 return false;
                             }
@@ -4518,7 +4520,9 @@ pub fn NewParser_(
                     // A call that has been marked "__PURE__" can be removed if all arguments
                     // can be removed. The annotation causes us to ignore the target.
                     if (ex.can_be_unwrapped_if_unused != .never) {
-                        for (*arg of ex.args.slice()) {
+                        const args = ex.args.slice();
+                        for (i of 0..args.len) {
+                            const arg = &args[i];
                             if (!(p.exprCanBeRemovedIfUnusedWithoutDCECheck(arg) || (ex.can_be_unwrapped_if_unused == .if_unused_and_toString_safe && arg.data.isSafeToString()))) {
                                 return false;
                             }

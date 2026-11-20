@@ -517,7 +517,8 @@ pub struct ByteRangeMapping {
                 functions.append(allocator, { start_line: min_line, end_line: max_line })?;
                 if (did_fn_execute) functions_which_have_executed.set(@intCast(i));
             }
-        } else if (parsed_mapping := parsed_mappings_) {
+        } else if (parsed_mappings_ != null) {
+            const parsed_mapping = parsed_mappings_.?;
             const input_lc: u32 = @truncate(parsed_mapping.input_line_count);
             line_count = input_lc + 1;
             executable_lines = Bitset.initEmpty(allocator, line_count)?;

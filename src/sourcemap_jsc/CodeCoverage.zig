@@ -535,8 +535,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                     }
                 }
             } else {
-                if ((parsed_mappings_.?)) |parsed_mapping| {
-                    _ = &parsed_mapping;
+                if ((parsed_mappings_ != null)) {
+                    const parsed_mapping = parsed_mappings_.?;
                     const input_lc: u32 = @truncate(parsed_mapping.input_line_count);
                     line_count = (input_lc + 1);
                     executable_lines = try Bitset.initEmpty(allocator, line_count);

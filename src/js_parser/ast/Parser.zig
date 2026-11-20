@@ -720,13 +720,18 @@ break :brk null;
                         if (p.options.features.commonjs_at_runtime) {
                             wrap_mode = .bun_commonjs;
                             const import_record: ?*const ImportRecord = brk: {
-                            for (p.import_records.items) |*import_record| {
-                                _ = &import_record;
-                                if (((import_record.*).flags.is_internal or (import_record.*).flags.is_unused)) {
-                                    continue;
-                                }
-                                if (((import_record.*).kind == .stmt)) {
-                                    break :brk (import_record.*);
+                            {
+                                var i: i32 = 0;
+                                _ = &i;
+                                const __end_11 = p.import_records.items.len;
+                                while (i < __end_11) : (i += 1) {
+                                    const import_record = (&p.import_records.items[@as(usize, @intCast(i))]);
+                                    if ((import_record.flags.is_internal or import_record.flags.is_unused)) {
+                                        continue;
+                                    }
+                                    if ((import_record.kind == .stmt)) {
+                                        break :brk import_record;
+                                    }
                                 }
                             }
                             break :brk null;
