@@ -294,20 +294,32 @@ pub fn visitDecls(p: *P, decls: []G.Decl, was_const: bool, comptime is_possibly_
                         if (((decl.*).binding.data == .b_identifier)) {
                             if (replacement) |ptr| {
                                 _ = &ptr;
-                                if ((!p.replaceDeclAndPossiblyRemove((decl.*), ptr))) {
+                                if ((!p.replaceDeclAndPossiblyRemove((blk: {
+                                break :blk (&(decl.*));
+
+}), ptr))) {
                                     continue;
                                 }
                             }
                         }
                     }
-                    _ = p.visitDecl((decl.*), was_anonymous_named_expr, (was_const and (!p.current_scope.is_after_const_local_prefix)), (if (comptime allow_macros) (prev_macro_call_count != p.macro_call_count) else false));
+                    _ = p.visitDecl((blk: {
+                    break :blk (&(decl.*));
+
+}), was_anonymous_named_expr, (was_const and (!p.current_scope.is_after_const_local_prefix)), (if (comptime allow_macros) (prev_macro_call_count != p.macro_call_count) else false));
                 } else {
                     if (comptime is_possibly_decl_to_remove) {
                         if (((decl.*).binding.data == .b_identifier)) {
                             if (p.options.features.replace_exports.getPtr(p.loadNameFromRef((decl.*).binding.data.b_identifier.ref))) |ptr| {
                                 _ = &ptr;
-                                if ((!p.replaceDeclAndPossiblyRemove((decl.*), ptr))) {
-                                    _ = p.visitDecl((decl.*), (was_const and (!p.current_scope.is_after_const_local_prefix)), false, false);
+                                if ((!p.replaceDeclAndPossiblyRemove((blk: {
+                                break :blk (&(decl.*));
+
+}), ptr))) {
+                                    _ = p.visitDecl((blk: {
+                                    break :blk (&(decl.*));
+
+}), (was_const and (!p.current_scope.is_after_const_local_prefix)), false, false);
                                 } else {
                                     continue;
                                 }
@@ -315,7 +327,7 @@ pub fn visitDecls(p: *P, decls: []G.Decl, was_const: bool, comptime is_possibly_
                         }
                     }
                 }
-                out_decls[cp_cast_int(usize, j)] = (decl.*).*;
+                out_decls[cp_cast_int(usize, j)] = (decl.*);
                 j = (j + 1);
             }
             return j;

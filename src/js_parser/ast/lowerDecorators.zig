@@ -862,10 +862,8 @@ pub fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
             }
             var prop_dec_refs: std.AutoHashMapUnmanaged(usize,Ref) = .{};
             _ = &prop_dec_refs;
-            var computed_key_refs = std.AutoHashMapUnmanaged(usize, Ref);
+            var computed_key_refs: std.AutoHashMapUnmanaged(usize,Ref) = .{};
             _ = &computed_key_refs;
-            {
-            }
             var pre_eval_stmts = ListManaged(Stmt).init(p.allocator);
             _ = &pre_eval_stmts;
             var computed_key_counter: usize = 0;

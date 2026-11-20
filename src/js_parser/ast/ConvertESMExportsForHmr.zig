@@ -241,7 +241,7 @@ new_stmt = stmt;
         _ = try self.stmts.append(p.allocator, new_stmt);
 }
 
-pub fn deduplicatedImport(self: *ConvertESMExportsForHmr, p: anytype, import_record_index: u32, namespace_ref: Ref, items: []js_ast.ClauseItem, star_name_loc: ?logger.Loc, default_name: ?js_ast.LocRef, loc: logger.Loc) DeduplicatedImportResult!void {
+pub fn deduplicatedImport(self: *ConvertESMExportsForHmr, p: anytype, import_record_index: u32, namespace_ref: Ref, items: []js_ast.ClauseItem, star_name_loc: ?logger.Loc, default_name: ?js_ast.LocRef, loc: logger.Loc) !DeduplicatedImportResult {
         const ir = (&p.import_records.items[@as(usize, @intCast(import_record_index))]);
         const gop = try self.imports_seen.getOrPut(p.allocator, ir.path.text);
         if (gop.found_existing) {

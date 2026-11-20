@@ -190,7 +190,7 @@ pub fn AstMaybe(
                                             .e_commonjs_export_identifier, .e_import_identifier, .e_identifier => false,
                                             .e_call => |call| switch (call.target.data) {
                                                 .e_commonjs_export_identifier, .e_import_identifier, .e_identifier => false,
-                                                else => !@as(Expr.Tag, call.target.data).isPrimitiveLiteral(),
+                                                else => !std.meta.activeTag(call.target.data).isPrimitiveLiteral(),
                                             },
                                             else => !prop.value.?.isPrimitiveLiteral(),
                                         })

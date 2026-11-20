@@ -901,7 +901,7 @@ fn VisitExprVisitors(
                 // was not a call target. even if the call target is `require.resolve`, it should be set.
                 return {
                     data: {
-                        e_require_resolve_call_target: {},
+                        e_require_resolve_call_target: undefined,
                     },
                     loc: expr.loc,
                 };
@@ -1050,11 +1050,11 @@ fn VisitExprVisitors(
                                 );
                             }
                         } else {
-                            item.* = p.visitExprInOut(item.*, ExprIn{ assign_target: expr_in.assign_target });
+                            item = p.visitExprInOut(item, ExprIn{ assign_target: expr_in.assign_target });
                         }
                     },
                     else => {
-                        item.* = p.visitExprInOut(item.*, ExprIn{ assign_target: expr_in.assign_target });
+                        item = p.visitExprInOut(item, ExprIn{ assign_target: expr_in.assign_target });
                     },
                 }
             }
@@ -1773,7 +1773,8 @@ fn VisitExprVisitors(
     };
 }
 
-let jsxChildrenKeyData = Expr.Data{ e_string: &Prefill.String.Children };
+const children_prefill = Prefill.String.Children;
+let jsxChildrenKeyData = Expr.Data{ e_string: &children_prefill };
 
 type string = []const u8;
 

@@ -1488,7 +1488,7 @@ for (cp_mut_slice(&e.items.slice())) |*item| {
                 return .{ .success = expr };
 },
 .failure => |result| {
-(item.*).* = result;
+(item.*) = result;
                 return .{ .failure = expr };
 },
 }
@@ -4225,7 +4225,7 @@ pub fn rewriteImportMetaHotAcceptString(p: *P, str: *E.String, loc: logger.Loc) 
                 return null;
             }
             const import_record_index = found_idx.?;
-            return .{ .e_special = .{ .resolved_specifier_string = .init((if (comptime @typeInfo(@TypeOf(import_record_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(import_record_index)) else cp_cast_int(i32, import_record_index))) } };
+            return .{ .e_special = .{ .resolved_specifier_string = .init(@intCast(import_record_index)) } };
     }
 
 pub fn handleReactRefreshRegister(p: *P, stmts: *ListManaged(Stmt), original_name: []const u8, sym_ref: Ref, export_kind: ReactRefreshExportKind) !void {

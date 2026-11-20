@@ -634,7 +634,7 @@ pub fn LowerDecorators(
             }
 
             let prop_dec_refs: std.AutoHashMapUnmanaged(usize, Ref) = .{};
-            let computed_key_refs = std.AutoHashMapUnmanaged(usize, Ref){};
+            let computed_key_refs: std.AutoHashMapUnmanaged(usize, Ref) = {};
             let pre_eval_stmts = ListManaged(Stmt).init(p.allocator);
             let computed_key_counter: usize = 0;
 

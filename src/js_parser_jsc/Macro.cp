@@ -516,7 +516,7 @@ export struct Runner {
         if (comptime Environment.isDebug) Output.prettyln("<r><d>[macro]<r> call <d><b>{s}<r>", .{function_name});
 
         exception_holder = jsc.ZigException.Holder.init();
-        let empty_js_args: [0]jsc.JSValue = [];
+        let empty_js_args: [0]jsc.JSValue = undefined;
         let js_args: []jsc.JSValue = empty_js_args[0..0];
         let js_processed_args_len: usize = 0;
         defer {

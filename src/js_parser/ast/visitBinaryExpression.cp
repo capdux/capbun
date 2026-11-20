@@ -276,7 +276,7 @@ pub fn CreateBinaryExpressionVisitor(
                         // TODO: warn about typeof string
 
                         // "x != void 0" => "x != null"
-                        if (@as(Expr.Tag, e_.right.data) == .e_undefined) {
+                        if (std.meta.activeTag(e_.right.data) == .e_undefined) {
                             e_.right = p.newExpr(E.Null{}, e_.right.loc);
                         }
                     },

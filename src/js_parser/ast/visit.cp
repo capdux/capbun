@@ -236,7 +236,7 @@ pub fn Visit(
                     if (comptime is_possibly_decl_to_remove) {
                         if (decl.binding.data == .b_identifier) {
                             if (ptr := replacement) {
-                                if (!p.replaceDeclAndPossiblyRemove(decl, ptr)) {
+                                if (!p.replaceDeclAndPossiblyRemove(unsafe { &decl }, ptr)) {
                                     continue;
                                 }
                             }
@@ -244,7 +244,7 @@ pub fn Visit(
                     }
 
                     p.visitDecl(
-                        decl,
+                        unsafe { &decl },
                         was_anonymous_named_expr,
                         was_const && !p.current_scope.is_after_const_local_prefix,
                         if (comptime allow_macros)
@@ -255,9 +255,9 @@ pub fn Visit(
                 } else if (comptime is_possibly_decl_to_remove) {
                     if (decl.binding.data == .b_identifier) {
                         if (ptr := p.options.features.replace_exports.getPtr(p.loadNameFromRef(decl.binding.data.b_identifier.ref))) {
-                            if (!p.replaceDeclAndPossiblyRemove(decl, ptr)) {
+                            if (!p.replaceDeclAndPossiblyRemove(unsafe { &decl }, ptr)) {
                                 p.visitDecl(
-                                    decl,
+                                    unsafe { &decl },
                                     was_const && !p.current_scope.is_after_const_local_prefix,
                                     false,
                                     false,
@@ -269,7 +269,7 @@ pub fn Visit(
                     }
                 }
 
-                out_decls[j] = decl.*;
+                out_decls[j] = decl;
                 j += 1;
             }
 

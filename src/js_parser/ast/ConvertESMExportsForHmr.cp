@@ -322,7 +322,7 @@ pub struct DeduplicatedImportResult {
         star_name_loc: logger.Loc?,
         default_name: js_ast.LocRef?,
         loc: logger.Loc,
-    )!DeduplicatedImportResult {
+    ): DeduplicatedImportResult! {
         const ir = &p.import_records.items[import_record_index];
         const gop = _.imports_seen.getOrPut(p.allocator, ir.path.text)?;
         if (gop.found_existing) {

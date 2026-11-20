@@ -421,7 +421,7 @@ pub fn run(m: Macro, log: *logger.Log, allocator: std.mem.Allocator, function_na
                 _ = Output.prettyln("<r><d>[macro]<r> call <d><b>{s}<r>", .{ function_name });
             }
             exception_holder = jsc.ZigException.Holder.init();
-            var empty_js_args: [0]jsc.JSValue = &.{};
+            var empty_js_args: [0]jsc.JSValue = undefined;
             _ = &empty_js_args;
             var js_args: []jsc.JSValue = empty_js_args[0..0];
             _ = &js_args;

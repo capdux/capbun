@@ -181,7 +181,7 @@ if (p.options.bundle) {
 .e_commonjs_export_identifier, .e_import_identifier, .e_identifier => false,
 .e_call => |call| (switch (call.target.data) {
 .e_commonjs_export_identifier, .e_import_identifier, .e_identifier => false,
-else => (!(if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(call.target.data)) else @as(Expr.Tag, call.target.data)).isPrimitiveLiteral()),
+else => (!std.meta.activeTag(call.target.data).isPrimitiveLiteral()),
 }),
 else => (!(if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.isPrimitiveLiteral()),
 }))) {

@@ -259,7 +259,7 @@ pub fn tryOptimizeTypeofUndefined(e_: *E.Binary, p: *P, replacement_op: js_ast.O
                         return optimized;
                     }
                 }
-                if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(e_.right.data)) else @as(Expr.Tag, e_.right.data)) == .e_undefined)) {
+                if ((std.meta.activeTag(e_.right.data) == .e_undefined)) {
                     e_.right = p.newExpr(E.Null, e_.right.loc);
                 }
     },

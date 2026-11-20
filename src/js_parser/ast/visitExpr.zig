@@ -70,7 +70,8 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 const string = []const u8;
-var jsxChildrenKeyData = Expr.Data{ .e_string = *const Prefill.String.Children };
+const children_prefill = Prefill.String.Children;
+var jsxChildrenKeyData = Expr.Data{ .e_string = (&children_prefill) };
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;
@@ -710,7 +711,7 @@ pub fn e_dot(p: *P, expr: Expr, expr_in: ExprIn) Expr {
             }
             e_.target = p.visitExprInOut(e_.target, .{ .property_access_for_method_call_maybe_should_replace_with_undefined = expr_in.property_access_for_method_call_maybe_should_replace_with_undefined });
             if (((e_.target.data == .e_require_call_target) and strings.eqlComptime((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), "resolve"))) {
-                return .{ .data = .{ .e_require_resolve_call_target = .{} }, .loc = expr.loc };
+                return .{ .data = .{ .e_require_resolve_call_target = undefined }, .loc = expr.loc };
             }
             if ((e_.optional_chain == null)) {
                 if (p.maybeRewritePropertyAccess(expr.loc, e_.target, (if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), e_.name_loc, .{ .is_call_target = is_call_target, .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target })) |_expr| {
@@ -825,11 +826,11 @@ if (((expr_in.assign_target != .none) and (e2.op == .bin_assign))) {
                         e2.right = p.maybeKeepExprSymbolName(e2.right, p.symbols.items[@as(usize, @intCast(e2.left.data.e_identifier.ref.innerIndex()))].original_name, was_anonymous_named_expr);
                     }
                 } else {
-                    (item.*).* = p.visitExprInOut((item.*).*, ExprIn{ .assign_target = expr_in.assign_target });
+                    (item.*) = p.visitExprInOut((item.*), ExprIn{ .assign_target = expr_in.assign_target });
                 }
 },
 else => {
-(item.*).* = p.visitExprInOut((item.*).*, ExprIn{ .assign_target = expr_in.assign_target });
+(item.*) = p.visitExprInOut((item.*), ExprIn{ .assign_target = expr_in.assign_target });
 },
 }
             }

@@ -1432,7 +1432,7 @@ else => std.meta.activeTag(right).isPrimitiveLiteral(),
 else => false,
 }), .ok = ok };
             }
-            return .{ .equal = (@as(Tag, @enumFromInt(right)) == @as(Tag, @enumFromInt(left))), .ok = ok };
+            return .{ .equal = (std.meta.activeTag(right) == std.meta.activeTag(left)), .ok = ok };
 },
 .e_boolean, .e_branch_boolean => |l| {
 switch (right) {
@@ -2444,6 +2444,9 @@ _ = @compileError(("Invalid type passed to Expr.init: " ++ @typeName(Type)));
 }
 
 pub fn init(comptime Type: type, st: Type, loc: logger.Loc) Expr {
+        if (comptime (Type == @TypeOf(Expr))) {
+            return init(st, std.mem.zeroes(st), loc);
+        }
         icount = (icount + 1);
         _ = Data.Store.assert();
         if (Type == E.NameOfSymbol) {

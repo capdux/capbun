@@ -63,13 +63,13 @@ pub union(Binding.Tag) B {
     /// This hash function is currently only used for React Fast Refresh transform.
     /// This doesn't include the `is_single_line` properties, as they only affect whitespace.
     fn writeToHasher(hasher: auto, symbol_table: auto) {
-        switch (_) {
+        switch (_.*) {
             .b_identifier => |id| {
                 const original_name = id.ref.getSymbol(symbol_table).original_name;
-                writeAnyToHasher(hasher, .{ std.meta.activeTag(_), original_name.len });
+                writeAnyToHasher(hasher, .{ std.meta.activeTag(_.*), original_name.len });
             },
             .b_array => |array| {
-                writeAnyToHasher(hasher, .{ std.meta.activeTag(_), array.has_spread, array.items.len });
+                writeAnyToHasher(hasher, .{ std.meta.activeTag(_.*), array.has_spread, array.items.len });
                 for (item of array.items) {
                     writeAnyToHasher(hasher, .{ item.default_value != null });
                     if (default := item.default_value) {
@@ -79,7 +79,7 @@ pub union(Binding.Tag) B {
                 }
             },
             .b_object => |object| {
-                writeAnyToHasher(hasher, .{ std.meta.activeTag(_), object.properties.len });
+                writeAnyToHasher(hasher, .{ std.meta.activeTag(_.*), object.properties.len });
                 for (property of object.properties) {
                     writeAnyToHasher(hasher, .{ property.default_value != null, property.flags });
                     if (default := property.default_value) {

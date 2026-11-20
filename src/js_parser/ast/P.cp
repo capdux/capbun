@@ -2312,7 +2312,7 @@ pub fn NewParser_(
                                     return { success: expr };
                                 },
                                 .failure => |result| {
-                                    item.* = result;
+                                    item = result;
                                     return { failure: expr };
                                 },
                             }
@@ -6229,7 +6229,7 @@ pub fn NewParser_(
             const import_record_index = found_idx.?;
 
             return { e_special: {
-                resolved_specifier_string: .init(i32(import_record_index)),
+                resolved_specifier_string: .init(@intCast(import_record_index)),
             } };
         }
 
