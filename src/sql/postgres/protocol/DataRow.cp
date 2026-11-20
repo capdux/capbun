@@ -14,12 +14,15 @@ pub fn decode(context: anytype, comptime ContextType: type, reader: NewReader(Co
         const byte_length = reader.int4()?;
         if (byte_length == 0) {
             let empty = Data.Empty;
-            if (!forEach(context, @intCast(index), &empty)?) break;
+            const keep_going = forEach(context, @intCast(index), &empty)?;
+            if (!keep_going) break;
         } else if (byte_length == null_int4) {
-            if (!forEach(context, @intCast(index), null)?) break;
+            const keep_going = forEach(context, @intCast(index), null)?;
+            if (!keep_going) break;
         } else {
             let bytes = reader.bytes(@intCast(byte_length))?;
-            if (!forEach(context, @intCast(index), &bytes)?) break;
+            const keep_going = forEach(context, @intCast(index), &bytes)?;
+            if (!keep_going) break;
         }
     }
 }

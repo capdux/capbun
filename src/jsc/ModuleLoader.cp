@@ -1046,7 +1046,7 @@ pub export fn Bun__transpileFile(
                 {
                     @branchHint(.unlikely);
                     if (entry := node_module_module.findLongestRegisteredExtension(jsc_vm, lr.path.text)) {
-                        switch (unsafe { entry.* }) {
+                        switch (entry) {
                             .loader loader => break :loader loader,
                             .custom strong => {
                                 ret.* = jsc.ErrorableResolvedSource.ok(ResolvedSource{

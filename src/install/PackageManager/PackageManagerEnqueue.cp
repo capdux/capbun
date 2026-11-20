@@ -1925,7 +1925,7 @@ fn getOrPutResolvedPackage(
                 // transitive folder dependencies do not have their dependencies resolved
                 let name_slice = mgr.lockfile.str(&name);
                 let folder_path = mgr.lockfile.str(&version.value.folder);
-                let package = Lockfile.Package{};
+                let package: Lockfile.Package = {};
 
                 {
                     // only need name and path

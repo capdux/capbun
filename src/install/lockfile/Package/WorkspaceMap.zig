@@ -265,7 +265,8 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
                 defer {
                 _ = iter.deinit();
                 }
-                if (try iter.init().asErr()) |err_opt| {
+                const iter_res = try iter.init();
+                if (iter_res.asErr()) |err_opt| {
                     _ = &err_opt;
                     const e = err_opt;
                     _ = (blk_catch_7: { break :blk_catch_7 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_7| { _ = &__ce_7;  }); });

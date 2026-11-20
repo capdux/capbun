@@ -775,7 +775,7 @@ static fn cloneWithDifferentBuffers(client: *const Dependency, package_manager: 
             &sliced,
             null,
             package_manager,
-        ) ?? Dependency.Version{},
+        ) ?? Dependency.Version.zeroed,
         behavior: client.behavior,
     };
 }

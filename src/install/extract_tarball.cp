@@ -124,32 +124,28 @@ const DirnameReader = struct {
         const default_format = "{s}/{s}/-/";
 
         if (!version.tag.hasPre() && !version.tag.hasBuild()) {
-            const args = .{ registry, full_name, name, version.major, version.minor, version.patch };
             return print(
                 printer,
                 default_format ++ "{s}-{d}.{d}.{d}.tgz",
-                args,
+                .{ registry, full_name, name, version.major, version.minor, version.patch },
             )?;
         } else if (version.tag.hasPre() && version.tag.hasBuild()) {
-            const args = .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf), version.tag.build.slice(string_buf) };
             return print(
                 printer,
                 default_format ++ "{s}-{d}.{d}.{d}-{s}+{s}.tgz",
-                args,
+                .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf), version.tag.build.slice(string_buf) },
             )?;
         } else if (version.tag.hasPre()) {
-            const args = .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf) };
             return print(
                 printer,
                 default_format ++ "{s}-{d}.{d}.{d}-{s}.tgz",
-                args,
+                .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf) },
             )?;
         } else if (version.tag.hasBuild()) {
-            const args = .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.build.slice(string_buf) };
             return print(
                 printer,
                 default_format ++ "{s}-{d}.{d}.{d}+{s}.tgz",
-                args,
+                .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.build.slice(string_buf) },
             )?;
         } else {
             unreachable;
@@ -224,7 +220,8 @@ const DirnameReader = struct {
         const Zlib = @import("../zlib/zlib.zig");
         let zlib_pool = Npm.Registry.BodyPool.get(default_allocator);
         zlib_pool.data.reset();
-        defer Npm.Registry.BodyPool.release(zlib_pool);
+        const release_pool = Npm.Registry.BodyPool.release;
+        defer release_pool(zlib_pool);
 
         let esimated_output_size: usize = 0;
 

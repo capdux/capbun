@@ -1810,7 +1810,7 @@ if ((self.authentication_state != .SASL)) {
 .Ok => {
 _ = debug("Authentication OK", .{});
         _ = self.authentication_state.zero();
-        self.authentication_state = .{ .ok = .{} };
+        self.authentication_state = .ok;
 },
 .Unknown => {
 _ = self.fail("Unknown authentication method", error.UNKNOWN_AUTHENTICATION_METHOD);

@@ -1145,7 +1145,7 @@ const res: FolderResolution = res: {
         _ = &name_slice;
         var folder_path = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).folder));
         _ = &folder_path;
-        var package = Lockfile.Package;
+        var package: Lockfile.Package = .{};
         _ = &package;
         {
             var builder = mgr.lockfile.stringBuilder();

@@ -3204,3 +3204,5 @@ Options:
 - **[2026-11-20 23:40] Wave 26 E 组验收提交（4 根因全绿，Wave 26 清仓）**：完成 `AsyncHTTP`（`.{}`）、`toml`/`parsePrefix`（`std.mem.zeroes(...)`）与 `immutable.NewGlobLengthSorter.lessThan`（`static fn`）独立验收（4/4 PASS）并原子提交；随即运行 Wave 27 全仓 `bun run zig:check`。
 
 - **[2026-11-20 23:43] Wave 27 C 组验收提交（14 模块全绿）**：完成 Runtime/HTTP/Libarchive/Shell/String/Watcher 14 模块独立验收（14/14 PASS，ratio 0.644x~1.022x）并原子提交；静待 A/B 组完成。
+
+- **[2026-11-20 23:44] Wave 27 B 组验收提交（16 模块全绿）**：完成 Install/JSC/SQL 16 模块独立验收（16/16 PASS，4 项门禁全绿，ratio 0.891x~1.102x）并原子提交；静待 A 组（`ba0433cd`）完成。

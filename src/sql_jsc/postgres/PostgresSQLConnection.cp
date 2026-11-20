@@ -1805,7 +1805,7 @@ export struct SocketHandlerSSL {
                     .Ok => {
                         debug("Authentication OK", .{});
                         this.authentication_state.zero();
-                        this.authentication_state = { ok: {} };
+                        this.authentication_state = .ok;
                     },
                     .Unknown => {
                         this.fail("Unknown authentication method", error.UNKNOWN_AUTHENTICATION_METHOD);

@@ -286,7 +286,8 @@ pub fn processNamesArray(
                 walker: &walker,
             };
             defer iter.deinit();
-            if (err_opt := (iter.init()?).asErr()) {
+            const iter_res = iter.init()?;
+            if (err_opt := iter_res.asErr()) {
                 const e = err_opt;
                 log.addErrorFmt(
                     source,

@@ -96,10 +96,7 @@ pub fn get(self: CatalogMap, lockfile: *const Lockfile, catalog_name: String, de
 
 pub fn getOrPutGroup(self: *CatalogMap, lockfile: *Lockfile, catalog_name: String) OOM!*Map {
         if (catalog_name.isEmpty()) {
-            return (blk: {
-            break :blk self.default;
-
-});
+            return (&@field(self, "default"));
         }
         const entry = try self.groups.getOrPutContext(lockfile.allocator, catalog_name, String.arrayHashContext(lockfile, null));
         if ((!entry.found_existing)) {
@@ -108,12 +105,9 @@ pub fn getOrPutGroup(self: *CatalogMap, lockfile: *Lockfile, catalog_name: Strin
         return entry.value_ptr;
 }
 
-pub fn getGroup(self: CatalogMap, map_buf: []const u8, catalog_name: String, catalog_name_buf: []const u8) ?*Map {
+pub fn getGroup(self: *CatalogMap, map_buf: []const u8, catalog_name: String, catalog_name_buf: []const u8) ?*Map {
         if (catalog_name.isEmpty()) {
-            return (blk: {
-            break :blk self.default;
-
-});
+            return (&@field(self, "default"));
         }
         return self.groups.getPtrContext(catalog_name, String.ArrayHashContext{ .arg_buf = catalog_name_buf, .existing_buf = map_buf });
 }

@@ -1219,7 +1219,7 @@ pub struct PackageManifest {
                 pub const new = bun.TrivialNew(@This());
 
                 static fn run(task: *bun.ThreadPool.Task) {
-                    const tracer = bun.perf.trace("PackageManifest.Serializer.save");
+                    let tracer = bun.perf.trace("PackageManifest.Serializer.save");
                     defer tracer.end();
 
                     const save_task: *@This() = @fieldParentPtr("task", task);

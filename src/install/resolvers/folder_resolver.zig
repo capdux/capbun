@@ -332,10 +332,11 @@ pub fn hash(normalized_path: []const u8) u64 {
 pub fn readPackageJSONFromDisk(manager: *PackageManager, abs: stringZ, version: Dependency.Version, comptime features: Features, comptime ResolverType: type, resolver: *ResolverType) !Lockfile.Package {
         var body = Npm.Registry.BodyPool.get(manager.allocator);
         _ = &body;
+        const release_pool = Npm.Registry.BodyPool.release;
         defer {
-        _ = (if (comptime @typeInfo(@TypeOf(Npm.Registry.BodyPool)) == .pointer) (Npm.Registry.BodyPool) else &(Npm.Registry.BodyPool)).release();
+        _ = release_pool(body);
         }
-        var package = Lockfile.Package;
+        var package: Lockfile.Package = .{};
         _ = &package;
         if (comptime (ResolverType == WorkspaceResolver)) {
             const tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.workspace");

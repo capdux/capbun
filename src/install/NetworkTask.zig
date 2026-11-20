@@ -299,8 +299,7 @@ pub fn forTarball(self: *NetworkTask, allocator: std.mem.Allocator, tarball_: *c
             self.url_buf = tarball_url;
         }
         if ((!(strings.hasPrefixComptime(self.url_buf, "https://") or strings.hasPrefixComptime(self.url_buf, "http://")))) {
-            const msg: __CpObj_fmt___const_u8_args___bun_fmt_QuotedFormatter = .{ .fmt = "Expected tarball URL to start with https:// or http://, got {f} while fetching package {f}", .args = .{ bun.fmt.QuotedFormatter{ .text = self.url_buf }, bun.fmt.QuotedFormatter{ .text = (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice() } } };
-            _ = try self.package_manager.log.addErrorFmt(null, .{}, allocator, msg.fmt, msg.args);
+            _ = try self.package_manager.log.addErrorFmt(null, .{}, allocator, "Expected tarball URL to start with https:// or http://, got {f} while fetching package {f}", .{ bun.fmt.QuotedFormatter{ .text = self.url_buf }, bun.fmt.QuotedFormatter{ .text = (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice() } });
             return error.InvalidURL;
         }
         self.response_buffer = MutableString.initEmpty(allocator);
@@ -413,4 +412,3 @@ pub fn countAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scop
             }
         }
 }
-pub const __CpObj_fmt___const_u8_args___bun_fmt_QuotedFormatter = struct { fmt: []const u8, args: []bun.fmt.QuotedFormatter };

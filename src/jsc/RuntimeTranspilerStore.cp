@@ -616,7 +616,7 @@ pub struct RuntimeTranspilerStore {
             .promise = .create(JSValue.fromCell(promise), globalObject),
             .poll_ref = .{},
             .fetcher = TranspilerJobInternal.Fetcher{
-                .file = {},
+                .file = undefined,
             },
             .resolved_source = resolved_source,
             .generation_number = _.generation_number.load(.seq_cst),

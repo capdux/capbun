@@ -1480,8 +1480,8 @@ pub fn parseIntoBinaryLockfile(
             source,
             &optional_peers_buf,
             false,
-            {},
-            {},
+            undefined,
+            undefined,
             true,
             &workspaces_obj,
         );

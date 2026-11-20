@@ -1846,7 +1846,8 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
         task: bun.ThreadPool.Task = .{ .callback = (&run) },
     
     pub fn run(task: *bun.ThreadPool.Task) void {
-                const tracer = bun.perf.trace("PackageManifest.Serializer.save");
+                var tracer = bun.perf.trace("PackageManifest.Serializer.save");
+                _ = &tracer;
                 defer {
                 _ = tracer.end();
                 }

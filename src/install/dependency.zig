@@ -706,7 +706,7 @@ pub fn cloneWithDifferentBuffers(client: *const Dependency, package_manager: *Pa
         const sliced = new_literal.sliced(out_slice);
         const slice_fn = String.slice;
         const new_name = builder.append(String, slice_fn((&client.name), name_buf));
-        return Dependency{ .name_hash = client.name_hash, .name = new_name, .version = ((Dependency.parseWithTag(builder.lockfile.allocator, new_name, String.Builder.stringHash(new_name.slice(out_slice)), new_literal.slice(out_slice), client.version.tag, (&sliced), null, package_manager)) orelse (Dependency.Version)), .behavior = client.behavior };
+        return Dependency{ .name_hash = client.name_hash, .name = new_name, .version = ((Dependency.parseWithTag(builder.lockfile.allocator, new_name, String.Builder.stringHash(new_name.slice(out_slice)), new_literal.slice(out_slice), client.version.tag, (&sliced), null, package_manager)) orelse (Dependency.Version.zeroed)), .behavior = client.behavior };
 }
 
 pub fn realname(client: *const Dependency) String {

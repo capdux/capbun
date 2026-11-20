@@ -1190,7 +1190,7 @@ else => {
                 return error.InvalidWorkspaceObject;
 }); }
             }
-            const _tmp_v25 = try parseAppendDependencies(lockfile, allocator, (&root_pkg_exr), (&string_buf), log, source, (&optional_peers_buf), false, .{}, .{}, true, (&workspaces_obj));
+            const _tmp_v25 = try parseAppendDependencies(lockfile, allocator, (&root_pkg_exr), (&string_buf), log, source, (&optional_peers_buf), false, undefined, undefined, true, (&workspaces_obj));
             var off = cp_unpack_elem(_tmp_v25, 0);
             _ = &off;
             var len = cp_unpack_elem(_tmp_v25, 1);

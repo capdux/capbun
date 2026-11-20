@@ -77,7 +77,7 @@ pub const protocol = @import("../../sql/postgres/PostgresProtocol.zig");
 pub const DataMod = @import("../../sql/shared/Data.zig");
 pub const SQLQueryResultModeMod = @import("../../sql/shared/SQLQueryResultMode.zig");
 pub const pg_types = @import("../../sql/postgres/PostgresTypes.zig");
-pub const PGNummericString = union {
+pub const PGNummericString = union(enum) {
     static: []const u8,
     dynamic: []const u8,
 
@@ -113,7 +113,7 @@ pub fn toJS(self: *Putter, globalObject: *jsc.JSGlobalObject, array: JSValue, st
             return SQLDataCell.constructObjectFromDataCell(globalObject, array, structure, self.list.ptr, @truncate(self.fields.len), flags, @intFromEnum(result_mode), names, names_count);
     }
 
-pub fn putImpl(self: *Putter, index: u32, optional_bytes: ?*Data, comptime is_raw: bool) !bool {
+pub fn putImpl(self: *Putter, index: u32, optional_bytes: ?*Data, comptime is_raw: bool) AnyPostgresError!bool {
             if ((index >= self.fields.len)) {
                 _ = debug("putImpl: index {d} >= fields.len {d}, ignoring extra field", .{ index, self.fields.len });
                 return false;
@@ -153,11 +153,11 @@ else => @intCast(index),
             return true;
     }
 
-pub fn putRaw(self: *Putter, index: u32, optional_bytes: ?*Data) !bool {
+pub fn putRaw(self: *Putter, index: u32, optional_bytes: ?*Data) AnyPostgresError!bool {
             return self.putImpl(index, optional_bytes, true);
     }
 
-pub fn put(self: *Putter, index: u32, optional_bytes: ?*Data) !bool {
+pub fn put(self: *Putter, index: u32, optional_bytes: ?*Data) AnyPostgresError!bool {
             return self.putImpl(index, optional_bytes, false);
     }
 };
@@ -288,7 +288,7 @@ pub fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObjec
         _ = &pos;
         var reached_end = false;
         _ = &reached_end;
-        const separator = (switch (arrayType) {
+        const separator: u8 = (switch (arrayType) {
 .box_array => 59,
 else => 44,
 });

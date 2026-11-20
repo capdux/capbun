@@ -203,9 +203,10 @@ fn readPackageJSONFromDisk(
     resolver: *ResolverType,
 ): !Lockfile.Package {
     let body = Npm.Registry.BodyPool.get(manager.allocator);
-    defer Npm.Registry.BodyPool.release(body);
+    const release_pool = Npm.Registry.BodyPool.release;
+    defer release_pool(body);
 
-    let package = Lockfile.Package{};
+    let package: Lockfile.Package = {};
 
     if (comptime ResolverType == WorkspaceResolver) {
         const tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.workspace");

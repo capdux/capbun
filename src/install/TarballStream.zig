@@ -438,8 +438,7 @@ client.phase = .done;
 _ = try client.beginEntry(entry_arr[0]);
 },
 .failed, .fatal => {
-const hdr_err: struct { *anyopaque } = .{ archive.errorString() };
-            _ = log("readNextHeader: {s}", hdr_err);
+_ = log("readNextHeader: {s}", .{ archive.errorString() });
             return error.Fail;
 },
 }
@@ -672,7 +671,7 @@ pub fn makeDirectory(entry: *lib.Archive.Entry, dest_fd: bun.FD, path: [:0]bun.O
         if (comptime Environment.isWindows) {
             _ = (blk_catch_6: { break :blk_catch_6 ((dest_fd.makePath(u16, path)) catch |__ce_6| { _ = &__ce_6;  }); });
         } else {
-            switch (bun.sys.mkdiratZ(dest_fd, path, (if (comptime @typeInfo(@TypeOf(mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(mode)) else cp_cast_int(i32, mode)))) {
+            switch (bun.sys.mkdiratZ(dest_fd, path, @intCast(mode))) {
 .result => {
 
 },

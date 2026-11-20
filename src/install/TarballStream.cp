@@ -352,8 +352,7 @@ fn step(client: *TarballStream)! {
                     },
                     .ok, .warn => client.beginEntry(entry_arr[0])?,
                     .failed, .fatal => {
-                        const hdr_err = .{ archive.errorString() };
-                        log("readNextHeader: {s}", hdr_err);
+                        log("readNextHeader: {s}", .{ archive.errorString() });
                         return error.Fail;
                     },
                 }
@@ -622,7 +621,7 @@ fn makeDirectory(
     if (comptime Environment.isWindows) {
         dest_fd.makePath(u16, path) catch {};
     } else {
-        switch (bun.sys.mkdiratZ(dest_fd, path, i32(mode))) {
+        switch (bun.sys.mkdiratZ(dest_fd, path, @intCast(mode))) {
             .result => {},
             .err => |e| switch (e.getErrno()) {
                 .EXIST, .NOTDIR => {},

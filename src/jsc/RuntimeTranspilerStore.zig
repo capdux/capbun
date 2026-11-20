@@ -442,7 +442,7 @@ resolved_source.tag = .package_json_type_module;
 },
 }
             }
-            job.* = TranspilerJobInternal{ .non_threadsafe_input_specifier = input_specifier, .path = owned_path, .globalThis = globalObject, .non_threadsafe_referrer = referrer, .vm = vm, .log = logger.Log.init(bun.default_allocator), .loader = loader, .promise = .create(JSValue.fromCell(promise), globalObject), .poll_ref = .{}, .fetcher = TranspilerJobInternal.Fetcher{ .file = .{} }, .resolved_source = resolved_source, .generation_number = self.generation_number.load(.seq_cst) };
+            job.* = TranspilerJobInternal{ .non_threadsafe_input_specifier = input_specifier, .path = owned_path, .globalThis = globalObject, .non_threadsafe_referrer = referrer, .vm = vm, .log = logger.Log.init(bun.default_allocator), .loader = loader, .promise = .create(JSValue.fromCell(promise), globalObject), .poll_ref = .{}, .fetcher = TranspilerJobInternal.Fetcher{ .file = undefined }, .resolved_source = resolved_source, .generation_number = self.generation_number.load(.seq_cst) };
             if (comptime Environment.allow_assert) {
                 _ = debug("transpile({s}, {s}, async)", .{ path.text, @tagName(job.loader) });
             }

@@ -108,7 +108,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
     }
     let pos: usize = 1;
     let reached_end = false;
-    const separator = switch (arrayType) {
+    const separator: u8 = switch (arrayType) {
         .box_array => ';',
         else => ',',
     };
@@ -692,7 +692,7 @@ fn pg_ntoh32(x: u32): u32 {
     return @byteSwap(x);
 }
 
-union PGNummericString {
+union(enum) PGNummericString {
     static: []const u8,
     dynamic: []const u8,
 
@@ -868,7 +868,7 @@ export struct Putter {
         );
     }
 
-    fn putImpl(*_, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool): bool! {
+    fn putImpl(*_, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool): AnyPostgresError!bool {
         if (index >= this.fields.len) {
             debug("putImpl: index {d} >= fields.len {d}, ignoring extra field", .{ index, this.fields.len });
             return false;
@@ -913,11 +913,11 @@ export struct Putter {
         return true;
     }
 
-    pub fn putRaw(*_, index: u32, optional_bytes: (*Data)?): bool! {
+    pub fn putRaw(*_, index: u32, optional_bytes: (*Data)?): AnyPostgresError!bool {
         return this.putImpl(index, optional_bytes, true);
     }
 
-    pub fn put(*_, index: u32, optional_bytes: (*Data)?): bool! {
+    pub fn put(*_, index: u32, optional_bytes: (*Data)?): AnyPostgresError!bool {
         return this.putImpl(index, optional_bytes, false);
     }
 }

@@ -3189,7 +3189,7 @@ pub fn printErrorNameAndMessage(_: *VirtualMachine, name: String, message: Strin
                     }
                 }
             }
-            _ = writer.print((comptime Output.prettyFmt("{f}<b>{f}<r>\n", allow_ansi_color)), .{ error_display_level.formatter(display_name, allow_ansi_color, .include_colon), display_message });
+            _ = try writer.print((comptime Output.prettyFmt("{f}<b>{f}<r>\n", allow_ansi_color)), .{ error_display_level.formatter(display_name, allow_ansi_color, .include_colon), display_message });
         } else {
             if ((!name.isEmpty())) {
                 _ = try writer.print("{f}\n", .{ error_display_level.formatter(name, allow_ansi_color, .include_colon) });

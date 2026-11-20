@@ -767,10 +767,7 @@ ret.* = jsc.ErrorableResolvedSource.ok(ResolvedSource{ .allocator = null, .sourc
                     @branchHint(.unlikely);
                     if (node_module_module.findLongestRegisteredExtension(jsc_vm, lr.path.text)) |entry| {
                         _ = &entry;
-                        switch ((blk: {
-                        break :blk entry.*;
-
-})) {
+                        switch (entry) {
 .loader => |loader| {
 break :loader loader;
 },

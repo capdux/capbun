@@ -415,12 +415,13 @@ pub const ForTarballError = OOM || error{
         }
 
         if (!(strings.hasPrefixComptime(_.url_buf, "https://") || strings.hasPrefixComptime(_.url_buf, "http://"))) {
-            const msg = {
-                fmt: "Expected tarball URL to start with https:// or http://, got {f} while fetching package {f}",
-                args: [ bun.fmt.QuotedFormatter{ text: _.url_buf }, bun.fmt.QuotedFormatter{ text: tarball.name.slice() } ],
-            };
-
-            _.package_manager.log.addErrorFmt(null, {}, allocator, msg.fmt, msg.args)?;
+            _.package_manager.log.addErrorFmt(
+                null,
+                {},
+                allocator,
+                "Expected tarball URL to start with https:// or http://, got {f} while fetching package {f}",
+                .{ bun.fmt.QuotedFormatter{ text: _.url_buf }, bun.fmt.QuotedFormatter{ text: tarball.name.slice() } },
+            )?;
             return error.InvalidURL;
         }
 

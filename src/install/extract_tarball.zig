@@ -124,20 +124,16 @@ pub fn buildURLWithPrinter(registry_: []const u8, full_name_: strings.StringOrTi
         }
         const default_format: []const u8 = "{s}/{s}/-/";
         if (((!version.tag.hasPre()) and (!version.tag.hasBuild()))) {
-            const args: struct { *anyopaque, *anyopaque, strings.StringOrTinyString, *anyopaque, *anyopaque, *anyopaque } = .{ registry, full_name, name, version.major, version.minor, version.patch };
-            return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}.tgz"), args);
+            return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}.tgz"), .{ registry, full_name, name, version.major, version.minor, version.patch });
         } else {
             if ((version.tag.hasPre() and version.tag.hasBuild())) {
-                const args: struct { *anyopaque, *anyopaque, strings.StringOrTinyString, *anyopaque, *anyopaque, *anyopaque, *anyopaque, *anyopaque } = .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf), version.tag.build.slice(string_buf) };
-                return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}-{s}+{s}.tgz"), args);
+                return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}-{s}+{s}.tgz"), .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf), version.tag.build.slice(string_buf) });
             } else {
                 if (version.tag.hasPre()) {
-                    const args: struct { *anyopaque, *anyopaque, strings.StringOrTinyString, *anyopaque, *anyopaque, *anyopaque, *anyopaque } = .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf) };
-                    return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}-{s}.tgz"), args);
+                    return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}-{s}.tgz"), .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.pre.slice(string_buf) });
                 } else {
                     if (version.tag.hasBuild()) {
-                        const args: struct { *anyopaque, *anyopaque, strings.StringOrTinyString, *anyopaque, *anyopaque, *anyopaque, *anyopaque } = .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.build.slice(string_buf) };
-                        return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}+{s}.tgz"), args);
+                        return try print(printer, (default_format ++ "{s}-{d}.{d}.{d}+{s}.tgz"), .{ registry, full_name, name, version.major, version.minor, version.patch, version.tag.build.slice(string_buf) });
                     } else {
                         _ = unreachable;
                     }
@@ -215,8 +211,9 @@ pub fn extract(self: ExtractTarball, log: *logger.Log, tgz_bytes: []const u8) !I
         var zlib_pool = Npm.Registry.BodyPool.get(default_allocator);
         _ = &zlib_pool;
         _ = zlib_pool.data.reset();
+        const release_pool = Npm.Registry.BodyPool.release;
         defer {
-        _ = (if (comptime @typeInfo(@TypeOf(Npm.Registry.BodyPool)) == .pointer) (Npm.Registry.BodyPool) else &(Npm.Registry.BodyPool)).release();
+        _ = release_pool(zlib_pool);
         }
         var esimated_output_size: usize = 0;
         _ = &esimated_output_size;
