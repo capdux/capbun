@@ -119,7 +119,7 @@ pub fn ioctl_ficlone(dest_fd: bun.FD, srcfd: bun.FD) usize {
         return std.os.linux.ioctl(dest_fd.native(), bun.c.FICLONE, @intCast(srcfd.native()));
 }
 
-pub fn sys_epoll_pwait2(epfd: i32, events: ?[*]std.os.linux.epoll_event, maxevents: i32, timeout: ?*const std.os.linux.timespec, sigmask: ?*const std.os.linux.sigset_t) callconv(.c) isize {
+pub export fn sys_epoll_pwait2(epfd: i32, events: ?[*]std.os.linux.epoll_event, maxevents: i32, timeout: ?*const std.os.linux.timespec, sigmask: ?*const std.os.linux.sigset_t) callconv(.c) isize {
         {
             return @bitCast(std.os.linux.syscall6(.epoll_pwait2, @bitCast(@as(isize, @intCast(epfd))), @intFromPtr(events), @bitCast(@as(isize, @intCast(maxevents))), @intFromPtr(timeout), @intFromPtr(sigmask), 8));
         }

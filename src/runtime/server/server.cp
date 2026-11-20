@@ -3526,7 +3526,7 @@ pub const AnyServer = struct {
     }
 };
 
-pub export fn Server__setIdleTimeout(server: jsc.JSValue, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject)  {
+@export @c fn Server__setIdleTimeout(server: jsc.JSValue, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject)  {
     Server__setIdleTimeout_(server, seconds, globalThis) catch |e| {
         if (e == error.OutOfMemory) {
             * = globalThis.throwOutOfMemoryValue();

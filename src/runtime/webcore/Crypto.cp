@@ -8,7 +8,7 @@ import {
 } from "bun";
 import { BoringSSL } from "bun:boringssl";
 import { time } from "std";
-import { UUID, UUID5, UUID7 } from "../../jsc/uuid";
+import { UUID, UUID5, UUID7 } from "../../jsc/uuid.zig";
 
 const BunString = String;
 
@@ -131,8 +131,8 @@ fn randomData(
 }
 
 comptime {
-    const Bun__randomUUIDv7 = jsc.toJSHostFn(Bun__randomUUIDv7_);
-    @export(&Bun__randomUUIDv7, .{ name: "Bun__randomUUIDv7" });
+    const f = jsc.toJSHostFn(Bun__randomUUIDv7_);
+    @export(&f, .{ name: "Bun__randomUUIDv7" });
 }
 
 pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
@@ -145,7 +145,8 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
             if (!arguments[0].isUndefined()) {
                 if (arguments[0].isString()) {
                     encoding_value = arguments[0];
-                    break :brk try jsc.Node.Encoding.fromJS(encoding_value, globalThis) orelse {
+                    const enc_opt = jsc.Node.Encoding.fromJS(encoding_value, globalThis)?;
+                    break :brk enc_opt orelse {
                         return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
                     };
                 }
@@ -190,8 +191,8 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
 }
 
 comptime {
-    const Bun__randomUUIDv5 = jsc.toJSHostFn(Bun__randomUUIDv5_);
-    @export(&Bun__randomUUIDv5, .{ name: "Bun__randomUUIDv5" });
+    const f = jsc.toJSHostFn(Bun__randomUUIDv5_);
+    @export(&f, .{ name: "Bun__randomUUIDv5" });
 }
 
 pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
@@ -208,7 +209,8 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
     const encoding: jsc.Node.Encoding = brk: {
         if (arguments.len > 2 and !arguments[2].isUndefined()) {
             if (arguments[2].isString()) {
-                break :brk try jsc.Node.Encoding.fromJS(arguments[2], globalThis) orelse {
+                const enc_opt = jsc.Node.Encoding.fromJS(arguments[2], globalThis)?;
+                break :brk enc_opt orelse {
                     return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
                 };
             }

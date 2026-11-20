@@ -160,13 +160,13 @@ else => "",
     }
 
 pub fn toBunString(self: Value) bun.String {
-            return (switch (self.*) {
+            return (switch (self) {
 .noop => bun.String.empty,
 .buffer => |buf| {
 return bun.String.createExternal(*FreeContext, buf.bytes, true, bun.new(FreeContext, .{ .allocator = buf.allocator }), FreeContext.onFree);
 },
 .pending => unreachable,
-else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(self.*) }),
+else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(self) }),
 });
     }
 };

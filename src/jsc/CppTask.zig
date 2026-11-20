@@ -90,7 +90,7 @@ pub fn runFromWorkpool(task: *jsc.WorkPoolTask) void {
             }
     }
 
-pub fn ConcurrentCppTask__createAndRun(cpp_task: *EventLoopTaskNoContextImpl) void {
+pub export fn ConcurrentCppTask__createAndRun(cpp_task: *EventLoopTaskNoContextImpl) callconv(.c) void {
             _ = jsc.markBinding(@src());
             if (cpp_task.getVM()) |vm| {
                 _ = &vm;

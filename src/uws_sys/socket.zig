@@ -763,9 +763,9 @@ pub fn fromNamedPipe(pipe: *bun.uws.WindowsNamedPipe) Self {
                 return Self{ .socket = InternalSocket{ .pipe = pipe } };
         }
 
-pub fn fromFd(g: *SocketGroup, k: SocketKind, handle: bun.FD, comptime This: type, this_ptr: *This, comptime socket_field_name: []const ?u8, is_ipc: bool) ?Self {
+pub fn fromFd(g: *SocketGroup, k: SocketKind, handle: bun.FD, comptime This: type, this_ptr: *This, comptime socket_field_name: ?[]const u8, is_ipc: bool) ?Self {
                 const ThisPtr = ?*This;
-                const raw = ((g.fromFd(k, null, @sizeOf(ThisPtr), handle.native(), is_ipc)) orelse { return null; });
+                const raw = ((g.fromFd(k, null, @sizeOf(ThisPtr), handle, is_ipc)) orelse { return null; });
                 const socket_ = Self{ .socket = InternalSocket{ .connected = raw } };
                 (raw.ext(ThisPtr)).* = this_ptr;
                 if ((socket_field_name != null)) {

@@ -1392,7 +1392,7 @@ pub struct CommandLineReporter {
 }
 
 @callconv("c")
-export fn BunTest__shouldGenerateCodeCoverage(test_name_str: bun.String): bool {
+@export pub fn BunTest__shouldGenerateCodeCoverage(test_name_str: bun.String): bool {
     let zig_slice: bun.jsc.ZigString.Slice = {};
     defer zig_slice.deinit();
 

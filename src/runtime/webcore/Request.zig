@@ -135,29 +135,30 @@ pub fn memoryCost(client: *const Request) usize {
         return (((@sizeOf(Request) + client.request_context.memoryCost()) + client.url.byteSlice().len) + (if (@typeInfo(@TypeOf(client.#body)) == .@"enum") @intFromEnum(client.#body) else client.#body.value).memoryCost());
 }
 
-pub fn Request__setCookiesOnRequestContext(client: *Request, cookieMap: ?*jsc.WebCore.CookieMap) void {
+pub export fn Request__setCookiesOnRequestContext(client: *Request, cookieMap: ?*jsc.WebCore.CookieMap) callconv(.c) void {
         _ = client.request_context.setCookies(cookieMap);
 }
 
-pub fn Request__getUWSRequest(client: *Request) ?*uws.Request {
+pub export fn Request__getUWSRequest(client: *Request) callconv(.c) ?*uws.Request {
         return client.request_context.getRequest();
 }
 
-pub fn Request__setInternalEventCallback(client: *Request, callback: jsc.JSValue, globalThis: *jsc.JSGlobalObject) void {
+pub export fn Request__setInternalEventCallback(client: *Request, callback: jsc.JSValue, globalThis: *jsc.JSGlobalObject) callconv(.c) void {
         client.internal_event_callback = InternalJSEventCallback.init(callback, globalThis);
         _ = client.request_context.enableTimeoutEvents();
 }
 
-pub fn Request__setTimeout(client: *Request, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) void {
+pub export fn Request__setTimeout(client: *Request, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) callconv(.c) void {
         if ((!seconds.isNumber())) {
-            _ = (blk_catch_1: { break :blk_catch_1 ((globalThis.throw("Failed to set timeout: The provided value is not of type 'number'.", .{})) catch |__ce_1| { _ = &__ce_1;  }); });
+            if ((globalThis.throw("Failed to set timeout: The provided value is not of type 'number'.", .{}) == error.JSError)) {
+            }
             return;
         }
         _ = client.setTimeout(seconds.to(c_uint));
 }
 
-pub fn Request__clone(client: *Request, globalThis: *jsc.JSGlobalObject) ?*Request {
-        return (blk_catch_2: { break :blk_catch_2 ((client.clone(bun.default_allocator, globalThis)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 @as(*Request, null); }); });
+pub export fn Request__clone(client: *Request, globalThis: *jsc.JSGlobalObject) callconv(.c) ?*Request {
+        return (blk_catch_1: { break :blk_catch_1 ((client.clone(bun.default_allocator, globalThis)) catch |__ce_1| { _ = &__ce_1; return null; }); });
 }
 
 pub fn init(method: Method, request_context: jsc.API.AnyRequestContext, https: bool, signal: ?*AbortSignal, body: *Body.Value.HiveRef) Request {
@@ -231,7 +232,7 @@ pub fn calculateEstimatedByteSize(client: *Request) void {
         client.reported_estimated_size = (((if (@typeInfo(@TypeOf(client.#body)) == .@"enum") @intFromEnum(client.#body) else client.#body.value).estimatedSize() + client.sizeOfURL()) + @sizeOf(Request));
 }
 
-pub fn Bun__JSRequest__calculateEstimatedByteSize(client: *Request) void {
+pub export fn Bun__JSRequest__calculateEstimatedByteSize(client: *Request) callconv(.c) void {
         _ = client.calculateEstimatedByteSize();
 }
 
@@ -240,7 +241,7 @@ pub inline fn getBodyReadableStream(self: *Request, globalObject: *JSGlobalObjec
             _ = &js_ref;
             if (js.gc.stream.get(js_ref)) |stream| {
                 _ = &stream;
-                return (blk_catch_3: { break :blk_catch_3 ((jsc.WebCore.ReadableStream.fromJS(stream, globalObject)) catch |e| { _ = &e; _ = globalObject.takeException(e);
+                return (blk_catch_2: { break :blk_catch_2 ((jsc.WebCore.ReadableStream.fromJS(stream, globalObject)) catch |e| { _ = &e; _ = globalObject.takeException(e);
                 return null; }); });
             }
         }
@@ -508,7 +509,7 @@ pub fn ensureURL(client: *Request) bun.OOM!void {
                     if ((url_bytelength < 128)) {
                         var buffer: [128]u8 = undefined;
                         _ = &buffer;
-                        const url = (blk_catch_7: { break :blk_catch_7 ((std.fmt.bufPrint((&buffer), "{s}{f}{s}", .{ client.getProtocol(), fmt, req_url })) catch |__ce_7| { _ = &__ce_7; @panic("Unexpected error while printing URL"); }); });
+                        const url = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint((&buffer), "{s}{f}{s}", .{ client.getProtocol(), fmt, req_url })) catch |__ce_6| { _ = &__ce_6; @panic("Unexpected error while printing URL"); }); });
                         if (comptime Environment.allow_assert) {
                             _ = bun.assert((client.sizeOfURL() == url.len));
                         }
@@ -530,7 +531,7 @@ pub fn ensureURL(client: *Request) bun.OOM!void {
                         const created = bun.String.createUninitialized(.latin1, url_bytelength);
                         client.url = created[0];
                         const bytes = created[1];
-                        _ = (blk_catch_8: { break :blk_catch_8 ((std.fmt.bufPrint(bytes, "{s}{f}{s}", .{ client.getProtocol(), fmt, req_url })) catch |e| { _ = &e; if ((e == error.NoSpaceLeft)) {
+                        _ = (blk_catch_7: { break :blk_catch_7 ((std.fmt.bufPrint(bytes, "{s}{f}{s}", .{ client.getProtocol(), fmt, req_url })) catch |e| { _ = &e; if ((e == error.NoSpaceLeft)) {
                             _ = unreachable;
                         }
                         unreachable; }); });
@@ -967,7 +968,7 @@ pub fn cloneHeaders(client: *Request, globalThis: *JSGlobalObject) bun.JSError!?
 
 pub fn cloneInto(self: *Request, req: *Request, allocator: std.mem.Allocator, globalThis: *JSGlobalObject, preserve_url: bool) bun.JSError!void {
         _ = &allocator;
-        _ = (blk_catch_9: { break :blk_catch_9 ((self.ensureURL()) catch |__ce_9| { _ = &__ce_9;  }); });
+        _ = (blk_catch_8: { break :blk_catch_8 ((self.ensureURL()) catch |__ce_8| { _ = &__ce_8;  }); });
         const vm = globalThis.bunVM();
         var body_ = brk: {
         if (self.#js_ref.tryGet()) |js_ref| {

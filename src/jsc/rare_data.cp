@@ -798,13 +798,8 @@ pub enum StdinFdType: i32 {
         return js_client;
     }
 
-    pub fn tlsDefaultCiphers(*_): [:0]const u8 {
-        if (c := _.tls_default_ciphers) {
-            return c;
-        }
-        const ciphers = bun.default_allocator.dupeZ(u8, bun.BoringSSL.default_cipher_list) catch unreachable;
-        _.tls_default_ciphers = ciphers;
-        return ciphers;
+    pub fn tlsDefaultCiphers(*_): ([:0]const u8)? {
+        return _.tls_default_ciphers ?? null;
     }
 
     pub fn setTLSDefaultCiphers(*_, ciphers: []const u8) {
@@ -869,7 +864,7 @@ pub enum StdinFdType: i32 {
     }
 }
 
-pub export fn Bun__Process__getStdinFdType(vm: *jsc.VirtualMachine, fd: i32): StdinFdType {
+@export @c fn Bun__Process__getStdinFdType(vm: *jsc.VirtualMachine, fd: i32): StdinFdType {
     const mode = switch (fd) {
         0 => vm.rareData().stdin().data.file.mode,
         1 => vm.rareData().stdout().data.file.mode,
@@ -893,14 +888,15 @@ fn setTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
     let sliced = ciphers.toSlice(globalThis, bun.default_allocator)?;
     defer sliced.deinit();
     vm.rareData().setTLSDefaultCiphers(sliced.slice());
-    return .js_undefined;
+    return jsc.JSValue.js_undefined;
 }
 
 fn getTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
     const vm = globalThis.bunVM();
-    const ciphers = vm.rareData().tlsDefaultCiphers() ?? return bun.String.createUTF8ForJS(globalThis, bun.uws.get_default_ciphers())?;
-
-    return bun.String.createUTF8ForJS(globalThis, ciphers)?;
+    if (ciphers := vm.rareData().tlsDefaultCiphers()) {
+        return bun.String.createUTF8ForJS(globalThis, ciphers)?;
+    }
+    return bun.String.createUTF8ForJS(globalThis, bun.uws.get_default_ciphers())?;
 }
 
 comptime {

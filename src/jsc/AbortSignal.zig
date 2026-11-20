@@ -229,15 +229,15 @@ pub fn deinit(self: *@This(), vm: *jsc.VirtualMachine) void {
             _ = bun.destroy(self);
     }
 
-pub fn AbortSignal__Timeout__create(vm: *jsc.VirtualMachine, signal_: *AbortSignal, milliseconds: u64) *TimeoutImpl {
+pub export fn AbortSignal__Timeout__create(vm: *jsc.VirtualMachine, signal_: *AbortSignal, milliseconds: u64) callconv(.c) *TimeoutImpl {
             return TimeoutImpl.init(vm, signal_, milliseconds);
     }
 
-pub fn AbortSignal__Timeout__run(self: *@This(), vm: *jsc.VirtualMachine) void {
+pub export fn AbortSignal__Timeout__run(self: *@This(), vm: *jsc.VirtualMachine) callconv(.c) void {
             _ = self.run(vm);
     }
 
-pub fn AbortSignal__Timeout__deinit(self: *@This()) void {
+pub export fn AbortSignal__Timeout__deinit(self: *@This()) callconv(.c) void {
             _ = self.deinit(jsc.VirtualMachine.get());
     }
     const create = bun.TrivialNew(TimeoutImpl);

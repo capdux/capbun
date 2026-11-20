@@ -1862,24 +1862,6 @@ pub fn nextDirname(path_: []const u8) ?[]const u8 {
         return path[0..(end_index + 1)];
 }
 
-pub fn ResolvePath__joinAbsStringBufCurrentPlatformBunString(globalObject: *bun.jsc.JSGlobalObject, in_str: bun.String) bun.String {
-        const str = in_str.toUTF8WithoutRef(bun.default_allocator);
-        defer {
-        _ = str.deinit();
-        }
-        const cwd = globalObject.bunVM().transpiler.fs.top_level_dir;
-        var sfa = std.heap.stackFallback(4096, bun.default_allocator);
-        _ = &sfa;
-        const alloc = sfa.get();
-        const buf = bun.handleOom(alloc.alloc(u8, ((cwd.len + str.slice().len) + 2)));
-        defer {
-        _ = alloc.free(buf);
-        }
-        const parts: [1][]const u8 = .{ str.slice() };
-        const out_slice = joinAbsStringBuf(cwd, buf, (&parts), .auto);
-        return bun.String.cloneUTF8(out_slice);
-}
-
 pub fn platformToPosixInPlace(comptime T: type, path_buffer: []T) void {
         if ((std.fs.path.sep == 47)) {
             return;

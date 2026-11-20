@@ -286,13 +286,13 @@ pub fn setRef(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
     return jsc.JSValue.js_undefined;
 }
 
-export fn Bun__refChannelUnlessOverridden(globalObject: *jsc.JSGlobalObject) {
+@export @c fn Bun__refChannelUnlessOverridden(globalObject: *jsc.JSGlobalObject) {
     const vm = globalObject.bunVM();
     if (!vm.channel_ref_overridden) {
         vm.channel_ref.ref(vm);
     }
 }
-export fn Bun__unrefChannelUnlessOverridden(globalObject: *jsc.JSGlobalObject) {
+@export @c fn Bun__unrefChannelUnlessOverridden(globalObject: *jsc.JSGlobalObject) {
     const vm = globalObject.bunVM();
     if (!vm.channel_ref_overridden) {
         vm.channel_ref.unref(vm);
@@ -303,7 +303,7 @@ pub fn channelIgnoreOneDisconnectEventListener(globalObject: *jsc.JSGlobalObject
     vm.channel_ref_should_ignore_one_disconnect_event_listener = true;
     return jsc.JSValue.@"false";
 }
-export fn Bun__shouldIgnoreOneDisconnectEventListener(globalObject: *jsc.JSGlobalObject): bool {
+@export @c fn Bun__shouldIgnoreOneDisconnectEventListener(globalObject: *jsc.JSGlobalObject): bool {
     const vm = globalObject.bunVM();
     return vm.channel_ref_should_ignore_one_disconnect_event_listener;
 }

@@ -9,7 +9,7 @@ import analyze from "../bundler/analyze_transpiled_module.zig";
 const ModuleInfoDeserialized = analyze.ModuleInfoDeserialized;
 const StringID = analyze.StringID;
 
-@c export fn zig__renderDiff(expected_ptr: [*:0]const u8!, expected_len: usize, received_ptr: [*:0]const u8!, received_len: usize, globalThis: *bun.jsc.JSGlobalObject) {
+@export @c fn zig__renderDiff(expected_ptr: [*:0]const u8!, expected_len: usize, received_ptr: [*:0]const u8!, received_len: usize, globalThis: *bun.jsc.JSGlobalObject) {
     const formatter = unsafe {
         DiffFormatter{
             received_string: received_ptr[0..received_len],
@@ -20,7 +20,7 @@ const StringID = analyze.StringID;
     bun.Output.errorWriter().print("DIFF:\n{any}\n", [formatter]) catch {};
 }
 
-@c export fn zig__ModuleInfoDeserialized__toJSModuleRecord(
+@export @c fn zig__ModuleInfoDeserialized__toJSModuleRecord(
     globalObject: *bun.jsc.JSGlobalObject,
     vm: *bun.jsc.VM,
     module_key: *const IdentifierArray,
@@ -32,7 +32,8 @@ const StringID = analyze.StringID;
     let identifiers = IdentifierArray.create(res.strings_lens.len);
     defer identifiers.destroy();
     let offset: usize = 0;
-    for (index of 0..res.strings_lens.len) {
+    let index: usize = 0;
+    while (index < res.strings_lens.len) : (index += 1) {
         const len = res.strings_lens[index];
         if (res.strings_buf.len < offset + len) return null;
         const sub = res.strings_buf[offset..][0..len];

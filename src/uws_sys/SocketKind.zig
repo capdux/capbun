@@ -98,8 +98,8 @@ else => false,
     }
 };
 
-pub const BUN_SOCKET_KIND_DYNAMIC: u8 = @intFromEnum(SocketKind.dynamic);
-pub const BUN_SOCKET_KIND_UWS_HTTP: u8 = @intFromEnum(SocketKind.uws_http);
-pub const BUN_SOCKET_KIND_UWS_HTTP_TLS: u8 = @intFromEnum(SocketKind.uws_http_tls);
-pub const BUN_SOCKET_KIND_UWS_WS: u8 = @intFromEnum(SocketKind.uws_ws);
-pub const BUN_SOCKET_KIND_UWS_WS_TLS: u8 = @intFromEnum(SocketKind.uws_ws_tls);
+pub export const BUN_SOCKET_KIND_DYNAMIC: u8 = @intFromEnum(SocketKind.dynamic);
+pub export const BUN_SOCKET_KIND_UWS_HTTP: u8 = @intFromEnum(SocketKind.uws_http);
+pub export const BUN_SOCKET_KIND_UWS_HTTP_TLS: u8 = @intFromEnum(SocketKind.uws_http_tls);
+pub export const BUN_SOCKET_KIND_UWS_WS: u8 = @intFromEnum(SocketKind.uws_ws);
+pub export const BUN_SOCKET_KIND_UWS_WS_TLS: u8 = @intFromEnum(SocketKind.uws_ws_tls);

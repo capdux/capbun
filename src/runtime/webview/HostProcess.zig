@@ -83,14 +83,14 @@ const jsc = bun.jsc;
 const log = bun.Output.scoped(.WebViewHost, .hidden);
 var instance: ?*HostProcess = null;
 
-pub fn Bun__WebViewHost__kill() void {
+pub export fn Bun__WebViewHost__kill() callconv(.c) void {
         if (instance) |i| {
             _ = &i;
             _ = i.process.kill(9);
         }
 }
 
-pub fn Bun__WebViewHost__ensure(global: *jsc.JSGlobalObject, stdoutInherit: bool, stderrInherit: bool) i32 {
+pub export fn Bun__WebViewHost__ensure(global: *jsc.JSGlobalObject, stdoutInherit: bool, stderrInherit: bool) callconv(.c) i32 {
         if (comptime (!bun.Environment.isMac)) {
             return -1;
         }

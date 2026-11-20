@@ -147,15 +147,15 @@ pub const ExternImpl = ReleaseImpl.Type;
 const unlocked: u32 = 0;
 const locked: u32 = 1;
 const contended: u32 = 3;
-pub const Bun__lock__size: usize = @sizeOf(ReleaseImpl);
+pub export const Bun__lock__size: usize = @sizeOf(ReleaseImpl);
 
 pub fn spinCycle() void {
 }
 
-pub fn Bun__lock(ptr: *ReleaseImpl) void {
+pub export fn Bun__lock(ptr: *ReleaseImpl) callconv(.c) void {
         _ = ptr.lock();
 }
 
-pub fn Bun__unlock(ptr: *ReleaseImpl) void {
+pub export fn Bun__unlock(ptr: *ReleaseImpl) callconv(.c) void {
         _ = ptr.unlock();
 }

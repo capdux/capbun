@@ -104,15 +104,15 @@ pub const TimeoutImpl = struct {
     }
 
     /// Caller is expected to have already ref'd the AbortSignal.
-    export fn AbortSignal__Timeout__create(vm: *jsc.VirtualMachine, signal_: *AbortSignal, milliseconds: u64): *TimeoutImpl {
+    @export @c static fn AbortSignal__Timeout__create(vm: *jsc.VirtualMachine, signal_: *AbortSignal, milliseconds: u64): *TimeoutImpl {
         return TimeoutImpl.init(vm, signal_, milliseconds);
     }
 
-    export fn AbortSignal__Timeout__run(*_, vm: *jsc.VirtualMachine) {
+    @export @c fn AbortSignal__Timeout__run(*_, vm: *jsc.VirtualMachine) {
         _.run(vm);
     }
 
-    export fn AbortSignal__Timeout__deinit(*_) {
+    @export @c fn AbortSignal__Timeout__deinit(*_) {
         // Called from ~AbortSignal() / cancelTimer(). The AbortSignal's
         // ScriptExecutionContext may be a dead global under --isolate, so
         // we resolve the VM via the threadlocal instead of taking it as a

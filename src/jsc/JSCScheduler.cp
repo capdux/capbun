@@ -19,7 +19,7 @@ pub struct JSCDeferredWorkTask {
     }
 }
 
-export fn Bun__eventLoop__incrementRefConcurrently(jsc_vm: *VirtualMachine, delta: c_int) {
+@export @c fn Bun__eventLoop__incrementRefConcurrently(jsc_vm: *VirtualMachine, delta: c_int) {
     jsc.markBinding(@src());
 
     if (delta > 0) {
@@ -29,7 +29,7 @@ export fn Bun__eventLoop__incrementRefConcurrently(jsc_vm: *VirtualMachine, delt
     }
 }
 
-export fn Bun__queueJSCDeferredWorkTaskConcurrently(jsc_vm: *VirtualMachine, task: *JSCDeferredWorkTask) {
+@export @c fn Bun__queueJSCDeferredWorkTaskConcurrently(jsc_vm: *VirtualMachine, task: *JSCDeferredWorkTask) {
     jsc.markBinding(@src());
     let loop = jsc_vm.eventLoop();
     loop.enqueueTaskConcurrent(ConcurrentTask.new({
@@ -38,7 +38,7 @@ export fn Bun__queueJSCDeferredWorkTaskConcurrently(jsc_vm: *VirtualMachine, tas
     }));
 }
 
-export fn Bun__tickWhilePaused(paused: *bool) {
+@export @c fn Bun__tickWhilePaused(paused: *bool) {
     jsc.markBinding(@src());
     VirtualMachine.get().eventLoop().tickWhilePaused(paused);
 }

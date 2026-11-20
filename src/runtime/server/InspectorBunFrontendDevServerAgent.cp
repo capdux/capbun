@@ -104,7 +104,7 @@ pub const BunFrontendDevServerAgent = struct {
         }
     }
 
-    export fn Bun__InspectorBunFrontendDevServerAgent__setEnabled(agent: ?*InspectorBunFrontendDevServerAgentHandle) void {
+    @export @c static fn Bun__InspectorBunFrontendDevServerAgent__setEnabled(agent: ?*InspectorBunFrontendDevServerAgentHandle) void {
         if (jsc.VirtualMachine.get().debugger) |*debugger| {
             debugger.frontend_dev_server_agent.handle = agent;
         }

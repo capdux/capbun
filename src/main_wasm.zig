@@ -476,7 +476,7 @@ pub fn visitParts(self: *TestAnalyzer, parser: *bun.js_parser.TSXParser, parts: 
 };
 
 const Main = @This();
-pub var code_buffer_ptr: ?[*]const u8 = null;
+pub export var code_buffer_ptr: ?[*]const u8 = null;
 pub const bindgen = true;
 var transform_response: api.TransformResponse = std.mem.zeroes(api.TransformResponse);
 var output_files: [1]api.OutputFile = undefined;
@@ -510,22 +510,20 @@ pub extern "c" fn console_warn(slice: u64) callconv(.c) void;
 
 pub extern "c" fn console_info(slice: u64) callconv(.c) void;
 
-pub fn cycleStart() void {
-}
+extern "c" fn cycleStart() callconv(.c) void;
 
-pub fn cycleEnd() void {
-}
+extern "c" fn cycleEnd() callconv(.c) void;
 
-pub fn bun_malloc(size: usize) u64 {
+pub export fn bun_malloc(size: usize) callconv(.c) u64 {
         const pair: [2]u32 = .{ @as(u32, @intCast(@intFromPtr(((default_allocator.alloc(u8, size)) catch unreachable).ptr))), @as(u32, @intCast(size)) };
         return @as(u64, @bitCast(pair));
 }
 
-pub fn bun_free(bytes: u64) void {
+pub export fn bun_free(bytes: u64) callconv(.c) void {
         _ = default_allocator.free(Uint8Array.fromJS(bytes));
 }
 
-pub fn init(heapsize: u32) void {
+pub export fn init(heapsize: u32) callconv(.c) void {
         defer {
         {
             init_counter = (init_counter +% 1);
@@ -548,7 +546,7 @@ pub fn init(heapsize: u32) void {
         }
 }
 
-pub fn getTests(opts_array: u64) u64 {
+pub export fn getTests(opts_array: u64) callconv(.c) u64 {
         var arena_ = Arena.init();
         _ = &arena_;
         var allocator = arena_.allocator();
@@ -596,7 +594,7 @@ pub fn getTests(opts_array: u64) u64 {
         return @as(u64, @bitCast(pair));
 }
 
-pub fn transform(opts_array: u64) u64 {
+pub export fn transform(opts_array: u64) callconv(.c) u64 {
         var arena_ = Arena.init();
         _ = &arena_;
         var allocator = arena_.allocator();
@@ -660,7 +658,7 @@ else => .file,
         return @as(u64, @bitCast(pair));
 }
 
-pub fn scan(opts_array: u64) u64 {
+pub export fn scan(opts_array: u64) callconv(.c) u64 {
         var arena_ = Arena.init();
         _ = &arena_;
         var allocator = arena_.allocator();
@@ -741,7 +739,7 @@ else => .file,
         }
 }
 
-pub fn emsc_main() void {
+pub export fn emsc_main() callconv(.c) void {
         _ = &emsc_main;
         _ = &cycleEnd;
         _ = &cycleStart;

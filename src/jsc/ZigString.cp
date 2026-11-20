@@ -834,7 +834,7 @@ pub struct StringPointer {
     length: usize = 0,
 }
 
-export fn ZigString__free(raw: [*]const u8, len: usize, allocator_: *!?) {
+@export @c fn ZigString__free(raw: [*]const u8, len: usize, allocator_: *!?) {
     if (al := allocator_) {
         const alloc_ptr: *std.mem.Allocator = unsafe { @ptrCast(@alignCast(al)) };
         let allocator: std.mem.Allocator = alloc_ptr.*;
@@ -848,7 +848,7 @@ export fn ZigString__free(raw: [*]const u8, len: usize, allocator_: *!?) {
     }
 }
 
-export fn ZigString__freeGlobal(ptr: [*]const u8, len: usize) {
+@export @c fn ZigString__freeGlobal(ptr: [*]const u8, len: usize) {
     const untagged: *! = unsafe { @ptrFromInt(@intFromPtr(ZigString.init(ptr[0..len]).slice().ptr)) };
     if (comptime Environment.allow_assert) {
         bun.assert(Mimalloc.mi_is_in_heap_region(ptr));

@@ -1405,7 +1405,7 @@ extern fn icu_hasBinaryProperty(c: u32, which: c_uint): bool;
 // C exports for wrapAnsi.cpp
 
 /// Calculate visible width of UTF-8 string excluding ANSI escape codes
-export fn Bun__visibleWidthExcludeANSI_utf8(ptr: [*]const u8!, len: usize, ambiguous_as_wide: bool): usize {
+@export @c fn Bun__visibleWidthExcludeANSI_utf8(ptr: [*]const u8!, len: usize, ambiguous_as_wide: bool): usize {
     * = ambiguous_as_wide; // UTF-8 version doesn't use this parameter
     unsafe {
         const input = ptr[0..len];
@@ -1414,7 +1414,7 @@ export fn Bun__visibleWidthExcludeANSI_utf8(ptr: [*]const u8!, len: usize, ambig
 }
 
 /// Calculate visible width of UTF-16 string excluding ANSI escape codes
-export fn Bun__visibleWidthExcludeANSI_utf16(ptr: [*]const u16!, len: usize, ambiguous_as_wide: bool): usize {
+@export @c fn Bun__visibleWidthExcludeANSI_utf16(ptr: [*]const u16!, len: usize, ambiguous_as_wide: bool): usize {
     unsafe {
         const input = ptr[0..len];
         return visible.width.exclude_ansi_colors.utf16(input, ambiguous_as_wide);
@@ -1422,7 +1422,7 @@ export fn Bun__visibleWidthExcludeANSI_utf16(ptr: [*]const u16!, len: usize, amb
 }
 
 /// Calculate visible width of Latin-1 string excluding ANSI escape codes
-export fn Bun__visibleWidthExcludeANSI_latin1(ptr: [*]const u8!, len: usize): usize {
+@export @c fn Bun__visibleWidthExcludeANSI_latin1(ptr: [*]const u8!, len: usize): usize {
     unsafe {
         const input = ptr[0..len];
         return visible.width.exclude_ansi_colors.latin1(input);
@@ -1430,14 +1430,14 @@ export fn Bun__visibleWidthExcludeANSI_latin1(ptr: [*]const u8!, len: usize): us
 }
 
 /// Calculate visible width of a single codepoint
-export fn Bun__codepointWidth(cp: u32, ambiguous_as_wide: bool): u8 {
+@export @c fn Bun__codepointWidth(cp: u32, ambiguous_as_wide: bool): u8 {
     return @intCast(visibleCodepointWidth(cp, ambiguous_as_wide));
 }
 
 /// Grapheme break detection for C++ callers.
 /// Returns true if there should be a grapheme break between cp1 and cp2.
 /// `state` is an opaque u8 that must be initialized to 0 and passed between calls.
-export fn Bun__graphemeBreak(cp1: u32, cp2: u32, state_ptr: *u8): bool {
+@export @c fn Bun__graphemeBreak(cp1: u32, cp2: u32, state_ptr: *u8): bool {
     unsafe {
         let state: grapheme.BreakState = @enumFromInt(state_ptr.*);
         const result = grapheme.graphemeBreak(@truncate(cp1), @truncate(cp2), &state);
@@ -1447,7 +1447,7 @@ export fn Bun__graphemeBreak(cp1: u32, cp2: u32, state_ptr: *u8): bool {
 }
 
 /// Check if a codepoint has the Emoji property (using ICU).
-export fn Bun__isEmojiPresentation(cp: u32): bool {
+@export @c fn Bun__isEmojiPresentation(cp: u32): bool {
     if (cp < 0x203C) return false;
     if (cp >= 0x2C00 && cp < 0x1F000) return false;
     if (cp == 0xFE0E || cp == 0xFE0F || cp == 0x200D) return false;

@@ -62,10 +62,10 @@ const VirtualMachine = jsc.VirtualMachine;
 
 extern "c" fn JSNodePerformanceHooksHistogram_recordDelay(histogram: jsc.JSValue, delay_ns: i64) callconv(.c) void;
 
-pub fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) void {
+pub export fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) callconv(.c) void {
         _ = vm.timer.event_loop_delay.enable(vm, histogram, resolution_ms);
 }
 
-pub fn Timer_disableEventLoopDelayMonitoring(vm: *VirtualMachine) void {
+pub export fn Timer_disableEventLoopDelayMonitoring(vm: *VirtualMachine) callconv(.c) void {
         _ = vm.timer.event_loop_delay.disable(vm);
 }

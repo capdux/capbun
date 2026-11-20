@@ -283,6 +283,6 @@ export @extern @value class us_socket_stream_buffer_t {
     }
 }
 
-export fn us_socket_free_stream_buffer(buffer: *us_socket_stream_buffer_t) {
+@export @c fn us_socket_free_stream_buffer(buffer: *us_socket_stream_buffer_t) {
     buffer.deinit();
 }

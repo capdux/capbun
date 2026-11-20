@@ -212,7 +212,7 @@ pub const VMHolder = struct {
     pub threadlocal var cached_global_object: ?*JSGlobalObject = null;
     pub var main_thread_vm: ?*VirtualMachine = null;
 
-pub fn Bun__setDefaultGlobalObject(global: *JSGlobalObject) void {
+pub export fn Bun__setDefaultGlobalObject(global: *JSGlobalObject) callconv(.c) void {
             if (vm) |vm_instance| {
                 _ = &vm_instance;
                 vm_instance.global = global;
@@ -223,7 +223,7 @@ pub fn Bun__setDefaultGlobalObject(global: *JSGlobalObject) void {
             cached_global_object = global;
     }
 
-pub fn Bun__getDefaultGlobalObject() ?*JSGlobalObject {
+pub export fn Bun__getDefaultGlobalObject() callconv(.c) ?*JSGlobalObject {
             if (cached_global_object) |g| {
                 _ = &g;
                 return g;
@@ -236,7 +236,7 @@ pub fn Bun__getDefaultGlobalObject() ?*JSGlobalObject {
             return null;
     }
 
-pub fn Bun__thisThreadHasVM() bool {
+pub export fn Bun__thisThreadHasVM() callconv(.c) bool {
             return (vm != null);
     }
 };
@@ -377,7 +377,7 @@ pub fn handleIPCClose(self: *IPCInstance) void {
             _ = vm.channel_ref.disable();
     }
 
-pub fn Bun__closeChildIPC(global: *JSGlobalObject) void {
+pub export fn Bun__closeChildIPC(global: *JSGlobalObject) callconv(.c) void {
             if (global.bunVM().getIPCInstance()) |current_ipc| {
                 _ = &current_ipc;
                 _ = current_ipc.data.closeSocketNextTick(true);
@@ -390,11 +390,11 @@ pub fn Bun__closeChildIPC(global: *JSGlobalObject) void {
 pub const ExitHandler = struct {
     exit_code: u8 = 0,
 
-pub fn Bun__getExitCode(vm: *VirtualMachine) u8 {
+pub export fn Bun__getExitCode(vm: *VirtualMachine) callconv(.c) u8 {
             return vm.exit_handler.exit_code;
     }
 
-pub fn Bun__setExitCode(vm: *VirtualMachine, code: u8) void {
+pub export fn Bun__setExitCode(vm: *VirtualMachine, code: u8) callconv(.c) void {
             vm.exit_handler.exit_code = code;
     }
 
@@ -419,9 +419,9 @@ pub const OnUnhandledRejection = *const fn (*VirtualMachine, *JSGlobalObject, JS
 pub const OnException = *const fn (*ZigException) void;
 const OptZigStringSlice = ?ZigString.Slice;
 const string = []const u8;
-pub var has_bun_garbage_collector_flag_enabled = false;
-pub var isBunTest: bool = false;
-pub var Bun__defaultRemainingRunsUntilSkipReleaseAccess: c_int = 10;
+pub export var has_bun_garbage_collector_flag_enabled = false;
+pub export var isBunTest: bool = false;
+pub export var Bun__defaultRemainingRunsUntilSkipReleaseAccess: c_int = 10;
 pub var synthetic_allocation_limit: usize = std.math.maxInt(u32);
 pub var string_allocation_limit: usize = std.math.maxInt(u32);
 pub threadlocal var is_bundler_thread_for_bytecode_cache: bool = false;
@@ -1280,7 +1280,7 @@ pub fn initWithModuleGraph(opts: Options) !*VirtualMachine {
         return vm;
 }
 
-pub fn Bun__isMainThreadVM() callconv(.c) bool {
+pub export fn Bun__isMainThreadVM() callconv(.c) bool {
         return get().is_main_thread;
 }
 
@@ -1791,7 +1791,7 @@ pub fn resolveMaybeNeedsTrailingSlash(res: *ErrorableString, global: *JSGlobalOb
         res.* = ErrorableString.ok(bun.String.cloneUTF8(result.path));
 }
 
-pub fn Bun__drainMicrotasksFromJS(globalObject: *JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) JSValue {
+pub export fn Bun__drainMicrotasksFromJS(globalObject: *JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) JSValue {
         _ = &callframe;
         _ = globalObject.bunVM().drainMicrotasks();
         return .js_undefined;
@@ -1915,7 +1915,7 @@ pub noinline fn runErrorHandler(client: *VirtualMachine, result: JSValue, except
         }
 }
 
-pub fn Bun__logUnhandledException(exception: JSValue) void {
+pub export fn Bun__logUnhandledException(exception: JSValue) callconv(.c) void {
         _ = get().runErrorHandler(exception, null);
 }
 
@@ -2050,7 +2050,7 @@ pub fn reloadEntryPoint(client: *VirtualMachine, entry_path: []const u8) !*JSInt
 
 extern "c" fn NodeModuleModule__callOverriddenRunMain(global: *JSGlobalObject, argv1: JSValue) callconv(.c) JSValue;
 
-pub fn Bun__VM__useIsolationSourceProviderCache(vm: *VirtualMachine) bool {
+pub export fn Bun__VM__useIsolationSourceProviderCache(vm: *VirtualMachine) callconv(.c) bool {
         return vm.useIsolationSourceProviderCache();
 }
 
@@ -2058,13 +2058,13 @@ pub inline fn useIsolationSourceProviderCache(client: *const VirtualMachine) boo
         return (client.test_isolation_enabled and (!bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_ISOLATION_SOURCE_CACHE.get()));
 }
 
-pub fn Bun__VirtualMachine__setOverrideModuleRunMain(vm: *VirtualMachine, is_patched: bool) void {
+pub export fn Bun__VirtualMachine__setOverrideModuleRunMain(vm: *VirtualMachine, is_patched: bool) callconv(.c) void {
         if (vm.is_in_preload) {
             vm.has_patched_run_main = is_patched;
         }
 }
 
-pub fn Bun__VirtualMachine__setOverrideModuleRunMainPromise(vm: *VirtualMachine, promise: *JSInternalPromise) void {
+pub export fn Bun__VirtualMachine__setOverrideModuleRunMainPromise(vm: *VirtualMachine, promise: *JSInternalPromise) callconv(.c) void {
         if ((vm.pending_internal_promise == null)) {
             vm.pending_internal_promise = promise;
             vm.pending_internal_promise_is_protected = false;
@@ -2465,7 +2465,7 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
         }
 }
 
-pub fn Bun__remapStackFramePositions(vm: *jsc.VirtualMachine, frames: [*]jsc.ZigStackFrame, frames_count: usize) void {
+pub export fn Bun__remapStackFramePositions(vm: *jsc.VirtualMachine, frames: [*]jsc.ZigStackFrame, frames_count: usize) callconv(.c) void {
         _ = vm.remapStackFramePositions(frames, frames_count);
 }
 

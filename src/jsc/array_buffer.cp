@@ -590,13 +590,13 @@ pub struct MarkedArrayBuffer {
 }
 
 @callconv("c")
-pub export fn MarkedArrayBuffer_deallocator(bytes_: *!, _: *!) {
+@export pub fn MarkedArrayBuffer_deallocator(bytes_: *!, _: *!) {
     const mimalloc = bun.mimalloc;
     mimalloc.mi_free(bytes_);
 }
 
 @callconv("c")
-pub export fn BlobArrayBuffer_deallocator(_: *!, blob: *!) {
+@export pub fn BlobArrayBuffer_deallocator(_: *!, blob: *!) {
     let store = bun.cast(*jsc.WebCore.Blob.Store, blob);
     store.deref();
 }

@@ -132,7 +132,7 @@ pub const node_os = struct {
 
 const binding_internals = struct {
     const import_DevServer = @import("../../bake/DevServer.zig");
-    export fn bindgen_DevServer_dispatchGetDeinitCountForTesting1(global: *jsc.JSGlobalObject, out: *usize) bool {
+    @export @c static fn bindgen_DevServer_dispatchGetDeinitCountForTesting1(global: *jsc.JSGlobalObject, out: *usize) bool {
         if (!@hasDecl(import_DevServer, "getDeinitCountForTesting"))
             @compileError("Missing binding declaration \"getDeinitCountForTesting\" in \"DevServer.zig\"");
         out.* = @as(bun.JSError!usize, import_DevServer.getDeinitCountForTesting(
@@ -146,7 +146,7 @@ const binding_internals = struct {
     }
     const import_bake = @import("../../bake/bake.zig");
     const import_NodeModuleModule = @import("../../jsc/NodeModuleModule.zig");
-    export fn bindgen_NodeModuleModule_dispatch_stat1(global: *jsc.JSGlobalObject, arg_str: *const bun.String, out: *i32) bool {
+    @export @c static fn bindgen_NodeModuleModule_dispatch_stat1(global: *jsc.JSGlobalObject, arg_str: *const bun.String, out: *i32) bool {
         if (!@hasDecl(import_NodeModuleModule, "_stat"))
             @compileError("Missing binding declaration \"_stat\" in \"NodeModuleModule.zig\"");
         const arg_str_utf8 = arg_str.toUTF8(bun.default_allocator);
@@ -162,7 +162,7 @@ const binding_internals = struct {
         return true;
     }
     const import_bindgen_test = @import("../../jsc/bindgen_test.zig");
-    export fn bindgen_Bindgen_test_dispatchAdd1(arg_global: *jsc.JSGlobalObject, arg_a: *const i32, arg_b: *const i32, out: *i32) bool {
+    @export @c static fn bindgen_Bindgen_test_dispatchAdd1(arg_global: *jsc.JSGlobalObject, arg_a: *const i32, arg_b: *const i32, out: *i32) bool {
         if (!@hasDecl(import_bindgen_test, "add"))
             @compileError("Missing binding declaration \"add\" in \"bindgen_test.zig\"");
         out.* = @as(bun.JSError!i32, import_bindgen_test.add(
@@ -183,7 +183,7 @@ const binding_internals = struct {
         d_value: u8,
         b_value: usize,
     };
-    export fn bindgen_Bindgen_test_dispatchRequiredAndOptionalArg1(global: *jsc.JSGlobalObject, arg_a: *const bool, arg_c: *const i32, buf: *BindgenTestRequiredAndOptionalArgArguments, out: *i32) bool {
+    @export @c static fn bindgen_Bindgen_test_dispatchRequiredAndOptionalArg1(global: *jsc.JSGlobalObject, arg_a: *const bool, arg_c: *const i32, buf: *BindgenTestRequiredAndOptionalArgArguments, out: *i32) bool {
         if (!@hasDecl(import_bindgen_test, "requiredAndOptionalArg"))
             @compileError("Missing binding declaration \"requiredAndOptionalArg\" in \"bindgen_test.zig\"");
         out.* = @as(bun.JSError!i32, import_bindgen_test.requiredAndOptionalArg(
@@ -200,7 +200,7 @@ const binding_internals = struct {
         return true;
     }
     const import_fmt_jsc = @import("../../jsc/fmt_jsc.zig");
-    export fn bindgen_Fmt_jsc_dispatchFmtString1(arg_global: *jsc.JSGlobalObject, arg_code: *const bun.String, arg_formatter: *const fmt_jsc.Formatter, out: *bun.String) bool {
+    @export @c static fn bindgen_Fmt_jsc_dispatchFmtString1(arg_global: *jsc.JSGlobalObject, arg_code: *const bun.String, arg_formatter: *const fmt_jsc.Formatter, out: *bun.String) bool {
         if (!@hasDecl(import_fmt_jsc.js_bindings, "fmtString"))
             @compileError("Missing binding declaration \"js_bindings.fmtString\" in \"fmt_jsc.zig\"");
         const arg_code_utf8 = arg_code.toUTF8(bun.default_allocator);
@@ -218,7 +218,7 @@ const binding_internals = struct {
         return true;
     }
     const import_BunObject = @import("../../runtime/api/BunObject.zig");
-    export fn bindgen_BunObject_dispatchBraces1(arg_global: *jsc.JSGlobalObject, arg_input: *const bun.String, arg_options: *const BunObject.BracesOptions) jsc.JSValue {
+    @export @c static fn bindgen_BunObject_dispatchBraces1(arg_global: *jsc.JSGlobalObject, arg_input: *const bun.String, arg_options: *const BunObject.BracesOptions) jsc.JSValue {
         if (!@hasDecl(import_BunObject, "braces"))
             @compileError("Missing binding declaration \"braces\" in \"BunObject.zig\"");
         return jsc.toJSHostCall(arg_global, @src(), import_BunObject.braces, .{
@@ -227,7 +227,7 @@ const binding_internals = struct {
             arg_options.*,
         });
     }
-    export fn bindgen_BunObject_dispatchGc1(global: *jsc.JSGlobalObject, arg_force: *const bool, out: *usize) bool {
+    @export @c static fn bindgen_BunObject_dispatchGc1(global: *jsc.JSGlobalObject, arg_force: *const bool, out: *usize) bool {
         if (!@hasDecl(import_BunObject, "gc"))
             @compileError("Missing binding declaration \"gc\" in \"BunObject.zig\"");
         out.* = @as(bun.JSError!usize, import_BunObject.gc(
@@ -242,14 +242,14 @@ const binding_internals = struct {
         return true;
     }
     const import_node_os = @import("../../runtime/node/node_os.zig");
-    export fn bindgen_Node_os_dispatchCpus1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
+    @export @c static fn bindgen_Node_os_dispatchCpus1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
         if (!@hasDecl(import_node_os, "cpus"))
             @compileError("Missing binding declaration \"cpus\" in \"node_os.zig\"");
         return jsc.toJSHostCall(arg_global, @src(), import_node_os.cpus, .{
             arg_global,
         });
     }
-    export fn bindgen_Node_os_dispatchFreemem1(global: *jsc.JSGlobalObject, out: *u64) bool {
+    @export @c static fn bindgen_Node_os_dispatchFreemem1(global: *jsc.JSGlobalObject, out: *u64) bool {
         if (!@hasDecl(import_node_os, "freemem"))
             @compileError("Missing binding declaration \"freemem\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!u64, import_node_os.freemem(
@@ -261,7 +261,7 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchGetPriority1(arg_global: *jsc.JSGlobalObject, arg_pid: *const i32, out: *i32) bool {
+    @export @c static fn bindgen_Node_os_dispatchGetPriority1(arg_global: *jsc.JSGlobalObject, arg_pid: *const i32, out: *i32) bool {
         if (!@hasDecl(import_node_os, "getPriority"))
             @compileError("Missing binding declaration \"getPriority\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!i32, import_node_os.getPriority(
@@ -275,7 +275,7 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchHomedir1(arg_global: *jsc.JSGlobalObject, out: *bun.String) bool {
+    @export @c static fn bindgen_Node_os_dispatchHomedir1(arg_global: *jsc.JSGlobalObject, out: *bun.String) bool {
         if (!@hasDecl(import_node_os, "homedir"))
             @compileError("Missing binding declaration \"homedir\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!bun.String, import_node_os.homedir(
@@ -288,28 +288,28 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchHostname1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
+    @export @c static fn bindgen_Node_os_dispatchHostname1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
         if (!@hasDecl(import_node_os, "hostname"))
             @compileError("Missing binding declaration \"hostname\" in \"node_os.zig\"");
         return jsc.toJSHostCall(arg_global, @src(), import_node_os.hostname, .{
             arg_global,
         });
     }
-    export fn bindgen_Node_os_dispatchLoadavg1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
+    @export @c static fn bindgen_Node_os_dispatchLoadavg1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
         if (!@hasDecl(import_node_os, "loadavg"))
             @compileError("Missing binding declaration \"loadavg\" in \"node_os.zig\"");
         return jsc.toJSHostCall(arg_global, @src(), import_node_os.loadavg, .{
             arg_global,
         });
     }
-    export fn bindgen_Node_os_dispatchNetworkInterfaces1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
+    @export @c static fn bindgen_Node_os_dispatchNetworkInterfaces1(arg_global: *jsc.JSGlobalObject) jsc.JSValue {
         if (!@hasDecl(import_node_os, "networkInterfaces"))
             @compileError("Missing binding declaration \"networkInterfaces\" in \"node_os.zig\"");
         return jsc.toJSHostCall(arg_global, @src(), import_node_os.networkInterfaces, .{
             arg_global,
         });
     }
-    export fn bindgen_Node_os_dispatchRelease1(global: *jsc.JSGlobalObject, out: *bun.String) bool {
+    @export @c static fn bindgen_Node_os_dispatchRelease1(global: *jsc.JSGlobalObject, out: *bun.String) bool {
         if (!@hasDecl(import_node_os, "release"))
             @compileError("Missing binding declaration \"release\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!bun.String, import_node_os.release(
@@ -321,7 +321,7 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchTotalmem1(global: *jsc.JSGlobalObject, out: *u64) bool {
+    @export @c static fn bindgen_Node_os_dispatchTotalmem1(global: *jsc.JSGlobalObject, out: *u64) bool {
         if (!@hasDecl(import_node_os, "totalmem"))
             @compileError("Missing binding declaration \"totalmem\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!u64, import_node_os.totalmem(
@@ -333,7 +333,7 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchUptime1(arg_global: *jsc.JSGlobalObject, out: *f64) bool {
+    @export @c static fn bindgen_Node_os_dispatchUptime1(arg_global: *jsc.JSGlobalObject, out: *f64) bool {
         if (!@hasDecl(import_node_os, "uptime"))
             @compileError("Missing binding declaration \"uptime\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!f64, import_node_os.uptime(
@@ -346,7 +346,7 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchUserInfo1(arg_global: *jsc.JSGlobalObject, arg_options: *const node_os.UserInfoOptions) jsc.JSValue {
+    @export @c static fn bindgen_Node_os_dispatchUserInfo1(arg_global: *jsc.JSGlobalObject, arg_options: *const node_os.UserInfoOptions) jsc.JSValue {
         if (!@hasDecl(import_node_os, "userInfo"))
             @compileError("Missing binding declaration \"userInfo\" in \"node_os.zig\"");
         return jsc.toJSHostCall(arg_global, @src(), import_node_os.userInfo, .{
@@ -354,7 +354,7 @@ const binding_internals = struct {
             arg_options.*,
         });
     }
-    export fn bindgen_Node_os_dispatchVersion1(global: *jsc.JSGlobalObject, out: *bun.String) bool {
+    @export @c static fn bindgen_Node_os_dispatchVersion1(global: *jsc.JSGlobalObject, out: *bun.String) bool {
         if (!@hasDecl(import_node_os, "version"))
             @compileError("Missing binding declaration \"version\" in \"node_os.zig\"");
         out.* = @as(bun.JSError!bun.String, import_node_os.version(
@@ -366,7 +366,7 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchSetPriority1(arg_global: *jsc.JSGlobalObject, arg_pid: *const i32, arg_priority: *const i32) bool {
+    @export @c static fn bindgen_Node_os_dispatchSetPriority1(arg_global: *jsc.JSGlobalObject, arg_pid: *const i32, arg_priority: *const i32) bool {
         if (!@hasDecl(import_node_os, "setPriority1"))
             @compileError("Missing binding declaration \"setPriority1\" in \"node_os.zig\"");
         @as(bun.JSError!void, import_node_os.setPriority1(
@@ -381,7 +381,7 @@ const binding_internals = struct {
         };
         return true;
     }
-    export fn bindgen_Node_os_dispatchSetPriority2(arg_global: *jsc.JSGlobalObject, arg_priority: *const i32) bool {
+    @export @c static fn bindgen_Node_os_dispatchSetPriority2(arg_global: *jsc.JSGlobalObject, arg_priority: *const i32) bool {
         if (!@hasDecl(import_node_os, "setPriority2"))
             @compileError("Missing binding declaration \"setPriority2\" in \"node_os.zig\"");
         @as(bun.JSError!void, import_node_os.setPriority2(

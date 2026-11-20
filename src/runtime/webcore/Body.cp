@@ -316,7 +316,7 @@ pub const Value = union(enum) {
     // So we can't know for sure if it's empty or not
     // We CAN know that it is definitely empty.
     pub fn isDefinitelyEmpty(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .Null => true,
             .Used, .Empty => true,
             .InternalBlob => _.InternalBlob.slice().len == 0,

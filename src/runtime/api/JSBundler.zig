@@ -1319,7 +1319,7 @@ pub const BundlerResolveValue = union(enum) {
 
 pub fn consume(self: *BundlerResolveValue) BundlerResolveValue {
             const result = self.*;
-            self.* = .{ .consumed = .{} };
+            self.* = .{ .consumed = undefined };
             return result;
     }
 
@@ -1335,7 +1335,7 @@ _ = e.deinit(bun.default_allocator);
 
 },
 }
-            self.* = .{ .consumed = .{} };
+            self.* = .{ .consumed = undefined };
     }
 };
 
@@ -1364,9 +1364,9 @@ pub fn runOnJSThread(self: *BundlerResolve) void {
             _ = self.bv2.plugins.?.matchOnResolve(self.import_record.specifier, self.import_record.namespace, self.import_record.source_file, self, self.import_record.kind);
     }
 
-pub fn JSBundlerPlugin__onResolveAsync(resolve: *BundlerResolve, _: *anyopaque, path_value: JSValue, namespace_value: JSValue, external_value: JSValue) void {
+pub export fn JSBundlerPlugin__onResolveAsync(resolve: *BundlerResolve, _: *anyopaque, path_value: JSValue, namespace_value: JSValue, external_value: JSValue) callconv(.c) void {
             if ((path_value.isEmptyOrUndefinedOrNull() or namespace_value.isEmptyOrUndefinedOrNull())) {
-                resolve.value = .{ .no_match = .{} };
+                resolve.value = .{ .no_match = undefined };
             } else {
                 const global = resolve.bv2.plugins.?.globalObject();
                 const path = (blk_catch_2: { break :blk_catch_2 ((path_value.toSliceCloneWithAllocator(global, bun.default_allocator)) catch |__ce_2| { _ = &__ce_2; @panic("Unexpected: path is not a string"); }); });
@@ -1405,12 +1405,12 @@ _ = e.deinit(bun.default_allocator);
 
 },
 }
-            self.* = .{ .consumed = .{} };
+            self.* = .{ .consumed = undefined };
     }
 
 pub fn consume(self: *BundlerLoadValue) BundlerLoadValue {
             const result = self.*;
-            self.* = .{ .consumed = .{} };
+            self.* = .{ .consumed = undefined };
             return result;
     }
 };
@@ -1451,7 +1451,7 @@ pub fn dispatch(self: *BundlerLoad) void {
             _ = self.bv2.jsLoopForPlugins().enqueueTaskConcurrent(concurrent_task);
     }
 
-pub fn JSBundlerPlugin__onDefer(load: *BundlerLoad, global: *jsc.JSGlobalObject) JSValue {
+pub export fn JSBundlerPlugin__onDefer(load: *BundlerLoad, global: *jsc.JSGlobalObject) callconv(.c) JSValue {
             return jsc.toJSHostCall(global, @src(), BundlerLoad.onDefer, .{ load, global });
     }
 
@@ -1466,16 +1466,21 @@ pub fn onDefer(self: *BundlerLoad, globalObject: *jsc.JSGlobalObject) bun.JSErro
 _ = jsc_event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.fromCallback(self.parse_task.ctx, BundleV2.onNotifyDefer));
 },
 .mini => |*mini| {
-_ = mini.enqueueTaskConcurrentWithExtraCtx(BundlerLoad, BundleV2, self, BundleV2.onNotifyDeferMini, .task);
+_ = mini.enqueueTaskConcurrentWithExtraCtx(BundlerLoad, BundleV2, self, BundlerLoad.onNotifyDeferMini, .task);
 },
 }
             return self.bv2.plugins.?.appendDeferPromise();
     }
 
-pub fn JSBundlerPlugin__onLoadAsync(self: *BundlerLoad, _: *anyopaque, source_code_value: JSValue, loader_as_int: JSValue) void {
+pub fn onNotifyDeferMini(load: *BundlerLoad, bundle: *BundleV2) void {
+            _ = &load;
+            _ = bundle.onNotifyDefer();
+    }
+
+pub export fn JSBundlerPlugin__onLoadAsync(self: *BundlerLoad, _: *anyopaque, source_code_value: JSValue, loader_as_int: JSValue) callconv(.c) void {
             _ = jsc.markBinding(@src());
             if ((source_code_value.isEmptyOrUndefinedOrNull() or loader_as_int.isEmptyOrUndefinedOrNull())) {
-                self.value = .{ .no_match = .{} };
+                self.value = .{ .no_match = undefined };
                 if (self.was_file) {
                     _ = self.bv2.graph.pool.worker_pool.schedule(bun.ThreadPool.Batch.@"from"((&self.parse_task.task)));
                     _ = self.deinit();
@@ -1611,18 +1616,18 @@ pub fn setConfig(self: *BundlerPlugin, config: *anyopaque) void {
             _ = JSBundlerPlugin__setConfig(self, config);
     }
 
-pub fn JSBundlerPlugin__addError(ctx: *anyopaque, plugin: *BundlerPlugin, exception: JSValue, which: JSValue) void {
+pub export fn JSBundlerPlugin__addError(ctx: *anyopaque, plugin: *BundlerPlugin, exception: JSValue, which: JSValue) callconv(.c) void {
             switch (which.to(i32)) {
 0 => {
 const resolve: *BundlerResolve = bun.cast(*BundlerResolve, ctx);
             const msg = msgFromJS(plugin, resolve.import_record.source_file, exception);
-            resolve.value = .{ .e = msg };
+            resolve.value = .{ .@"err" = msg };
             _ = resolve.bv2.onResolveAsync(resolve);
 },
 1 => {
 const load: *BundlerLoad = bun.cast(*BundlerLoad, ctx);
             const msg = msgFromJS(plugin, load.path, exception);
-            load.value = .{ .e = msg };
+            load.value = .{ .@"err" = msg };
             _ = load.bv2.onLoadAsync(load);
 },
 else => {

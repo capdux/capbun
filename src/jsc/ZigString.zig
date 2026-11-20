@@ -860,7 +860,7 @@ const C_API = bun.jsc.C;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
-pub fn ZigString__free(raw: [*]const u8, len: usize, allocator_: ?*anyopaque) void {
+pub export fn ZigString__free(raw: [*]const u8, len: usize, allocator_: ?*anyopaque) callconv(.c) void {
         if (allocator_) |al| {
             _ = &al;
             const alloc_ptr: *std.mem.Allocator = (blk: {
@@ -885,7 +885,7 @@ pub fn ZigString__free(raw: [*]const u8, len: usize, allocator_: ?*anyopaque) vo
         }
 }
 
-pub fn ZigString__freeGlobal(ptr: [*]const u8, len: usize) void {
+pub export fn ZigString__freeGlobal(ptr: [*]const u8, len: usize) callconv(.c) void {
         const untagged: *anyopaque = (blk: {
         break :blk @ptrFromInt(@intFromPtr(ZigString.init(ptr[0..len]).slice().ptr));
 

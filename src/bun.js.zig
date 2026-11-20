@@ -527,7 +527,7 @@ pub fn applyStandaloneRuntimeFlags(b: *bun.Transpiler, graph: *const bun.Standal
         b.resolver.opts.load_package_json = (!graph.flags.disable_autoload_package_json);
 }
 
-pub fn Bun__onResolveEntryPointResult(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) noreturn {
+pub export fn Bun__onResolveEntryPointResult(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) noreturn {
         const arguments = callframe.arguments_old(1).slice();
         const result = arguments[0];
         _ = result.print(global, .Log, .Log);
@@ -535,7 +535,7 @@ pub fn Bun__onResolveEntryPointResult(global: *jsc.JSGlobalObject, callframe: *j
         return .js_undefined;
 }
 
-pub fn Bun__onRejectEntryPointResult(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) noreturn {
+pub export fn Bun__onRejectEntryPointResult(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) noreturn {
         const arguments = callframe.arguments_old(1).slice();
         const result = arguments[0];
         _ = result.print(global, .Log, .Log);

@@ -155,11 +155,11 @@ const contended: u32 = 0b11;
 pub fn spinCycle() {}
 
 // These have to be a size known to C.
-export fn Bun__lock(ptr: *ReleaseImpl) {
+@export @c fn Bun__lock(ptr: *ReleaseImpl) {
     ptr.lock();
 }
 
-export fn Bun__unlock(ptr: *ReleaseImpl) {
+@export @c fn Bun__unlock(ptr: *ReleaseImpl) {
     ptr.unlock();
 }
 

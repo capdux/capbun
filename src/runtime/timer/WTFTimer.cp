@@ -88,11 +88,11 @@ pub struct RunLoopTimer {
     }
 }
 
-pub export fn WTFTimer__runIfImminent(vm: *VirtualMachine) {
+@export @c fn WTFTimer__runIfImminent(vm: *VirtualMachine) {
     vm.eventLoop().runImminentGCTimer();
 }
 
-pub export fn WTFTimer__create(run_loop_timer: *RunLoopTimer): *!? {
+@export @c fn WTFTimer__create(run_loop_timer: *RunLoopTimer): *!? {
     if (VirtualMachine.is_bundler_thread_for_bytecode_cache) {
         return null;
     }
@@ -118,23 +118,23 @@ pub export fn WTFTimer__create(run_loop_timer: *RunLoopTimer): *!? {
     return timer;
 }
 
-pub export fn WTFTimer__update(timer: *WTFTimer, seconds: f64, repeat: bool) {
+@export @c fn WTFTimer__update(timer: *WTFTimer, seconds: f64, repeat: bool) {
     timer.update(seconds, repeat);
 }
 
-pub export fn WTFTimer__deinit(timer: *WTFTimer) {
+@export @c fn WTFTimer__deinit(timer: *WTFTimer) {
     timer.deinit();
 }
 
-pub export fn WTFTimer__isActive(timer: *const WTFTimer): bool {
+@export @c fn WTFTimer__isActive(timer: *const WTFTimer): bool {
     return timer.event_loop_timer.state == .ACTIVE or (timer.imminent.load(.seq_cst) orelse return false) == timer;
 }
 
-pub export fn WTFTimer__cancel(timer: *WTFTimer) {
+@export @c fn WTFTimer__cancel(timer: *WTFTimer) {
     timer.cancel();
 }
 
-pub export fn WTFTimer__secondsUntilTimer(timer: *WTFTimer): f64 {
+@export @c fn WTFTimer__secondsUntilTimer(timer: *WTFTimer): f64 {
     timer.lock.lock();
     defer timer.lock.unlock();
     if (timer.event_loop_timer.state == .ACTIVE) {

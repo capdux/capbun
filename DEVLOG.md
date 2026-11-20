@@ -1449,3 +1449,7 @@
   - `Expr.init(type, st, loc)` 内 `std.mem.zeroes(st)` 会在泛型分析时触发 `BabyList.#origin` 私有字段及非空指针置零错误，改用 `.{}` 默认初始化即可消除；
   - `std.mem.sort`/`std.sort.pdq` 回调上下文传 `{}` 会被 lower 成 `.{}` 而回调期望 `void`，使用空上下文结构体 `EmptySortCtx{}` + `static fn lessThan` 统一解决；
   - `for (x of start..end)` 当 `start` 为 `u32`/`usize` 时 `cpc` 默认推导循环变量为 `i32`，改用显式类型的 `while` 循环；`DependencyBehavior.includes(...)` 被误识别为容器 `includes` 时用函数引用 `const f = T.includes; f(x, y)` 绕过；`TopFormatter.repository` 改值传递 `Repository` 同步消除了潜在栈悬垂指针风险。
+- **[2026-11-21] C ABI Export 全量激活与链接前语义闭环经验**：
+  - 区分内部 `pub const` 与 C ABI `export const`（类型别名/Slice/Zig 函数不可加 `export`），仅真实 C ABI 导出函数使用 `@export @c fn` / `@export @c static fn` / `export fn`，仅真实 C ABI 常量使用 `export const`；
+  - `FetchTasklet` 内因结构体存在可空字段 `http: (*http.AsyncHTTP)?`，方法体内直接写 `http.AsyncHTTP` 会被 `cpc` 误判为可空字段解包 `(http).?.AsyncHTTP`，通过在模块顶层定义 `HttpAsyncHTTP = bun.http.AsyncHTTP` 等别名彻底消除阴影；
+  - `bun.range` comptime 循环需补充 `@setEvalBranchQuota(100_000)` 防止 5000 分支上限溢出。

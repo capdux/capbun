@@ -78,7 +78,7 @@ pub fn resolveEmbeddedFile(vm: *VirtualMachine, path_buf: *bun.PathBuffer, input
     return bun.path.joinAbsStringBuf(bun.fs.FileSystem.RealFS.tmpdirPath(), path_buf, &[tmpfilename], .auto);
 }
 
-pub export fn Bun__getDefaultLoader(global: *JSGlobalObject, str: *const bun.String): api.Loader {
+@export @c fn Bun__getDefaultLoader(global: *JSGlobalObject, str: *const bun.String): api.Loader {
     let jsc_vm = global.bunVM();
     const filename = str.toUTF8(jsc_vm.allocator);
     defer filename.deinit();
@@ -818,7 +818,7 @@ pub fn transpileSourceCode(
     }
 }
 
-pub export fn Bun__resolveAndFetchBuiltinModule(
+@export @c fn Bun__resolveAndFetchBuiltinModule(
     jsc_vm: *VirtualMachine,
     specifier: *bun.String,
     ret: *jsc.ErrorableResolvedSource,
@@ -840,7 +840,7 @@ pub export fn Bun__resolveAndFetchBuiltinModule(
     return true;
 }
 
-pub export fn Bun__fetchBuiltinModule(
+@export @c fn Bun__fetchBuiltinModule(
     jsc_vm: *VirtualMachine,
     globalObject: *JSGlobalObject,
     specifier: *bun.String,
@@ -871,7 +871,7 @@ pub export fn Bun__fetchBuiltinModule(
 
 const always_sync_modules = [ "reflect-metadata" ];
 
-pub export fn Bun__transpileFile(
+@export @c fn Bun__transpileFile(
     jsc_vm: *VirtualMachine,
     globalObject: *JSGlobalObject,
     specifier_ptr: *bun.String,
@@ -1116,7 +1116,7 @@ pub export fn Bun__transpileFile(
     return promise;
 }
 
-export fn Bun__runVirtualModule(globalObject: *JSGlobalObject, specifier_ptr: *const bun.String): JSValue {
+@export @c fn Bun__runVirtualModule(globalObject: *JSGlobalObject, specifier_ptr: *const bun.String): JSValue {
     jsc.markBinding(@src());
     if (globalObject.bunVM().plugin_runner == null) return JSValue.zero;
 
@@ -1221,7 +1221,7 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String): !Reso
     return null;
 }
 
-export fn Bun__transpileVirtualModule(
+@export @c fn Bun__transpileVirtualModule(
     globalObject: *JSGlobalObject,
     specifier_ptr: *const bun.String,
     referrer_ptr: *const bun.String,
@@ -1317,7 +1317,7 @@ pub enum FetchFlags {
 }
 
 /// Support embedded .node files
-export fn Bun__resolveEmbeddedNodeFile(vm: *VirtualMachine, in_out_str: *bun.String): bool {
+@export @c fn Bun__resolveEmbeddedNodeFile(vm: *VirtualMachine, in_out_str: *bun.String): bool {
     if (vm.standalone_module_graph == null) return false;
 
     const input_path = in_out_str.toUTF8(bun.default_allocator);
@@ -1329,7 +1329,7 @@ export fn Bun__resolveEmbeddedNodeFile(vm: *VirtualMachine, in_out_str: *bun.Str
     return true;
 }
 
-export fn ModuleLoader__isBuiltin(data: [*]const u8, len: usize): bool {
+@export @c fn ModuleLoader__isBuiltin(data: [*]const u8, len: usize): bool {
     const str = unsafe { data[0..len] };
     return HardcodedModule.Alias.bun_aliases.get(str) != null;
 }

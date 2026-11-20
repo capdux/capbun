@@ -85,7 +85,7 @@ pub fn setThreadName(name: [:0]const u8) {
 const ExitFn = @c ((): void);
 
 let on_exit_callbacks: std.ArrayListUnmanaged(ExitFn) = .empty;
-@c pub export fn Bun__atexit(function: ExitFn) {
+@export @c fn Bun__atexit(function: ExitFn) {
     if (std.mem.indexOfScalar(ExitFn, on_exit_callbacks.items, function) == null) {
         on_exit_callbacks.append(bun.default_allocator, function) catch {};
     }
@@ -218,13 +218,10 @@ pub const user_agent = std.fmt.comptimePrint("Bun/{s}", [Global.package_json_ver
 pub export const Bun__userAgent: cstr = Global.user_agent;
 
 comptime {
-    @export(&@field(Global, "Bun__userAgent"), { name: "Bun__userAgent" });
-    @export(&@field(Global, "Bun__atexit"), { name: "Bun__atexit" });
     @export(&bun_is_exiting, { name: "bun_is_exiting" });
-    @export(&@field(Global, "Bun__onExit"), { name: "Bun__onExit" });
 }
 
-@c pub export fn Bun__onExit() {
+@export @c fn Bun__onExit() {
     bun.jsc.Node.FSEvents.closeAndWait();
 
     runExitCallbacks();

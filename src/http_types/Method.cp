@@ -197,7 +197,7 @@ export enum Method: u8 {
     };
 }
 
-pub export fn Bun__HTTPMethod__from(str: [*]const u8, len: usize): i16 {
+@export @c fn Bun__HTTPMethod__from(str: [*]const u8, len: usize): i16 {
     let method: Method? = Method.find(str[0..len]);
     if (method == null) {
         return -1;

@@ -325,7 +325,7 @@ export union(enum) Source {
     }
 }
 
-export fn Source__setRawModeStdin(raw: bool): c_int {
+@export @c fn Source__setRawModeStdin(raw: bool): c_int {
     const tty = switch (Source.openTty(bun.jsc.VirtualMachine.get().uvLoop(), .stdin())) {
         .result t => t,
         .err e => return e.errno,

@@ -103,7 +103,7 @@ pub struct PosixSignalTask {
 }
 
 /// This is the signal handler entry point. Calls enqueue on the ring buffer.
-export fn Bun__onPosixSignal(number: i32) {
+@export @c fn Bun__onPosixSignal(number: i32) {
     if (comptime Environment.isPosix) {
         if (vm := VirtualMachine.getMainThreadVM()) {
             if (sh := vm.eventLoop().signal_handler) {
@@ -113,7 +113,7 @@ export fn Bun__onPosixSignal(number: i32) {
     }
 }
 
-export fn Bun__ensureSignalHandler() {
+@export @c fn Bun__ensureSignalHandler() {
     if (comptime Environment.isPosix) {
         if (vm := VirtualMachine.getMainThreadVM()) {
             let el = vm.eventLoop();

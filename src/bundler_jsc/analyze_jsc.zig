@@ -105,7 +105,7 @@ pub const JSModuleRecord = opaque {
 const ModuleInfoDeserialized = analyze.ModuleInfoDeserialized;
 const StringID = analyze.StringID;
 
-pub fn zig__renderDiff(expected_ptr: [*:0]u8, expected_len: usize, received_ptr: [*:0]u8, received_len: usize, globalThis: *bun.jsc.JSGlobalObject) callconv(.c) void {
+pub export fn zig__renderDiff(expected_ptr: [*:0]const u8, expected_len: usize, received_ptr: [*:0]const u8, received_len: usize, globalThis: *bun.jsc.JSGlobalObject) callconv(.c) void {
         const formatter = (blk: {
         break :blk DiffFormatter{ .received_string = received_ptr[0..received_len], .expected_string = expected_ptr[0..expected_len], .globalThis = globalThis };
 
@@ -113,7 +113,7 @@ pub fn zig__renderDiff(expected_ptr: [*:0]u8, expected_len: usize, received_ptr:
         _ = (blk_catch_0: { break :blk_catch_0 ((bun.Output.errorWriter().print("DIFF:\n{any}\n", .{ formatter })) catch |__ce_0| { _ = &__ce_0;  }); });
 }
 
-pub fn zig__ModuleInfoDeserialized__toJSModuleRecord(globalObject: *bun.jsc.JSGlobalObject, vm: *bun.jsc.VM, module_key: *const IdentifierArray, source_code: *const SourceCode, declared_variables: *VariableEnvironment, lexical_variables: *VariableEnvironment, res: *ModuleInfoDeserialized) callconv(.c) ?*JSModuleRecord {
+pub export fn zig__ModuleInfoDeserialized__toJSModuleRecord(globalObject: *bun.jsc.JSGlobalObject, vm: *bun.jsc.VM, module_key: *const IdentifierArray, source_code: *const SourceCode, declared_variables: *VariableEnvironment, lexical_variables: *VariableEnvironment, res: *ModuleInfoDeserialized) callconv(.c) ?*JSModuleRecord {
         var identifiers = IdentifierArray.create(res.strings_lens.len);
         _ = &identifiers;
         defer {
@@ -121,19 +121,16 @@ pub fn zig__ModuleInfoDeserialized__toJSModuleRecord(globalObject: *bun.jsc.JSGl
         }
         var offset: usize = 0;
         _ = &offset;
-        {
-            var index: i32 = 0;
-            _ = &index;
-            const __end_0 = res.strings_lens.len;
-            while (index < __end_0) : (index += 1) {
-                const len = res.strings_lens[@as(usize, @intCast(index))];
-                if ((res.strings_buf.len < (offset + len))) {
-                    return null;
-                }
-                const sub = res.strings_buf[offset..][0..len];
-                _ = identifiers.setFromUtf8(index, vm, sub);
-                offset = (offset + len);
+        var index: usize = 0;
+        _ = &index;
+        while ((index < res.strings_lens.len)) : (index = (index + 1)) {
+            const len = res.strings_lens[@as(usize, @intCast(index))];
+            if ((res.strings_buf.len < (offset + len))) {
+                return null;
             }
+            const sub = res.strings_buf[offset..][0..len];
+            _ = identifiers.setFromUtf8(index, vm, sub);
+            offset = (offset + len);
         }
         {
             var i: usize = 0;
@@ -164,8 +161,8 @@ return null;
         {
             var idx: i32 = 0;
             _ = &idx;
-            const __end_2 = res.requested_modules_keys.len;
-            while (idx < __end_2) : (idx += 1) {
+            const __end_1 = res.requested_modules_keys.len;
+            while (idx < __end_1) : (idx += 1) {
                 const reqk = res.requested_modules_keys[@as(usize, @intCast(idx))];
                 const reqv = res.requested_modules_values[@as(usize, @intCast(idx))];
                 switch (reqv) {

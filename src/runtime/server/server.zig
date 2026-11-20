@@ -3941,7 +3941,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
     };
 }
 
-pub fn Server__setIdleTimeout(server: jsc.JSValue, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) void {
+pub export fn Server__setIdleTimeout(server: jsc.JSValue, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) callconv(.c) void {
         _ = (blk_catch_1: { break :blk_catch_1 ((Server__setIdleTimeout_(server, seconds, globalThis)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             _ = globalThis.throwOutOfMemoryValue();
         } }); });

@@ -6,14 +6,14 @@
 import std from "std";
 import bun from "bun";
 
-export const MemFdAllocator = bun.allocators.LinuxMemFdAllocator;
+pub const MemFdAllocator = bun.allocators.LinuxMemFdAllocator;
 
 /// splice() moves data between two file descriptors without copying
 /// between kernel address space and user address space.  It
 /// transfers up to len bytes of data from the file descriptor fd_in
 /// to the file descriptor fd_out, where one of the file descriptors
 /// must refer to a pipe.
-export fn splice(fd_in: std.posix.fd_t, off_in: *i64!?, fd_out: std.posix.fd_t, off_out: *i64!?, len: usize, flags: u32): usize {
+pub fn splice(fd_in: std.posix.fd_t, off_in: *i64!?, fd_out: std.posix.fd_t, off_out: *i64!?, len: usize, flags: u32): usize {
     unsafe {
         return std.os.linux.syscall6(
             .splice,
@@ -29,7 +29,7 @@ export fn splice(fd_in: std.posix.fd_t, off_in: *i64!?, fd_out: std.posix.fd_t, 
 
 let rwf_bool = std.atomic.Value(RWFFlagSupport).init(RWFFlagSupport.unknown);
 
-export enum RWFFlagSupport: u8 {
+pub enum RWFFlagSupport: u8 {
     unknown = 0,
     unsupported = 2,
     supported = 1,
@@ -73,11 +73,11 @@ export enum RWFFlagSupport: u8 {
 /// https://man7.org/linux/man-pages/man2/ioctl_ficlone.2.html
 ///
 /// Support for FICLONE is dependent on the filesystem driver.
-export fn ioctl_ficlone(dest_fd: bun.FD, srcfd: bun.FD): usize {
+pub fn ioctl_ficlone(dest_fd: bun.FD, srcfd: bun.FD): usize {
     return std.os.linux.ioctl(dest_fd.native(), bun.c.FICLONE, @intCast(srcfd.native()));
 }
 
-@c pub export fn sys_epoll_pwait2(epfd: i32, events: [*]std.os.linux.epoll_event?!, maxevents: i32, timeout: *const std.os.linux.timespec!?, sigmask: *const std.os.linux.sigset_t!?): isize {
+@export @c fn sys_epoll_pwait2(epfd: i32, events: [*]std.os.linux.epoll_event?!, maxevents: i32, timeout: *const std.os.linux.timespec!?, sigmask: *const std.os.linux.sigset_t!?): isize {
     unsafe {
         return @bitCast(
             std.os.linux.syscall6(

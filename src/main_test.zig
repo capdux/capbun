@@ -719,8 +719,10 @@ var global_task_queue: GlobalTaskQueue = .{};
 var global_runtime_shutdown: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 var global_active_tasks: std.atomic.Value(usize) = std.atomic.Value(usize).init(0);
 var global_running_workers: std.atomic.Value(usize) = std.atomic.Value(usize).init(0);
-threadlocal var task_queue: [1000]_Task = undefined; threadlocal var queue_len: usize = 0;
-threadlocal var current_node_id: u32 = 0; threadlocal var next_local_id: u32 = 1;
+threadlocal var task_queue: [1000]_Task = undefined;
+threadlocal var queue_len: usize = 0;
+threadlocal var current_node_id: u32 = 0;
+threadlocal var next_local_id: u32 = 1;
 fn schedule(run: *const fn(*anyopaque) anyerror!void, ctx: *anyopaque) void { if (current_node_id == 0) { global_task_queue.push(.{ .run = run, .ctx = ctx }); } else { if (queue_len < 1000) { task_queue[queue_len] = .{ .run = run, .ctx = ctx }; queue_len += 1; } } }
 const _WorkerPoolRunner = struct { pub fn run() void { while (!global_runtime_shutdown.load(.acquire)) { if (global_task_queue.pop()) |task| { _ = global_running_workers.fetchAdd(1, .acquire); task.run(task.ctx) catch {}; _ = global_running_workers.fetchSub(1, .release); } else { const ts = std.os.linux.timespec{ .sec = 0, .nsec = 100_000 }; _ = std.os.linux.nanosleep(&ts, null); } } } };
 
@@ -790,7 +792,7 @@ pub fn exitCode(self: Stats) u8 {
 
 pub const OverridesMem = struct {
 
-pub fn indexOfSentinel(comptime T: type, comptime sentinel: T, p: [*:sentinel]T) usize {
+pub fn indexOfSentinel(comptime T: type, comptime sentinel: T, p: [*:sentinel]const T) usize {
             if (comptime (((T == u16) and (sentinel == 0)) and Environment.isWindows)) {
                 return wcslen(p);
             }
@@ -939,9 +941,9 @@ pub fn extractName(t: TestFn) []const u8 {
         return (if (@typeInfo(@TypeOf(t)) == .@"enum" or @typeInfo(@TypeOf(t)) == .@"union") @tagName(t) else t.name);
 }
 
-extern "c" fn wcslen(s: [*:0]u16) callconv(.c) usize;
+extern "c" fn wcslen(s: [*:0]const u16) callconv(.c) usize;
 
-pub fn Bun__panic(msg: [*]const u8, len: usize) noreturn {
+pub export fn Bun__panic(msg: [*]const u8, len: usize) callconv(.c) noreturn {
         _ = Output.panic("{s}", .{ msg[0..len] });
 }
 

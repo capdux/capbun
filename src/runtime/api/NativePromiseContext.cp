@@ -75,7 +75,7 @@ pub fn take(comptime T: type, cell: jsc.JSValue): (*T)? {
 /// the server — all of which may unprotect JS values or allocate. We must
 /// defer that work to the event loop.
 @callconv("c")
-pub export fn Bun__NativePromiseContext__destroy(ctx: *!, tag: u8) {
+@export pub fn Bun__NativePromiseContext__destroy(ctx: *!, tag: u8) {
     DeferredDerefTask.schedule(ctx, @enumFromInt(tag));
 }
 

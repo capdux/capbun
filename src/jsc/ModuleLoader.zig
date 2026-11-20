@@ -184,7 +184,7 @@ else => {
         return bun.path.joinAbsStringBuf(bun.fs.FileSystem.RealFS.tmpdirPath(), path_buf, (&.{ tmpfilename }), .auto);
 }
 
-pub fn Bun__getDefaultLoader(global: *JSGlobalObject, str: *const bun.String) api.Loader {
+pub export fn Bun__getDefaultLoader(global: *JSGlobalObject, str: *const bun.String) callconv(.c) api.Loader {
         var jsc_vm = global.bunVM();
         _ = &jsc_vm;
         const filename = str.toUTF8(jsc_vm.allocator);
@@ -605,7 +605,7 @@ if (comptime Environment.isMac) {
 }
 }
 
-pub fn Bun__resolveAndFetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: *bun.String, ret: *jsc.ErrorableResolvedSource) bool {
+pub export fn Bun__resolveAndFetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: *bun.String, ret: *jsc.ErrorableResolvedSource) callconv(.c) bool {
         _ = jsc.markBinding(@src());
         var log = logger.Log.init(jsc_vm.transpiler.allocator);
         _ = &log;
@@ -621,7 +621,7 @@ pub fn Bun__resolveAndFetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: *bu
         return true;
 }
 
-pub fn Bun__fetchBuiltinModule(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject, specifier: *bun.String, referrer: *bun.String, ret: *jsc.ErrorableResolvedSource) bool {
+pub export fn Bun__fetchBuiltinModule(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject, specifier: *bun.String, referrer: *bun.String, ret: *jsc.ErrorableResolvedSource) callconv(.c) bool {
         _ = jsc.markBinding(@src());
         var log = logger.Log.init(jsc_vm.transpiler.allocator);
         _ = &log;
@@ -641,7 +641,7 @@ pub fn Bun__fetchBuiltinModule(jsc_vm: *VirtualMachine, globalObject: *JSGlobalO
         }
 }
 
-pub fn Bun__transpileFile(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject, specifier_ptr: *bun.String, referrer: *bun.String, type_attribute: ?*const bun.String, ret: *jsc.ErrorableResolvedSource, allow_promise: bool, is_commonjs_require: bool, _force_loader_type: bun.schema.api.Loader) ?*anyopaque {
+pub export fn Bun__transpileFile(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject, specifier_ptr: *bun.String, referrer: *bun.String, type_attribute: ?*const bun.String, ret: *jsc.ErrorableResolvedSource, allow_promise: bool, is_commonjs_require: bool, _force_loader_type: bun.schema.api.Loader) callconv(.c) ?*anyopaque {
         _ = jsc.markBinding(@src());
         const force_loader_type: bun.options.Loader.Optional = .fromAPI(_force_loader_type);
         var log = logger.Log.init(jsc_vm.transpiler.allocator);
@@ -812,7 +812,7 @@ ret.* = jsc.ErrorableResolvedSource.ok(ResolvedSource{ .allocator = null, .sourc
         return promise;
 }
 
-pub fn Bun__runVirtualModule(globalObject: *JSGlobalObject, specifier_ptr: *const bun.String) JSValue {
+pub export fn Bun__runVirtualModule(globalObject: *JSGlobalObject, specifier_ptr: *const bun.String) callconv(.c) JSValue {
         _ = jsc.markBinding(@src());
         if ((globalObject.bunVM().plugin_runner == null)) {
             return JSValue.zero;
@@ -884,7 +884,7 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String) !?Reso
         return null;
 }
 
-pub fn Bun__transpileVirtualModule(globalObject: *JSGlobalObject, specifier_ptr: *const bun.String, referrer_ptr: *const bun.String, source_code: *ZigString, loader_: api.Loader, ret: *jsc.ErrorableResolvedSource) bool {
+pub export fn Bun__transpileVirtualModule(globalObject: *JSGlobalObject, specifier_ptr: *const bun.String, referrer_ptr: *const bun.String, source_code: *ZigString, loader_: api.Loader, ret: *jsc.ErrorableResolvedSource) callconv(.c) bool {
         _ = jsc.markBinding(@src());
         const jsc_vm = globalObject.bunVM();
         var specifier_slice = specifier_ptr.toUTF8(jsc_vm.allocator);
@@ -939,7 +939,7 @@ pub inline fn jsSyntheticModule(name: ResolvedSource.Tag, specifier: String) Res
         return ResolvedSource{ .allocator = null, .source_code = bun.String.empty, .specifier = specifier, .source_url = bun.String.static(@tagName(name)), .tag = name, .source_code_needs_deref = false };
 }
 
-pub fn Bun__resolveEmbeddedNodeFile(vm: *VirtualMachine, in_out_str: *bun.String) bool {
+pub export fn Bun__resolveEmbeddedNodeFile(vm: *VirtualMachine, in_out_str: *bun.String) callconv(.c) bool {
         if ((vm.standalone_module_graph == null)) {
             return false;
         }
@@ -956,7 +956,7 @@ pub fn Bun__resolveEmbeddedNodeFile(vm: *VirtualMachine, in_out_str: *bun.String
         return true;
 }
 
-pub fn ModuleLoader__isBuiltin(data: [*]const u8, len: usize) bool {
+pub export fn ModuleLoader__isBuiltin(data: [*]const u8, len: usize) callconv(.c) bool {
         const str = (blk: {
         break :blk data[0..len];
 

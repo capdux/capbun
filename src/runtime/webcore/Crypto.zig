@@ -34,15 +34,15 @@ fn is_cp_result(comptime __T: type) bool {
 }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 comptime {
-    const Bun__randomUUIDv7 = jsc.toJSHostFn(Bun__randomUUIDv7_);
-    _ = &Bun__randomUUIDv7;
-    _ = @export(*const Bun__randomUUIDv7, .{ .name = "Bun__randomUUIDv7" });
+    const f = jsc.toJSHostFn(Bun__randomUUIDv7_);
+    _ = &f;
+    _ = @export((&f), .{ .name = "Bun__randomUUIDv7" });
 
 }
 comptime {
-    const Bun__randomUUIDv5 = jsc.toJSHostFn(Bun__randomUUIDv5_);
-    _ = &Bun__randomUUIDv5;
-    _ = @export(*const Bun__randomUUIDv5, .{ .name = "Bun__randomUUIDv5" });
+    const f = jsc.toJSHostFn(Bun__randomUUIDv5_);
+    _ = &f;
+    _ = @export((&f), .{ .name = "Bun__randomUUIDv5" });
 
 }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -67,9 +67,9 @@ const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
 const BoringSSL = @import("bun:boringssl").BoringSSL;
 const time = @import("std").time;
-const UUID = @import("../../jsc/uuid").UUID;
-const UUID5 = @import("../../jsc/uuid").UUID5;
-const UUID7 = @import("../../jsc/uuid").UUID7;
+const UUID = @import("../../jsc/uuid.zig").UUID;
+const UUID5 = @import("../../jsc/uuid.zig").UUID5;
+const UUID7 = @import("../../jsc/uuid.zig").UUID7;
 pub const Crypto = @This();
 
 garbage: i32 = 0,
@@ -175,7 +175,8 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
             if ((!arguments[0].isUndefined())) {
                 if (arguments[0].isString()) {
                     encoding_value = arguments[0];
-                    break :brk try ((jsc.Node.Encoding.fromJS(encoding_value, globalThis)) orelse {
+                    const enc_opt = try jsc.Node.Encoding.fromJS(encoding_value, globalThis);
+                    break :brk ((enc_opt) orelse {
                     return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
 });
                 }
@@ -218,7 +219,8 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         const encoding: jsc.Node.Encoding = brk: {
         if (((arguments.len > 2) and (!arguments[2].isUndefined()))) {
             if (arguments[2].isString()) {
-                break :brk try ((jsc.Node.Encoding.fromJS(arguments[2], globalThis)) orelse {
+                const enc_opt = try jsc.Node.Encoding.fromJS(arguments[2], globalThis);
+                break :brk ((enc_opt) orelse {
                 return globalThis.ERR(.UNKNOWN_ENCODING, "Encoding must be one of base64, base64url, hex, or buffer", .{}).throw();
 });
             }

@@ -1750,6 +1750,7 @@ pub fn RangeArray(comptime min: anytype, comptime max: anytype) type {
 
 pub inline fn range(comptime min: anytype, comptime max: anytype) RangeArray(min,max) {
         return (comptime brk: {
+        _ = @setEvalBranchQuota(100000);
         const n = (max - min);
         var slice: [n]usize = undefined;
         _ = &slice;

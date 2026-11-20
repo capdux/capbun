@@ -75,7 +75,7 @@ pub fn main() {
     _bun.Global.exit(0);
 }
 
-pub export fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
+@export @c fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
     Output.panic("{s}", .{msg[0..len]});
 }
 

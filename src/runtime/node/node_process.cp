@@ -361,11 +361,11 @@ comptime {
     }
 }
 
-pub export fn Bun__NODE_NO_WARNINGS(): bool {
+@export @c fn Bun__NODE_NO_WARNINGS(): bool {
     return bun.feature_flag.NODE_NO_WARNINGS.get();
 }
 
-pub export fn Bun__suppressCrashOnProcessKillSelfIfDesired() {
+@export @c fn Bun__suppressCrashOnProcessKillSelfIfDesired() {
     if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_ON_PROCESS_KILL_SELF.get()) {
         bun.crash_handler.suppressReporting();
     }

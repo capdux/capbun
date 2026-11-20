@@ -769,14 +769,8 @@ pub fn s3DefaultClient(self: *RareData, globalThis: *jsc.JSGlobalObject) jsc.JSV
         return js_client;
 }
 
-pub fn tlsDefaultCiphers(self: *RareData) [:0]const u8 {
-        if (self.tls_default_ciphers) |c| {
-            _ = &c;
-            return c;
-        }
-        const ciphers = ((bun.default_allocator.dupeZ(u8, bun.BoringSSL.default_cipher_list)) catch unreachable);
-        self.tls_default_ciphers = ciphers;
-        return ciphers;
+pub fn tlsDefaultCiphers(self: *RareData) ?[:0]const u8 {
+        return ((self.tls_default_ciphers) orelse (null));
 }
 
 pub fn setTLSDefaultCiphers(self: *RareData, ciphers: []const u8) void {
@@ -876,7 +870,7 @@ pub const ProxySlot = struct {
 };
 const HotMapEntry = bun.TaggedPointerUnion(.{ jsc.API.HTTPServer, jsc.API.HTTPSServer, jsc.API.DebugHTTPServer, jsc.API.DebugHTTPSServer, jsc.API.TCPSocket, jsc.API.TLSSocket, jsc.API.Listener });
 
-pub fn Bun__Process__getStdinFdType(vm: *jsc.VirtualMachine, fd: i32) StdinFdType {
+pub export fn Bun__Process__getStdinFdType(vm: *jsc.VirtualMachine, fd: i32) callconv(.c) StdinFdType {
         const mode = (switch (fd) {
 0 => vm.rareData().stdin().data.file.mode,
 1 => vm.rareData().stdout().data.file.mode,
@@ -905,11 +899,14 @@ pub fn setTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, callframe: *j
         _ = sliced.deinit();
         }
         _ = vm.rareData().setTLSDefaultCiphers(sliced.slice());
-        return error.js_undefined;
+        return jsc.JSValue.js_undefined;
 }
 
 pub fn getTLSDefaultCiphersFromJS(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const vm = globalThis.bunVM();
-        const ciphers = ((vm.rareData().tlsDefaultCiphers()) orelse { return .{ .ok = try bun.String.createUTF8ForJS(globalThis, bun.uws.get_default_ciphers()) }; });
-        return try bun.String.createUTF8ForJS(globalThis, ciphers);
+        if (vm.rareData().tlsDefaultCiphers()) |ciphers| {
+            _ = &ciphers;
+            return try bun.String.createUTF8ForJS(globalThis, ciphers);
+        }
+        return try bun.String.createUTF8ForJS(globalThis, bun.uws.get_default_ciphers());
 }

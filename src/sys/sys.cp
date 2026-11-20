@@ -4314,7 +4314,7 @@ pub fn selfProcessMemoryUsage(): usize? {
     return rss;
 }
 
-export fn Bun__errnoName(e: c_int): ([*:0]const u8)? {
+@export @c fn Bun__errnoName(e: c_int): ([*:0]const u8)? {
     if (val := SystemErrno.init(e)) {
         return @tagName(val);
     }
@@ -4322,7 +4322,7 @@ export fn Bun__errnoName(e: c_int): ([*:0]const u8)? {
 }
 
 /// Small "fire and forget" wrapper around unlink for c usage that handles EINTR, windows path conversion, etc.
-export fn Bun__unlink(ptr: [*:0]const u8, len: usize) {
+@export @c fn Bun__unlink(ptr: [*:0]const u8, len: usize) {
     * = unlink(ptr[0..len :0]);
 }
 

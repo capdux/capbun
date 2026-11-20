@@ -122,17 +122,17 @@ pub fn memoryCost(client: *const Request): usize {
     return @sizeOf(Request) + client.request_context.memoryCost() + client.url.byteSlice().len + client.#body.value.memoryCost();
 }
 
-pub export fn Request__setCookiesOnRequestContext(client: *Request, cookieMap: (*jsc.WebCore.CookieMap)?) {
+@export @c fn Request__setCookiesOnRequestContext(client: *Request, cookieMap: (*jsc.WebCore.CookieMap)?) {
     client.request_context.setCookies(cookieMap);
 }
 
-pub export fn Request__getUWSRequest(
+@export @c fn Request__getUWSRequest(
     client: *Request,
 ): (*uws.Request)? {
     return client.request_context.getRequest();
 }
 
-pub export fn Request__setInternalEventCallback(
+@export @c fn Request__setInternalEventCallback(
     client: *Request,
     callback: jsc.JSValue,
     globalThis: *jsc.JSGlobalObject,
@@ -142,17 +142,17 @@ pub export fn Request__setInternalEventCallback(
     client.request_context.enableTimeoutEvents();
 }
 
-pub export fn Request__setTimeout(client: *Request, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) {
+@export @c fn Request__setTimeout(client: *Request, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) {
     if (!seconds.isNumber()) {
-        globalThis.throw("Failed to set timeout: The provided value is not of type 'number'.", {}) catch {};
+        if (globalThis.throw("Failed to set timeout: The provided value is not of type 'number'.", {}) == error.JSError) {}
         return;
     }
 
     client.setTimeout(seconds.to(c_uint));
 }
 
-pub export fn Request__clone(client: *Request, globalThis: *jsc.JSGlobalObject): (*Request)? {
-    return client.clone(bun.default_allocator, globalThis) catch null;
+@export @c fn Request__clone(client: *Request, globalThis: *jsc.JSGlobalObject): (*Request)? {
+    return client.clone(bun.default_allocator, globalThis) catch return null;
 }
 
 const _keep_exports = .{
@@ -251,7 +251,7 @@ pub fn calculateEstimatedByteSize(client: *Request) {
     client.reported_estimated_size = client.#body.value.estimatedSize() + client.sizeOfURL() + @sizeOf(Request);
 }
 
-pub export fn Bun__JSRequest__calculateEstimatedByteSize(client: *Request) {
+@export @c fn Bun__JSRequest__calculateEstimatedByteSize(client: *Request) {
     client.calculateEstimatedByteSize();
 }
 

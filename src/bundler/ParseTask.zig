@@ -365,24 +365,24 @@ pub fn fetchSourceCode(args: *OnBeforeParseArguments, result: *OnBeforeParseResu
             return 0;
     }
 
-pub fn OnBeforeParseResult__reset(self: *OnBeforeParsePlugin) void {
-            const wrapper = self.getWrapper();
-            self.loader = wrapper.loader;
+pub export fn OnBeforeParseResult__reset(res: *OnBeforeParseResult) callconv(.c) void {
+            const wrapper = res.getWrapper();
+            res.loader = wrapper.loader;
             if (wrapper.original_source) |src_ptr| {
                 _ = &src_ptr;
                 const src = (blk: {
                 break :blk src_ptr[0..wrapper.original_source_len];
 
 });
-                self.source_ptr = src.ptr;
-                self.source_len = src.len;
+                res.source_ptr = src.ptr;
+                res.source_len = src.len;
             } else {
-                self.source_ptr = null;
-                self.source_len = 0;
+                res.source_ptr = null;
+                res.source_len = 0;
             }
     }
 
-pub fn OnBeforeParsePlugin__isDone(self: *OnBeforeParsePlugin) i32 {
+pub export fn OnBeforeParsePlugin__isDone(self: *OnBeforeParsePlugin) callconv(.c) i32 {
             if ((self.should_continue_running.* != 1)) {
                 return 1;
             }

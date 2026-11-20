@@ -101,7 +101,7 @@ pub struct FreeContext {
     }
 
     pub fn toBunString(): bun.String {
-        return switch (_.*) {
+        return switch (_) {
             .noop => bun.String.empty,
             .buffer => |buf| {
                 return bun.String.createExternal(
@@ -113,7 +113,7 @@ pub struct FreeContext {
                 );
             },
             .pending => unreachable,
-            else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(_.*) }),
+            else => bun.todoPanic(@src(), "handle .{s}", .{ @tagName(_) }),
         };
     }
 }

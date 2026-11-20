@@ -34,10 +34,7 @@ fn is_cp_result(comptime __T: type) bool {
 }
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 comptime {
-    _ = @export((&@field(Global, "Bun__userAgent")), .{ .name = "Bun__userAgent" });
-    _ = @export((&@field(Global, "Bun__atexit")), .{ .name = "Bun__atexit" });
     _ = @export((&bun_is_exiting), .{ .name = "bun_is_exiting" });
-    _ = @export((&@field(Global, "Bun__onExit")), .{ .name = "Bun__onExit" });
 
 }
 comptime {
@@ -108,7 +105,7 @@ const ExitFn = *const fn () callconv(.c) void;
 var on_exit_callbacks: std.ArrayListUnmanaged(ExitFn) = .empty;
 var is_exiting = std.atomic.Value(bool).init(false);
 pub const user_agent = std.fmt.comptimePrint("Bun/{s}", .{ Global.package_json_version });
-pub const Bun__userAgent: [*:0]const u8 = Global.user_agent;
+pub export const Bun__userAgent: [*:0]const u8 = Global.user_agent;
 const version_string = Environment.version_string;
 const Mimalloc = bun.mimalloc;
 const use_mimalloc = bun.use_mimalloc;
@@ -134,7 +131,7 @@ pub fn setThreadName(name: [:0]const u8) void {
         }
 }
 
-pub fn Bun__atexit(function: ExitFn) callconv(.c) void {
+pub export fn Bun__atexit(function: ExitFn) callconv(.c) void {
         if ((std.mem.indexOfScalar(ExitFn, on_exit_callbacks.items, function) == null)) {
             _ = (blk_catch_1: { break :blk_catch_1 ((on_exit_callbacks.append(bun.default_allocator, function)) catch |__ce_1| { _ = &__ce_1;  }); });
         }
@@ -221,7 +218,7 @@ pub fn crash() noreturn {
         _ = Global.exit(1);
 }
 
-pub fn Bun__onExit() callconv(.c) void {
+pub export fn Bun__onExit() callconv(.c) void {
         _ = bun.jsc.Node.FSEvents.closeAndWait();
         _ = runExitCallbacks();
         _ = Output.flush();

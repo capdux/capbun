@@ -1,5 +1,7 @@
 import bun from "bun";
-import { Output, default_allocator, Environment, picohttp, webcore, http, jsc, String, sys, JSError, analytics, FetchRedirect, Headers } from "bun";
+import { Output, default_allocator, Environment, picohttp, webcore, http, jsc, String, sys, JSError, analytics } from "bun";
+const FetchRedirect = http.FetchRedirect;
+const Headers = http.Headers;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const CallFrame = jsc.CallFrame;
@@ -43,7 +45,7 @@ pub const fetch_type_error_strings: JSTypeErrorEnum = brk: {
 fn dataURLResponse(
     _data_url: DataURL,
     globalThis: **JSGlobalObject,
-    allocator: sys.Allocator,
+    allocator: std.mem.Allocator,
 ): JSValue {
     let data_url = _data_url;
 
@@ -60,7 +62,7 @@ fn dataURLResponse(
         blob.content_type_allocated = true;
     }
 
-    let response = sys.new(Response, Response.init(
+    let response = bun.new(Response, Response.init(
         Response.Init {
             .status_code = 200,
             .status_text = String.createAtomASCII("OK"),
@@ -76,8 +78,8 @@ fn dataURLResponse(
 }
 
 comptime {
-    const Bun__fetchPreconnect = jsc.toJSHostFn(Bun__fetchPreconnect_);
-    @export(&Bun__fetchPreconnect, .{ name: "Bun__fetchPreconnect" });
+    const f = jsc.toJSHostFn(Bun__fetchPreconnect_);
+    @export(&f, .{ name: "Bun__fetchPreconnect" });
 }
 
 pub fn Bun__fetchPreconnect_(
@@ -101,7 +103,7 @@ pub fn Bun__fetchPreconnect_(
         return globalObject.ERR(.INVALID_ARG_TYPE, fetch_error_blank_url, .{}).throw();
     }
 
-    let url = ZigURL.parse(sys.handleOom(url_str.toOwnedSlice(default_allocator)));
+    let url = ZigURL.parse(bun.handleOom(url_str.toOwnedSlice(default_allocator)));
     if (!url.isHTTP() and !url.isHTTPS() and !url.isS3()) {
         default_allocator.free(url.href);
         return globalObject.throwInvalidArguments("URL must be HTTP or HTTPS", .{});
@@ -122,7 +124,7 @@ pub fn Bun__fetchPreconnect_(
 }
 
 export class StringOrURL {
-    pub fn fromJS(value: JSValue, globalThis: *JSGlobalObject): JSError!String? {
+    pub static fn fromJS(value: JSValue, globalThis: *JSGlobalObject): JSError!String? {
         if (value.isString()) {
             return try String.fromJS(value, globalThis);
         }
@@ -133,8 +135,8 @@ export class StringOrURL {
 }
 
 comptime {
-    const Bun__fetch = jsc.toJSHostFn(Bun__fetch_);
-    @export(&Bun__fetch, .{ name: "Bun__fetch" });
+    const f = jsc.toJSHostFn(Bun__fetch_);
+    @export(&f, .{ name: "Bun__fetch" });
 }
 
 pub fn Bun__fetch_(
@@ -255,7 +257,7 @@ fn fetchImpl(
     if (str := url_str_optional) {
         url_str = str;
     } else if (req := request) {
-        sys.handleOom(req.ensureURL());
+        bun.handleOom(req.ensureURL());
         url_str = req.url.dupeRef();
     } else if (req_init := request_init_object) {
         if (u := try req_init.fastGet(globalThis, .url)) {
@@ -300,13 +302,21 @@ fn fetchImpl(
     // method
     if (opts := options_object) {
         if (m := try opts.getTruthyComptime(globalThis, "method")) {
-            method = try Method.fromJS(globalThis, m) orelse Method.GET;
+            if (m_val := Method.fromJS(globalThis, m)?) {
+                method = m_val;
+            } else {
+                method = Method.GET;
+            }
         }
     } else if (req := request) {
         method = req.method;
     } else if (req_init := request_init_object) {
         if (m := try req_init.getTruthyComptime(globalThis, "method")) {
-            method = try Method.fromJS(globalThis, m) orelse Method.GET;
+            if (m_val := Method.fromJS(globalThis, m)?) {
+                method = m_val;
+            } else {
+                method = Method.GET;
+            }
         }
     }
 
@@ -356,14 +366,14 @@ fn fetchImpl(
             if (!h_val.isUndefined()) {
                 if (fh := h_val.as(FetchHeaders)) {
                     if (!fh.isEmpty()) {
-                        headers = Headers.from(fh, allocator, .{ .body = body.getAnyBlob() }) catch |e| sys.handleOom(e);
+                        headers = Headers.from(fh, allocator, .{ .body = body.getAnyBlob() }) catch |e| bun.handleOom(e);
                     }
                 }
             }
         }
     } else if (req := request) {
         if (head := req.getFetchHeadersUnlessEmpty()) {
-            headers = Headers.from(head, allocator, .{ .body = body.getAnyBlob() }) catch |e| sys.handleOom(e);
+            headers = Headers.from(head, allocator, .{ .body = body.getAnyBlob() }) catch |e| bun.handleOom(e);
         }
     }
 
@@ -404,7 +414,7 @@ fn fetchImpl(
             .unix_socket_path = unix_socket_path,
         },
         promise,
-    ) catch |e| sys.handleOom(e);
+    ) catch |e| bun.handleOom(e);
 
     url = .{};
     headers = null;
@@ -421,7 +431,7 @@ fn fetchImpl(
 
 fn setHeaders(headers: (*Headers)?, new_headers: []const picohttp.Header, allocator: sys.Allocator) {
     let old = headers.*;
-    headers.* = sys.handleOom(Headers.fromPicoHttpHeaders(new_headers, allocator));
+    headers.* = bun.handleOom(Headers.fromPicoHttpHeaders(new_headers, allocator));
     if (*h := old) {
         h.deinit();
     }

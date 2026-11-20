@@ -69,10 +69,10 @@ const VirtualMachine = jsc.VirtualMachine;
 }
 
 // Export functions for C++
-pub export fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) {
+@export @c fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) {
     vm.timer.event_loop_delay.enable(vm, histogram, resolution_ms);
 }
 
-pub export fn Timer_disableEventLoopDelayMonitoring(vm: *VirtualMachine) {
+@export @c fn Timer_disableEventLoopDelayMonitoring(vm: *VirtualMachine) {
     vm.timer.event_loop_delay.disable(vm);
 }

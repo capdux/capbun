@@ -279,19 +279,19 @@ pub fn exportAll() void {
 
 pub const EnvironmentVariables = struct {
 
-pub fn Bun__getEnvCount(globalObject: *jsc.JSGlobalObject, ptr: *[*]const []u8) usize {
+pub export fn Bun__getEnvCount(globalObject: *jsc.JSGlobalObject, ptr: *[*]EnvKeySlice) callconv(.c) usize {
             const bunVM = globalObject.bunVM();
             ptr.* = bunVM.transpiler.env.map.map.keys().ptr;
             return bunVM.transpiler.env.map.map.unmanaged.entries.len;
     }
 
-pub fn Bun__getEnvKey(ptr: [*]const []u8, i: usize, data_ptr: *[*]const u8) usize {
+pub export fn Bun__getEnvKey(ptr: [*]EnvKeySlice, i: usize, data_ptr: *[*]const u8) callconv(.c) usize {
             const item = ptr[@as(usize, @intCast(i))];
             data_ptr.* = item.ptr;
             return item.len;
     }
 
-pub fn Bun__getEnvValue(globalObject: *jsc.JSGlobalObject, name: *ZigString, value: *ZigString) bool {
+pub export fn Bun__getEnvValue(globalObject: *jsc.JSGlobalObject, name: *ZigString, value: *ZigString) callconv(.c) bool {
             if (getEnvValue(globalObject, name.*)) |val| {
                 _ = &val;
                 value.* = val;
@@ -300,7 +300,7 @@ pub fn Bun__getEnvValue(globalObject: *jsc.JSGlobalObject, name: *ZigString, val
             return false;
     }
 
-pub fn Bun__getEnvValueBunString(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String) bool {
+pub export fn Bun__getEnvValueBunString(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String) callconv(.c) bool {
             const vm = globalObject.bunVM();
             var name_slice = name.toUTF8(bun.default_allocator);
             _ = &name_slice;
@@ -316,7 +316,7 @@ pub fn Bun__getEnvValueBunString(globalObject: *jsc.JSGlobalObject, name: *bun.S
             return true;
     }
 
-pub fn Bun__setEnvValue(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String) void {
+pub export fn Bun__setEnvValue(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String) callconv(.c) void {
             const vm = globalObject.bunVM();
             var name_slice = name.toUTF8(bun.default_allocator);
             _ = &name_slice;
@@ -347,7 +347,8 @@ pub fn Bun__setEnvValue(globalObject: *jsc.JSGlobalObject, name: *bun.String, va
             defer {
             _ = value_slice.deinit();
             }
-            const new_val = jsc.RareData.RefCountedEnvValue.create(value_slice.slice());
+            const new_val = bun.handleOom(bun.default_allocator.create(jsc.RareData.RefCountedEnvValue));
+            new_val.* = jsc.RareData.RefCountedEnvValue{ .ref_count = 1, .bytes = bun.handleOom(bun.default_allocator.dupe(u8, value_slice.slice())) };
             slot.ptr.* = new_val;
             _ = bun.handleOom(vm.transpiler.env.map.put(slot.key, new_val.bytes));
     }
@@ -651,8 +652,7 @@ const compressor_opt = bun.libdeflate.Compressor.alloc(((level) orelse (6)));
 
 pub const JSZstd = struct {
 
-pub fn deallocator(self: JSZstd, _: ?*anyopaque, ctx: ?*anyopaque) void {
-        _ = self;
+pub export fn deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
             _ = bun.allocators.freeWithoutSize(ctx);
     }
 
@@ -847,6 +847,7 @@ pub fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
     };
 };
 
+const EnvKeySlice = []const u8;
 const SubscriptionCtx = js_valkey.SubscriptionCtx;
 const Editor = open.Editor;
 const URL = url.URL;
@@ -1153,7 +1154,7 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
         return ret;
 }
 
-pub fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue) bun.String {
+pub export fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue) callconv(.c) bun.String {
         var array = std.Io.Writer.Allocating.init(bun.default_allocator);
         _ = &array;
         defer {
@@ -1170,7 +1171,7 @@ pub fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue) bun.String {
         return bun.String.cloneUTF8(array.written());
 }
 
-pub fn Bun__inspect_singleline(globalThis: *JSGlobalObject, value: JSValue) bun.String {
+pub export fn Bun__inspect_singleline(globalThis: *JSGlobalObject, value: JSValue) callconv(.c) bun.String {
         var array = std.Io.Writer.Allocating.init(bun.default_allocator);
         _ = &array;
         defer {
@@ -1393,7 +1394,7 @@ pub fn sleepSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
         return JSValue.js_undefined;
 }
 
-pub fn Bun__gc(vm: *jsc.VirtualMachine, sync: bool) callconv(.c) usize {
+pub export fn Bun__gc(vm: *jsc.VirtualMachine, sync: bool) callconv(.c) usize {
         return vm.garbageCollect(sync);
 }
 
@@ -1490,7 +1491,7 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun
         return jsc.JSPromise.resolvedPromiseValue(globalObject, value);
 }
 
-pub fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool) jsc.JSValue {
+pub export fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool) callconv(.c) jsc.JSValue {
         const specifier_str = (blk_catch_32: { break :blk_catch_32 ((specifier.toBunString(global)) catch |__ce_32| { _ = &__ce_32; return jsc.JSValue.zero; }); });
         defer {
         _ = specifier_str.deref();
@@ -1504,31 +1505,35 @@ pub fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue
         return jsc.JSPromise.resolvedPromiseValue(global, value);
 }
 
-pub fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool) jsc.JSValue {
+pub export fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool) callconv(.c) jsc.JSValue {
         const specifier_str = (blk_catch_35: { break :blk_catch_35 ((specifier.toBunString(global)) catch |__ce_35| { _ = &__ce_35; return jsc.JSValue.zero; }); });
         defer {
         _ = specifier_str.deref();
         }
         if ((specifier_str.length() == 0)) {
-            return (blk_catch_36: { break :blk_catch_36 ((global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw()) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 .zero; }); });
+            if ((global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError)) {
+            }
+            return .zero;
         }
-        const source_str = (blk_catch_37: { break :blk_catch_37 ((source.toBunString(global)) catch |__ce_37| { _ = &__ce_37; return jsc.JSValue.zero; }); });
+        const source_str = (blk_catch_36: { break :blk_catch_36 ((source.toBunString(global)) catch |__ce_36| { _ = &__ce_36; return jsc.JSValue.zero; }); });
         defer {
         _ = source_str.deref();
         }
         return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source_str, is_esm, true, is_user_require_resolve });
 }
 
-pub fn Bun__resolveSyncWithPaths(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool, paths_ptr: ?[*]const bun.String, paths_len: usize) jsc.JSValue {
+pub export fn Bun__resolveSyncWithPaths(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool, paths_ptr: ?[*]const bun.String, paths_len: usize) callconv(.c) jsc.JSValue {
         const paths: []const bun.String = (if ((paths_len == 0)) &.{} else paths_ptr.?[0..paths_len]);
-        const specifier_str = (blk_catch_38: { break :blk_catch_38 ((specifier.toBunString(global)) catch |__ce_38| { _ = &__ce_38; return jsc.JSValue.zero; }); });
+        const specifier_str = (blk_catch_37: { break :blk_catch_37 ((specifier.toBunString(global)) catch |__ce_37| { _ = &__ce_37; return jsc.JSValue.zero; }); });
         defer {
         _ = specifier_str.deref();
         }
         if ((specifier_str.length() == 0)) {
-            return (blk_catch_39: { break :blk_catch_39 ((global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw()) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 .zero; }); });
+            if ((global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError)) {
+            }
+            return .zero;
         }
-        const source_str = (blk_catch_40: { break :blk_catch_40 ((source.toBunString(global)) catch |__ce_40| { _ = &__ce_40; return jsc.JSValue.zero; }); });
+        const source_str = (blk_catch_38: { break :blk_catch_38 ((source.toBunString(global)) catch |__ce_38| { _ = &__ce_38; return jsc.JSValue.zero; }); });
         defer {
         _ = source_str.deref();
         }
@@ -1541,18 +1546,20 @@ pub fn Bun__resolveSyncWithPaths(global: *JSGlobalObject, specifier: JSValue, so
         return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source_str, is_esm, true, is_user_require_resolve });
 }
 
-pub fn Bun__resolveSyncWithStrings(global: *JSGlobalObject, specifier: *bun.String, source: *bun.String, is_esm: bool) jsc.JSValue {
+pub export fn Bun__resolveSyncWithStrings(global: *JSGlobalObject, specifier: *bun.String, source: *bun.String, is_esm: bool) callconv(.c) jsc.JSValue {
         _ = Output.scoped(.importMetaResolve, .visible)("source: {f}, specifier: {f}", .{ source.*, specifier.* });
         return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier.*, source.*, is_esm, true, false });
 }
 
-pub fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSValue, source: *bun.String, is_esm: bool, is_user_require_resolve: bool) jsc.JSValue {
-        const specifier_str = (blk_catch_41: { break :blk_catch_41 ((specifier.toBunString(global)) catch |__ce_41| { _ = &__ce_41; return jsc.JSValue.zero; }); });
+pub export fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSValue, source: *bun.String, is_esm: bool, is_user_require_resolve: bool) callconv(.c) jsc.JSValue {
+        const specifier_str = (blk_catch_39: { break :blk_catch_39 ((specifier.toBunString(global)) catch |__ce_39| { _ = &__ce_39; return jsc.JSValue.zero; }); });
         defer {
         _ = specifier_str.deref();
         }
         if ((specifier_str.length() == 0)) {
-            return (blk_catch_42: { break :blk_catch_42 ((global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw()) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 .zero; }); });
+            if ((global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError)) {
+            }
+            return .zero;
         }
         return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source.*, is_esm, true, is_user_require_resolve });
 }
@@ -1690,7 +1697,7 @@ const ServerType = (comptime (if (development) (if (has_ssl_config) jsc.API.Debu
         if (vm.debugger) |*debugger| {
             _ = &debugger;
             _ = (debugger.*).http_server_agent.notifyServerStarted(jsc.API.AnyServer.@"from"(server));
-            _ = (blk_catch_43: { break :blk_catch_43 (((debugger.*).http_server_agent.notifyServerRoutesUpdated(jsc.API.AnyServer.@"from"(server))) catch |e| { _ = &e; break :blk_catch_43 bun.handleOom(e); }); });
+            _ = (blk_catch_40: { break :blk_catch_40 (((debugger.*).http_server_agent.notifyServerRoutesUpdated(jsc.API.AnyServer.@"from"(server))) catch |e| { _ = &e; break :blk_catch_40 bun.handleOom(e); }); });
         }
         return obj;
 },
@@ -1699,10 +1706,12 @@ const ServerType = (comptime (if (development) (if (has_ssl_config) jsc.API.Debu
 }
 }
 
-pub fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u16, len: usize) callconv(.c) JSValue {
+pub export fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u16, len: usize) callconv(.c) JSValue {
         _ = assert((len > 0));
         const input_slice = ptr[0..len];
-        const escaped = (blk_catch_44: { break :blk_catch_44 ((strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice)) catch |__ce_44| { _ = &__ce_44; return (blk_catch_45: { break :blk_catch_45 ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject))) catch |__ce_45| { _ = &__ce_45; return jsc.JSValue.zero; }); }); }); });
+        const escaped = (blk_catch_41: { break :blk_catch_41 ((strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice)) catch |__ce_41| { _ = &__ce_41; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
+        }
+        return jsc.JSValue.zero; }); });
         switch (escaped) {
 .static => |val| {
 return ZigString.init(val).toJS(globalObject);
@@ -1716,13 +1725,15 @@ return ZigString.from16(escaped_html.ptr, escaped_html.len).toExternalValue(glob
 }
 }
 
-pub fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u8, len: usize) callconv(.c) JSValue {
+pub export fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u8, len: usize) callconv(.c) JSValue {
         _ = assert((len > 0));
         const input_slice = ptr[0..len];
         var stack_allocator = std.heap.stackFallback(256, globalObject.bunVM().allocator);
         _ = &stack_allocator;
         const allocator = (if ((input_slice.len <= 32)) stack_allocator.get() else stack_allocator.fallback_allocator);
-        const escaped = (blk_catch_46: { break :blk_catch_46 ((strings.escapeHTMLForLatin1Input(allocator, input_slice)) catch |__ce_46| { _ = &__ce_46; return (blk_catch_47: { break :blk_catch_47 ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject))) catch |__ce_47| { _ = &__ce_47; return jsc.JSValue.zero; }); }); }); });
+        const escaped = (blk_catch_42: { break :blk_catch_42 ((strings.escapeHTMLForLatin1Input(allocator, input_slice)) catch |__ce_42| { _ = &__ce_42; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
+        }
+        return jsc.JSValue.zero; }); });
         switch (escaped) {
 .static => |val| {
 return ZigString.init(val).toJS(globalObject);
@@ -1892,7 +1903,7 @@ pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, c
 }
 
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
-        var valkey = (blk_catch_48: { break :blk_catch_48 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
+        var valkey = (blk_catch_43: { break :blk_catch_43 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;
@@ -1901,7 +1912,7 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
         _ = &valkey;
         const as_js = valkey.toJS(globalThis);
         valkey.this_value = jsc.JSRef.initWeak(as_js);
-        valkey._subscription_ctx = (blk_catch_49: { break :blk_catch_49 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
+        valkey._subscription_ctx = (blk_catch_44: { break :blk_catch_44 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;
@@ -1975,22 +1986,22 @@ pub fn getCSRFObject(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JS
         return CSRFObject.create(globalObject);
 }
 
-pub fn Bun__reportError(globalObject: *JSGlobalObject, e: jsc.JSValue) void {
+pub export fn Bun__reportError(globalObject: *JSGlobalObject, e: jsc.JSValue) callconv(.c) void {
         _ = jsc.VirtualMachine.get().uncaughtException(globalObject, e, false);
 }
 
-pub fn reader_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) void {
+pub export fn reader_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
         var reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
         _ = &reader;
         _ = reader.list.deinit(reader.allocator);
         _ = reader.deinit();
 }
 
-pub fn global_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) void {
+pub export fn global_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
         _ = bun.allocators.freeWithoutSize(ctx);
 }
 
-pub fn compressor_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) void {
+pub export fn compressor_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
         var compressor: *zlib.ZlibCompressorArrayList = bun.cast(*zlib.ZlibCompressorArrayList, ctx.?);
         _ = &compressor;
         _ = compressor.list.deinit(compressor.allocator);

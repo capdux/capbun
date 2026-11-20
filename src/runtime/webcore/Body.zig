@@ -1016,7 +1016,7 @@ pub const Value = union(enum) {
     Null: void,
 
 pub fn isDefinitelyEmpty(self: @This()) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .Null => true,
 .Used, .Empty => true,
 .InternalBlob => (self.InternalBlob.slice().len == 0),

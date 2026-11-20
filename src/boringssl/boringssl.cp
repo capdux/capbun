@@ -1,30 +1,30 @@
 // src/boringssl/boringssl.cp
 // BoringSSL bindings and X.509 verification in CP language
 
-export import boring from "../boringssl_sys/boringssl.zig";
-export const c = boring;
-export import builtin from "builtin";
-export const ERR_toJS = @import("../runtime/crypto/boringssl_jsc.zig").ERR_toJS;
+pub import boring from "../boringssl_sys/boringssl.zig";
+pub const c = boring;
+pub import builtin from "builtin";
+pub const ERR_toJS = @import("../runtime/crypto/boringssl_jsc.zig").ERR_toJS;
 import std from "std";
 import bun from "bun";
 const strings = bun.strings;
 
 const INET6_ADDRSTRLEN = if (bun.Environment.isWindows) 65 else 46;
 const INET6_ADDRSTRLEN_BUF = if (bun.Environment.isWindows) 66 else 47;
-export type OutIPBuf = *[INET6_ADDRSTRLEN_BUF]u8;
-export type IPTextBuf = [INET6_ADDRSTRLEN_BUF]u8;
-export type CStrPtr = [*:0]u8;
-export type GeneralNameStack = *boring.struct_stack_st_GENERAL_NAME;
-export type SSL_CTX_Ptr = *boring.SSL_CTX?;
-export type SSL_Ptr = *boring.SSL;
-export type X509_Ptr = *boring.X509;
-export type ASN1_OCTET_STRING_Ptr = *boring.ASN1_OCTET_STRING;
+pub type OutIPBuf = *[INET6_ADDRSTRLEN_BUF]u8;
+pub type IPTextBuf = [INET6_ADDRSTRLEN_BUF]u8;
+pub type CStrPtr = [*:0]u8;
+pub type GeneralNameStack = *boring.struct_stack_st_GENERAL_NAME;
+pub type SSL_CTX_Ptr = *boring.SSL_CTX;
+pub type SSL_Ptr = *boring.SSL;
+pub type X509_Ptr = *boring.X509;
+pub type ASN1_OCTET_STRING_Ptr = *boring.ASN1_OCTET_STRING;
 
-export fn OPENSSL_memory_alloc(size: usize): *!? {
+@export @c fn OPENSSL_memory_alloc(size: usize): *!? {
     return bun.mimalloc.mi_malloc(size);
 }
 
-export fn OPENSSL_memory_free(ptr: *!) {
+@export @c fn OPENSSL_memory_free(ptr: *!) {
     unsafe {
         const len = bun.mimalloc.mi_usable_size(ptr);
         @memset(@as([*]u8, ptr)[0..len], 0);
@@ -32,7 +32,7 @@ export fn OPENSSL_memory_free(ptr: *!) {
     }
 }
 
-export fn OPENSSL_memory_get_size(ptr: *!?): usize {
+@export @c fn OPENSSL_memory_get_size(ptr: *!?): usize {
     return bun.mimalloc.mi_usable_size(ptr);
 }
 
@@ -41,7 +41,7 @@ import * as c_ares from "../cares_sys/c_ares.cp";
 
 let loaded = false;
 
-export fn load() {
+pub fn load() {
     if (loaded) {
         return;
     }
@@ -64,7 +64,7 @@ export fn load() {
 
 let ctx_store: SSL_CTX_Ptr? = null;
 
-export fn initClient(): SSL_Ptr {
+pub fn initClient(): SSL_Ptr {
     if (ctx_store != null) {
         * = boring.SSL_CTX_up_ref(ctx_store.?);
     }
@@ -80,7 +80,7 @@ export fn initClient(): SSL_Ptr {
     return ssl;
 }
 
-export fn canonicalizeIP(addr_str: string, outIP: *IPTextBuf): string? {
+pub fn canonicalizeIP(addr_str: string, outIP: *IPTextBuf): string? {
     if (addr_str.len >= INET6_ADDRSTRLEN) {
         return null;
     }
@@ -102,7 +102,7 @@ export fn canonicalizeIP(addr_str: string, outIP: *IPTextBuf): string? {
     return outIP[0..size];
 }
 
-export fn ip2String(ip: *boring.ASN1_OCTET_STRING, outIP: *IPTextBuf): string? {
+pub fn ip2String(ip: *boring.ASN1_OCTET_STRING, outIP: *IPTextBuf): string? {
     let af: i32 = std.posix.AF.INET6;
     if (ip.length == 4) {
         af = std.posix.AF.INET;
@@ -142,7 +142,7 @@ fn matchDnsName(pattern: string, hostname: string): bool {
     return strings.eqlCaseInsensitiveASCII(pattern, hostname, true);
 }
 
-export fn checkX509ServerIdentity(
+pub fn checkX509ServerIdentity(
     x509: *boring.X509,
     hostname: string,
 ): bool {
@@ -251,7 +251,7 @@ export fn checkX509ServerIdentity(
     return false;
 }
 
-export fn checkServerIdentity(
+pub fn checkServerIdentity(
     ssl_ptr: *boring.SSL,
     hostname: string,
 ): bool {

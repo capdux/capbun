@@ -268,7 +268,7 @@ pub fn onThreadExit() void {
         }
 }
 
-pub fn BUN__warn__extra_ca_load_failed(filename: [*c]const u8, error_msg: [*c]const u8) callconv(.c) void {
+pub export fn BUN__warn__extra_ca_load_failed(filename: [*c]const u8, error_msg: [*c]const u8) callconv(.c) void {
         _ = bun.Output.warn("ignoring extra certs from {s}, load failed: {s}", .{ filename, error_msg });
 }
 

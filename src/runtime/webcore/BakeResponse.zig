@@ -75,7 +75,7 @@ pub fn toJSForSSR(self: *Response, globalObject: *JSGlobalObject, kind: SSRKind)
         return BakeResponse__createForSSR(globalObject, self, @intFromEnum(kind));
 }
 
-pub fn BakeResponseClass__constructForSSR(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, bake_ssr_has_jsx: *c_int, js_this: jsc.JSValue) callconv(jsc.conv) ?*anyopaque {
+pub export fn BakeResponseClass__constructForSSR(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, bake_ssr_has_jsx: *c_int, js_this: jsc.JSValue) callconv(jsc.conv) ?*anyopaque {
         const res = (blk_catch_0: { break :blk_catch_0 ((constructor(globalObject, callFrame, bake_ssr_has_jsx, js_this)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             _ = (blk_catch_1: { break :blk_catch_1 ((globalObject.throwOutOfMemory()) catch |__ce_1| { _ = &__ce_1;  }); });
         }
@@ -100,7 +100,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, b
         return Response.constructor(globalThis, callframe, js_this);
 }
 
-pub fn BakeResponseClass__constructRedirect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
+pub export fn BakeResponseClass__constructRedirect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
         return jsc.toJSHostCall(globalObject, @src(), constructRedirect, .{ globalObject, callFrame });
 }
 
@@ -116,7 +116,7 @@ pub fn constructRedirect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
         return ptr.toJS(globalThis);
 }
 
-pub fn BakeResponseClass__constructRender(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
+pub export fn BakeResponseClass__constructRender(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
         return @call(bun.callmod_inline, jsc.toJSHostFn(constructRender), .{ globalObject, callFrame });
 }
 

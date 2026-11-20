@@ -327,6 +327,6 @@ extern "c" fn us_socket_adopt_tls(s: *us_socket_t, group: *SocketGroup, kind: u8
 
 extern "c" fn us_socket_start_tls_handshake(s: *us_socket_t) callconv(.c) void;
 
-pub fn us_socket_free_stream_buffer(buffer: *us_socket_stream_buffer_t) void {
+pub export fn us_socket_free_stream_buffer(buffer: *us_socket_stream_buffer_t) callconv(.c) void {
         _ = buffer.deinit();
 }

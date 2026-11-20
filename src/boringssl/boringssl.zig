@@ -71,7 +71,7 @@ pub const OutIPBuf = *[INET6_ADDRSTRLEN_BUF]u8;
 pub const IPTextBuf = [INET6_ADDRSTRLEN_BUF]u8;
 pub const CStrPtr = [*:0]u8;
 pub const GeneralNameStack = *boring.struct_stack_st_GENERAL_NAME;
-pub const SSL_CTX_Ptr = ?*boring.SSL_CTX;
+pub const SSL_CTX_Ptr = *boring.SSL_CTX;
 pub const SSL_Ptr = *boring.SSL;
 pub const X509_Ptr = *boring.X509;
 pub const ASN1_OCTET_STRING_Ptr = *boring.ASN1_OCTET_STRING;
@@ -83,11 +83,11 @@ const INET6_ADDRSTRLEN_BUF = (if (bun.Environment.isWindows) 66 else 47);
 var loaded = false;
 var ctx_store: ?SSL_CTX_Ptr = null;
 
-pub fn OPENSSL_memory_alloc(size: usize) ?*anyopaque {
+pub export fn OPENSSL_memory_alloc(size: usize) callconv(.c) ?*anyopaque {
         return bun.mimalloc.mi_malloc(size);
 }
 
-pub fn OPENSSL_memory_free(ptr: *anyopaque) void {
+pub export fn OPENSSL_memory_free(ptr: *anyopaque) callconv(.c) void {
         {
             const len = bun.mimalloc.mi_usable_size(ptr);
             _ = @memset(@as([*]u8, @ptrCast(@alignCast(ptr)))[0..len], 0);
@@ -95,7 +95,7 @@ pub fn OPENSSL_memory_free(ptr: *anyopaque) void {
         }
 }
 
-pub fn OPENSSL_memory_get_size(ptr: ?*anyopaque) usize {
+pub export fn OPENSSL_memory_get_size(ptr: ?*anyopaque) callconv(.c) usize {
         return bun.mimalloc.mi_usable_size(ptr);
 }
 

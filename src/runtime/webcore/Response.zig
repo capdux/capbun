@@ -848,7 +848,7 @@ extern "c" fn Response__getAsyncLocalStorageStore(global: *JSGlobalObject, als: 
 
 extern "c" fn Response__mergeAsyncLocalStorageOptions(global: *JSGlobalObject, alsStore: JSValue, initOptions: JSValue) callconv(.c) void;
 
-pub fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
+pub export fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
         const arguments = callframe.arguments_old(1);
         const this_value = (blk: {
         break :blk arguments.ptr[0];
@@ -869,7 +869,7 @@ pub fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, callframe
         return .false;
 }
 
-pub fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
+pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
         const arguments = callframe.arguments_old(1);
         const this_value = (blk: {
         break :blk arguments.ptr[0];
@@ -897,14 +897,14 @@ pub fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject
 return .js_undefined;
 },
 .Blob => {
-const blob = *const body.Blob;
+const blob = (&@field(body, "Blob"));
         if (blob.isBunFile()) {
             return .js_undefined;
         }
         defer {
-        body.* = .{ .Used = .{} };
+        body.* = .{ .Used = undefined };
         }
-        return (blk_catch_3: { break :blk_catch_3 ((blob.toArrayBuffer(globalObject, .transfer)) catch |__ce_3| { _ = &__ce_3; return .zero; }); });
+        return (blk_catch_3: { break :blk_catch_3 ((blob.toArrayBufferView(globalObject, .transfer, .ArrayBuffer)) catch |__ce_3| { _ = &__ce_3; return .zero; }); });
 },
 .WTFStringImpl, .InternalBlob => {
 var any_blob = body.useAsAnyBlob();

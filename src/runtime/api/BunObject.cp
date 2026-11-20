@@ -576,7 +576,7 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
     return ret;
 }
 
-export fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue): bun.String {
+@export @c fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue): bun.String {
     // very stable memory address
     let array = std.Io.Writer.Allocating.init(bun.default_allocator);
     defer array.deinit();
@@ -589,7 +589,7 @@ export fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue): bun.String 
     return bun.String.cloneUTF8(array.written());
 }
 
-export fn Bun__inspect_singleline(globalThis: *JSGlobalObject, value: JSValue): bun.String {
+@export @c fn Bun__inspect_singleline(globalThis: *JSGlobalObject, value: JSValue): bun.String {
     let array = std.Io.Writer.Allocating.init(bun.default_allocator);
     defer array.deinit();
     const writer = &array.writer;
@@ -862,7 +862,7 @@ pub fn sleepSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 }
 
 @callconv("c")
-export fn Bun__gc(vm: *jsc.VirtualMachine, sync: bool): usize {
+@export pub fn Bun__gc(vm: *jsc.VirtualMachine, sync: bool): usize {
     return vm.garbageCollect(sync);
 }
 
@@ -975,7 +975,7 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
     return jsc.JSPromise.resolvedPromiseValue(globalObject, value);
 }
 
-export fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool): jsc.JSValue {
+@export @c fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool): jsc.JSValue {
     const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
     defer specifier_str.deref();
 
@@ -990,12 +990,13 @@ export fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSVa
     return jsc.JSPromise.resolvedPromiseValue(global, value);
 }
 
-export fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
+@export @c fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
     const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
     defer specifier_str.deref();
 
     if (specifier_str.length() == 0) {
-        return global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() catch .zero;
+        if (global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError) {}
+        return .zero;
     }
 
     const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
@@ -1004,7 +1005,7 @@ export fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: 
     return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source_str, is_esm, true, is_user_require_resolve });
 }
 
-export fn Bun__resolveSyncWithPaths(
+@export @c fn Bun__resolveSyncWithPaths(
     global: *JSGlobalObject,
     specifier: JSValue,
     source: JSValue,
@@ -1019,7 +1020,8 @@ export fn Bun__resolveSyncWithPaths(
     defer specifier_str.deref();
 
     if (specifier_str.length() == 0) {
-        return global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() catch .zero;
+        if (global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError) {}
+        return .zero;
     }
 
     const source_str = source.toBunString(global) catch return jsc.JSValue.zero;
@@ -1033,16 +1035,17 @@ export fn Bun__resolveSyncWithPaths(
     return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source_str, is_esm, true, is_user_require_resolve });
 }
 
-export fn Bun__resolveSyncWithStrings(global: *JSGlobalObject, specifier: *bun.String, source: *bun.String, is_esm: bool): jsc.JSValue {
+@export @c fn Bun__resolveSyncWithStrings(global: *JSGlobalObject, specifier: *bun.String, source: *bun.String, is_esm: bool): jsc.JSValue {
     Output.scoped(.importMetaResolve, .visible)("source: {f}, specifier: {f}", .{ source.*, specifier.* });
     return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier.*, source.*, is_esm, true, false });
 }
 
-export fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSValue, source: *bun.String, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
+@export @c fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSValue, source: *bun.String, is_esm: bool, is_user_require_resolve: bool): jsc.JSValue {
     const specifier_str = specifier.toBunString(global) catch return jsc.JSValue.zero;
     defer specifier_str.deref();
     if (specifier_str.length() == 0) {
-        return global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() catch .zero;
+        if (global.ERR(.INVALID_ARG_VALUE, "The argument 'id' must be a non-empty string. Received ''", .{}).throw() == error.JSError) {}
+        return .zero;
     }
     return jsc.toJSHostCall(global, @src(), doResolveWithArgs, .{ global, specifier_str, source.*, is_esm, true, is_user_require_resolve });
 }
@@ -1206,11 +1209,12 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
 }
 
 @callconv("c")
-pub export fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u16, len: usize): JSValue {
+@export pub fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u16, len: usize): JSValue {
     assert(len > 0);
     const input_slice = ptr[0..len];
     const escaped = strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice) catch {
-        return globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) catch return jsc.JSValue.zero;
+        if (globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError) {}
+        return jsc.JSValue.zero;
     };
 
     switch (escaped) {
@@ -1227,7 +1231,7 @@ pub export fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: 
 }
 
 @callconv("c")
-pub export fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u8, len: usize): JSValue {
+@export pub fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: JSValue, ptr: [*]const u8, len: usize): JSValue {
     assert(len > 0);
 
     const input_slice = ptr[0..len];
@@ -1235,7 +1239,8 @@ pub export fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: J
     const allocator = if (input_slice.len <= 32) stack_allocator.get() else stack_allocator.fallback_allocator;
 
     const escaped = strings.escapeHTMLForLatin1Input(allocator, input_slice) catch {
-        return globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) catch return jsc.JSValue.zero;
+        if (globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError) {}
+        return jsc.JSValue.zero;
     };
 
     switch (escaped) {
@@ -1505,20 +1510,21 @@ pub fn getCSRFObject(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.J
 }
 
 // This is aliased to Bun.env
+type EnvKeySlice = []const u8;
 pub struct EnvironmentVariables {
-    pub export fn Bun__getEnvCount(globalObject: *jsc.JSGlobalObject, ptr: *[*][]const u8): usize {
+    @export @c static fn Bun__getEnvCount(globalObject: *jsc.JSGlobalObject, ptr: *[*]EnvKeySlice): usize {
         const bunVM = globalObject.bunVM();
         ptr.* = bunVM.transpiler.env.map.map.keys().ptr;
         return bunVM.transpiler.env.map.map.unmanaged.entries.len;
     }
 
-    pub export fn Bun__getEnvKey(ptr: [*][]const u8, i: usize, data_ptr: *[*]const u8): usize {
+    @export @c static fn Bun__getEnvKey(ptr: [*]EnvKeySlice, i: usize, data_ptr: *[*]const u8): usize {
         const item = ptr[i];
         data_ptr.* = item.ptr;
         return item.len;
     }
 
-    pub export fn Bun__getEnvValue(globalObject: *jsc.JSGlobalObject, name: *ZigString, value: *ZigString): bool {
+    @export @c static fn Bun__getEnvValue(globalObject: *jsc.JSGlobalObject, name: *ZigString, value: *ZigString): bool {
         if (val := getEnvValue(globalObject, name.*)) {
             value.* = val;
             return true;
@@ -1529,7 +1535,7 @@ pub struct EnvironmentVariables {
 
     /// BunString variant of Bun__getEnvValue. The returned value borrows from
     /// the env map; caller must copy before the map can mutate.
-    pub export fn Bun__getEnvValueBunString(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String): bool {
+    @export @c static fn Bun__getEnvValueBunString(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String): bool {
         const vm = globalObject.bunVM();
         let name_slice = name.toUTF8(bun.default_allocator);
         defer name_slice.deinit();
@@ -1550,7 +1556,7 @@ pub struct EnvironmentVariables {
     /// rather than cloning. A worker only allocates its own value if it
     /// writes to that var. Parent deref'ing on overwrite won't free the
     /// bytes while a worker still holds a ref.
-    pub export fn Bun__setEnvValue(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String) {
+    @export @c static fn Bun__setEnvValue(globalObject: *jsc.JSGlobalObject, name: *bun.String, value: *bun.String) {
         const vm = globalObject.bunVM();
         let name_slice = name.toUTF8(bun.default_allocator);
         defer name_slice.deinit();
@@ -1587,7 +1593,11 @@ pub struct EnvironmentVariables {
 
         let value_slice = value.toUTF8(bun.default_allocator);
         defer value_slice.deinit();
-        const new_val = jsc.RareData.RefCountedEnvValue.create(value_slice.slice());
+        const new_val = bun.handleOom(bun.default_allocator.create(jsc.RareData.RefCountedEnvValue));
+        new_val.* = jsc.RareData.RefCountedEnvValue{
+            ref_count: 1,
+            bytes: bun.handleOom(bun.default_allocator.dupe(u8, value_slice.slice())),
+        };
         slot.ptr.* = new_val;
         // slot.key is a static-lifetime string literal (the struct field
         // name); value bytes live in the ref-counted wrapper. map.put
@@ -1616,19 +1626,19 @@ pub struct EnvironmentVariables {
     }
 }
 
-export fn Bun__reportError(globalObject: *JSGlobalObject, e: jsc.JSValue) {
+@export @c fn Bun__reportError(globalObject: *JSGlobalObject, e: jsc.JSValue) {
     * = jsc.VirtualMachine.get().uncaughtException(globalObject, e, false);
 }
 
-export fn reader_deallocator(_: *!?, ctx: *!?) {
+@export @c fn reader_deallocator(_: *!?, ctx: *!?) {
     let reader: *zlib.ZlibReaderArrayList = bun.cast(*zlib.ZlibReaderArrayList, ctx.?);
     reader.list.deinit(reader.allocator);
     reader.deinit();
 }
-export fn global_deallocator(_: *!?, ctx: *!?) {
+@export @c fn global_deallocator(_: *!?, ctx: *!?) {
     bun.allocators.freeWithoutSize(ctx);
 }
-export fn compressor_deallocator(_: *!?, ctx: *!?) {
+@export @c fn compressor_deallocator(_: *!?, ctx: *!?) {
     let compressor: *zlib.ZlibCompressorArrayList = bun.cast(*zlib.ZlibCompressorArrayList, ctx.?);
     compressor.list.deinit(compressor.allocator);
     compressor.deinit();
@@ -1926,7 +1936,7 @@ pub struct JSZlib {
 }
 
 pub struct JSZstd {
-    export fn deallocator(_: *!?, ctx: *!?) {
+    @export @c static fn deallocator(_: *!?, ctx: *!?) {
         bun.allocators.freeWithoutSize(ctx);
     }
 

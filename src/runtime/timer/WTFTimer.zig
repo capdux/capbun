@@ -86,11 +86,11 @@ const VirtualMachine = jsc.VirtualMachine;
 
 extern "c" fn WTFTimer__fire(timer: *RunLoopTimer) callconv(.c) void;
 
-pub fn WTFTimer__runIfImminent(vm: *VirtualMachine) void {
+pub export fn WTFTimer__runIfImminent(vm: *VirtualMachine) callconv(.c) void {
         _ = vm.eventLoop().runImminentGCTimer();
 }
 
-pub fn WTFTimer__create(run_loop_timer: *RunLoopTimer) ?*anyopaque {
+pub export fn WTFTimer__create(run_loop_timer: *RunLoopTimer) callconv(.c) ?*anyopaque {
         if (VirtualMachine.is_bundler_thread_for_bytecode_cache) {
             return null;
         }
@@ -99,23 +99,23 @@ pub fn WTFTimer__create(run_loop_timer: *RunLoopTimer) ?*anyopaque {
         return timer;
 }
 
-pub fn WTFTimer__update(timer: *WTFTimer, seconds: f64, repeat: bool) void {
+pub export fn WTFTimer__update(timer: *WTFTimer, seconds: f64, repeat: bool) callconv(.c) void {
         _ = timer.update(seconds, repeat);
 }
 
-pub fn WTFTimer__deinit(timer: *WTFTimer) void {
+pub export fn WTFTimer__deinit(timer: *WTFTimer) callconv(.c) void {
         _ = timer.deinit();
 }
 
-pub fn WTFTimer__isActive(timer: *const WTFTimer) bool {
+pub export fn WTFTimer__isActive(timer: *const WTFTimer) callconv(.c) bool {
         return ((timer.event_loop_timer.state == .ACTIVE) or (((timer.imminent.load(.seq_cst)) orelse { return false; }) == timer));
 }
 
-pub fn WTFTimer__cancel(timer: *WTFTimer) void {
+pub export fn WTFTimer__cancel(timer: *WTFTimer) callconv(.c) void {
         _ = timer.cancel();
 }
 
-pub fn WTFTimer__secondsUntilTimer(timer: *WTFTimer) f64 {
+pub export fn WTFTimer__secondsUntilTimer(timer: *WTFTimer) callconv(.c) f64 {
         _ = timer.lock.lock();
         defer {
         _ = timer.lock.unlock();

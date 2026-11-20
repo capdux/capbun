@@ -451,11 +451,11 @@ export class SocketHandler<const is_ssl: bool> {
         handle: bun.FD,
         @comptime This: type,
         this_ptr: *This,
-        @comptime socket_field_name: []const u8?,
+        @comptime socket_field_name: ([]const u8)?,
         is_ipc: bool,
     ): Self? {
         const ThisPtr = ?*This;
-        const raw = g.fromFd(k, null, @sizeOf(ThisPtr), handle.native(), is_ipc) orelse return null;
+        const raw = g.fromFd(k, null, @sizeOf(ThisPtr), handle, is_ipc) orelse return null;
         const socket_ = Self { socket = InternalSocket.connected(raw) };
 
         raw.ext(ThisPtr).* = this_ptr;
@@ -652,6 +652,6 @@ export enum AnySocket {
     }
 }
 
-export const NewSocketHandler = SocketHandler;
+pub const NewSocketHandler = SocketHandler;
 
 

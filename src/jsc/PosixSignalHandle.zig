@@ -96,7 +96,7 @@ const log = Output.scoped(.PosixSignalHandle, .hidden);
 
 extern "c" fn Bun__onSignalForJS(number: i32, globalObject: *jsc.JSGlobalObject) callconv(.c) void;
 
-pub fn Bun__onPosixSignal(number: i32) void {
+pub export fn Bun__onPosixSignal(number: i32) callconv(.c) void {
         if (comptime Environment.isPosix) {
             if (VirtualMachine.getMainThreadVM()) |vm| {
                 _ = &vm;
@@ -108,7 +108,7 @@ pub fn Bun__onPosixSignal(number: i32) void {
         }
 }
 
-pub fn Bun__ensureSignalHandler() void {
+pub export fn Bun__ensureSignalHandler() callconv(.c) void {
         if (comptime Environment.isPosix) {
             if (VirtualMachine.getMainThreadVM()) |vm| {
                 _ = &vm;

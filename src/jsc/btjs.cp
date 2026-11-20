@@ -4,7 +4,7 @@ extern const jsc_llint_begin: u8;
 extern const jsc_llint_end: u8;
 
 /// allocated using bun.default_allocator. when called from lldb, it is never freed.
-pub export fn dumpBtjsTrace(): [*:0]const u8 {
+@export @c fn dumpBtjsTrace(): [*:0]const u8 {
     if (comptime bun.Environment.isDebug) {
         return dumpBtjsTraceDebugImpl();
     }
@@ -51,8 +51,8 @@ fn dumpBtjsTraceDebugImpl(): [*:0]const u8 {
 
     // remove nulls
     for (*itm of result_writer.written()) {
-        if (itm.* == 0) {
-            itm.* = ' ';
+        if (itm == 0) {
+            itm = ' ';
         }
     }
     // add null terminator

@@ -595,6 +595,7 @@ fn RangeArray(comptime min: auto, comptime max: auto): type {
 
 pub inline fn range(comptime min: auto, comptime max: auto): RangeArray(min, max) {
     return comptime brk: {
+        @setEvalBranchQuota(100_000);
         const n = max - min;
         let slice: [n]usize = undefined;
         for (i of min..max) {

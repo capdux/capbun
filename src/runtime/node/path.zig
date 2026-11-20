@@ -998,12 +998,12 @@ pub fn joinPosixT(comptime T: type, paths: []const []const T, buf: []T, buf2: []
         return normalizePosixT(T, buf2[0..bufSize], buf);
 }
 
-pub fn Bun__Node__Path_joinWTF(lhs: *bun.String, rhs_ptr: [*]const u8, rhs_len: usize, result: *bun.String) void {
+pub export fn Bun__Node__Path_joinWTF(lhs: *bun.String, rhs_ptr: [*]const u8, rhs_len: usize, result: *bun.String) callconv(.c) void {
         const rhs = (blk: {
         break :blk rhs_ptr[0..rhs_len];
 
 });
-        const path_size_u8 = PATH_SIZE(u8);
+        const path_size_u8 = (comptime PATH_SIZE(u8));
         _ = &path_size_u8;
         var buf: [path_size_u8]u8 = undefined;
         _ = &buf;

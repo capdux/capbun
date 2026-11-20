@@ -178,7 +178,7 @@ pub struct c {
 /// e.g. `HTTPThread`'s, or build-fail paths). Runs synchronously inside
 /// whichever `SSL_CTX_free` took the refcount to zero, on that caller's
 /// thread; for the per-VM cache that's always the JS thread.
-@c export fn bun_ssl_ctx_cache_on_free(
+@export @c fn bun_ssl_ctx_cache_on_free(
     parent: *!?,
     ptr: *!?,
     ad: [*c]BoringSSL.CRYPTO_EX_DATA,

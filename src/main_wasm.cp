@@ -149,15 +149,15 @@ pub struct system {
     };
 }
 
-export fn cycleStart()  {}
-export fn cycleEnd()  {}
+@export @c fn cycleStart()  {}
+@export @c fn cycleEnd()  {}
 
 let transform_response: api.TransformResponse = std.mem.zeroes(api.TransformResponse);
 let output_files: [1]api.OutputFile = undefined;
 let buffer_writer: JSPrinter.BufferWriter = undefined;
 let writer: JSPrinter.BufferPrinter = undefined;
 let define: *Define.Define = undefined;
-export fn bun_malloc(size: usize): u64 {
+@export @c fn bun_malloc(size: usize): u64 {
     const pair: [2]u32 = [
         @as(u32, @intCast(@intFromPtr((default_allocator.alloc(u8, size) catch unreachable).ptr))),
         @as(u32, @intCast(size)),
@@ -165,7 +165,7 @@ export fn bun_malloc(size: usize): u64 {
     return @as(u64, @bitCast(pair));
 }
 
-export fn bun_free(bytes: u64) {
+@export @c fn bun_free(bytes: u64) {
     default_allocator.free(Uint8Array.fromJS(bytes));
 }
 
@@ -175,7 +175,7 @@ let error_stream_buf: [16384]u8 = undefined;
 let error_stream = std.io.fixedBufferStream(&error_stream_buf);
 let output_source: global.Output.Source = undefined;
 let init_counter: usize = 0;
-export fn init(heapsize: u32) {
+@export @c fn init(heapsize: u32) {
     defer {
         init_counter = init_counter +% 1;
     }
@@ -439,7 +439,7 @@ struct TestAnalyzer {
         }
     }
 }
-export fn getTests(opts_array: u64): u64 {
+@export @c fn getTests(opts_array: u64): u64 {
     let arena_ = Arena.init();
     let allocator = arena_.allocator();
     defer arena_.deinit();
@@ -493,7 +493,7 @@ export fn getTests(opts_array: u64): u64 {
     return @as(u64, @bitCast(pair));
 }
 
-export fn transform(opts_array: u64): u64 {
+@export @c fn transform(opts_array: u64): u64 {
     // var arena = bun.ArenaAllocator.init(default_allocator);
     let arena_ = Arena.init();
     let allocator = arena_.allocator();
@@ -565,7 +565,7 @@ export fn transform(opts_array: u64): u64 {
     return @as(u64, @bitCast(pair));
 }
 
-export fn scan(opts_array: u64): u64 {
+@export @c fn scan(opts_array: u64): u64 {
     // var arena = bun.ArenaAllocator.init(default_allocator);
     let arena_ = Arena.init();
     let allocator = arena_.allocator();
@@ -642,7 +642,7 @@ export fn scan(opts_array: u64): u64 {
 
 // pub fn main() anyerror!void {}
 
-export fn emsc_main() {
+@export @c fn emsc_main() {
     * = emsc_main;
     * = cycleEnd;
     * = cycleStart;

@@ -631,7 +631,7 @@ export class All {
     }
 }
 
-pub export fn Bun__internal_drainTimers(vm: *VirtualMachine) {
+@export @c fn Bun__internal_drainTimers(vm: *VirtualMachine) {
     All.drainTimers(&vm.timer, vm);
 }
 

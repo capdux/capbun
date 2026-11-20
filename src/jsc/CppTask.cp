@@ -48,7 +48,7 @@ pub struct ConcurrentCppTask {
         }
     }
 
-    pub export fn ConcurrentCppTask__createAndRun(cpp_task: *EventLoopTaskNoContextImpl) {
+    @export @c static fn ConcurrentCppTask__createAndRun(cpp_task: *EventLoopTaskNoContextImpl) {
         jsc.markBinding(@src());
         if (vm := cpp_task.getVM()) {
             vm.event_loop.refConcurrently();

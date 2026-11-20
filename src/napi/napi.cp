@@ -2,6 +2,9 @@ import WorkPoolMod from "../threading/work_pool.zig";
 import BufferMod from "../runtime/node/buffer.zig";
 
 type OpaquePtr = *!?;
+type NullableU8MultiPtr = ([*]u8)?;
+type NapiAsyncWorkPtr = *napi_async_work;
+type ConstNapiNodeVersionPtr = *const napi_node_version;
 
 const TODO_EXCEPTION = @as(jsc.C.ExceptionRef, null);
 
@@ -286,7 +289,7 @@ const napi_type_tag = extern struct {
     upper: u64,
 };
 pub extern fn napi_get_last_error_info(env: napi_env, result: [*c][*c]const napi_extended_error_info): napi_status ;
-pub export fn napi_get_undefined(env_: napi_env, result_: (*napi_value)?): napi_status {
+@export @c fn napi_get_undefined(env_: napi_env, result_: (*napi_value)?): napi_status {
     log("napi_get_undefined", {});
     if (env_ == null) {
         return envIsNull();
@@ -300,7 +303,7 @@ pub export fn napi_get_undefined(env_: napi_env, result_: (*napi_value)?): napi_
     result.set(env, .js_undefined);
     return env.ok();
 }
-pub export fn napi_get_null(env_: napi_env, result_: (*napi_value)?): napi_status {
+@export @c fn napi_get_null(env_: napi_env, result_: (*napi_value)?): napi_status {
     log("napi_get_null", {});
     if (env_ == null) {
         return envIsNull();
@@ -315,7 +318,7 @@ pub export fn napi_get_null(env_: napi_env, result_: (*napi_value)?): napi_statu
     return env.ok();
 }
 pub extern fn napi_get_global(env: napi_env, result: *napi_value): napi_status ;
-pub export fn napi_get_boolean(env_: napi_env, value: bool, result_: (*napi_value)?): napi_status {
+@export @c fn napi_get_boolean(env_: napi_env, value: bool, result_: (*napi_value)?): napi_status {
     log("napi_get_boolean", {});
     if (env_ == null) {
         return envIsNull();
@@ -329,7 +332,7 @@ pub export fn napi_get_boolean(env_: napi_env, value: bool, result_: (*napi_valu
     result.set(env, JSValue.jsBoolean(value));
     return env.ok();
 }
-pub export fn napi_create_array(env_: napi_env, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_array(env_: napi_env, result_: (*napi_value)?): napi_status {
     log("napi_create_array", {});
     if (env_ == null) {
         return envIsNull();
@@ -343,7 +346,7 @@ pub export fn napi_create_array(env_: napi_env, result_: (*napi_value)?): napi_s
     result.set(env, JSValue.createEmptyArray(env.toJS(), 0) catch return env.setLastError(.pending_exception));
     return env.ok();
 }
-pub export fn napi_create_array_with_length(env_: napi_env, length: usize, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_array_with_length(env_: napi_env, length: usize, result_: (*napi_value)?): napi_status {
     log("napi_create_array_with_length", {});
     if (env_ == null) {
         return envIsNull();
@@ -367,7 +370,7 @@ pub export fn napi_create_array_with_length(env_: napi_env, length: usize, resul
     return env.ok();
 }
 pub extern fn napi_create_double(_: napi_env, value: f64, result: *napi_value): napi_status ;
-pub export fn napi_create_int32(env_: napi_env, value: i32, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_int32(env_: napi_env, value: i32, result_: (*napi_value)?): napi_status {
     log("napi_create_int32", {});
     if (env_ == null) {
         return envIsNull();
@@ -381,7 +384,7 @@ pub export fn napi_create_int32(env_: napi_env, value: i32, result_: (*napi_valu
     result.set(env, JSValue.jsNumber(value));
     return env.ok();
 }
-pub export fn napi_create_uint32(env_: napi_env, value: u32, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_uint32(env_: napi_env, value: u32, result_: (*napi_value)?): napi_status {
     log("napi_create_uint32", {});
     if (env_ == null) {
         return envIsNull();
@@ -395,7 +398,7 @@ pub export fn napi_create_uint32(env_: napi_env, value: u32, result_: (*napi_val
     result.set(env, JSValue.jsNumber(value));
     return env.ok();
 }
-pub export fn napi_create_int64(env_: napi_env, value: i64, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_int64(env_: napi_env, value: i64, result_: (*napi_value)?): napi_status {
     log("napi_create_int64", {});
     if (env_ == null) {
         return envIsNull();
@@ -409,7 +412,7 @@ pub export fn napi_create_int64(env_: napi_env, value: i64, result_: (*napi_valu
     result.set(env, JSValue.jsNumber(value));
     return env.ok();
 }
-pub export fn napi_create_string_latin1(env_: napi_env, str: [*]const u8?, length: usize, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_string_latin1(env_: napi_env, str: [*]const u8?, length: usize, result_: (*napi_value)?): napi_status {
     if (env_ == null) {
         return envIsNull();
     }
@@ -454,7 +457,7 @@ pub export fn napi_create_string_latin1(env_: napi_env, str: [*]const u8?, lengt
     result.set(env, str_val.toJS(env.toJS()) catch return env.setLastError(.generic_failure));
     return env.ok();
 }
-pub export fn napi_create_string_utf8(env_: napi_env, str: [*]const u8?, length: usize, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_string_utf8(env_: napi_env, str: [*]const u8?, length: usize, result_: (*napi_value)?): napi_status {
     if (env_ == null) {
         return envIsNull();
     }
@@ -489,7 +492,7 @@ pub export fn napi_create_string_utf8(env_: napi_env, str: [*]const u8?, length:
     result.set(env, str_val);
     return env.ok();
 }
-pub export fn napi_create_string_utf16(env_: napi_env, str: [*]const char16_t?, length: usize, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_string_utf16(env_: napi_env, str: [*]const char16_t?, length: usize, result_: (*napi_value)?): napi_status {
     if (env_ == null) {
         return envIsNull();
     }
@@ -560,7 +563,7 @@ pub extern fn napi_get_value_string_utf16(env: napi_env, value_: napi_value, buf
 pub extern fn napi_coerce_to_bool(env: napi_env, value_: napi_value, result_: (*napi_value)?): napi_status ;
 pub extern fn napi_coerce_to_number(env: napi_env, value_: napi_value, result_: (*napi_value)?): napi_status ;
 pub extern fn napi_coerce_to_object(env: napi_env, value_: napi_value, result_: (*napi_value)?): napi_status ;
-pub export fn napi_get_prototype(env_: napi_env, object_: napi_value, result_: (*napi_value)?): napi_status {
+@export @c fn napi_get_prototype(env_: napi_env, object_: napi_value, result_: (*napi_value)?): napi_status {
     log("napi_get_prototype", {});
     if (env_ == null) {
         return envIsNull();
@@ -595,7 +598,7 @@ pub extern fn napi_has_element(env_: napi_env, object_: napi_value, index: c_uin
 pub extern fn napi_get_element(env: napi_env, object: napi_value, index: u32, result: *napi_value): napi_status ;
 pub extern fn napi_delete_element(env: napi_env, object: napi_value, index: u32, result: *bool): napi_status ;
 pub extern fn napi_define_properties(env: napi_env, object: napi_value, property_count: usize, properties: [*c]const napi_property_descriptor): napi_status ;
-pub export fn napi_is_array(env_: napi_env, value_: napi_value, result_: (*bool)?): napi_status {
+@export @c fn napi_is_array(env_: napi_env, value_: napi_value, result_: (*bool)?): napi_status {
     log("napi_is_array", {});
     if (env_ == null) {
         return envIsNull();
@@ -610,7 +613,7 @@ pub export fn napi_is_array(env_: napi_env, value_: napi_value, result_: (*bool)
     result.* = value.jsType().isArray();
     return env.ok();
 }
-pub export fn napi_get_array_length(env_: napi_env, value_: napi_value, result_: [*c]u32): napi_status {
+@export @c fn napi_get_array_length(env_: napi_env, value_: napi_value, result_: [*c]u32): napi_status {
     log("napi_get_array_length", {});
     if (env_ == null) {
         return envIsNull();
@@ -629,7 +632,7 @@ pub export fn napi_get_array_length(env_: napi_env, value_: napi_value, result_:
     result.* = @truncate(value.getLength(env.toJS()) catch return env.setLastError(.pending_exception));
     return env.ok();
 }
-pub export fn napi_strict_equals(env_: napi_env, lhs_: napi_value, rhs_: napi_value, result_: (*bool)?): napi_status {
+@export @c fn napi_strict_equals(env_: napi_env, lhs_: napi_value, rhs_: napi_value, result_: (*bool)?): napi_status {
     log("napi_strict_equals", {});
     if (env_ == null) {
         return envIsNull();
@@ -671,7 +674,7 @@ pub extern fn napi_reference_ref(env: napi_env, ref: napi_ref, result: [*c]u32):
 pub extern fn napi_reference_unref(env: napi_env, ref: napi_ref, result: [*c]u32): napi_status ;
 pub extern fn napi_get_reference_value(env: napi_env, ref: napi_ref, result: *napi_value): napi_status ;
 
-pub export fn napi_open_handle_scope(env_: napi_env, result_: (*napi_handle_scope)?): napi_status {
+@export @c fn napi_open_handle_scope(env_: napi_env, result_: (*napi_handle_scope)?): napi_status {
     log("napi_open_handle_scope", {});
     if (env_ == null) {
         return envIsNull();
@@ -686,7 +689,7 @@ pub export fn napi_open_handle_scope(env_: napi_env, result_: (*napi_handle_scop
     return env.ok();
 }
 
-pub export fn napi_close_handle_scope(env_: napi_env, handle_scope: napi_handle_scope): napi_status {
+@export @c fn napi_close_handle_scope(env_: napi_env, handle_scope: napi_handle_scope): napi_status {
     log("napi_close_handle_scope", {});
     if (env_ == null) {
         return envIsNull();
@@ -701,7 +704,7 @@ pub export fn napi_close_handle_scope(env_: napi_env, handle_scope: napi_handle_
 }
 
 // we don't support async contexts
-pub export fn napi_async_init(env_: napi_env, _: napi_value, _: napi_value, async_ctx: **!): napi_status {
+@export @c fn napi_async_init(env_: napi_env, _: napi_value, _: napi_value, async_ctx: **!): napi_status {
     log("napi_async_init", {});
     if (env_ == null) {
         return envIsNull();
@@ -714,7 +717,7 @@ pub export fn napi_async_init(env_: napi_env, _: napi_value, _: napi_value, asyn
 }
 
 // we don't support async contexts
-pub export fn napi_async_destroy(env_: napi_env, _: *!): napi_status {
+@export @c fn napi_async_destroy(env_: napi_env, _: *!): napi_status {
     log("napi_async_destroy", {});
     if (env_ == null) {
         return envIsNull();
@@ -724,7 +727,7 @@ pub export fn napi_async_destroy(env_: napi_env, _: *!): napi_status {
 }
 
 // this is just a regular function call
-pub export fn napi_make_callback(env_: napi_env, _: *!, recv_: napi_value, func_: napi_value, arg_count: usize, args: [*]const napi_value?, maybe_result: (*napi_value)?): napi_status {
+@export @c fn napi_make_callback(env_: napi_env, _: *!, recv_: napi_value, func_: napi_value, arg_count: usize, args: [*]const napi_value?, maybe_result: (*napi_value)?): napi_status {
     log("napi_make_callback", {});
     if (env_ == null) {
         return envIsNull();
@@ -782,7 +785,7 @@ fn notImplementedYet(comptime name: []const u8) {
     );
 }
 
-pub export fn napi_open_escapable_handle_scope(env_: napi_env, result_: (*napi_escapable_handle_scope)?): napi_status {
+@export @c fn napi_open_escapable_handle_scope(env_: napi_env, result_: (*napi_escapable_handle_scope)?): napi_status {
     log("napi_open_escapable_handle_scope", {});
     if (env_ == null) {
         return envIsNull();
@@ -796,7 +799,7 @@ pub export fn napi_open_escapable_handle_scope(env_: napi_env, result_: (*napi_e
     result.* = NapiHandleScope.open(env, true);
     return env.ok();
 }
-pub export fn napi_close_escapable_handle_scope(env_: napi_env, scope: napi_escapable_handle_scope): napi_status {
+@export @c fn napi_close_escapable_handle_scope(env_: napi_env, scope: napi_escapable_handle_scope): napi_status {
     log("napi_close_escapable_handle_scope", {});
     if (env_ == null) {
         return envIsNull();
@@ -808,7 +811,7 @@ pub export fn napi_close_escapable_handle_scope(env_: napi_env, scope: napi_esca
     }
     return env.ok();
 }
-pub export fn napi_escape_handle(env_: napi_env, scope_: napi_escapable_handle_scope, escapee: napi_value, result_: (*napi_value)?): napi_status {
+@export @c fn napi_escape_handle(env_: napi_env, scope_: napi_escapable_handle_scope, escapee: napi_value, result_: (*napi_value)?): napi_status {
     log("napi_escape_handle", {});
     if (env_ == null) {
         return envIsNull();
@@ -831,11 +834,11 @@ pub extern fn napi_type_tag_object(env: napi_env, _: napi_value, _: [*c]const na
 pub extern fn napi_check_object_type_tag(env: napi_env, _: napi_value, _: [*c]const napi_type_tag, _: *bool): napi_status ;
 
 // do nothing for both of these
-pub export fn napi_open_callback_scope(_: napi_env, _: napi_value, _: *!, _: *!): napi_status {
+@export @c fn napi_open_callback_scope(_: napi_env, _: napi_value, _: *!, _: *!): napi_status {
     log("napi_open_callback_scope", {});
     return @intFromEnum(NapiStatus.ok);
 }
-pub export fn napi_close_callback_scope(_: napi_env, _: *!): napi_status {
+@export @c fn napi_close_callback_scope(_: napi_env, _: *!): napi_status {
     log("napi_close_callback_scope", {});
     return @intFromEnum(NapiStatus.ok);
 }
@@ -843,7 +846,7 @@ pub extern fn napi_throw(env: napi_env, @"error": napi_value): napi_status ;
 pub extern fn napi_throw_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8): napi_status ;
 pub extern fn napi_throw_type_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8): napi_status ;
 pub extern fn napi_throw_range_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8): napi_status ;
-pub export fn napi_is_error(env_: napi_env, value_: napi_value, result: *bool): napi_status {
+@export @c fn napi_is_error(env_: napi_env, value_: napi_value, result: *bool): napi_status {
     log("napi_is_error", {});
     if (env_ == null) {
         return envIsNull();
@@ -856,7 +859,7 @@ pub export fn napi_is_error(env_: napi_env, value_: napi_value, result: *bool): 
 }
 pub extern fn napi_is_exception_pending(env: napi_env, result: *bool): napi_status ;
 pub extern fn napi_get_and_clear_last_exception(env: napi_env, result: *napi_value): napi_status ;
-pub export fn napi_is_arraybuffer(env_: napi_env, value_: napi_value, result_: (*bool)?): napi_status {
+@export @c fn napi_is_arraybuffer(env_: napi_env, value_: napi_value, result_: (*bool)?): napi_status {
     log("napi_is_arraybuffer", {});
     if (env_ == null) {
         return envIsNull();
@@ -875,7 +878,7 @@ pub extern fn napi_create_arraybuffer(env: napi_env, byte_length: usize, data: [
 
 pub extern fn napi_create_external_arraybuffer(env: napi_env, external_data: *!?, byte_length: usize, finalize_cb: napi_finalize, finalize_hint: *!?, result: *napi_value): napi_status ;
 
-pub export fn napi_get_arraybuffer_info(env_: napi_env, arraybuffer_: napi_value, data: (*(([*]u8)?))?, byte_length: (*usize)?): napi_status {
+@export @c fn napi_get_arraybuffer_info(env_: napi_env, arraybuffer_: napi_value, data: (*NullableU8MultiPtr)?, byte_length: (*usize)?): napi_status {
     log("napi_get_arraybuffer_info", {});
     if (env_ == null) {
         return envIsNull();
@@ -899,12 +902,12 @@ pub export fn napi_get_arraybuffer_info(env_: napi_env, arraybuffer_: napi_value
 
 pub extern fn napi_is_typedarray(napi_env, napi_value, bool): napi_status ;
 
-pub export fn napi_get_typedarray_info(
+@export @c fn napi_get_typedarray_info(
     env_: napi_env,
     typedarray_: napi_value,
     maybe_type: (*napi_typedarray_type)?,
     maybe_length: (*usize)?,
-    maybe_data: (*(([*]u8)?))?,
+    maybe_data: (*NullableU8MultiPtr)?,
     maybe_arraybuffer: (*napi_value)?,
     maybe_byte_offset: (*usize)?, // note: this is always 0
 ): napi_status {
@@ -948,7 +951,7 @@ pub export fn napi_get_typedarray_info(
     return env.ok();
 }
 pub extern fn napi_create_dataview(env: napi_env, length: usize, arraybuffer: napi_value, byte_offset: usize, result: *napi_value): napi_status ;
-pub export fn napi_is_dataview(env_: napi_env, value_: napi_value, result_: (*bool)?): napi_status {
+@export @c fn napi_is_dataview(env_: napi_env, value_: napi_value, result_: (*bool)?): napi_status {
     log("napi_is_dataview", {});
     if (env_ == null) {
         return envIsNull();
@@ -962,11 +965,11 @@ pub export fn napi_is_dataview(env_: napi_env, value_: napi_value, result_: (*bo
     result.* = !value.isEmptyOrUndefinedOrNull() && value.jsTypeLoose() == .DataView;
     return env.ok();
 }
-pub export fn napi_get_dataview_info(
+@export @c fn napi_get_dataview_info(
     env_: napi_env,
     dataview_: napi_value,
     maybe_bytelength: (*usize)?,
-    maybe_data: (*(([*]u8)?))?,
+    maybe_data: (*NullableU8MultiPtr)?,
     maybe_arraybuffer: (*napi_value)?,
     maybe_byte_offset: (*usize)?, // note: this is always 0
 ): napi_status {
@@ -997,7 +1000,7 @@ pub export fn napi_get_dataview_info(
 
     return env.ok();
 }
-pub export fn napi_get_version(env_: napi_env, result_: (*u32)?): napi_status {
+@export @c fn napi_get_version(env_: napi_env, result_: (*u32)?): napi_status {
     log("napi_get_version", {});
     if (env_ == null) {
         return envIsNull();
@@ -1011,7 +1014,7 @@ pub export fn napi_get_version(env_: napi_env, result_: (*u32)?): napi_status {
     result.* = 9;
     return env.ok();
 }
-pub export fn napi_create_promise(env_: napi_env, deferred_: (*napi_deferred)?, promise_: (*napi_value)?): napi_status {
+@export @c fn napi_create_promise(env_: napi_env, deferred_: (*napi_deferred)?, promise_: (*napi_value)?): napi_status {
     log("napi_create_promise", {});
     if (env_ == null) {
         return envIsNull();
@@ -1030,7 +1033,7 @@ pub export fn napi_create_promise(env_: napi_env, deferred_: (*napi_deferred)?, 
     promise.set(env, deferred.*.get().asValue(env.toJS()));
     return env.ok();
 }
-pub export fn napi_resolve_deferred(env_: napi_env, deferred: napi_deferred, resolution_: napi_value): napi_status {
+@export @c fn napi_resolve_deferred(env_: napi_env, deferred: napi_deferred, resolution_: napi_value): napi_status {
     log("napi_resolve_deferred", {});
     if (env_ == null) {
         return envIsNull();
@@ -1043,7 +1046,7 @@ pub export fn napi_resolve_deferred(env_: napi_env, deferred: napi_deferred, res
     prom.resolve(env.toJS(), resolution) catch return env.setLastError(.pending_exception);
     return env.ok();
 }
-pub export fn napi_reject_deferred(env_: napi_env, deferred: napi_deferred, rejection_: napi_value): napi_status {
+@export @c fn napi_reject_deferred(env_: napi_env, deferred: napi_deferred, rejection_: napi_value): napi_status {
     log("napi_reject_deferred", {});
     if (env_ == null) {
         return envIsNull();
@@ -1056,7 +1059,7 @@ pub export fn napi_reject_deferred(env_: napi_env, deferred: napi_deferred, reje
     prom.reject(env.toJS(), rejection) catch return env.setLastError(.pending_exception);
     return env.ok();
 }
-pub export fn napi_is_promise(env_: napi_env, value_: napi_value, is_promise_: (*bool)?): napi_status {
+@export @c fn napi_is_promise(env_: napi_env, value_: napi_value, is_promise_: (*bool)?): napi_status {
     log("napi_is_promise", {});
     if (env_ == null) {
         return envIsNull();
@@ -1078,7 +1081,7 @@ pub export fn napi_is_promise(env_: napi_env, value_: napi_value, is_promise_: (
 }
 pub extern fn napi_run_script(env: napi_env, script: napi_value, result: *napi_value): napi_status ;
 pub extern fn napi_adjust_external_memory(env: napi_env, change_in_bytes: i64, adjusted_value: [*c]i64): napi_status ;
-pub export fn napi_create_date(env_: napi_env, time: f64, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_date(env_: napi_env, time: f64, result_: (*napi_value)?): napi_status {
     log("napi_create_date", {});
     if (env_ == null) {
         return envIsNull();
@@ -1092,7 +1095,7 @@ pub export fn napi_create_date(env_: napi_env, time: f64, result_: (*napi_value)
     result.set(env, JSValue.c(jsc.C.JSObjectMakeDate(env.toJS().ref(), 1, &args, TODO_EXCEPTION)));
     return env.ok();
 }
-pub export fn napi_is_date(env_: napi_env, value_: napi_value, is_date_: (*bool)?): napi_status {
+@export @c fn napi_is_date(env_: napi_env, value_: napi_value, is_date_: (*bool)?): napi_status {
     log("napi_is_date", {});
     if (env_ == null) {
         return envIsNull();
@@ -1275,7 +1278,7 @@ fn napiSpan(ptr: auto, len: usize): []const u8 {
 
     return ptr.?[0..len];
 }
-pub export fn napi_fatal_error(location_ptr: [*:0]const u8?, location_len: usize, message_ptr: [*:0]const u8?, message_len_: usize): noreturn {
+@export @c fn napi_fatal_error(location_ptr: [*:0]const u8?, location_len: usize, message_ptr: [*:0]const u8?, message_len_: usize): noreturn {
     log("napi_fatal_error", {});
     napi_internal_suppress_crash_on_abort_if_desired();
     let message = napiSpan(message_ptr, message_len_);
@@ -1292,7 +1295,7 @@ pub export fn napi_fatal_error(location_ptr: [*:0]const u8?, location_len: usize
 }
 pub extern fn napi_create_buffer(env: napi_env, length: usize, data: **!?, result: *napi_value): napi_status ;
 pub extern fn napi_create_external_buffer(env: napi_env, length: usize, data: *!?, finalize_cb: napi_finalize, finalize_hint: *!?, result: *napi_value): napi_status ;
-pub export fn napi_create_buffer_copy(env_: napi_env, length: usize, data: [*]u8, result_data: (*(*!?))?, result_: (*napi_value)?): napi_status {
+@export @c fn napi_create_buffer_copy(env_: napi_env, length: usize, data: [*]u8, result_data: (*(*!?))?, result_: (*napi_value)?): napi_status {
     log("napi_create_buffer_copy: {d}", .{length});
     if (env_ == null) {
         return envIsNull();
@@ -1317,7 +1320,7 @@ pub export fn napi_create_buffer_copy(env_: napi_env, length: usize, data: [*]u8
     return env.ok();
 }
 extern fn napi_is_buffer(napi_env, napi_value, bool): napi_status ;
-pub export fn napi_get_buffer_info(env_: napi_env, value_: napi_value, data: (*(([*]u8)?))?, length: (*usize)?): napi_status {
+@export @c fn napi_get_buffer_info(env_: napi_env, value_: napi_value, data: (*NullableU8MultiPtr)?, length: (*usize)?): napi_status {
     log("napi_get_buffer_info", {});
     if (env_ == null) {
         return envIsNull();
@@ -1344,14 +1347,14 @@ extern fn node_api_throw_syntax_error(a0: napi_env, a1: [*]const c_char, a2: [*]
 extern fn node_api_create_external_string_latin1(a0: napi_env, a1: [*:0]u8, a2: usize, a3: napi_finalize, a4: *!?, a5: *JSValue, a6: *bool): napi_status ;
 extern fn node_api_create_external_string_utf16(a0: napi_env, a1: [*:0]u16, a2: usize, a3: napi_finalize, a4: *!?, a5: *JSValue, a6: *bool): napi_status ;
 
-pub export fn napi_create_async_work(
+@export @c fn napi_create_async_work(
     env_: napi_env,
     _: napi_value,
     _: [*:0]const u8,
     execute_: napi_async_execute_callback?,
     complete: napi_async_complete_callback?,
     data: *!?,
-    result_: (*(*napi_async_work))?,
+    result_: (*NapiAsyncWorkPtr)?,
 ): napi_status {
     log("napi_create_async_work", {});
     if (env_ == null) {
@@ -1370,7 +1373,7 @@ pub export fn napi_create_async_work(
     result.* = napi_async_work.new(env, execute, complete, data);
     return env.ok();
 }
-pub export fn napi_delete_async_work(env_: napi_env, work_: (*napi_async_work)?): napi_status {
+@export @c fn napi_delete_async_work(env_: napi_env, work_: (*napi_async_work)?): napi_status {
     log("napi_delete_async_work", {});
     if (env_ == null) {
         return envIsNull();
@@ -1383,7 +1386,7 @@ pub export fn napi_delete_async_work(env_: napi_env, work_: (*napi_async_work)?)
     }
     return env.invalidArg();
 }
-pub export fn napi_queue_async_work(env_: napi_env, work_: (*napi_async_work)?): napi_status {
+@export @c fn napi_queue_async_work(env_: napi_env, work_: (*napi_async_work)?): napi_status {
     log("napi_queue_async_work", {});
     if (env_ == null) {
         return envIsNull();
@@ -1396,7 +1399,7 @@ pub export fn napi_queue_async_work(env_: napi_env, work_: (*napi_async_work)?):
     }
     return env.invalidArg();
 }
-pub export fn napi_cancel_async_work(env_: napi_env, work_: (*napi_async_work)?): napi_status {
+@export @c fn napi_cancel_async_work(env_: napi_env, work_: (*napi_async_work)?): napi_status {
     log("napi_cancel_async_work", {});
     if (env_ == null) {
         return envIsNull();
@@ -1411,7 +1414,7 @@ pub export fn napi_cancel_async_work(env_: napi_env, work_: (*napi_async_work)?)
     }
     return env.invalidArg();
 }
-pub export fn napi_get_node_version(env_: napi_env, version_: **const napi_node_version?): napi_status {
+@export @c fn napi_get_node_version(env_: napi_env, version_: (*ConstNapiNodeVersionPtr)?): napi_status {
     log("napi_get_node_version", {});
     if (env_ == null) {
         return envIsNull();
@@ -1425,7 +1428,7 @@ pub export fn napi_get_node_version(env_: napi_env, version_: **const napi_node_
     return env.ok();
 }
 const napi_event_loop = if (bun.Environment.isWindows) *bun.windows.libuv.Loop else *jsc.EventLoop;
-pub export fn napi_get_uv_event_loop(env_: napi_env, loop_: (*napi_event_loop)?): napi_status {
+@export @c fn napi_get_uv_event_loop(env_: napi_env, loop_: (*napi_event_loop)?): napi_status {
     log("napi_get_uv_event_loop", {});
     if (env_ == null) {
         return envIsNull();
@@ -1462,12 +1465,12 @@ fn napiInternalCleanupCallback(data: *!?) {
     }
 }
 
-pub export fn napi_internal_register_cleanup_zig(env_: napi_env) {
+@export @c fn napi_internal_register_cleanup_zig(env_: napi_env) {
     const env = env_.?;
     env.toJS().bunVM().rareData().pushCleanupHook(env.toJS(), env, napiInternalCleanupCallback);
 }
 
-pub export fn napi_internal_suppress_crash_on_abort_if_desired() {
+@export @c fn napi_internal_suppress_crash_on_abort_if_desired() {
     if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_ON_NAPI_ABORT.get()) {
         bun.crash_handler.suppressReporting();
     }
@@ -1517,7 +1520,7 @@ pub struct Finalizer {
 /// For Node-API modules not built with NAPI_EXPERIMENTAL, finalizers should be deferred to the
 /// immediate task queue instead of run immediately. This lets finalizers perform allocations,
 /// which they couldn't if they ran immediately while the garbage collector is still running.
-pub export fn napi_internal_enqueue_finalizer(env: napi_env, fun: napi_finalize, data: *!?, hint: *!?) {
+@export @c fn napi_internal_enqueue_finalizer(env: napi_env, fun: napi_finalize, data: *!?, hint: *!?) {
     if (fun == null || env == null) {
         return;
     }
@@ -1780,7 +1783,8 @@ pub struct ThreadSafeFunction {
             if (_.thread_count.load(.seq_cst) <= 0) {
                 return @intFromEnum(NapiStatus.invalid_arg);
             }
-            * = _.release(.release, true);
+            const release_fn = ThreadSafeFunction.release;
+            * = release_fn(_, .release, true);
             return @intFromEnum(NapiStatus.closing);
         }
 
@@ -1869,7 +1873,7 @@ pub struct ThreadSafeFunction {
     }
 }
 
-pub export fn napi_create_threadsafe_function(
+@export @c fn napi_create_threadsafe_function(
     env_: napi_env,
     func_: napi_value,
     _: napi_value, // async_resource
@@ -1909,7 +1913,7 @@ pub export fn napi_create_threadsafe_function(
             },
         };
     }
-    let function = ThreadSafeFunction.new({
+    result.* = ThreadSafeFunction.new({
         event_loop: vm.eventLoop(),
         env: NapiEnv.Ref.cloneFromRaw(env),
         callback: cb_val,
@@ -1923,31 +1927,29 @@ pub export fn napi_create_threadsafe_function(
     });
 
     // nodejs by default keeps the event loop alive until the thread-safe function is unref'd
-    function.ref();
-    function.tracker.didSchedule(vm.global);
-
-    result.* = function;
+    result.*.ref();
+    result.*.tracker.didSchedule(vm.global);
     return env.ok();
 }
-pub export fn napi_get_threadsafe_function_context(func: napi_threadsafe_function, result: **!?): napi_status {
+@export @c fn napi_get_threadsafe_function_context(func: napi_threadsafe_function, result: *OpaquePtr): napi_status {
     log("napi_get_threadsafe_function_context", {});
     result.* = func.ctx;
     return @intFromEnum(NapiStatus.ok);
 }
-pub export fn napi_call_threadsafe_function(func: napi_threadsafe_function, data: *!?, is_blocking: napi_threadsafe_function_call_mode): napi_status {
+@export @c fn napi_call_threadsafe_function(func: napi_threadsafe_function, data: *!?, is_blocking: napi_threadsafe_function_call_mode): napi_status {
     log("napi_call_threadsafe_function", {});
     return func.enqueue(data, is_blocking == napi_tsfn_blocking);
 }
-pub export fn napi_acquire_threadsafe_function(func: napi_threadsafe_function): napi_status {
+@export @c fn napi_acquire_threadsafe_function(func: napi_threadsafe_function): napi_status {
     log("napi_acquire_threadsafe_function", {});
     return func.acquire();
 }
-pub export fn napi_release_threadsafe_function(func: napi_threadsafe_function, mode: napi_threadsafe_function_release_mode): napi_status {
+@export @c fn napi_release_threadsafe_function(func: napi_threadsafe_function, mode: napi_threadsafe_function_release_mode): napi_status {
     log("napi_release_threadsafe_function", {});
     const release_fn = ThreadSafeFunction.release;
     return release_fn(func, mode, false);
 }
-pub export fn napi_unref_threadsafe_function(env_: napi_env, func: napi_threadsafe_function): napi_status {
+@export @c fn napi_unref_threadsafe_function(env_: napi_env, func: napi_threadsafe_function): napi_status {
     log("napi_unref_threadsafe_function", {});
     if (env_ == null) {
         return envIsNull();
@@ -1957,7 +1959,7 @@ pub export fn napi_unref_threadsafe_function(env_: napi_env, func: napi_threadsa
     func.unref();
     return env.ok();
 }
-pub export fn napi_ref_threadsafe_function(env_: napi_env, func: napi_threadsafe_function): napi_status {
+@export @c fn napi_ref_threadsafe_function(env_: napi_env, func: napi_threadsafe_function): napi_status {
     log("napi_ref_threadsafe_function", {});
     if (env_ == null) {
         return envIsNull();

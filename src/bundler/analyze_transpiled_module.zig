@@ -466,14 +466,14 @@ pub const StringID = enum(u32) {
     _,
 };
 
-pub fn zig__ModuleInfo__destroy(info: *ModuleInfo) void {
+pub export fn zig__ModuleInfo__destroy(info: *ModuleInfo) callconv(.c) void {
         _ = info.destroy();
 }
 
-pub fn zig__ModuleInfoDeserialized__deinit(info: *ModuleInfoDeserialized) void {
+pub export fn zig__ModuleInfoDeserialized__deinit(info: *ModuleInfoDeserialized) callconv(.c) void {
         _ = info.deinit();
 }
 
-pub fn zig_log(msg: [*:0]const u8) void {
+pub export fn zig_log(msg: [*:0]const u8) callconv(.c) void {
         _ = (blk_catch_5: { break :blk_catch_5 ((bun.Output.errorWriter().print("{s}\n", .{ std.mem.span(msg) })) catch |__ce_5| { _ = &__ce_5;  }); });
 }

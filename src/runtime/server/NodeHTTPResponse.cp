@@ -1175,7 +1175,7 @@ pub fn setTimeout(this: *NodeHTTPResponse, seconds: u8) void {
     this.raw_response.?.timeout(seconds);
 }
 
-export fn NodeHTTPResponse__setTimeout(this: *NodeHTTPResponse, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) bool {
+pub export fn NodeHTTPResponse__setTimeout(this: *NodeHTTPResponse, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) bool {
     if (!seconds.isNumber()) {
         globalThis.throwInvalidArgumentTypeValue("timeout", "number", seconds) catch {};
         return false;

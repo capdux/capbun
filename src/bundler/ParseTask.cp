@@ -1036,20 +1036,20 @@ struct OnBeforeParsePlugin {
         return 0;
     }
 
-    pub export fn OnBeforeParseResult__reset(*_) {
-        const wrapper = _.getWrapper();
-        _.loader = wrapper.loader;
+    @export @c fn OnBeforeParseResult__reset(res: *OnBeforeParseResult) {
+        const wrapper = res.getWrapper();
+        res.loader = wrapper.loader;
         if (src_ptr := wrapper.original_source) {
             const src = unsafe { src_ptr[0..wrapper.original_source_len] };
-            _.source_ptr = src.ptr;
-            _.source_len = src.len;
+            res.source_ptr = src.ptr;
+            res.source_len = src.len;
         } else {
-            _.source_ptr = null;
-            _.source_len = 0;
+            res.source_ptr = null;
+            res.source_len = 0;
         }
     }
 
-    pub export fn OnBeforeParsePlugin__isDone(*_): i32 {
+    @export @c fn OnBeforeParsePlugin__isDone(*_): i32 {
         if (_.should_continue_running.* != 1) {
             return 1;
         }

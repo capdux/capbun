@@ -43,7 +43,7 @@ const jsc = bun.jsc;
 const VirtualMachine = jsc.VirtualMachine;
 const log = bun.Output.scoped(.DateHeaderTimer, .visible);
 
-pub fn Bun__internal_ensureDateHeaderTimerIsEnabled(loop: *uws.Loop) callconv(.c) void {
+pub export fn Bun__internal_ensureDateHeaderTimerIsEnabled(loop: *uws.Loop) callconv(.c) void {
         if (jsc.VirtualMachine.getOrNull()) |vm| {
             _ = &vm;
             _ = vm.timer.updateDateHeaderTimerIfNecessary(loop, vm);

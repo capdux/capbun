@@ -47,7 +47,7 @@ pub enum Algorithm_Value: AlgorithmEnum {
     };
 }
 
-pub fn algorithmValueFromJS(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): anyerror!Algorithm_Value {
+pub fn algorithmValueFromJS(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!Algorithm_Value {
     if (value.isObject()) {
         if (algorithm_value := value.getTruthy(globalObject, "algorithm")?) {
             if (!algorithm_value.isString()) {
@@ -64,7 +64,7 @@ pub fn algorithmValueFromJS(globalObject: *jsc.JSGlobalObject, value: jsc.JSValu
             switch (maybe_alg.?) {
                 .bcrypt => {
                     let algorithm = Algorithm_Value{
-                        .bcrypt = Algorithm_Value.bcrpyt_default,
+                        .bcrypt = 10,
                     };
 
                     if (rounds_value := value.getTruthy(globalObject, "cost")?) {
@@ -172,7 +172,7 @@ pub fn algorithmValueFromJS(globalObject: *jsc.JSGlobalObject, value: jsc.JSValu
         switch (maybe_alg.?) {
             .bcrypt => {
                 return Algorithm_Value{
-                    .bcrypt = Algorithm_Value.bcrpyt_default,
+                    .bcrypt = 10,
                 };
             },
             .argon2id => {
@@ -255,11 +255,11 @@ pub class PasswordObject {
 
     pub const HashError = pwhash.Error || error{UnsupportedAlgorithm};
 
-    pub fn hash(
+    pub static fn hash(
         allocator: std.mem.Allocator,
         password: []const u8,
         algorithm: Algorithm_Value,
-    ): anyerror![]const u8 {
+    ): HashError![]const u8 {
         switch (algorithm) {
             .argon2i argon => {
                 let outbuf: [4096]u8 = undefined;
@@ -304,7 +304,7 @@ pub class PasswordObject {
                 let password_to_use = password;
                 if (password.len > 72) {
                     let sha_512 = bun.sha.SHA512.init();
-                    defer sha_512.release();
+                    defer sha_512.deinit();
                     sha_512.update(password);
                     sha_512.final(outbuf[0..64]);
                     password_to_use = outbuf[0..64];
@@ -330,25 +330,33 @@ pub class PasswordObject {
         password: []const u8,
         previous_hash: []const u8,
         algorithm: AlgorithmEnum?,
-    ): anyerror!bool {
+    ): HashError!bool {
         if (previous_hash.len == 0) {
             return false;
         }
 
+        let algo: AlgorithmEnum = undefined;
+        if (a := algorithm) {
+            algo = a;
+        } else if (g := AlgorithmDef_.get(previous_hash)) {
+            algo = g;
+        } else {
+            return error.UnsupportedAlgorithm;
+        }
         return verifyWithAlgorithm(
             allocator,
             password,
             previous_hash,
-            algorithm orelse AlgorithmDef_.get(previous_hash) orelse return error.UnsupportedAlgorithm,
+            algo,
         );
     }
 
-    pub fn verifyWithAlgorithm(
+    static fn verifyWithAlgorithm(
         allocator: std.mem.Allocator,
         password: []const u8,
         previous_hash: []const u8,
         algorithm: AlgorithmEnum,
-    ): anyerror!bool {
+    ): HashError!bool {
         switch (algorithm) {
             .argon2id, .argon2d, .argon2i => {
                 pwhash.argon2.strVerify(previous_hash, password, .{ .allocator = allocator }) catch e => {
@@ -367,7 +375,7 @@ pub class PasswordObject {
 
                 if (password.len > 72) {
                     let sha_512 = bun.sha.SHA512.init();
-                    defer sha_512.release();
+                    defer sha_512.deinit();
                     sha_512.update(password);
                     sha_512.final(outbuf[0..64]);
                     password_to_use = outbuf[0..64];
@@ -435,7 +443,7 @@ pub struct HashJobResult_ {
     pub const new = bun.TrivialNew(@This());
     pub const Value = HashJobResultValue;
 
-    pub fn runFromJS(*_: *HashJobResult_): anyerror!void {
+    pub fn runFromJS(*_: *HashJobResult_): bun.JSError!void {
         let promise = this.promise;
         defer promise.deinit();
         this.promise = .{};
@@ -532,7 +540,7 @@ pub struct VerifyJobResult_ {
     pub const new = bun.TrivialNew(@This());
     pub const Value = VerifyJobResultValue;
 
-    pub fn runFromJS(*_: *VerifyJobResult_): anyerror!void {
+    pub fn runFromJS(*_: *VerifyJobResult_): bun.JSError!void {
         let promise = this.promise;
         defer promise.deinit();
         this.promise = .{};
@@ -608,7 +616,7 @@ pub class JSPasswordObject {
     pub const HashJob = HashJob_;
     pub const VerifyJob = VerifyJob_;
 
-    static fn JSPasswordObject__create(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+    @export @c static fn JSPasswordObject__create(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         let object = JSValue.createEmptyObject(globalObject, 4);
         object.put(globalObject, ZigString.static("hash"), jsc.JSFunction.create(globalObject, "hash", JSPasswordObject__hash, 2, .{}));
         object.put(globalObject, ZigString.static("hashSync"), jsc.JSFunction.create(globalObject, "hashSync", JSPasswordObject__hashSync, 2, .{}));
@@ -617,7 +625,7 @@ pub class JSPasswordObject {
         return object;
     }
 
-    pub fn hash(globalObject: *jsc.JSGlobalObject, password: []const u8, algorithm: Algorithm_Value, comptime sync: bool): anyerror!jsc.JSValue {
+    pub static fn hash(globalObject: *jsc.JSGlobalObject, password: []const u8, algorithm: Algorithm_Value, comptime sync: bool): bun.JSError!jsc.JSValue {
         assert(password.len > 0);
 
         if (comptime sync) {
@@ -651,7 +659,7 @@ pub class JSPasswordObject {
         return promise.value();
     }
 
-    static fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?, comptime sync: bool): anyerror!jsc.JSValue {
+    static fn verify(globalObject: *jsc.JSGlobalObject, password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?, comptime sync: bool): bun.JSError!jsc.JSValue {
         assert(password.len > 0);
 
         if (comptime sync) {
@@ -685,7 +693,7 @@ pub class JSPasswordObject {
         return promise.value();
     }
 
-    static fn JSPasswordObject__hash(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__hash(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments_ = callframe.arguments_old(2);
         const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -693,7 +701,7 @@ pub class JSPasswordObject {
             return globalObject.throwNotEnoughArguments("hash", 1, 0);
         }
 
-        let algorithm = Algorithm_Value.default;
+        let algorithm = Algorithm_Value{ .argon2id = .{} };
 
         if (arguments.len > 1 and !arguments[1].isEmptyOrUndefinedOrNull()) {
             algorithm = algorithmValueFromJS(globalObject, arguments[1])?;
@@ -709,7 +717,7 @@ pub class JSPasswordObject {
         return hash(globalObject, password_to_hash, algorithm, false);
     }
 
-    static fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments_ = callframe.arguments_old(2);
         const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -717,7 +725,7 @@ pub class JSPasswordObject {
             return globalObject.throwNotEnoughArguments("hash", 1, 0);
         }
 
-        let algorithm = Algorithm_Value.default;
+        let algorithm = Algorithm_Value{ .argon2id = .{} };
 
         if (arguments.len > 1 and !arguments[1].isEmptyOrUndefinedOrNull()) {
             algorithm = algorithmValueFromJS(globalObject, arguments[1])?;
@@ -737,7 +745,7 @@ pub class JSPasswordObject {
         return hash(globalObject, string_or_buffer.slice(), algorithm, true);
     }
 
-    static fn JSPasswordObject__verify(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__verify(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments_ = callframe.arguments_old(3);
         const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -784,7 +792,7 @@ pub class JSPasswordObject {
         return verify(globalObject, owned_password, owned_hash, algorithm, false);
     }
 
-    static fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): anyerror!jsc.JSValue {
+    static fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments_ = callframe.arguments_old(3);
         const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -840,7 +848,3 @@ pub class JSPasswordObject {
 }
 
 const unknown_password_algorithm_message = "unknown algorithm, expected one of: \"bcrypt\", \"argon2id\", \"argon2d\", \"argon2i\" (default is \"argon2id\")";
-
-comptime {
-    @export(&@field(JSPasswordObject, "JSPasswordObject__create"), { name: "JSPasswordObject__create" });
-}

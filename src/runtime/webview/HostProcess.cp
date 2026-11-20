@@ -47,7 +47,7 @@ let instance: (*HostProcess)? = null;
 /// hasn't yet noticed EOF before we return from main(). WKWebView's own
 /// WebContent/GPU/Network helpers are XPC-connected to the child — when the
 /// child dies they get connection-invalidated and exit.
-pub export fn Bun__WebViewHost__kill() {
+@export @c fn Bun__WebViewHost__kill() {
     if (i := instance) {
         * = i.process.kill(9);
     }
@@ -60,7 +60,7 @@ pub export fn Bun__WebViewHost__kill() {
 /// a bug" not "spawn failed". We deliberately don't store the fd — usockets
 /// owns it; re-returning a fd usockets may have already closed would be a
 /// use-after-close. Zig only owns process lifetime (watch + kill).
-pub export fn Bun__WebViewHost__ensure(global: *jsc.JSGlobalObject, stdoutInherit: bool, stderrInherit: bool): i32 {
+@export @c fn Bun__WebViewHost__ensure(global: *jsc.JSGlobalObject, stdoutInherit: bool, stderrInherit: bool): i32 {
     if (comptime !bun.Environment.isMac) return -1;
     if (instance != null) return -1; // C++ already holds the fd
 

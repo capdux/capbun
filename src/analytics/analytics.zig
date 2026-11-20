@@ -39,12 +39,6 @@ comptime {
     _ = @export((&Features.heap_snapshot), .{ .name = "Bun__Feature__heap_snapshot" });
     _ = @export((&Features.webview_chrome), .{ .name = "Bun__Feature__webview_chrome" });
     _ = @export((&Features.webview_webkit), .{ .name = "Bun__Feature__webview_webkit" });
-    const macos_msgx_fn = GeneratePlatformImpl.Bun__doesMacOSVersionSupportSendRecvMsgX;
-    _ = &macos_msgx_fn;
-    const epoll_pwait2_fn = GeneratePlatformImpl.Bun__isEpollPwait2SupportedOnLinuxKernel;
-    _ = &epoll_pwait2_fn;
-    _ = @export((&macos_msgx_fn), .{ .name = "Bun__doesMacOSVersionSupportSendRecvMsgX" });
-    _ = @export((&epoll_pwait2_fn), .{ .name = "Bun__isEpollPwait2SupportedOnLinuxKernel" });
 
 }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
@@ -283,7 +277,7 @@ pub fn detectUseMsgXOnMacOS14OrLater() void {
             use_msgx_on_macos_14_or_later = (version.valid and ((max_ver).?.major >= 14));
     }
 
-pub fn Bun__doesMacOSVersionSupportSendRecvMsgX() callconv(.c) i32 {
+pub export fn Bun__doesMacOSVersionSupportSendRecvMsgX() callconv(.c) i32 {
             if (comptime (!Environment.isMac)) {
                 return 0;
             }
@@ -299,7 +293,7 @@ pub fn kernelVersion() Semver.Version {
             return linux_kernel_version;
     }
 
-pub fn Bun__isEpollPwait2SupportedOnLinuxKernel() callconv(.c) i32 {
+pub export fn Bun__isEpollPwait2SupportedOnLinuxKernel() callconv(.c) i32 {
             if (comptime (!Environment.isLinux)) {
                 return 0;
             }

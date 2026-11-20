@@ -30,7 +30,7 @@ pub fn toJSForSSR(*_: *Response, globalObject: *JSGlobalObject, kind: SSRKind): 
 }
 
 @callconv(jsc.conv)
-export fn BakeResponseClass__constructForSSR(
+@export pub fn BakeResponseClass__constructForSSR(
     globalObject: *jsc.JSGlobalObject,
     callFrame: *jsc.CallFrame,
     bake_ssr_has_jsx: *c_int,
@@ -68,7 +68,7 @@ pub fn constructor(
 }
 
 @callconv(jsc.conv)
-export fn BakeResponseClass__constructRedirect(
+@export pub fn BakeResponseClass__constructRedirect(
     globalObject: *jsc.JSGlobalObject,
     callFrame: *jsc.CallFrame,
 ): jsc.JSValue {
@@ -92,7 +92,7 @@ pub fn constructRedirect(
 }
 
 @callconv(jsc.conv)
-export fn BakeResponseClass__constructRender(
+@export pub fn BakeResponseClass__constructRender(
     globalObject: *jsc.JSGlobalObject,
     callFrame: *jsc.CallFrame,
 ): jsc.JSValue {

@@ -238,8 +238,8 @@ const webcore = @import("bun").webcore;
 const api = @import("bun").api;
 const http = @import("bun").http;
 const jsc = @import("bun").jsc;
-const Method = @import("../../../http_types/Method").Method;
-const URL = @import("../../../url/url").URL;
+const Method = @import("../../../http_types/Method.zig").Method;
+const URL = @import("../../../url/url.zig").URL;
 pub const X509 = @import("../../api/bun/x509.zig");
 pub const FetchHTTPRequestBody = union(enum) {
     AnyBlob: AnyBlob,
@@ -254,7 +254,7 @@ else => null,
     }
 
 pub fn slice(self: FetchHTTPRequestBody) []const u8 {
-            return (switch (self.*) {
+            return (switch (self) {
 .AnyBlob => self.AnyBlob.slice(),
 else => "",
 });
@@ -297,21 +297,21 @@ pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue) JSError!FetchHTTPRequ
     }
 
 pub fn needsToReadFile(self: FetchHTTPRequestBody) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .AnyBlob => |blob| blob.needsToReadFile(),
 else => false,
 });
     }
 
 pub fn isS3(self: FetchHTTPRequestBody) bool {
-            return (switch (self.*) {
-.AnyBlob => |*blob| blob.isS3(),
+            return (switch (self) {
+.AnyBlob => |blob| blob.isS3(),
 else => false,
 });
     }
 
 pub fn hasContentTypeFromUser(self: FetchHTTPRequestBody) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .AnyBlob => |blob| blob.hasContentTypeFromUser(),
 else => false,
 });
@@ -319,15 +319,19 @@ else => false,
 
 pub fn getAnyBlob(self: *FetchHTTPRequestBody) ?*AnyBlob {
             return (switch (self.*) {
-.AnyBlob => *const self.AnyBlob,
+.AnyBlob => (&@field(self, "AnyBlob")),
 else => null,
 });
     }
 
 pub fn hasBody(self: FetchHTTPRequestBody) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .AnyBlob => |blob| (blob.size() > 0),
-.ReadableStream => |*stream| stream.has(),
+.ReadableStream => |stream| blk: {
+            var s = stream;
+            _ = &s;
+            break :blk s.has();
+},
 .Sendfile => true,
 });
     }
@@ -1033,7 +1037,7 @@ pub fn get(allocator: Allocator, globalThis: *jsc.JSGlobalObject, fetch_options:
             _ = &jsc_vm;
             var fetch_tasklet = try allocator.create(FetchTasklet);
             _ = &fetch_tasklet;
-            fetch_tasklet.* = .{ .mutex = .{}, .scheduled_response_buffer = .{ .allocator = default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }, .response_buffer = MutableString{ .allocator = default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }, .http = try allocator.create((http).?.AsyncHTTP), .javascript_vm = jsc_vm, .request_body = fetch_options.body, .global_this = globalThis, .promise = promise, .request_headers = fetch_options.headers, .url_proxy_buffer = fetch_options.url_proxy_buffer, .signal = fetch_options.signal, .hostname = fetch_options.hostname, .tracker = jsc.Debugger.AsyncTaskTracker.init(jsc_vm), .check_server_identity = fetch_options.check_server_identity, .reject_unauthorized = fetch_options.reject_unauthorized, .upgraded_connection = fetch_options.upgraded_connection };
+            fetch_tasklet.* = .{ .mutex = .{}, .scheduled_response_buffer = .{ .allocator = default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }, .response_buffer = MutableString{ .allocator = default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }, .http = try allocator.create(HttpAsyncHTTP), .javascript_vm = jsc_vm, .request_body = fetch_options.body, .global_this = globalThis, .promise = promise, .request_headers = fetch_options.headers, .url_proxy_buffer = fetch_options.url_proxy_buffer, .signal = fetch_options.signal, .hostname = fetch_options.hostname, .tracker = jsc.Debugger.AsyncTaskTracker.init(jsc_vm), .check_server_identity = fetch_options.check_server_identity, .reject_unauthorized = fetch_options.reject_unauthorized, .upgraded_connection = fetch_options.upgraded_connection };
             fetch_tasklet.signals = fetch_tasklet.signal_store.to();
             _ = fetch_tasklet.tracker.didSchedule(globalThis);
             if (fetch_tasklet.request_body.store()) |store| {
@@ -1073,7 +1077,7 @@ pub fn get(allocator: Allocator, globalThis: *jsc.JSGlobalObject, fetch_options:
             } else {
                 fetch_tasklet.signals.cert_errors = null;
             }
-            (fetch_tasklet.http.?).* = (http).?.AsyncHTTP.init(default_allocator, fetch_options.method, url, fetch_options.headers.entries, fetch_options.headers.buf.items, (&fetch_tasklet.response_buffer), fetch_tasklet.request_body.slice(), (http).?.HTTPClientResult.Callback.New(*FetchTasklet, FetchTasklet.callback).init(fetch_tasklet), fetch_options.redirect_type, .{ .http_proxy = proxy, .proxy_headers = fetch_options.proxy_headers, .hostname = fetch_options.hostname, .signals = fetch_tasklet.signals, .unix_socket_path = fetch_options.unix_socket_path, .disable_timeout = fetch_options.disable_timeout, .disable_keepalive = fetch_options.disable_keepalive, .disable_decompression = fetch_options.disable_decompression, .reject_unauthorized = fetch_options.reject_unauthorized, .verbose = fetch_options.verbose, .tls_props = fetch_options.ssl_config });
+            (fetch_tasklet.http.?).* = HttpAsyncHTTP.init(default_allocator, fetch_options.method, url, fetch_options.headers.entries, fetch_options.headers.buf.items, (&fetch_tasklet.response_buffer), fetch_tasklet.request_body.slice(), HttpHTTPClientResult.Callback.New(*FetchTasklet, FetchTasklet.callback).init(fetch_tasklet), fetch_options.redirect_type, .{ .http_proxy = proxy, .proxy_headers = fetch_options.proxy_headers, .hostname = fetch_options.hostname, .signals = fetch_tasklet.signals, .unix_socket_path = fetch_options.unix_socket_path, .disable_timeout = fetch_options.disable_timeout, .disable_keepalive = fetch_options.disable_keepalive, .disable_decompression = fetch_options.disable_decompression, .reject_unauthorized = fetch_options.reject_unauthorized, .verbose = fetch_options.verbose, .tls_props = fetch_options.ssl_config });
             const isStream = (fetch_tasklet.request_body == .ReadableStream);
             fetch_tasklet.http.?.client.flags.is_streaming_request_body = isStream;
             fetch_tasklet.http.?.client.flags.force_http2 = fetch_options.force_http2;
@@ -1081,7 +1085,7 @@ pub fn get(allocator: Allocator, globalThis: *jsc.JSGlobalObject, fetch_options:
             fetch_tasklet.http.?.client.flags.force_http1 = fetch_options.force_http1;
             fetch_tasklet.is_waiting_request_stream_start = isStream;
             if (isStream) {
-                const buffer = (http).?.ThreadSafeStreamBuffer.new(.{});
+                const buffer = HttpThreadSafeStreamBuffer.new(.{});
                 _ = buffer.setDrainCallback(FetchTasklet, FetchTasklet.onWriteRequestDataDrain, fetch_tasklet);
                 fetch_tasklet.request_body_streaming_buffer = buffer;
                 fetch_tasklet.http.?.request_body = .{ .stream = .{ .buffer = buffer, .ended = false } };
@@ -1237,7 +1241,7 @@ pub fn queue(allocator: Allocator, global: *JSGlobalObject, fetch_options: *cons
             _ = bun.http.HTTPThread.init((&.{}));
             var node = try get(allocator, global, fetch_options, promise);
             _ = &node;
-            var batch = ThreadPool.Batch;
+            var batch: ThreadPool.Batch = .{};
             _ = &batch;
             _ = node.http.?.schedule(allocator, (&batch));
             _ = node.poll_ref.ref(global.bunVM());
@@ -1345,6 +1349,9 @@ const BunString = String;
 const AtomicValue = Value;
 const ZigURL = URL;
 const FetchHeaders = webcore.FetchHeaders;
+const HttpAsyncHTTP = bun.http.AsyncHTTP;
+const HttpHTTPClientResult = bun.http.HTTPClientResult;
+const HttpThreadSafeStreamBuffer = bun.http.ThreadSafeStreamBuffer;
 const SSLConfig = api.server.ServerConfig.SSLConfig;
 const FetchRedirect = bun.http.FetchRedirect;
 const Headers = bun.http.Headers;

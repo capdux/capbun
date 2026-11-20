@@ -52,8 +52,7 @@ export class DateHeaderTimer {
     }
 }
 
-@c
-pub export fn Bun__internal_ensureDateHeaderTimerIsEnabled(loop: *uws.Loop) {
+@export @c fn Bun__internal_ensureDateHeaderTimerIsEnabled(loop: *uws.Loop) {
     if (vm := jsc.VirtualMachine.getOrNull()) {
         vm.timer.updateDateHeaderTimerIfNecessary(loop, vm);
     }

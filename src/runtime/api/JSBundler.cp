@@ -1234,7 +1234,7 @@ pub union(enum) BundlerResolveValue {
 
     fn consume(*_): BundlerResolveValue {
         const result = _.*;
-        _.* = { consumed: {} };
+        _.* = { consumed: undefined };
         return result;
     }
 
@@ -1248,7 +1248,7 @@ pub union(enum) BundlerResolveValue {
             },
             .no_match, .pending, .consumed => {},
         }
-        _.* = { consumed: {} };
+        _.* = { consumed: undefined };
     }
 }
 
@@ -1300,7 +1300,7 @@ pub union(enum) BundlerResolveValue {
             );
         }
 
-        export fn JSBundlerPlugin__onResolveAsync(
+        @export @c static fn JSBundlerPlugin__onResolveAsync(
             resolve: *BundlerResolve,
             _: *!,
             path_value: JSValue,
@@ -1308,7 +1308,7 @@ pub union(enum) BundlerResolveValue {
             external_value: JSValue,
         ) {
             if (path_value.isEmptyOrUndefinedOrNull() || namespace_value.isEmptyOrUndefinedOrNull()) {
-                resolve.value = { no_match: {} };
+                resolve.value = { no_match: undefined };
             } else {
                 const global = resolve.bv2.plugins.?.globalObject();
                 const path = path_value.toSliceCloneWithAllocator(global, bun.default_allocator) catch @panic("Unexpected: path is not a string");
@@ -1350,12 +1350,12 @@ pub union(enum) BundlerLoadValue {
             },
             .no_match, .pending, .consumed => {},
         }
-        _.* = { consumed: {} };
+        _.* = { consumed: undefined };
     }
 
     fn consume(*_): BundlerLoadValue {
         const result = _.*;
-        _.* = { consumed: {} };
+        _.* = { consumed: undefined };
         return result;
     }
 }
@@ -1429,7 +1429,7 @@ pub union(enum) BundlerLoadValue {
             _.bv2.jsLoopForPlugins().enqueueTaskConcurrent(concurrent_task);
         }
 
-        export fn JSBundlerPlugin__onDefer(load: *BundlerLoad, global: *jsc.JSGlobalObject): JSValue {
+        @export @c static fn JSBundlerPlugin__onDefer(load: *BundlerLoad, global: *jsc.JSGlobalObject): JSValue {
             return jsc.toJSHostCall(global, @src(), BundlerLoad.onDefer, .{ load, global });
         }
         fn onDefer(*_, globalObject: *jsc.JSGlobalObject): bun.JSError!JSValue {
@@ -1451,7 +1451,7 @@ pub union(enum) BundlerLoadValue {
                         BundlerLoad,
                         BundleV2,
                         _,
-                        BundleV2.onNotifyDeferMini,
+                        BundlerLoad.onNotifyDeferMini,
                         .task,
                     );
                 },
@@ -1460,7 +1460,12 @@ pub union(enum) BundlerLoadValue {
             return _.bv2.plugins.?.appendDeferPromise();
         }
 
-        export fn JSBundlerPlugin__onLoadAsync(
+        static fn onNotifyDeferMini(load: *BundlerLoad, bundle: *BundleV2) {
+            * = load;
+            bundle.onNotifyDefer();
+        }
+
+        @export @c fn JSBundlerPlugin__onLoadAsync(
             *_,
             _: *!,
             source_code_value: JSValue,
@@ -1468,7 +1473,7 @@ pub union(enum) BundlerLoadValue {
         ) {
             jsc.markBinding(@src());
             if (source_code_value.isEmptyOrUndefinedOrNull() || loader_as_int.isEmptyOrUndefinedOrNull()) {
-                _.value = { no_match: {} };
+                _.value = { no_match: undefined };
 
                 if (_.was_file) {
                     // Faster path: skip the extra threadpool dispatch
@@ -1705,7 +1710,7 @@ extern fn JSBundlerPlugin__runSetupFunction(
 
 
 
-        pub export fn JSBundlerPlugin__addError(
+        @export @c static fn JSBundlerPlugin__addError(
             ctx: *!,
             plugin: *BundlerPlugin,
             exception: JSValue,
@@ -1715,13 +1720,13 @@ extern fn JSBundlerPlugin__runSetupFunction(
                 0 => {
                     const resolve: *BundlerResolve = bun.cast(*BundlerResolve, ctx);
                     const msg = msgFromJS(plugin, resolve.import_record.source_file, exception);
-                    resolve.value = { e: msg };
+                    resolve.value = { @"err": msg };
                     resolve.bv2.onResolveAsync(resolve);
                 },
                 1 => {
                     const load: *BundlerLoad = bun.cast(*BundlerLoad, ctx);
                     const msg = msgFromJS(plugin, load.path, exception);
-                    load.value = { e: msg };
+                    load.value = { @"err": msg };
                     load.bv2.onLoadAsync(load);
                 },
                 else => @panic("invalid error type"),

@@ -437,14 +437,14 @@ comptime {
     * = analyze_jsc;
 }
 
-export fn zig__ModuleInfo__destroy(info: *ModuleInfo) {
+@export @c fn zig__ModuleInfo__destroy(info: *ModuleInfo) {
     info.destroy();
 }
 
-export fn zig__ModuleInfoDeserialized__deinit(info: *ModuleInfoDeserialized) {
+@export @c fn zig__ModuleInfoDeserialized__deinit(info: *ModuleInfoDeserialized) {
     info.deinit();
 }
 
-export fn zig_log(msg: [*:0]const u8) {
+@export @c fn zig_log(msg: [*:0]const u8) {
     bun.Output.errorWriter().print("{s}\n", .{ std.mem.span(msg) }) catch {};
 }

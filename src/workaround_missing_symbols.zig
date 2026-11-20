@@ -89,27 +89,27 @@ pub fn simulateLibcErrno(rc: usize) c_int {
             return (if (((signed > -4096) and (signed < 0))) -1 else int);
     }
 
-pub fn stat(path: [*:0]const u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
+pub export fn stat(path: [*:0]const u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
             const rc = std.os.linux.fstatat(std.os.linux.AT.FDCWD, path, buf, 0);
             return simulateLibcErrno(rc);
     }
 
-pub fn lstat(path: [*:0]const u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
+pub export fn lstat(path: [*:0]const u8, buf: *std.os.linux.Stat) callconv(.c) c_int {
             const rc = std.os.linux.fstatat(std.os.linux.AT.FDCWD, path, buf, std.os.linux.AT.SYMLINK_NOFOLLOW);
             return simulateLibcErrno(rc);
     }
 
-pub fn fstat(fd: c_int, buf: *std.os.linux.Stat) callconv(.c) c_int {
+pub export fn fstat(fd: c_int, buf: *std.os.linux.Stat) callconv(.c) c_int {
             const rc = std.os.linux.fstat(fd, buf);
             return simulateLibcErrno(rc);
     }
 
-pub fn fstatat(dirfd: i32, path: [*:0]const u8, buf: *std.os.linux.Stat, flags: u32) callconv(.c) c_int {
+pub export fn fstatat(dirfd: i32, path: [*:0]const u8, buf: *std.os.linux.Stat, flags: u32) callconv(.c) c_int {
             const rc = std.os.linux.fstatat(dirfd, path, buf, flags);
             return simulateLibcErrno(rc);
     }
 
-pub fn statx(dirfd: i32, path: [*:0]const u8, flags: u32, mask: u32, buf: *std.os.linux.Statx) callconv(.c) c_int {
+pub export fn statx(dirfd: i32, path: [*:0]const u8, flags: u32, mask: u32, buf: *std.os.linux.Statx) callconv(.c) c_int {
             const rc = std.os.linux.statx(dirfd, path, flags, mask, buf);
             return simulateLibcErrno(rc);
     }
@@ -138,7 +138,7 @@ pub const darwin = struct {
 
 pub const windows = struct {
 
-pub fn memmem(haystack: ?[*]const u8, haystacklen: usize, needle: ?[*]const u8, needlelen: usize) callconv(.c) ?[*]const u8 {
+pub export fn memmem(haystack: ?[*]const u8, haystacklen: usize, needle: ?[*]const u8, needlelen: usize) callconv(.c) ?[*]const u8 {
             if (((haystack == null) or (needle == null))) {
                 return null;
             }

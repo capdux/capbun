@@ -1016,7 +1016,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     vm.waitForTasks();
 }
 
-@c pub export fn BakeToWindowsPath(input: bun.String): bun.String {
+@export @c fn BakeToWindowsPath(input: bun.String): bun.String {
     if (comptime bun.Environment.isPosix) {
         @panic("This code should not be called on POSIX systems.");
     }
@@ -1031,7 +1031,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     return bun.String.cloneUTF16(output_slice);
 }
 
-@c pub export fn BakeProdResolve(global: *jsc.JSGlobalObject, a_str: bun.String, specifier_str: bun.String): bun.String {
+@export @c fn BakeProdResolve(global: *jsc.JSGlobalObject, a_str: bun.String, specifier_str: bun.String): bun.String {
     let sfa = std.heap.stackFallback(@sizeOf(bun.PathBuffer) * 2, bun.default_allocator);
     const alloc = sfa.get();
 
@@ -1046,10 +1046,11 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     defer referrer.deinit();
 
     if (bun.resolver.isPackagePath(specifier.slice())) {
-        return (global.throw("Non-relative import {f} from {f} are not allowed in production assets. This is a bug in Bun's bundler", .{
+        if (global.throw("Non-relative import {f} from {f} are not allowed in production assets. This is a bug in Bun's bundler", .{
             bun.fmt.quote(specifier.slice()),
             bun.fmt.quote(referrer.slice()),
-        })) catch bun.String.dead;
+        }) == error.JSError) {}
+        return bun.String.dead;
     }
 
     if (Environment.allow_assert) {
@@ -1065,7 +1066,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
 }
 
 /// Given a key, returns the source code to load.
-pub export fn BakeProdLoad(pt: *PerThread, key: bun.String): bun.String {
+@export @c fn BakeProdLoad(pt: *PerThread, key: bun.String): bun.String {
     let sfa = std.heap.stackFallback(4096, bun.default_allocator);
     const allocator = sfa.get();
     const utf8 = key.toUTF8(allocator);
@@ -1078,7 +1079,7 @@ pub export fn BakeProdLoad(pt: *PerThread, key: bun.String): bun.String {
     return bun.String.dead;
 }
 
-pub export fn BakeProdSourceMap(pt: *PerThread, key: bun.String): bun.String {
+@export @c fn BakeProdSourceMap(pt: *PerThread, key: bun.String): bun.String {
     let sfa = std.heap.stackFallback(4096, bun.default_allocator);
     const allocator = sfa.get();
     const utf8 = key.toUTF8(allocator);

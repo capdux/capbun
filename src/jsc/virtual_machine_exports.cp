@@ -8,16 +8,16 @@ comptime {
     return client.isShuttingDown();
 }
 
-pub export fn Bun__getVM(): *jsc.VirtualMachine {
+@export @c fn Bun__getVM(): *jsc.VirtualMachine {
     return jsc.VirtualMachine.get();
 }
 
 /// Caller must check for termination exception
-pub export fn Bun__drainMicrotasks() {
+@export @c fn Bun__drainMicrotasks() {
     jsc.VirtualMachine.get().eventLoop().tick();
 }
 
-export fn Bun__readOriginTimer(vm: *jsc.VirtualMachine): u64 {
+@export @c fn Bun__readOriginTimer(vm: *jsc.VirtualMachine): u64 {
     // Check if performance.now() is overridden (for fake timers)
     if (overridden := vm.overridden_performance_now) {
         return overridden;
@@ -25,12 +25,12 @@ export fn Bun__readOriginTimer(vm: *jsc.VirtualMachine): u64 {
     return vm.origin_timer.read();
 }
 
-export fn Bun__readOriginTimerStart(vm: *jsc.VirtualMachine): f64 {
+@export @c fn Bun__readOriginTimerStart(vm: *jsc.VirtualMachine): f64 {
     // timespce to milliseconds
     return (@as(f64, @floatFromInt(vm.origin_timestamp)) + jsc.VirtualMachine.origin_relative_epoch) / 1_000_000.0;
 }
 
-pub export fn Bun__GlobalObject__connectedIPC(global: *JSGlobalObject): bool {
+@export @c fn Bun__GlobalObject__connectedIPC(global: *JSGlobalObject): bool {
     if (ipc := global.bunVM().ipc) {
         if (ipc == .initialized) {
             return ipc.initialized.data.isConnected();
@@ -39,14 +39,14 @@ pub export fn Bun__GlobalObject__connectedIPC(global: *JSGlobalObject): bool {
     }
     return false;
 }
-pub export fn Bun__GlobalObject__hasIPC(global: *JSGlobalObject): bool {
+@export @c fn Bun__GlobalObject__hasIPC(global: *JSGlobalObject): bool {
     if (global.bunVM().ipc != null) {
         return true;
     }
     return false;
 }
 
-export fn Bun__VirtualMachine__exitDuringUncaughtException(client: *jsc.VirtualMachine) {
+@export @c fn Bun__VirtualMachine__exitDuringUncaughtException(client: *jsc.VirtualMachine) {
     client.exit_on_uncaught_exception = true;
 }
 
@@ -63,14 +63,14 @@ pub fn Bun__Process__send_(globalObject: *JSGlobalObject, callFrame: *jsc.CallFr
     return IPC.doSend(ipc_data, globalObject, callFrame, .process);
 }
 
-pub export fn Bun__isBunMain(globalObject: *JSGlobalObject, str: *const bun.String): bool {
+@export @c fn Bun__isBunMain(globalObject: *JSGlobalObject, str: *const bun.String): bool {
     return str.eqlUTF8(globalObject.bunVM().main);
 }
 
 /// When IPC environment variables are passed, the socket is not immediately opened,
 /// but rather we wait for process.on('message') or process.send() to be called, THEN
 /// we open the socket. This is to avoid missing messages at the start of the program.
-pub export fn Bun__ensureProcessIPCInitialized(globalObject: *JSGlobalObject) {
+@export @c fn Bun__ensureProcessIPCInitialized(globalObject: *JSGlobalObject) {
     // getIPC() will initialize a "waiting" ipc instance so this is enough.
     // it will do nothing if IPC is not enabled.
     * = globalObject.bunVM().getIPCInstance();
@@ -78,7 +78,7 @@ pub export fn Bun__ensureProcessIPCInitialized(globalObject: *JSGlobalObject) {
 
 /// This function is called on the main thread
 /// The bunVM() call will assert this
-pub export fn Bun__queueTask(global: *JSGlobalObject, task: *jsc.CppTask) {
+@export @c fn Bun__queueTask(global: *JSGlobalObject, task: *jsc.CppTask) {
     jsc.markBinding(@src());
 
     global.bunVM().eventLoop().enqueueTask(jsc.Task.init(task));
@@ -96,7 +96,7 @@ pub export fn Bun__queueTask(global: *JSGlobalObject, task: *jsc.CppTask) {
 /// This function is called on another thread
 /// The main difference: we need to allocate the task & wakeup the thread
 /// We can avoid that if we run it from the main thread.
-pub export fn Bun__queueTaskConcurrently(global: *JSGlobalObject, task: *jsc.CppTask) {
+@export @c fn Bun__queueTaskConcurrently(global: *JSGlobalObject, task: *jsc.CppTask) {
     jsc.markBinding(@src());
 
     global.bunVMConcurrently().eventLoop().enqueueTaskConcurrent(
@@ -104,7 +104,7 @@ pub export fn Bun__queueTaskConcurrently(global: *JSGlobalObject, task: *jsc.Cpp
     );
 }
 
-pub export fn Bun__handleRejectedPromise(global: *JSGlobalObject, promise: *jsc.JSPromise) {
+@export @c fn Bun__handleRejectedPromise(global: *JSGlobalObject, promise: *jsc.JSPromise) {
     jsc.markBinding(@src());
 
     const result = promise.result(global.vm());
@@ -118,7 +118,7 @@ pub export fn Bun__handleRejectedPromise(global: *JSGlobalObject, promise: *jsc.
     jsc_vm.autoGarbageCollect();
 }
 
-pub export fn Bun__handleHandledPromise(global: *JSGlobalObject, promise: *jsc.JSPromise) {
+@export @c fn Bun__handleHandledPromise(global: *JSGlobalObject, promise: *jsc.JSPromise) {
     const Context = struct {
         globalThis: *jsc.JSGlobalObject,
         promise: jsc.JSValue,
@@ -136,7 +136,7 @@ pub export fn Bun__handleHandledPromise(global: *JSGlobalObject, promise: *jsc.J
     global.bunVM().eventLoop().enqueueTask(jsc.ManagedTask.New(Context, Context.callback).init(context));
 }
 
-pub export fn Bun__onDidAppendPlugin(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject) {
+@export @c fn Bun__onDidAppendPlugin(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject) {
     if (jsc_vm.plugin_runner != null) {
         return;
     }
@@ -152,26 +152,26 @@ pub export fn Bun__onDidAppendPlugin(jsc_vm: *VirtualMachine, globalObject: *JSG
     return jsc_vm.uvLoop();
 }
 
-export fn Bun__setTLSRejectUnauthorizedValue(value: i32) {
+@export @c fn Bun__setTLSRejectUnauthorizedValue(value: i32) {
     VirtualMachine.get().default_tls_reject_unauthorized = value != 0;
 }
 
-export fn Bun__getTLSRejectUnauthorizedValue(): i32 {
+@export @c fn Bun__getTLSRejectUnauthorizedValue(): i32 {
     return if (jsc.VirtualMachine.get().getTLSRejectUnauthorized()) 1 else 0;
 }
 
-export fn Bun__isNoProxy(hostname_ptr: [*]const u8, hostname_len: usize, host_ptr: [*]const u8, host_len: usize): bool {
+@export @c fn Bun__isNoProxy(hostname_ptr: [*]const u8, hostname_len: usize, host_ptr: [*]const u8, host_len: usize): bool {
     const vm = jsc.VirtualMachine.get();
     const hostname: ([]const u8)? = if (hostname_len > 0) hostname_ptr[0..hostname_len] else null;
     const host: ([]const u8)? = if (host_len > 0) host_ptr[0..host_len] else null;
     return vm.transpiler.env.isNoProxy(hostname, host);
 }
 
-export fn Bun__setVerboseFetchValue(value: i32) {
+@export @c fn Bun__setVerboseFetchValue(value: i32) {
     VirtualMachine.get().default_verbose_fetch = if (value == 1) .headers else if (value == 2) .curl else .none;
 }
 
-export fn Bun__getVerboseFetchValue(): i32 {
+@export @c fn Bun__getVerboseFetchValue(): i32 {
     return switch (jsc.VirtualMachine.get().getVerboseFetch()) {
         .none => 0,
         .headers => 1,
@@ -179,35 +179,35 @@ export fn Bun__getVerboseFetchValue(): i32 {
     };
 }
 
-export fn Bun__addBakeSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
+@export @c fn Bun__addBakeSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
     const slice = specifier.toUTF8(sfb.get());
     defer slice.deinit();
     vm.source_mappings.putBakeSourceProvider(@ptrCast(opaque_source_provider), slice.slice());
 }
 
-export fn Bun__addDevServerSourceProvider(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
+@export @c fn Bun__addDevServerSourceProvider(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
     const slice = specifier.toUTF8(sfb.get());
     defer slice.deinit();
     vm.source_mappings.putDevServerSourceProvider(@ptrCast(opaque_source_provider), slice.slice());
 }
 
-export fn Bun__removeDevServerSourceProvider(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
+@export @c fn Bun__removeDevServerSourceProvider(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
     const slice = specifier.toUTF8(sfb.get());
     defer slice.deinit();
     vm.source_mappings.removeDevServerSourceProvider(@ptrCast(opaque_source_provider), slice.slice());
 }
 
-export fn Bun__addSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
+@export @c fn Bun__addSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
     const slice = specifier.toUTF8(sfb.get());
     defer slice.deinit();
     vm.source_mappings.putZigSourceProvider(opaque_source_provider, slice.slice());
 }
 
-export fn Bun__removeSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
+@export @c fn Bun__removeSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
     const slice = specifier.toUTF8(sfb.get());
     defer slice.deinit();

@@ -88,11 +88,11 @@ var title_mutex = bun.Mutex{  };
 pub const getCwd = jsc.host_fn.wrap1(getCwd_);
 pub const setCwd = jsc.host_fn.wrap2(setCwd_);
 const empty_u16_buf: [1]u16 = .{ 0 };
-pub const Bun__version: [*:0]const u8 = ("v" ++ bun.Global.package_json_version).ptr;
-pub const Bun__version_with_sha: [*:0]const u8 = ("v" ++ bun.Global.package_json_version_with_sha).ptr;
-pub const Bun__versions_uws: [*:0]const u8 = bun.Environment.git_sha.ptr;
-pub const Bun__versions_usockets: [*:0]const u8 = bun.Environment.git_sha.ptr;
-pub const Bun__version_sha: [*:0]const u8 = bun.Environment.git_sha.ptr;
+pub export const Bun__version: [*:0]const u8 = ("v" ++ bun.Global.package_json_version).ptr;
+pub export const Bun__version_with_sha: [*:0]const u8 = ("v" ++ bun.Global.package_json_version_with_sha).ptr;
+pub export const Bun__versions_uws: [*:0]const u8 = bun.Environment.git_sha.ptr;
+pub export const Bun__versions_usockets: [*:0]const u8 = bun.Environment.git_sha.ptr;
+pub export const Bun__version_sha: [*:0]const u8 = bun.Environment.git_sha.ptr;
 const Environment = bun.Environment;
 const Syscall = bun.sys;
 const strings = bun.strings;
@@ -458,11 +458,11 @@ else => unreachable,
         _ = bun.c.SetEnvironmentVariableW(buf1[0..len1 :0].ptr, str2);
 }
 
-pub fn Bun__NODE_NO_WARNINGS() bool {
+pub export fn Bun__NODE_NO_WARNINGS() callconv(.c) bool {
         return bun.feature_flag.NODE_NO_WARNINGS.get();
 }
 
-pub fn Bun__suppressCrashOnProcessKillSelfIfDesired() void {
+pub export fn Bun__suppressCrashOnProcessKillSelfIfDesired() callconv(.c) void {
         if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_ON_PROCESS_KILL_SELF.get()) {
             _ = bun.crash_handler.suppressReporting();
         }

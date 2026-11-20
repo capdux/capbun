@@ -121,7 +121,7 @@ pub struct Init {
 }
 
 @callconv(jsc.conv)
-pub export fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
+@export pub fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
     const arguments = callframe.arguments_old(1);
     const this_value = unsafe { arguments.ptr[0] };
     if (this_value.isEmptyOrUndefinedOrNull()) {
@@ -138,7 +138,7 @@ pub export fn jsFunctionRequestOrResponseHasBodyValue(_: *jsc.JSGlobalObject, ca
 }
 
 @callconv(jsc.conv)
-pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
+@export pub fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
     const arguments = callframe.arguments_old(1);
     const this_value = unsafe { arguments.ptr[0] };
     if (this_value.isEmptyOrUndefinedOrNull()) {
@@ -159,12 +159,12 @@ pub export fn jsFunctionGetCompleteRequestOrResponseBodyValueAsArrayBuffer(globa
     switch (body.*) {
         .Used, .Empty, .Null => return .js_undefined,
         .Blob => {
-            const blob = &body.Blob;
+            const blob = &@field(body, "Blob");
             if (blob.isBunFile()) {
                 return .js_undefined;
             }
-            defer body.* = .{ .Used = {} };
-            return blob.toArrayBuffer(globalObject, .transfer) catch return .zero;
+            defer body.* = .{ .Used = undefined };
+            return blob.toArrayBufferView(globalObject, .transfer, .ArrayBuffer) catch return .zero;
         },
         .WTFStringImpl, .InternalBlob => {
             let any_blob = body.useAsAnyBlob();

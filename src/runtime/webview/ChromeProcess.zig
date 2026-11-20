@@ -32,10 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn CpOptType(comptime __T: type) type { if (@typeInfo(__T) == .optional) return __T; return ?__T; }
-fn CpUnwrapOpt(comptime __T: type) type { if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
-fn cp_opt_is_null(v: anytype) bool { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) return v == null; return false; }
-fn cp_opt_unwrap(v: anytype) CpUnwrapOpt(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -89,14 +85,14 @@ const jsc = bun.jsc;
 const log = bun.Output.scoped(.Chrome, .hidden);
 var instance: ?*ChromeProcess = null;
 
-pub fn Bun__Chrome__kill() void {
+pub export fn Bun__Chrome__kill() callconv(.c) void {
         if (instance) |i| {
             _ = &i;
             _ = i.process.kill(9);
         }
 }
 
-pub fn Bun__Chrome__ensure(global: *jsc.JSGlobalObject, userDataDir: ?[*:0]const u8, path: ?[*:0]const u8, extraArgv: ?[*]const [*:0]const u8, extraArgvLen: u32, stdoutInherit: bool, stderrInherit: bool) i32 {
+pub export fn Bun__Chrome__ensure(global: *jsc.JSGlobalObject, userDataDir: ?[*:0]const u8, path: ?[*:0]const u8, extraArgv: ?[*]const [*:0]const u8, extraArgvLen: u32, stdoutInherit: bool, stderrInherit: bool) callconv(.c) i32 {
         if (comptime bun.Environment.isWindows) {
             return -1;
         }
@@ -128,7 +124,7 @@ pub fn findChrome(alloc: std.mem.Allocator, explicitPath: ?[*:0]const u8) !?[:0]
         _ = bun.path_buffer_pool.put(buf);
         }
         const path = ((bun.env_var.PATH.get()) orelse (""));
-        const names: [][]const u8 = .{ "google-chrome-stable", "google-chrome", "chromium-browser", "chromium", "brave-browser", "microsoft-edge", "chrome" };
+        const names: [7][]const u8 = .{ "google-chrome-stable", "google-chrome", "chromium-browser", "chromium", "brave-browser", "microsoft-edge", "chrome" };
         for (cp_iter_slice(names)) |n| {
             _ = &n;
             if (bun.which(buf, path, "", n)) |found| {
@@ -137,17 +133,17 @@ pub fn findChrome(alloc: std.mem.Allocator, explicitPath: ?[*:0]const u8) !?[:0]
             }
         }
         if (comptime bun.Environment.isMac) {
-            const bundles: [][]const u8 = .{ "Google Chrome.app/Contents/MacOS/Google Chrome", "Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary", "Chromium.app/Contents/MacOS/Chromium", "Brave Browser.app/Contents/MacOS/Brave Browser", "Microsoft Edge.app/Contents/MacOS/Microsoft Edge" };
+            const bundles: [5][]const u8 = .{ "Google Chrome.app/Contents/MacOS/Google Chrome", "Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary", "Chromium.app/Contents/MacOS/Chromium", "Brave Browser.app/Contents/MacOS/Brave Browser", "Microsoft Edge.app/Contents/MacOS/Microsoft Edge" };
             const home = ((bun.env_var.HOME.get()) orelse (""));
             for (cp_iter_slice(bundles)) |b| {
                 _ = &b;
-                const sys_parts: [][]const u8 = .{ "/Applications", b };
+                const sys_parts: [2][]const u8 = .{ "/Applications", b };
                 const sys = bun.path.joinStringBufZ(buf, (&sys_parts), .auto);
                 if (bun.sys.isExecutableFilePath(sys)) {
                     return try alloc.dupeZ(u8, sys);
                 }
                 if ((home.len > 0)) {
-                    const user_parts: [][]const u8 = .{ home, "Applications", b };
+                    const user_parts: [3][]const u8 = .{ home, "Applications", b };
                     const user = bun.path.joinStringBufZ(buf, (&user_parts), .auto);
                     if (bun.sys.isExecutableFilePath(user)) {
                         return try alloc.dupeZ(u8, user);
@@ -156,7 +152,7 @@ pub fn findChrome(alloc: std.mem.Allocator, explicitPath: ?[*:0]const u8) !?[:0]
             }
         } else {
             if (comptime bun.Environment.isLinux) {
-                const absolute: [][]const u8 = .{ "/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium", "/snap/bin/chromium", "/usr/bin/brave-browser", "/snap/bin/brave", "/usr/bin/microsoft-edge" };
+                const absolute: [8][]const u8 = .{ "/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium", "/snap/bin/chromium", "/usr/bin/brave-browser", "/snap/bin/brave", "/usr/bin/microsoft-edge" };
                 for (cp_iter_slice(absolute)) |c| {
                     _ = &c;
                     if (bun.sys.isExecutableFilePath(c)) {
@@ -179,7 +175,7 @@ pub fn findPlaywrightShell(alloc: std.mem.Allocator) ?[:0]const u8 {
         _ = bun.path_buffer_pool.put(dir_buf);
         }
         const cache_subpath = (if (comptime bun.Environment.isMac) "Library/Caches/ms-playwright" else ".cache/ms-playwright");
-        const parts = .{ home, cache_subpath };
+        const parts: [2][]const u8 = .{ home, cache_subpath };
         const cache_dir = bun.path.joinStringBufZ(dir_buf, (&parts), .auto);
         const fd = (switch (bun.sys.open(cache_dir, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
 .result => |f| f,
@@ -253,16 +249,20 @@ pub fn @"spawn"(vm: *jsc.VirtualMachine, userDataDir: ?[*:0]const u8, explicitPa
         _ = arena_alloc.deinit();
         }
         const alloc = arena_alloc.allocator();
-        const chrome = ((try findChrome(alloc, explicitPath)) orelse { return .{ .ok = error.ChromeNotFound }; });
+        const chrome_opt = try findChrome(alloc, explicitPath);
+        if ((chrome_opt == null)) {
+            return error.ChromeNotFound;
+        }
+        const chrome = chrome_opt.?;
         _ = log("using chrome: {s}", .{ chrome });
-        const fds = try try bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking).unwrap();
+        const fds = try bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking).unwrap();
         errdefer {
         {
             _ = fds[0].close();
             _ = fds[1].close();
         }
         }
-        _ = try (blk_oc_7: { const __o_7 = bun.sys.setNonblocking(fds[0]); const __R_7 = CpOptType(@TypeOf(cp_opt_unwrap(__o_7).unwrap())); if (cp_opt_is_null(__o_7)) break :blk_oc_7 @as(__R_7, null); break :blk_oc_7 @as(__R_7, cp_opt_unwrap(__o_7).unwrap()); });
+        _ = try bun.sys.setNonblocking(fds[0]).unwrap();
         var dataDir: [:0]const u8 = undefined;
         _ = &dataDir;
         if (userDataDir) |d| {
@@ -294,11 +294,11 @@ pub fn @"spawn"(vm: *jsc.VirtualMachine, userDataDir: ?[*:0]const u8, explicitPa
         }
         _ = try argv.append(alloc, null);
         const env = try vm.transpiler.env.map.createNullDelimitedEnvMap(alloc);
-        var extra_fds: []bun.spawn.SpawnOptions.ExtraFd = .{ bun.spawn.SpawnOptions.ExtraFd{ .pipe = fds[1] }, bun.spawn.SpawnOptions.ExtraFd{ .pipe = fds[1] } };
-        _ = &extra_fds;
+        const extra_fds: [2]bun.spawn.SpawnOptions.Stdio = .{ bun.spawn.SpawnOptions.Stdio{ .pipe = fds[1] }, bun.spawn.SpawnOptions.Stdio{ .pipe = fds[1] } };
         var opts: bun.spawn.SpawnOptions = .{ .stdin = .ignore, .stdout = (if (stdoutInherit) .inherit else .ignore), .stderr = (if (stderrInherit) .inherit else .ignore), .extra_fds = (&extra_fds), .argv0 = chrome.ptr };
         _ = &opts;
-        var spawned = try try bun.spawn.spawnProcess((&opts), @ptrCast(argv.items.ptr), @ptrCast(env.ptr)).unwrap();
+        const spawned_maybe = try bun.spawn.spawnProcess((&opts), @ptrCast(argv.items.ptr), @ptrCast(env.ptr));
+        var spawned = try spawned_maybe.unwrap();
         _ = &spawned;
         _ = fds[1].close();
         const self = bun.new(ChromeProcess, .{ .process = spawned.toProcess(vm.eventLoop(), false) });
@@ -340,7 +340,7 @@ pub fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)) bool {
         _ = &path_buf;
         for (cp_iter_slice(candidates)) |rel| {
             _ = &rel;
-            const parts: [][]const u8 = .{ rel };
+            const parts: [1][]const u8 = .{ rel };
             const path = bun.path.joinAbsStringBufZ(root, (&path_buf), (&parts), .auto);
             const contents = (switch (bun.sys.File.readFrom(bun.FD.cwd(), path, bun.default_allocator)) {
 .err => continue,
@@ -353,18 +353,18 @@ pub fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)) bool {
             _ = &lines;
             const port_str = std.mem.trim(u8, ((lines.next()) orelse continue), " \r\t");
             const ws_path = std.mem.trim(u8, ((lines.next()) orelse continue), " \r\t");
-            const port = (blk_catch_8: { break :blk_catch_8 ((std.fmt.parseInt(u16, port_str, 10)) catch |__ce_8| { _ = &__ce_8; continue; }); });
+            const port = (blk_catch_7: { break :blk_catch_7 ((std.fmt.parseInt(u16, port_str, 10)) catch |__ce_7| { _ = &__ce_7; continue; }); });
             if ((((port == 0) or (ws_path.len == 0)) or (ws_path[0] != 47))) {
                 continue;
             }
             _ = out_buf.clearRetainingCapacity();
-            _ = (blk_catch_9: { break :blk_catch_9 ((out_buf.writer(bun.default_allocator).print("ws://127.0.0.1:{d}{s}", .{ port, ws_path })) catch |__ce_9| { _ = &__ce_9; return false; }); });
+            _ = (blk_catch_8: { break :blk_catch_8 ((out_buf.writer(bun.default_allocator).print("ws://127.0.0.1:{d}{s}", .{ port, ws_path })) catch |__ce_8| { _ = &__ce_8; return false; }); });
             return true;
         }
         return false;
 }
 
-pub fn Bun__Chrome__autoDetect(out_buf: [*]u8, out_cap: usize) usize {
+pub export fn Bun__Chrome__autoDetect(out_buf: [*]u8, out_cap: usize) callconv(.c) usize {
         var buf: std.ArrayListUnmanaged(u8) = .empty;
         _ = &buf;
         defer {

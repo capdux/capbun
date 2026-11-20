@@ -47,7 +47,7 @@ let instance: (*ChromeProcess)? = null;
 /// dies. SIGKILL here takes the browser process, the zygote tree follows.
 /// The C++ side doesn't touch JS state; EVFILT_PROC → Bun__Chrome__died →
 /// rejectAllAndMarkDead handles promise rejection on the next loop tick.
-pub export fn Bun__Chrome__kill() {
+@export @c fn Bun__Chrome__kill() {
     if (i := instance) {
         * = i.process.kill(9);
     }
@@ -65,7 +65,7 @@ pub export fn Bun__Chrome__kill() {
 /// Windows TODO — fd.cast() returns a HANDLE there, and pipe() / fcntl
 /// nonblocking have no direct equivalents. The spawn would need to use
 /// named pipes or libuv. For now -1 and C++ throws not-implemented.
-pub export fn Bun__Chrome__ensure(
+@export @c fn Bun__Chrome__ensure(
     global: *jsc.JSGlobalObject,
     userDataDir: ([*:0]const u8)?,
     path: ([*:0]const u8)?,
@@ -115,7 +115,7 @@ fn findChrome(alloc: std.mem.Allocator, explicitPath: ([*:0]const u8)?): !([:0]c
     // $PATH first — `brew install chromium`, distro packages, manual symlinks
     // all land here. Same precedence as `which` at a shell prompt.
     const path = bun.env_var.PATH.get() ?? "";
-    const names = [
+    const names: [7][]const u8 = [
         "google-chrome-stable",
         "google-chrome",
         "chromium-browser",
@@ -137,7 +137,7 @@ fn findChrome(alloc: std.mem.Allocator, explicitPath: ([*:0]const u8)?): !([:0]c
     // dirs; Playwright's chrome-headless-shell is unsigned and SIGKILLs at
     // exec on a locked-down dev machine while Chrome.app runs.
     if (comptime bun.Environment.isMac) {
-        const bundles = [
+        const bundles: [5][]const u8 = [
             "Google Chrome.app/Contents/MacOS/Google Chrome",
             "Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
             "Chromium.app/Contents/MacOS/Chromium",
@@ -148,17 +148,17 @@ fn findChrome(alloc: std.mem.Allocator, explicitPath: ([*:0]const u8)?): !([:0]c
         // or drag-to-home-folder) land in the latter.
         const home = bun.env_var.HOME.get() ?? "";
         for (b of bundles) {
-            const sys_parts = ["/Applications", b];
+            const sys_parts: [2][]const u8 = ["/Applications", b];
             const sys = bun.path.joinStringBufZ(buf, &sys_parts, .auto);
             if (bun.sys.isExecutableFilePath(sys)) return alloc.dupeZ(u8, sys)?;
             if (home.len > 0) {
-                const user_parts = [home, "Applications", b];
+                const user_parts: [3][]const u8 = [home, "Applications", b];
                 const user = bun.path.joinStringBufZ(buf, &user_parts, .auto);
                 if (bun.sys.isExecutableFilePath(user)) return alloc.dupeZ(u8, user)?;
             }
         }
     } else if (comptime bun.Environment.isLinux) {
-        const absolute = [
+        const absolute: [8][]const u8 = [
             "/usr/bin/google-chrome-stable",
             "/usr/bin/google-chrome",
             "/usr/bin/chromium-browser",
@@ -193,7 +193,7 @@ fn findPlaywrightShell(alloc: std.mem.Allocator): ([:0]const u8)? {
         "Library/Caches/ms-playwright"
     else
         ".cache/ms-playwright";
-    const parts = [home, cache_subpath];
+    const parts: [2][]const u8 = [home, cache_subpath];
     const cache_dir = bun.path.joinStringBufZ(dir_buf, &parts, .auto);
 
     const fd = switch (bun.sys.open(cache_dir, bun.O.RDONLY | bun.O.DIRECTORY, 0)) {
@@ -260,7 +260,9 @@ fn @"spawn"(
     defer arena_alloc.deinit();
     const alloc = arena_alloc.allocator();
 
-    const chrome = (findChrome(alloc, explicitPath)?) ?? return error.ChromeNotFound;
+    const chrome_opt = findChrome(alloc, explicitPath)?;
+    if (chrome_opt == null) return error.ChromeNotFound;
+    const chrome = chrome_opt.?;
     log("using chrome: {s}", .{chrome});
 
     // One socketpair. Parent keeps fds[0], child gets fds[1] dup'd to BOTH
@@ -270,17 +272,17 @@ fn @"spawn"(
     // read loop. O_NONBLOCK lives on the open file description (shared
     // across dup2), so set it on fds[0] only — fds[0] and fds[1] are two
     // different descriptions (peer sockets), the flag isn't shared across.
-    const fds = (bun.sys.socketpair(
+    const fds = bun.sys.socketpair(
         std.posix.AF.UNIX,
         std.posix.SOCK.STREAM,
         0,
         .blocking,
-    )?).unwrap()?;
+    ).unwrap()?;
     errdefer {
         fds[0].close();
         fds[1].close();
     }
-    bun.sys.setNonblocking(fds[0])?.unwrap()?;
+    bun.sys.setNonblocking(fds[0]).unwrap()?;
 
     // Minimal flags. --remote-debugging-pipe is the one that matters;
     // --headless works on both full Chrome (switches to headless mode) and
@@ -323,9 +325,9 @@ fn @"spawn"(
 
     const env = vm.transpiler.env.map.createNullDelimitedEnvMap(alloc)?;
 
-    let extra_fds = [
-        bun.spawn.SpawnOptions.ExtraFd{ pipe: fds[1] },
-        bun.spawn.SpawnOptions.ExtraFd{ pipe: fds[1] },
+    const extra_fds: [2]bun.spawn.SpawnOptions.Stdio = [
+        bun.spawn.SpawnOptions.Stdio{ pipe: fds[1] },
+        bun.spawn.SpawnOptions.Stdio{ pipe: fds[1] },
     ];
 
     let opts: bun.spawn.SpawnOptions = {
@@ -336,11 +338,12 @@ fn @"spawn"(
         argv0: chrome.ptr,
     };
 
-    let spawned = ((bun.spawn.spawnProcess(
+    const spawned_maybe = bun.spawn.spawnProcess(
         &opts,
         @ptrCast(argv.items.ptr),
         @ptrCast(env.ptr),
-    )?).unwrap())?;
+    )?;
+    let spawned = spawned_maybe.unwrap()?;
 
     // Parent doesn't need the child's end. POSIX_SPAWN_CLOEXEC_DEFAULT
     // already closed our copy in the child (only fd 3/4 survive the exec);
@@ -435,7 +438,7 @@ fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): bool {
 
     let path_buf: bun.PathBuffer = undefined;
     for (rel of candidates) {
-        const parts = [rel];
+        const parts: [1][]const u8 = [rel];
         const path = bun.path.joinAbsStringBufZ(root, &path_buf, &parts, .auto);
         const contents = switch (bun.sys.File.readFrom(bun.FD.cwd(), path, bun.default_allocator)) {
             .err => continue, // ENOENT or EACCES — try next
@@ -472,7 +475,7 @@ fn readDevToolsActivePort(out_buf: *std.ArrayListUnmanaged(u8)): bool {
 /// fails with a close code; C++ falls back to spawn in that case
 /// (m_wasAutoDetected gate in wsOnClose). We don't pre-validate here
 /// because that'd need a network round-trip which defeats the file.
-pub export fn Bun__Chrome__autoDetect(out_buf: [*]u8, out_cap: usize): usize {
+@export @c fn Bun__Chrome__autoDetect(out_buf: [*]u8, out_cap: usize): usize {
     let buf: std.ArrayListUnmanaged(u8) = .empty;
     defer buf.deinit(bun.default_allocator);
     if (readDevToolsActivePort(&buf)) {

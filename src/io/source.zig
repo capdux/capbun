@@ -183,7 +183,7 @@ pub const Source = union(enum) {
     file: *File,
     sync_file: *File,
 
-pub fn isClosed(self: *const Source) bool {
+pub fn isClosed(self: Source) bool {
             return (switch (self) {
 .pipe => |pipe| pipe.isClosed(),
 .tty => |tty| tty.isClosed(),
@@ -192,7 +192,7 @@ pub fn isClosed(self: *const Source) bool {
 });
     }
 
-pub fn isActive(self: *const Source) bool {
+pub fn isActive(self: Source) bool {
             return (switch (self) {
 .pipe => |pipe| pipe.isActive(),
 .tty => |tty| tty.isActive(),
@@ -201,7 +201,7 @@ pub fn isActive(self: *const Source) bool {
 });
     }
 
-pub fn getHandle(self: *const Source) *uv.Handle {
+pub fn getHandle(self: Source) *uv.Handle {
             return (switch (self) {
 .pipe => |p| (blk: {
             break :blk @ptrCast(p);
@@ -216,7 +216,7 @@ pub fn getHandle(self: *const Source) *uv.Handle {
 });
     }
 
-pub fn toStream(self: *const Source) *uv.uv_stream_t {
+pub fn toStream(self: Source) *uv.uv_stream_t {
             return (switch (self) {
 .pipe => |p| p.asStream(),
 .tty => |t| (blk: {
@@ -228,7 +228,7 @@ pub fn toStream(self: *const Source) *uv.uv_stream_t {
 });
     }
 
-pub fn getFd(self: *const Source) bun.FD {
+pub fn getFd(self: Source) bun.FD {
             return (switch (self) {
 .pipe => |pipe| pipe.fd(),
 .tty => |tty| tty.fd(),
@@ -237,7 +237,7 @@ pub fn getFd(self: *const Source) bun.FD {
 });
     }
 
-pub fn setData(self: *const Source, data: ?*anyopaque) void {
+pub fn setData(self: Source, data: ?*anyopaque) void {
             switch (self) {
 .pipe => |pipe| {
 pipe.data = data;
@@ -254,7 +254,7 @@ file.fs.data = data;
 }
     }
 
-pub fn getData(self: *const Source) ?*anyopaque {
+pub fn getData(self: Source) ?*anyopaque {
             return (switch (self) {
 .pipe => |pipe| pipe.data,
 .tty => |tty| tty.data,
@@ -263,7 +263,7 @@ pub fn getData(self: *const Source) ?*anyopaque {
 });
     }
 
-pub fn ref(self: *const Source) void {
+pub fn ref(self: Source) void {
             switch (self) {
 .pipe => |p| {
 _ = p.ref();
@@ -280,7 +280,7 @@ _ = t.ref();
 }
     }
 
-pub fn unref(self: *const Source) void {
+pub fn unref(self: Source) void {
             switch (self) {
 .pipe => |p| {
 _ = p.unref();
@@ -297,7 +297,7 @@ _ = t.unref();
 }
     }
 
-pub fn hasRef(self: *const Source) bool {
+pub fn hasRef(self: Source) bool {
             return (switch (self) {
 .pipe => |pipe| pipe.hasRef(),
 .tty => |tty| tty.hasRef(),
@@ -395,7 +395,7 @@ const errno = bun.windows.getLastErrno();
 }
     }
 
-pub fn setRawMode(self: *const Source, value: bool) bun.sys.Maybe(void) {
+pub fn setRawMode(self: Source, value: bool) bun.sys.Maybe(void) {
             return (switch (self) {
 .tty => |tty| {
 if (tty.setMode((if (value) .raw else .normal)).toError(.uv_tty_set_mode)) |err_val| {
@@ -420,7 +420,7 @@ var stdin_tty_data: uv.uv_tty_t = undefined;
 var stdin_tty_lock: bun.Mutex = .{};
 var stdin_tty_initialized = std.atomic.Value(bool).init(false);
 
-pub fn Source__setRawModeStdin(raw: bool) c_int {
+pub export fn Source__setRawModeStdin(raw: bool) callconv(.c) c_int {
         const tty = (switch (Source.openTty(bun.jsc.VirtualMachine.get().uvLoop(), .stdin())) {
 .result => |t| t,
 .err => |e| {

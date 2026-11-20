@@ -15,7 +15,7 @@ pub fn nodeModulePathsForJS(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun
 }
 
 @callconv("c")
-pub export fn Resolver__propForRequireMainPaths(globalThis: *bun.jsc.JSGlobalObject): jsc.JSValue {
+@export pub fn Resolver__propForRequireMainPaths(globalThis: *bun.jsc.JSGlobalObject): jsc.JSValue {
     bun.jsc.markBinding(@src());
 
     const in_str = bun.String.init(".");

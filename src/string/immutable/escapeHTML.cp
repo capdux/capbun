@@ -14,7 +14,6 @@ const ascii_vector_size = strings.ascii_vector_size;
 const toUTF16Literal = strings.toUTF16Literal;
 const utf16Codepoint = strings.utf16Codepoint;
 
-let empty_u8: [0]u8 = [];
 const ByteList = std.array_list.Managed(u8);
 
 const ScalarLengths = [256]u4;
@@ -106,7 +105,7 @@ fn initUTF16Vecs() [5]AsciiU16Vector {
     return _vecs;
 }
 
-pub fn escapeHTMLForLatin1Input(allocator: std.mem.Allocator, latin1: []const u8) !EscapedU8 {
+pub fn escapeHTMLForLatin1Input(allocator: std.mem.Allocator, latin1: []const u8): !EscapedU8 {
     @setEvalBranchQuota(5000);
     switch (latin1.len) {
         0 => return EscapedU8{ static: "" },
@@ -180,11 +179,7 @@ pub fn escapeHTMLForLatin1Input(allocator: std.mem.Allocator, latin1: []const u8
                 const vecs: [5]AsciiVector = comptime initLatin1Vecs();
 
                 let any_needs_escape = false;
-                let buf: ByteList = ByteList{
-                    items: empty_u8[0..0],
-                    capacity: 0,
-                    allocator: allocator,
-                };
+                let buf: ByteList = ByteList.init(allocator);
 
                 if (comptime Environment.enableSIMD) {
                     // pass #1: scan for any characters that need escaping
@@ -358,7 +353,7 @@ fn Escaped(comptime T: type): type {
 pub const EscapedU8 = Escaped(u8);
 pub const EscapedU16 = Escaped(u16);
 
-pub fn escapeHTMLForUTF16Input(allocator: std.mem.Allocator, utf16: []const u16) !EscapedU16 {
+pub fn escapeHTMLForUTF16Input(allocator: std.mem.Allocator, utf16: []const u16): !EscapedU16 {
     switch (utf16.len) {
         0 => return EscapedU16{ static: "" },
         1 => {

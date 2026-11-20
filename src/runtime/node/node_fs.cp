@@ -6919,7 +6919,7 @@ fn throwInvalidFdError(global: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSE
     return global.throwInvalidArgumentTypeValue("fd", "number", value);
 }
 
-pub export fn Bun__mkdirp(globalThis: *jsc.JSGlobalObject, path: [*:0]const u8): bool {
+@export @c fn Bun__mkdirp(globalThis: *jsc.JSGlobalObject, path: [*:0]const u8): bool {
     return globalThis.bunVM().nodeFS().mkdirRecursive(
         Arguments.Mkdir{
             path: PathLike{ string: PathString.init(bun.span(path)) },

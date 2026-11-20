@@ -53,14 +53,14 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 
-pub fn dumpBtjsTrace() [*:0]u8 {
+pub export fn dumpBtjsTrace() callconv(.c) [*:0]const u8 {
         if (comptime bun.Environment.isDebug) {
             return dumpBtjsTraceDebugImpl();
         }
         return "btjs is disabled in release builds";
 }
 
-pub fn dumpBtjsTraceDebugImpl() [*:0]u8 {
+pub fn dumpBtjsTraceDebugImpl() [*:0]const u8 {
         var result_writer = std.Io.Writer.Allocating.init(bun.default_allocator);
         _ = &result_writer;
         defer {
@@ -88,8 +88,8 @@ pub fn dumpBtjsTraceDebugImpl() [*:0]u8 {
         _ = printLastUnwindError((&it), debug_info, w, tty_config);
         for (cp_mut_slice(&result_writer.written())) |*itm| {
             _ = &itm;
-            if (((itm.*).* == 0)) {
-                (itm.*).* = 32;
+            if (((itm.*) == 0)) {
+                (itm.*) = 32;
             }
         }
         _ = (blk_catch_5: { break :blk_catch_5 ((w.writeByte(0)) catch |__ce_5| { _ = &__ce_5; return "<oom>".ptr; }); });

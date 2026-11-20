@@ -193,7 +193,7 @@ pub struct overrides {
     pub const mem = OverridesMem;
 }
 
-pub export fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
+@export @c fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
     Output.panic("{s}", .{msg[0..len]});
 }
 

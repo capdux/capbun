@@ -170,6 +170,6 @@ pub fn take(comptime T: type, cell: jsc.JSValue) ?*T {
         }
 }
 
-pub fn Bun__NativePromiseContext__destroy(ctx: *anyopaque, tag: u8) callconv(.c) void {
+pub export fn Bun__NativePromiseContext__destroy(ctx: *anyopaque, tag: u8) callconv(.c) void {
         _ = DeferredDerefTask.schedule(ctx, @enumFromInt(tag));
 }

@@ -76,7 +76,7 @@ const jsc = bun.jsc;
 const ErrorableString = jsc.ErrorableString;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
-pub const NodeModuleModule__findPath = jsc.host_fn.wrap3(findPath);
+pub export const NodeModuleModule__findPath = jsc.host_fn.wrap3(findPath);
 
 pub fn findPath(global: *JSGlobalObject, request_bun_str: bun.String, paths_maybe: ?*jsc.JSArray) bun.JSError!JSValue {
         var stack_buf = std.heap.stackFallback(8192, bun.default_allocator);

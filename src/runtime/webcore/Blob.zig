@@ -1917,13 +1917,11 @@ pub fn write_bytes(_: *anyopaque, _: [*]const u8, _: u32) callconv(jsc.conv) voi
 pub const BlobStructuredCloneWriteBytes = @TypeOf((&_BlobCloneSigs.write_bytes));
 pub const MmapFreeInterface = (if (Environment.isPosix) struct {
 
-pub fn alloc(self: *@This(), _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
-        _ = self;
+pub fn alloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
             return null;
     }
 
-pub fn free(self: *@This(), buf: []u8, _: std.mem.Alignment, _: usize) void {
-        _ = self;
+pub fn free(_: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((sys.munmap(@ptrCast(@alignCast(buf))).unwrap()) catch |e| { _ = &e; break :blk_catch_0 Output.debugWarn("Blob mmap-store munmap failed: {}", .{ e }); }); });
     }
     const vtable_: std.mem.Allocator.VTable = .{ .alloc = (&alloc), .resize = (&std.mem.Allocator.noResize), .remap = (&std.mem.Allocator.noRemap), .free = (&free) };
@@ -2882,29 +2880,29 @@ pub fn run(handler: *anyopaque, bytes: read_file_mod.ReadFileResultType) void {
 };
 }
 
-pub fn Bun__Blob__getSizeForBindings(blob: *Blob) callconv(.c) usize {
+pub export fn Bun__Blob__getSizeForBindings(blob: *Blob) callconv(.c) usize {
         return blob.getSizeForBindings();
 }
 
-pub fn Blob__ref(blob: *Blob) callconv(.c) void {
+pub export fn Blob__ref(blob: *Blob) callconv(.c) void {
         _ = blob.ref_count.increment();
 }
 
-pub fn Blob__deref(blob: *Blob) callconv(.c) void {
+pub export fn Blob__deref(blob: *Blob) callconv(.c) void {
         if ((blob.ref_count.decrement() == .should_destroy)) {
             _ = blob.ref_count.increment();
             _ = blob.deinit();
         }
 }
 
-pub fn Blob__dupeFromJS(value: JSValue) callconv(.c) ?*Blob {
+pub export fn Blob__dupeFromJS(value: JSValue) callconv(.c) ?*Blob {
         const b = ((Blob.fromJS(value)) orelse { return null; });
         var __b_moved = false; _ = &__b_moved;
         defer if (!__b_moved) { const __T = @TypeOf(b); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = b.release() catch {}; } else { b.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = b; _drop_val.release(); } };
         return Blob.new(b.dupeWithContentType(true));
 }
 
-pub fn Blob__setAsFile(blob: *Blob, path_str: *String) callconv(.c) void {
+pub export fn Blob__setAsFile(blob: *Blob, path_str: *String) callconv(.c) void {
         blob.is_jsdom_file = true;
         if (blob.store) |*store| {
             _ = &store;
@@ -2919,11 +2917,11 @@ pub fn Blob__setAsFile(blob: *Blob, path_str: *String) callconv(.c) void {
         }
 }
 
-pub fn Blob__dupe(blob: *Blob) callconv(.c) *Blob {
+pub export fn Blob__dupe(blob: *Blob) callconv(.c) *Blob {
         return Blob.new(blob.dupeWithContentType(true));
 }
 
-pub fn Blob__getFileNameString(blob: *Blob) callconv(.c) String {
+pub export fn Blob__getFileNameString(blob: *Blob) callconv(.c) String {
         if (blob.getFileName()) |filename| {
             _ = &filename;
             return String.fromBytes(filename);
@@ -2931,7 +2929,7 @@ pub fn Blob__getFileNameString(blob: *Blob) callconv(.c) String {
         return String.empty;
 }
 
-pub fn Blob__getDataPtr(value: JSValue) callconv(.c) ?*anyopaque {
+pub export fn Blob__getDataPtr(value: JSValue) callconv(.c) ?*anyopaque {
         const blob = ((Blob.fromJS(value)) orelse { return null; });
         var __blob_moved = false; _ = &__blob_moved;
         defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
@@ -2944,7 +2942,7 @@ pub fn Blob__getDataPtr(value: JSValue) callconv(.c) ?*anyopaque {
         return @constCast(data.ptr);
 }
 
-pub fn Blob__getSize(value: JSValue) callconv(.c) usize {
+pub export fn Blob__getSize(value: JSValue) callconv(.c) usize {
         const blob = ((Blob.fromJS(value)) orelse { return 0; });
         var __blob_moved = false; _ = &__blob_moved;
         defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
@@ -2954,7 +2952,7 @@ pub fn Blob__getSize(value: JSValue) callconv(.c) usize {
         return data.len;
 }
 
-pub fn Blob__fromBytes(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8, len: usize) callconv(.c) *Blob {
+pub export fn Blob__fromBytes(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8, len: usize) callconv(.c) *Blob {
         if (((ptr_arg == null) or (len == 0))) {
             return Blob.new(Blob.initEmpty(globalThis));
         }
@@ -2967,7 +2965,7 @@ pub fn Blob__fromBytes(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8, len: 
         return Blob.new(Blob.initWithStore(store, globalThis));
 }
 
-pub fn Blob__fromBytesWithType(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8, len: usize, mime: [*:0]const u8) callconv(.c) *Blob {
+pub export fn Blob__fromBytesWithType(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8, len: usize, mime: [*:0]const u8) callconv(.c) *Blob {
         const blob = Blob__fromBytes(globalThis, ptr_arg, len);
         const mime_slice = std.mem.span(mime);
         var __mime_slice_moved = false; _ = &__mime_slice_moved;
@@ -2979,7 +2977,7 @@ pub fn Blob__fromBytesWithType(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u
         return blob;
 }
 
-pub fn Blob__fromMmapWithType(globalThis: *JSGlobalObject, ptr_arg: [*]u8, len: usize, mime: [*:0]const u8) callconv(.c) *Blob {
+pub export fn Blob__fromMmapWithType(globalThis: *JSGlobalObject, ptr_arg: [*]u8, len: usize, mime: [*:0]const u8) callconv(.c) *Blob {
         if ((!Environment.isPosix)) {
             return Blob__fromBytesWithType(globalThis, ptr_arg, len, mime);
         }
@@ -3096,14 +3094,15 @@ blob.name = name_value_str.dupeRef();
         return blob_;
 }
 
-pub fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) ?*Blob {
+pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) ?*Blob {
         return (blk_catch_14: { break :blk_catch_14 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
-            _ = (blk_catch_15: { break :blk_catch_15 ((globalThis.throwOutOfMemory()) catch |__ce_15| { _ = &__ce_15;  }); });
+            if ((globalThis.throwOutOfMemory() == error.JSError)) {
+            }
         }
         return null; }); });
 }
 
-pub fn JSDOMFile__hasInstance(_: JSValue, _: *JSGlobalObject, value: JSValue) callconv(jsc.conv) bool {
+pub export fn JSDOMFile__hasInstance(_: JSValue, _: *JSGlobalObject, value: JSValue) callconv(jsc.conv) bool {
         _ = jsc.markBinding(@src());
         const blob = ((value.as(Blob)) orelse { return false; });
         var __blob_moved = false; _ = &__blob_moved;

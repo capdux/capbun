@@ -631,12 +631,12 @@ extern "c" fn Bun__makeArrayBufferWithBytesNoCopy(globalObject: *jsc.JSGlobalObj
 
 extern "c" fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, arrayType: ArrayBufferTypedArrayType, ptr: ?*anyopaque, len: usize, deallocator: jsc.C.JSTypedArrayBytesDeallocator, deallocatorContext: ?*anyopaque) callconv(.c) jsc.JSValue;
 
-pub fn MarkedArrayBuffer_deallocator(bytes_: *anyopaque, _: *anyopaque) callconv(.c) void {
+pub export fn MarkedArrayBuffer_deallocator(bytes_: *anyopaque, _: *anyopaque) callconv(.c) void {
         const mimalloc = bun.mimalloc;
         _ = mimalloc.mi_free(bytes_);
 }
 
-pub fn BlobArrayBuffer_deallocator(_: *anyopaque, blob: *anyopaque) callconv(.c) void {
+pub export fn BlobArrayBuffer_deallocator(_: *anyopaque, blob: *anyopaque) callconv(.c) void {
         var store = bun.cast(*jsc.WebCore.Blob.Store, blob);
         _ = &store;
         _ = store.deref();

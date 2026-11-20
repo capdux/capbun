@@ -11,7 +11,7 @@ pub struct linux {
     }
 
     @callconv("c")
-    pub export fn stat(path: [*:0]const u8, buf: *std.os.linux.Stat): c_int {
+    @export static fn stat(path: [*:0]const u8, buf: *std.os.linux.Stat): c_int {
         // https://git.musl-libc.org/cgit/musl/tree/src/stat/stat.c
         const rc = std.os.linux.fstatat(std.os.linux.AT.FDCWD, path, buf, 0);
         return simulateLibcErrno(rc);
@@ -23,26 +23,26 @@ pub struct linux {
     pub const fstatat64 = fstatat;
 
     @callconv("c")
-    pub export fn lstat(path: [*:0]const u8, buf: *std.os.linux.Stat): c_int {
+    @export static fn lstat(path: [*:0]const u8, buf: *std.os.linux.Stat): c_int {
         // https://git.musl-libc.org/cgit/musl/tree/src/stat/lstat.c
         const rc = std.os.linux.fstatat(std.os.linux.AT.FDCWD, path, buf, std.os.linux.AT.SYMLINK_NOFOLLOW);
         return simulateLibcErrno(rc);
     }
 
     @callconv("c")
-    pub export fn fstat(fd: c_int, buf: *std.os.linux.Stat): c_int {
+    @export static fn fstat(fd: c_int, buf: *std.os.linux.Stat): c_int {
         const rc = std.os.linux.fstat(fd, buf);
         return simulateLibcErrno(rc);
     }
 
     @callconv("c")
-    pub export fn fstatat(dirfd: i32, path: [*:0]const u8, buf: *std.os.linux.Stat, flags: u32): c_int {
+    @export static fn fstatat(dirfd: i32, path: [*:0]const u8, buf: *std.os.linux.Stat, flags: u32): c_int {
         const rc = std.os.linux.fstatat(dirfd, path, buf, flags);
         return simulateLibcErrno(rc);
     }
 
     @callconv("c")
-    pub export fn statx(dirfd: i32, path: [*:0]const u8, flags: u32, mask: u32, buf: *std.os.linux.Statx): c_int {
+    @export static fn statx(dirfd: i32, path: [*:0]const u8, flags: u32, mask: u32, buf: *std.os.linux.Statx): c_int {
         const rc = std.os.linux.statx(dirfd, path, flags, mask, buf);
         return simulateLibcErrno(rc);
     }
@@ -92,7 +92,7 @@ pub struct windows {
     /// Windows doesn't have memmem, so we need to implement it
     /// This is used in src/string/immutable.zig
     @callconv("c")
-    pub export fn memmem(haystack: ([*]const u8)?, haystacklen: usize, needle: ([*]const u8)?, needlelen: usize): ([*]const u8)? {
+    @export static fn memmem(haystack: ([*]const u8)?, haystacklen: usize, needle: ([*]const u8)?, needlelen: usize): ([*]const u8)? {
         // Handle null pointers
         if (haystack == null || needle == null) return null;
 

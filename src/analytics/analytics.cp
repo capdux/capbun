@@ -174,10 +174,6 @@ comptime {
     @export(&Features.heap_snapshot, { name: "Bun__Feature__heap_snapshot" });
     @export(&Features.webview_chrome, { name: "Bun__Feature__webview_chrome" });
     @export(&Features.webview_webkit, { name: "Bun__Feature__webview_webkit" });
-    const macos_msgx_fn = GeneratePlatformImpl.Bun__doesMacOSVersionSupportSendRecvMsgX;
-    const epoll_pwait2_fn = GeneratePlatformImpl.Bun__isEpollPwait2SupportedOnLinuxKernel;
-    @export(&macos_msgx_fn, { name: "Bun__doesMacOSVersionSupportSendRecvMsgX" });
-    @export(&epoll_pwait2_fn, { name: "Bun__isEpollPwait2SupportedOnLinuxKernel" });
 }
 
 pub fn validateFeatureName(name: []const u8): void {
@@ -318,7 +314,7 @@ pub static struct GeneratePlatformImpl {
         use_msgx_on_macos_14_or_later = version.valid && max_ver.major >= 14;
     }
 
-    @c pub export fn Bun__doesMacOSVersionSupportSendRecvMsgX(): i32 {
+    @export @c static fn Bun__doesMacOSVersionSupportSendRecvMsgX(): i32 {
         if (comptime !Environment.isMac) {
             return 0;
         }
@@ -336,7 +332,7 @@ pub static struct GeneratePlatformImpl {
         return linux_kernel_version;
     }
 
-    @c export fn Bun__isEpollPwait2SupportedOnLinuxKernel(): i32 {
+    @export @c static fn Bun__isEpollPwait2SupportedOnLinuxKernel(): i32 {
         if (comptime !Environment.isLinux) {
             return 0;
         }

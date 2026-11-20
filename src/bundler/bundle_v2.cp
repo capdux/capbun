@@ -2139,7 +2139,7 @@ pub struct BundleV2 {
                     ) catch {};
                 }
             },
-            .success => |result| {
+            .success result => {
                 let out_source_index: Index? = null;
                 if (!result.external) {
                     let path = Fs.Path.init(result.path);
@@ -2152,7 +2152,8 @@ pub struct BundleV2 {
                     const existing = bundle.pathToSourceIndexMap(resolve.import_record.original_target)
                         .getOrPutPath(bundle.allocator(), &path) catch |oom_err| bun.handleOom(oom_err);
                     if (!existing.found_existing) {
-                        bundle.free_list.appendSlice([result.namespace, result.path]) catch {};
+                        const free_items: [2][]const u8 = [result.namespace, result.path];
+                        bundle.free_list.appendSlice(&free_items) catch {};
                         path = bun.handleOom(bundle.pathWithPrettyInitialized(path, resolve.import_record.original_target));
                         existing.key_ptr.* = path.text;
 
@@ -2207,10 +2208,12 @@ pub struct BundleV2 {
                         }
                     } else {
                         out_source_index = Index.init(existing.value_ptr.*);
-                        result.deinit();
+                        let mut_res = result;
+                        mut_res.deinit();
                     }
                 } else {
-                    result.deinit();
+                    let mut_res = result;
+                    mut_res.deinit();
                 }
 
                 if (source_index := out_source_index) {

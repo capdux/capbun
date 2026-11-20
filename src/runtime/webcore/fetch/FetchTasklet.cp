@@ -24,8 +24,8 @@ const BoringSSL = bun.BoringSSL;
 const Value = std.atomic.Value;
 const Allocator = std.mem.Allocator;
 const fmt = std.fmt;
-import { Method } from "../../../http_types/Method";
-import { URL } from "../../../url/url";
+import { Method } from "../../../http_types/Method.zig";
+import { URL } from "../../../url/url.zig";
 
 const BunString = String;
 const AtomicValue = Value;
@@ -33,6 +33,9 @@ const ZigURL = URL;
 
 import X509 from "../../api/bun/x509.zig";
 const FetchHeaders = webcore.FetchHeaders;
+const HttpAsyncHTTP = bun.http.AsyncHTTP;
+const HttpHTTPClientResult = bun.http.HTTPClientResult;
+const HttpThreadSafeStreamBuffer = bun.http.ThreadSafeStreamBuffer;
 const SSLConfig = api.server.ServerConfig.SSLConfig;
 
 const FetchRedirect = bun.http.FetchRedirect;
@@ -67,7 +70,7 @@ pub union(enum) FetchHTTPRequestBody {
     }
 
     pub fn slice(): []const u8 {
-        return switch (_.*) {
+        return switch (_) {
             .AnyBlob => _.AnyBlob.slice(),
             else => "",
         };
@@ -106,21 +109,21 @@ pub union(enum) FetchHTTPRequestBody {
     }
 
     pub fn needsToReadFile(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .AnyBlob => |blob| blob.needsToReadFile(),
             else => false,
         };
     }
 
     pub fn isS3(): bool {
-        return switch (_.*) {
-            .AnyBlob => |*blob| blob.isS3(),
+        return switch (_) {
+            .AnyBlob => |blob| blob.isS3(),
             else => false,
         };
     }
 
     pub fn hasContentTypeFromUser(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .AnyBlob => |blob| blob.hasContentTypeFromUser(),
             else => false,
         };
@@ -128,15 +131,18 @@ pub union(enum) FetchHTTPRequestBody {
 
     pub fn getAnyBlob(*_): (*AnyBlob)? {
         return switch (_.*) {
-            .AnyBlob => &_.AnyBlob,
+            .AnyBlob => &@field(_, "AnyBlob"),
             else => null,
         };
     }
 
     pub fn hasBody(): bool {
-        return switch (_.*) {
+        return switch (_) {
             .AnyBlob => |blob| blob.size() > 0,
-            .ReadableStream => |*stream| stream.has(),
+            .ReadableStream => |stream| blk: {
+                let s = stream;
+                break :blk s.has();
+            },
             .Sendfile => true,
         };
     }
@@ -1011,7 +1017,7 @@ export class FetchTasklet {
                     .capacity = 0,
                 },
             },
-            .http = try allocator.create(http.AsyncHTTP),
+            .http = allocator.create(HttpAsyncHTTP)?,
             .javascript_vm = jsc_vm,
             .request_body = fetch_options.body,
             .global_this = globalThis,
@@ -1064,7 +1070,7 @@ export class FetchTasklet {
             fetch_tasklet.signals.cert_errors = null;
         }
 
-        fetch_tasklet.http.?.* = http.AsyncHTTP.init(
+        fetch_tasklet.http.?.* = HttpAsyncHTTP.init(
             default_allocator,
             fetch_options.method,
             url,
@@ -1072,7 +1078,7 @@ export class FetchTasklet {
             fetch_options.headers.buf.items,
             &fetch_tasklet.response_buffer,
             fetch_tasklet.request_body.slice(),
-            http.HTTPClientResult.Callback.New(
+            HttpHTTPClientResult.Callback.New(
                 *FetchTasklet,
                 FetchTasklet.callback,
             ).init(fetch_tasklet),
@@ -1099,7 +1105,7 @@ export class FetchTasklet {
         fetch_tasklet.http.?.client.flags.force_http1 = fetch_options.force_http1;
         fetch_tasklet.is_waiting_request_stream_start = isStream;
         if (isStream) {
-            const buffer = http.ThreadSafeStreamBuffer.new(.{});
+            const buffer = HttpThreadSafeStreamBuffer.new(.{});
             buffer.setDrainCallback(FetchTasklet, FetchTasklet.onWriteRequestDataDrain, fetch_tasklet);
             fetch_tasklet.request_body_streaming_buffer = buffer;
             fetch_tasklet.http.?.request_body = .{
@@ -1285,7 +1291,7 @@ export class FetchTasklet {
             promise,
         );
 
-        let batch = ThreadPool.Batch{};
+        let batch: ThreadPool.Batch = .{};
         node.http.?.schedule(allocator, &batch);
         node.poll_ref.ref(global.bunVM());
 

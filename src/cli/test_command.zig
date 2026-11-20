@@ -2024,7 +2024,7 @@ _ = ((writer.print((comptime fmtStatusTextLine(status, enable_ansi_colors_stderr
 }
 }
 
-pub fn BunTest__shouldGenerateCodeCoverage(test_name_str: bun.String) callconv(.c) bool {
+pub export fn BunTest__shouldGenerateCodeCoverage(test_name_str: bun.String) callconv(.c) bool {
         var zig_slice: bun.jsc.ZigString.Slice = .{};
         _ = &zig_slice;
         defer {

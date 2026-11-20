@@ -3694,7 +3694,7 @@ pub fn selfProcessMemoryUsage() ?usize {
         return rss;
 }
 
-pub fn Bun__errnoName(e: c_int) ?[*:0]const u8 {
+pub export fn Bun__errnoName(e: c_int) callconv(.c) ?[*:0]const u8 {
         if (SystemErrno.init(e)) |val| {
             _ = &val;
             return @tagName(val);
@@ -3702,7 +3702,7 @@ pub fn Bun__errnoName(e: c_int) ?[*:0]const u8 {
         return null;
 }
 
-pub fn Bun__unlink(ptr: [*:0]const u8, len: usize) void {
+pub export fn Bun__unlink(ptr: [*:0]const u8, len: usize) callconv(.c) void {
         _ = unlink(ptr[0..len :0]);
 }
 

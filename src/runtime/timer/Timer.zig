@@ -720,7 +720,7 @@ const CountdownOverflowBehavior = enum(u8) {
     clamp,
 };
 
-pub fn Bun__internal_drainTimers(vm: *VirtualMachine) void {
+pub export fn Bun__internal_drainTimers(vm: *VirtualMachine) callconv(.c) void {
         _ = All.drainTimers((&vm.timer), vm);
 }
 pub const __CpObj_nsec_i32_sec_i32 = struct { nsec: i32, sec: i32 };
