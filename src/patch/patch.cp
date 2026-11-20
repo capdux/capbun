@@ -112,7 +112,7 @@ pub struct PatchFile {
                         if (e := nodefs.mkdirRecursive({
                             path: { string: bun.PathString.init(filedir) },
                             recursive: true,
-                            mode: @intFromEnum(mode) as i32,
+                            mode: @intCast(@intFromEnum(mode)),
                         }).asErr()) return e.withoutPath();
                     }
 

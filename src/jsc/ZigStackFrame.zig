@@ -83,7 +83,8 @@ pub fn toAPI(self: ZigStackFrame, root_path: []const u8, origin: ?*const ZigURL,
             if ((!self.function_name.isEmpty())) {
                 var slicer = self.function_name.toUTF8(allocator);
                 _ = &slicer;
-                frame.function_name = try slicer.cloneIfBorrowed(allocator).slice();
+                const cloned = try slicer.cloneIfBorrowed(allocator);
+                frame.function_name = cloned.slice();
             }
             if ((!self.source_url.isEmpty())) {
                 frame.file = try std.fmt.allocPrint(allocator, "{f}", .{ self.sourceURLFormatter(root_path, origin, true, false) });

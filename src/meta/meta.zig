@@ -90,7 +90,7 @@ pub const ListContainerInfo = struct {
 };
 
 pub const TaggedUnion = tagged_union.TaggedUnion;
-const empty_decls: [0]std.builtin.Type.Declaration = &.{};
+const empty_decls: [0]std.builtin.Type.Declaration = undefined;
 
 pub fn OptionalChild(comptime T: type) type {
         const tyinfo = @typeInfo(T);

@@ -714,7 +714,7 @@ pub fn cloneToWithRecycled(self: *Log, other: *Log, recycled: bool) OOM!void {
                         const __end_14 = self.msgs.items.len;
                         while (i < __end_14) : (i += 1) {
                             const msg = self.msgs.items[@as(usize, @intCast(i))];
-                            const j = (offset + i);
+                            const j = (offset + @as(usize, @intCast(i)));
                             other.msgs.items[cp_cast_int(usize, j)] = msg.cloneWithBuilder(notes_buf[note_i..], (&string_builder));
                             note_i = (note_i + msg.notes.len);
                         }

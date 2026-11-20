@@ -136,7 +136,8 @@ pub fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext
         const ctx_opt = global.bunVM().rareData().sslCtxCache().getOrCreateDigest(ctx_opts, d, (&e));
         if ((ctx_opt == null)) {
             if ((e == .none)) {
-                const code = BoringSSL.ERR_get_error;
+                const get_err = BoringSSL.ERR_get_error;
+                const code = get_err();
                 if ((code != 0)) {
                     return global.throwValue(bun.BoringSSL.ERR_toJS(global, code));
                 }

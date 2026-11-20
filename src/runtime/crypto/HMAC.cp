@@ -35,7 +35,7 @@ const EVP = jsc.API.Bun.Crypto.EVP;
         return BoringSSL.HMAC_size(&_.ctx);
     }
 
-    fn copy(*_): *HMAC! {
+    fn copy(*_): (*HMAC)! {
         let ctx: BoringSSL.HMAC_CTX = undefined;
         BoringSSL.HMAC_CTX_init(&ctx);
         if (BoringSSL.HMAC_CTX_copy(&ctx, &_.ctx) != 1) {

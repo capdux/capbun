@@ -790,9 +790,9 @@ pub fn defaultCSRFSecret(self: *RareData) []const u8 {
 }
 
 pub fn deinit(self: *RareData) void {
-        if (self.mime_types) |m| {
+        if (self.mime_types) |*m| {
             _ = &m;
-            _ = m.deinit();
+            _ = (m.*).deinit();
         }
         _ = self.path_buf.deinit();
         _ = self.closeAllWatchersForIsolation();

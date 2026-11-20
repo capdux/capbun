@@ -704,7 +704,7 @@ if (comptime Environment.allow_assert) {
 },
 }
                 }
-                if (client.consumeOnExitCallback(this_jsvalue, globalThis)) |callback| {
+                if (consumeOnExitCallback(this_jsvalue, globalThis)) |callback| {
                     _ = &callback;
                     var waitpid_value: JSValue = .js_undefined;
                     _ = &waitpid_value;

@@ -185,7 +185,7 @@ pub inline fn ConcatArgs4(
     return args;
 }
 
-const empty_decls: [0]std.builtin.Type.Declaration = [];
+const empty_decls: [0]std.builtin.Type.Declaration = undefined;
 
 // Copied from std.meta
 fn CreateUniqueTuple(comptime N: comptime_int, comptime types: [N]type): type {

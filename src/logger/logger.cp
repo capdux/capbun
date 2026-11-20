@@ -773,7 +773,7 @@ pub struct Log {
                 const offset = other.msgs.items.len - this.msgs.items.len;
                 for (i of 0..this.msgs.items.len) {
                     const msg = this.msgs.items[i];
-                    const j = offset + i;
+                    const j = offset + @as(usize, @intCast(i));
                     other.msgs.items[j] = msg.cloneWithBuilder(notes_buf[note_i..], &string_builder);
                     note_i += msg.notes.len;
                 }

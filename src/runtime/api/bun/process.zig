@@ -1798,6 +1798,7 @@ pub fn reapChild(child: std.c.pid_t) Status {
     const JobControl = SyncJobControl;
 };
 
+const OptCStr = ?[*:0]const u8;
 const ArgPtr = ?[*:0]u8;
 const pid_t = (if (Environment.isPosix) std.posix.pid_t else uv.uv_pid_t);
 const fd_t = (if (Environment.isPosix) std.posix.fd_t else i32);
@@ -2091,7 +2092,7 @@ pub fn uv_getrusage(process: *uv.uv_process_t) win_rusage {
         return usage_info;
 }
 
-pub fn spawnProcess(options: *const SpawnOptions, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !bun.sys.Maybe(SpawnProcessResult) {
+pub fn spawnProcess(options: *const SpawnOptions, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !bun.sys.Maybe(SpawnProcessResult) {
         if (comptime Environment.isPosix) {
             return spawnProcessPosix(options, argv, envp);
         } else {

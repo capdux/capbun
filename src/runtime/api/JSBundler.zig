@@ -1288,7 +1288,7 @@ pub const BundlerResolveValue = union(enum) {
     pending: void,
     consumed: void,
 
-pub fn consume(self: *BundlerResolveValue) *BundlerResolveValue {
+pub fn consume(self: *BundlerResolveValue) BundlerResolveValue {
             const result = self.*;
             self.* = .{ .consumed = .{} };
             return result;
@@ -1379,7 +1379,7 @@ _ = e.deinit(bun.default_allocator);
             self.* = .{ .consumed = .{} };
     }
 
-pub fn consume(self: *BundlerLoadValue) *BundlerLoadValue {
+pub fn consume(self: *BundlerLoadValue) BundlerLoadValue {
             const result = self.*;
             self.* = .{ .consumed = .{} };
             return result;
@@ -1614,7 +1614,7 @@ pub fn build(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSValue) bu
             }
             const vm = globalThis.bunVM();
             if (vm.macro_mode) {
-                return globalThis.throw("Bun.build cannot be called from within a macro during bundling.", "", "This would cause a deadlock because the bundler is waiting for the macro to complete,", "but the macro's Bun.build call is waiting for the bundler.", "", "To bundle code at compile time in a macro, use Bun.spawnSync to invoke the CLI:", "  const result = Bun.spawnSync([\"bun\", \"build\", entrypoint, \"--format=esm\"]);", .{});
+                return globalThis.throw("Bun.build cannot be called from within a macro during bundling.\n\nThis would cause a deadlock because the bundler is waiting for the macro to complete,\nbut the macro's Bun.build call is waiting for the bundler.\n\nTo bundle code at compile time in a macro, use Bun.spawnSync to invoke the CLI:\n  const result = Bun.spawnSync([\"bun\", \"build\", entrypoint, \"--format=esm\"]);", .{});
             }
             var plugins: ?*BundlerPlugin = null;
             _ = &plugins;

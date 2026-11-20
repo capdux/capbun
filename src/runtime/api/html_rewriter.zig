@@ -451,7 +451,9 @@ pub fn transform_(self: *HTMLRewriter, global: *JSGlobalObject, response_value: 
                         }
                     }
                     if (is_async) {
-                        _ = (blk_catch_2: { break :blk_catch_2 ((sinkBodyValue.toErrorInstance(e.dupe(sink.global), sink.global)) catch |__ce_2| { _ = &__ce_2;  }); });
+                        var duped_err = e.dupe(sink.global);
+                        _ = &duped_err;
+                        _ = (blk_catch_2: { break :blk_catch_2 ((sinkBodyValue.toErrorInstance((&duped_err), sink.global)) catch |__ce_2| { _ = &__ce_2;  }); });
                     } else {
                         var ret_err = createLOLHTMLError(sink.global);
                         _ = &ret_err;

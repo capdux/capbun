@@ -729,7 +729,7 @@ pub struct TestingAPIs {
                     }
                 }
 
-                if (callback := client.consumeOnExitCallback(this_jsvalue, globalThis)) {
+                if (callback := consumeOnExitCallback(this_jsvalue, globalThis)) {
                     let waitpid_value: JSValue = .js_undefined;
                     if (status == .@"err") {
                         waitpid_value = status.@"err".toJS(globalThis) catch return;

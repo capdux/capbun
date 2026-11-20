@@ -1770,14 +1770,7 @@ pub struct JSBundler {
         // 4. The singleton thread is blocked waiting for the macro to complete -> deadlock
         if (vm.macro_mode) {
             return globalThis.throw(
-                \\Bun.build cannot be called from within a macro during bundling.
-                \\
-                \\This would cause a deadlock because the bundler is waiting for the macro to complete,
-                \\but the macro's Bun.build call is waiting for the bundler.
-                \\
-                \\To bundle code at compile time in a macro, use Bun.spawnSync to invoke the CLI:
-                \\  const result = Bun.spawnSync(["bun", "build", entrypoint, "--format=esm"]);
-            ,
+                "Bun.build cannot be called from within a macro during bundling.\n\nThis would cause a deadlock because the bundler is waiting for the macro to complete,\nbut the macro's Bun.build call is waiting for the bundler.\n\nTo bundle code at compile time in a macro, use Bun.spawnSync to invoke the CLI:\n  const result = Bun.spawnSync([\"bun\", \"build\", entrypoint, \"--format=esm\"]);",
                 .{},
             );
         }

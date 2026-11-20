@@ -14,7 +14,7 @@ pub struct ZigSourceLine {
 }
 
 pub struct ZigSourceLineIterator {
-    trace: *const ZigStackTrace,
+    trace: ZigStackTrace,
     i: i32,
 
     pub const SourceLine = ZigSourceLine;

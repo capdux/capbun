@@ -3,7 +3,10 @@ import bun from "bun";
 import { PerfEvent } from "./generated_perf_trace_events.zig";
 
 struct DisabledCtx {
-    pub inline fn end() {}
+    pub inline fn end() {
+        const unused = _;
+        * = unused;
+    }
 }
 
 export enum Ctx {

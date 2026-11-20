@@ -201,7 +201,7 @@ pub struct FileSystemRouter {
                         const full_path = vm.transpiler.fs.abs(&abs_parts_con);
 
                         * = vm.transpiler.resolver.bustDirCache(strings.withoutTrailingSlashWindowsPath(full_path));
-                        bustDirCacheRecursive(_, globalThis, full_path);
+                        _.bustDirCacheRecursive(globalThis, full_path);
                     }
                 }
             }
@@ -211,7 +211,7 @@ pub struct FileSystemRouter {
     }
 
     fn bustDirCache(*_, globalThis: *jsc.JSGlobalObject) {
-        bustDirCacheRecursive(_, globalThis, strings.withoutTrailingSlashWindowsPath(_.router.config.dir));
+        _.bustDirCacheRecursive(globalThis, strings.withoutTrailingSlashWindowsPath(_.router.config.dir));
     }
 
     fn reload(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {

@@ -220,7 +220,7 @@ pub fn run(self: *TranspilerJobInternal) void {
             switch (vm.bun_watcher) {
 .hot, .watch => {
 const indexOfFn = @TypeOf(vm.bun_watcher).indexOf;
-            if (indexOfFn((&vm.bun_watcher), hash)) |index| {
+            if (indexOfFn(vm.bun_watcher, hash)) |index| {
                 _ = &index;
                 const watcher_fd = vm.bun_watcher.watchlist().items(.fd)[@as(usize, @intCast(index))];
                 fd = (if ((watcher_fd.isValid() and (watcher_fd.stdioTag() == null))) watcher_fd else null);

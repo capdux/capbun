@@ -229,15 +229,15 @@ pub struct Routes {
 
         if (path.len == 0) {
             if (_.index != null) {
-                const index = _.index.?;
+                const idx = _.index.?;
                 return Match{
                     .params = params,
-                    .name = index.name,
-                    .path = index.abs_path.slice(),
+                    .name = idx.name,
+                    .path = idx.abs_path.slice(),
                     .pathname = url_path.pathname,
-                    .basename = index.basename,
+                    .basename = idx.basename,
                     .hash = index_route_hash,
-                    .file_path = index.abs_path.slice(),
+                    .file_path = idx.abs_path.slice(),
                     .query_string = url_path.query_string,
                     .client_framework_enabled = _.client_framework_enabled,
                 };

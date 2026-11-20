@@ -231,7 +231,7 @@ pub fn bustDirCacheRecursive(self: *FileSystemRouter, globalThis: *jsc.JSGlobalO
                             _ = &abs_parts_con;
                             const full_path = vm.transpiler.fs.abs((&abs_parts_con));
                             _ = vm.transpiler.resolver.bustDirCache(strings.withoutTrailingSlashWindowsPath(full_path));
-                            _ = self.bustDirCacheRecursive(self, globalThis, full_path);
+                            _ = self.bustDirCacheRecursive(globalThis, full_path);
                         }
                     }
                 }
@@ -240,7 +240,7 @@ pub fn bustDirCacheRecursive(self: *FileSystemRouter, globalThis: *jsc.JSGlobalO
     }
 
 pub fn bustDirCache(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject) void {
-            _ = self.bustDirCacheRecursive(self, globalThis, strings.withoutTrailingSlashWindowsPath(self.router.config.dir));
+            _ = self.bustDirCacheRecursive(globalThis, strings.withoutTrailingSlashWindowsPath(self.router.config.dir));
     }
 
 pub fn reload(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {

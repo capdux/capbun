@@ -139,8 +139,10 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
     // Fast path: no profile to attach, so the bare VP8/VP8L RIFF that
     // `WebPEncodeRGBA` produced is already the final container. Avoids the
     // mux round-trip (and its extra copy) for the common sRGB case.
-    const profile = icc_profile ??
-        return { bytes: bitstream, free: codecs.Encoded.wrap(WebPFree) };
+    if (icc_profile == null) {
+        return codecs.Encoded{ bytes: bitstream, free: codecs.Encoded.wrap(WebPFree) };
+    }
+    const profile = icc_profile.?;
     if (profile.len == 0)
         return { bytes: bitstream, free: codecs.Encoded.wrap(WebPFree) };
 

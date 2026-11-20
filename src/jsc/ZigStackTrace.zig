@@ -56,7 +56,7 @@ pub const ZigSourceLine = struct {
 };
 
 pub const ZigSourceLineIterator = struct {
-    trace: *const ZigStackTrace,
+    trace: ZigStackTrace,
     i: i32,
 
 pub fn getLength(self: *ZigSourceLineIterator) usize {

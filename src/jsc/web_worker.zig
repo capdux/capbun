@@ -249,7 +249,7 @@ pub fn create(cpp_worker: *anyopaque, parent: *jsc.VirtualMachine, name_str: bun
 
 });
             } else {
-                var empty_argv: [0]WTFStringImpl = &.{};
+                var empty_argv: [0]WTFStringImpl = undefined;
                 _ = &empty_argv;
                 exec_argv_slice = empty_argv[0..0];
             }

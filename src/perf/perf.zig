@@ -86,7 +86,9 @@ _ = ctx.end();
 
 pub const DisabledCtx = struct {
 
-pub inline fn end() void {
+pub inline fn end(self: DisabledCtx) void {
+            const unused = self;
+            _ = &unused;
     }
 };
 

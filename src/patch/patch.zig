@@ -278,7 +278,7 @@ const filepath = bun.PathString.init(bun.handleOom(arena_alloc.allocator().dupeZ
                 var nodefs = bun.api.node.fs.NodeFS{  };
                 _ = &nodefs;
                 if ((filedir.len > 0)) {
-                    if (nodefs.mkdirRecursive(.{ .path = .{ .string = bun.PathString.init(filedir) }, .recursive = true, .mode = (if (comptime @typeInfo(@TypeOf(@intFromEnum(mode))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromEnum(mode))) else cp_cast_int(i32, @intFromEnum(mode))) }).asErr()) |e| {
+                    if (nodefs.mkdirRecursive(.{ .path = .{ .string = bun.PathString.init(filedir) }, .recursive = true, .mode = @intCast(@intFromEnum(mode)) }).asErr()) |e| {
                         _ = &e;
                         return e.withoutPath();
                     }

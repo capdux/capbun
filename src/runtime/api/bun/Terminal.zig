@@ -843,7 +843,7 @@ pub fn createPtyPosix(cols: u16, rows: u16) CreatePtyError!PtyResult {
         }
 },
 });
-        return PtyResult{ .master = master_fd_desc, .read_fd = read_fd, .write_fd = write_fd, .slave = slave_fd_desc, .hpcon = .{} };
+        return PtyResult{ .master = master_fd_desc, .read_fd = read_fd, .write_fd = write_fd, .slave = slave_fd_desc, .hpcon = undefined };
 }
 
 pub fn createOverlappedPipePair(server_access: u32) CreatePtyError!PipePair {

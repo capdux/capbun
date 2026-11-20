@@ -1742,3 +1742,5 @@
 - **[2026-11-20] Wave 21 A 组 (20 模块) + GEMINI.md 第十节**：更新 `resolver/{fs,package_json,resolver}`, `js_parser/{ast/{skipTypescript,P,Expr,parse,parseProperty,parseSuffix,ImportScanner,Stmt,base},lexer}`, `js_printer/js_printer`, `bundler/options`, `bundler_jsc/output_file_jsc`, `interchange/json`, `sourcemap/ParsedSourceMap`, `bake/DevServer{,/SourceMapStore}`, `GEMINI.md`。
 
 - **[2026-11-20] Wave 21 C 组 (17 模块)**：更新 `bun_core/deprecated`, `http/Headers`, `install/{TarballStream,lifecycle_script_runner,npm,repository}`, `io/openForWriting`, `jsc/{AnyPromise,ConsoleObject,Debugger,EventLoopHandle,GarbageCollectionController,HTTPServerAgent,PosixSignalHandle,RefString,RuntimeTranspilerCache,Task}`。
+
+- **[2026-11-20] Wave 21 D 组 (29 模块)**：更新 `jsc/{RuntimeTranspilerStore,ZigStackFrame,ZigStackTrace,array_buffer,rare_data,web_worker}`, `logger/logger`, `meta/meta`, `patch/patch`, `perf/perf`, `router/router`, `runtime/{api/{BunObject,JSBundler,JSTranspiler,UnsafeObject,filesystem_router,html_rewriter,bun/{SecureContext,Terminal,process,subprocess}},crypto/HMAC,dns_jsc/cares_jsc,ffi/ffi,image/{codec_gif,codec_webp,quantize,thumbhash},node/Stat}`。

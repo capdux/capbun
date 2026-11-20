@@ -541,7 +541,7 @@ pub struct TransformTask {
         };
 
         const parse_result = _.transpiler.parse(parse_options, null) orelse {
-            _.@"err" = error.ParseError;
+            _.e = error.ParseError;
             return;
         };
 

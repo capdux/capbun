@@ -213,7 +213,7 @@ fn mapFloydSteinberg(
             }
         }
         // Slide: next row's error becomes current; clear next.
-        std.mem.swap([]i32, &cur, &nxt);
+        std.mem.swap(@TypeOf(cur), &cur, &nxt);
         @memset(nxt, 0);
     }
 }

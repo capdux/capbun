@@ -33,7 +33,7 @@ pub fn size(self: HMAC) usize {
         return BoringSSL.HMAC_size((&self.ctx));
 }
 
-pub fn copy(self: *HMAC) *HMAC {
+pub fn copy(self: *HMAC) !*HMAC {
         var ctx: BoringSSL.HMAC_CTX = undefined;
         _ = &ctx;
         _ = BoringSSL.HMAC_CTX_init((&ctx));

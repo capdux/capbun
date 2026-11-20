@@ -220,7 +220,8 @@ const NameFormatterImpl = struct {
         let frame: api.StackFrame = comptime std.mem.zeroes(api.StackFrame);
         if (!_.function_name.isEmpty()) {
             let slicer = _.function_name.toUTF8(allocator);
-            frame.function_name = (slicer.cloneIfBorrowed(allocator)?).slice();
+            const cloned = slicer.cloneIfBorrowed(allocator)?;
+            frame.function_name = cloned.slice();
         }
 
         if (!_.source_url.isEmpty()) {

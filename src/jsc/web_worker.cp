@@ -272,7 +272,7 @@ pub struct LiveWorkers {
             if (ptr := execArgv_ptr) {
                 exec_argv_slice = unsafe { ptr[0..execArgv_len] };
             } else {
-                let empty_argv: [0]WTFStringImpl = [];
+                let empty_argv: [0]WTFStringImpl = undefined;
                 exec_argv_slice = empty_argv[0..0];
             }
         }

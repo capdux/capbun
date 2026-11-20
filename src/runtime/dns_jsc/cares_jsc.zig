@@ -534,9 +534,10 @@ pub fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u
         _ = bun.assert(response.isObject());
         break :blk response;
 });
-        var upper: struct { lookup_name.len } = undefined;
+        const upper_len = (comptime lookup_name.len);
+        _ = &upper_len;
+        var upper: [upper_len]u8 = undefined;
         _ = &upper;
-        u8 = undefined;
         var idx: usize = 0;
         _ = &idx;
         while ((idx < lookup_name.len)) {

@@ -123,7 +123,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
         return error.DecodeFailed;
     const lsd_packed = bytes[10];
     const has_gct = (lsd_packed & 0x80) != 0;
-    const gct_size: u16 = if (has_gct) @as(u16, 1) << @intCast((lsd_packed & 7) + 1) else 0;
+    const gct_size: u16 = if (has_gct) @as(u16, 1) << @as(u4, @intCast((lsd_packed & 7) + 1)) else 0;
 
     let i: usize = @as(usize, 13) + @as(usize, gct_size) * 3;
     if (i > bytes.len) return error.DecodeFailed;

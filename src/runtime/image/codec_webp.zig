@@ -172,7 +172,10 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
             return error.EncodeFailed;
         }
         const bitstream = out.?[0..len];
-        const profile = ((icc_profile) orelse { return .{ .ok = .{ .bytes = bitstream, .free = codecs.Encoded.wrap(WebPFree) } }; });
+        if ((icc_profile == null)) {
+            return codecs.Encoded{ .bytes = bitstream, .free = codecs.Encoded.wrap(WebPFree) };
+        }
+        const profile = icc_profile.?;
         if ((profile.len == 0)) {
             return .{ .bytes = bitstream, .free = codecs.Encoded.wrap(WebPFree) };
         }

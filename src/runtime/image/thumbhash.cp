@@ -113,7 +113,7 @@ pub fn encode(out: *[max_len]u8, w: u32, h: u32, rgba: []const u8): []u8 {
     }
 
     let odd = false;
-    let chs = [lc, pc, qc, ac];
+    let chs: [4]Channel = [lc, pc, qc, ac];
     for (ch of chs) {
         for (f of ch.ac[0..ch.n]) {
             const u: u8 = @intFromFloat(@round(15 * f));

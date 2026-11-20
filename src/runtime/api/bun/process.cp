@@ -1345,10 +1345,11 @@ pub struct PosixSpawnResult {
 
 pub const SpawnOptions = if (Environment.isPosix) PosixSpawnOptions else WindowsSpawnOptions;
 pub const SpawnProcessResult = if (Environment.isPosix) PosixSpawnResult else WindowsSpawnResult;
+type OptCStr = ([*:0]const u8)?;
 pub fn spawnProcess(
     options: *const SpawnOptions,
-    argv: [*:null][*:0]const u8?,
-    envp: [*:null][*:0]const u8?,
+    argv: [*:null]OptCStr,
+    envp: [*:null]OptCStr,
 ): !bun.sys.Maybe(SpawnProcessResult) {
     if (comptime Environment.isPosix) {
         return spawnProcessPosix(

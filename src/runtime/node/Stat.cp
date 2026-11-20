@@ -20,16 +20,18 @@ pub fn StatType(comptime big: bool): type {
 
         inline fn toNanoseconds(ts: StatTimespec): u64 {
             if (ts.sec < 0) {
-                return @as(u64, @intCast(@max(bun.timespec.nsSigned(&bun.timespec{
+                const ts_val: bun.timespec = {
                     sec: @intCast(ts.sec),
                     nsec: @intCast(ts.nsec),
-                }), 0)));
+                };
+                return @as(u64, @intCast(@max(bun.timespec.nsSigned(&ts_val), 0)));
             }
 
-            return bun.timespec.ns(&bun.timespec{
+            const ts_pos: bun.timespec = {
                 sec: @intCast(ts.sec),
                 nsec: @intCast(ts.nsec),
-            });
+            };
+            return bun.timespec.ns(&ts_pos);
         }
 
         fn toTimeMS(ts: StatTimespec): Float {

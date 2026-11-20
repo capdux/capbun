@@ -826,7 +826,7 @@ pub enum StdinFdType: i32 {
     }
 
     pub fn deinit(*_) {
-        if (m := _.mime_types) {
+        if (*m := _.mime_types) {
             m.deinit();
         }
         _.path_buf.deinit();

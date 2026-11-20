@@ -297,7 +297,7 @@ fn createPtyPosix(cols: u16, rows: u16): CreatePtyError!PtyResult {
         read_fd: read_fd,
         write_fd: write_fd,
         slave: slave_fd_desc,
-        hpcon: {},
+        hpcon: undefined,
     };
 }
 

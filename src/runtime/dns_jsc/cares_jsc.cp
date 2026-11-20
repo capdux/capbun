@@ -429,7 +429,7 @@ pub fn anyReplyToJSResponse(reply: *c_ares.struct_any_reply, parent_allocator: s
     return reply.toJS(globalThis, allocator);
 }
 
-fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, response: jsc.JSValue, comptime lookup_name: []const u8): !void {
+fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, response: jsc.JSValue, comptime lookup_name: []const u8): void! {
     const transformed = if (response.isString())
         (jsc.JSObject.create(.{
             .value = response,
@@ -439,7 +439,8 @@ fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, 
         break :blk response;
     };
 
-    let upper: [lookup_name.len]u8 = undefined;
+    const upper_len = comptime lookup_name.len;
+    let upper: [upper_len]u8 = undefined;
     let idx: usize = 0;
     while (idx < lookup_name.len) {
         upper[idx] = std.ascii.toUpper(lookup_name[idx]);
@@ -452,7 +453,7 @@ fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, 
     i.* += 1;
 }
 
-fn anyReplyAppendAll(globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, array: jsc.JSValue, i: *u32, reply: auto, comptime lookup_name: []const u8): !void {
+fn anyReplyAppendAll(globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, array: jsc.JSValue, i: *u32, reply: auto, comptime lookup_name: []const u8): void! {
     const response: jsc.JSValue = if (comptime @hasDecl(@TypeOf(reply.*), "toJSForAny"))
         (reply.toJSForAny(allocator, globalThis, lookup_name) catch |e| return e)
     else

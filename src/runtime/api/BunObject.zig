@@ -1348,7 +1348,8 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
                 }
                 if (try opts.getTruthy(globalThis, "line")) |line_| {
                     _ = &line_;
-                    line = try line_.toSlice(globalThis, arguments.@"arena".allocator()).slice();
+                    const line_slice = try line_.toSlice(globalThis, arguments.@"arena".allocator());
+                    line = line_slice.slice();
                 }
                 if (try opts.getTruthy(globalThis, "column")) |column_| {
                     _ = &column_;
