@@ -3106,3 +3106,5 @@ Options:
 - **[2026-11-20 21:20] Wave 16 Batch A 验收提交（Server/WebCore/EventLoop/Bake 13 模块全绿）**：13/13 PASS（ratio 0.512x~1.147x）并原子提交；B 组（`65620450`）仍在 Gemini 上收尾；后续新子智能体统一继承 Claude Sonnet 5.5 (Medium)，并发 `<= 2`。
 
 - **[2026-11-20 21:21] Wave 16 Batch B 验收提交（SQL/Node/JSC/Shell/Core 20 模块全绿）**：20/20 PASS（Gemini 子智能体收官），并已记录外部根因（`jsc.zig OpaqueCallback`、`GarbageCollectionController`/`WTFTimer`/`PosixSignalHandle`/`ObjectURLRegistry` 缺 `@root struct`、`bundler/options Loader.fromString/toAPI` 缺 `static`、`blob/Store file: *StoreFile`、`BlobAny.toBlob/toString`）；已由 Sonnet 5.5 子智能体 `6c141a28` 接手 webcore/io 侧外部依赖。
+
+- **[2026-11-20 21:22] Wave 16 C 组阶段汇报**：`s3/error_jsc.cp` 修复（`([]const u8)?`，ratio 1.081）；`io/io.cp` 被 `cpc` 缺陷阻塞——fn 指针类型里具名 union 返回类型被降成 `*Action`，已提交上游工单 `task-bun-20261120-fnptr-ret-union`（repro `/data/dev/cp/temp/repro_fnptr_ret.cp`），影响 `Blob.zig:2460`、`blob/read_file.zig:193`、`blob/write_file.zig:166`；`io.cp` 暂不提交，待上游修复后重编。

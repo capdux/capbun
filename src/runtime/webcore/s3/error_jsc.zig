@@ -107,13 +107,13 @@ pub fn throwSignError(err: anyerror, globalThis: *jsc.JSGlobalObject) bun.JSErro
         return (__sw_blk_1: { const __disc_1 = err; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .MissingCredentials)) {  break :__sw_blk_1 cp_val(globalThis.ERR(.S3_MISSING_CREDENTIALS, getSignErrorMessage(error.MissingCredentials), .{}).throw()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .InvalidMethod)) {  break :__sw_blk_1 cp_val(globalThis.ERR(.S3_INVALID_METHOD, getSignErrorMessage(error.InvalidMethod), .{}).throw()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .InvalidPath)) {  break :__sw_blk_1 cp_val(globalThis.ERR(.S3_INVALID_PATH, getSignErrorMessage(error.InvalidPath), .{}).throw()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .InvalidEndpoint)) {  break :__sw_blk_1 cp_val(globalThis.ERR(.S3_INVALID_ENDPOINT, getSignErrorMessage(error.InvalidEndpoint), .{}).throw()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .InvalidSessionToken)) {  break :__sw_blk_1 cp_val(globalThis.ERR(.S3_INVALID_SESSION_TOKEN, getSignErrorMessage(error.InvalidSessionToken), .{}).throw()); } } {  break :__sw_blk_1 cp_val(globalThis.ERR(.S3_INVALID_SIGNATURE, getSignErrorMessage(error.SignError), .{}).throw()); }  unreachable; });
 }
 
-pub fn s3ErrorToJS(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, path: []const ?u8) jsc.JSValue {
+pub fn s3ErrorToJS(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, path: ?[]const u8) jsc.JSValue {
         const value = JSS3Error.init(s3_err.code, s3_err.message, path).toErrorInstance(globalObject);
         _ = bun.assert((!globalObject.hasException()));
         return value;
 }
 
-pub fn s3ErrorToJSWithAsyncStack(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, path: []const ?u8, promise: *jsc.JSPromise) jsc.JSValue {
+pub fn s3ErrorToJSWithAsyncStack(s3_err: *const S3Error, globalObject: *jsc.JSGlobalObject, path: ?[]const u8, promise: *jsc.JSPromise) jsc.JSValue {
         const value = s3ErrorToJS(s3_err, globalObject, path);
         _ = value.attachAsyncStackFromPromise(globalObject, promise);
         return value;
