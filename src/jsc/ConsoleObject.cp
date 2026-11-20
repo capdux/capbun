@@ -723,7 +723,7 @@ pub fn writeTrace(comptime Writer: type, writer: Writer, global: *JSGlobalObject
         e,
         null,
         &holder.need_to_clear_parser_arena_on_deinit,
-        if (source_code_slice != null) &source_code_slice.? else null,
+        &source_code_slice,
         false,
     );
 

@@ -621,7 +621,7 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
             }
         
         pub fn byteSlice(self: @This()) []const u8 {
-                    switch (self.*) {
+                    switch (self) {
         .utf8 => {
         return self.utf8;
         },

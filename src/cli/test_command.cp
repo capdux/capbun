@@ -292,10 +292,7 @@ pub struct JunitReporter {
         let buffer = std.array_list.Managed(u8).init(bun.default_allocator);
         let writer = buffer.writer();
 
-        writer.writeAll(
-            \\    <properties>
-            \\
-        )?;
+        writer.writeAll("    <properties>\n")?;
 
         if (properties.ci.len > 0) {
             writer.writeAll(

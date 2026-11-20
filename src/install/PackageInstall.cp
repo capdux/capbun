@@ -1394,7 +1394,7 @@ pub const PackageInstall = struct {
     }
 
     pub fn install(this: *@This(), skip_delete: bool, destination_dir: std.fs.Dir, method_: Method, resolution_tag: Resolution.Tag) Result {
-        const tracer = bun.perf.trace("PackageInstaller.install");
+        let tracer = bun.perf.trace("PackageInstaller.install");
         defer tracer.end();
 
         // If this fails, we don't care.

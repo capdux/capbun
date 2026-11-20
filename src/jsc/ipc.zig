@@ -1415,7 +1415,7 @@ _ = log("received ipc message: internal: {f}", .{ jsvalue.toFmt((&formatter)) })
                     const cmd_str = (blk_catch_13: { break :blk_catch_13 ((bun.String.fromJS(cmd, globalThis)) catch |e| { _ = &e; break :blk_catch_13 brk: {
                     _ = globalThis.takeException(e);
                     has_cmd = false;
-                    break :brk .empty;
+                    break :brk bun.String.empty;
 }; }); });
                     if ((!has_cmd)) {
                         break :handle_message;

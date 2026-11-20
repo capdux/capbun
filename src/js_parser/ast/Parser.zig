@@ -215,7 +215,8 @@ pub fn analyze(self: *Parser, context: *anyopaque, callback: *const fn (*anyopaq
             }
             var opts = ParseStatementOptions{ .is_module_scope = true };
             _ = &opts;
-            const parse_tracer = bun.perf.trace("JSParser.parse");
+            var parse_tracer = bun.perf.trace("JSParser.parse");
+            _ = &parse_tracer;
             const stmts = (blk_catch_1: { break :blk_catch_1 ((p.parseStmtsUpTo(js_lexer.T.t_end_of_file, (&opts))) catch |e| { _ = &e; if (comptime Environment.isWasm) {
                 _ = Output.print("JSParser.parse: caught error {s} at location: {d}\n", .{ @errorName(e), p.lexer.loc().start });
                 _ = (blk_catch_2: { break :blk_catch_2 ((p.log.print(Output.writer())) catch |__ce_2| { _ = &__ce_2;  }); });
@@ -312,7 +313,8 @@ pub fn _parse(self: Parser, comptime ParserType: type) !js_ast.Result {
             }
             var opts = ParseStatementOptions{ .is_module_scope = true };
             _ = &opts;
-            const parse_tracer = bun.perf.trace("JSParser.parse");
+            var parse_tracer = bun.perf.trace("JSParser.parse");
+            _ = &parse_tracer;
             const stmts = (blk_catch_7: { break :blk_catch_7 ((p.parseStmtsUpTo(js_lexer.T.t_end_of_file, (&opts))) catch |e| { _ = &e; _ = parse_tracer.end();
             if ((e == error.StackOverflow)) {
                 _ = try p.log.addError(p.source, p.lexer.loc(), "Maximum call stack size exceeded");

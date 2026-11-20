@@ -277,7 +277,7 @@ pub struct Parser {
 
         // Parse the file in the first pass, but do not bind symbols
         let opts = ParseStatementOptions{ is_module_scope: true };
-        const parse_tracer = bun.perf.trace("JSParser.parse");
+        let parse_tracer = bun.perf.trace("JSParser.parse");
 
         const stmts = p.parseStmtsUpTo(js_lexer.T.t_end_of_file, &opts) catch |e| {
             if (comptime Environment.isWasm) {
@@ -403,7 +403,7 @@ pub struct Parser {
 
         // Parse the file in the first pass, but do not bind symbols
         let opts = ParseStatementOptions{ is_module_scope: true };
-        const parse_tracer = bun.perf.trace("JSParser.parse");
+        let parse_tracer = bun.perf.trace("JSParser.parse");
 
         // Parsing seems to take around 2x as much time as visiting.
         // Which makes sense.

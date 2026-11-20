@@ -804,7 +804,8 @@ pub fn flushDebugLogs(r: *ThisResolver, flush_mode: DebugLogs.FlushMode) !void {
     }
 
 pub fn resolveAndAutoInstall(r: *ThisResolver, source_dir: []const u8, import_path: []const u8, kind: ast.ImportKind, global_cache: GlobalCache) Result.Union {
-            const tracer = bun.perf.trace("ModuleResolver.resolve");
+            var tracer = bun.perf.trace("ModuleResolver.resolve");
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }

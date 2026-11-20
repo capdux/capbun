@@ -148,7 +148,8 @@ pub fn start(self: *ProcessHandle) !void {
             _ = bun.handleOom(self.state.env.map.put("PATH", original_path));
             }
             const envp = try self.state.env.map.createNullDelimitedEnvMap(arena_.allocator());
-            const argv_ptr: ?[*:null][*:0]u8 = (blk: {
+            const OptCstr = try cstr;
+            const argv_ptr: [*:null]OptCstr = (blk: {
             break :blk @ptrCast((&argv));
 
 });

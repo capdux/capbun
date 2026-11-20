@@ -100,13 +100,15 @@ pub fn BabyList(comptime Type: type): type {
                 {};
 
             if (comptime @TypeOf(allocator) == void) {
-                unsafe {
-                    list_ptr.* = .empty;
+                if (comptime @typeInfo(ListArgType) == .pointer) {
+                    unsafe {
+                        list_ptr.* = .empty;
+                    }
                 }
             } else {
                 result.#allocator.set(bun.allocators.asStd(allocator));
                 // `moveToUnmanaged` already cleared the old list.
-                if (comptime !std.meta.hasFn(ListType, "moveToUnmanaged")) {
+                if (comptime !std.meta.hasFn(ListType, "moveToUnmanaged") && @typeInfo(ListArgType) == .pointer) {
                     unsafe {
                         list_ptr.* = .init(allocator);
                     }

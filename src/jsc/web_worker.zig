@@ -392,16 +392,16 @@ pub fn startVM(self: *WebWorker) !void {
             _ = temp_proxy_storage.deinit();
             _ = self.shutdown();
         }
-        var vm = try jsc.VirtualMachine.initWorker(self, .{ .allocator = allocator, .args = transform_options, .env_loader = loader, .store_fd = self.store_fd, .graph = self.parent.standalone_module_graph });
-        _ = &vm;
-        (vm).?.allocator = allocator;
-        (vm).?.@"arena" = (&self.@"arena".?);
-        (vm).?.proxy_env_storage = temp_proxy_storage;
+        var worker_vm = try jsc.VirtualMachine.initWorker(self, .{ .allocator = allocator, .args = transform_options, .env_loader = loader, .store_fd = self.store_fd, .graph = self.parent.standalone_module_graph });
+        _ = &worker_vm;
+        worker_vm.allocator = allocator;
+        worker_vm.@"arena" = (&self.@"arena".?);
+        worker_vm.proxy_env_storage = temp_proxy_storage;
         temp_proxy_storage = .{};
-        (vm).?.is_main_thread = false;
+        worker_vm.is_main_thread = false;
         jsc.VirtualMachine.is_main_thread_vm = false;
-        (vm).?.onUnhandledRejection = WebWorker.onUnhandledRejection;
-        var b = (&(vm).?.transpiler);
+        worker_vm.onUnhandledRejection = WebWorker.onUnhandledRejection;
+        var b = (&worker_vm.transpiler);
         _ = &b;
         b.resolver.env_loader = b.env;
         if (self.parent.standalone_module_graph) |graph| {
@@ -414,27 +414,27 @@ pub fn startVM(self: *WebWorker) !void {
                 defer {
                 _ = self.vm_lock.unlock();
                 }
-                self.vm = vm;
+                self.vm = worker_vm;
             }
             return;
         }
-        _ = (blk_catch_6: { break :blk_catch_6 ((b.configureDefines()) catch |__ce_6| { _ = &__ce_6; (vm).?.exit_handler.exit_code = 1;
+        _ = (blk_catch_6: { break :blk_catch_6 ((b.configureDefines()) catch |__ce_6| { _ = &__ce_6; worker_vm.exit_handler.exit_code = 1;
         {
             _ = self.vm_lock.lock();
             defer {
             _ = self.vm_lock.unlock();
             }
-            self.vm = vm;
+            self.vm = worker_vm;
         }
         _ = self.setRequestedTerminate();
         return; }); });
-        _ = (vm).?.loadExtraEnvAndSourceCodePrinter();
+        _ = worker_vm.loadExtraEnvAndSourceCodePrinter();
         {
             _ = self.vm_lock.lock();
             defer {
             _ = self.vm_lock.unlock();
             }
-            self.vm = vm;
+            self.vm = worker_vm;
         }
 }
 

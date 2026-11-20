@@ -176,12 +176,14 @@ pub fn moveFromList(list_ptr: anytype) Self {
             const allocator = (if (comptime @hasField(ListType, "allocator")) list_ptr.allocator else (if (comptime std.meta.hasFn(ListType, "allocator")) list_ptr.allocator() else ({
 })));
             if (comptime (@TypeOf(allocator) == void)) {
-                {
-                    list_ptr.* = .empty;
+                if (comptime (@typeInfo(ListArgType) == .pointer)) {
+                    {
+                        list_ptr.* = .empty;
+                    }
                 }
             } else {
                 _ = result.#allocator.set(bun.allocators.asStd(allocator));
-                if (comptime (!std.meta.hasFn(ListType, "moveToUnmanaged"))) {
+                if (comptime ((!std.meta.hasFn(ListType, "moveToUnmanaged")) and (@typeInfo(ListArgType) == .pointer))) {
                     {
                         list_ptr.* = .init(allocator);
                     }

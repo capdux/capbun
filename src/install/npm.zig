@@ -894,7 +894,7 @@ pub fn parse(allocator: std.mem.Allocator, scope: *const Registry.Scope, log: *l
                 const field = ((name_q.expr.asString(allocator)) orelse { return null; });
                 _ = string_builder.count(field);
             }
-            const dependency_groups: []DependencyGroup = .{ DependencyGroup{ .prop = "dependencies", .field = "dependencies" }, DependencyGroup{ .prop = "optionalDependencies", .field = "optional_dependencies" }, DependencyGroup{ .prop = "peerDependencies", .field = "peer_dependencies" } };
+            const dependency_groups: [3]DependencyGroup = .{ DependencyGroup{ .prop = "dependencies", .field = "dependencies" }, DependencyGroup{ .prop = "optionalDependencies", .field = "optional_dependencies" }, DependencyGroup{ .prop = "peerDependencies", .field = "peer_dependencies" } };
             var release_versions_len: usize = 0;
             _ = &release_versions_len;
             var pre_versions_len: usize = 0;

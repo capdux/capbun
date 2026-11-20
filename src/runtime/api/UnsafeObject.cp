@@ -59,7 +59,7 @@ pub fn arrayBufferToString(
 
 extern fn dump_zone_malloc_stats() ;
 
-fn dump_mimalloc(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+fn dump_mimalloc(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
     globalObject.bunVM().@"arena".dumpStats();
     if (bun.heap_breakdown.enabled) {
         dump_zone_malloc_stats();

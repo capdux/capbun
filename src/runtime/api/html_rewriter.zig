@@ -455,7 +455,7 @@ pub fn transform_(self: *HTMLRewriter, global: *JSGlobalObject, response_value: 
                         _ = &mut_e;
                         var duped_err = mut_e.dupe(sink.global);
                         _ = &duped_err;
-                        _ = (blk_catch_2: { break :blk_catch_2 ((sinkBodyValue.toErrorInstance((&duped_err), sink.global)) catch |__ce_2| { _ = &__ce_2;  }); });
+                        _ = (blk_catch_2: { break :blk_catch_2 ((sinkBodyValue.toErrorInstance(duped_err, sink.global)) catch |__ce_2| { _ = &__ce_2;  }); });
                     } else {
                         var ret_err = createLOLHTMLError(sink.global);
                         _ = &ret_err;

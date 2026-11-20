@@ -17,7 +17,8 @@ fn isOomOnlyError(comptime ErrorUnionOrSet: type): bool {
 
 fn ErrorSetWithoutOom(comptime ErrorSet: type): type {
     const errs = @typeInfo(ErrorSet).error_set ?? return ErrorSet;
-    let out: [errs.len]std.builtin.Type.Error = undefined;
+    const err_count = errs.len;
+    let out: [err_count]std.builtin.Type.Error = undefined;
     let n: usize = 0;
     for (err_item of errs) {
         if (!std.mem.eql(u8, err_item.name, "OutOfMemory")) {

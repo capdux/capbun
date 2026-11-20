@@ -208,7 +208,8 @@ pub struct Transpiler {
 
             // Only re-query if we previously had something cached.
             if (transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name))) {
-                if (result := _resolveEntryPoint(transpiler, entry_point) catch null) {
+                const maybe_result: _resolver.Result? = _resolveEntryPoint(transpiler, entry_point) catch null;
+                if (result := maybe_result) {
                     return result;
                 }
             }

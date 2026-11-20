@@ -33,7 +33,7 @@ pub fn init(comptime name: []const u8) FallbackModule {
             _ = @setEvalBranchQuota(99999);
             const version: []const u8 = "0.0.0-polyfill";
             const code_path = (("node-fallbacks/" ++ name) ++ ".js");
-            return FallbackModule{ .path = Fs.Path.initWithNamespaceVirtual(((import_path ++ name) ++ "/index.js"), "node", name), .package_json = (&PackageJSON{ .name = name, .version = version, .module_type = .esm, .main_fields = undefined, .browser_map = undefined, .source = logger.Source.initPathString(((import_path + name) + "/package.json"), ""), .side_effects = .false }), .code = createSourceCodeGetter(code_path) };
+            return FallbackModule{ .path = Fs.Path.initWithNamespaceVirtual(((import_path ++ name) ++ "/index.js"), "node", name), .package_json = (&PackageJSON{ .name = name, .version = version, .module_type = .esm, .main_fields = undefined, .browser_map = undefined, .source = logger.Source.initPathString(((import_path ++ name) ++ "/package.json"), ""), .side_effects = .false }), .code = createSourceCodeGetter(code_path) };
     }
 };
 

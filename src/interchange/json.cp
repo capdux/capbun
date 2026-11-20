@@ -942,7 +942,7 @@ pub fn parseEnvJSON(source: *const logger.Source, log: *logger.Log, allocator: s
                     return Expr{ .loc = logger.Loc{ .start = 0 }, .data = .{ .e_boolean = E.Boolean{ .value = false } } };
                 },
                 .t_null => {
-                    return Expr{ .loc = logger.Loc{ .start = 0 }, .data = .{ .e_null = E.Null{} } };
+                    return Expr{ .loc = logger.Loc{ .start = 0 }, .data = .{ .e_null = std.mem.zeroes(E.Null) } };
                 },
                 .t_identifier => {
                     if (strings.eqlComptime(parser.lexer.identifier, "undefined")) {

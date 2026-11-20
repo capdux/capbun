@@ -77,7 +77,7 @@ pub const AnyRoute = union(enum) {
         }
     }
 
-    fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
+    fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext): (AnyRoute?) ! bun.JSError {
         if (!argument.isObject()) return null;
 
         const path_val = (argument.get(init_ctx.global, "path")?) orelse return null;

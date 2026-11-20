@@ -2837,7 +2837,7 @@ pub fn writeTrace(comptime Writer: type, writer: Writer, global: *JSGlobalObject
         var e = ZigString.init("trace output").toErrorInstance(global);
         _ = &e;
         _ = e.toZigException(global, exception);
-        _ = vm.remapZigException(exception, e, null, (&holder.need_to_clear_parser_arena_on_deinit), (if ((source_code_slice != null)) (&source_code_slice.?) else null), false);
+        _ = vm.remapZigException(exception, e, null, (&holder.need_to_clear_parser_arena_on_deinit), (&source_code_slice), false);
         if (Output.enable_ansi_colors_stderr) {
             _ = (blk_catch_68: { break :blk_catch_68 ((VirtualMachine.printStackTrace(Writer, writer, exception.stack, true)) catch |__ce_68| { _ = &__ce_68;  }); });
         } else {

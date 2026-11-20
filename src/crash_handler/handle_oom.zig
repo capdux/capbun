@@ -94,9 +94,10 @@ else => @compileError("argument must be an error union or error set"),
 
 pub fn ErrorSetWithoutOom(comptime ErrorSet: type) type {
         const errs = ((@typeInfo(ErrorSet).error_set) orelse { return ErrorSet; });
-        var out: struct { errs.len } = undefined;
+        const err_count = errs.len;
+        _ = &err_count;
+        var out: [err_count]std.builtin.Type.Error = undefined;
         _ = &out;
-        std.builtin.Type.Error = undefined;
         var n: usize = 0;
         _ = &n;
         for (cp_iter_slice(errs)) |err_item| {

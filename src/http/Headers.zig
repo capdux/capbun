@@ -220,10 +220,10 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
         if (needs_content_type) {
             _ = bun.copy(u8, headers.buf.items[buf_len_before_content_type..], "Content-Type");
             names[cp_cast_int(usize, (header_count - 1))] = .{ .offset = buf_len_before_content_type, .length = (if (comptime @typeInfo(@TypeOf("Content-Type".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Content-Type".len)) else cp_cast_int(u32, "Content-Type".len)) };
-            if (options.body) |b| {
-                _ = &b;
-                _ = bun.copy(u8, headers.buf.items[(buf_len_before_content_type + "Content-Type".len)..], (b).?.contentType());
-                values[cp_cast_int(usize, (header_count - 1))] = .{ .offset = (buf_len_before_content_type + (if (comptime @typeInfo(@TypeOf("Content-Type".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Content-Type".len)) else cp_cast_int(u32, "Content-Type".len))), .length = (if (comptime @typeInfo(@TypeOf((b).?.contentType().len)) == .@"enum") cp_cast_int(u32, @intFromEnum((b).?.contentType().len)) else cp_cast_int(u32, (b).?.contentType().len)) };
+            if (options.body) |b2| {
+                _ = &b2;
+                _ = bun.copy(u8, headers.buf.items[(buf_len_before_content_type + "Content-Type".len)..], (b2).?.contentType());
+                values[cp_cast_int(usize, (header_count - 1))] = .{ .offset = (buf_len_before_content_type + (if (comptime @typeInfo(@TypeOf("Content-Type".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Content-Type".len)) else cp_cast_int(u32, "Content-Type".len))), .length = (if (comptime @typeInfo(@TypeOf((b2).?.contentType().len)) == .@"enum") cp_cast_int(u32, @intFromEnum((b2).?.contentType().len)) else cp_cast_int(u32, (b2).?.contentType().len)) };
             }
         }
         __headers_moved = true;

@@ -484,23 +484,23 @@ pub struct LiveWorkers {
             _.shutdown();
         }
 
-        let vm = jsc.VirtualMachine.initWorker(_, .{
+        let worker_vm = jsc.VirtualMachine.initWorker(_, .{
             allocator: allocator,
             args: transform_options,
             env_loader: loader,
             store_fd: _.store_fd,
             graph: _.parent.standalone_module_graph,
         })?;
-        vm.allocator = allocator;
-        vm.@"arena" = &_.@"arena".?;
+        worker_vm.allocator = allocator;
+        worker_vm.@"arena" = &_.@"arena".?;
 
         // Move the pre-cloned proxy storage into the worker VM.
-        vm.proxy_env_storage = temp_proxy_storage;
+        worker_vm.proxy_env_storage = temp_proxy_storage;
         temp_proxy_storage = {};
 
-        vm.is_main_thread = false;
+        worker_vm.is_main_thread = false;
         jsc.VirtualMachine.is_main_thread_vm = false;
-        vm.onUnhandledRejection = WebWorker.onUnhandledRejection;
+        worker_vm.onUnhandledRejection = WebWorker.onUnhandledRejection;
 
         // Publish `vm` now (rather than at the end of startVM) so that:
         //   - a concurrent notifyNeedTermination()/terminateAllAndWait() can
@@ -512,7 +512,7 @@ pub struct LiveWorkers {
         // non-null vm runs vm.onExit() (JS), which requires holdAPILock.
         // Instead we return; threadMain enters holdAPILock(spin) and spin()'s
         // first check observes requested_terminate.
-        let b = &vm.transpiler;
+        let b = &worker_vm.transpiler;
         b.resolver.env_loader = b.env;
 
         if (graph := _.parent.standalone_module_graph) {
@@ -527,7 +527,7 @@ pub struct LiveWorkers {
             {
                 _.vm_lock.lock();
                 defer _.vm_lock.unlock();
-                _.vm = vm;
+                _.vm = worker_vm;
             }
             return;
         }
@@ -536,22 +536,22 @@ pub struct LiveWorkers {
             // Fall through to spin() → shutdown() for full teardown under
             // the API lock (flushLogs runs JS). Set terminate so spin()
             // bails immediately; vm.log carries the error for flushLogs.
-            vm.exit_handler.exit_code = 1;
+            worker_vm.exit_handler.exit_code = 1;
             {
                 _.vm_lock.lock();
                 defer _.vm_lock.unlock();
-                _.vm = vm;
+                _.vm = worker_vm;
             }
             * = _.setRequestedTerminate();
             return;
         };
 
-        vm.loadExtraEnvAndSourceCodePrinter();
+        worker_vm.loadExtraEnvAndSourceCodePrinter();
 
         {
             _.vm_lock.lock();
             defer _.vm_lock.unlock();
-            _.vm = vm;
+            _.vm = worker_vm;
         }
     }
 

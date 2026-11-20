@@ -334,7 +334,8 @@ pub struct TSConfigJSON {
 
     pub static fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: string, allocator: std.mem.Allocator): ([]string)! {
         if (text.len == 0) {
-            return &([]);
+            let empty_parts: [0][]const u8 = [];
+            return empty_parts[0..0];
         }
         const parts_count = std.mem.count(u8, text, ".") + @as(usize, @intFromBool(text[text.len - 1] != '.'));
         let parts = std.array_list.Managed(string).initCapacity(allocator, parts_count) catch unreachable;

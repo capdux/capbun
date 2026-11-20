@@ -370,7 +370,9 @@ pub fn isValidTSConfigPathPattern(text: []const u8, log: *logger.Log, source: *c
 
 pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: []const u8, allocator: std.mem.Allocator) ![][]const u8 {
             if ((text.len == 0)) {
-                return (&&.{});
+                var empty_parts: [0][]const u8 = &.{};
+                _ = &empty_parts;
+                return empty_parts[0..0];
             }
             const parts_count = (std.mem.count(u8, text, ".") + (if (comptime @typeInfo(@TypeOf(@intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))) else cp_cast_int(usize, @intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))));
             var parts = ((std.array_list.Managed(string).initCapacity(allocator, parts_count)) catch unreachable);

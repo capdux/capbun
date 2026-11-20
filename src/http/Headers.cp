@@ -184,11 +184,11 @@ export @root @value struct Headers {
                 length: "Content-Type".len as u32,
             };
 
-            if (b := options.body) {
-                bun.copy(u8, headers.buf.items[buf_len_before_content_type + "Content-Type".len..], b.contentType());
+            if (b2 := options.body) {
+                bun.copy(u8, headers.buf.items[buf_len_before_content_type + "Content-Type".len..], b2.contentType());
                 values[header_count - 1] = {
                     offset: buf_len_before_content_type + ("Content-Type".len as u32),
-                    length: b.contentType().len as u32,
+                    length: b2.contentType().len as u32,
                 };
             }
         }

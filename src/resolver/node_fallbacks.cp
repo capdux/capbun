@@ -42,7 +42,7 @@ pub struct FallbackModule {
                 module_type: .esm,
                 main_fields: undefined,
                 browser_map: undefined,
-                source: logger.Source.initPathString(import_path + name + "/package.json", ""),
+                source: logger.Source.initPathString(import_path ++ name ++ "/package.json", ""),
                 side_effects: .false,
             },
             code: createSourceCodeGetter(code_path),

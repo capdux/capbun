@@ -1193,7 +1193,7 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
                 const cmd_str = bun.String.fromJS(cmd, globalThis) catch |e| brk: {
                     * = globalThis.takeException(e);
                     has_cmd = false;
-                    break :brk .empty;
+                    break :brk bun.String.empty;
                 };
                 if (!has_cmd) break :handle_message;
                 if (cmd_str.eqlComptime("NODE_HANDLE")) {

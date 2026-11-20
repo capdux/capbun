@@ -1833,7 +1833,7 @@ pub struct PackageManifest {
             string_builder.count(field);
         }
 
-        const dependency_groups = [
+        const dependency_groups: [3]DependencyGroup = [
             DependencyGroup{ prop: "dependencies", field: "dependencies" },
             DependencyGroup{ prop: "optionalDependencies", field: "optional_dependencies" },
             DependencyGroup{ prop: "peerDependencies", field: "peer_dependencies" },

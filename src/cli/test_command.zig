@@ -256,7 +256,7 @@ pub fn generatePropertiesList(self: *JunitReporter) !void {
             _ = &buffer;
             var writer = buffer.writer();
             _ = &writer;
-            _ = try writer.writeAll("    <properties>", "");
+            _ = try writer.writeAll("    <properties>\n");
             if ((properties.ci.len > 0)) {
                 _ = try writer.writeAll("      <property name=\"ci\" value=\"");
                 _ = try escapeXml(properties.ci, writer);

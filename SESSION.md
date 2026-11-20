@@ -3168,3 +3168,5 @@ Options:
 - **[2026-11-20 23:00] Wave 22 D 组 + `bindgen.cp` 验收提交（26 模块全绿）+ Wave 23 `zig:check`**：完成 11 外部根因 + 15 长尾模块 + `jsc/bindgen.cp`（`BindgenOptional.convertFromExtern` 返回 `ZigType` 消除 `codegen/bindgen_generated` 2 错）独立验收（26/26 PASS，ratio 0.536x~1.055x）并原子提交；Wave 22 全部 112 模块已清仓。
 
 - **[2026-11-20 23:05] Wave 23 A 组验收提交（18 模块全绿）**：完成 JSParser/Bundler/Bake/Interchange/Sourcemap 18 模块独立验收（18/18 PASS，ratio 0.877x~1.051x）并原子提交；已流水线补派 D 组扫荡剩余全部 39 个 1 错长尾。
+
+- **[2026-11-20 23:08] Wave 23 C 组验收提交（32 模块全绿）**：完成 1 错长尾第 1 批 32 模块独立验收（32/32 PASS，ratio 0.814x~1.167x，`json.cp` 原无备份除外）并原子提交；记录 3 外部根因（`node_process.cp` `ProcessParamKV`、`bun.cp` `MakePath.makeOpenPath`、`bundler/options.cp:1003` `blob_to_deinit`）。

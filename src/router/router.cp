@@ -228,20 +228,18 @@ pub struct Routes {
         }
 
         if (path.len == 0) {
-            if (idx := _.index) {
-                return Match{
-                    .params = params,
-                    .name = idx.name,
-                    .path = idx.abs_path.slice(),
-                    .pathname = url_path.pathname,
-                    .basename = idx.basename,
-                    .hash = index_route_hash,
-                    .file_path = idx.abs_path.slice(),
-                    .query_string = url_path.query_string,
-                    .client_framework_enabled = _.client_framework_enabled,
-                };
-            }
-            return null;
+            const idx = _.index orelse return null;
+            return Match{
+                .params = params,
+                .name = idx.name,
+                .path = idx.abs_path.slice(),
+                .pathname = url_path.pathname,
+                .basename = idx.basename,
+                .hash = index_route_hash,
+                .file_path = idx.abs_path.slice(),
+                .query_string = url_path.query_string,
+                .client_framework_enabled = _.client_framework_enabled,
+            };
         }
 
         let matcher = MatchContextType{ .params = params.* };

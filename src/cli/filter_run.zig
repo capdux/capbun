@@ -134,7 +134,8 @@ pub fn start(self: *ProcessHandle) !void {
             _ = arena_allocator.deinit();
             }
             const envp = try getEnvp(self.state.env, self.config.PATH, arena_allocator.allocator());
-            const argv_ptr: ?[*:null][*:0]u8 = (blk: {
+            const OptCstr = try cstr;
+            const argv_ptr: [*:null]OptCstr = (blk: {
             break :blk @ptrCast((&argv));
 
 });

@@ -152,7 +152,7 @@ pub struct RuntimeTranspilerCache {
             }
 
             fn byteSlice(): []const u8 {
-                switch (_.*) {
+                switch (_) {
                     .utf8 => return _.utf8,
                     .string => return _.string.byteSlice(),
                 }

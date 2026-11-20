@@ -1778,7 +1778,8 @@ pub fn checkTimeouts(self: *Resolver, now: *const timespec, vm: *jsc.VirtualMach
             }
             }
             self.event_loop_timer.state = .PENDING;
-            if ((blk_catch_14: { break :blk_catch_14 ((self.getChannelOrError(vm.global)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 @as(*c_ares.Channel, null); }); })) |channel| {
+            const maybe_channel: ?*c_ares.Channel = (blk_catch_14: { break :blk_catch_14 ((self.getChannelOrError(vm.global)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 @as(*c_ares.Channel, null); }); });
+            if (maybe_channel) |channel| {
                 _ = &channel;
                 if (self.anyRequestsPending()) {
                     _ = c_ares.ares_process_fd(channel, c_ares.ARES_SOCKET_BAD, c_ares.ARES_SOCKET_BAD);

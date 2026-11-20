@@ -220,7 +220,7 @@ pub struct LifecycleScriptSubprocess {
 
             windows: if (Environment.isWindows) .{
                 .loop = jsc.EventLoopHandle.init(&manager.event_loop),
-            } else .{},
+            } else undefined,
 
             stream: false,
         };

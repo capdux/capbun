@@ -170,7 +170,8 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
         WebPFree(@constCast(assembled.bytes));
         return error.EncodeFailed;
     }
-    const assembled_ptr = @constCast(assembled.bytes ?? return error.EncodeFailed);
+    if (assembled.bytes == null) return error.EncodeFailed;
+    const assembled_ptr = @constCast(assembled.bytes.?);
     return { bytes: assembled_ptr[0..assembled.size], free: codecs.Encoded.wrap(WebPFree) };
 }
 

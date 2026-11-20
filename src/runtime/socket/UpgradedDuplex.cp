@@ -94,23 +94,24 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             return;
         }
         if (duplex := _.origin.get()) {
-            const global_obj = _.global.?;
-            const writeOrEnd_opt = if (msg_more) (duplex.getFunction(global_obj, "write") catch return) else (duplex.getFunction(global_obj, "end") catch return);
-            const writeOrEnd = writeOrEnd_opt orelse return;
-            if (data_ := data) {
-                const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj) catch |e| {
-                    _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
-                    return;
-                };
-                buffer.ensureStillAlive();
+            if (global_obj := _.global) {
+                const writeOrEnd_opt = if (msg_more) (duplex.getFunction(global_obj, "write") catch return) else (duplex.getFunction(global_obj, "end") catch return);
+                const writeOrEnd = writeOrEnd_opt orelse return;
+                if (data_ := data) {
+                    const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj) catch |e| {
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
+                        return;
+                    };
+                    buffer.ensureStillAlive();
 
-                * = writeOrEnd.call(global_obj, duplex, &[buffer]) catch |e| {
-                    _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
-                };
-            } else {
-                * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.js_null]) catch |e| {
-                    _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
-                };
+                    * = writeOrEnd.call(global_obj, duplex, &[buffer]) catch |e| {
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
+                    };
+                } else {
+                    * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.js_null]) catch |e| {
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
+                    };
+                }
             }
         }
     }

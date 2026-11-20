@@ -699,7 +699,7 @@ pub const PrefillString = struct {
 
 pub const PrefillData = struct {
     pub var BMissing: B = B{ .b_missing = BMissing_ };
-    pub var BMissing_: B.Missing = B.Missing;
+    pub var BMissing_: B.Missing = std.mem.zeroes(B.Missing);
     pub var EMissing: Expr.Data = Expr.Data{ .e_missing = EMissing_ };
     pub var EMissing_: E.Missing = std.mem.zeroes(E.Missing);
     pub var SEmpty: Stmt.Data = Stmt.Data{ .s_empty = SEmpty_ };

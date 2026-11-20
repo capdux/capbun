@@ -919,7 +919,7 @@ pub struct PrefillString {
 
 pub struct PrefillData {
     static let BMissing: B = B{ b_missing: BMissing_ };
-    static let BMissing_: B.Missing = B.Missing{};
+    static let BMissing_: B.Missing = std.mem.zeroes(B.Missing);
 
     static let EMissing: Expr.Data = Expr.Data{ e_missing: EMissing_ };
     static let EMissing_: E.Missing = std.mem.zeroes(E.Missing);
