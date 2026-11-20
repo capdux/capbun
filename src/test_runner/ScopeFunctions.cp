@@ -520,7 +520,7 @@ pub fn createUnbound(globalThis: *JSGlobalObject, mode: Mode, each: jsc.JSValue,
     groupLog.begin(@src());
     defer groupLog.end();
 
-    let client = VirtualMachine.get().allocator.create(ScopeFunctions);
+    let client = VirtualMachine.get().allocator.create(ScopeFunctions)?;
     client.* = {
         mode: mode,
         each: each,

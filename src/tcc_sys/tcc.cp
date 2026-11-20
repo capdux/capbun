@@ -258,7 +258,7 @@ export @opaque struct State {
     /// Set output type. MUST BE CALLED before any compilation
     pub fn setOutputType(*_, outputType: OutputFormat): void ! TccError {
         unsafe {
-            if (tcc_set_output_type(this, outputType as c_int) == -1) {
+            if (tcc_set_output_type(this, @intFromEnum(outputType)) == -1) {
                 @branchHint(.unlikely);
                 return TccError.InvalidOutputType;
             }

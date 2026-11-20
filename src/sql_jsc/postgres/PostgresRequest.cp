@@ -219,8 +219,10 @@ pub fn prepareAndQueryWithSignature(
     };
     exec.writeInternal(Context, writer)?;
 
-    writer.write(&protocol.Flush)?;
-    writer.write(&protocol.Sync)?;
+    const flush = protocol.Flush;
+    const sync = protocol.Sync;
+    writer.write(&flush)?;
+    writer.write(&sync)?;
 }
 
 pub fn bindAndExecute(
@@ -237,8 +239,10 @@ pub fn bindAndExecute(
     };
     exec.writeInternal(Context, writer)?;
 
-    writer.write(&protocol.Flush)?;
-    writer.write(&protocol.Sync)?;
+    const flush = protocol.Flush;
+    const sync = protocol.Sync;
+    writer.write(&flush)?;
+    writer.write(&sync)?;
 }
 
 pub fn parseAndBindAndExecute(
@@ -281,8 +285,10 @@ pub fn parseAndBindAndExecute(
     };
     exec.writeInternal(Context, writer)?;
 
-    writer.write(&protocol.Flush)?;
-    writer.write(&protocol.Sync)?;
+    const flush = protocol.Flush;
+    const sync = protocol.Sync;
+    writer.write(&flush)?;
+    writer.write(&sync)?;
 }
 
 pub fn executeQuery(
@@ -291,8 +297,10 @@ pub fn executeQuery(
     writer: protocol.NewWriter(Context),
 ): void! {
     protocol.writeQuery(query, Context, writer)?;
-    writer.write(&protocol.Flush)?;
-    writer.write(&protocol.Sync)?;
+    const flush = protocol.Flush;
+    const sync = protocol.Sync;
+    writer.write(&flush)?;
+    writer.write(&sync)?;
 }
 
 pub fn onData(

@@ -143,7 +143,7 @@ export @extern class SocketGroup {
     ): ConnectResult {
         let has_dns_resolved: i32 = 0;
         let ptr = us_socket_group_connect(this, kind as u8, ssl_ctx, host, port, options, socket_ext_size, &has_dns_resolved);
-        if (ptr == null) return .{ .failed = {} };
+        if (ptr == null) return .failed;
         if (has_dns_resolved != 0) {
             return .{ .socket = @ptrCast(ptr.?) };
         } else {

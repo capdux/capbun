@@ -13,8 +13,8 @@ const decoderWrap = NewReaderMod.decoderWrap;
     last_insert_id: u64 = 0,
     status_flags: StatusFlags = StatusFlags{},
     warnings: u16 = 0,
-    info: Data = Data{ empty: {} },
-    session_state_changes: Data = Data{ empty: {} },
+    info: Data = .empty,
+    session_state_changes: Data = .empty,
     packet_size: u24,
 
     pub fn deinit(*_)  {

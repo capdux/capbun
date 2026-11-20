@@ -35,7 +35,8 @@ const JSValue = jsc.JSValue;
                 return null;
             };
             if (this.current_row.isEmptyOrUndefinedOrNull()) {
-                return globalObject.throw("Expected a row to be returned at index {d}", .{row_i}) catch null;
+                if (globalObject.throw("Expected a row to be returned at index {d}", .{row_i}) == error.JSError) {}
+                return null;
             }
         }
 
@@ -52,7 +53,8 @@ const JSValue = jsc.JSValue;
             return null;
         };
         if (property.isUndefined()) {
-            return globalObject.throw("Expected a column at index {d} in row {d}", .{ cell_i, row_i }) catch null;
+            if (globalObject.throw("Expected a column at index {d} in row {d}", .{ cell_i, row_i }) == error.JSError) {}
+            return null;
         }
 
         const value = this.current_row.getOwnByValue(globalObject, property);

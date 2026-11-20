@@ -641,7 +641,8 @@ pub struct Expect {
             return_value = return_value_from_function;
         }
 
-        if (promise := return_value.asAnyPromise()) {
+        if (p := return_value.asAnyPromise()) {
+            let promise = p;
             vm.waitForPromise(promise);
             scope.apply(vm);
             switch (promise.unwrap(globalThis.vm(), .mark_handled)) {

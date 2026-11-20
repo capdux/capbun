@@ -74,7 +74,9 @@ pub const AuthMethod = enum {
 
 pub fn scramble(self: AuthMethod, password: []const u8, auth_data: []const u8, buf: *[32]u8) ![]u8 {
             if ((password.len == 0)) {
-                return (&&.{});
+                var empty: [0]u8 = &.{};
+                _ = &empty;
+                return empty[0..0];
             }
             const len = self.scrambleLength();
             switch (self) {

@@ -68,7 +68,7 @@ pub const interpreter = @import("../interpreter.zig");
 pub const bun = @import("bun");
 pub const ExecState = struct {
     target_path: [:0]const u8,
-    paths_to_copy: []const [*:0]u8,
+    paths_to_copy: []const [*:0]const u8,
     started: bool = false,
     tasks_count: u32 = 0,
     output_waiting: u32 = 0,
@@ -95,7 +95,7 @@ pub const Opts = packed struct(u16) {
     overwrite_existing_file: bool = true,
     _padding: u7 = 0,
 
-pub fn parse(self: *Opts, args: []const [*:0]u8) Result(FilepathArgs,ParseError) {
+pub fn parse(self: *Opts, args: []const [*:0]const u8) Result(FilepathArgs,ParseError) {
             const Parse = FlagParser(*Opts);
             return Parse.parseFlags(self, args);
     }
@@ -470,7 +470,7 @@ pub fn next(self: *Cp) Yield {
 _ = @panic("Invalid state for \"Cp\": idle, this indicates a bug in Bun. Please file a GitHub issue");
 },
 .exec => {
-var exec = (&(&self.state.exec));
+var exec = (&self.state.exec);
             _ = &exec;
             if (exec.started) {
                 if (((self.state.exec.tasks_count <= 0) and (self.state.exec.output_done >= self.state.exec.output_waiting))) {
@@ -613,7 +613,7 @@ pub fn printShellCpTask(self: *Cp, task: *ShellCpTask) Yield {
         }
         return output_task.start(null);
 }
-pub const FilepathArgs = ?[]const [*:0]u8;
+pub const FilepathArgs = ?[]const [*:0]const u8;
 pub const OptionalPathZ = ?[:0]const u8;
 pub const OptionalShellErr = ?bun.shell.ShellErr;
 const ArrayList = std.array_list.Managed;

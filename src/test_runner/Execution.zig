@@ -703,12 +703,12 @@ return bun_test.StepResult{ .waiting = .{ .timeout = exec_st.timeout } };
         }
 }
 
-pub fn stepGroupOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, now: *bun.timespec) !*AdvanceStatus {
+pub fn stepGroupOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, now: *bun.timespec) !AdvanceStatus {
         var buntest: *BunTest = buntest_strong.get();
         _ = &buntest;
         var exec = (&buntest.execution);
         _ = &exec;
-        var final_status: *AdvanceStatus = .done;
+        var final_status = AdvanceStatus{ .done = undefined };
         _ = &final_status;
         var concurrent_limit: usize = 20;
         _ = &concurrent_limit;
@@ -746,7 +746,7 @@ var prev_timeout: bun.timespec = .epoch;
         return final_status;
 }
 
-pub fn stepSequence(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, sequence_index: usize, now: *bun.timespec) !*AdvanceSequenceStatus {
+pub fn stepSequence(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, sequence_index: usize, now: *bun.timespec) !AdvanceSequenceStatus {
         while (true) {
             if (try stepSequenceOne(buntest_strong, globalThis, group, sequence_index, now)) |res| {
                 _ = &res;
@@ -755,7 +755,7 @@ pub fn stepSequence(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlob
         }
 }
 
-pub fn stepSequenceOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, sequence_index: usize, now: *bun.timespec) !?*AdvanceSequenceStatus {
+pub fn stepSequenceOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, sequence_index: usize, now: *bun.timespec) !?AdvanceSequenceStatus {
         _ = groupLog.begin(@src());
         defer {
         _ = groupLog.end();

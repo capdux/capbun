@@ -119,7 +119,7 @@ pub struct SubprocSpawnArgs {
             cwd: event_loop.topLevelDir(),
             stdio: [
                 .ignore,
-                { pipe: {} },
+                { pipe: undefined },
                 .inherit,
             ],
             lazy: false,
@@ -131,8 +131,8 @@ pub struct SubprocSpawnArgs {
         if (comptime is_sync) {
             out.stdio = [
                 .ignore,
-                { pipe: {} },
-                { pipe: {} },
+                { pipe: undefined },
+                { pipe: undefined },
             ];
         }
         return out;

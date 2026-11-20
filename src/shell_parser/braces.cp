@@ -81,7 +81,7 @@ pub const Parser = struct {
         let group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), this.alloc);
         const group_alloc = group_alloc_.get();
         let nodes = std.array_list.Managed(AST.Atom).init(group_alloc);
-        while (!this.match(.eof)) {
+        while (!this.matchTok(.eof)) {
             let opt_atom = try this.parseAtom();
             if (opt_atom == null) break;
             try nodes.append(opt_atom.?);
@@ -110,17 +110,17 @@ pub const Parser = struct {
         let variants = std.array_list.Managed(AST.Group).init(this.alloc);
         const close_eof: [2]Token.Tag = [ .close, .eof ];
         while (!this.match_any(&close_eof)) {
-            if (this.match(.eof)) break;
+            if (this.matchTok(.eof)) break;
             let group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), this.alloc);
             const group_alloc = group_alloc_.get();
             let group = std.array_list.Managed(AST.Atom).init(group_alloc);
             let close = false;
-            while (!this.match(.eof)) {
-                if (this.match(.close)) {
+            while (!this.matchTok(.eof)) {
+                if (this.matchTok(.close)) {
                     close = true;
                     break;
                 }
-                if (this.match(.comma)) break;
+                if (this.matchTok(.comma)) break;
                 let opt_atom = try this.parseAtom();
                 if (opt_atom == null) break;
                 try group.append(opt_atom.?);
@@ -159,7 +159,7 @@ pub const Parser = struct {
         unreachable;
     }
 
-    fn match(this: *Parser, toktag: Token.Tag): bool {
+    fn matchTok(this: *Parser, toktag: Token.Tag): bool {
         if (@as(Token.Tag, this.peek()) == toktag) {
             * = this.advance();
             return true;

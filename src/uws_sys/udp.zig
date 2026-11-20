@@ -13,9 +13,9 @@ pub fn create(loop: *Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, clos
             return us_create_udp_socket(loop, data_cb, drain_cb, close_cb, recv_error_cb, host, port, options, err, user_data);
     }
 
-pub fn send(self: *Socket, payloads: [*]const []u8, lengths: []usize, addresses: []ConstRawPtr) i32 {
+pub fn send(self: *Socket, payloads: []const PayloadPtr, lengths: []const usize, addresses: []const ConstRawPtr) i32 {
             _ = bun.assert(((payloads.len == lengths.len) and (payloads.len == addresses.len)));
-            return us_udp_socket_send(self, payloads.ptr, lengths.ptr, addresses.ptr, (if (comptime @typeInfo(@TypeOf(payloads.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(payloads.len)) else cp_cast_int(i32, payloads.len)));
+            return us_udp_socket_send(self, @ptrCast(payloads.ptr), lengths.ptr, addresses.ptr, @intCast(payloads.len));
     }
 
 pub fn user(self: *Socket) ?*anyopaque {
@@ -107,12 +107,13 @@ pub fn getTruncated(self: *PacketBuffer, index: i32) bool {
 };
 
 pub const ConstRawPtr = ?*anyopaque;
+pub const PayloadPtr = [*]const u8;
 pub const OptUdpDataCb = ?UdpDataCbFn;
 pub const OptUdpSimpleCb = ?UdpSimpleCbFn;
 pub const OptUdpRecvErrCb = ?UdpRecvErrCbFn;
-pub const UdpDataCbFn = *const *const fn(*Socket, *PacketBuffer, i32) callconv(.c) void;
-pub const UdpSimpleCbFn = *const *const fn(*Socket) callconv(.c) void;
-pub const UdpRecvErrCbFn = *const *const fn(*Socket, i32) callconv(.c) void;
+pub const UdpDataCbFn = *const fn(*Socket, *PacketBuffer, i32) callconv(.c) void;
+pub const UdpSimpleCbFn = *const fn(*Socket) callconv(.c) void;
+pub const UdpRecvErrCbFn = *const fn(*Socket, i32) callconv(.c) void;
 
 extern "c" fn us_create_udp_socket(loop: ?*Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: ?[*:0]const u8, port: u16, options: i32, err: ?*i32, user_data: ?*anyopaque) callconv(.c) *?*Socket;
 

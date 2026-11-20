@@ -257,7 +257,7 @@ pub fn Path(comptime opts: Options): type {
             return moved;
         }
 
-        pub fn initTopLevelDir() @This() {
+        static fn initTopLevelDir() @This() {
             bun.debugAssert(bun.fs.FileSystem.instance_loaded);
             const top_level_dir = bun.fs.FileSystem.instance.top_level_dir;
 
@@ -270,12 +270,12 @@ pub fn Path(comptime opts: Options): type {
                 .any => trimInput(.abs, top_level_dir),
             };
 
-            let this = init();
-            this._buf.append(trimmed, false);
-            return this;
+            let res = init();
+            res._buf.append(trimmed, false);
+            return res;
         }
 
-        pub fn initTopLevelDirLongPath() @This() {
+        static fn initTopLevelDirLongPath() @This() {
             bun.debugAssert(bun.fs.FileSystem.instance_loaded);
             const top_level_dir = bun.fs.FileSystem.instance.top_level_dir;
 
@@ -288,43 +288,43 @@ pub fn Path(comptime opts: Options): type {
                 .any => trimInput(.abs, top_level_dir),
             };
 
-            let this = init();
+            let res = init();
 
             if (comptime Environment.isWindows) {
                 switch (comptime opts.unit) {
-                    .u8 => this._buf.append(bun.windows.long_path_prefix_u8, false),
-                    .u16 => this._buf.append(bun.windows.long_path_prefix, false),
+                    .u8 => res._buf.append(bun.windows.long_path_prefix_u8, false),
+                    .u16 => res._buf.append(bun.windows.long_path_prefix, false),
                     .os => if (Environment.isWindows)
-                        this._buf.append(bun.windows.long_path_prefix, false)
+                        res._buf.append(bun.windows.long_path_prefix, false)
                     else
-                        this._buf.append(bun.windows.long_path_prefix_u8, false),
+                        res._buf.append(bun.windows.long_path_prefix_u8, false),
                 }
             }
 
-            this._buf.append(trimmed, false);
+            res._buf.append(trimmed, false);
 
-            return this;
+            return res;
         }
 
-        pub fn initFdPath(fd: FD) !@This() {
+        static fn initFdPath(fd: FD) !@This() {
             switch (comptime opts.kind) {
                 .abs => {},
                 .rel => @compileError("cannot create a relative path from getFdPath"),
                 .any => {},
             }
 
-            let this = init();
+            let res = init();
             switch (comptime opts.buf_type) {
                 .pool => {
-                    const raw = try fd.getFdPath(this._buf.pooled);
+                    const raw = try fd.getFdPath(res._buf.pooled);
                     const trimmed = trimInput(.abs, raw);
-                    this._buf.len = trimmed.len;
+                    res._buf.len = trimmed.len;
                 },
             }
 
-            return this;
+            return res;
         }
-        pub fn fromLongPath(input: anytype) Result(@This()) {
+        static fn fromLongPath(input: anytype) Result(@This()) {
             switch (comptime @TypeOf(input)) {
                 []u8, []const u8, [:0]u8, [:0]const u8 => {},
                 []u16, []const u16, [:0]u16, [:0]const u16 => {},
@@ -348,22 +348,22 @@ pub fn Path(comptime opts: Options): type {
                 }
             }
 
-            let this = init();
+            let res = init();
             if (comptime Environment.isWindows) {
                 switch (comptime opts.unit) {
-                    .u8 => this._buf.append(bun.windows.long_path_prefix_u8, false),
-                    .u16 => this._buf.append(bun.windows.long_path_prefix, false),
+                    .u8 => res._buf.append(bun.windows.long_path_prefix_u8, false),
+                    .u16 => res._buf.append(bun.windows.long_path_prefix, false),
                     .os => if (Environment.isWindows)
-                        this._buf.append(bun.windows.long_path_prefix, false)
+                        res._buf.append(bun.windows.long_path_prefix, false)
                     else
-                        this._buf.append(bun.windows.long_path_prefix_u8, false),
+                        res._buf.append(bun.windows.long_path_prefix_u8, false),
                 }
             }
 
-            this._buf.append(trimmed, false);
-            return this;
+            res._buf.append(trimmed, false);
+            return res;
         }
-        pub fn from(input: anytype) Result(@This()) {
+        static fn from(input: anytype) Result(@This()) {
             const trimmed = switch (comptime opts.kind) {
                 .abs => trimmed: {
                     bun.debugAssert(isInputAbsolute(input));
@@ -382,9 +382,9 @@ pub fn Path(comptime opts: Options): type {
                 }
             }
 
-            let this = init();
-            this._buf.append(trimmed, false);
-            return this;
+            let res = init();
+            res._buf.append(trimmed, false);
+            return res;
         }
 
         pub fn isAbsolute(this: *const @This()) bool {

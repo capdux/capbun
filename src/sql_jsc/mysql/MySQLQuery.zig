@@ -189,7 +189,7 @@ pub fn runPreparedQuery(self: *MySQLQuery, connection: *MySQLConnection, globalO
             const query = self.#query.toUTF8(bun.default_allocator);
             query_str = query;
             var signature = (blk_catch_0: { break :blk_catch_0 ((Signature.generate(globalObject, query.slice(), binding_value, columns_value)) catch |e| { _ = &e; if ((!globalObject.hasException())) {
-                return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to generate signature", e));
+                return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to generate signature", @errorCast(e)));
             }
             return error.JSError; }); });
             _ = &signature;
@@ -353,16 +353,16 @@ const debug = bun.Output.scoped(.MySQLQuery, .visible);
 
 pub fn BindAndExecuteCtx(comptime WriterType: type) type {
         return struct {
-        query_ptr: *MySQLQuery,
-        writer: WriterType,
-        statement: *MySQLStatement,
-        globalObject: *JSGlobalObject,
-        binding_value: JSValue,
-        columns_value: JSValue,
-        result: AnyMySQLError.Error!void,
+    query_ptr: *MySQLQuery,
+    writer: WriterType,
+    statement: *MySQLStatement,
+    globalObject: *JSGlobalObject,
+    binding_value: JSValue,
+    columns_value: JSValue,
+    result: AnyMySQLError.Error!void,
 
-        pub fn run(ctx: *@This(), roots: *bun.jsc.MarkedArgumentBuffer) callconv(.c) void {
+pub fn run(ctx: *@This(), roots: *bun.jsc.MarkedArgumentBuffer) callconv(.c) void {
             ctx.result = ctx.query_ptr.bindAndExecuteImpl(ctx.writer, ctx.statement, ctx.globalObject, ctx.binding_value, ctx.columns_value, roots);
-        }
-    };
+    }
+};
 }

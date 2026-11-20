@@ -22,7 +22,10 @@ pub @opaque struct BakeSourceProvider {
         const pt = unsafe { BakeGlobalObject__getPerThreadData(global) };
         if (value := pt.source_maps.get(source_filename)) {
             const idx = value.get();
-            return pt.bundled_outputs[idx].value.asSlice();
+            return switch (pt.bundled_outputs[idx].value) {
+                .buffer => |buf| buf.bytes,
+                else => "",
+            };
         }
         return "";
     }

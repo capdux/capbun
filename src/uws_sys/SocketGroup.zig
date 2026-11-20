@@ -123,7 +123,7 @@ pub fn connect(self: *SocketGroup, kind: SocketKind, ssl_ctx: ?*bun.uws.SslCtx, 
             var ptr = us_socket_group_connect(self, (if (comptime @typeInfo(@TypeOf(kind)) == .@"enum") cp_cast_int(u8, @intFromEnum(kind)) else cp_cast_int(u8, kind)), ssl_ctx, host, port, options, socket_ext_size, (&has_dns_resolved));
             _ = &ptr;
             if ((ptr == null)) {
-                return .{ .failed = .{} };
+                return .failed;
             }
             if ((has_dns_resolved != 0)) {
                 return .{ .socket = @ptrCast(ptr.?) };

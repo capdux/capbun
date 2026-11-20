@@ -144,7 +144,7 @@ pub fn parse(self: *@This()) !AST.Group {
             const group_alloc = group_alloc_.get();
             var nodes = std.array_list.Managed(AST.Atom).init(group_alloc);
             _ = &nodes;
-            while ((!.eof.exec(self))) {
+            while ((!self.matchTok(.eof))) {
                 var opt_atom = try self.parseAtom();
                 _ = &opt_atom;
                 if ((opt_atom == null)) {
@@ -182,7 +182,7 @@ pub fn parseExpansion(self: *@This()) !AST.Expansion {
             _ = &variants;
             const close_eof: [2]Token.Tag = .{ .close, .eof };
             while ((!self.match_any((&close_eof)))) {
-                if (.eof.exec(self)) {
+                if (self.matchTok(.eof)) {
                     break;
                 }
                 var group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), self.alloc);
@@ -192,12 +192,12 @@ pub fn parseExpansion(self: *@This()) !AST.Expansion {
                 _ = &group;
                 var close = false;
                 _ = &close;
-                while ((!.eof.exec(self))) {
-                    if (.close.exec(self)) {
+                while ((!self.matchTok(.eof))) {
+                    if (self.matchTok(.close)) {
                         close = true;
                         break;
                     }
-                    if (.comma.exec(self)) {
+                    if (self.matchTok(.comma)) {
                         break;
                     }
                     var opt_atom = try self.parseAtom();
@@ -243,7 +243,7 @@ pub fn expect(self: *@This(), toktag: Token.Tag) Token {
             _ = unreachable;
     }
 
-pub fn match(self: *@This(), toktag: Token.Tag) bool {
+pub fn matchTok(self: *@This(), toktag: Token.Tag) bool {
             if (((if (comptime @typeInfo(Token.Tag) == .@"enum") @as(Token.Tag, @enumFromInt(self.peek())) else @as(Token.Tag, self.peek())) == toktag)) {
                 _ = self.advance();
                 return true;

@@ -116,7 +116,7 @@ pub struct QueuedDescribe {
     static fn step(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, data: bun_test.BunTest.RefDataValue): bun.JSError!bun_test.StepResult {
         group.begin(@src());
         defer group.end();
-        const buntest = buntest_strong.get();
+        const buntest: *bun_test.BunTest = buntest_strong.get();
         const client = &buntest.collection;
 
         if (data != .start) client.runOneCompleted(globalThis, null, data)?;

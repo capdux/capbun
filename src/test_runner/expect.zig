@@ -616,7 +616,9 @@ pub fn getValueAsToThrow(self: *Expect, globalThis: *JSGlobalObject, value: JSVa
             if ((return_value == .zero)) {
                 return_value = return_value_from_function;
             }
-            if (return_value.asAnyPromise()) |promise| {
+            if (return_value.asAnyPromise()) |p| {
+                _ = &p;
+                var promise = p;
                 _ = &promise;
                 _ = vm.waitForPromise(promise);
                 _ = scope.apply(vm);

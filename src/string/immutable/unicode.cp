@@ -162,7 +162,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             it.i = @min(next_, bytes.len);
 
             const slice = bytes[prev..][0..@min(@as(usize, cp_len), bytes.len - prev)];
-            it.width = @as(u3_fast, i32(slice.len));
+            it.width = @intCast(slice.len);
             return slice;
         }
 

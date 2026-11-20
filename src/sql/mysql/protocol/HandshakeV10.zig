@@ -76,14 +76,14 @@ pub const NewReaderMod = @import("./NewReader.zig");
 pub const HandshakeV10 = @This();
 
 protocol_version: u8 = 10,
-server_version: Data = Data{ .empty = .{} },
+server_version: Data = .empty,
 connection_id: u32 = 0,
 auth_plugin_data_part_1: [8]u8 = undefined,
 auth_plugin_data_part_2: []const u8 = empty_u8[0..0],
 capability_flags: Capabilities = Capabilities{  },
 character_set: CharacterSet = CharacterSet.default,
 status_flags: StatusFlags = StatusFlags{  },
-auth_plugin_name: Data = Data{ .empty = .{} },
+auth_plugin_name: Data = .empty,
 
 pub fn deinit(self: *HandshakeV10) void {
         _ = self.server_version.deinit();

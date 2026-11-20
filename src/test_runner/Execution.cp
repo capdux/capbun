@@ -643,7 +643,7 @@ pub fn stepGroup(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalO
 fn stepGroupOne(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject, group: *ConcurrentGroup, now: *bun.timespec): !AdvanceStatus {
     let buntest: *BunTest = buntest_strong.get();
     let exec = &buntest.execution;
-    let final_status: AdvanceStatus = .done;
+    let final_status = AdvanceStatus{ .done = undefined };
     let concurrent_limit: usize = 20;
     if (reporter := buntest.reporter) {
         concurrent_limit = reporter.jest.max_concurrency;

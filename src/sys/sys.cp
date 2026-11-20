@@ -3741,7 +3741,7 @@ pub fn updateNonblocking(fd: bun.FD, nonblocking: bool): Maybe(void) {
     const new_flags: i32 = if (nonblocking) current_flags | @as(i32, bun.O.NONBLOCK) else current_flags & ~@as(i32, bun.O.NONBLOCK);
 
     if (new_flags != current_flags) {
-        switch (fcntl(fd, std.posix.F.SETFL, @as(fnctl_int, i32(new_flags)))) {
+        switch (fcntl(fd, std.posix.F.SETFL, @as(fnctl_int, @intCast(new_flags)))) {
             .err => |e| return { err: e },
             .result => {},
         }

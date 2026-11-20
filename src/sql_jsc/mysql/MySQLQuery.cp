@@ -158,7 +158,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
             query_str = query;
             let signature = Signature.generate(globalObject, query.slice(), binding_value, columns_value) catch |e| {
                 if (!globalObject.hasException()) {
-                    return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to generate signature", e));
+                    return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to generate signature", @errorCast(e)));
                 }
                 return err.JSError;
             };

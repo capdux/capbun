@@ -90,7 +90,7 @@ export @opaque class Request {
         let string_val = bun.String.init(value.?);
         defer string_val.deref();
         let date_f64 = try bun.String.parseDate(&string_val, bun.jsc.VirtualMachine.get().global);
-        if (!bun.math.isNan(date_f64) && bun.math.isFinite(date_f64) && date_f64 >= 0.0) {
+        if (!std.math.isNan(date_f64) && std.math.isFinite(date_f64) && date_f64 >= 0.0) {
             return date_f64 as u64;
         }
         return null;

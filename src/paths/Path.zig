@@ -298,7 +298,7 @@ pub fn move(self: *const @This()) @This() {
             return moved;
     }
 
-pub fn initTopLevelDir(self: @This()) @This() {
+pub fn initTopLevelDir() @This() {
             _ = bun.debugAssert(bun.fs.FileSystem.instance_loaded);
             const top_level_dir = bun.fs.FileSystem.instance.top_level_dir;
             const trimmed = (switch ((comptime opts.kind)) {
@@ -309,13 +309,13 @@ pub fn initTopLevelDir(self: @This()) @This() {
 .rel => @compileError("cannot create a relative path from top_level_dir"),
 .any => trimInput(.abs, top_level_dir),
 });
-            var this = init();
-            _ = &this;
-            _ = self._buf.append(trimmed, false);
-            return self;
+            var res = init();
+            _ = &res;
+            _ = res._buf.append(trimmed, false);
+            return res;
     }
 
-pub fn initTopLevelDirLongPath(self: @This()) @This() {
+pub fn initTopLevelDirLongPath() @This() {
             _ = bun.debugAssert(bun.fs.FileSystem.instance_loaded);
             const top_level_dir = bun.fs.FileSystem.instance.top_level_dir;
             const trimmed = (switch ((comptime opts.kind)) {
@@ -326,26 +326,26 @@ pub fn initTopLevelDirLongPath(self: @This()) @This() {
 .rel => @compileError("cannot create a relative path from top_level_dir"),
 .any => trimInput(.abs, top_level_dir),
 });
-            var this = init();
-            _ = &this;
+            var res = init();
+            _ = &res;
             if (comptime Environment.isWindows) {
                 switch ((comptime opts.unit)) {
 .u8 => {
-_ = self._buf.append(bun.windows.long_path_prefix_u8, false);
+_ = res._buf.append(bun.windows.long_path_prefix_u8, false);
 },
 .u16 => {
-_ = self._buf.append(bun.windows.long_path_prefix, false);
+_ = res._buf.append(bun.windows.long_path_prefix, false);
 },
 .os => {
-_ = (if (Environment.isWindows) self._buf.append(bun.windows.long_path_prefix, false) else self._buf.append(bun.windows.long_path_prefix_u8, false));
+_ = (if (Environment.isWindows) res._buf.append(bun.windows.long_path_prefix, false) else res._buf.append(bun.windows.long_path_prefix_u8, false));
 },
 }
             }
-            _ = self._buf.append(trimmed, false);
-            return self;
+            _ = res._buf.append(trimmed, false);
+            return res;
     }
 
-pub fn initFdPath(self: @This(), fd: FD) !@This() {
+pub fn initFdPath(fd: FD) !@This() {
             switch ((comptime opts.kind)) {
 .abs => {
 
@@ -357,19 +357,19 @@ _ = @compileError("cannot create a relative path from getFdPath");
 
 },
 }
-            var this = init();
-            _ = &this;
+            var res = init();
+            _ = &res;
             switch ((comptime opts.buf_type)) {
 .pool => {
-const raw = try fd.getFdPath(self._buf.pooled);
+const raw = try fd.getFdPath(res._buf.pooled);
             const trimmed = trimInput(.abs, raw);
-            self._buf.len = trimmed.len;
+            res._buf.len = trimmed.len;
 },
 }
-            return self;
+            return res;
     }
 
-pub fn fromLongPath(self: @This(), input: anytype) Result(@This()) {
+pub fn fromLongPath(input: anytype) Result(@This()) {
             if (((comptime @TypeOf(input)) == []u8) or ((comptime @TypeOf(input)) == []const u8) or ((comptime @TypeOf(input)) == [:0]u8) or ((comptime @TypeOf(input)) == [:0]const u8)) {
 
 } else if (((comptime @TypeOf(input)) == []u16) or ((comptime @TypeOf(input)) == []const u16) or ((comptime @TypeOf(input)) == [:0]u16) or ((comptime @TypeOf(input)) == [:0]const u16)) {
@@ -393,26 +393,26 @@ _ = @compileError(("unsupported type: " ++ @typeName(@TypeOf(input))));
                     return error.MaxPathExceeded;
                 }
             }
-            var this = init();
-            _ = &this;
+            var res = init();
+            _ = &res;
             if (comptime Environment.isWindows) {
                 switch ((comptime opts.unit)) {
 .u8 => {
-_ = self._buf.append(bun.windows.long_path_prefix_u8, false);
+_ = res._buf.append(bun.windows.long_path_prefix_u8, false);
 },
 .u16 => {
-_ = self._buf.append(bun.windows.long_path_prefix, false);
+_ = res._buf.append(bun.windows.long_path_prefix, false);
 },
 .os => {
-_ = (if (Environment.isWindows) self._buf.append(bun.windows.long_path_prefix, false) else self._buf.append(bun.windows.long_path_prefix_u8, false));
+_ = (if (Environment.isWindows) res._buf.append(bun.windows.long_path_prefix, false) else res._buf.append(bun.windows.long_path_prefix_u8, false));
 },
 }
             }
-            _ = self._buf.append(trimmed, false);
-            return self;
+            _ = res._buf.append(trimmed, false);
+            return res;
     }
 
-pub fn from(self: @This(), input: anytype) Result(@This()) {
+pub fn from(input: anytype) Result(@This()) {
             const trimmed = (switch ((comptime opts.kind)) {
 .abs => trimmed: {
             _ = bun.debugAssert(isInputAbsolute(input));
@@ -429,10 +429,10 @@ pub fn from(self: @This(), input: anytype) Result(@This()) {
                     return error.MaxPathExceeded;
                 }
             }
-            var this = init();
-            _ = &this;
-            _ = self._buf.append(trimmed, false);
-            return self;
+            var res = init();
+            _ = &res;
+            _ = res._buf.append(trimmed, false);
+            return res;
     }
 
 pub fn isAbsolute(self: *const @This()) bool {
@@ -886,10 +886,10 @@ pub fn undo(self: *@This(), n_components: usize) void {
 .auto => std.mem.lastIndexOfScalar(opts.pathUnit(), self.slice(), std.fs.path.sep),
 .posix => std.mem.lastIndexOfScalar(opts.pathUnit(), self.slice(), std.fs.path.sep_posix),
 .windows => std.mem.lastIndexOfScalar(opts.pathUnit(), self.slice(), std.fs.path.sep_windows),
-})) orelse (({
+})) orelse {
                 _ = self._buf.setLength(min_len);
                 return;
-})));
+});
                 if ((slash < min_len)) {
                     _ = self._buf.setLength(min_len);
                     return;

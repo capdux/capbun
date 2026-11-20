@@ -463,25 +463,22 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                         var max_line: u32 = 0;
                         _ = &max_line;
                         const has_executed = (block.hasExecuted or (block.executionCount > 0));
-                        {
-                            var byte_offset: i32 = min;
-                            _ = &byte_offset;
-                            const __end_1 = max;
-                            while (byte_offset < __end_1) : (byte_offset += 1) {
-                                const start_u32: u32 = @intCast(byte_offset);
-                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
-                                const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
-                                if ((line_start_byte_offset >= byte_offset)) {
-                                    continue;
-                                }
-                                const line: u32 = @intCast(new_line_index);
-                                min_line = @min(min_line, line);
-                                max_line = @max(max_line, line);
-                                _ = executable_lines.set(line);
-                                if (has_executed) {
-                                    _ = lines_which_have_executed.set(line);
-                                    line_hits_slice[cp_cast_int(usize, line)] = (line_hits_slice[@as(usize, @intCast(line))] + 1);
-                                }
+                        var byte_offset: usize = min;
+                        _ = &byte_offset;
+                        while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
+                            const start_u32: u32 = @intCast(byte_offset);
+                            const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                            const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
+                            if ((line_start_byte_offset >= byte_offset)) {
+                                continue;
+                            }
+                            const line: u32 = @intCast(new_line_index);
+                            min_line = @min(min_line, line);
+                            max_line = @max(max_line, line);
+                            _ = executable_lines.set(line);
+                            if (has_executed) {
+                                _ = lines_which_have_executed.set(line);
+                                line_hits_slice[cp_cast_int(usize, line)] = (line_hits_slice[@as(usize, @intCast(line))] + 1);
                             }
                         }
                         if ((min_line != std.math.maxInt(u32))) {
@@ -495,8 +492,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_2 = function_blocks.len;
-                    while (i < __end_2) : (i += 1) {
+                    const __end_1 = function_blocks.len;
+                    while (i < __end_1) : (i += 1) {
                         const function = function_blocks[@as(usize, @intCast(i))];
                         if (((function.endOffset < 0) or (function.startOffset < 0))) {
                             continue;
@@ -507,21 +504,18 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                         _ = &min_line;
                         var max_line: u32 = 0;
                         _ = &max_line;
-                        {
-                            var byte_offset: i32 = min;
-                            _ = &byte_offset;
-                            const __end_3 = max;
-                            while (byte_offset < __end_3) : (byte_offset += 1) {
-                                const start_u32: u32 = @intCast(byte_offset);
-                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
-                                const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
-                                if ((line_start_byte_offset >= byte_offset)) {
-                                    continue;
-                                }
-                                const line: u32 = @intCast(new_line_index);
-                                min_line = @min(min_line, line);
-                                max_line = @max(max_line, line);
+                        var byte_offset: usize = min;
+                        _ = &byte_offset;
+                        while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
+                            const start_u32: u32 = @intCast(byte_offset);
+                            const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                            const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
+                            if ((line_start_byte_offset >= byte_offset)) {
+                                continue;
                             }
+                            const line: u32 = @intCast(new_line_index);
+                            min_line = @min(min_line, line);
+                            max_line = @max(max_line, line);
                         }
                         const did_fn_execute = ((function.executionCount > 0) or function.hasExecuted);
                         if ((!did_fn_execute)) {
@@ -530,8 +524,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             {
                                 var line: i32 = min_line;
                                 _ = &line;
-                                const __end_4 = end;
-                                while (line < __end_4) : (line += 1) {
+                                const __end_2 = end;
+                                while (line < __end_2) : (line += 1) {
                                     _ = executable_lines.set(line);
                                     _ = lines_which_have_executed.unset(line);
                                 }
@@ -563,8 +557,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_5 = blocks.len;
-                        while (i < __end_5) : (i += 1) {
+                        const __end_3 = blocks.len;
+                        while (i < __end_3) : (i += 1) {
                             const block = blocks[@as(usize, @intCast(i))];
                             if (((block.endOffset < 0) or (block.startOffset < 0))) {
                                 continue;
@@ -576,42 +570,39 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             var max_line: u32 = 0;
                             _ = &max_line;
                             const has_executed = (block.hasExecuted or (block.executionCount > 0));
-                            {
-                                var byte_offset: i32 = min;
-                                _ = &byte_offset;
-                                const __end_6 = max;
-                                while (byte_offset < __end_6) : (byte_offset += 1) {
-                                    const start_u32: u32 = @intCast(byte_offset);
-                                    const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
-                                    const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
-                                    if ((line_start_byte_offset >= byte_offset)) {
+                            var byte_offset: usize = min;
+                            _ = &byte_offset;
+                            while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
+                                const start_u32: u32 = @intCast(byte_offset);
+                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                                const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
+                                if ((line_start_byte_offset >= byte_offset)) {
+                                    continue;
+                                }
+                                const column_position = (byte_offset -| line_start_byte_offset);
+                                const line_zb: i32 = @intCast(new_line_index);
+                                const col_zb: i32 = @intCast(column_position);
+                                var found: ?Mapping = null;
+                                _ = &found;
+                                if (cur_) |*c| {
+                                    _ = &c;
+                                    found = (c.*).moveTo(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
+                                } else {
+                                    found = parsed_mapping.findMapping(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
+                                }
+                                if (found) |point| {
+                                    _ = &point;
+                                    if ((point.original.lines.zeroBased() < 0)) {
                                         continue;
                                     }
-                                    const column_position = (byte_offset -| line_start_byte_offset);
-                                    const line_zb: i32 = @intCast(new_line_index);
-                                    const col_zb: i32 = @intCast(column_position);
-                                    var found: ?Mapping = null;
-                                    _ = &found;
-                                    if (cur_) |*c| {
-                                        _ = &c;
-                                        found = (c.*).moveTo(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
-                                    } else {
-                                        found = parsed_mapping.findMapping(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
+                                    const line: u32 = @intCast(point.original.lines.zeroBased());
+                                    _ = executable_lines.set(line);
+                                    if (has_executed) {
+                                        _ = lines_which_have_executed.set(line);
+                                        line_hits_slice[cp_cast_int(usize, line)] = (line_hits_slice[@as(usize, @intCast(line))] + 1);
                                     }
-                                    if (found) |point| {
-                                        _ = &point;
-                                        if ((point.original.lines.zeroBased() < 0)) {
-                                            continue;
-                                        }
-                                        const line: u32 = @intCast(point.original.lines.zeroBased());
-                                        _ = executable_lines.set(line);
-                                        if (has_executed) {
-                                            _ = lines_which_have_executed.set(line);
-                                            line_hits_slice[cp_cast_int(usize, line)] = (line_hits_slice[@as(usize, @intCast(line))] + 1);
-                                        }
-                                        min_line = @min(min_line, line);
-                                        max_line = @max(max_line, line);
-                                    }
+                                    min_line = @min(min_line, line);
+                                    max_line = @max(max_line, line);
                                 }
                             }
                             if ((min_line != std.math.maxInt(u32))) {
@@ -625,8 +616,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_7 = function_blocks.len;
-                        while (i < __end_7) : (i += 1) {
+                        const __end_4 = function_blocks.len;
+                        while (i < __end_4) : (i += 1) {
                             const function = function_blocks[@as(usize, @intCast(i))];
                             if (((function.endOffset < 0) or (function.startOffset < 0))) {
                                 continue;
@@ -637,37 +628,34 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             _ = &min_line;
                             var max_line: u32 = 0;
                             _ = &max_line;
-                            {
-                                var byte_offset: i32 = min;
-                                _ = &byte_offset;
-                                const __end_8 = max;
-                                while (byte_offset < __end_8) : (byte_offset += 1) {
-                                    const start_u32: u32 = @intCast(byte_offset);
-                                    const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
-                                    const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
-                                    if ((line_start_byte_offset >= byte_offset)) {
+                            var byte_offset: usize = min;
+                            _ = &byte_offset;
+                            while ((byte_offset < max)) : (byte_offset = (byte_offset + 1)) {
+                                const start_u32: u32 = @intCast(byte_offset);
+                                const new_line_index = ((LineOffsetTable.findIndex(line_starts, .{ .start = start_u32 })) orelse continue);
+                                const line_start_byte_offset = line_starts[@as(usize, @intCast(new_line_index))];
+                                if ((line_start_byte_offset >= byte_offset)) {
+                                    continue;
+                                }
+                                const column_position = (byte_offset -| line_start_byte_offset);
+                                const line_zb: i32 = @intCast(new_line_index);
+                                const col_zb: i32 = @intCast(column_position);
+                                var found: ?Mapping = null;
+                                _ = &found;
+                                if (cur_) |*c| {
+                                    _ = &c;
+                                    found = (c.*).moveTo(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
+                                } else {
+                                    found = parsed_mapping.findMapping(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
+                                }
+                                if (found) |point| {
+                                    _ = &point;
+                                    if ((point.original.lines.zeroBased() < 0)) {
                                         continue;
                                     }
-                                    const column_position = (byte_offset -| line_start_byte_offset);
-                                    const line_zb: i32 = @intCast(new_line_index);
-                                    const col_zb: i32 = @intCast(column_position);
-                                    var found: ?Mapping = null;
-                                    _ = &found;
-                                    if (cur_) |*c| {
-                                        _ = &c;
-                                        found = (c.*).moveTo(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
-                                    } else {
-                                        found = parsed_mapping.findMapping(.fromZeroBased(line_zb), .fromZeroBased(col_zb));
-                                    }
-                                    if (found) |point| {
-                                        _ = &point;
-                                        if ((point.original.lines.zeroBased() < 0)) {
-                                            continue;
-                                        }
-                                        const line: u32 = @intCast(point.original.lines.zeroBased());
-                                        min_line = @min(min_line, line);
-                                        max_line = @max(max_line, line);
-                                    }
+                                    const line: u32 = @intCast(point.original.lines.zeroBased());
+                                    min_line = @min(min_line, line);
+                                    max_line = @max(max_line, line);
                                 }
                             }
                             if (((min_line == std.math.maxInt(u32)) and (max_line == 0))) {
@@ -679,8 +667,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                                 {
                                     var line: i32 = min_line;
                                     _ = &line;
-                                    const __end_9 = end;
-                                    while (line < __end_9) : (line += 1) {
+                                    const __end_5 = end;
+                                    while (line < __end_5) : (line += 1) {
                                         _ = executable_lines.set(line);
                                         _ = lines_which_have_executed.unset(line);
                                         line_hits_slice[cp_cast_int(usize, line)] = 0;

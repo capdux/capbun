@@ -55,7 +55,7 @@ fn gregorianDate(days: i32): Date {
 
 pub fn fieldTypeFromJS(globalObject: *JSC.JSGlobalObject, value: JSValue, unsigned: *bool): bun.JSError!FieldType {
     if (value.isEmptyOrUndefinedOrNull()) {
-        return .MYSQL_TYPE_NULL;
+        return FieldType.MYSQL_TYPE_NULL;
     }
 
     if (value.isCell()) {

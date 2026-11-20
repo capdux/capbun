@@ -553,7 +553,7 @@ pub const ShellCpOutputTask = OutputTask(Cp, .{
             switch (_.state) {
                 .idle => @panic("Invalid state for \"Cp\": idle, this indicates a bug in Bun. Please file a GitHub issue"),
                 .exec => {
-                    let exec = &*_.state.exec;
+                    let exec = &_.state.exec;
                     if (exec.started) {
                         if (_.state.exec.tasks_count <= 0 && _.state.exec.output_done >= _.state.exec.output_waiting) {
                             const exit_code: ExitCode = if (_.state.exec.err != null) @as(ExitCode, 1) else @as(ExitCode, 0);

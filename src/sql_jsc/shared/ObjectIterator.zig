@@ -75,7 +75,9 @@ pub fn next(self: *ObjectIterator) ?jsc.JSValue {
             self.current_row = (blk_catch_0: { break :blk_catch_0 ((jsc.JSObject.getIndex(self.array, globalObject, @intCast(row_i))) catch |e| { _ = &e; self.any_failed = true;
             return null; }); });
             if (self.current_row.isEmptyOrUndefinedOrNull()) {
-                return (blk_catch_1: { break :blk_catch_1 ((globalObject.throw("Expected a row to be returned at index {d}", .{ row_i })) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
+                if ((globalObject.throw("Expected a row to be returned at index {d}", .{ row_i }) == error.JSError)) {
+                }
+                return null;
             }
         }
         defer {
@@ -87,15 +89,17 @@ pub fn next(self: *ObjectIterator) ?jsc.JSValue {
             }
         }
         }
-        const property = (blk_catch_2: { break :blk_catch_2 ((jsc.JSObject.getIndex(self.columns, globalObject, @intCast(cell_i))) catch |e| { _ = &e; self.any_failed = true;
+        const property = (blk_catch_1: { break :blk_catch_1 ((jsc.JSObject.getIndex(self.columns, globalObject, @intCast(cell_i))) catch |e| { _ = &e; self.any_failed = true;
         return null; }); });
         if (property.isUndefined()) {
-            return (blk_catch_3: { break :blk_catch_3 ((globalObject.throw("Expected a column at index {d} in row {d}", .{ cell_i, row_i })) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); });
+            if ((globalObject.throw("Expected a column at index {d} in row {d}", .{ cell_i, row_i }) == error.JSError)) {
+            }
+            return null;
         }
         const value = self.current_row.getOwnByValue(globalObject, property);
         if (((value == .zero) or ((value != null) and value.?.isUndefined()))) {
             if ((!globalObject.hasException())) {
-                return (blk_catch_4: { break :blk_catch_4 ((globalObject.throw("Expected a value at index {d} in row {d}", .{ cell_i, row_i })) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); });
+                return (blk_catch_2: { break :blk_catch_2 ((globalObject.throw("Expected a value at index {d} in row {d}", .{ cell_i, row_i })) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); });
             }
             self.any_failed = true;
             return null;

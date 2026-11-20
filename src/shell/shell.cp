@@ -1201,7 +1201,7 @@ pub const Parser = struct {
             return { stmts: stmts.items[0..stmts.items.len] };
 
         while (if (_.inside_subshell == null)
-            !_.match(.Eof)
+            !_.matchTok(.Eof)
         else
             !_.match_any(&.{ .Eof, _.inside_subshell.?.closing_tok() }))
         {
@@ -1227,7 +1227,7 @@ pub const Parser = struct {
             !_.match_any(&.{ .Semicolon, .Newline, .Eof, _.inside_subshell.?.closing_tok() }))
         {
             const expr = _.parse_expr()?;
-            if (_.match(.Ampersand)) {
+            if (_.matchTok(.Ampersand)) {
                 _.add_error("Background commands \"&\" are not supported yet.", {})?;
                 return ParseError.Unsupported;
                 // Uncomment when we enable ampersand
@@ -1316,7 +1316,7 @@ pub const Parser = struct {
                 return ParseError.Expected;
             }
 
-            while (_.match(.Pipe)) {
+            while (_.matchTok(.Pipe)) {
                 expr = _.parse_compound_cmd()?;
                 if (next_item := expr.asPipelineItem()) {
                     pipeline_items.append(next_item)?;
@@ -1371,7 +1371,7 @@ pub const Parser = struct {
     }
 
     fn skip_newlines(*_) {
-        while (_.match(.Newline)) {}
+        while (_.matchTok(.Newline)) {}
     }
 
     fn parse_compound_cmd(*_): anyerror!AST.Expr {
@@ -1445,7 +1445,7 @@ pub const Parser = struct {
                             }
 
                             * = _.expect(.Text);
-                            if (!_.match(.Delimit)) {
+                            if (!_.matchTok(.Delimit)) {
                                 _.add_error("Expected a single, simple word", {})?;
                                 return ParseError.Expected;
                             }
@@ -1457,7 +1457,7 @@ pub const Parser = struct {
                             }
                             const arg = arg_opt.?;
 
-                            if (!_.match(.DoubleBracketClose)) {
+                            if (!_.matchTok(.DoubleBracketClose)) {
                                 _.add_error("Expected \"]]\" but got: {s}", .{_.peek().asHumanReadable(_.strpool)})?;
                                 return ParseError.Expected;
                             }
@@ -1494,7 +1494,7 @@ pub const Parser = struct {
         }
 
         const op = _.expect(.Text);
-        if (!_.match(.Delimit)) {
+        if (!_.matchTok(.Delimit)) {
             _.add_error("Expected a single, simple word", {})?;
             return ParseError.Expected;
         }
@@ -1514,7 +1514,7 @@ pub const Parser = struct {
                     return ParseError.Expected;
                 };
 
-                if (!_.match(.DoubleBracketClose)) {
+                if (!_.matchTok(.DoubleBracketClose)) {
                     _.add_error("Expected \"]]\" but got: {s}", .{_.peek().asHumanReadable(_.strpool)})?;
                     return ParseError.Expected;
                 }
@@ -1689,11 +1689,11 @@ pub const Parser = struct {
     }
 
     fn parse_redirect(*_): !ParsedRedirect {
-        const has_redirect = _.match(.Redirect);
+        const has_redirect = _.matchTok(.Redirect);
         const redirect = if (has_redirect) _.prev().Redirect else AST.RedirectFlags{ stdin: false };
         const redirect_file: AST.Redirect? = redirect_file: {
             if (has_redirect) {
-                if (_.match(.JSObjRef)) {
+                if (_.matchTok(.JSObjRef)) {
                     const obj_ref = _.prev().JSObjRef;
                     break :redirect_file { jsbuf: AST.JSBuf.new(obj_ref) };
                 }
@@ -1820,7 +1820,7 @@ pub const Parser = struct {
                         * = _.expect(.Asterisk);
                         atoms.append(.asterisk)?;
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             break;
                         }
                     },
@@ -1829,7 +1829,7 @@ pub const Parser = struct {
                         * = _.expect(.DoubleAsterisk);
                         atoms.append(.double_asterisk)?;
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             break;
                         }
                     },
@@ -1839,7 +1839,7 @@ pub const Parser = struct {
                         atoms.append(.brace_begin)?;
                         // TODO in this case we know it can't possibly be the beginning of a brace expansion so maybe its faster to just change it to text here
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             if (should_break) break;
                         }
                     },
@@ -1848,7 +1848,7 @@ pub const Parser = struct {
                         * = _.expect(.BraceEnd);
                         atoms.append(.brace_end)?;
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             break;
                         }
                     },
@@ -1857,13 +1857,13 @@ pub const Parser = struct {
                         * = _.expect(.Comma);
                         atoms.append(.comma)?;
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             if (should_break) break;
                         }
                     },
                     .CmdSubstBegin => {
                         * = _.expect(.CmdSubstBegin);
-                        const is_quoted = _.match(.CmdSubstQuoted);
+                        const is_quoted = _.matchTok(.CmdSubstQuoted);
                         let subparser = _.make_subparser(.cmd_subst);
                         const script = subparser.parse_impl() catch |e| {
                             _.continue_from_subparser(&subparser);
@@ -1875,7 +1875,7 @@ pub const Parser = struct {
                         } });
                         _.continue_from_subparser(&subparser);
                         if (_.delimits(_.peek())) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             break;
                         }
                     },
@@ -1895,7 +1895,7 @@ pub const Parser = struct {
                             atoms.append({ Text: txt })?;
                         }
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             if (should_break) break;
                         }
                     },
@@ -1904,7 +1904,7 @@ pub const Parser = struct {
                         const txt = _.text(txtrng);
                         atoms.append({ Var: txt })?;
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             if (should_break) break;
                         }
                     },
@@ -1912,7 +1912,7 @@ pub const Parser = struct {
                         * = _.expect(.VarArgv);
                         atoms.append({ VarArgv: int })?;
                         if (next_delimits) {
-                            * = _.match(.Delimit);
+                            * = _.matchTok(.Delimit);
                             if (should_break) break;
                         }
                     },
@@ -2017,7 +2017,7 @@ pub const Parser = struct {
     }
 
     /// Consumes token if it matches
-    fn match(*_, toktag: TokenTag): bool {
+    fn matchTok(*_, toktag: TokenTag): bool {
         if (@as(TokenTag, _.peek()) == toktag) {
             * = _.advance();
             return true;

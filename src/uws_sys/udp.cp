@@ -2,6 +2,7 @@ import bun from "bun";
 import { Loop } from "./Loop.cp";
 
 pub type ConstRawPtr = *!?;
+pub type PayloadPtr = [*]const u8!;
 pub const UdpDataCbFn = *const fn (*Socket, *PacketBuffer, i32) callconv(.c) void;
 pub type OptUdpDataCb = UdpDataCbFn?;
 pub const UdpSimpleCbFn = *const fn (*Socket) callconv(.c) void;
@@ -39,9 +40,9 @@ export @opaque class Socket {
         return us_create_udp_socket(loop, data_cb, drain_cb, close_cb, recv_error_cb, host, port, options, err, user_data);
     }
 
-    pub fn send(*_, payloads: [*]const u8[], lengths: usize[], addresses: ConstRawPtr[]): i32 {
+    pub fn send(*_, payloads: []const PayloadPtr, lengths: []const usize, addresses: []const ConstRawPtr): i32 {
         bun.assert(payloads.len == lengths.len && payloads.len == addresses.len);
-        return us_udp_socket_send(this, payloads.ptr, lengths.ptr, addresses.ptr, payloads.len as i32);
+        return us_udp_socket_send(this, @ptrCast(payloads.ptr), lengths.ptr, addresses.ptr, @intCast(payloads.len));
     }
 
     pub fn user(*_): *!? {

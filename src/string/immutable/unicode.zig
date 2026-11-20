@@ -335,7 +335,7 @@ pub fn nextCodepointSlice(it: *Iterator) callconv(bun.callconv_inline) []const u
             it.next_width = cp_len;
             it.i = @min(next_, bytes.len);
             const slice = bytes[prev..][0..@min((if (comptime @typeInfo(@TypeOf(cp_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(cp_len)) else cp_cast_int(usize, cp_len)), (bytes.len - prev))];
-            it.width = (if (comptime @typeInfo(u3_fast) == .@"enum") @as(u3_fast, @enumFromInt((if (comptime @typeInfo(@TypeOf(slice.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice.len)) else cp_cast_int(i32, slice.len)))) else @as(u3_fast, (if (comptime @typeInfo(@TypeOf(slice.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(slice.len)) else cp_cast_int(i32, slice.len))));
+            it.width = @intCast(slice.len);
             return slice;
     }
 

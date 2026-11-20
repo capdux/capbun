@@ -7,18 +7,18 @@ const VirtualMachine = jsc.VirtualMachine;
     fn JSNodePerformanceHooksHistogram_recordDelay(histogram: jsc.JSValue, delay_ns: i64);
 }
 
-export class EventLoopDelayMonitor {
-    js_histogram: jsc.JSValue = jsc.JSValue.zero;
+@root struct EventLoopDelayMonitor {
+    js_histogram: jsc.JSValue = jsc.JSValue.zero,
 
     event_loop_timer: jsc.API.Timer.EventLoopTimer = .{
         .next = .epoch,
         .tag = .EventLoopDelayMonitor,
-    };
-    resolution_ms: i32 = 10;
-    last_fire_ns: u64 = 0;
-    enabled: bool = false;
+    },
+    resolution_ms: i32 = 10,
+    last_fire_ns: u64 = 0,
+    enabled: bool = false,
 
-    pub fn enable(_: *EventLoopDelayMonitor, vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) {
+    pub fn enable(*_, vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) {
         if (_.enabled) return;
         _.js_histogram = histogram;
         _.resolution_ms = resolution_ms;
@@ -28,10 +28,10 @@ export class EventLoopDelayMonitor {
         // Schedule timer
         const now = bun.timespec.now(.force_real_time);
         _.event_loop_timer.next = now.addMs(@intCast(resolution_ms));
-        vm.timer.insert(&_.event_loop_timer);
+        * = vm.timer.insert(&_.event_loop_timer);
     }
 
-    pub fn disable(_: *EventLoopDelayMonitor, vm: *VirtualMachine) {
+    pub fn disable(*_, vm: *VirtualMachine) {
         if (!_.enabled) return;
 
         _.enabled = false;
@@ -40,18 +40,18 @@ export class EventLoopDelayMonitor {
         vm.timer.remove(&_.event_loop_timer);
     }
 
-    pub fn isEnabled(_: *const EventLoopDelayMonitor): bool {
-        return _.enabled and _.js_histogram != jsc.JSValue.zero;
+    pub fn isEnabled(): bool {
+        return _.enabled && _.js_histogram != jsc.JSValue.zero;
     }
 
-    pub fn onFire(_: *EventLoopDelayMonitor, vm: *VirtualMachine, now: *const bun.timespec) {
-        if (!_.enabled or _.js_histogram == jsc.JSValue.zero) {
+    pub fn onFire(*_, vm: *VirtualMachine, now: *const bun.timespec) {
+        if (!_.enabled || _.js_histogram == jsc.JSValue.zero) {
             return;
         }
 
         const now_ns = now.ns();
         if (_.last_fire_ns > 0) {
-            const expected_ns = @as(u64, @intCast(_.resolution_ms)) * 1000000;
+            const expected_ns = @as(u64, @intCast(_.resolution_ms)) * 1_000_000;
             const actual_ns = now_ns - _.last_fire_ns;
 
             if (actual_ns > expected_ns) {
@@ -64,7 +64,7 @@ export class EventLoopDelayMonitor {
 
         // Reschedule
         _.event_loop_timer.next = now.addMs(@intCast(_.resolution_ms));
-        vm.timer.insert(&_.event_loop_timer);
+        * = vm.timer.insert(&_.event_loop_timer);
     }
 }
 

@@ -1746,7 +1746,7 @@ pub fn parse_impl(self: *@This()) !AST.Script {
             if (((self.tokens.len == 0) or ((self.tokens.len == 1) and (self.tokens[0] == .Eof)))) {
                 return .{ .stmts = stmts.items[0..stmts.items.len] };
             }
-            while ((if ((self.inside_subshell == null)) (!.Eof.exec(self)) else (!self.match_any((&.{ .Eof, self.inside_subshell.?.closing_tok() }))))) {
+            while ((if ((self.inside_subshell == null)) (!self.matchTok(.Eof)) else (!self.match_any((&.{ .Eof, self.inside_subshell.?.closing_tok() }))))) {
                 _ = self.skip_newlines();
                 const stmt = try self.parse_stmt();
                 _ = try stmts.append(stmt);
@@ -1766,7 +1766,7 @@ pub fn parse_stmt(self: *@This()) !AST.Stmt {
             _ = &exprs;
             while ((if ((self.inside_subshell == null)) (!self.match_any_comptime((&.{ .Semicolon, .Newline, .Eof }))) else (!self.match_any((&.{ .Semicolon, .Newline, .Eof, self.inside_subshell.?.closing_tok() }))))) {
                 const expr = try self.parse_expr();
-                if (.Ampersand.exec(self)) {
+                if (self.matchTok(.Ampersand)) {
                     _ = try self.add_error("Background commands \"&\" are not supported yet.", .{});
                     return ParseError.Unsupported;
                 }
@@ -1812,7 +1812,7 @@ pub fn parse_pipeline(self: *@This()) !AST.Expr {
                     _ = try self.add_error_expected_pipeline_item((if (comptime @typeInfo(AST.Expr.Tag) == .@"enum") @as(AST.Expr.Tag, @enumFromInt(expr)) else @as(AST.Expr.Tag, expr)));
                     return ParseError.Expected;
                 }
-                while (.Pipe.exec(self)) {
+                while (self.matchTok(.Pipe)) {
                     expr = try self.parse_compound_cmd();
                     if (expr.asPipelineItem()) |next_item| {
                         _ = &next_item;
@@ -1866,7 +1866,7 @@ pub fn isIfClauseTextTokenImpl(self: *@This(), range: Token.TextRange, comptime 
     }
 
 pub fn skip_newlines(self: *@This()) void {
-            while (.Newline.exec(self)) {
+            while (self.matchTok(.Newline)) {
             }
     }
 
@@ -1922,7 +1922,7 @@ const txt = self.text(range);
                             return ParseError.Unsupported;
                         }
                         _ = self.expect(.Text);
-                        if ((!.Delimit.exec(self))) {
+                        if ((!self.matchTok(.Delimit))) {
                             _ = try self.add_error("Expected a single, simple word", .{});
                             return ParseError.Expected;
                         }
@@ -1932,7 +1932,7 @@ const txt = self.text(range);
                             return ParseError.Expected;
                         }
                         const arg = arg_opt.?;
-                        if ((!.DoubleBracketClose.exec(self))) {
+                        if ((!self.matchTok(.DoubleBracketClose))) {
                             _ = try self.add_error("Expected \"]]\" but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
                             return ParseError.Expected;
                         }
@@ -1958,7 +1958,7 @@ else => {
                 return ParseError.Expected;
             }
             const op = self.expect(.Text);
-            if ((!.Delimit.exec(self))) {
+            if ((!self.matchTok(.Delimit))) {
                 _ = try self.add_error("Expected a single, simple word", .{});
                 return ParseError.Expected;
             }
@@ -1975,7 +1975,7 @@ else => {
                     _ = try self.add_error("Expected a word, but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
                     return ParseError.Expected;
 });
-                    if ((!.DoubleBracketClose.exec(self))) {
+                    if ((!self.matchTok(.DoubleBracketClose))) {
                         _ = try self.add_error("Expected \"]]\" but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
                         return ParseError.Expected;
                     }
@@ -2114,11 +2114,11 @@ pub fn parse_simple_cmd(self: *@This()) !AST.CmdOrAssigns {
     }
 
 pub fn parse_redirect(self: *@This()) !ParsedRedirect {
-            const has_redirect = .Redirect.exec(self);
+            const has_redirect = self.matchTok(.Redirect);
             const redirect = (if (has_redirect) self.prev().Redirect else AST.RedirectFlags{ .stdin = false });
             const redirect_file: ?AST.Redirect = redirect_file: {
             if (has_redirect) {
-                if (.JSObjRef.exec(self)) {
+                if (self.matchTok(.JSObjRef)) {
                     const obj_ref = self.prev().JSObjRef;
                     break :redirect_file .{ .jsbuf = AST.JSBuf.new(obj_ref) };
                 }
@@ -2236,7 +2236,7 @@ has_glob_syntax = true;
                     _ = self.expect(.Asterisk);
                     _ = try atoms.append(.asterisk);
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         break;
                     }
 },
@@ -2245,7 +2245,7 @@ has_glob_syntax = true;
                     _ = self.expect(.DoubleAsterisk);
                     _ = try atoms.append(.double_asterisk);
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         break;
                     }
 },
@@ -2254,7 +2254,7 @@ has_brace_open = true;
                     _ = self.expect(.BraceBegin);
                     _ = try atoms.append(.brace_begin);
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         if (should_break) {
                             break;
                         }
@@ -2265,7 +2265,7 @@ has_brace_close = true;
                     _ = self.expect(.BraceEnd);
                     _ = try atoms.append(.brace_end);
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         break;
                     }
 },
@@ -2274,7 +2274,7 @@ has_comma = true;
                     _ = self.expect(.Comma);
                     _ = try atoms.append(.comma);
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         if (should_break) {
                             break;
                         }
@@ -2282,7 +2282,7 @@ has_comma = true;
 },
 .CmdSubstBegin => {
 _ = self.expect(.CmdSubstBegin);
-                    const is_quoted = .CmdSubstQuoted.exec(self);
+                    const is_quoted = self.matchTok(.CmdSubstQuoted);
                     var subparser = self.make_subparser(.cmd_subst);
                     _ = &subparser;
                     const script = (blk_catch_1: { break :blk_catch_1 ((subparser.parse_impl()) catch |e| { _ = &e; _ = self.continue_from_subparser((&subparser));
@@ -2290,7 +2290,7 @@ _ = self.expect(.CmdSubstBegin);
                     _ = atoms.append(.{ .cmd_subst = .{ .script = script, .quoted = is_quoted } });
                     _ = self.continue_from_subparser((&subparser));
                     if (self.delimits(self.peek())) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         break;
                     }
 },
@@ -2312,7 +2312,7 @@ _ = self.advance();
                         }
                     }
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         if (should_break) {
                             break;
                         }
@@ -2323,7 +2323,7 @@ _ = self.expect(.Var);
                     const txt = self.text(txtrng);
                     _ = try atoms.append(.{ .Var = txt });
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         if (should_break) {
                             break;
                         }
@@ -2333,7 +2333,7 @@ _ = self.expect(.Var);
 _ = self.expect(.VarArgv);
                     _ = try atoms.append(.{ .VarArgv = int });
                     if (next_delimits) {
-                        _ = .Delimit.exec(self);
+                        _ = self.matchTok(.Delimit);
                         if (should_break) {
                             break;
                         }
@@ -2476,7 +2476,7 @@ pub fn match_if_clausetok(self: *@This(), toktag: IfClauseTok) bool {
             return false;
     }
 
-pub fn match(self: *@This(), toktag: TokenTag) bool {
+pub fn matchTok(self: *@This(), toktag: TokenTag) bool {
             if ((@as(TokenTag, @enumFromInt(self.peek())) == toktag)) {
                 _ = self.advance();
                 return true;

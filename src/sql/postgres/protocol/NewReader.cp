@@ -8,12 +8,12 @@ const PostgresShort = int_types.PostgresShort;
 
 pub fn NewReaderWrap(
     comptime Context: type,
-    comptime markMessageStartFn_: fn (ctx: Context) void,
-    comptime peekFn_: fn (ctx: Context) []const u8,
-    comptime skipFn_: fn (ctx: Context, count: usize) void,
-    comptime ensureCapacityFn_: fn (ctx: Context, count: usize) bool,
-    comptime readFunction_: fn (ctx: Context, count: usize) AnyPostgresError!Data,
-    comptime readZ_: fn (ctx: Context) AnyPostgresError!Data,
+    comptime markMessageStartFn_: anytype,
+    comptime peekFn_: anytype,
+    comptime skipFn_: anytype,
+    comptime ensureCapacityFn_: anytype,
+    comptime readFunction_: anytype,
+    comptime readZ_: anytype,
 ): type {
     return struct {
         wrapped: Context,
@@ -27,39 +27,43 @@ pub fn NewReaderWrap(
         pub const Ctx = Context;
 
         pub inline fn markMessageStart(this) {
-            markMessageStartFn(this.wrapped);
+            let w = this.wrapped;
+            if (comptime @typeInfo(@TypeOf(markMessageStartFn)).@"fn".params[0].type.? == *Context) markMessageStartFn(&w) else markMessageStartFn(w);
         }
 
         pub inline fn read(this, count: usize): AnyPostgresError!Data {
-            return readFn(this.wrapped, count)?;
+            let w = this.wrapped;
+            return (if (comptime @typeInfo(@TypeOf(readFn)).@"fn".params[0].type.? == *Context) readFn(&w, count) else readFn(w, count))?;
         }
 
         pub inline fn eatMessage(this, comptime msg_: anytype): AnyPostgresError!void {
             const msg = msg_[1..];
             this.ensureCapacity(msg.len)?;
-
-            let input = readFn(this.wrapped, msg.len)?;
+            let input = this.read(msg.len)?;
             defer input.deinit();
             if (bun.strings.eqlComptime(input.slice(), msg)) return;
             return err.InvalidMessage;
         }
 
         pub fn skip(this, count: usize): AnyPostgresError!void {
-            skipFn(this.wrapped, count);
+            let w = this.wrapped;
+            if (comptime @typeInfo(@TypeOf(skipFn)).@"fn".params[0].type.? == *Context) skipFn(&w, count) else skipFn(w, count);
         }
 
         pub fn peek(this): []const u8 {
-            return peekFn(this.wrapped);
+            let w = this.wrapped;
+            return if (comptime @typeInfo(@TypeOf(peekFn)).@"fn".params[0].type.? == *Context) peekFn(&w) else peekFn(w);
         }
 
         pub inline fn readZ(this): AnyPostgresError!Data {
-            return readZFn(this.wrapped)?;
+            let w = this.wrapped;
+            return (if (comptime @typeInfo(@TypeOf(readZFn)).@"fn".params[0].type.? == *Context) readZFn(&w) else readZFn(w))?;
         }
 
         pub inline fn ensureCapacity(this, count: usize): AnyPostgresError!void {
-            if (!ensureCapacityFn(this.wrapped, count)) {
-                return err.ShortRead;
-            }
+            let w = this.wrapped;
+            const ok = if (comptime @typeInfo(@TypeOf(ensureCapacityFn)).@"fn".params[0].type.? == *Context) ensureCapacityFn(&w, count) else ensureCapacityFn(w, count);
+            if (!ok) return err.ShortRead;
         }
 
         pub fn int(this, comptime Int: type): Int! {

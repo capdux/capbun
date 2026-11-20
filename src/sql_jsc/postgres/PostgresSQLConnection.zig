@@ -962,7 +962,7 @@ else => .disable,
         var ptr: *PostgresSQLConnection = try bun.default_allocator.create(PostgresSQLConnection);
         _ = &ptr;
         {
-            ptr.* = PostgresSQLConnection{ .globalObject = globalObject, .vm = vm, .database = database, .user = username, .password = password, .path = path, .options = options, .options_buf = options_buf, .socket = Socket{ .SocketTCP = .{ .socket = .{ .detached = .{} } } }, .requests = PostgresRequest.Queue.init(bun.default_allocator), .statements = PreparedStatementsMap{  }, .tls_config = tls_config, .secure = secure, .ssl_mode = ssl_mode, .tls_status = (if ((ssl_mode != .disable)) .pending else .none), .idle_timeout_interval_ms = @intCast(idle_timeout), .connection_timeout_ms = @intCast(connection_timeout), .max_lifetime_interval_ms = @intCast(max_lifetime), .flags = .{ .use_unnamed_prepared_statements = use_unnamed_prepared_statements } };
+            ptr.* = PostgresSQLConnection{ .globalObject = globalObject, .vm = vm, .database = database, .user = username, .password = password, .path = path, .options = options, .options_buf = options_buf, .socket = Socket{ .SocketTCP = .{ .socket = .detached } }, .requests = PostgresRequest.Queue.init(bun.default_allocator), .statements = PreparedStatementsMap{  }, .tls_config = tls_config, .secure = secure, .ssl_mode = ssl_mode, .tls_status = (if ((ssl_mode != .disable)) .pending else .none), .idle_timeout_interval_ms = @intCast(idle_timeout), .connection_timeout_ms = @intCast(connection_timeout), .max_lifetime_interval_ms = @intCast(max_lifetime), .flags = .{ .use_unnamed_prepared_statements = use_unnamed_prepared_statements } };
         }
         secure = null;
         tls_config = .{};

@@ -116,7 +116,7 @@ else => true,
         }
         for (cp_mut_slice(&self.cmds.?)) |*c| {
             _ = &c;
-            (c.*).* = .{ .result = 0 };
+            (c.*) = .{ .result = 0 };
         }
         var pipes = bun.handleOom(self.base.allocator().alloc(Pipe, (if ((cmd_count > 1)) (cmd_count - 1) else 1)));
         _ = &pipes;

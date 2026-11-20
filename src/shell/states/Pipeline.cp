@@ -123,7 +123,7 @@ pub const PipelineState = union(enum) {
         _.cmds = if (cmd_count >= 1) bun.handleOom(_.base.allocator().alloc(CmdOrResult, cmd_count)) else null;
         if (_.cmds == null) return null;
 
-        for (*c of _.cmds.?) c.* = .{ .result = 0 };
+        for (*c of _.cmds.?) c = .{ .result = 0 };
 
         let pipes = bun.handleOom(_.base.allocator().alloc(Pipe, if (cmd_count > 1) cmd_count - 1 else 1));
         _.pipes = pipes;

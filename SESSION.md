@@ -3152,3 +3152,5 @@ Options:
 - **[2026-11-20 22:46] Wave 21 D 组验收提交（29 模块全绿）**：完成 1 错长尾第 2 批 29 模块独立验收（29/29 PASS，ratio 0.840x~1.146x）并原子提交；记录外部根因 `jsc/RefString.zig:58`（`Callback` 双重 `*const` 导致 `VirtualMachine.zig:1502` 报错）。
 
 - **[2026-11-20 22:47] Wave 21 E 组验收提交（26 模块全绿）**：完成 1 错长尾第 3 批 26 模块独立验收（26/26 PASS，ratio 0.274x~1.147x，连带修复 `validators.cp`）并原子提交；记录外部根因 `runtime/node/path_watcher.cp`（`Callback` 双重 `*const`）并流水线补派 G 组。
+
+- **[2026-11-20 22:49] Wave 21 F 组验收提交（28 模块全绿）**：完成 `EventLoopDelayMonitor`/`Path` 2 个外部根因 + 最后 26 个 1 错长尾模块（`toHaveReturnedWith` 随 G 组同提）独立验收（28/28 PASS，ratio 0.859x~1.153x）并原子提交；静待 G 组（`3adcd579`）完成即执行 Wave 22 `zig:check`。

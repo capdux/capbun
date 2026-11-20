@@ -3251,7 +3251,7 @@ return .{ .err = e };
 });
         const new_flags: i32 = (if (nonblocking) (current_flags | (if (comptime @typeInfo(@TypeOf(bun.O.NONBLOCK)) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.O.NONBLOCK)) else cp_cast_int(i32, bun.O.NONBLOCK))) else (current_flags & (~(if (comptime @typeInfo(@TypeOf(bun.O.NONBLOCK)) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.O.NONBLOCK)) else cp_cast_int(i32, bun.O.NONBLOCK)))));
         if ((new_flags != current_flags)) {
-            switch (fcntl(fd, std.posix.F.SETFL, (if (comptime @typeInfo(fnctl_int) == .@"enum") @as(fnctl_int, @enumFromInt((if (comptime @typeInfo(@TypeOf(new_flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(new_flags)) else cp_cast_int(i32, new_flags)))) else @as(fnctl_int, (if (comptime @typeInfo(@TypeOf(new_flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(new_flags)) else cp_cast_int(i32, new_flags)))))) {
+            switch (fcntl(fd, std.posix.F.SETFL, @as(fnctl_int, @intCast(new_flags)))) {
 .err => |e| {
 return .{ .err = e };
 },

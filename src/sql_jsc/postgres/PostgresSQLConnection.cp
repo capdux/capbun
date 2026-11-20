@@ -948,7 +948,7 @@ export struct SocketHandlerSSL {
                 path: path,
                 options: options,
                 options_buf: options_buf,
-                socket: Socket{ SocketTCP: { socket: { detached: {} } } },
+                socket: Socket{ SocketTCP: { socket: .detached } },
                 requests: PostgresRequest.Queue.init(bun.default_allocator),
                 statements: PreparedStatementsMap{},
                 tls_config: tls_config,

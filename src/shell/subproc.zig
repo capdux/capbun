@@ -176,10 +176,10 @@ pub fn default(arena_alloc: *bun.ArenaAllocator, cmd_parent: *ShellCmd, event_lo
                 _ = &p;
                 path_val = p;
             }
-            var out: SubprocSpawnArgs = SubprocSpawnArgs{ .@"arena" = arena_alloc, .override_env = false, .env_array = .empty, .cwd = event_loop.topLevelDir(), .stdio = .{ .ignore, .{ .pipe = .{} }, .inherit }, .lazy = false, .PATH = path_val, .detached = false, .cmd_parent = cmd_parent };
+            var out: SubprocSpawnArgs = SubprocSpawnArgs{ .@"arena" = arena_alloc, .override_env = false, .env_array = .empty, .cwd = event_loop.topLevelDir(), .stdio = .{ .ignore, .{ .pipe = undefined }, .inherit }, .lazy = false, .PATH = path_val, .detached = false, .cmd_parent = cmd_parent };
             _ = &out;
             if (comptime is_sync) {
-                out.stdio = .{ .ignore, .{ .pipe = .{} }, .{ .pipe = .{} } };
+                out.stdio = .{ .ignore, .{ .pipe = undefined }, .{ .pipe = undefined } };
             }
             return out;
     }
