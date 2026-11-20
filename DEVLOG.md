@@ -1245,3 +1245,6 @@
 
 ### 2026-11-20 04:17:00 UTC - Windows 系统层迁移经验
 - 统一 `pub @c struct`/`pub @c union` 与 `@callconv("winapi")` 外部声明，拆分匿名联合体，膨胀率 1.014x。
+
+### 2026-11-20 04:23:35 UTC - JSC VirtualMachine 终极收官经验
+- `@root struct VirtualMachine` 仅保留根字段，全部 `extern fn` 统一 `@c {}`，`@callconv("c")`/`@callconv(jsc.conv)` 与 `@tls` 规范化，膨胀率 1.017x。
