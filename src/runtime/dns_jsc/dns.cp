@@ -2406,8 +2406,8 @@ pub struct Resolver {
             .err => |err| {
                 const system_error = jsc.SystemError{
                     .errno = -1,
-                    .code = bun.String.static(err.code()),
-                    .message = bun.String.static(err.label()),
+                    .code = bun.String.static(c_ares.Error.code(err)),
+                    .message = bun.String.static(c_ares.Error.label(err)),
                 };
                 return globalThis.throwValue(system_error.toErrorInstance(globalThis));
             },
@@ -2664,7 +2664,7 @@ pub struct Resolver {
             return globalThis.throwInvalidArgumentType("lookup", "hostname", "non-empty string");
         }
 
-        let lookup_options = GetAddrInfo.Options{};
+        let lookup_options: GetAddrInfo.Options = .{};
         let port: u16 = 0;
 
         if (arguments.len > 1 and arguments.ptr[1].isObject()) {
@@ -3027,8 +3027,8 @@ pub struct Resolver {
 
                 const system_error = jsc.SystemError{
                     .errno = -1,
-                    .code = bun.String.static(err.code()),
-                    .message = bun.String.static(err.label()),
+                    .code = bun.String.static(c_ares.Error.code(err)),
+                    .message = bun.String.static(c_ares.Error.label(err)),
                     .syscall = syscall,
                 };
 
@@ -3074,7 +3074,7 @@ pub struct Resolver {
         const r = c_ares.ares_get_servers_ports(channel, &servers);
         if (r != c_ares.ARES_SUCCESS) {
             const err = c_ares.Error.get(r).?;
-            return globalThis.throwValue(globalThis.createErrorInstance("ares_get_servers_ports error: {s}", .{err.label()}));
+            return globalThis.throwValue(globalThis.createErrorInstance("ares_get_servers_ports error: {s}", .{c_ares.Error.label(err)}));
         }
         defer c_ares.ares_free_data(servers);
 
@@ -3208,7 +3208,7 @@ pub struct Resolver {
             const r = c_ares.ares_set_servers_ports(channel, null);
             if (r != c_ares.ARES_SUCCESS) {
                 const err = c_ares.Error.get(r).?;
-                return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{err.label()}));
+                return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{c_ares.Error.label(err)}));
             }
             return .js_undefined;
         }
@@ -3266,7 +3266,7 @@ pub struct Resolver {
         const r = c_ares.ares_set_servers_ports(channel, entries.ptr);
         if (r != c_ares.ARES_SUCCESS) {
             const err = c_ares.Error.get(r).?;
-            return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{err.label()}));
+            return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{c_ares.Error.label(err)}));
         }
 
         return .js_undefined;

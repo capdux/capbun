@@ -1,4 +1,4 @@
-pub const SocketAddress = @import("./SocketAddress.cp");
+pub const SocketAddress = @import("./SocketAddress.zig");
 
 fn JSSocketType(comptime ssl: bool): type {
     if (!ssl) {
@@ -22,11 +22,11 @@ fn selectALPNCallback(ssl: (*BoringSSL.SSL)?, out: [*c][*c]const u8, outlen: [*c
     }
 }
 
-pub const Handlers = @import("./Handlers.cp");
+pub const Handlers = @import("./Handlers.zig");
 pub const SocketConfig = Handlers.SocketConfig;
 
-pub const Listener = @import("./Listener.cp");
-pub const WindowsNamedPipeContext = if (Environment.isWindows) @import("./WindowsNamedPipeContext.cp") else void;
+pub const Listener = @import("./Listener.zig");
+pub const WindowsNamedPipeContext = if (Environment.isWindows) @import("./WindowsNamedPipeContext.zig") else void;
 
 pub fn NewSocket(comptime ssl: bool): type {
     return struct {
@@ -2013,7 +2013,7 @@ pub fn jsSetSocketOptions(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 }
 
 const std = @import("std");
-const tls_socket_functions = @import("./tls_socket_functions.cp");
+const tls_socket_functions = @import("./tls_socket_functions.zig");
 const H2FrameParser = @import("../api/bun/h2_frame_parser.zig").H2FrameParser;
 
 const bun = @import("bun");

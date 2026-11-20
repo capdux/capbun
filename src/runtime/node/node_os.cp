@@ -60,7 +60,7 @@ pub fn cpus(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     };
 
     return cpusImpl(global) catch {
-        const e = jsc.SystemError{
+        let e = jsc.SystemError{
             message: bun.String.static("Failed to get CPU information"),
             code: bun.String.static(@tagName(jsc.Node.ErrorCode.ERR_SYSTEM_ERROR)),
         };
@@ -98,7 +98,8 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
         };
         defer file.close();
 
-        const read = bun.sys.File.@"from"(file).readToEndWithArrayList(&file_buf, .probably_small).unwrap()?;
+        const file_buf_ptr = &file_buf;
+        const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
         defer file_buf.clearRetainingCapacity();
         const contents = file_buf.items[0..read];
 
@@ -149,7 +150,8 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
     if (file := std.fs.cwd().openFile("/proc/cpuinfo", {}) catch null) {
         defer file.close();
 
-        const read = bun.sys.File.@"from"(file).readToEndWithArrayList(&file_buf, .probably_small).unwrap()?;
+        const file_buf_ptr = &file_buf;
+        const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
         defer file_buf.clearRetainingCapacity();
         const contents = file_buf.items[0..read];
 
@@ -200,7 +202,8 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
         if (file := std.fs.cwd().openFile(path, {}) catch null) {
             defer file.close();
 
-            const read = bun.sys.File.@"from"(file).readToEndWithArrayList(&file_buf, .probably_small).unwrap()?;
+            const file_buf_ptr = &file_buf;
+        const read = bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap()?;
             defer file_buf.clearRetainingCapacity();
             const contents = file_buf.items[0..read];
 
@@ -376,7 +379,7 @@ pub fn freemem(): u64 {
 pub fn getPriority(global: *jsc.JSGlobalObject, pid: i32): bun.JSError!i32 {
     const result = get_process_priority(pid);
     if (result == std.math.maxInt(i32)) {
-        const e = jsc.SystemError{
+        let e = jsc.SystemError{
             message: bun.String.static("no such process"),
             code: bun.String.static("ESRCH"),
             errno: switch (bun.Environment.os) {
@@ -611,7 +614,7 @@ fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSVa
                 return jsc.JSValue.createEmptyObject(globalThis, 0);
             }
         }
-        const e = jsc.SystemError{
+        let e = jsc.SystemError{
             message: bun.String.static("A system error occurred: getifaddrs returned an error"),
             code: bun.String.static("ERR_SYSTEM_ERROR"),
             errno: @intFromEnum(errno),
@@ -789,7 +792,7 @@ fn networkInterfacesWindows(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JS
     let count: c_int = undefined;
     const e = libuv.uv_interface_addresses(&ifaces, &count);
     if (e != 0) {
-        const sys_err = jsc.SystemError{
+        let sys_err = jsc.SystemError{
             message: bun.String.static("uv_interface_addresses failed"),
             code: bun.String.static("ERR_SYSTEM_ERROR"),
             //.info = info,
@@ -974,7 +977,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32)! {
     const errcode = setProcessPriorityImpl(pid, priority);
     switch (errcode) {
         .SRCH => {
-            const e = jsc.SystemError{
+            let e = jsc.SystemError{
                 message: bun.String.static("no such process"),
                 code: bun.String.static("ESRCH"),
                 errno: switch (bun.Environment.os) {
@@ -986,7 +989,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32)! {
             return global.throwValue(e.toErrorInstanceWithInfoObject(global));
         },
         .ACCES => {
-            const e = jsc.SystemError{
+            let e = jsc.SystemError{
                 message: bun.String.static("permission denied"),
                 code: bun.String.static("EACCES"),
                 errno: switch (bun.Environment.os) {
@@ -998,7 +1001,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32)! {
             return global.throwValue(e.toErrorInstanceWithInfoObject(global));
         },
         .PERM => {
-            const e = jsc.SystemError{
+            let e = jsc.SystemError{
                 message: bun.String.static("operation not permitted"),
                 code: bun.String.static("EPERM"),
                 errno: switch (bun.Environment.os) {
@@ -1061,7 +1064,7 @@ pub fn uptime(global: *jsc.JSGlobalObject): bun.JSError!f64 {
             let uptime_value: f64 = undefined;
             const e = libuv.uv_uptime(&uptime_value);
             if (e != 0) {
-                const sys_err = jsc.SystemError{
+                let sys_err = jsc.SystemError{
                     message: bun.String.static("failed to get system uptime"),
                     code: bun.String.static("ERR_SYSTEM_ERROR"),
                     errno: e,

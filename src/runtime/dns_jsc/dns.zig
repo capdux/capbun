@@ -2163,7 +2163,7 @@ pub fn getChannelOrError(self: *Resolver, globalThis: *jsc.JSGlobalObject) bun.J
 return result;
 },
 .err => |err| {
-const system_error = jsc.SystemError{ .errno = -1, .code = bun.String.static(err.code()), .message = bun.String.static(err.label()) };
+const system_error = jsc.SystemError{ .errno = -1, .code = bun.String.static(c_ares.Error.code(err)), .message = bun.String.static(c_ares.Error.label(err)) };
             return globalThis.throwValue(system_error.toErrorInstance(globalThis));
 },
 }
@@ -2462,7 +2462,7 @@ pub fn globalLookup(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
             if ((name_str.length() == 0)) {
                 return globalThis.throwInvalidArgumentType("lookup", "hostname", "non-empty string");
             }
-            var lookup_options = GetAddrInfo.Options;
+            var lookup_options: GetAddrInfo.Options = .{};
             _ = &lookup_options;
             var port: u16 = 0;
             _ = &port;
@@ -2908,7 +2908,7 @@ pub fn c_aresLookupWithNormalizedName(self: *Resolver, query: GetAddrInfo, globa
                 defer {
                 _ = syscall.deref();
                 }
-                const system_error = jsc.SystemError{ .errno = -1, .code = bun.String.static(err.code()), .message = bun.String.static(err.label()), .syscall = syscall };
+                const system_error = jsc.SystemError{ .errno = -1, .code = bun.String.static(c_ares.Error.code(err)), .message = bun.String.static(c_ares.Error.label(err)), .syscall = syscall };
                 return globalThis.throwValue(system_error.toErrorInstance(globalThis));
             }
 },
@@ -2951,7 +2951,7 @@ pub fn getChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObje
                 const err = (c_ares.Error.get(r)).?;
                 var __err_moved = false; _ = &__err_moved;
                 defer if (!__err_moved) { const __T = @TypeOf(err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = err.release() catch {}; } else { err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = err; _drop_val.release(); } };
-                return globalThis.throwValue(globalThis.createErrorInstance("ares_get_servers_ports error: {s}", .{ err.label() }));
+                return globalThis.throwValue(globalThis.createErrorInstance("ares_get_servers_ports error: {s}", .{ c_ares.Error.label(err) }));
             }
             defer {
             _ = c_ares.ares_free_data(servers);
@@ -3103,7 +3103,7 @@ pub fn setChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObje
                     const err = (c_ares.Error.get(r)).?;
                     var __err_moved = false; _ = &__err_moved;
                     defer if (!__err_moved) { const __T = @TypeOf(err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = err.release() catch {}; } else { err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = err; _drop_val.release(); } };
-                    return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{ err.label() }));
+                    return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{ c_ares.Error.label(err) }));
                 }
                 return error.js_undefined;
             }
@@ -3168,7 +3168,7 @@ pub fn setChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObje
                 const err = (c_ares.Error.get(r)).?;
                 var __err_moved = false; _ = &__err_moved;
                 defer if (!__err_moved) { const __T = @TypeOf(err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = err.release() catch {}; } else { err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = err; _drop_val.release(); } };
-                return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{ err.label() }));
+                return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{ c_ares.Error.label(err) }));
             }
             return error.js_undefined;
     }

@@ -1,20 +1,45 @@
 // src/runtime/webcore/blob/Store.cp
 import bun from "bun";
-import { default_allocator, assert, strings, webcore, cast, destroy, PathString, Mode, isRegularFile, URL, JSError, JSTerminated, IdentityContext } from "bun";
-import { MimeType } from "bun:http";
-import { node } from "bun:api";
-import { JSGlobalObject, JSValue, JSPromise, ZigString, Node, WebCore } from "bun:jsc";
-import atomic from "std:atomic";
-import { Allocator } from "std:mem";
-import { HashMap } from "std";
-import { ArrayListUnmanaged } from "std:array_list";
-import s3client from "../s3/client";
-import { S3Credentials, S3CredentialsWithOptions, MultiPartUploadOptions, ACL, StorageClass, S3DeleteResult, S3ListObjectsResult, S3ListObjectsOptions, getListObjectsOptionsFromJS } from "../s3/client";
+import s3client from "../s3/client.zig";
 
-const AtomicValue = atomic.Value;
+const default_allocator = bun.default_allocator;
+const assert = bun.assert;
+const strings = bun.strings;
+const webcore = bun.webcore;
+const cast = bun.cast;
+const destroy = bun.destroy;
+const PathString = bun.PathString;
+const Mode = bun.Mode;
+const isRegularFile = bun.isRegularFile;
+const URL = bun.URL;
+const JSError = bun.JSError;
+const JSTerminated = bun.JSTerminated;
+const IdentityContext = bun.IdentityContext;
+const MimeType = bun.http.MimeType;
+const node = bun.api.node;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const JSPromise = jsc.JSPromise;
+const ZigString = jsc.ZigString;
+const Node = jsc.Node;
+const WebCore = jsc.WebCore;
+const Allocator = std.mem.Allocator;
+const HashMap = std.HashMap;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const AtomicValue = std.atomic.Value;
+
+const S3Credentials = s3client.S3Credentials;
+const S3CredentialsWithOptions = s3client.S3CredentialsWithOptions;
+const MultiPartUploadOptions = s3client.MultiPartUploadOptions;
+const ACL = s3client.ACL;
+const StorageClass = s3client.StorageClass;
+const S3DeleteResult = s3client.S3DeleteResult;
+const S3ListObjectsResult = s3client.S3ListObjectsResult;
+const S3ListObjectsOptions = s3client.S3ListObjectsOptions;
+const getListObjectsOptionsFromJS = s3client.getListObjectsOptionsFromJS;
 const s3Delete = s3client.delete;
 const s3ListObjects = s3client.listObjects;
-const jsc = bun.jsc;
 
 const Blob = webcore.Blob;
 const SizeType = Blob.SizeType;

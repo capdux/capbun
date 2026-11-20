@@ -63,40 +63,7 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
-const default_allocator = @import("bun").default_allocator;
-const assert = @import("bun").assert;
-const strings = @import("bun").strings;
-const webcore = @import("bun").webcore;
-const cast = @import("bun").cast;
-const destroy = @import("bun").destroy;
-const PathString = @import("bun").PathString;
-const Mode = @import("bun").Mode;
-const isRegularFile = @import("bun").isRegularFile;
-const URL = @import("bun").URL;
-const JSError = @import("bun").JSError;
-const JSTerminated = @import("bun").JSTerminated;
-const IdentityContext = @import("bun").IdentityContext;
-const MimeType = @import("bun:http").MimeType;
-const node = @import("bun:api").node;
-const JSGlobalObject = @import("bun:jsc").JSGlobalObject;
-const JSValue = @import("bun:jsc").JSValue;
-const JSPromise = @import("bun:jsc").JSPromise;
-const ZigString = @import("bun:jsc").ZigString;
-const Node = @import("bun:jsc").Node;
-const WebCore = @import("bun:jsc").WebCore;
-pub const atomic = @import("std:atomic");
-const Allocator = @import("std:mem").Allocator;
-const ArrayListUnmanaged = @import("std:array_list").ArrayListUnmanaged;
-pub const s3client = @import("../s3/client");
-const S3Credentials = @import("../s3/client").S3Credentials;
-const S3CredentialsWithOptions = @import("../s3/client").S3CredentialsWithOptions;
-const MultiPartUploadOptions = @import("../s3/client").MultiPartUploadOptions;
-const ACL = @import("../s3/client").ACL;
-const StorageClass = @import("../s3/client").StorageClass;
-const S3DeleteResult = @import("../s3/client").S3DeleteResult;
-const S3ListObjectsResult = @import("../s3/client").S3ListObjectsResult;
-const S3ListObjectsOptions = @import("../s3/client").S3ListObjectsOptions;
-const getListObjectsOptionsFromJS = @import("../s3/client").getListObjectsOptionsFromJS;
+pub const s3client = @import("../s3/client.zig");
 pub const StoreFile = struct {
     pathlike: Node.PathOrFileDescriptor,
     mime_type: MimeType = .other,
@@ -610,9 +577,42 @@ pub fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator) !*Store
         };
 };
 
-const AtomicValue = atomic.Value;
+const default_allocator = bun.default_allocator;
+const assert = bun.assert;
+const strings = bun.strings;
+const webcore = bun.webcore;
+const cast = bun.cast;
+const destroy = bun.destroy;
+const PathString = bun.PathString;
+const Mode = bun.Mode;
+const isRegularFile = bun.isRegularFile;
+const URL = bun.URL;
+const JSError = bun.JSError;
+const JSTerminated = bun.JSTerminated;
+const IdentityContext = bun.IdentityContext;
+const MimeType = bun.http.MimeType;
+const node = bun.api.node;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const JSPromise = jsc.JSPromise;
+const ZigString = jsc.ZigString;
+const Node = jsc.Node;
+const WebCore = jsc.WebCore;
+const Allocator = std.mem.Allocator;
+const HashMap = std.HashMap;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const AtomicValue = std.atomic.Value;
+const S3Credentials = s3client.S3Credentials;
+const S3CredentialsWithOptions = s3client.S3CredentialsWithOptions;
+const MultiPartUploadOptions = s3client.MultiPartUploadOptions;
+const ACL = s3client.ACL;
+const StorageClass = s3client.StorageClass;
+const S3DeleteResult = s3client.S3DeleteResult;
+const S3ListObjectsResult = s3client.S3ListObjectsResult;
+const S3ListObjectsOptions = s3client.S3ListObjectsOptions;
+const getListObjectsOptionsFromJS = s3client.getListObjectsOptionsFromJS;
 const s3Delete = s3client.delete;
 const s3ListObjects = s3client.listObjects;
-const jsc = bun.jsc;
 const Blob = webcore.Blob;
 const SizeType = Blob.SizeType;

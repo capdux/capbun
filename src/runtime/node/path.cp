@@ -61,8 +61,11 @@ inline fn toLowerT(comptime T: type, a_c: T): T {
     return if (a_c < 128) i32(std.ascii.toLower(i32(a_c))) else a_c;
 }
 
+type U8Buf = []u8;
+type U16Buf = []u16;
+
 fn MaybeBuf(comptime T: type): type {
-    return jsc.Node.Maybe([]T, Syscall.Error);
+    return if (T == u8) jsc.Node.Maybe(U8Buf, Syscall.Error) else jsc.Node.Maybe(U16Buf, Syscall.Error);
 }
 
 fn MaybeSlice(comptime T: type): type {
@@ -1030,7 +1033,7 @@ pub fn isAbsolute(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: 
     validateString(globalObject, path_ptr, "path", .{})?;
 
     const pathZStr = path_ptr.getZigString(globalObject)?;
-    if (pathZStr.len == 0) return .false;
+    if (pathZStr.len == 0) return jsc.JSValue.false;
     if (isWindows) return jsc.JSValue.jsBoolean(isAbsoluteWindowsZigString(pathZStr));
     return jsc.JSValue.jsBoolean(isAbsolutePosixZigString(pathZStr));
 }
@@ -1229,7 +1232,7 @@ pub fn joinJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, allocator: 
     return if (isWindows) joinWindowsJS_T(T, globalObject, paths, buf, buf2) else joinPosixJS_T(T, globalObject, paths, buf, buf2);
 }
 
-pub fn join(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
+fn joinImpl(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
     if (args_len == 0) return bun.String.createUTF8ForJS(globalObject, CHAR_STR_DOT);
 
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
@@ -1251,6 +1254,8 @@ pub fn join(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc
     }
     return joinJS_T(u8, globalObject, allocator, isWindows, paths);
 }
+
+pub const join = joinImpl;
 
 /// Based on Node v21.6.1 private helper normalizeString:
 /// https://github.com/nodejs/node/blob/6ae20aa63de78294b18d5015481485b7cd8fbb60/lib/path.js#L65C1-L66C77

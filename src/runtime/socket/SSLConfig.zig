@@ -65,343 +65,317 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
-pub const SSLConfig = struct {
-    server_name: ?[*:0]u8 = null,
-    key_file_name: ?[*:0]u8 = null,
-    cert_file_name: ?[*:0]u8 = null,
-    ca_file_name: ?[*:0]u8 = null,
-    dh_params_file_name: ?[*:0]u8 = null,
-    passphrase: ?[*:0]u8 = null,
-    key: ?[][*:0]u8 = null,
-    cert: ?[][*:0]u8 = null,
-    ca: ?[][*:0]u8 = null,
-    secure_options: u32 = 0,
-    request_cert: i32 = 0,
-    reject_unauthorized: i32 = 0,
-    ssl_ciphers: ?[*:0]u8 = null,
-    protos: ?[*:0]u8 = null,
-    client_renegotiation_limit: u32 = 0,
-    client_renegotiation_window: u32 = 0,
-    requires_custom_request_ctx: bool = false,
-    is_using_default_ciphers: bool = true,
-    low_memory_mode: bool = false,
-    cached_hash: u64 = 0,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.server_name = null; self_ptr.key_file_name = null; self_ptr.cert_file_name = null; self_ptr.ca_file_name = null; self_ptr.dh_params_file_name = null; self_ptr.passphrase = null; self_ptr.key = null; self_ptr.cert = null; self_ptr.ca = null; self_ptr.secure_options = 0; self_ptr.request_cert = 0; self_ptr.reject_unauthorized = 0; self_ptr.ssl_ciphers = null; self_ptr.protos = null; self_ptr.client_renegotiation_limit = 0; self_ptr.client_renegotiation_window = 0; self_ptr.requires_custom_request_ctx = false; self_ptr.is_using_default_ciphers = true; self_ptr.low_memory_mode = false; self_ptr.cached_hash = 0; return self_ptr; }
+pub const SSLConfig = @This();
 
-pub fn init(self: *SSLConfig, server_name: ?[*:0]u8, key_file_name: ?[*:0]u8, cert_file_name: ?[*:0]u8, ca_file_name: ?[*:0]u8, dh_params_file_name: ?[*:0]u8, passphrase: ?[*:0]u8, key: ?[][*:0]u8, cert: ?[][*:0]u8, ca: ?[][*:0]u8, secure_options: u32, request_cert: i32, reject_unauthorized: i32, ssl_ciphers: ?[*:0]u8, protos: ?[*:0]u8, client_renegotiation_limit: u32, client_renegotiation_window: u32, requires_custom_request_ctx: bool, is_using_default_ciphers: bool, low_memory_mode: bool, cached_hash: u64) void {
-            self.server_name = server_name;
-            self.key_file_name = key_file_name;
-            self.cert_file_name = cert_file_name;
-            self.ca_file_name = ca_file_name;
-            self.dh_params_file_name = dh_params_file_name;
-            self.passphrase = passphrase;
-            self.key = key;
-            self.cert = cert;
-            self.ca = ca;
-            self.secure_options = secure_options;
-            self.request_cert = request_cert;
-            self.reject_unauthorized = reject_unauthorized;
-            self.ssl_ciphers = ssl_ciphers;
-            self.protos = protos;
-            self.client_renegotiation_limit = client_renegotiation_limit;
-            self.client_renegotiation_window = client_renegotiation_window;
-            self.requires_custom_request_ctx = requires_custom_request_ctx;
-            self.is_using_default_ciphers = is_using_default_ciphers;
-            self.low_memory_mode = low_memory_mode;
-            self.cached_hash = cached_hash;
-    }
+server_name: ?[*:0]u8 = null,
+key_file_name: ?[*:0]u8 = null,
+cert_file_name: ?[*:0]u8 = null,
+ca_file_name: ?[*:0]u8 = null,
+dh_params_file_name: ?[*:0]u8 = null,
+passphrase: ?[*:0]u8 = null,
+key: ?[][*:0]u8 = null,
+cert: ?[][*:0]u8 = null,
+ca: ?[][*:0]u8 = null,
+secure_options: u32 = 0,
+request_cert: i32 = 0,
+reject_unauthorized: i32 = 0,
+ssl_ciphers: ?[*:0]u8 = null,
+protos: ?[*:0]u8 = null,
+client_renegotiation_limit: u32 = 0,
+client_renegotiation_window: u32 = 0,
+requires_custom_request_ctx: bool = false,
+is_using_default_ciphers: bool = true,
+low_memory_mode: bool = false,
+cached_hash: u64 = 0,
 
 pub fn rawPtr(maybe_shared: ?SharedPtr) ?*SSLConfig {
-            return (if ((maybe_shared != null)) maybe_shared.?.get() else null);
-    }
+        return (if ((maybe_shared != null)) maybe_shared.?.get() else null);
+}
 
 pub fn asUSockets(self: *const SSLConfig) uws.SocketContext.BunSocketContextOptions {
-            var ctx_opts: uws.SocketContext.BunSocketContextOptions = .{};
-            _ = &ctx_opts;
-            if ((self.key_file_name != null)) {
-                ctx_opts.key_file_name = self.key_file_name;
-            }
-            if ((self.cert_file_name != null)) {
-                ctx_opts.cert_file_name = self.cert_file_name;
-            }
-            if ((self.ca_file_name != null)) {
-                ctx_opts.ca_file_name = self.ca_file_name;
-            }
-            if ((self.dh_params_file_name != null)) {
-                ctx_opts.dh_params_file_name = self.dh_params_file_name;
-            }
-            if ((self.passphrase != null)) {
-                ctx_opts.passphrase = self.passphrase;
-            }
-            ctx_opts.ssl_prefer_low_memory_usage = @intFromBool(self.low_memory_mode);
-            if (self.key) |key| {
-                _ = &key;
-                ctx_opts.key = key.ptr;
-                ctx_opts.key_count = @intCast(std.mem.span(key).len);
-            }
-            if (self.cert) |cert| {
-                _ = &cert;
-                ctx_opts.cert = cert.ptr;
-                ctx_opts.cert_count = @intCast(std.mem.span(cert).len);
-            }
-            if (self.ca) |ca| {
-                _ = &ca;
-                ctx_opts.ca = ca.ptr;
-                ctx_opts.ca_count = @intCast(std.mem.span(ca).len);
-            }
-            if ((self.ssl_ciphers != null)) {
-                ctx_opts.ssl_ciphers = self.ssl_ciphers;
-            }
-            ctx_opts.request_cert = self.request_cert;
-            ctx_opts.reject_unauthorized = self.reject_unauthorized;
-            return ctx_opts;
-    }
+        var ctx_opts: uws.SocketContext.BunSocketContextOptions = .{};
+        _ = &ctx_opts;
+        if ((self.key_file_name != null)) {
+            ctx_opts.key_file_name = self.key_file_name;
+        }
+        if ((self.cert_file_name != null)) {
+            ctx_opts.cert_file_name = self.cert_file_name;
+        }
+        if ((self.ca_file_name != null)) {
+            ctx_opts.ca_file_name = self.ca_file_name;
+        }
+        if ((self.dh_params_file_name != null)) {
+            ctx_opts.dh_params_file_name = self.dh_params_file_name;
+        }
+        if ((self.passphrase != null)) {
+            ctx_opts.passphrase = self.passphrase;
+        }
+        ctx_opts.ssl_prefer_low_memory_usage = @intFromBool(self.low_memory_mode);
+        if (self.key) |key| {
+            _ = &key;
+            ctx_opts.key = key.ptr;
+            ctx_opts.key_count = @intCast(std.mem.span(key).len);
+        }
+        if (self.cert) |cert| {
+            _ = &cert;
+            ctx_opts.cert = cert.ptr;
+            ctx_opts.cert_count = @intCast(std.mem.span(cert).len);
+        }
+        if (self.ca) |ca| {
+            _ = &ca;
+            ctx_opts.ca = ca.ptr;
+            ctx_opts.ca_count = @intCast(std.mem.span(ca).len);
+        }
+        if ((self.ssl_ciphers != null)) {
+            ctx_opts.ssl_ciphers = self.ssl_ciphers;
+        }
+        ctx_opts.request_cert = self.request_cert;
+        ctx_opts.reject_unauthorized = self.reject_unauthorized;
+        return ctx_opts;
+}
 
 pub fn asUSocketsForClientVerification(self: *const SSLConfig) uws.SocketContext.BunSocketContextOptions {
-            var opts = self.asUSockets();
-            _ = &opts;
-            opts.request_cert = 1;
-            opts.reject_unauthorized = 0;
-            return opts;
-    }
+        var opts = self.asUSockets();
+        _ = &opts;
+        opts.request_cert = 1;
+        opts.reject_unauthorized = 0;
+        return opts;
+}
 
-pub fn forClientVerification(self: *const SSLConfig) *SSLConfig {
-            var copy = self;
-            _ = &copy;
-            copy.request_cert = 1;
-            copy.reject_unauthorized = 0;
-            return copy;
-    }
+pub fn forClientVerification(self: SSLConfig) SSLConfig {
+        var copy = self;
+        _ = &copy;
+        copy.request_cert = 1;
+        copy.reject_unauthorized = 0;
+        return copy;
+}
 
 pub fn isSame(self: *const SSLConfig, other: *const SSLConfig) bool {
-            if ((!stringsEqualOpt(self.server_name, other.server_name))) {
-                return false;
-            }
-            if ((!stringsEqualOpt(self.key_file_name, other.key_file_name))) {
-                return false;
-            }
-            if ((!stringsEqualOpt(self.cert_file_name, other.cert_file_name))) {
-                return false;
-            }
-            if ((!stringsEqualOpt(self.ca_file_name, other.ca_file_name))) {
-                return false;
-            }
-            if ((!stringsEqualOpt(self.dh_params_file_name, other.dh_params_file_name))) {
-                return false;
-            }
-            if ((!stringsEqualOpt(self.passphrase, other.passphrase))) {
-                return false;
-            }
-            if ((!stringSlicesEqualOpt(self.key, other.key))) {
-                return false;
-            }
-            if ((!stringSlicesEqualOpt(self.cert, other.cert))) {
-                return false;
-            }
-            if ((!stringSlicesEqualOpt(self.ca, other.ca))) {
-                return false;
-            }
-            if ((self.secure_options != other.secure_options)) {
-                return false;
-            }
-            if ((self.request_cert != other.request_cert)) {
-                return false;
-            }
-            if ((self.reject_unauthorized != other.reject_unauthorized)) {
-                return false;
-            }
-            if ((!stringsEqualOpt(self.ssl_ciphers, other.ssl_ciphers))) {
-                return false;
-            }
-            if ((!stringsEqualOpt(self.protos, other.protos))) {
-                return false;
-            }
-            if ((self.client_renegotiation_limit != other.client_renegotiation_limit)) {
-                return false;
-            }
-            if ((self.client_renegotiation_window != other.client_renegotiation_window)) {
-                return false;
-            }
-            if ((self.requires_custom_request_ctx != other.requires_custom_request_ctx)) {
-                return false;
-            }
-            if ((self.is_using_default_ciphers != other.is_using_default_ciphers)) {
-                return false;
-            }
-            if ((self.low_memory_mode != other.low_memory_mode)) {
-                return false;
-            }
-            return true;
-    }
+        if ((!stringsEqualOpt(self.server_name, other.server_name))) {
+            return false;
+        }
+        if ((!stringsEqualOpt(self.key_file_name, other.key_file_name))) {
+            return false;
+        }
+        if ((!stringsEqualOpt(self.cert_file_name, other.cert_file_name))) {
+            return false;
+        }
+        if ((!stringsEqualOpt(self.ca_file_name, other.ca_file_name))) {
+            return false;
+        }
+        if ((!stringsEqualOpt(self.dh_params_file_name, other.dh_params_file_name))) {
+            return false;
+        }
+        if ((!stringsEqualOpt(self.passphrase, other.passphrase))) {
+            return false;
+        }
+        if ((!stringSlicesEqualOpt(self.key, other.key))) {
+            return false;
+        }
+        if ((!stringSlicesEqualOpt(self.cert, other.cert))) {
+            return false;
+        }
+        if ((!stringSlicesEqualOpt(self.ca, other.ca))) {
+            return false;
+        }
+        if ((self.secure_options != other.secure_options)) {
+            return false;
+        }
+        if ((self.request_cert != other.request_cert)) {
+            return false;
+        }
+        if ((self.reject_unauthorized != other.reject_unauthorized)) {
+            return false;
+        }
+        if ((!stringsEqualOpt(self.ssl_ciphers, other.ssl_ciphers))) {
+            return false;
+        }
+        if ((!stringsEqualOpt(self.protos, other.protos))) {
+            return false;
+        }
+        if ((self.client_renegotiation_limit != other.client_renegotiation_limit)) {
+            return false;
+        }
+        if ((self.client_renegotiation_window != other.client_renegotiation_window)) {
+            return false;
+        }
+        if ((self.requires_custom_request_ctx != other.requires_custom_request_ctx)) {
+            return false;
+        }
+        if ((self.is_using_default_ciphers != other.is_using_default_ciphers)) {
+            return false;
+        }
+        if ((self.low_memory_mode != other.low_memory_mode)) {
+            return false;
+        }
+        return true;
+}
 
 pub fn release(self: *SSLConfig) void {
-            _ = GlobalRegistry.remove(self);
-            _ = freeString((&self.server_name));
-            _ = freeString((&self.key_file_name));
-            _ = freeString((&self.cert_file_name));
-            _ = freeString((&self.ca_file_name));
-            _ = freeString((&self.dh_params_file_name));
-            _ = freeString((&self.passphrase));
-            _ = freeStrings((&self.key));
-            _ = freeStrings((&self.cert));
-            _ = freeStrings((&self.ca));
-            _ = freeString((&self.ssl_ciphers));
-            _ = freeString((&self.protos));
-    }
+        _ = GlobalRegistry.remove(self);
+        _ = freeString((&self.server_name));
+        _ = freeString((&self.key_file_name));
+        _ = freeString((&self.cert_file_name));
+        _ = freeString((&self.ca_file_name));
+        _ = freeString((&self.dh_params_file_name));
+        _ = freeString((&self.passphrase));
+        _ = freeStrings((&self.key));
+        _ = freeStrings((&self.cert));
+        _ = freeStrings((&self.ca));
+        _ = freeString((&self.ssl_ciphers));
+        _ = freeString((&self.protos));
+}
 
 pub fn deinit(self: *SSLConfig) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
-    }
+        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+}
 
-pub fn clone(self: *const SSLConfig) *SSLConfig {
-            return .{ .server_name = cloneString(self.server_name), .key_file_name = cloneString(self.key_file_name), .cert_file_name = cloneString(self.cert_file_name), .ca_file_name = cloneString(self.ca_file_name), .dh_params_file_name = cloneString(self.dh_params_file_name), .passphrase = cloneString(self.passphrase), .key = cloneStrings(self.key), .cert = cloneStrings(self.cert), .ca = cloneStrings(self.ca), .secure_options = self.secure_options, .request_cert = self.request_cert, .reject_unauthorized = self.reject_unauthorized, .ssl_ciphers = cloneString(self.ssl_ciphers), .protos = cloneString(self.protos), .client_renegotiation_limit = self.client_renegotiation_limit, .client_renegotiation_window = self.client_renegotiation_window, .requires_custom_request_ctx = self.requires_custom_request_ctx, .is_using_default_ciphers = self.is_using_default_ciphers, .low_memory_mode = self.low_memory_mode, .cached_hash = 0 };
-    }
+pub fn clone(self: *const SSLConfig) SSLConfig {
+        return .{ .server_name = cloneString(self.server_name), .key_file_name = cloneString(self.key_file_name), .cert_file_name = cloneString(self.cert_file_name), .ca_file_name = cloneString(self.ca_file_name), .dh_params_file_name = cloneString(self.dh_params_file_name), .passphrase = cloneString(self.passphrase), .key = cloneStrings(self.key), .cert = cloneStrings(self.cert), .ca = cloneStrings(self.ca), .secure_options = self.secure_options, .request_cert = self.request_cert, .reject_unauthorized = self.reject_unauthorized, .ssl_ciphers = cloneString(self.ssl_ciphers), .protos = cloneString(self.protos), .client_renegotiation_limit = self.client_renegotiation_limit, .client_renegotiation_window = self.client_renegotiation_window, .requires_custom_request_ctx = self.requires_custom_request_ctx, .is_using_default_ciphers = self.is_using_default_ciphers, .low_memory_mode = self.low_memory_mode, .cached_hash = 0 };
+}
 
 pub fn contentHash(self: *SSLConfig) u64 {
-            if ((self.cached_hash != 0)) {
-                return self.cached_hash;
+        if ((self.cached_hash != 0)) {
+            return self.cached_hash;
+        }
+        var hasher = std.hash.Wyhash.init(0);
+        var __hasher_moved = false; _ = &__hasher_moved;
+        defer if (!__hasher_moved) { const __T = @TypeOf(hasher); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hasher.release() catch {}; } else { hasher.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hasher; _drop_val.release(); } };
+        inline for (std.meta.fields(SSLConfig)) |field| {
+            if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cached_hash")) {
+                continue;
             }
-            var hasher = std.hash.Wyhash.init(0);
-            var __hasher_moved = false; _ = &__hasher_moved;
-            defer if (!__hasher_moved) { const __T = @TypeOf(hasher); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hasher.release() catch {}; } else { hasher.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hasher; _drop_val.release(); } };
-            inline for (std.meta.fields(SSLConfig)) |field| {
-                if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cached_hash")) {
-                    continue;
+            const value = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
+            var __value_moved = false; _ = &__value_moved;
+            defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
+            if (((std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "key") or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cert")) or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "ca"))) {
+                if (value) |slice| {
+                    _ = &slice;
+                    for (cp_iter_slice(slice)) |s| {
+                        _ = &s;
+                        _ = hasher.update(bun.asByteSlice(s));
+                        _ = hasher.update((&.{ 0 }));
+                    }
                 }
-                const value = @field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
-                var __value_moved = false; _ = &__value_moved;
-                defer if (!__value_moved) { const __T = @TypeOf(value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = value.release() catch {}; } else { value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = value; _drop_val.release(); } };
-                if (((std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "key") or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "cert")) or std.mem.eql(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "ca"))) {
-                    if (value) |slice| {
-                        _ = &slice;
-                        for (cp_iter_slice(slice)) |s| {
-                            _ = &s;
-                            _ = hasher.update(bun.asByteSlice(s));
-                            _ = hasher.update((&.{ 0 }));
-                        }
+                _ = hasher.update((&.{ 0 }));
+            } else {
+                if ((@typeInfo(field.type) == .optional)) {
+                    if (value) |s| {
+                        _ = &s;
+                        _ = hasher.update(bun.asByteSlice(s));
                     }
                     _ = hasher.update((&.{ 0 }));
                 } else {
-                    if ((@typeInfo(field.type) == .optional)) {
-                        if (value) |s| {
-                            _ = &s;
-                            _ = hasher.update(bun.asByteSlice(s));
-                        }
-                        _ = hasher.update((&.{ 0 }));
-                    } else {
-                        _ = hasher.update(std.mem.asBytes((&value)));
-                    }
+                    _ = hasher.update(std.mem.asBytes((&value)));
                 }
             }
-            const hash = hasher.final();
-            var __hash_moved = false; _ = &__hash_moved;
-            defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };
-            self.cached_hash = (if ((hash == 0)) 1 else hash);
-            return self.cached_hash;
-    }
+        }
+        const hash = hasher.final();
+        var __hash_moved = false; _ = &__hash_moved;
+        defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };
+        self.cached_hash = (if ((hash == 0)) 1 else hash);
+        return self.cached_hash;
+}
 
-pub fn fromJS(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!?*SSLConfig {
-            var generated: jsc.generated.SSLConfig = try jsc.generated.SSLConfig.fromJS(global, value);
-            _ = &generated;
-            defer {
-            _ = generated.deinit();
-            }
-            return SSLConfig.fromGenerated(vm, global, (&generated));
-    }
+pub fn fromJS(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!?SSLConfig {
+        var generated: jsc.generated.SSLConfig = try jsc.generated.SSLConfig.fromJS(global, value);
+        _ = &generated;
+        defer {
+        _ = generated.deinit();
+        }
+        return SSLConfig.fromGenerated(vm, global, (&generated));
+}
 
-pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, generated: *const jsc.generated.SSLConfig) bun.JSError!?*SSLConfig {
-            var result: *SSLConfig = zero;
-            var __result_moved = false; _ = &__result_moved;
-            defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
-            errdefer {
-            _ = result.deinit();
-            }
-            var has_any = false;
-            _ = &has_any;
-            if (generated.passphrase.get()) |passphrase| {
-                _ = &passphrase;
-                result.passphrase = passphrase.toOwnedSliceZ(bun.default_allocator).ptr;
-                has_any = true;
-            }
-            if (generated.dh_params_file.get()) |dh_params_file| {
-                _ = &dh_params_file;
-                result.dh_params_file_name = try handlePath(global, "dhParamsFile", dh_params_file).ptr;
-                has_any = true;
-            }
-            if (generated.server_name.get()) |server_name| {
-                _ = &server_name;
-                result.server_name = server_name.toOwnedSliceZ(bun.default_allocator).ptr;
-                result.requires_custom_request_ctx = true;
-            }
-            result.low_memory_mode = generated.low_memory_mode;
-            result.reject_unauthorized = @intFromBool(((generated.reject_unauthorized) orelse (vm.getTLSRejectUnauthorized())));
-            result.request_cert = @intFromBool(generated.request_cert);
-            result.secure_options = generated.secure_options;
-            has_any = ((((has_any or result.low_memory_mode) or (generated.reject_unauthorized != null)) or generated.request_cert) or (result.secure_options != 0));
-            result.ca = try handleFileForField(global, "ca", (&generated.ca));
-            result.cert = try handleFileForField(global, "cert", (&generated.cert));
-            result.key = try handleFileForField(global, "key", (&generated.key));
-            result.requires_custom_request_ctx = (((result.requires_custom_request_ctx or (result.ca != null)) or (result.cert != null)) or (result.key != null));
-            if (generated.key_file.get()) |key_file| {
-                _ = &key_file;
-                result.key_file_name = try handlePath(global, "keyFile", key_file).ptr;
-                result.requires_custom_request_ctx = true;
-            }
-            if (generated.cert_file.get()) |cert_file| {
-                _ = &cert_file;
-                result.cert_file_name = try handlePath(global, "certFile", cert_file).ptr;
-                result.requires_custom_request_ctx = true;
-            }
-            if (generated.ca_file.get()) |ca_file| {
-                _ = &ca_file;
-                result.ca_file_name = try handlePath(global, "caFile", ca_file).ptr;
-                result.requires_custom_request_ctx = true;
-            }
-            const protocols: ?[*:0]u8 = (switch (generated.alpn_protocols) {
+pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, generated: *const jsc.generated.SSLConfig) bun.JSError!?SSLConfig {
+        var result: SSLConfig = zero;
+        var __result_moved = false; _ = &__result_moved;
+        defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
+        errdefer {
+        _ = result.deinit();
+        }
+        var has_any = false;
+        _ = &has_any;
+        if (generated.passphrase.get()) |passphrase| {
+            _ = &passphrase;
+            result.passphrase = passphrase.toOwnedSliceZ(bun.default_allocator).ptr;
+            has_any = true;
+        }
+        if (generated.dh_params_file.get()) |dh_params_file| {
+            _ = &dh_params_file;
+            result.dh_params_file_name = try handlePath(global, "dhParamsFile", dh_params_file).ptr;
+            has_any = true;
+        }
+        if (generated.server_name.get()) |server_name| {
+            _ = &server_name;
+            result.server_name = server_name.toOwnedSliceZ(bun.default_allocator).ptr;
+            result.requires_custom_request_ctx = true;
+        }
+        result.low_memory_mode = generated.low_memory_mode;
+        result.reject_unauthorized = @intFromBool(((generated.reject_unauthorized) orelse (vm.getTLSRejectUnauthorized())));
+        result.request_cert = @intFromBool(generated.request_cert);
+        result.secure_options = generated.secure_options;
+        has_any = ((((has_any or result.low_memory_mode) or (generated.reject_unauthorized != null)) or generated.request_cert) or (result.secure_options != 0));
+        result.ca = try handleFileForField(global, "ca", (&generated.ca));
+        result.cert = try handleFileForField(global, "cert", (&generated.cert));
+        result.key = try handleFileForField(global, "key", (&generated.key));
+        result.requires_custom_request_ctx = (((result.requires_custom_request_ctx or (result.ca != null)) or (result.cert != null)) or (result.key != null));
+        if (generated.key_file.get()) |key_file| {
+            _ = &key_file;
+            result.key_file_name = try handlePath(global, "keyFile", key_file).ptr;
+            result.requires_custom_request_ctx = true;
+        }
+        if (generated.cert_file.get()) |cert_file| {
+            _ = &cert_file;
+            result.cert_file_name = try handlePath(global, "certFile", cert_file).ptr;
+            result.requires_custom_request_ctx = true;
+        }
+        if (generated.ca_file.get()) |ca_file| {
+            _ = &ca_file;
+            result.ca_file_name = try handlePath(global, "caFile", ca_file).ptr;
+            result.requires_custom_request_ctx = true;
+        }
+        const protocols: ?[*:0]u8 = (switch (generated.alpn_protocols) {
 .none => null,
 .string => |*val| val.get().toOwnedSliceZ(bun.default_allocator).ptr,
 .buffer => |*val| blk: {
-            const buffer: jsc.ArrayBuffer = val.get().asArrayBuffer();
-            break :blk try bun.default_allocator.dupeZ(u8, buffer.byteSlice()).ptr;
+        const buffer: jsc.ArrayBuffer = val.get().asArrayBuffer();
+        break :blk try bun.default_allocator.dupeZ(u8, buffer.byteSlice()).ptr;
 },
 });
-            if (protocols) |some_protocols| {
-                _ = &some_protocols;
-                result.protos = some_protocols;
-                result.requires_custom_request_ctx = true;
-            }
-            if (generated.ciphers.get()) |ciphers| {
-                _ = &ciphers;
-                result.ssl_ciphers = ciphers.toOwnedSliceZ(bun.default_allocator).ptr;
-                result.is_using_default_ciphers = false;
-                result.requires_custom_request_ctx = true;
-            }
-            result.client_renegotiation_limit = generated.client_renegotiation_limit;
-            result.client_renegotiation_window = generated.client_renegotiation_window;
-            has_any = (((has_any or result.requires_custom_request_ctx) or (result.client_renegotiation_limit != 0)) or (generated.client_renegotiation_window != 0));
-            return (if (has_any) result else null);
-    }
+        if (protocols) |some_protocols| {
+            _ = &some_protocols;
+            result.protos = some_protocols;
+            result.requires_custom_request_ctx = true;
+        }
+        if (generated.ciphers.get()) |ciphers| {
+            _ = &ciphers;
+            result.ssl_ciphers = ciphers.toOwnedSliceZ(bun.default_allocator).ptr;
+            result.is_using_default_ciphers = false;
+            result.requires_custom_request_ctx = true;
+        }
+        result.client_renegotiation_limit = generated.client_renegotiation_limit;
+        result.client_renegotiation_window = generated.client_renegotiation_window;
+        has_any = (((has_any or result.requires_custom_request_ctx) or (result.client_renegotiation_limit != 0)) or (generated.client_renegotiation_window != 0));
+        return (if (has_any) result else null);
+}
 
 pub fn takeProtos(self: *SSLConfig) ?[]const u8 {
-            defer {
-            self.protos = null;
-            }
-            const protos = ((self.protos) orelse { return null; });
-            return bun.handleOom(bun.memory.dropSentinel(protos, bun.default_allocator));
-    }
+        defer {
+        self.protos = null;
+        }
+        const protos = ((self.protos) orelse { return null; });
+        return bun.handleOom(bun.memory.dropSentinel(protos, bun.default_allocator));
+}
 
 pub fn takeServerName(self: *SSLConfig) ?[]const u8 {
-            defer {
-            self.server_name = null;
-            }
-            const server_name = ((self.server_name) orelse { return null; });
-            return bun.handleOom(bun.memory.dropSentinel(server_name, bun.default_allocator));
-    }
-    pub const SharedPtr = bun.ptr.shared.WithOptions(*SSLConfig, .{ .atomic = true, .allow_weak = true });
-    pub const WeakPtr = SharedPtr.Weak;
-};
-
+        defer {
+        self.server_name = null;
+        }
+        const server_name = ((self.server_name) orelse { return null; });
+        return bun.handleOom(bun.memory.dropSentinel(server_name, bun.default_allocator));
+}
+pub const SharedPtr = bun.ptr.shared.WithOptions(*SSLConfig, .{ .atomic = true, .allow_weak = true });
+pub const WeakPtr = SharedPtr.Weak;
 pub const SingleFileInput = union(enum) {
     string: bun.string.WTFStringImpl,
     buffer: *jsc.JSCArrayBuffer,
@@ -420,7 +394,7 @@ pub const GlobalRegistry = struct {
     pub var mutex: bun.Mutex = .{};
     pub var configs: std.ArrayHashMapUnmanaged(*SSLConfig,SSLConfig.WeakPtr,MapContext,true) = .empty;
 
-pub fn intern(config: *SSLConfig) SSLConfig.SharedPtr {
+pub fn intern(config: SSLConfig) SSLConfig.SharedPtr {
             var new_shared = SSLConfig.SharedPtr.new(config);
             var __new_shared_moved = false; _ = &__new_shared_moved;
             defer if (!__new_shared_moved) { const __T = @TypeOf(new_shared); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = new_shared.release() catch {}; } else { new_shared.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = new_shared; _drop_val.release(); } };

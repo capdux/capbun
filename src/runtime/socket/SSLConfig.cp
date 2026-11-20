@@ -9,7 +9,7 @@ const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 pub type CString = [*:0]const u8;
 
-export class SSLConfig {
+@root struct SSLConfig {
     server_name: ([*:0]const u8)? = null,
 
     key_file_name: ([*:0]const u8)? = null,
@@ -177,12 +177,12 @@ export class SSLConfig {
     }
 
     pub fn contentHash(*_): u64 {
-        if (this.cached_hash != 0) return this.cached_hash;
+        if (_.cached_hash != 0) return _.cached_hash;
         let hasher = std.hash.Wyhash.init(0);
         inline for (field of std.meta.fields(SSLConfig)) {
             if (std.mem.eql(u8, field.name, "cached_hash")) continue;
-            const value = @field(this, field.name);
-            if (std.mem.eql(u8, field.name, "key") or std.mem.eql(u8, field.name, "cert") or std.mem.eql(u8, field.name, "ca")) {
+            const value = @field(_, field.name);
+            if (std.mem.eql(u8, field.name, "key") || std.mem.eql(u8, field.name, "cert") || std.mem.eql(u8, field.name, "ca")) {
                 if (slice := value) {
                     for (s of slice) {
                         hasher.update(bun.asByteSlice(s));
@@ -200,8 +200,8 @@ export class SSLConfig {
             }
         }
         const hash = hasher.final();
-        this.cached_hash = if (hash == 0) 1 else hash;
-        return this.cached_hash;
+        _.cached_hash = if (hash == 0) 1 else hash;
+        return _.cached_hash;
     }
 
     pub static fn fromJS(

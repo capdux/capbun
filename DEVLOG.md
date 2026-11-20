@@ -1329,3 +1329,6 @@
 
 ### 2026-11-20 06:05:02 UTC - zig:check 第 2 轮 Core+Install+Parser 簇修复经验
 - 发现 `@root struct Task` 会被 `cpc` 静默丢弃（改名 `@root struct PackageManagerTask` 即完整生成字段）；`E.Missing{}` 空字面量用 `std.mem.zeroes(E.Missing)` 避降级为类型名。
+
+### 2026-11-20 06:05:27 UTC - zig:check 第 2 轮 Runtime 簇修复经验
+- `SSLConfig.cp` 改 `@root struct SSLConfig`、`path.cp` 规避 `pub fn join` 静默跳过（改 `joinImpl` + `pub const join`）、`encoding.cp` 改索引解包消除 `cp_unpack_elem`。
