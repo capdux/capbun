@@ -284,7 +284,7 @@ pub struct Routes {
             const case_sensitive_name = _.dynamic_names[i];
             const name = _.dynamic_match_names[i];
             const route = _.dynamic[i];
-            if (Pattern.match(path, case_sensitive_name[1..], name, allocator, ParamList, &ctx.params, true)) {
+            if (Pattern.match(path, case_sensitive_name[1..], name, allocator, ParamListPtr, &ctx.params, true)) {
                 return route;
             }
             i += 1;

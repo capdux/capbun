@@ -7,3 +7,4 @@
 - **[2026-11-21 00:05] Wave 29 B 组验收提交（15 模块全绿）**：完成 Bake/Bundler/Router/Install 15 模块独立验收（15/15 PASS，ratio 0.783x~1.121x）并原子提交；补派 D 组修复外部根因 `src/install/resolvers/folder_resolver.cp`。
 - **[2026-11-21 00:07] Wave 29 D 组验收提交（`folder_resolver` 全绿）**：修复 `CacheFolderResolver`/`NewResolver` `resolve`/`count` 重复接收者并通过独立验收（PASS，ratio 1.108x）并原子提交；静待 A 组（`2cefe132`）完成即跑 Wave 30 `zig:check`。
 - **[2026-11-21 00:10] Wave 29 A 组验收提交（15 模块全绿，Wave 29 清仓）**：完成 `js_printer`（16 错）、`visitExpr`（9 错）、`Expr`、`P`、`visit`、`lowerDecorators`、`visitBinaryExpression`、`visitStmt`、`ConvertESMExportsForHmr`、`E`、`Parser`、`SideEffects`、`maybe`、`parser`、`Macro` 15 模块独立验收（15/15 PASS，ratio 0.998x~1.038x）并原子提交；随即运行 Wave 30 全仓 `bun run zig:check`。
+- **[2026-11-21 00:15] Wave 30 C 组验收提交（10 模块全绿）**：完成 Runtime/SQL/JSC/Options/Router/Shell/Threading 10 模块独立验收（10/10 PASS，4 项门禁全绿，ratio 0.842x~1.042x）并原子提交；静待 A/B 组完成。

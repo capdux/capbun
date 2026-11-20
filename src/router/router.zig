@@ -269,7 +269,7 @@ pub fn matchDynamic(self: *Routes, allocator: std.mem.Allocator, path: []const u
                 const case_sensitive_name = self.dynamic_names[@as(usize, @intCast(i))];
                 const name = self.dynamic_match_names[@as(usize, @intCast(i))];
                 const route = self.dynamic[@as(usize, @intCast(i))];
-                if (Pattern.match(path, case_sensitive_name[1..], name, allocator, ParamList, (&ctx.params), true)) {
+                if (Pattern.match(path, case_sensitive_name[1..], name, allocator, ParamListPtr, (&ctx.params), true)) {
                     return route;
                 }
                 i = (i + 1);

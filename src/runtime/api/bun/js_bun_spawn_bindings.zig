@@ -584,7 +584,7 @@ return e.throwJS(globalThis);
                 const ipc_fd: i32 = brk: {
                 if ((ipc_channel == -1)) {
                     ipc_channel = (if (comptime @typeInfo(@TypeOf(extra_fds.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(extra_fds.items.len)) else cp_cast_int(i32, extra_fds.items.len));
-                    var ipc_extra_fd_default = Stdio{ .ipc = .{} };
+                    var ipc_extra_fd_default = Stdio{ .ipc = undefined };
                     _ = &ipc_extra_fd_default;
                     const fd: i32 = (ipc_channel + 3);
                     switch (ipc_extra_fd_default.asSpawnOption(fd)) {
@@ -612,7 +612,7 @@ inline else => |t| ("NODE_CHANNEL_SERIALIZATION_MODE=" ++ @tagName(t)),
         if (comptime is_sync) {
             var i: usize = 0;
             _ = &i;
-            for (cp_mut_slice(&(&stdio))) |*io| {
+            for (cp_mut_slice(&stdio)) |*io| {
                 _ = &io;
                 _ = (io.*).toSync(@truncate(i));
                 i = (i + 1);

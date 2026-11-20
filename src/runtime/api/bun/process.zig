@@ -2249,7 +2249,9 @@ else => "spawn_stdio_generic",
                 }
                 const fds: [2]bun.FD = brk: {
                 const pair = (if ((!options.no_sigpipe)) try bun.sys.socketpairForShell(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking).unwrap() else try bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking).unwrap());
-                break :brk .{ pair[@as(usize, @intCast((if ((i == 0)) 1 else 0)))], pair[@as(usize, @intCast((if ((i == 0)) 0 else 1)))] };
+                const idx0: usize = (if ((i == 0)) 1 else 0);
+                const idx1: usize = (if ((i == 0)) 0 else 1);
+                break :brk .{ pair[@as(usize, @intCast(idx0))], pair[@as(usize, @intCast(idx1))] };
 };
                 if (comptime Environment.isMac) {
                     const so_recvbuf: c_int = (1024 * 512);

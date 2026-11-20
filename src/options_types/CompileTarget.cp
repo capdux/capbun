@@ -235,7 +235,7 @@ export @root struct CompileTarget {
                         tmpdir,
                         null,
                         void,
-                        {},
+                        undefined,
                         {
                             // "package/bin"
                             depth_to_skip: 2,

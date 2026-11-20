@@ -1515,7 +1515,8 @@ pub const Parser = struct {
 
                 const atom_opt = _.parse_atom()?;
                 const arg2 = atom_opt orelse {
-                    _.add_error("Expected a word, but got: {s}", .{_.peek().asHumanReadable(_.strpool)})?;
+                    const bad_tok: Token = _.peek();
+                    _.add_error("Expected a word, but got: {s}", .{bad_tok.asHumanReadable(_.strpool)})?;
                     return ParseError.Expected;
                 };
 

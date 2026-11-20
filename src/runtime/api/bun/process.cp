@@ -1524,7 +1524,9 @@ pub fn spawnProcessPosix(
                         0,
                         .blocking,
                     ).unwrap()?;
-                    break :brk [ pair[if (i == 0) 1 else 0], pair[if (i == 0) 0 else 1] ];
+                    const idx0: usize = if (i == 0) 1 else 0;
+                    const idx1: usize = if (i == 0) 0 else 1;
+                    break :brk [ pair[idx0], pair[idx1] ];
                 };
 
                 // Note: we intentionally do NOT call shutdown() on the

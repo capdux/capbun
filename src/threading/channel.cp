@@ -68,12 +68,13 @@ pub fn Channel(
         }
 
         pub fn tryWriteItem(self: *Self, item: T): bool! {
-            const wrote = try self.write(&[1]T{item});
+            const arr: [1]T = [ item ];
+            const wrote = self.write(&arr)?;
             return wrote == 1;
         }
 
         pub fn writeItem(self: *Self, item: T)! {
-            const arr = [1]T{ item };
+            const arr: [1]T = [ item ];
             return self.writeAll(&arr);
         }
 

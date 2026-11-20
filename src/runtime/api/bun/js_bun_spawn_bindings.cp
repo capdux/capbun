@@ -504,7 +504,7 @@ pub fn spawnMaybeSync(
             if (ipc_channel == -1) {
                 // If the user didn't specify an IPC channel, we need to add one
                 ipc_channel = i32(extra_fds.items.len);
-                let ipc_extra_fd_default = Stdio{ .ipc = {} };
+                let ipc_extra_fd_default = Stdio{ .ipc = undefined };
                 const fd: i32 = ipc_channel + 3;
                 switch (ipc_extra_fd_default.asSpawnOption(fd)) {
                     .result => |opt| {
@@ -539,7 +539,7 @@ pub fn spawnMaybeSync(
 
     if (comptime is_sync) {
         let i: usize = 0;
-        for (*io of &stdio) {
+        for (*io of stdio) {
             io.toSync(@truncate(i));
             i += 1;
         }

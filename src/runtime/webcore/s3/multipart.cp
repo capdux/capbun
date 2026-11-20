@@ -141,7 +141,7 @@ export struct UploadPart {
             search_params: search_params,
             request_payer: this.ctx.request_payer,
         };
-        const cb = .{ .part = @ptrCast(&onPartResponse) };
+        const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .part = @constCast(@ptrCast(&onPartResponse)) };
         executeSimpleS3Request(this.ctx.credentials, req_opts, cb, this)?;
     }
 
@@ -514,7 +514,7 @@ export class MultiPartUpload {
             search_params: searchParams,
             request_payer: this.request_payer,
         };
-        const cb = .{ .commit = @ptrCast(&onCommitMultiPartRequest) };
+        const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .commit = @constCast(@ptrCast(&onCommitMultiPartRequest)) };
         executeSimpleS3Request(this.credentials, req_opts, cb, this)?;
     }
 

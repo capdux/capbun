@@ -265,7 +265,7 @@ return error.NetworkError;
                     defer {
                     _ = (blk_catch_5: { break :blk_catch_5 ((std.fs.cwd().deleteTree(tempdir_name)) catch |__ce_5| { _ = &__ce_5;  }); });
                     }
-                    _ = (blk_catch_6: { break :blk_catch_6 ((libarchive.Archiver.extractToDir(tarball_bytes.items, tmpdir, null, void, .{}, .{ .depth_to_skip = 2 })) catch |__ce_6| { _ = &__ce_6; _ = node.end();
+                    _ = (blk_catch_6: { break :blk_catch_6 ((libarchive.Archiver.extractToDir(tarball_bytes.items, tmpdir, null, void, undefined, .{ .depth_to_skip = 2 })) catch |__ce_6| { _ = &__ce_6; _ = node.end();
                     return error.ExtractionFailed; }); });
                     var did_retry = false;
                     _ = &did_retry;

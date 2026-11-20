@@ -510,7 +510,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
     }
 }
 
-pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject): AnyPostgresError!SQLDataCell {
+pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject): SQLDataCell! {
     switch (oid) {
         .int4_array => return fromTypedArrayBytes(.int4_array, binary, bigint, bytes, globalObject),
         .float4_array => return fromTypedArrayBytes(.float4_array, binary, bigint, bytes, globalObject),
@@ -845,7 +845,7 @@ export struct Putter {
     count: usize = 0,
     globalObject: *jsc.JSGlobalObject,
 
-    pub fn toJS(*_, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: PostgresCachedStructure?): AnyPostgresError!JSValue {
+    pub fn toJS(*_, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: PostgresCachedStructure?): JSValue! {
         let names: [*]jsc.JSObject.ExternColumnIdentifier? = null;
         let names_count: u32 = 0;
         if (c := cached_structure) {

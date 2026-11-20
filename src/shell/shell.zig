@@ -1977,7 +1977,8 @@ else => {
                     }
                     const atom_opt = try self.parse_atom();
                     const arg2 = ((atom_opt) orelse {
-                    _ = try self.add_error("Expected a word, but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
+                    const bad_tok: Token = self.peek();
+                    _ = try self.add_error("Expected a word, but got: {s}", .{ bad_tok.asHumanReadable(self.strpool) });
                     return ParseError.Expected;
 });
                     if ((!self.matchTok(.DoubleBracketClose))) {

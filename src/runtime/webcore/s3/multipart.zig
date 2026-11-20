@@ -196,7 +196,7 @@ pub fn perform(self: *UploadPart) JSTerminatedError!void {
             var search_params = ((bufPrint((&params_buffer), "?partNumber={}&uploadId={s}&x-id=UploadPart", .{ self.partNumber, self.ctx.upload_id })) catch unreachable);
             _ = &search_params;
             const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = self.ctx.path, .method = bun.http.Method.PUT, .proxy_url = self.ctx.proxyUrl(), .body = self.data, .search_params = search_params, .request_payer = self.ctx.request_payer };
-            const cb: __CpObj_part__anyopaque = .{ .part = @ptrCast((&onPartResponse)) };
+            const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .part = @constCast(@ptrCast((&onPartResponse))) };
             _ = try executeSimpleS3Request(self.ctx.credentials, req_opts, cb, self);
     }
 
@@ -589,7 +589,7 @@ pub fn commitMultiPartRequest(self: *MultiPartUpload) JSTerminatedError!void {
             var searchParams = ((bufPrint((&params_buffer), "?uploadId={s}", .{ self.upload_id })) catch unreachable);
             _ = &searchParams;
             const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = self.path, .method = bun.http.Method.POST, .proxy_url = self.proxyUrl(), .body = self.multipart_upload_list.slice(), .search_params = searchParams, .request_payer = self.request_payer };
-            const cb: __CpObj_commit__anyopaque = .{ .commit = @ptrCast((&onCommitMultiPartRequest)) };
+            const cb: S3SimpleRequest.S3HttpSimpleTask.Callback = .{ .commit = @constCast(@ptrCast((&onCommitMultiPartRequest))) };
             _ = try executeSimpleS3Request(self.credentials, req_opts, cb, self);
     }
 
@@ -805,5 +805,3 @@ const ResumableSinkBackpressure = WebCore.ResumableSinkBackpressure;
 const JSTerminatedError = bun.JSTerminated;
 const OOMError = bun.OOM;
 const log = Output.scoped(.S3MultiPartUpload, .hidden);
-pub const __CpObj_commit__anyopaque = struct { commit: *anyopaque };
-pub const __CpObj_part__anyopaque = struct { part: *anyopaque };

@@ -1045,7 +1045,7 @@ pub fn deinit(self: *@This()) void {
     }
 
 pub fn isLessThan(_: void, lhs: StaticRouteEntry, rhs: StaticRouteEntry) bool {
-            return strings.cmpStringsDesc(.{}, lhs.path, rhs.path);
+            return strings.cmpStringsDesc(undefined, lhs.path, rhs.path);
     }
 };
 pub const FromJSOptions = struct {

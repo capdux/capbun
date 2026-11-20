@@ -293,12 +293,12 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
                 return;
             }
             _ = bun.assert((self.entry == null));
-            const output_code = bun.String.cloneLatin1(output_code_bytes);
-            self.output_code = output_code;
-            _ = (blk_catch_1: { break :blk_catch_1 ((RuntimeTranspilerCache.toFile(self.input_byte_length.?, self.input_hash.?, self.features_hash.?, sourcemap, esm_record, output_code, self.exports_kind)) catch |e| { _ = &e; _ = debug("put() = {s}", .{ @errorName(e) });
+            const out_code = bun.String.cloneLatin1(output_code_bytes);
+            self.output_code = out_code;
+            _ = (blk_catch_1: { break :blk_catch_1 ((RuntimeTranspilerCache.toFile(self.input_byte_length.?, self.input_hash.?, self.features_hash.?, sourcemap, esm_record, out_code, self.exports_kind)) catch |e| { _ = &e; _ = debug("put() = {s}", .{ @errorName(e) });
             return; }); });
             if (comptime bun.Environment.allow_assert) {
-                _ = debug("put() = {d} bytes", .{ (output_code).?.latin1().len });
+                _ = debug("put() = {d} bytes", .{ out_code.latin1().len });
             }
     }
     const seed = 42;

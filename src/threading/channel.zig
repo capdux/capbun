@@ -99,17 +99,15 @@ pub fn close(self: *@This()) void {
     }
 
 pub fn tryWriteItem(self: *@This(), item: T) !bool {
-            const wrote = try self.write((&[1]T), .{ .item = item });
+            const arr: [1]T = .{ item };
+            const wrote = try self.write((&arr));
             var __wrote_moved = false; _ = &__wrote_moved;
             defer if (!__wrote_moved) { const __T = @TypeOf(wrote); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = wrote.release() catch {}; } else { wrote.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = wrote; _drop_val.release(); } };
             return (wrote == 1);
     }
 
 pub fn writeItem(self: *@This(), item: T) !void {
-            const arr = [1]T;
-            {
-                _ = item;
-            }
+            const arr: [1]T = .{ item };
             return self.writeAll((&arr));
     }
 

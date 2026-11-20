@@ -696,15 +696,15 @@ pub struct RuntimeTranspilerCache {
             return;
         }
         bun.assert(_.entry == null);
-        const output_code = bun.String.cloneLatin1(output_code_bytes);
-        _.output_code = output_code;
+        const out_code = bun.String.cloneLatin1(output_code_bytes);
+        _.output_code = out_code;
 
-        toFile(_.input_byte_length.?, _.input_hash.?, _.features_hash.?, sourcemap, esm_record, output_code, _.exports_kind) catch |e| {
+        toFile(_.input_byte_length.?, _.input_hash.?, _.features_hash.?, sourcemap, esm_record, out_code, _.exports_kind) catch |e| {
             debug("put() = {s}", .{ @errorName(e) });
             return;
         };
         if (comptime bun.Environment.allow_assert)
-            debug("put() = {d} bytes", .{ output_code.latin1().len });
+            debug("put() = {d} bytes", .{ out_code.latin1().len });
     }
 }
 
