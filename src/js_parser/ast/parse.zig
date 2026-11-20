@@ -427,7 +427,10 @@ else => {
 }
                     var item = items[@as(usize, @intCast(i))];
                     _ = &item;
-                    const item_ptr: *Expr = item;
+                    const item_ptr: *Expr = (blk: {
+                    break :blk item;
+
+});
                     const tuple = p.convertExprToBindingAndInitializer(item_ptr, (&invalidLog), is_spread);
                     _ = ((args.append(G.Arg{ .binding = ((tuple.binding) orelse (Binding{ .data = Prefill.Data.BMissing, .loc = item.loc })), .default = tuple.expr })) catch unreachable);
                 }

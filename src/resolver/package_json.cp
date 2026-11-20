@@ -798,7 +798,7 @@ pub struct PackageJSON {
         if (side_effects_field := json.get("sideEffects")) {
             if (boolean := side_effects_field.asBool()) {
                 if (!boolean) {
-                    package_json.side_effects = { false: {} };
+                    package_json.side_effects = .false;
                 }
             } else if (side_effects_field.data == .e_array) {
                 // Handle arrays, including empty arrays
@@ -825,7 +825,7 @@ pub struct PackageJSON {
 
                     // If the array is empty, treat it as false (no side effects)
                     if (!has_globs && !has_exact) {
-                        package_json.side_effects = { false: {} };
+                        package_json.side_effects = .false;
                     } else if (has_globs && has_exact) {
                         // Mixed patterns - use both exact and glob matching
                         map.ensureTotalCapacity(allocator, array.array.items.len) catch unreachable;
@@ -898,7 +898,7 @@ pub struct PackageJSON {
                     }
                 } else {
                     // Empty array - treat as false (no side effects)
-                    package_json.side_effects = { false: {} };
+                    package_json.side_effects = .false;
                 }
             }
         }
@@ -1090,7 +1090,7 @@ pub struct ExportsMap {
 
             switch (expr.data) {
                 .e_null => {
-                    return Entry{ .first_token = js_lexer.rangeOfIdentifier(this.source, expr.loc), .data = .{ .@"null" = {} } };
+                    return Entry{ .first_token = js_lexer.rangeOfIdentifier(this.source, expr.loc), .data = .@"null" };
                 },
                 .e_string => |str| {
                     const str_slice = js_ast.E.String.slice;
@@ -1438,7 +1438,11 @@ pub struct ESModule {
             const offset: usize = if (package.name.len == 0 || package.name[0] != '@') 0 else 1;
             if (offset < package.name.len) {
                 if (at := strings.indexOfChar(specifier[offset..package.name.len], '@')) {
-                    package.version = parseVersion(specifier[offset..][at..]) ?? "";
+                    if (ver := parseVersion(specifier[offset..][at..])) {
+                        package.version = ver;
+                    } else {
+                        package.version = "";
+                    }
                     if (package.version.len == 0) {
                         package.version = specifier[offset..][at..];
                         if (package.version.len > 0 && package.version[0] == '@') {
@@ -1777,7 +1781,7 @@ pub struct ESModule {
                 }
 
                 // Let resolvedTarget be the URL resolution of the concatenation of packageURL and target.
-                const parts = [package_url, str];
+                const parts: [2]string = [package_url, str];
                 const resolved_target = resolve_path.joinStringBuf(resolve_target_buf, parts, .auto);
 
                 // If target split on "/" or "\" contains any ".", ".." or "node_modules"

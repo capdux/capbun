@@ -61,7 +61,7 @@ const PreparedStatementsMap = std.HashMapUnmanaged(u64, *MySQLStatement, U64Iden
 pub const PreparedStatementsMapGetOrPutResult = PreparedStatementsMap.GetOrPutResult;
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const debug = bun.Output.scoped(.MySQLConnection, .visible);
-const empty_columns: [0]ColumnDefinition41 = [];
+let empty_columns: [0]ColumnDefinition41 = [];
 pub err FlushQueueError {
     AuthenticationFailed,
 }
@@ -488,7 +488,7 @@ export struct Reader {
         this.@"#read_buffer".head = 0;
     }
 
-    pub fn processPackets(*_, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
+    pub fn processPackets(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         while (true) {
             reader.markMessageStart();
 
@@ -516,7 +516,7 @@ export struct Reader {
         }
     }
 
-    pub fn handleHandshake(*_, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
+    pub fn handleHandshake(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         let handshake = HandshakeV10{};
         handshake.decode(reader)?;
         defer handshake.deinit();
@@ -725,7 +725,7 @@ export struct Reader {
         }
     }
 
-    pub fn handleCommand(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): AnyMySQLError.Error!void {
+    pub fn handleCommand(*_, comptime Context: type, reader: NewReader(Context), header_length: u24): anyerror!void {
         const request = this.queue.current() orelse {
             debug("Received unexpected command response", .{});
             return error.UnexpectedPacket;

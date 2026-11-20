@@ -450,12 +450,13 @@ pub struct Runtime {
             for (flag of feature_flags) {
                 bun.handleOom(set.insert(flag));
             }
-            set.map.sort(struct {
+            const SortCtx = struct {
                 keys: []const []const u8,
                 static fn lessThan(ctx: @This(), a: usize, b: usize): bool {
                     return std.mem.lessThan(u8, ctx.keys[a], ctx.keys[b]);
                 }
-            }{ keys: set.map.keys() });
+            };
+            set.map.sort(SortCtx{ keys: set.map.keys() });
             return set;
         }
 
@@ -484,7 +485,8 @@ pub struct Runtime {
         fn hashForRuntimeTranspiler(hasher: *std.hash.Wyhash) {
             bun.assert(_.runtime_transpiler_cache != null);
 
-            let bools: [std.@"meta".fieldNames(@TypeOf(hash_fields_for_runtime_transpiler)).len]bool = undefined;
+            const hash_field_count = comptime std.@"meta".fieldNames(@TypeOf(hash_fields_for_runtime_transpiler)).len;
+            let bools: [hash_field_count]bool = undefined;
             inline for (hash_fields_for_runtime_transpiler, 0..) |field, i| {
                 bools[i] = @field(_, @tagName(field));
             }

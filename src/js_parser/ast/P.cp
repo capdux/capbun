@@ -1285,6 +1285,9 @@ pub fn NewParser_(
 
         static fn s(p_unused: *const P, t: auto, loc: logger.Loc): Stmt {
             const Type = @TypeOf(t);
+            if (Type == type) {
+                return Stmt.alloc(t, std.mem.zeroes(t), loc);
+            }
             if (!is_typescript_enabled && (Type == S.TypeScript || Type == *S.TypeScript)) {
                 @compileError("Attempted to use TypeScript syntax in a non-TypeScript environment");
             }
@@ -3760,7 +3763,7 @@ pub fn NewParser_(
                     tag: .source_contents_slice,
                 });
             } else {
-                const inner_index: u31 = i32(p.allocated_names.items.len);
+                const inner_index: u31 = @intCast(p.allocated_names.items.len);
                 p.allocated_names.append(p.allocator, name)?;
                 return Ref.init(
                     inner_index,

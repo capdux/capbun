@@ -371,7 +371,8 @@ pub fn parseTypescriptEnumStmt(p: *P, loc: logger.Loc, opts: *ParseStatementOpti
                 var needs_symbol = false;
                 _ = &needs_symbol;
                 if ((p.lexer.token == .t_string_literal)) {
-                    (if (@typeInfo(@TypeOf(value)) == .@"enum" or @typeInfo(@TypeOf(value)) == .@"union") @tagName(value) else value.name) = try p.lexer.toUTF8EString().slice8();
+                    const utf8_str = try p.lexer.toUTF8EString();
+                    (if (@typeInfo(@TypeOf(value)) == .@"enum" or @typeInfo(@TypeOf(value)) == .@"union") @tagName(value) else value.name) = utf8_str.slice8();
                     needs_symbol = js_lexer.isIdentifier((if (@typeInfo(@TypeOf(value)) == .@"enum" or @typeInfo(@TypeOf(value)) == .@"union") @tagName(value) else value.name));
                 } else {
                     if (p.lexer.isIdentifierOrKeyword()) {

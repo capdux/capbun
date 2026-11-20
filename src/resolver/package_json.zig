@@ -664,7 +664,7 @@ else => {
                 if (side_effects_field.asBool()) |boolean| {
                     _ = &boolean;
                     if ((!boolean)) {
-                        package_json.side_effects = .{ .false = .{} };
+                        package_json.side_effects = .false;
                     }
                 } else {
                     if ((side_effects_field.data == .e_array)) {
@@ -692,7 +692,7 @@ else => {
                             }
                             array = array_;
                             if (((!has_globs) and (!has_exact))) {
-                                package_json.side_effects = .{ .false = .{} };
+                                package_json.side_effects = .false;
                             } else {
                                 if ((has_globs and has_exact)) {
                                     _ = ((map.ensureTotalCapacity(allocator, array.array.items.len)) catch unreachable);
@@ -747,7 +747,7 @@ else => {
                                 }
                             }
                         } else {
-                            package_json.side_effects = .{ .false = .{} };
+                            package_json.side_effects = .false;
                         }
                     }
                 }
@@ -980,7 +980,7 @@ pub fn parse(allocator: std.mem.Allocator, source: *const logger.Source, log: *l
                 _ = &first_token;
                 switch (expr.data) {
     .e_null => {
-    return Entry{ .first_token = js_lexer.rangeOfIdentifier(self.source, expr.loc), .data = .{ .@"null" = .{} } };
+    return Entry{ .first_token = js_lexer.rangeOfIdentifier(self.source, expr.loc), .data = .@"null" };
     },
     .e_string => |str| {
     const str_slice = js_ast.E.String.slice;
@@ -1364,7 +1364,7 @@ if (r.debug_logs) |log| {
                 }
                 return Resolution{ .path = str, .status = .InvalidPackageTarget, .debug = .{ .token = target.first_token } };
             }
-            const parts: [][]const u8 = .{ package_url, str };
+            const parts: [2][]const u8 = .{ package_url, str };
             const resolved_target = resolve_path.joinStringBuf(resolve_target_buf, parts, .auto);
             if (findInvalidSegment(resolved_target)) |invalid| {
                 _ = &invalid;
@@ -1737,7 +1737,12 @@ else => {
                 if ((offset < (if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name).len)) {
                     if (strings.indexOfChar(specifier[offset..(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name).len], 64)) |at| {
                         _ = &at;
-                        if (package.version == null) { package.version = ""; }
+                        if (parseVersion(specifier[offset..][at..])) |ver| {
+                            _ = &ver;
+                            package.version = ver;
+                        } else {
+                            package.version = "";
+                        }
                         if ((package.version.len == 0)) {
                             package.version = specifier[offset..][at..];
                             if (((package.version.len > 0) and (package.version[0] == 64))) {

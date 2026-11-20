@@ -18,25 +18,26 @@ const decoderWrap = NewReaderMod.decoderWrap;
     packet_size: u24,
 
     pub fn deinit(*_)  {
-        this.info.deinit();
-        this.session_state_changes.deinit();
+        _.info.deinit();
+        _.session_state_changes.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         let read_size: usize = 5;
-        this.header = reader.int(u8)?;
-        if (this.header != 0x00 && this.header != 0xfe) {
+        _.header = reader.int(u8)?;
+        if (_.header != 0x00 && _.header != 0xfe) {
             return error.InvalidOKPacket;
         }
 
-        this.affected_rows = reader.encodedLenIntWithSize(&read_size)?;
-        this.last_insert_id = reader.encodedLenIntWithSize(&read_size)?;
-        this.status_flags = StatusFlags.fromInt(reader.int(u16)?);
-        this.warnings = reader.int(u16)?;
+        _.affected_rows = reader.encodedLenIntWithSize(&read_size)?;
+        _.last_insert_id = reader.encodedLenIntWithSize(&read_size)?;
+        _.status_flags = StatusFlags.fromInt(reader.int(u16)?);
+        _.warnings = reader.int(u16)?;
 
-        if (reader.peek().len > 0 && this.packet_size > read_size) {
-            const remaining = this.packet_size - read_size;
-            this.info = reader.read(@truncate(remaining))?;
+        const peeked = reader.peek();
+        if (peeked.len > 0 && _.packet_size > read_size) {
+            const remaining = _.packet_size - read_size;
+            _.info = reader.read(@truncate(remaining))?;
         }
     }
 

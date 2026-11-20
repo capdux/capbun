@@ -1484,7 +1484,11 @@ pub fn on(self: *PostgresSQLConnection, comptime MessageType: anytype, comptime 
         _ = debug("on({s})", .{ @tagName(MessageType) });
         switch ((comptime MessageType)) {
 .DataRow => {
-const request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
+const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        const request = request_opt.?;
         var statement = ((request.statement) orelse { return .{ .ok = error.ExpectedStatement }; });
         _ = &statement;
         var structure: JSValue = .js_undefined;
@@ -1585,7 +1589,11 @@ var ready_for_query: protocol.ReadyForQuery = undefined;
         _ = self.registerAutoFlusher();
 },
 .CommandComplete => {
-var request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
+const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        var request = request_opt.?;
         _ = &request;
         var cmd: protocol.CommandComplete = undefined;
         _ = &cmd;
@@ -1603,7 +1611,11 @@ var request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }
 },
 .BindComplete => {
 _ = try reader.eatMessage(protocol.BindComplete);
-        var request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        var request = request_opt.?;
         _ = &request;
         if ((request.status == .binding)) {
             request.status = .running;
@@ -1611,7 +1623,11 @@ _ = try reader.eatMessage(protocol.BindComplete);
 },
 .ParseComplete => {
 _ = try reader.eatMessage(protocol.ParseComplete);
-        const request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        const request = request_opt.?;
         if (request.statement) |statement| {
             _ = &statement;
             if (((statement.status == .parsing) and (statement.signature.fields.len == 0))) {
@@ -1627,8 +1643,16 @@ var description: protocol.ParameterDescription = undefined;
         errdefer {
         _ = bun.default_allocator.free(description.parameters);
         }
-        const request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
-        var statement = ((request.statement) orelse { return .{ .ok = error.ExpectedStatement }; });
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        const request = request_opt.?;
+        const statement_opt = request.statement;
+        if ((statement_opt == null)) {
+            return error.ExpectedStatement;
+        }
+        var statement = statement_opt.?;
         _ = &statement;
         if ((statement.parameters.len > 0)) {
             _ = bun.default_allocator.free(statement.parameters);
@@ -1646,8 +1670,16 @@ var description: protocol.RowDescription = undefined;
         errdefer {
         _ = description.deinit();
         }
-        const request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
-        var statement = ((request.statement) orelse { return .{ .ok = error.ExpectedStatement }; });
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        const request = request_opt.?;
+        const statement_opt = request.statement;
+        if ((statement_opt == null)) {
+            return error.ExpectedStatement;
+        }
+        var statement = statement_opt.?;
         _ = &statement;
         if ((statement.fields.len > 0)) {
             {
@@ -1812,7 +1844,11 @@ _ = debug("TODO auth: {s}", .{ @tagName(std.meta.activeTag(auth)) });
 },
 .NoData => {
 _ = try reader.eatMessage(protocol.NoData);
-        var request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        var request = request_opt.?;
         _ = &request;
         if ((request.status == .binding)) {
             request.status = .running;
@@ -1869,7 +1905,11 @@ _ = debug("TODO PortalSuspended", .{});
 },
 .CloseComplete => {
 _ = try reader.eatMessage(protocol.CloseComplete);
-        var request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        var request = request_opt.?;
         _ = &request;
         defer {
         _ = self.updateRef();
@@ -1888,7 +1928,11 @@ _ = debug("UNSUPPORTED NoticeResponse", .{});
 },
 .EmptyQueryResponse => {
 _ = try reader.eatMessage(protocol.EmptyQueryResponse);
-        var request = ((self.current()) orelse { return .{ .ok = error.ExpectedRequest }; });
+        const request_opt = self.current();
+        if ((request_opt == null)) {
+            return error.ExpectedRequest;
+        }
+        var request = request_opt.?;
         _ = &request;
         defer {
         _ = self.updateRef();

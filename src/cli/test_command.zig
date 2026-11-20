@@ -148,9 +148,10 @@ pub fn getHostname(self: *JunitReporter) ?[]const u8 {
                 if (Environment.isWindows) {
                     return null;
                 }
-                var name_buffer: struct { bun.HOST_NAME_MAX } = undefined;
+                const host_max = bun.HOST_NAME_MAX;
+                _ = &host_max;
+                var name_buffer: [host_max]u8 = undefined;
                 _ = &name_buffer;
-                u8 = undefined;
                 const hostname = (blk_catch_2: { break :blk_catch_2 ((std.posix.gethostname((&name_buffer))) catch |__ce_2| { _ = &__ce_2; self.hostname_value = "";
                 return null; }); });
                 var arraylist_writer = std.array_list.Managed(u8).init(bun.default_allocator);
@@ -283,7 +284,7 @@ pub fn beginTestSuite(self: *JunitReporter, name: []const u8) !void {
 
 pub fn beginTestSuiteWithLine(self: *JunitReporter, name: []const u8, line_number: u32, is_file_suite: bool) !void {
             if ((self.contents.items.len == 0)) {
-                _ = try self.contents.appendSlice(bun.default_allocator, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "");
+                _ = try self.contents.appendSlice(bun.default_allocator, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
                 _ = try self.contents.appendSlice(bun.default_allocator, "<testsuites name=\"bun test\" ");
                 self.offset_of_testsuites_value = self.contents.items.len;
                 _ = try self.contents.appendSlice(bun.default_allocator, ">\n");
@@ -617,40 +618,34 @@ else => {
 },
 }
                 if (Output.enable_ansi_colors_stderr) {
-                    {
-                        var i: i32 = 0;
-                        _ = &i;
-                        const __end_2 = scopes.len;
-                        while (i < __end_2) : (i += 1) {
-                            const index = ((scopes.len - 1) - i);
-                            const scope = scopes[@as(usize, @intCast(index))];
-                            const name: []const u8 = (((if (@typeInfo(@TypeOf(scope.base)) == .@"enum" or @typeInfo(@TypeOf(scope.base)) == .@"union") @tagName(scope.base) else scope.base.name)) orelse (""));
-                            if ((name.len == 0)) {
-                                continue;
-                            }
-                            _ = ((writer.writeAll(" ")) catch unreachable);
-                            _ = ((writer.print((comptime Output.prettyFmt(("<r>" ++ color_code), true)), .{})) catch unreachable);
-                            _ = ((writer.writeAll(name)) catch unreachable);
-                            _ = ((writer.print((comptime Output.prettyFmt("<d>", true)), .{})) catch unreachable);
-                            _ = ((writer.writeAll(" >")) catch unreachable);
+                    var i: usize = 0;
+                    _ = &i;
+                    while ((i < scopes.len)) : (i = (i + 1)) {
+                        const index = ((scopes.len - 1) - i);
+                        const scope = scopes[@as(usize, @intCast(index))];
+                        const name: []const u8 = (((if (@typeInfo(@TypeOf(scope.base)) == .@"enum" or @typeInfo(@TypeOf(scope.base)) == .@"union") @tagName(scope.base) else scope.base.name)) orelse (""));
+                        if ((name.len == 0)) {
+                            continue;
                         }
+                        _ = ((writer.writeAll(" ")) catch unreachable);
+                        _ = ((writer.print((comptime Output.prettyFmt(("<r>" ++ color_code), true)), .{})) catch unreachable);
+                        _ = ((writer.writeAll(name)) catch unreachable);
+                        _ = ((writer.print((comptime Output.prettyFmt("<d>", true)), .{})) catch unreachable);
+                        _ = ((writer.writeAll(" >")) catch unreachable);
                     }
                 } else {
-                    {
-                        var i: i32 = 0;
-                        _ = &i;
-                        const __end_3 = scopes.len;
-                        while (i < __end_3) : (i += 1) {
-                            const index = ((scopes.len - 1) - i);
-                            const scope = scopes[@as(usize, @intCast(index))];
-                            const name: []const u8 = (((if (@typeInfo(@TypeOf(scope.base)) == .@"enum" or @typeInfo(@TypeOf(scope.base)) == .@"union") @tagName(scope.base) else scope.base.name)) orelse (""));
-                            if ((name.len == 0)) {
-                                continue;
-                            }
-                            _ = ((writer.writeAll(" ")) catch unreachable);
-                            _ = ((writer.writeAll(name)) catch unreachable);
-                            _ = ((writer.writeAll(" >")) catch unreachable);
+                    var i: usize = 0;
+                    _ = &i;
+                    while ((i < scopes.len)) : (i = (i + 1)) {
+                        const index = ((scopes.len - 1) - i);
+                        const scope = scopes[@as(usize, @intCast(index))];
+                        const name: []const u8 = (((if (@typeInfo(@TypeOf(scope.base)) == .@"enum" or @typeInfo(@TypeOf(scope.base)) == .@"union") @tagName(scope.base) else scope.base.name)) orelse (""));
+                        if ((name.len == 0)) {
+                            continue;
                         }
+                        _ = ((writer.writeAll(" ")) catch unreachable);
+                        _ = ((writer.writeAll(name)) catch unreachable);
+                        _ = ((writer.writeAll(" >")) catch unreachable);
                     }
                 }
                 if (Output.enable_ansi_colors_stderr) {
@@ -754,18 +749,15 @@ pub fn maybePrintJunitLine(comptime status: bun_test.Execution.Result, buntest: 
                         defer {
                         _ = needed_suites.deinit();
                         }
-                        {
-                            var i: i32 = 0;
-                            _ = &i;
-                            const __end_4 = scopes.len;
-                            while (i < __end_4) : (i += 1) {
-                                const index = ((scopes.len - 1) - i);
-                                const scope = scopes[@as(usize, @intCast(index))];
-                                if ((if (@typeInfo(@TypeOf(scope.base)) == .@"enum" or @typeInfo(@TypeOf(scope.base)) == .@"union") @tagName(scope.base) else scope.base.name)) |name| {
-                                    _ = &name;
-                                    if ((name.len > 0)) {
-                                        _ = bun.handleOom(needed_suites.append(scope));
-                                    }
+                        var i: usize = 0;
+                        _ = &i;
+                        while ((i < scopes.len)) : (i = (i + 1)) {
+                            const index = ((scopes.len - 1) - i);
+                            const scope = scopes[@as(usize, @intCast(index))];
+                            if ((if (@typeInfo(@TypeOf(scope.base)) == .@"enum" or @typeInfo(@TypeOf(scope.base)) == .@"union") @tagName(scope.base) else scope.base.name)) |name| {
+                                _ = &name;
+                                if ((name.len > 0)) {
+                                    _ = bun.handleOom(needed_suites.append(scope));
                                 }
                             }
                         }
@@ -1432,7 +1424,7 @@ pub fn exec(ctx: Command.Context) !void {
                 const file_or_dirnames = ctx.positionals[1..];
                 for (cp_iter_slice(file_or_dirnames)) |arg| {
                     _ = &arg;
-                    _ = (blk_catch_58: { break :blk_catch_58 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_58 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  break :__sw_blk_18 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .DoesNotExist)) {  break :__sw_blk_18 cp_val((if ((file_or_dirnames.len == 1)) blk: {
+                    _ = (blk_catch_58: { break :blk_catch_58 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_58 (__sw_blk_15: { const __disc_15 = e; _ = &__disc_15; if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .OutOfMemory)) {  break :__sw_blk_15 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .DoesNotExist)) {  break :__sw_blk_15 cp_val((if ((file_or_dirnames.len == 1)) blk: {
                     if (Output.isAIAgent()) {
                         _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                     } else {
@@ -1453,8 +1445,8 @@ pub fn exec(ctx: Command.Context) !void {
                 {
                     var ni: i32 = 0;
                     _ = &ni;
-                    const __end_19 = filter_names.len;
-                    while (ni < __end_19) : (ni += 1) {
+                    const __end_16 = filter_names.len;
+                    while (ni < __end_16) : (ni += 1) {
                         const to_normalize = try ctx.allocator.dupe(u8, filter_names[@as(usize, @intCast(ni))]);
                         _ = bun.path.posixToPlatformInPlace(u8, to_normalize);
                         normalized[cp_cast_int(usize, ni)] = to_normalize;
@@ -1480,14 +1472,14 @@ pub fn exec(ctx: Command.Context) !void {
                 }
                 break :brk scanner.fs.top_level_dir;
 };
-                _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_21: { const __disc_21 = e; _ = &__disc_21; if ((!cp_has_ok_val(__disc_21) and !cp_is_null_val(__disc_21))) { const __err_v_21 = cp_unwrap_err_val(__disc_21); _ = &__err_v_21; if (cp_match_tag(__err_v_21, .OutOfMemory)) {  break :__sw_blk_21 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_21) and !cp_is_null_val(__disc_21))) { const __err_v_21 = cp_unwrap_err_val(__disc_21); _ = &__err_v_21; if (cp_match_tag(__err_v_21, .DoesNotExist)) {  if (Output.isAIAgent()) {
+                _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  break :__sw_blk_18 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .DoesNotExist)) {  if (Output.isAIAgent()) {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f} in --cwd={f}", .{ bun.fmt.quote(dir_to_scan), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                 } else {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f}", .{ bun.fmt.quote(dir_to_scan) });
                 }
                 vm.exit_handler.exit_code = 1;
                 vm.is_shutting_down = true;
-                break :__sw_blk_21 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
+                break :__sw_blk_18 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
             }
             const all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
             defer {
@@ -1539,8 +1531,8 @@ pub fn exec(ctx: Command.Context) !void {
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_23 = test_files.len;
-                        while (i < __end_23) : (i += 1) {
+                        const __end_20 = test_files.len;
+                        while (i < __end_20) : (i += 1) {
                             const file = test_files[@as(usize, @intCast(i))];
                             if (((i % shard.count) == (shard.index - 1))) {
                                 test_files[cp_cast_int(usize, write)] = file;
@@ -1647,8 +1639,8 @@ else => {
                     {
                         var i: i32 = 1;
                         _ = &i;
-                        const __end_25 = ctx.positionals.len;
-                        while (i < __end_25) : (i += 1) {
+                        const __end_22 = ctx.positionals.len;
+                        while (i < __end_22) : (i += 1) {
                             const filter = ctx.positionals[@as(usize, @intCast(i))];
                             _ = Output.prettyError(" {s}", .{ filter });
                             if (((has_file_like == null) and (((strings.hasSuffixComptime(filter, ".ts") or strings.hasSuffixComptime(filter, ".tsx")) or strings.hasSuffixComptime(filter, ".js")) or strings.hasSuffixComptime(filter, ".jsx")))) {

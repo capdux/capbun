@@ -140,7 +140,7 @@ else => {
                 ifStmtScopeIndex = try p.pushScopeForParsePass(js_ast.Scope.Kind.block, loc);
             }
             const scopeIndex: usize = try p.pushScopeForParsePass(js_ast.Scope.Kind.function_args, p.lexer.loc());
-            var func = p.parseFn(name, FnOrArrowDataParse{ .needs_async_loc = loc, .async_range = ((asyncRange) orelse (logger.Range.None)), .has_async_range = (asyncRange != null), .allow_await = (if (is_async) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident), .allow_yield = (if (is_generator) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident), .is_typescript_declare = opts.is_typescript_declare, .allow_missing_body_for_type_script = is_typescript_enabled });
+            var func = try p.parseFn(name, FnOrArrowDataParse{ .needs_async_loc = loc, .async_range = ((asyncRange) orelse (logger.Range.None)), .has_async_range = (asyncRange != null), .allow_await = (if (is_async) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident), .allow_yield = (if (is_generator) AwaitOrYield.allow_expr else AwaitOrYield.allow_ident), .is_typescript_declare = opts.is_typescript_declare, .allow_missing_body_for_type_script = is_typescript_enabled });
             _ = &func;
             p.fn_or_arrow_data_parse.has_argument_decorators = false;
             if (comptime is_typescript_enabled) {
@@ -185,10 +185,10 @@ pub fn parseFn(p: *P, name: ?js_ast.LocRef, opts: FnOrArrowDataParse) anyerror!G
             _ = &rest_arg;
             var arg_has_decorators: bool = false;
             _ = &arg_has_decorators;
-            var args = List(G.Arg);
+            const ArgList = List(G.Arg);
+            _ = &ArgList;
+            var args = ArgList{  };
             _ = &args;
-            {
-            }
             while ((p.lexer.token != T.t_close_paren)) {
                 if ((is_typescript_enabled and (p.lexer.token == T.t_this))) {
                     _ = try p.lexer.next();
@@ -347,7 +347,7 @@ pub fn parseFnExpr(p: *P, loc: logger.Loc, is_async: bool, async_range: logger.R
             if (comptime is_typescript_enabled) {
                 _ = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
             }
-            const func = p.parseFn(name, FnOrArrowDataParse{ .needs_async_loc = loc, .async_range = async_range, .allow_await = (if (is_async) .allow_expr else .allow_ident), .allow_yield = (if (is_generator) .allow_expr else .allow_ident) });
+            const func = try p.parseFn(name, FnOrArrowDataParse{ .needs_async_loc = loc, .async_range = async_range, .allow_await = (if (is_async) .allow_expr else .allow_ident), .allow_yield = (if (is_generator) .allow_expr else .allow_ident) });
             p.fn_or_arrow_data_parse.has_argument_decorators = false;
             _ = p.validateFunctionName(func, .expr);
             _ = p.popScope();

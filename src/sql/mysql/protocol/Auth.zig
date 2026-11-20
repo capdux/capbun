@@ -102,7 +102,7 @@ pub fn scramble(password: []const u8, nonce: []const u8) anyerror![20]u8 {
 
 pub const AuthResponse = struct {
     status: AuthFastStatus = .success,
-    data: Data = Data{ .empty = .{} },
+    data: Data = .empty,
 
 pub fn deinit(self: *AuthResponse) void {
             _ = self.data.deinit();
@@ -212,7 +212,7 @@ pub fn writeInternal(self: AuthEncryptedPassword, comptime Context: type, writer
 };
 
 pub const AuthPublicKeyResponse = struct {
-    data: Data = Data{ .empty = .{} },
+    data: Data = .empty,
 
 pub fn deinit(self: *AuthPublicKeyResponse) void {
             _ = self.data.deinit();

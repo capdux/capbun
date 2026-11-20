@@ -73,7 +73,7 @@ pub fn ParseFn(
 
                 // Only allow omitting the body if we're parsing TypeScript
                 allow_missing_body_for_type_script: is_typescript_enabled,
-            });
+            })?;
             p.fn_or_arrow_data_parse.has_argument_decorators = false;
 
             if (comptime is_typescript_enabled) {
@@ -169,7 +169,8 @@ pub fn ParseFn(
 
             let rest_arg: bool = false;
             let arg_has_decorators: bool = false;
-            let args = List(G.Arg){};
+            const ArgList = List(G.Arg);
+            let args = ArgList{};
             while (p.lexer.token != T.t_close_paren) {
                 // Skip over "this" type annotations
                 if (is_typescript_enabled && p.lexer.token == T.t_this) {
@@ -391,7 +392,7 @@ pub fn ParseFn(
                 async_range: async_range,
                 allow_await: if (is_async) .allow_expr else .allow_ident,
                 allow_yield: if (is_generator) .allow_expr else .allow_ident,
-            });
+            })?;
             p.fn_or_arrow_data_parse.has_argument_decorators = false;
 
             p.validateFunctionName(func, .expr);

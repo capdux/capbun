@@ -1783,7 +1783,7 @@ else => r.opts.conditions.@"import",
                 const esm = esm_.?.withAutoVersion();
                 _ = load_module_from_cache: {
                 const manager = r.getPackageManager();
-                var dependency_version = Dependency.Version;
+                var dependency_version: Dependency.Version = .{};
                 _ = &dependency_version;
                 var dependency_behavior: Dependency.Behavior = .{ .prod = true };
                 _ = &dependency_behavior;
@@ -3050,7 +3050,7 @@ pub fn loadAsFile(r: *ThisResolver, path: []const u8, extension_order: []const [
             }
             const dir_path = bun.strings.withoutTrailingSlashWindowsPath(Dirname.dirname(path));
             const dir_entry: *Fs.FileSystem.RealFS.EntriesOption = (blk_catch_71: { break :blk_catch_71 ((rfs.readDirectory(dir_path, null, r.generation, r.store_fd)) catch |__ce_71| { _ = &__ce_71; return null; }); });
-            if (((if (comptime @typeInfo(Fs.FileSystem.RealFS.EntriesOption.Tag) == .@"enum") @as(Fs.FileSystem.RealFS.EntriesOption.Tag, @enumFromInt(dir_entry.*)) else @as(Fs.FileSystem.RealFS.EntriesOption.Tag, dir_entry.*)) == .err)) {
+            if ((std.meta.activeTag(dir_entry.*) == .err)) {
                 switch (dir_entry.err.original_err) {
 error.ENOENT, error.FileNotFound, error.ENOTDIR, error.NotDir => {
 

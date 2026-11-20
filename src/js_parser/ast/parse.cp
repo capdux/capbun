@@ -423,7 +423,7 @@ pub fn Parse(
                     }
 
                     let item = items[i];
-                    const item_ptr: *Expr = &item;
+                    const item_ptr: *Expr = unsafe { &item };
                     const tuple = p.convertExprToBindingAndInitializer(item_ptr, &invalidLog, is_spread);
                     // double allocations
                     args.append(G.Arg{

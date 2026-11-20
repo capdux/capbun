@@ -54,11 +54,12 @@ process_id: u32 = 0,
 secret_key: u32 = 0,
 
 pub fn decodeInternal(self: *BackendKeyData, comptime Container: type, reader: NewReader(Container)) !void {
-        if (try (!reader.expectInt(u32, 12))) {
+        const ok = try reader.expectInt(u32, 12);
+        if ((!ok)) {
             return error.InvalidBackendKeyData;
         }
         {
-            self.* = .{ .process_id = @bitCast(try reader.int4()), .secret_key = @bitCast(try reader.int4()) };
+            self.* = BackendKeyData{ .process_id = @bitCast(try reader.int4()), .secret_key = @bitCast(try reader.int4()) };
         }
 }
 pub const decode = DecoderWrap(@This(), decodeInternal).decode;

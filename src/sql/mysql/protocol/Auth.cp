@@ -54,7 +54,7 @@ export enum AuthFastStatus: u8 {
 
 export struct AuthResponse {
     status: AuthFastStatus = .success,
-    data: Data = Data{ empty: {} },
+    data: Data = .empty,
 
     pub fn deinit(*_)  {
         _.data.deinit();
@@ -157,7 +157,7 @@ export struct AuthEncryptedPassword {
 }
 
 export struct AuthPublicKeyResponse {
-    data: Data = Data{ empty: {} },
+    data: Data = .empty,
 
     pub fn deinit(*_)  {
         _.data.deinit();

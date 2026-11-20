@@ -421,7 +421,8 @@ pub fn ParseTypescript(
 
                 // Parse the name
                 if (p.lexer.token == .t_string_literal) {
-                    value.name = (p.lexer.toUTF8EString()?).slice8();
+                    const utf8_str = p.lexer.toUTF8EString()?;
+                    value.name = utf8_str.slice8();
                     needs_symbol = js_lexer.isIdentifier(value.name);
                 } else if (p.lexer.isIdentifierOrKeyword()) {
                     value.name = p.lexer.identifier;

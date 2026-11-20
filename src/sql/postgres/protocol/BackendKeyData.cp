@@ -6,13 +6,14 @@ import { NewReader } from "./NewReader.zig";
     secret_key: u32 = 0,
     pub const decode = DecoderWrap(@This(), decodeInternal).decode;
 
-    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
-        if (!reader.expectInt(u32, 12)?) {
-            return err.InvalidBackendKeyData;
+    pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container))! {
+        const ok = reader.expectInt(u32, 12)?;
+        if (!ok) {
+            return error.InvalidBackendKeyData;
         }
 
         unsafe {
-            this.* = {
+            _.* = BackendKeyData{
                 process_id: @bitCast(reader.int4()?),
                 secret_key: @bitCast(reader.int4()?),
             };

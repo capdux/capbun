@@ -112,7 +112,7 @@ else => {
             return error.done;
     }
 
-pub fn t_dot(p: *P, optional_chain: ?*OptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
+pub fn t_dot(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             _ = try p.lexer.next();
             const target = left.*;
             if (((p.lexer.token == .t_private_identifier) and p.allow_private_identifiers)) {
@@ -142,7 +142,7 @@ else => {
             return error.next;
     }
 
-pub fn t_question_dot(p: *P, level: Level, optional_chain: ?*OptionalChain, left: *Expr) anyerror!Continuation {
+pub fn t_question_dot(p: *P, level: Level, optional_chain: *OptOptionalChain, left: *Expr) anyerror!Continuation {
             _ = try p.lexer.next();
             var optional_start: ?OptionalChain = OptionalChain.start;
             _ = &optional_start;
@@ -208,7 +208,7 @@ if (((p.lexer.token == .t_private_identifier) and p.allow_private_identifiers)) 
             return error.next;
     }
 
-pub fn t_no_substitution_template_literal(p: *P, _: Level, _: ?*OptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
+pub fn t_no_substitution_template_literal(p: *P, _: Level, _: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if ((old_optional_chain != null)) {
                 _ = ((p.log.addRangeError(p.source, p.lexer.range(), "Template literals cannot have an optional chain as a tag")) catch unreachable);
             }
@@ -218,7 +218,7 @@ pub fn t_no_substitution_template_literal(p: *P, _: Level, _: ?*OptionalChain, o
             return error.next;
     }
 
-pub fn t_template_head(p: *P, _: Level, _: ?*OptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
+pub fn t_template_head(p: *P, _: Level, _: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if ((old_optional_chain != null)) {
                 _ = ((p.log.addRangeError(p.source, p.lexer.range(), "Template literals cannot have an optional chain as a tag")) catch unreachable);
             }
@@ -229,7 +229,7 @@ pub fn t_template_head(p: *P, _: Level, _: ?*OptionalChain, old_optional_chain: 
             return error.next;
     }
 
-pub fn t_open_bracket(p: *P, optional_chain: ?*OptionalChain, old_optional_chain: ?OptionalChain, left: *Expr, flags: Expr.EFlags) anyerror!Continuation {
+pub fn t_open_bracket(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr, flags: Expr.EFlags) anyerror!Continuation {
             if ((flags == .ts_decorator)) {
                 return error.done;
             }
@@ -244,7 +244,7 @@ pub fn t_open_bracket(p: *P, optional_chain: ?*OptionalChain, old_optional_chain
             return error.next;
     }
 
-pub fn t_open_paren(p: *P, level: Level, optional_chain: ?*OptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
+pub fn t_open_paren(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if (level.gte(.call)) {
                 return error.done;
             }
@@ -278,7 +278,7 @@ pub fn t_question(p: *P, level: Level, errors: ?*DeferredErrors, left: *Expr) an
             return error.next;
     }
 
-pub fn t_exclamation(p: *P, optional_chain: ?*OptionalChain, old_optional_chain: ?OptionalChain) anyerror!Continuation {
+pub fn t_exclamation(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain) anyerror!Continuation {
             if (p.lexer.has_newline_before) {
                 return error.done;
             }
@@ -462,7 +462,7 @@ pub fn t_exclamation_equals_equals(p: *P, level: Level, left: *Expr) anyerror!Co
             return error.next;
     }
 
-pub fn t_less_than(p: *P, level: Level, optional_chain: ?*OptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
+pub fn t_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if ((is_typescript_enabled and p.trySkipTypeScriptTypeArgumentsWithBacktracking())) {
                 optional_chain.* = old_optional_chain;
                 return error.next;
@@ -502,7 +502,7 @@ pub fn t_greater_than_equals(p: *P, level: Level, left: *Expr) anyerror!Continua
             return error.next;
     }
 
-pub fn t_less_than_less_than(p: *P, level: Level, optional_chain: ?*OptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
+pub fn t_less_than_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: ?OptionalChain, left: *Expr) anyerror!Continuation {
             if ((is_typescript_enabled and p.trySkipTypeScriptTypeArgumentsWithBacktracking())) {
                 optional_chain.* = old_optional_chain;
                 return error.next;
@@ -796,5 +796,6 @@ break;
     }
     const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
     const is_typescript_enabled = P.is_typescript_enabled;
+    const OptOptionalChain = ?OptionalChain;
 };
 }

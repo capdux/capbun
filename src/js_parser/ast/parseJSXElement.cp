@@ -29,7 +29,7 @@ pub fn ParseJSXElement(
 
             // Fragments don't have props
             // Fragments of the form "React.Fragment" are not parsed as fragments.
-            if (@as(JSXTag.TagType, tag.data) == .tag) {
+            if (std.meta.activeTag(tag.data) == .tag) {
                 start_tag = tag.data.tag;
 
                 let spread_loc: logger.Loc = logger.Loc.Empty;

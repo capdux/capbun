@@ -150,7 +150,8 @@ pub struct JunitReporter {
                 return null;
             }
 
-            let name_buffer: [bun.HOST_NAME_MAX]u8 = undefined;
+            const host_max = bun.HOST_NAME_MAX;
+            let name_buffer: [host_max]u8 = undefined;
             const hostname = std.posix.gethostname(&name_buffer) catch {
                 _.hostname_value = "";
                 return null;
@@ -329,10 +330,7 @@ pub struct JunitReporter {
 
     fn beginTestSuiteWithLine(*_, name: string, line_number: u32, is_file_suite: bool)! {
         if (_.contents.items.len == 0) {
-            _.contents.appendSlice(bun.default_allocator,
-                \\<?xml version="1.0" encoding="UTF-8"?>
-                \\
-            )?;
+            _.contents.appendSlice(bun.default_allocator, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")?;
 
             _.contents.appendSlice(bun.default_allocator, "<testsuites name=\"bun test\" ")?;
             _.offset_of_testsuites_value = _.contents.items.len;
@@ -712,7 +710,8 @@ pub struct CommandLineReporter {
             }
 
             if (Output.enable_ansi_colors_stderr) {
-                for (i of 0..scopes.len) {
+                let i: usize = 0;
+                while (i < scopes.len) : (i += 1) {
                     const index = (scopes.len - 1) - i;
                     const scope = scopes[index];
                     const name: []const u8 = scope.base.name ?? "";
@@ -725,7 +724,8 @@ pub struct CommandLineReporter {
                     writer.writeAll(" >") catch unreachable;
                 }
             } else {
-                for (i of 0..scopes.len) {
+                let i: usize = 0;
+                while (i < scopes.len) : (i += 1) {
                     const index = (scopes.len - 1) - i;
                     const scope = scopes[index];
                     const name: []const u8 = scope.base.name ?? "";
@@ -831,7 +831,8 @@ pub struct CommandLineReporter {
                     let needed_suites = std.array_list.Managed(*bun_test.DescribeScope).init(bun.default_allocator);
                     defer needed_suites.deinit();
 
-                    for (i of 0..scopes.len) {
+                    let i: usize = 0;
+                    while (i < scopes.len) : (i += 1) {
                         const index = (scopes.len - 1) - i;
                         const scope = scopes[index];
                         if (name := scope.base.name) {

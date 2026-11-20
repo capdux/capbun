@@ -657,7 +657,7 @@ if ((p.lexer.has_newline_before or opts.contains(.disallow_conditional_types))) 
                     return;
                 }
                 _ = try p.lexer.next();
-                var extends_type = (if (get_metadata) TypeScript.Metadata.default else null);
+                var extends_type = TypeScript.Metadata.default;
                 _ = &extends_type;
                 _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), get_metadata, (if (get_metadata) (&extends_type) else null));
                 if (comptime get_metadata) {

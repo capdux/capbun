@@ -423,21 +423,23 @@ pub fn versionHash() u32 {
                     _ = &flag;
                     _ = bun.handleOom(set.insert(flag));
                 }
-                _ = set.map.sort(struct {
+                const SortCtx = struct {
         keys: []const []const u8,
     
     pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
                 return std.mem.lessThan(u8, ctx.keys[@as(usize, @intCast(a))], ctx.keys[@as(usize, @intCast(b))]);
         }
-    }, .{ .keys = set.map.keys() });
+    };
+                _ = set.map.sort(SortCtx{ .keys = set.map.keys() });
                 return set;
         }
     
     pub fn hashForRuntimeTranspiler(self: @This(), hasher: *std.hash.Wyhash) void {
                 _ = bun.assert((self.runtime_transpiler_cache != null));
-                var bools: struct { std.@"meta".fieldNames(@TypeOf(hash_fields_for_runtime_transpiler)).len } = undefined;
+                const hash_field_count = (comptime std.@"meta".fieldNames(@TypeOf(hash_fields_for_runtime_transpiler)).len);
+                _ = &hash_field_count;
+                var bools: [hash_field_count]bool = undefined;
                 _ = &bools;
-                bool = undefined;
                 inline for (hash_fields_for_runtime_transpiler, 0..) |field, i| {
                     _ = &field;
                     _ = &i;

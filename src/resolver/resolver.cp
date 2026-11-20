@@ -2090,7 +2090,7 @@ pub struct Resolver {
                 // If the source directory doesn't have a node_modules directory, we can
                 // check the global cache directory for a package.json file.
                 const manager = r.getPackageManager();
-                let dependency_version = Dependency.Version{};
+                let dependency_version: Dependency.Version = {};
                 let dependency_behavior: Dependency.Behavior = { prod: true };
                 let string_buf = esm.version;
 
@@ -3884,7 +3884,7 @@ pub struct Resolver {
             return null;
         };
 
-        if (@as(Fs.FileSystem.RealFS.EntriesOption.Tag, dir_entry.*) == .err) {
+        if (std.meta.activeTag(dir_entry.*) == .err) {
             switch (dir_entry.err.original_err) {
                 error.ENOENT, error.FileNotFound, error.ENOTDIR, error.NotDir => {},
                 else => {

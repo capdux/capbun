@@ -1488,7 +1488,9 @@ export struct SocketHandlerSSL {
 
         switch (comptime MessageType) {
             .DataRow => {
-                const request = this.current() orelse return error.ExpectedRequest;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                const request = request_opt.?;
 
                 let statement = request.statement orelse return error.ExpectedStatement;
                 let structure: JSValue = .js_undefined;
@@ -1595,7 +1597,9 @@ export struct SocketHandlerSSL {
                 this.registerAutoFlusher();
             },
             .CommandComplete => {
-                let request = this.current() orelse return error.ExpectedRequest;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                let request = request_opt.?;
 
                 let cmd: protocol.CommandComplete = undefined;
                 cmd.decodeInternal(Context, reader)?;
@@ -1609,14 +1613,18 @@ export struct SocketHandlerSSL {
             },
             .BindComplete => {
                 reader.eatMessage(protocol.BindComplete)?;
-                let request = this.current() orelse return error.ExpectedRequest;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                let request = request_opt.?;
                 if (request.status == .binding) {
                     request.status = .running;
                 }
             },
             .ParseComplete => {
                 reader.eatMessage(protocol.ParseComplete)?;
-                const request = this.current() orelse return error.ExpectedRequest;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                const request = request_opt.?;
                 if (statement := request.statement) {
                     if (statement.status == .parsing && statement.signature.fields.len == 0) {
                         statement.status = .prepared;
@@ -1628,8 +1636,12 @@ export struct SocketHandlerSSL {
                 let description: protocol.ParameterDescription = undefined;
                 description.decodeInternal(Context, reader)?;
                 errdefer bun.default_allocator.free(description.parameters);
-                const request = this.current() orelse return error.ExpectedRequest;
-                let statement = request.statement orelse return error.ExpectedStatement;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                const request = request_opt.?;
+                const statement_opt = request.statement;
+                if (statement_opt == null) return error.ExpectedStatement;
+                let statement = statement_opt.?;
                 if (statement.parameters.len > 0) {
                     bun.default_allocator.free(statement.parameters);
                 }
@@ -1643,8 +1655,12 @@ export struct SocketHandlerSSL {
                 let description: protocol.RowDescription = undefined;
                 description.decodeInternal(Context, reader)?;
                 errdefer description.deinit();
-                const request = this.current() orelse return error.ExpectedRequest;
-                let statement = request.statement orelse return error.ExpectedStatement;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                const request = request_opt.?;
+                const statement_opt = request.statement;
+                if (statement_opt == null) return error.ExpectedStatement;
+                let statement = statement_opt.?;
                 if (statement.fields.len > 0) {
                     for (field_idx of 0..statement.fields.len) {
                         statement.fields[field_idx].deinit();
@@ -1836,7 +1852,9 @@ export struct SocketHandlerSSL {
             },
             .NoData => {
                 reader.eatMessage(protocol.NoData)?;
-                let request = this.current() orelse return error.ExpectedRequest;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                let request = request_opt.?;
                 if (request.status == .binding) {
                     request.status = .running;
                 }
@@ -1888,7 +1906,9 @@ export struct SocketHandlerSSL {
             },
             .CloseComplete => {
                 reader.eatMessage(protocol.CloseComplete)?;
-                let request = this.current() orelse return error.ExpectedRequest;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                let request = request_opt.?;
                 defer this.updateRef();
                 request.onResult("CLOSECOMPLETE", this.globalObject, this.js_value, false);
             },
@@ -1904,7 +1924,9 @@ export struct SocketHandlerSSL {
             },
             .EmptyQueryResponse => {
                 reader.eatMessage(protocol.EmptyQueryResponse)?;
-                let request = this.current() orelse return error.ExpectedRequest;
+                const request_opt = this.current();
+                if (request_opt == null) return error.ExpectedRequest;
+                let request = request_opt.?;
                 defer this.updateRef();
                 request.onResult("", this.globalObject, this.js_value, false);
             },

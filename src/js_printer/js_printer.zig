@@ -2085,8 +2085,7 @@ _ = p.printSpaceBeforeIdentifier();
 .e_spread => |e| {
 _ = p.addSourceMapping(expr.loc);
             _ = p.print("..");
-            const none_flags = ExprFlag.None;
-            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, none_flags);
+            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, ExprFlag.None);
 },
 .e_new_target => {
 _ = p.printSpaceBeforeIdentifier();
@@ -5561,7 +5560,7 @@ pub fn printAst(comptime Writer: type, _writer: Writer, tree: Ast, symbols_: js_
                     _ = try minify_renamer.accumulateSymbolUseCount((&top_level_symbols), declared_ref, 1, (&.{ (if (@typeInfo(@TypeOf(source.index)) == .@"enum") @intFromEnum(source.index) else source.index.value) }));
                 }
             }
-            _ = std.sort.pdq(rename.StableSymbolCount, top_level_symbols.items, .{}, rename.StableSymbolCount.lessThan);
+            _ = std.sort.pdq(rename.StableSymbolCount, top_level_symbols.items, undefined, rename.StableSymbolCount.lessThan);
             _ = try minify_renamer.allocateTopLevelSymbolSlots(top_level_symbols);
             var minifier = tree.char_freq.?.compile(allocator);
             _ = &minifier;

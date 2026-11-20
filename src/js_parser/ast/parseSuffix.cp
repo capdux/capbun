@@ -6,6 +6,7 @@ pub fn ParseSuffix(
     return struct {
         const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
         const is_typescript_enabled = P.is_typescript_enabled;
+        type OptOptionalChain = OptionalChain?;
 
         static fn handleTypescriptAs(p: *P, level: Level): anyerror!Continuation {
             if (is_typescript_enabled && level.lt(.compare) && !p.lexer.has_newline_before && (p.lexer.isContextualKeyword("as") || p.lexer.isContextualKeyword("satisfies"))) {
@@ -43,7 +44,7 @@ pub fn ParseSuffix(
             return .done;
         }
 
-        static fn t_dot(p: *P, optional_chain: *OptionalChain?, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
+        static fn t_dot(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
             p.lexer.next()?;
             const target = left.*;
 
@@ -95,7 +96,7 @@ pub fn ParseSuffix(
             optional_chain.* = old_optional_chain;
             return .next;
         }
-        static fn t_question_dot(p: *P, level: Level, optional_chain: *OptionalChain?, left: *Expr): anyerror!Continuation {
+        static fn t_question_dot(p: *P, level: Level, optional_chain: *OptOptionalChain, left: *Expr): anyerror!Continuation {
             p.lexer.next()?;
             let optional_start: OptionalChain? = OptionalChain.start;
 
@@ -208,7 +209,7 @@ pub fn ParseSuffix(
 
             return .next;
         }
-        static fn t_no_substitution_template_literal(p: *P, _: Level, _: *OptionalChain?, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
+        static fn t_no_substitution_template_literal(p: *P, _: Level, _: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
             if (old_optional_chain != null) {
                 p.log.addRangeError(p.source, p.lexer.range(), "Template literals cannot have an optional chain as a tag") catch unreachable;
             }
@@ -222,7 +223,7 @@ pub fn ParseSuffix(
             }, left.loc);
             return .next;
         }
-        static fn t_template_head(p: *P, _: Level, _: *OptionalChain?, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
+        static fn t_template_head(p: *P, _: Level, _: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
             if (old_optional_chain != null) {
                 p.log.addRangeError(p.source, p.lexer.range(), "Template literals cannot have an optional chain as a tag") catch unreachable;
             }
@@ -237,7 +238,7 @@ pub fn ParseSuffix(
             }, left.loc);
             return .next;
         }
-        static fn t_open_bracket(p: *P, optional_chain: *OptionalChain?, old_optional_chain: OptionalChain?, left: *Expr, flags: Expr.EFlags): anyerror!Continuation {
+        static fn t_open_bracket(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr, flags: Expr.EFlags): anyerror!Continuation {
             // When parsing a decorator, ignore EIndex expressions since they may be
             // part of a computed property:
             //
@@ -270,7 +271,7 @@ pub fn ParseSuffix(
             optional_chain.* = old_optional_chain;
             return .next;
         }
-        static fn t_open_paren(p: *P, level: Level, optional_chain: *OptionalChain?, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
+        static fn t_open_paren(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
             if (level.gte(.call)) {
                 return .done;
             }
@@ -339,7 +340,7 @@ pub fn ParseSuffix(
             left.* = ternary;
             return .next;
         }
-        static fn t_exclamation(p: *P, optional_chain: *OptionalChain?, old_optional_chain: OptionalChain?): anyerror!Continuation {
+        static fn t_exclamation(p: *P, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?): anyerror!Continuation {
             // Skip over TypeScript non-null assertions
             if (p.lexer.has_newline_before) {
                 return .done;
@@ -526,7 +527,7 @@ pub fn ParseSuffix(
             left.* = p.newExpr(E.Binary{ op: .bin_strict_ne, left: left.*, right: try p.parseExpr(Level.equals) }, left.loc);
             return .next;
         }
-        static fn t_less_than(p: *P, level: Level, optional_chain: *OptionalChain?, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
+        static fn t_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
             // TypeScript allows type arguments to be specified with angle brackets
             // inside an expression. Unlike in other languages, this unfortunately
             // appears to require backtracking to parse.
@@ -566,7 +567,7 @@ pub fn ParseSuffix(
             left.* = p.newExpr(E.Binary{ op: .bin_ge, left: left.*, right: try p.parseExpr(.compare) }, left.loc);
             return .next;
         }
-        static fn t_less_than_less_than(p: *P, level: Level, optional_chain: *OptionalChain?, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
+        static fn t_less_than_less_than(p: *P, level: Level, optional_chain: *OptOptionalChain, old_optional_chain: OptionalChain?, left: *Expr): anyerror!Continuation {
             // TypeScript allows type arguments to be specified with angle brackets
             // inside an expression. Unlike in other languages, this unfortunately
             // appears to require backtracking to parse.

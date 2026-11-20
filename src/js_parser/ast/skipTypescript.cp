@@ -739,7 +739,7 @@ pub fn SkipTypescript(
                         p.lexer.next()?;
 
                         // The type following "extends" is not permitted to be another conditional type
-                        let extends_type = if (get_metadata) TypeScript.Metadata.default;
+                        let extends_type = TypeScript.Metadata.default;
                         try p.skipTypeScriptTypeWithOpts(
                             .lowest,
                             TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types),

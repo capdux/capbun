@@ -483,7 +483,7 @@ pub fn readAndProcessData(self: *MySQLConnection, data: []const u8) anyerror!voi
         self.@"#read_buffer".head = 0;
 }
 
-pub fn processPackets(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
+pub fn processPackets(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context)) anyerror!void {
         while (true) {
             _ = reader.markMessageStart();
             const header_opt = PacketHeader.decode(reader.peek());
@@ -518,7 +518,7 @@ _ = debug("Unexpected packet in state {s}", .{ @tagName(self.status) });
         }
 }
 
-pub fn handleHandshake(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context)) AnyMySQLError.Error!void {
+pub fn handleHandshake(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context)) anyerror!void {
         var handshake = HandshakeV10{  };
         _ = &handshake;
         _ = try handshake.decode(reader);
@@ -715,7 +715,7 @@ _ = debug("Unexpected auth packet: 0x{x:0>2}", .{ first_byte });
 }
 }
 
-pub fn handleCommand(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context), header_length: u24) AnyMySQLError.Error!void {
+pub fn handleCommand(self: *MySQLConnection, comptime Context: type, reader: NewReader(Context), header_length: u24) anyerror!void {
         const request = ((self.queue.current()) orelse {
         _ = debug("Received unexpected command response", .{});
         return error.UnexpectedPacket;
@@ -1118,7 +1118,7 @@ const PreparedStatementsMap = std.HashMapUnmanaged(u64, *MySQLStatement, U64Iden
 pub const PreparedStatementsMapGetOrPutResult = PreparedStatementsMap.GetOrPutResult;
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const debug = bun.Output.scoped(.MySQLConnection, .visible);
-const empty_columns: [0]ColumnDefinition41 = &.{};
+var empty_columns: [0]ColumnDefinition41 = &.{};
 pub const AuthState = union(enum) {
     pending: void,
     native_password: void,
