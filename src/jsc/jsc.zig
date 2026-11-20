@@ -166,13 +166,13 @@ const log = bun.Output.scoped(.JSC, .hidden);
 pub const Subprocess = bun.api.Subprocess;
 pub const GeneratedClassesList = @import("./generated_classes_list.zig").Classes;
 pub const RuntimeTranspilerCache = @import("./RuntimeTranspilerCache.zig").RuntimeTranspilerCache;
-pub const OpaqueCallback = *const *const fn(current: ?*anyopaque) callconv(.c) void;
+pub const OpaqueCallback = *const fn(current: ?*anyopaque) callconv(.c) void;
 pub const Error = @import("ErrorCode").Error;
 pub const init_timestamp = std.math.maxInt(JSTimeType);
 pub const JSTimeType = u52;
 pub const MAX_SAFE_INTEGER = 9007199254740991;
 pub const MIN_SAFE_INTEGER = -9007199254740991;
-const JSCInitializeCallback = *const *const fn([*]const u8, len: usize) callconv(.c) void;
+const JSCInitializeCallback = *const fn([*]const u8, len: usize) callconv(.c) void;
 
 pub fn initialize(eval_mode: bool) void {
         _ = markBinding(@src());

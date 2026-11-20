@@ -223,7 +223,6 @@ pub struct Ref {
     }
 }
 
-// TODO(cpc): [task-bun-20261120-fn-callconv-ptr] fn 类型自带 *const，加 * 前缀得双层；无前缀时 callconv 后返回类型被丢弃
 pub const OpaqueCallback = *const fn (current: *!?) callconv(.c) void;
 pub fn OpaqueWrap(comptime Context: type, comptime Function: auto): OpaqueCallback {
     return struct {
