@@ -102,7 +102,7 @@ pub const Bin = extern struct {
     _padding_tag: [3]u8 = @as([3]u8, @splat(@as(u8, 0))),
     value: Value = Value{ .map = ExternalStringList{  } },
 
-pub fn count(self: Bin, buf: []u8, extern_strings: []const ExternalString, comptime StringBuilder: type, builder: StringBuilder) u32 {
+pub fn count(self: Bin, buf: []const u8, extern_strings: []const ExternalString, comptime StringBuilder: type, builder: StringBuilder) u32 {
             switch (self.tag) {
 .file => {
 _ = builder.count(self.value.file.slice(buf));
@@ -166,7 +166,7 @@ pub fn eql(l: *const Bin, r: *const Bin, l_buf: []const u8, l_extern_strings: []
 });
     }
 
-pub fn clone(self: Bin, buf: []u8, prev_external_strings: []const ExternalString, all_extern_strings: []ExternalString, extern_strings_slice: []ExternalString, comptime StringBuilder: type, builder: StringBuilder) Bin {
+pub fn clone(self: Bin, buf: []const u8, prev_external_strings: []const ExternalString, all_extern_strings: []ExternalString, extern_strings_slice: []ExternalString, comptime StringBuilder: type, builder: StringBuilder) Bin {
             switch (self.tag) {
 .none => {
 return Bin{ .tag = .none, .value = Value.init(.{ .none = {} }) };
@@ -390,7 +390,7 @@ pub const BinValue = extern union {
     dir: String,
     map: ExternalStringList,
 
-pub fn init(field: anytype) *BinValue {
+pub fn init(field: anytype) BinValue {
             return bun.serializableInto(BinValue, field);
     }
 };

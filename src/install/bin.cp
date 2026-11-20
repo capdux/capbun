@@ -10,7 +10,7 @@
     // Largest member must be zero initialized
     value: Value = Value{ map: ExternalStringList{} },
 
-    pub fn count(buf: []u8, extern_strings: []const ExternalString, comptime StringBuilder: type, builder: StringBuilder): u32 {
+    pub fn count(buf: []const u8, extern_strings: []const ExternalString, comptime StringBuilder: type, builder: StringBuilder): u32 {
         switch (_.tag) {
             .file => builder.count(_.value.file.slice(buf)),
             .named_file => {
@@ -75,7 +75,7 @@
         };
     }
 
-    pub fn clone(buf: []u8, prev_external_strings: []const ExternalString, all_extern_strings: []ExternalString, extern_strings_slice: []ExternalString, comptime StringBuilder: type, builder: StringBuilder): Bin {
+    pub fn clone(buf: []const u8, prev_external_strings: []const ExternalString, all_extern_strings: []ExternalString, extern_strings_slice: []ExternalString, comptime StringBuilder: type, builder: StringBuilder): Bin {
         switch (_.tag) {
             .none => {
                 return Bin{
