@@ -96,25 +96,26 @@ pub struct ModuleInfoDeserialized {
         const duped = gpa.dupe(u8, source)?;
         errdefer gpa.free(duped);
         let rem: []const u8 = duped;
+        const rem_ptr = unsafe { &rem };
         const res = gpa.create(ModuleInfoDeserialized)?;
         errdefer gpa.destroy(res);
 
-        const record_kinds_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(unsafe { &rem }, record_kinds_len * @sizeOf(RecordKind))?);
-        * = eat(unsafe { &rem }, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
+        const record_kinds_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
+        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(rem_ptr, record_kinds_len * @sizeOf(RecordKind))?);
+        * = eat(rem_ptr, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
 
-        const buffer_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const buffer = std.mem.bytesAsSlice(StringID, eat(unsafe { &rem }, buffer_len * @sizeOf(StringID))?);
+        const buffer_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
+        const buffer = std.mem.bytesAsSlice(StringID, eat(rem_ptr, buffer_len * @sizeOf(StringID))?);
 
-        const requested_modules_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const requested_modules_keys = std.mem.bytesAsSlice(StringID, eat(unsafe { &rem }, requested_modules_len * @sizeOf(StringID))?);
-        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, eat(unsafe { &rem }, requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
+        const requested_modules_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
+        const requested_modules_keys = std.mem.bytesAsSlice(StringID, eat(rem_ptr, requested_modules_len * @sizeOf(StringID))?);
+        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, eat(rem_ptr, requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
 
-        const flags: Flags = @bitCast((eatC(unsafe { &rem }, 1)?)[0]);
-        * = eat(unsafe { &rem }, 3)?; // alignment padding
+        const flags: Flags = @bitCast((eatC(rem_ptr, 1)?)[0]);
+        * = eat(rem_ptr, 3)?; // alignment padding
 
-        const strings_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const strings_lens = std.mem.bytesAsSlice(u32, eat(unsafe { &rem }, strings_len * @sizeOf(u32))?);
+        const strings_len = std.mem.readInt(u32, eatC(rem_ptr, 4)?, .little);
+        const strings_lens = std.mem.bytesAsSlice(u32, eat(rem_ptr, strings_len * @sizeOf(u32))?);
         const strings_buf = rem;
 
         res.* = .{
@@ -365,14 +366,14 @@ pub struct ModuleInfo {
                     local_name_to_module_name.put(_.buffer.items[i + 2], .{
                         .module_name = _.buffer.items[i],
                         .import_name = _.buffer.items[i + 1],
-                        .record_kinds_idx = idx,
+                        .record_kinds_idx = @as(usize, @intCast(idx)),
                         .is_namespace = false,
                     })?;
                 } else if (k == .import_info_namespace) {
                     local_name_to_module_name.put(_.buffer.items[i + 2], .{
                         .module_name = _.buffer.items[i],
                         .import_name = .star_namespace,
-                        .record_kinds_idx = idx,
+                        .record_kinds_idx = @as(usize, @intCast(idx)),
                         .is_namespace = true,
                     })?;
                 }

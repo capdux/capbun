@@ -320,13 +320,13 @@ return error.InvalidNPMLockfile;
                 }
                 const pkg = (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).?.data.e_object;
                 if ((pkg.get("link") != null)) {
-                    _ = id_map.putAssumeCapacity(pkg_path, IdMapValue{ .old_json_index = @truncate(i), .new_package_id = package_id_is_link });
+                    _ = id_map.putAssumeCapacity(pkg_path, IdMapValue{ .old_json_index = @truncate(@as(usize, @intCast(i))), .new_package_id = package_id_is_link });
                     continue;
                 }
                 if (pkg.get("inBundle")) |x| {
                     _ = &x;
                     if (((x.data == .e_boolean) and (if (@typeInfo(@TypeOf(x.data.e_boolean)) == .@"enum") @intFromEnum(x.data.e_boolean) else x.data.e_boolean.value))) {
-                        _ = id_map.putAssumeCapacity(pkg_path, IdMapValue{ .old_json_index = @truncate(i), .new_package_id = package_id_is_bundled });
+                        _ = id_map.putAssumeCapacity(pkg_path, IdMapValue{ .old_json_index = @truncate(@as(usize, @intCast(i))), .new_package_id = package_id_is_bundled });
                         continue;
                     }
                 }
@@ -336,7 +336,7 @@ return error.InvalidNPMLockfile;
                         continue;
                     }
                 }
-                _ = id_map.putAssumeCapacity(pkg_path, IdMapValue{ .old_json_index = @truncate(i), .new_package_id = package_idx });
+                _ = id_map.putAssumeCapacity(pkg_path, IdMapValue{ .old_json_index = @truncate(@as(usize, @intCast(i))), .new_package_id = package_idx });
                 package_idx = (package_idx + 1);
                 inline for (dependency_keys) |dep_key| {
                     if (pkg.get(@tagName(dep_key))) |deps| {
@@ -938,7 +938,7 @@ var input = try string_buf.append(dep_resolved).sliced(string_buf.bytes.items);
                                         if (strings.hasPrefixComptime(input.slice, "workspace:")) {
                                             input = input.sub(input.slice["workspace:".len..]);
                                         }
-                                        res = Resolution.init(.{ .workspace = (if (@typeInfo(@TypeOf(input)) == .@"enum") @intFromEnum(input) else input.value)() });
+                                        res = Resolution.init(.{ .workspace = input.value() });
 },
 .git => {
 const str = (if (strings.hasPrefixComptime(dep_resolved, "git+")) try string_buf.append(dep_resolved[4..]) else try string_buf.append(dep_resolved)).sliced(string_buf.bytes.items);
@@ -947,8 +947,8 @@ const str = (if (strings.hasPrefixComptime(dep_resolved, "git+")) try string_buf
                                             return error.InvalidNPMLockfile;
                                         }
                                         const hash_index = hash_idx_opt.?;
-                                        const commit = (if (@typeInfo(@TypeOf(str.sub(str.slice[(hash_index + 1)..]))) == .@"enum") @intFromEnum(str.sub(str.slice[(hash_index + 1)..])) else str.sub(str.slice[(hash_index + 1)..]).value)();
-                                        res = Resolution.init(.{ .git = .{ .owner = (if (@typeInfo(@TypeOf(res_version)) == .@"enum") @intFromEnum(res_version) else res_version.value).git.owner, .repo = (if (@typeInfo(@TypeOf(str.sub(str.slice[0..hash_index]))) == .@"enum") @intFromEnum(str.sub(str.slice[0..hash_index])) else str.sub(str.slice[0..hash_index]).value)(), .committish = commit, .resolved = commit, .package_name = dep_name } });
+                                        const commit = str.sub(str.slice[(hash_index + 1)..]).value();
+                                        res = Resolution.init(.{ .git = .{ .owner = (if (@typeInfo(@TypeOf(res_version)) == .@"enum") @intFromEnum(res_version) else res_version.value).git.owner, .repo = str.sub(str.slice[0..hash_index]).value(), .committish = commit, .resolved = commit, .package_name = dep_name } });
 },
 .github => {
 const str = (if (strings.hasPrefixComptime(dep_resolved, "git+")) try string_buf.append(dep_resolved[4..]) else try string_buf.append(dep_resolved)).sliced(string_buf.bytes.items);
@@ -957,8 +957,8 @@ const str = (if (strings.hasPrefixComptime(dep_resolved, "git+")) try string_buf
                                             return error.InvalidNPMLockfile;
                                         }
                                         const hash_index = hash_idx_opt.?;
-                                        const commit = (if (@typeInfo(@TypeOf(str.sub(str.slice[(hash_index + 1)..]))) == .@"enum") @intFromEnum(str.sub(str.slice[(hash_index + 1)..])) else str.sub(str.slice[(hash_index + 1)..]).value)();
-                                        res = Resolution.init(.{ .git = .{ .owner = (if (@typeInfo(@TypeOf(res_version)) == .@"enum") @intFromEnum(res_version) else res_version.value).github.owner, .repo = (if (@typeInfo(@TypeOf(str.sub(str.slice[0..hash_index]))) == .@"enum") @intFromEnum(str.sub(str.slice[0..hash_index])) else str.sub(str.slice[0..hash_index]).value)(), .committish = commit, .resolved = commit, .package_name = dep_name } });
+                                        const commit = str.sub(str.slice[(hash_index + 1)..]).value();
+                                        res = Resolution.init(.{ .git = .{ .owner = (if (@typeInfo(@TypeOf(res_version)) == .@"enum") @intFromEnum(res_version) else res_version.value).github.owner, .repo = str.sub(str.slice[0..hash_index]).value(), .committish = commit, .resolved = commit, .package_name = dep_name } });
 },
 }
                                     }

@@ -405,10 +405,15 @@ pub fn appendAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Sco
 
 pub fn countAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scope) void {
         if ((scope.token.len > 0)) {
-            _ = header_builder.countFmt("Authorization", "Bearer {s}", .{ scope.token });
+            _ = header_builder.count("Authorization", "");
+            header_builder.content.cap = (header_builder.content.cap + ("Bearer ".len + scope.token.len));
         } else {
             if ((scope.auth.len > 0)) {
-                _ = header_builder.countFmt("Authorization", "Basic {s}", .{ scope.auth });
+                _ = header_builder.count("Authorization", "");
+                header_builder.content.cap = (header_builder.content.cap + ("Basic ".len + scope.auth.len));
+            } else {
+                return;
             }
         }
+        _ = header_builder.count("npm-auth-type", "legacy");
 }

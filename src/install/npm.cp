@@ -8,6 +8,8 @@ import url_mod from "../url/url.zig";
 import install_mod from "./install.zig";
 import npm_jsc_mod from "../install_jsc/npm_jsc.zig";
 
+type OptSemverVersion = Semver.Version?;
+
 const WhoamiError = OOM || error{
     NeedAuth,
     ProbablyInvalidAuth,
@@ -1286,7 +1288,7 @@ pub struct PackageManifest {
         }
 
         static fn loadByFile(allocator: std.mem.Allocator, scope: *const Registry.Scope, manifest_file: File): !PackageManifest? {
-            const tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
+            let tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
             defer tracer.end();
             const bytes = manifest_file.readToEnd(allocator).unwrap()?;
             errdefer allocator.free(bytes);
@@ -1432,7 +1434,7 @@ pub struct PackageManifest {
         group: Semver.Query.Group,
         group_buf: string,
         minimum_release_age_ms: f64,
-        newest_filtered: *(Semver.Version?),
+        newest_filtered: *OptSemverVersion,
     ): FindVersionResult? {
         let prev_package_blocked_from_age: (*const PackageVersion)? = null;
         let best_version: FindResult? = null;

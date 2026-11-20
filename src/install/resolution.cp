@@ -503,12 +503,13 @@ pub @c struct ResolutionType<SemverIntType> {
             /// To avoid undefined memory between union values, we must zero initialize the union first.
             pub fn init(field: bun.@"meta".Tagged(Value, Tag)): Value {
                 let value = zero;
-                switch (field) {
-                    inline else => |v, t| {
-                        @field(value, @tagName(t)) = v;
-                    },
+                inline for (@typeInfo(Value).@"union".fields) |f| {
+                    if (std.@"meta".activeTag(field) == @field(Tag, f.name)) {
+                        @field(value, f.name) = @field(field, f.name);
+                        return value;
+                    }
                 }
-                return value;
+                unreachable;
             }
         };
 

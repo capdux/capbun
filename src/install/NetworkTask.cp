@@ -54,10 +54,15 @@ fn appendAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scope) 
 
 fn countAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scope) {
     if (scope.token.len > 0) {
-        header_builder.countFmt("Authorization", "Bearer {s}", [ scope.token ]);
+        header_builder.count("Authorization", "");
+        header_builder.content.cap += "Bearer ".len + scope.token.len;
     } else if (scope.auth.len > 0) {
-        header_builder.countFmt("Authorization", "Basic {s}", [ scope.auth ]);
+        header_builder.count("Authorization", "");
+        header_builder.content.cap += "Basic ".len + scope.auth.len;
+    } else {
+        return;
     }
+    header_builder.count("npm-auth-type", "legacy");
 }
 
 pub struct PackageManifestCallback {

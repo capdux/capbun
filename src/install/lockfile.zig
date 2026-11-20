@@ -946,7 +946,7 @@ pub fn getWorkspacePackageID(client: *const Lockfile, workspace_name_hash: ?Pack
                 const res = resolutions[@as(usize, @intCast(i))];
                 const name_hash = name_hashes[@as(usize, @intCast(i))];
                 if (((res.tag == .workspace) and (name_hash == workspace_name_hash_))) {
-                    return (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i));
+                    return @as(PackageID, @intCast(i));
                 }
             }
         }

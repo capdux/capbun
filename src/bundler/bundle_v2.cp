@@ -396,7 +396,7 @@ pub struct BundleV2 {
     };
 
     fn findReachableFiles(*_): ![]Index {
-        const trace = bun.perf.trace("Bundler.findReachableFiles");
+        let trace = bun.perf.trace("Bundler.findReachableFiles");
         defer trace.end();
 
         // Create a quick index for server-component boundaries.
@@ -1240,7 +1240,7 @@ pub struct BundleV2 {
     }
 
     fn cloneAST(*_)! {
-        const trace = bun.perf.trace("Bundler.cloneAST");
+        let trace = bun.perf.trace("Bundler.cloneAST");
         defer trace.end();
         bun.safety.alloc.assertEq(_.allocator(), _.transpiler.allocator);
         bun.safety.alloc.assertEq(_.allocator(), _.linker.graph.allocator);
@@ -1319,13 +1319,13 @@ pub struct BundleV2 {
                     data: std.fmt.allocPrint(alloc, "{f}S{d:0>8}", [ 
                         bun.fmt.hexIntLower(_.unique_key),
                         source_id,
-                    ]),
+                    ])?,
                 });
                 const ssr_path = server.newExpr(E.String{
                     data: std.fmt.allocPrint(alloc, "{f}S{d:0>8}", [ 
                         bun.fmt.hexIntLower(_.unique_key),
                         ssr_index,
-                    ]),
+                    ])?,
                 });
 
                 for (j of 0..keys.len) {
@@ -3608,7 +3608,7 @@ pub struct BundleV2 {
     }
 
     static fn onParseTaskComplete(parse_result: *ParseTask.Result, bundle: *BundleV2) {
-        const trace = bun.perf.trace("Bundler.onParseTaskComplete");
+        let trace = bun.perf.trace("Bundler.onParseTaskComplete");
         const graph = unsafe { &bundle.graph };
         defer trace.end();
         if (parse_result.external.function != null) {

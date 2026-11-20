@@ -560,7 +560,7 @@ pub fn isPackageVersionTooRecent(package_version: *const PackageVersion, minimum
             return (package_version.publish_timestamp_ms > (current_timestamp_ms - minimum_release_age_ms));
     }
 
-pub fn searchVersionList(self: PackageManifest, versions: []const Semver.Version, packages: []const PackageVersion, group: Semver.Query.Group, group_buf: []const u8, minimum_release_age_ms: f64, newest_filtered: ?*Semver.Version) ?FindVersionResult {
+pub fn searchVersionList(self: PackageManifest, versions: []const Semver.Version, packages: []const PackageVersion, group: Semver.Query.Group, group_buf: []const u8, minimum_release_age_ms: f64, newest_filtered: *OptSemverVersion) ?FindVersionResult {
             var prev_package_blocked_from_age: ?*const PackageVersion = null;
             _ = &prev_package_blocked_from_age;
             var best_version: ?FindResult = null;
@@ -1910,7 +1910,8 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
         }
     
     pub fn loadByFile(allocator: std.mem.Allocator, scope: *const Registry.Scope, manifest_file: File) !?PackageManifest {
-                const tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
+                var tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
+                _ = &tracer;
                 defer {
                 _ = tracer.end();
                 }
@@ -2006,6 +2007,7 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
     const ExternalStringMapDeduper = std.HashMap(u64, ExternalStringList, IdentityContext(u64), 80);
 };
 
+const OptSemverVersion = ?Semver.Version;
 const ByteFixedStream = std.io.FixedBufferStream(string);
 const string = []const u8;
 const WhoamiError = (OOM || error{

@@ -212,7 +212,8 @@ pub inline fn pathToSourceIndexMap(self: *BundleV2, target: options.Target) *Pat
     }
 
 pub fn findReachableFiles(self: *BundleV2) ![]Index {
-            const trace = bun.perf.trace("Bundler.findReachableFiles");
+            var trace = bun.perf.trace("Bundler.findReachableFiles");
+            _ = &trace;
             defer {
             _ = trace.end();
             }
@@ -830,7 +831,8 @@ _ = (comptime unreachable);
     }
 
 pub fn cloneAST(self: *BundleV2) !void {
-            const trace = bun.perf.trace("Bundler.cloneAST");
+            var trace = bun.perf.trace("Bundler.cloneAST");
+            _ = &trace;
             defer {
             _ = trace.end();
             }
@@ -894,8 +896,8 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
                         if ((!sc.separate_ssr_graph)) {
                             _ = bun.todoPanic(@src(), "separate_ssr_graph=false", &.{});
                         }
-                        const client_path = server.newExpr(E.String{ .data = std.fmt.allocPrint(alloc, "{f}S{d:0>8}", .{ bun.fmt.hexIntLower(self.unique_key), source_id }) });
-                        const ssr_path = server.newExpr(E.String{ .data = std.fmt.allocPrint(alloc, "{f}S{d:0>8}", .{ bun.fmt.hexIntLower(self.unique_key), ssr_index }) });
+                        const client_path = server.newExpr(E.String{ .data = try std.fmt.allocPrint(alloc, "{f}S{d:0>8}", .{ bun.fmt.hexIntLower(self.unique_key), source_id }) });
+                        const ssr_path = server.newExpr(E.String{ .data = try std.fmt.allocPrint(alloc, "{f}S{d:0>8}", .{ bun.fmt.hexIntLower(self.unique_key), ssr_index }) });
                         {
                             var j: i32 = 0;
                             _ = &j;
@@ -2253,7 +2255,8 @@ pub fn onNotifyDeferMini(self: *BundleV2, _: *bun.jsc.API.JSBundler.Load, bundle
     }
 
 pub fn onParseTaskComplete(parse_result: *ParseTask.Result, bundle: *BundleV2) void {
-            const trace = bun.perf.trace("Bundler.onParseTaskComplete");
+            var trace = bun.perf.trace("Bundler.onParseTaskComplete");
+            _ = &trace;
             const graph = (blk: {
             break :blk (&bundle.graph);
 

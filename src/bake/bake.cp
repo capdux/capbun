@@ -722,7 +722,7 @@ pub const Framework = struct {
         out.* = try bun.Transpiler.init(
             arena,
             log,
-            std.mem.zeroes(bun.schema.api.TransformOptions),
+            std.mem.zeroInit(bun.schema.api.TransformOptions, .{}),
             null,
         );
 

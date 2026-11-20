@@ -131,58 +131,26 @@ pub fn create(source: []const u8, gpa: std.mem.Allocator) !*ModuleInfoDeserializ
             }
             var rem: []const u8 = duped;
             _ = &rem;
+            const rem_ptr = (blk: {
+            break :blk rem;
+
+});
             const res = try gpa.create(ModuleInfoDeserialized);
             errdefer {
             _ = gpa.destroy(res);
             }
-            const record_kinds_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const record_kinds = std.mem.bytesAsSlice(RecordKind, try eat((blk: {
-            break :blk rem;
-
-}), (record_kinds_len * @sizeOf(RecordKind))));
-            _ = try eat((blk: {
-            break :blk rem;
-
-}), ((4 - (record_kinds_len % 4)) % 4));
-            const buffer_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const buffer = std.mem.bytesAsSlice(StringID, try eat((blk: {
-            break :blk rem;
-
-}), (buffer_len * @sizeOf(StringID))));
-            const requested_modules_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const requested_modules_keys = std.mem.bytesAsSlice(StringID, try eat((blk: {
-            break :blk rem;
-
-}), (requested_modules_len * @sizeOf(StringID))));
-            const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, try eat((blk: {
-            break :blk rem;
-
-}), (requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))));
-            const flags: Flags = @bitCast(try eatC((blk: {
-            break :blk rem;
-
-}), 1)[0]);
-            _ = try eat((blk: {
-            break :blk rem;
-
-}), 3);
-            const strings_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const strings_lens = std.mem.bytesAsSlice(u32, try eat((blk: {
-            break :blk rem;
-
-}), (strings_len * @sizeOf(u32))));
+            const record_kinds_len = std.mem.readInt(u32, try eatC(rem_ptr, 4), .little);
+            const record_kinds = std.mem.bytesAsSlice(RecordKind, try eat(rem_ptr, (record_kinds_len * @sizeOf(RecordKind))));
+            _ = try eat(rem_ptr, ((4 - (record_kinds_len % 4)) % 4));
+            const buffer_len = std.mem.readInt(u32, try eatC(rem_ptr, 4), .little);
+            const buffer = std.mem.bytesAsSlice(StringID, try eat(rem_ptr, (buffer_len * @sizeOf(StringID))));
+            const requested_modules_len = std.mem.readInt(u32, try eatC(rem_ptr, 4), .little);
+            const requested_modules_keys = std.mem.bytesAsSlice(StringID, try eat(rem_ptr, (requested_modules_len * @sizeOf(StringID))));
+            const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, try eat(rem_ptr, (requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))));
+            const flags: Flags = @bitCast(try eatC(rem_ptr, 1)[0]);
+            _ = try eat(rem_ptr, 3);
+            const strings_len = std.mem.readInt(u32, try eatC(rem_ptr, 4), .little);
+            const strings_lens = std.mem.bytesAsSlice(u32, try eat(rem_ptr, (strings_len * @sizeOf(u32))));
             const strings_buf = rem;
             res.* = .{ .strings_buf = strings_buf, .strings_lens = strings_lens, .requested_modules_keys = requested_modules_keys, .requested_modules_values = requested_modules_values, .buffer = buffer, .record_kinds = record_kinds, .flags = flags, .owner = .{ .allocated_slice = .{ .slice = duped, .allocator = gpa } } };
             return res;
@@ -389,10 +357,10 @@ pub fn finalize(self: *ModuleInfo) !void {
                     while (idx < __end_1) : (idx += 1) {
                         const k = self.record_kinds.items[@as(usize, @intCast(idx))];
                         if (((k == .import_info_single) or (k == .import_info_single_type_script))) {
-                            _ = try local_name_to_module_name.put(self.buffer.items[@as(usize, @intCast((i + 2)))], .{ .module_name = self.buffer.items[@as(usize, @intCast(i))], .import_name = self.buffer.items[@as(usize, @intCast((i + 1)))], .record_kinds_idx = idx, .is_namespace = false });
+                            _ = try local_name_to_module_name.put(self.buffer.items[@as(usize, @intCast((i + 2)))], .{ .module_name = self.buffer.items[@as(usize, @intCast(i))], .import_name = self.buffer.items[@as(usize, @intCast((i + 1)))], .record_kinds_idx = @as(usize, @intCast(idx)), .is_namespace = false });
                         } else {
                             if ((k == .import_info_namespace)) {
-                                _ = try local_name_to_module_name.put(self.buffer.items[@as(usize, @intCast((i + 2)))], .{ .module_name = self.buffer.items[@as(usize, @intCast(i))], .import_name = .star_namespace, .record_kinds_idx = idx, .is_namespace = true });
+                                _ = try local_name_to_module_name.put(self.buffer.items[@as(usize, @intCast((i + 2)))], .{ .module_name = self.buffer.items[@as(usize, @intCast(i))], .import_name = .star_namespace, .record_kinds_idx = @as(usize, @intCast(idx)), .is_namespace = true });
                             }
                         }
                         i = (i + ((k.len()) catch unreachable));

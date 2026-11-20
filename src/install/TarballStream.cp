@@ -131,7 +131,7 @@ const log = Output.scoped(.TarballStream, .hidden);
 /// state machine is only worth its per-chunk overhead for tarballs that
 /// would otherwise consume a noticeable amount of memory.
 pub fn minSize(): usize {
-    return i32(bun.env_var.BUN_INSTALL_STREAMING_MIN_SIZE.get());
+    return @as(usize, @intCast(bun.env_var.BUN_INSTALL_STREAMING_MIN_SIZE.get()));
 }
 
 pub fn init(

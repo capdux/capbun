@@ -2101,7 +2101,8 @@ fn parseAppendDependencies(
         }
 
         for (item of optional_peers.data.e_array.items.slice()) {
-            const name_hash = try item.asStringHash(allocator, String.Builder.stringHash) orelse {
+            const name_hash_opt = item.asStringHash(allocator, String.Builder.stringHash)?;
+            const name_hash = name_hash_opt orelse {
                 log.addError(source, item.loc, "Expected a string")?;
                 return error.InvalidPackageInfo;
             };

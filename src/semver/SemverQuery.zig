@@ -85,16 +85,16 @@ const Formatter = struct {
     query: *const Query,
     buffer: []const u8,
 
-pub fn format(formatter: Formatter, writer: *std.Io.Writer) !void {
-            const q = formatter.query;
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+            const q = self.query;
             if (q.next) |ptr| {
                 _ = &ptr;
                 if ((ptr.range.hasLeft() or ptr.range.hasRight())) {
-                    _ = try writer.print("{f} && {f}", .{ q.range.fmt(formatter.buffer), ptr.range.fmt(formatter.buffer) });
+                    _ = try writer.print("{f} && {f}", .{ q.range.fmt(self.buffer), ptr.range.fmt(self.buffer) });
                     return;
                 }
             }
-            _ = try writer.print("{f}", .{ q.range.fmt(formatter.buffer) });
+            _ = try writer.print("{f}", .{ q.range.fmt(self.buffer) });
     }
 };
 pub const List = struct {
@@ -146,14 +146,13 @@ pub fn andRange(self: *@This(), allocator: Allocator, range: Range) !void {
         list: *const List,
         buffer: []const u8,
     
-    pub fn format(self: @This(), formatter: @This(), writer: *std.Io.Writer) !void {
-            _ = self;
-                const l = formatter.list;
+    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+                const l = self.list;
                 if (l.next) |ptr| {
                     _ = &ptr;
-                    _ = try writer.print("{f} || {f}", .{ l.head.fmt(formatter.buffer), ptr.fmt(formatter.buffer) });
+                    _ = try writer.print("{f} || {f}", .{ l.head.fmt(self.buffer), ptr.fmt(self.buffer) });
                 } else {
-                    _ = try writer.print("{f}", .{ l.head.fmt(formatter.buffer) });
+                    _ = try writer.print("{f}", .{ l.head.fmt(self.buffer) });
                 }
         }
     };
@@ -276,23 +275,22 @@ pub inline fn satisfies(group: *const Group, version: Version, group_buf: []cons
         group: *const Group,
         buf: []const u8,
     
-    pub fn format(self: @This(), formatter: @This(), writer: *std.Io.Writer) !void {
-            _ = self;
-                const g = formatter.group;
+    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+                const g = self.group;
                 if ((((g.tail == null) and (g.head.tail == null)) and (!g.head.head.range.hasLeft()))) {
                     return;
                 }
                 if (((g.tail == null) and (g.head.tail == null))) {
-                    _ = try writer.print("{f}", .{ g.head.fmt(formatter.buf) });
+                    _ = try writer.print("{f}", .{ g.head.fmt(self.buf) });
                     return;
                 }
                 var list = (&g.head);
                 _ = &list;
                 while (list.next) |next| {
-                    _ = try writer.print("{f} && ", .{ list.fmt(formatter.buf) });
+                    _ = try writer.print("{f} && ", .{ list.fmt(self.buf) });
                     list = next;
                 }
-                _ = try writer.print("{f}", .{ list.fmt(formatter.buf) });
+                _ = try writer.print("{f}", .{ list.fmt(self.buf) });
         }
     };
     pub const FlagsBitSet = bun.bit_set.IntegerBitSet(3);

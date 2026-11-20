@@ -1150,7 +1150,7 @@ pub fn getWorkspacePackageID(client: *const Lockfile, workspace_name_hash: Packa
             const res = resolutions[i];
             const name_hash = name_hashes[i];
             if (res.tag == .workspace && name_hash == workspace_name_hash_) {
-                return i32(i);
+                return @as(PackageID, @intCast(i));
             }
         }
     }

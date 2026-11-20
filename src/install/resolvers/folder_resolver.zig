@@ -339,14 +339,16 @@ pub fn readPackageJSONFromDisk(manager: *PackageManager, abs: stringZ, version: 
         var package: Lockfile.Package = .{};
         _ = &package;
         if (comptime (ResolverType == WorkspaceResolver)) {
-            const tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.workspace");
+            var tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.workspace");
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }
             const json = try manager.workspace_package_json_cache.getWithPath(manager.allocator, manager.log, abs, .{}).unwrap();
             _ = try package.parseWithJSON(manager.lockfile, manager, manager.allocator, manager.log, (&json.source), json.root, ResolverType, resolver, features);
         } else {
-            const tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.folder");
+            var tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.folder");
+            _ = &tracer;
             defer {
             _ = tracer.end();
             }

@@ -311,7 +311,7 @@ pub fn migrateNPMLockfile(
             id_map.putAssumeCapacity(
                 pkg_path,
                 IdMapValue{
-                    old_json_index: @truncate(i),
+                    old_json_index: @truncate(@as(usize, @intCast(i))),
                     new_package_id: package_id_is_link,
                 },
             );
@@ -322,7 +322,7 @@ pub fn migrateNPMLockfile(
                 id_map.putAssumeCapacity(
                     pkg_path,
                     IdMapValue{
-                        old_json_index: @truncate(i),
+                        old_json_index: @truncate(@as(usize, @intCast(i))),
                         new_package_id: package_id_is_bundled,
                     },
                 );
@@ -338,7 +338,7 @@ pub fn migrateNPMLockfile(
         id_map.putAssumeCapacity(
             pkg_path,
             IdMapValue{
-                old_json_index: @truncate(i),
+                old_json_index: @truncate(@as(usize, @intCast(i))),
                 new_package_id: package_idx,
             },
         );

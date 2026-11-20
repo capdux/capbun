@@ -209,7 +209,7 @@ fn readPackageJSONFromDisk(
     let package: Lockfile.Package = {};
 
     if (comptime ResolverType == WorkspaceResolver) {
-        const tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.workspace");
+        let tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.workspace");
         defer tracer.end();
 
         const json = manager.workspace_package_json_cache.getWithPath(manager.allocator, manager.log, abs, .{}).unwrap()?;
@@ -226,7 +226,7 @@ fn readPackageJSONFromDisk(
             features,
         )?;
     } else {
-        const tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.folder");
+        let tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.folder");
         defer tracer.end();
 
         let file = bun.sys.File.from(bun.sys.openatA(

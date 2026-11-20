@@ -192,6 +192,20 @@ pub struct Routes {
         _.release();
     }
 
+    fn makeIndexMatch(_: *Routes, r: RoutePtr, params: *Router.Param.List, url_path: URLPath): Match {
+        return Match{
+            .params = params,
+            .name = r.name,
+            .path = r.abs_path.slice(),
+            .pathname = url_path.pathname,
+            .basename = r.basename,
+            .hash = index_route_hash,
+            .file_path = r.abs_path.slice(),
+            .query_string = url_path.query_string,
+            .client_framework_enabled = _.client_framework_enabled,
+        };
+    }
+
     pub fn matchPageWithAllocator(
         _: *Routes,
         __: string,
@@ -228,19 +242,8 @@ pub struct Routes {
         }
 
         if (path.len == 0) {
-            if (_.index != null) {
-                const idx = _.index.?;
-                return Match{
-                    .params = params,
-                    .name = idx.name,
-                    .path = idx.abs_path.slice(),
-                    .pathname = url_path.pathname,
-                    .basename = idx.basename,
-                    .hash = index_route_hash,
-                    .file_path = idx.abs_path.slice(),
-                    .query_string = url_path.query_string,
-                    .client_framework_enabled = _.client_framework_enabled,
-                };
+            if (index_route := _.index) {
+                return _.makeIndexMatch(index_route, params, url_path);
             }
             return null;
         }

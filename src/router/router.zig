@@ -207,6 +207,10 @@ pub fn deinit(self: *Routes) void {
             _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
     }
 
+pub fn makeIndexMatch(self: *Routes, r: RoutePtr, params: *Router.Param.List, url_path: URLPath) Match {
+            return Match{ .params = params, .name = (if (@typeInfo(@TypeOf(r)) == .@"enum" or @typeInfo(@TypeOf(r)) == .@"union") @tagName(r) else r.name), .path = r.abs_path.slice(), .pathname = url_path.pathname, .basename = r.basename, .hash = index_route_hash, .file_path = r.abs_path.slice(), .query_string = url_path.query_string, .client_framework_enabled = self.client_framework_enabled };
+    }
+
 pub fn matchPageWithAllocator(self: *Routes, __: []const u8, url_path: URLPath, params: *Router.Param.List, allocator: std.mem.Allocator) ?Match {
         _ = __;
             var path = url_path.path;
@@ -235,9 +239,9 @@ pub fn matchPageWithAllocator(self: *Routes, __: []const u8, url_path: URLPath, 
                 redirect = false;
             }
             if ((path.len == 0)) {
-                if ((self.index != null)) {
-                    const idx = self.index.?;
-                    return Match{ .params = params, .name = (if (@typeInfo(@TypeOf(idx)) == .@"enum" or @typeInfo(@TypeOf(idx)) == .@"union") @tagName(idx) else idx.name), .path = (idx).?.abs_path.slice(), .pathname = url_path.pathname, .basename = (idx).?.basename, .hash = index_route_hash, .file_path = (idx).?.abs_path.slice(), .query_string = url_path.query_string, .client_framework_enabled = self.client_framework_enabled };
+                if (self.index) |index_route| {
+                    _ = &index_route;
+                    return self.makeIndexMatch(index_route, params, url_path);
                 }
                 return null;
             }

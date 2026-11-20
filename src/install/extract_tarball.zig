@@ -270,14 +270,14 @@ var dirname_reader = DirnameReader{ .outdirname = (&resolved) };
             _ = try Archiver.extractToDir(zlib_pool.data.list.items, extract_destination, null, *DirnameReader, (&dirname_reader), .{ .depth_to_skip = 1, .log = false });
         }
         if ((resolved.len > 0)) {
-            if (extract_destination.createFileZ(".bun-tag", .{ .truncate = true })) |gh_tag_res| {
+            if ((blk_catch_7: { break :blk_catch_7 ((extract_destination.createFileZ(".bun-tag", .{ .truncate = true })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); })) |gh_tag_res| {
                 _ = &gh_tag_res;
                 var gh_tag = gh_tag_res;
                 _ = &gh_tag;
                 defer {
                 _ = gh_tag.close();
                 }
-                _ = (blk_catch_7: { break :blk_catch_7 ((gh_tag.writeAll(resolved)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 (blk_catch_8: { break :blk_catch_8 ((extract_destination.deleteFileZ(".bun-tag")) catch |__ce_8| { _ = &__ce_8;  }); }); }); });
+                _ = (blk_catch_8: { break :blk_catch_8 ((gh_tag.writeAll(resolved)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 (blk_catch_9: { break :blk_catch_9 ((extract_destination.deleteFileZ(".bun-tag")) catch |__ce_9| { _ = &__ce_9;  }); }); }); });
             }
         }
 },
@@ -320,12 +320,12 @@ else => unreachable,
             if (create_subdir) {
                 if (bun.Dirname.dirname(u16, path2)) |folder| {
                     _ = &folder;
-                    _ = (blk_catch_9: { break :blk_catch_9 ((bun.MakePath.makePath(u16, cache_dir, folder)) catch |__ce_9| { _ = &__ce_9;  }); });
+                    _ = (blk_catch_10: { break :blk_catch_10 ((bun.MakePath.makePath(u16, cache_dir, folder)) catch |__ce_10| { _ = &__ce_10;  }); });
                 }
             }
             const path_to_use = path2;
             while (true) {
-                var dir_to_move = (blk_catch_10: { break :blk_catch_10 ((bun.sys.openDirAtWindowsA(.fromStdDir(self.temp_dir), tmpname, .{ .can_rename_or_delete = true, .iterable = false, .read_only = true }).unwrap()) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "moving \"{s}\" to cache dir failed\n{}\n From: {s}\n   To: {s}", .{ name, e, tmpname, folder_name })) catch unreachable);
+                var dir_to_move = (blk_catch_11: { break :blk_catch_11 ((bun.sys.openDirAtWindowsA(.fromStdDir(self.temp_dir), tmpname, .{ .can_rename_or_delete = true, .iterable = false, .read_only = true }).unwrap()) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "moving \"{s}\" to cache dir failed\n{}\n From: {s}\n   To: {s}", .{ name, e, tmpname, folder_name })) catch unreachable);
                 return error.InstallFailed; }); });
                 _ = &dir_to_move;
                 switch (bun.windows.moveOpenedFileAt(dir_to_move, .fromStdDir(cache_dir), path_to_use, true)) {
@@ -344,7 +344,7 @@ _ = dir_to_move.close();
 
 },
 .result => {
-_ = (blk_catch_12: { break :blk_catch_12 ((tmpdir.deleteTree(tempdest)) catch |__ce_12| { _ = &__ce_12;  }); });
+_ = (blk_catch_13: { break :blk_catch_13 ((tmpdir.deleteTree(tempdest)) catch |__ce_13| { _ = &__ce_13;  }); });
 },
 }
                     did_retry = true;
@@ -369,7 +369,7 @@ _ = dir_to_move.close();
             if (create_subdir) {
                 if (bun.Dirname.dirname(u8, folder_name)) |folder| {
                     _ = &folder;
-                    _ = (blk_catch_14: { break :blk_catch_14 ((bun.MakePath.makePath(u8, cache_dir, folder)) catch |__ce_14| { _ = &__ce_14;  }); });
+                    _ = (blk_catch_15: { break :blk_catch_15 ((bun.MakePath.makePath(u8, cache_dir, folder)) catch |__ce_15| { _ = &__ce_15;  }); });
                 }
             }
             if (bun.sys.renameatConcurrently(.fromStdDir(tmpdir), tmpname, .fromStdDir(cache_dir), folder_name, .{ .move_fallback = true }).asErr()) |err_opt| {
@@ -378,13 +378,13 @@ _ = dir_to_move.close();
                 return error.InstallFailed;
             }
         }
-        var final_dir = (blk_catch_16: { break :blk_catch_16 ((bun.openDir(cache_dir, folder_name)) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "failed to verify cache dir for \"{s}\": {s}", .{ name, @errorName(e) })) catch unreachable);
+        var final_dir = (blk_catch_17: { break :blk_catch_17 ((bun.openDir(cache_dir, folder_name)) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "failed to verify cache dir for \"{s}\": {s}", .{ name, @errorName(e) })) catch unreachable);
         return error.InstallFailed; }); });
         _ = &final_dir;
         defer {
         _ = final_dir.close();
         }
-        const final_path = (blk_catch_18: { break :blk_catch_18 ((bun.getFdPathZ(.fromStdDir(final_dir), (&bufs.final_path_buf))) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "failed to resolve cache dir for \"{s}\": {s}", .{ name, @errorName(e) })) catch unreachable);
+        const final_path = (blk_catch_19: { break :blk_catch_19 ((bun.getFdPathZ(.fromStdDir(final_dir), (&bufs.final_path_buf))) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "failed to resolve cache dir for \"{s}\": {s}", .{ name, @errorName(e) })) catch unreachable);
         return error.InstallFailed; }); });
         const url = try FileSystem.instance.dirname_store.append(@TypeOf(self.url.slice()), self.url.slice());
         var json_path: []u8 = "";
@@ -395,7 +395,7 @@ _ = dir_to_move.close();
 .github, .local_tarball, .remote_tarball => true,
 else => ((self.package_manager.lockfile.trusted_dependencies != null) and self.package_manager.lockfile.trusted_dependencies.?.contains(@truncate(Semver.String.Builder.stringHash(name)))),
 })) {
-            const _tmp_v0 = (blk_catch_20: { break :blk_catch_20 ((bun.sys.File.readFileFrom(bun.FD.fromStdDir(cache_dir), bun.path.joinZBuf((&bufs.json_path_buf), .{ folder_name, "package.json" }, .auto), bun.default_allocator).unwrap()) catch |e| { _ = &e; if (((self.resolution.tag == .github) and (e == error.ENOENT))) {
+            const _tmp_v0 = (blk_catch_21: { break :blk_catch_21 ((bun.sys.File.readFileFrom(bun.FD.fromStdDir(cache_dir), bun.path.joinZBuf((&bufs.json_path_buf), .{ folder_name, "package.json" }, .auto), bun.default_allocator).unwrap()) catch |e| { _ = &e; if (((self.resolution.tag == .github) and (e == error.ENOENT))) {
                 return .{ .url = url, .resolved = resolved };
             }
             _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "\"package.json\" for \"{s}\" failed to open: {s}", .{ name, @errorName(e) })) catch unreachable);
@@ -408,7 +408,7 @@ else => ((self.package_manager.lockfile.trusted_dependencies != null) and self.p
             _ = json_file.close();
             }
             json_buf = json_buf_read;
-            json_path = (blk_catch_22: { break :blk_catch_22 ((json_file.getPath((&bufs.json_path_buf)).unwrap()) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "\"package.json\" for \"{s}\" failed to resolve: {s}", .{ name, @errorName(e) })) catch unreachable);
+            json_path = (blk_catch_23: { break :blk_catch_23 ((json_file.getPath((&bufs.json_path_buf)).unwrap()) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "\"package.json\" for \"{s}\" failed to resolve: {s}", .{ name, @errorName(e) })) catch unreachable);
             return error.InstallFailed; }); });
         }
         if ((!bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_INSTALL_INDEX.get())) {
@@ -420,18 +420,18 @@ else => ((self.package_manager.lockfile.trusted_dependencies != null) and self.p
 else => folder_name,
 });
                 if (comptime Environment.isWindows) {
-                    _ = (blk_catch_24: { break :blk_catch_24 ((bun.MakePath.makePath(u8, cache_dir, name)) catch |__ce_24| { _ = &__ce_24; break :create_index; }); });
+                    _ = (blk_catch_25: { break :blk_catch_25 ((bun.MakePath.makePath(u8, cache_dir, name)) catch |__ce_25| { _ = &__ce_25; break :create_index; }); });
                     var dest_buf: bun.PathBuffer = undefined;
                     _ = &dest_buf;
                     const dest_path = bun.path.joinAbsStringBufZ(self.package_manager.cache_directory_path, (&dest_buf), .{ name, dest_name }, .windows);
-                    _ = (blk_catch_25: { break :blk_catch_25 ((bun.sys.sys_uv.symlinkUV(final_path, dest_path, bun.windows.libuv.UV_FS_SYMLINK_JUNCTION).unwrap()) catch |__ce_25| { _ = &__ce_25; break :create_index; }); });
+                    _ = (blk_catch_26: { break :blk_catch_26 ((bun.sys.sys_uv.symlinkUV(final_path, dest_path, bun.windows.libuv.UV_FS_SYMLINK_JUNCTION).unwrap()) catch |__ce_26| { _ = &__ce_26; break :create_index; }); });
                 } else {
-                    var index_dir = bun.FD.fromStdDir((blk_catch_26: { break :blk_catch_26 ((bun.MakePath.makeOpenPath(cache_dir, name, .{})) catch |__ce_26| { _ = &__ce_26; break :create_index; }); }));
+                    var index_dir = bun.FD.fromStdDir((blk_catch_27: { break :blk_catch_27 ((bun.MakePath.makeOpenPath(cache_dir, name, .{})) catch |__ce_27| { _ = &__ce_27; break :create_index; }); }));
                     _ = &index_dir;
                     defer {
                     _ = index_dir.close();
                     }
-                    _ = (blk_catch_27: { break :blk_catch_27 ((bun.sys.symlinkat(final_path, index_dir, dest_name).unwrap()) catch |__ce_27| { _ = &__ce_27; break :create_index; }); });
+                    _ = (blk_catch_28: { break :blk_catch_28 ((bun.sys.symlinkat(final_path, index_dir, dest_name).unwrap()) catch |__ce_28| { _ = &__ce_28; break :create_index; }); });
                 }
 };
             }

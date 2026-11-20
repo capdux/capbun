@@ -271,7 +271,7 @@ network_task: *NetworkTask,
 package_manager: *PackageManager,
 
 pub fn minSize() usize {
-        return (if (comptime @typeInfo(@TypeOf(bun.env_var.BUN_INSTALL_STREAMING_MIN_SIZE.get())) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.env_var.BUN_INSTALL_STREAMING_MIN_SIZE.get())) else cp_cast_int(i32, bun.env_var.BUN_INSTALL_STREAMING_MIN_SIZE.get()));
+        return @as(usize, @intCast(bun.env_var.BUN_INSTALL_STREAMING_MIN_SIZE.get()));
 }
 
 pub fn init(allocator: std.mem.Allocator, extract_task: *Task, network_task: *NetworkTask, manager: *PackageManager) *TarballStream {

@@ -308,7 +308,7 @@ const DirnameReader = struct {
                 }
 
                 if (resolved.len > 0) {
-                    if (gh_tag_res := extract_destination.createFileZ(".bun-tag", .{ .truncate = true })) {
+                    if (gh_tag_res := extract_destination.createFileZ(".bun-tag", .{ .truncate = true }) catch null) {
                         let gh_tag = gh_tag_res;
                         defer gh_tag.close();
                         gh_tag.writeAll(resolved) catch {

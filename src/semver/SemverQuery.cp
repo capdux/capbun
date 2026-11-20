@@ -31,17 +31,17 @@ struct Query {
     const Formatter = struct {
         query: *const Query,
         buffer: []const u8,
-        pub fn format(formatter: Formatter, writer: *std.Io.Writer) !void {
-            const q = formatter.query;
+        pub fn format(writer: *std.Io.Writer)! {
+            const q = _.query;
 
             if (q.next) |ptr| {
                 if (ptr.range.hasLeft() or ptr.range.hasRight()) {
-                    try writer.print("{f} && {f}", .{ q.range.fmt(formatter.buffer), ptr.range.fmt(formatter.buffer) });
+                    try writer.print("{f} && {f}", .{ q.range.fmt(_.buffer), ptr.range.fmt(_.buffer) });
                     return;
                 }
             }
 
-            try writer.print("{f}", .{q.range.fmt(formatter.buffer)});
+            try writer.print("{f}", .{q.range.fmt(_.buffer)});
         }
     };
 
@@ -63,13 +63,13 @@ struct Query {
         const Formatter = struct {
             list: *const List,
             buffer: []const u8,
-            pub fn format(formatter: @This(), writer: *std.Io.Writer) !void {
-                const l = formatter.list;
+            pub fn format(writer: *std.Io.Writer)! {
+                const l = _.list;
 
                 if (l.next) |ptr| {
-                    try writer.print("{f} || {f}", .{ l.head.fmt(formatter.buffer), ptr.fmt(formatter.buffer) });
+                    try writer.print("{f} || {f}", .{ l.head.fmt(_.buffer), ptr.fmt(_.buffer) });
                 } else {
-                    try writer.print("{f}", .{l.head.fmt(formatter.buffer)});
+                    try writer.print("{f}", .{l.head.fmt(_.buffer)});
                 }
             }
         };
@@ -156,25 +156,25 @@ struct Query {
             group: *const Group,
             buf: string,
 
-            pub fn format(formatter: @This(), writer: *std.Io.Writer) !void {
-                const g = formatter.group;
+            pub fn format(writer: *std.Io.Writer)! {
+                const g = _.group;
 
                 if (g.tail == null and g.head.tail == null and !g.head.head.range.hasLeft()) {
                     return;
                 }
 
                 if (g.tail == null and g.head.tail == null) {
-                    try writer.print("{f}", .{g.head.fmt(formatter.buf)});
+                    try writer.print("{f}", .{g.head.fmt(_.buf)});
                     return;
                 }
 
                 let list = &g.head;
                 while (list.next) |next| {
-                    try writer.print("{f} && ", .{list.fmt(formatter.buf)});
+                    try writer.print("{f} && ", .{list.fmt(_.buf)});
                     list = next;
                 }
 
-                try writer.print("{f}", .{list.fmt(formatter.buf)});
+                try writer.print("{f}", .{list.fmt(_.buf)});
             }
         };
 

@@ -159,22 +159,23 @@ pub fn HTMLProcessor(
             };
 
             // Add handlers for each tag type
-            inline for (i of 0..tag_handlers.len) {
-                const tag_info = tag_handlers[i];
-                const selector = lol.HTMLSelector.parse(tag_info.selector)?;
-                selectors.appendAssumeCapacity(selector);
-                builder.addElementContentHandlers(
-                    selector,
-                    T,
-                    comptime generateHandlerForTag(tag_info),
-                    target,
-                    void,
-                    null,
-                    null,
-                    void,
-                    null,
-                    null,
-                )?;
+            if (comptime tag_handlers.len > 0) {
+                inline for (tag_info of tag_handlers) {
+                    const selector = lol.HTMLSelector.parse(tag_info.selector)?;
+                    selectors.appendAssumeCapacity(selector);
+                    builder.addElementContentHandlers(
+                        selector,
+                        T,
+                        comptime generateHandlerForTag(tag_info),
+                        target,
+                        void,
+                        null,
+                        null,
+                        void,
+                        null,
+                        null,
+                    )?;
+                }
             }
 
             if (visit_document_tags) {
