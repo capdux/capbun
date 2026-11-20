@@ -167,7 +167,7 @@ const temp_id = p.generateTempRef("default_export");
             _ = try self.last_part.symbol_uses.putNoClobber(p.allocator, temp_id, .{ .count_estimate = 1 });
             _ = try p.current_scope.generated.append(p.allocator, temp_id);
             _ = try self.export_props.append(p.allocator, .{ .key = Expr.init(E.String, .{ .data = "default" }, stmt.loc), .value = Expr.initIdentifier(temp_id, stmt.loc) });
-            const decl_slice: []G = .{ G.Decl{ .binding = Binding.alloc(p.allocator, B.Identifier{ .ref = temp_id }, stmt.loc), .value = (if (@typeInfo(@TypeOf(st)) == .@"enum") @intFromEnum(st) else st.value).toExpr() } };
+            const decl_slice: [1]G = .{ G.Decl{ .binding = Binding.alloc(p.allocator, B.Identifier{ .ref = temp_id }, stmt.loc), .value = (if (@typeInfo(@TypeOf(st)) == .@"enum") @intFromEnum(st) else st.value).toExpr() } };
             new_stmt = Stmt.alloc(S.Local, .{ .kind = .k_const, .decls = try G.Decl.List.fromSlice(p.allocator, (&decl_slice)) }, stmt.loc);
 },
 .stmt => |s| {

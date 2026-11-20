@@ -322,7 +322,7 @@ pub struct Parser {
         analyze_tracer.end();
     }
 
-    fn _parse(comptime ParserType: type): !js_ast.Result {
+    fn _parse(*_, comptime ParserType: type): !js_ast.Result {
         const prev_action = bun.crash_handler.current_action;
         defer bun.crash_handler.current_action = prev_action;
         bun.crash_handler.current_action = { parse: _.source.path.text };

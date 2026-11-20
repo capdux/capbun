@@ -1342,7 +1342,7 @@ pub fn mergeKnownPrimitive(lhs: Expr.Data, rhs: Expr.Data) PrimitiveType {
     }
 
 pub inline fn toTypeof(data: Expr.Data) ?[]const u8 {
-            return (if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(data)) else @as(Expr.Tag, data)).typeof();
+            return std.meta.activeTag(data).typeof();
     }
 
 pub fn toNumber(data: Expr.Data) ?f64 {
@@ -1542,7 +1542,7 @@ if ((right == .e_require_main)) {
     }
 
 pub inline fn isStringValue(self: Data) bool {
-            return ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(self)) else @as(Expr.Tag, self)) == .e_string);
+            return (std.meta.activeTag(self) == .e_string);
     }
     pub const Equality = DataEquality;
     pub const toJS = expr_jsc.dataToJS;

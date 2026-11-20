@@ -193,7 +193,7 @@ pub fn e_spread(p: *P, expr: Expr, unused_in: ExprIn) Expr {
 pub fn e_identifier(p: *P, expr: Expr, expr_in: ExprIn) Expr {
             var e_ = expr.data.e_identifier;
             _ = &e_;
-            const is_delete_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.delete_target)) else @as(Expr.Tag, p.delete_target)) == .e_identifier) and e_.ref.eql(p.delete_target.e_identifier.ref));
+            const is_delete_target = ((std.meta.activeTag(p.delete_target) == .e_identifier) and e_.ref.eql(p.delete_target.e_identifier.ref));
             const name = p.loadNameFromRef(e_.ref);
             if ((p.isStrictMode() and js_lexer.StrictModeReservedWords.has(name))) {
                 _ = ((p.markStrictModeFeature(.reserved_word, js_lexer.rangeOfIdentifier(p.source, expr.loc), name)) catch unreachable);
@@ -316,7 +316,7 @@ const tag: Expr = tagger: {
                     const allocator = p.allocator;
                     var props = (&e_.properties);
                     _ = &props;
-                    const maybe_key_value: ?ExprNodeIndex = (if ((e_.key_prop_index > -1)) (if (@typeInfo(@TypeOf(props.orderedRemove((if (comptime @typeInfo(@TypeOf(e_.key_prop_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(e_.key_prop_index)) else cp_cast_int(i32, e_.key_prop_index))))) == .@"enum") @intFromEnum(props.orderedRemove((if (comptime @typeInfo(@TypeOf(e_.key_prop_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(e_.key_prop_index)) else cp_cast_int(i32, e_.key_prop_index)))) else props.orderedRemove((if (comptime @typeInfo(@TypeOf(e_.key_prop_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(e_.key_prop_index)) else cp_cast_int(i32, e_.key_prop_index))).value) else null);
+                    const maybe_key_value: ?ExprNodeIndex = (if ((e_.key_prop_index > -1)) (if (@typeInfo(@TypeOf(props.orderedRemove(@as(usize, @intCast(e_.key_prop_index))))) == .@"enum") @intFromEnum(props.orderedRemove(@as(usize, @intCast(e_.key_prop_index)))) else props.orderedRemove(@as(usize, @intCast(e_.key_prop_index))).value) else null);
                     {
                         var last_child: u32 = 0;
                         _ = &last_child;
@@ -561,7 +561,7 @@ const index = p.visitExpr(e_.index);
                     }
                 }
             }
-            if (((((expr_in.assign_target != .none) or is_delete_target) and ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(e_.target.data)) else @as(Expr.Tag, e_.target.data)) == .e_identifier)) and (p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].kind == .@"import"))) {
+            if (((((expr_in.assign_target != .none) or is_delete_target) and (std.meta.activeTag(e_.target.data) == .e_identifier)) and (p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].kind == .@"import"))) {
                 const r = js_lexer.rangeOfIdentifier(p.source, e_.target.loc);
                 _ = ((p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot assign to property on import \"{s}\"", .{ p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].original_name })) catch unreachable);
             }
@@ -678,7 +678,7 @@ else => {
 
 pub fn e_dot(p: *P, expr: Expr, expr_in: ExprIn) Expr {
             const e_ = expr.data.e_dot;
-            const is_delete_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.delete_target)) else @as(Expr.Tag, p.delete_target)) == .e_dot) and (expr.data.e_dot == p.delete_target.e_dot));
+            const is_delete_target = ((std.meta.activeTag(p.delete_target) == .e_dot) and (expr.data.e_dot == p.delete_target.e_dot));
             const is_call_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.call_target)) else @as(Expr.Tag, p.call_target)) == .e_dot) and (expr.data.e_dot == p.call_target.e_dot));
             if (p.define.dots.get((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name))) |parts| {
                 _ = &parts;
@@ -703,7 +703,7 @@ pub fn e_dot(p: *P, expr: Expr, expr_in: ExprIn) Expr {
                     }
                 }
             }
-            if (((is_call_target and ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.then_catch_chain.next_target)) else @as(Expr.Tag, p.then_catch_chain.next_target)) == .e_dot)) and (p.then_catch_chain.next_target.e_dot == expr.data.e_dot))) {
+            if (((is_call_target and (std.meta.activeTag(p.then_catch_chain.next_target) == .e_dot)) and (p.then_catch_chain.next_target.e_dot == expr.data.e_dot))) {
                 if (strings.eqlComptime((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), "catch")) {
                     p.then_catch_chain = ThenCatchChain{ .next_target = e_.target.data, .has_catch = true };
                 } else {
@@ -819,7 +819,7 @@ pub fn e_array(p: *P, expr: Expr, expr_in: ExprIn) Expr {
 .e_binary => |e2| {
 if (((expr_in.assign_target != .none) and (e2.op == .bin_assign))) {
                     const was_anonymous_named_expr = e2.right.isAnonymousNamed();
-                    if ((((was_anonymous_named_expr and (e2.right.data == .e_class)) and e2.right.data.e_class.should_lower_standard_decorators) and ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(e2.left.data)) else @as(Expr.Tag, e2.left.data)) == .e_identifier))) {
+                    if ((((was_anonymous_named_expr and (e2.right.data == .e_class)) and e2.right.data.e_class.should_lower_standard_decorators) and (std.meta.activeTag(e2.left.data) == .e_identifier))) {
                         p.decorator_class_name = p.loadNameFromRef(e2.left.data.e_identifier.ref);
                     }
                     e2.left = p.visitExprInOut(e2.left, ExprIn{ .assign_target = .replace });
@@ -936,7 +936,7 @@ pub fn e_import(p: *P, expr: Expr, unused_in: ExprIn) Expr {
 pub fn e_call(p: *P, expr: Expr, expr_in: ExprIn) Expr {
             const e_ = expr.data.e_call;
             p.call_target = e_.target.data;
-            p.then_catch_chain = ThenCatchChain{ .next_target = e_.target.data, .has_multiple_args = (e_.args.len >= 2), .has_catch = ((((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.then_catch_chain.next_target)) else @as(Expr.Tag, p.then_catch_chain.next_target)) == .e_call) and (p.then_catch_chain.next_target.e_call == expr.data.e_call)) and p.then_catch_chain.has_catch) };
+            p.then_catch_chain = ThenCatchChain{ .next_target = e_.target.data, .has_multiple_args = (e_.args.len >= 2), .has_catch = (((std.meta.activeTag(p.then_catch_chain.next_target) == .e_call) and (p.then_catch_chain.next_target.e_call == expr.data.e_call)) and p.then_catch_chain.has_catch) };
             const target_was_identifier_before_visit = (e_.target.data == .e_identifier);
             e_.target = p.visitExprInOut(e_.target, .{ .has_chain_parent = (e_.optional_chain == .continuation), .property_access_for_method_call_maybe_should_replace_with_undefined = true });
             switch (e_.target.data) {
@@ -1004,9 +1004,13 @@ method_call_should_be_replaced_with_undefined = false;
 },
 }
                 }
-                for (cp_mut_slice(&e_.args.slice())) |*arg| {
-                    _ = &arg;
-                    (arg.*).* = p.visitExpr((arg.*).*);
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_8 = e_.args.len;
+                    while (i < __end_8) : (i += 1) {
+                        e_.args.ptr[cp_cast_int(usize, i)] = p.visitExpr(e_.args.ptr[@as(usize, @intCast(i))]);
+                    }
                 }
                 if (method_call_should_be_replaced_with_undefined) {
                     p.is_control_flow_dead = old_is_control_flow_dead;
@@ -1186,9 +1190,13 @@ pub fn e_new(p: *P, expr: Expr, unused_in: ExprIn) Expr {
         _ = unused_in;
             const e_ = expr.data.e_new;
             e_.target = p.visitExpr(e_.target);
-            for (cp_mut_slice(&e_.args.slice())) |*arg| {
-                _ = &arg;
-                (arg.*).* = p.visitExpr((arg.*).*);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_9 = e_.args.len;
+                while (i < __end_9) : (i += 1) {
+                    e_.args.ptr[cp_cast_int(usize, i)] = p.visitExpr(e_.args.ptr[@as(usize, @intCast(i))]);
+                }
             }
             if (p.options.features.minify_syntax) {
                 if (KnownGlobal.minifyGlobalConstructor(p.allocator, e_, p.symbols.items, expr.loc, p.options.features.minify_whitespace)) |minified| {
@@ -1213,7 +1221,7 @@ pub fn e_arrow(p: *P, expr: Expr, unused_in: ExprIn) Expr {
             const dupe = ((p.allocator.dupe(Stmt, e_.body.stmts)) catch unreachable);
             _ = p.visitArgs(e_.args, VisitArgsOpts{ .has_rest_arg = e_.has_rest_arg, .body = dupe, .is_unique_formal_parameters = true });
             _ = ((p.pushScopeForVisitPass(.function_body, e_.body.loc)) catch unreachable);
-            var react_hook_data: ?ReactRefresh.HookContext = null;
+            var react_hook_data: ?*ReactRefresh.HookContext = null;
             _ = &react_hook_data;
             const prev = p.react_refresh.hook_ctx_storage;
             defer {
@@ -1253,7 +1261,7 @@ pub fn e_function(p: *P, expr: Expr, unused_in: ExprIn) Expr {
             if (p.is_revisit_for_substitution) {
                 return expr;
             }
-            var react_hook_data: ?ReactRefresh.HookContext = null;
+            var react_hook_data: ?*ReactRefresh.HookContext = null;
             _ = &react_hook_data;
             const prev = p.react_refresh.hook_ctx_storage;
             defer {

@@ -1,5 +1,5 @@
 const hex_chars = "0123456789ABCDEF";
-const empty_comments: [0]G.Comment = [];
+let empty_comments: [0]G.Comment = undefined;
 const first_ascii = 0x20;
 const last_ascii = 0x7E;
 const first_high_surrogate = 0xD800;
@@ -630,9 +630,10 @@ struct TopLevelEmpty {
         return {};
     }
     fn subVar(): TopLevelEmpty {
-        return {};
+        return _;
     }
     fn isTopLevel(): bool {
+        std.mem.doNotOptimizeAway(_);
         return false;
     }
 }
@@ -781,7 +782,7 @@ pub struct BinaryExpressionVisitorStruct {
     fn visitRightAndFinish(*_, p: auto) {
         const e = _.e;
         const entry = _.entry;
-        let flags = ExprFlag.Set{};
+        let flags = ExprFlag.Set.initEmpty();
 
         if (e.op != .bin_comma) {
             p.printSpace();
@@ -1530,7 +1531,7 @@ fn NewPrinter(
                         p.print("0");
                     },
                     1..9 => {
-                        let bytes = [1]u8{'0' + @as(u8, @intCast(val))};
+                        let bytes: [1]u8 = ['0' + @as(u8, @intCast(val))];
                         p.print(&bytes);
                     },
                     10 => {
@@ -3653,7 +3654,7 @@ fn NewPrinter(
 
                 p.print(":");
                 p.printSpace();
-                p.printExpr(val, .comma, ExprFlag.Set{});
+                p.printExpr(val, .comma, ExprFlag.Set.initEmpty());
             }
 
             if (comptime is_json) {
@@ -5285,7 +5286,7 @@ fn NewPrinter(
                     // let/const are block-scoped: only record at true top-level,
                     // not inside blocks where subVar() downgrades to .var_only.
                     (if (tlmtlo.is_top_level == .yes) .lexical else null),
-            } else {};
+            } else TopLevelAndIsExportEmpty{};
             p.printDecls(keyword, decls, ExprFlag.Set.initEmpty(), tlm);
             p.printSemicolonAfterStatement();
             if (rewrite_esm_to_cjs && is_export && decls.len > 0) {

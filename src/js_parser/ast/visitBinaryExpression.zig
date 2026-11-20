@@ -59,7 +59,7 @@ pub fn tryOptimizeTypeofUndefined(e_: *E.Binary, p: *P, replacement_op: js_ast.O
     pub fn visitRightAndFinish(v: *BinaryExpressionVisitor, p: *P) Expr {
                 var e_ = v.e;
                 _ = &e_;
-                const is_call_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.call_target)) else @as(Expr.Tag, p.call_target)) == .e_binary) and (e_ == p.call_target.e_binary));
+                const is_call_target = ((std.meta.activeTag(p.call_target) == .e_binary) and (e_ == p.call_target.e_binary));
                 const was_anonymous_named_expr = e_.right.isAnonymousNamed();
                 const prev_decorator_class_name = p.decorator_class_name;
                 if ((((((e_.op == .bin_assign) and was_anonymous_named_expr) and (e_.right.data == .e_class)) and e_.right.data.e_class.should_lower_standard_decorators) and (e_.left.data == .e_identifier))) {
@@ -305,7 +305,7 @@ pub fn tryOptimizeTypeofUndefined(e_: *E.Binary, p: *P, replacement_op: js_ast.O
     if (p.should_fold_typescript_constant_expressions) {
                     if (Expr.extractNumericValues(e_.left.data, e_.right.data)) |vals| {
                         _ = &vals;
-                        const fmod = @extern(*const *const fn(f64, f64) callconv(.c) f64, .{ .name = "fmod" });
+                        const fmod = @extern(*const fn(f64, f64) callconv(.c) f64, .{ .name = "fmod" });
                         return p.newExpr(E.Number{ .value = (if (comptime Environment.isNative) fmod(vals[0], vals[1]) else (blk_catch_0: { break :blk_catch_0 ((std.math.mod(f64, vals[0], vals[1])) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 0; }); })) }, v.loc);
                     }
                 }

@@ -907,7 +907,7 @@ pub fn NewParser_(
 
                 return p.newExpr(E.Import{
                     expr: arg,
-                    import_record_index: i32(import_record_index),
+                    import_record_index: @as(u32, @intCast(import_record_index)),
                     options: state.import_options,
                 }, state.loc);
             }
@@ -1937,8 +1937,8 @@ pub fn NewParser_(
                         break :brk &throw.value;
                     },
                     .s_return => |ret| {
-                        if (*value := ret.value) {
-                            break :brk value;
+                        if (ret.value != null) {
+                            break :brk &ret.value.?;
                         }
                     },
                     .s_if => |if_stmt| {
@@ -1950,9 +1950,9 @@ pub fn NewParser_(
                     .s_local => |local| {
                         if (local.decls.len > 0) {
                             let first: *Decl = &local.decls.ptr[0];
-                            if (*value := first.value) {
+                            if (first.value != null) {
                                 if (first.binding.data == .b_identifier) {
-                                    break :brk value;
+                                    break :brk &first.value.?;
                                 }
                             }
                         }
@@ -4331,7 +4331,7 @@ pub fn NewParser_(
             }
 
             for (arg of args) {
-                if (@as(Binding.Tag, arg.binding.data) != .b_identifier || arg.default != null) {
+                if (std.meta.activeTag(arg.binding.data) != .b_identifier || arg.default != null) {
                     return false;
                 }
             }
@@ -5956,7 +5956,7 @@ pub fn NewParser_(
             let _scope: (*Scope)? = p.current_scope;
 
             while (_scope != null && !_scope.?.kindStopsHoisting()) : (_scope = _scope.?.parent.?) {
-                const scope = _scope ?? unreachable;
+                const scope = _scope.?;
                 if (scope.label_ref == null) continue;
                 const label_ref = scope.label_ref.?;
                 if (scope.kind == .label && strings.eql(name, p.symbols.items[label_ref.innerIndex()].original_name)) {

@@ -3010,7 +3010,7 @@ pub union(Tag) Data {
     /// statically determined and this expression has no side effects (i.e. can be
     /// removed without consequence).
     static inline fn toTypeof(data: Expr.Data): string? {
-        return @as(Expr.Tag, data).typeof();
+        return std.meta.activeTag(data).typeof();
     }
 
     static fn toNumber(data: Expr.Data): f64? {
@@ -3275,7 +3275,7 @@ pub union(Tag) Data {
     pub const Store = ExprStore;
 
     inline fn isStringValue(): bool {
-        return @as(Expr.Tag, _) == .e_string;
+        return std.meta.activeTag(_) == .e_string;
     }
 }
 

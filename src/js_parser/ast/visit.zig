@@ -190,7 +190,8 @@ pub fn visitArgs(p: *P, args: []G.Arg, opts: VisitArgsOpts) void {
             {
                 if (duplicate_args_check) |checker| {
                     _ = &checker;
-                    _ = (if (comptime @typeInfo(@TypeOf(StringVoidMap)) == .pointer) (StringVoidMap) else &(StringVoidMap)).release();
+                    const release_fn = StringVoidMap.release;
+                    _ = release_fn(checker);
                 }
             }
             }
@@ -268,7 +269,8 @@ pub fn visitDecls(p: *P, decls: []G.Decl, was_const: bool, comptime is_possibly_
                             if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data.@"as"(.e_call)) |call| {
                                 _ = &call;
                                 if ((last_hook == call)) {
-                                    _ = (decl.*).binding.data.writeToHasher((&(p.react_refresh.hook_ctx_storage.?).*.?.hasher), p.symbols.items);
+                                    const hook_ctx = (p.react_refresh.hook_ctx_storage.?).*.?;
+                                    _ = (decl.*).binding.data.writeToHasher((&hook_ctx.hasher), p.symbols.items);
                                 }
                             }
                         }
@@ -631,7 +633,7 @@ pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name
                         if (((!(property.*).flags.contains(.is_method)) and (!(property.*).flags.contains(.is_computed)))) {
                             if ((property.*).key) |key| {
                                 _ = &key;
-                                if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(key.data)) else @as(Expr.Tag, key.data)) == .e_string)) {
+                                if ((std.meta.activeTag(key.data) == .e_string)) {
                                     name_to_keep = ((key.data.e_string.string(p.allocator)) catch unreachable);
                                 }
                             }

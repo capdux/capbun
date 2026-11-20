@@ -372,11 +372,12 @@ pub fn init(v: IsTopLevel) TopLevelEmpty {
             return .{};
     }
 
-pub fn subVar() TopLevelEmpty {
-            return .{};
+pub fn subVar(self: TopLevelEmpty) TopLevelEmpty {
+            return self;
     }
 
-pub fn isTopLevel() bool {
+pub fn isTopLevel(self: TopLevelEmpty) bool {
+            _ = std.mem.doNotOptimizeAway(self);
             return false;
     }
 };
@@ -523,7 +524,7 @@ else => {
 pub fn visitRightAndFinish(self: *BinaryExpressionVisitorStruct, p: anytype) void {
             const e = self.e;
             const entry = self.entry;
-            var flags = ExprFlag.Set;
+            var flags = ExprFlag.Set.initEmpty();
             _ = &flags;
             if ((e.op != .bin_comma)) {
                 _ = p.printSpace();
@@ -700,7 +701,7 @@ pub const RequireOrImportMetaCallbackFn = *const fn (OpaquePtr, u32, bool) Requi
 const U16Slice = []const u16;
 const string = []const u8;
 const hex_chars = "0123456789ABCDEF";
-const empty_comments: [0]G.Comment = &.{};
+var empty_comments: [0]G.Comment = undefined;
 const first_ascii = 32;
 const last_ascii = 126;
 const first_high_surrogate = 55296;
@@ -1580,11 +1581,9 @@ pub fn printNonNegativeFloat(p: *Printer, float: f64) void {
 _ = p.print("0");
 },
 1...8 => {
-var bytes = [1]u8;
+var bytes: [1]u8 = .{ (48 + @as(u8, @intCast(val))) };
                 _ = &bytes;
-                {
-                    _ = (48 + @as(u8, @intCast(val)));
-                }
+                _ = p.print((&bytes));
 },
 10 => {
 _ = p.print("10");
@@ -3428,7 +3427,7 @@ else => {
 }
                 _ = p.print(":");
                 _ = p.printSpace();
-                _ = p.printExpr(val, .comma, ExprFlag.Set);
+                _ = p.printExpr(val, .comma, ExprFlag.Set.initEmpty());
             }
             if (comptime is_json) {
                 _ = bun.assert((item.initializer == null));
@@ -5035,8 +5034,7 @@ pub fn printDeclStmt(p: *Printer, is_export: bool, comptime keyword: []const u8,
             if (((!rewrite_esm_to_cjs) and is_export)) {
                 _ = p.print("export ");
             }
-            const tlm: TopLevelAndIsExport = (if (may_have_module_info) TopLevelAndIsExport{ .is_export = is_export, .is_top_level = (if (comptime strings.eqlComptime(keyword, "var")) (if (tlmtlo.isTopLevel()) .declared else null) else (if ((tlmtlo.is_top_level == .yes)) .lexical else null)) } else ({
-}));
+            const tlm: TopLevelAndIsExport = (if (may_have_module_info) TopLevelAndIsExport{ .is_export = is_export, .is_top_level = (if (comptime strings.eqlComptime(keyword, "var")) (if (tlmtlo.isTopLevel()) .declared else null) else (if ((tlmtlo.is_top_level == .yes)) .lexical else null)) } else TopLevelAndIsExportEmpty{  });
             _ = p.printDecls(keyword, decls, ExprFlag.Set.initEmpty(), tlm);
             _ = p.printSemicolonAfterStatement();
             if (((rewrite_esm_to_cjs and is_export) and (decls.len > 0))) {

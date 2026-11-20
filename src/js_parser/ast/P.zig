@@ -411,7 +411,7 @@ pub fn transposeImport(p: *P, arg: Expr, state: *const TransposeState) Expr {
                 }
                 p.import_records.items[@as(usize, @intCast(import_record_index))].flags.handles_import_errors = ((state.is_await_target and (p.fn_or_arrow_data_visit.try_body_count != 0)) or state.is_then_catch_target);
                 _ = ((p.import_records_for_current_part.append(p.allocator, import_record_index)) catch unreachable);
-                return p.newExpr(E.Import{ .expr = arg, .import_record_index = (if (comptime @typeInfo(@TypeOf(import_record_index)) == .@"enum") cp_cast_int(i32, @intFromEnum(import_record_index)) else cp_cast_int(i32, import_record_index)), .options = state.import_options }, state.loc);
+                return p.newExpr(E.Import{ .expr = arg, .import_record_index = @as(u32, @intCast(import_record_index)), .options = state.import_options }, state.loc);
             }
             if (p.options.warn_about_unbundled_modules) {
                 const r = js_lexer.rangeOfIdentifier(p.source, state.loc);
@@ -1134,9 +1134,8 @@ break :brk (&(if (@typeInfo(@TypeOf(exp)) == .@"enum") @intFromEnum(exp) else ex
 break :brk (&(if (@typeInfo(@TypeOf(throw)) == .@"enum") @intFromEnum(throw) else throw.value));
 },
 .s_return => |ret| {
-if ((if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value)) |*value| {
-                _ = &value;
-                break :brk (value.*);
+if (((if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value) != null)) {
+                break :brk (&(if (@typeInfo(@TypeOf(ret)) == .@"enum") @intFromEnum(ret) else ret.value).?);
             }
 },
 .s_if => |if_stmt| {
@@ -1149,10 +1148,9 @@ break :brk (&switch_stmt.test_);
 if ((local.decls.len > 0)) {
                 var first: *Decl = (&local.decls.ptr[0]);
                 _ = &first;
-                if ((if (@typeInfo(@TypeOf(first)) == .@"enum") @intFromEnum(first) else first.value)) |*value| {
-                    _ = &value;
+                if (((if (@typeInfo(@TypeOf(first)) == .@"enum") @intFromEnum(first) else first.value) != null)) {
                     if ((first.binding.data == .b_identifier)) {
-                        break :brk (value.*);
+                        break :brk (&(if (@typeInfo(@TypeOf(first)) == .@"enum") @intFromEnum(first) else first.value).?);
                     }
                 }
             }
@@ -3043,7 +3041,7 @@ pub fn isSimpleParameterList(args: []G.Arg, has_rest_arg: bool) bool {
             }
             for (cp_iter_slice(args)) |arg| {
                 _ = &arg;
-                if ((((if (comptime @typeInfo(Binding.Tag) == .@"enum") @as(Binding.Tag, @enumFromInt(arg.binding.data)) else @as(Binding.Tag, arg.binding.data)) != .b_identifier) or (arg.default != null))) {
+                if (((std.meta.activeTag(arg.binding.data) != .b_identifier) or (arg.default != null))) {
                     return false;
                 }
             }
@@ -4010,7 +4008,7 @@ pub fn findLabelSymbol(p: *P, loc: logger.Loc, name: []const u8) FindLabelSymbol
             var _scope: ?*Scope = p.current_scope;
             _ = &_scope;
             while (((_scope != null) and (!_scope.?.kindStopsHoisting()))) : (_scope = _scope.?.parent.?) {
-                const scope = (((_scope.?)) orelse (unreachable));
+                const scope = _scope.?;
                 if ((scope.label_ref == null)) {
                     continue;
                 }

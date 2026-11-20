@@ -390,31 +390,29 @@ pub const IdentifierOpts = packed struct(u8) {
 };
 
 pub fn statementCaresAboutScope(stmt: Stmt): bool {
-    return switch (stmt.data) {
-        .s_block,
-        .s_empty,
-        .s_debugger,
-        .s_expr,
-        .s_if,
-        .s_for,
-        .s_for_in,
-        .s_for_of,
-        .s_do_while,
-        .s_while,
-        .s_with,
-        .s_try,
-        .s_switch,
-        .s_return,
-        .s_throw,
-        .s_break,
-        .s_continue,
-        .s_directive,
-        .s_label,
-        => false,
-
-        .s_local local => local.kind != .k_var,
-        else => true,
-    };
+    if (stmt.data == .s_local) {
+        return stmt.data.s_local.kind != .k_var;
+    }
+    const tag = std.meta.activeTag(stmt.data);
+    return tag != .s_block &&
+        tag != .s_empty &&
+        tag != .s_debugger &&
+        tag != .s_expr &&
+        tag != .s_if &&
+        tag != .s_for &&
+        tag != .s_for_in &&
+        tag != .s_for_of &&
+        tag != .s_do_while &&
+        tag != .s_while &&
+        tag != .s_with &&
+        tag != .s_try &&
+        tag != .s_switch &&
+        tag != .s_return &&
+        tag != .s_throw &&
+        tag != .s_break &&
+        tag != .s_continue &&
+        tag != .s_directive &&
+        tag != .s_label;
 }
 
 pub struct ExprIn {
@@ -1279,7 +1277,7 @@ pub const NewParser_ = @import("./ast/P.zig").NewParser_;
 pub const StringHashMap = bun.StringHashMap;
 pub const js_printer = bun.js_printer;
 pub const logger = bun.logger;
-const string = []const u8;
+type string = []const u8;
 
 pub const js_ast = bun.ast;
 pub const B = js_ast.B;

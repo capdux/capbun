@@ -145,7 +145,7 @@ if (p.options.bundle) {
                         const new_item = LocRef{ .loc = name_loc, .@"ref" = ((p.newSymbol(.@"import", name)) catch unreachable) };
                         _ = bun.handleOom(p.module_scope.generated.append(p.allocator, new_item.ref.?));
                         _ = ((import_items.put(name, new_item)) catch unreachable);
-                        _ = ((p.is_import_item.put(p.allocator, new_item.ref.?, .{})) catch unreachable);
+                        _ = ((p.is_import_item.put(p.allocator, new_item.ref.?, undefined)) catch unreachable);
                         var symbol = (&p.symbols.items[@as(usize, @intCast(new_item.ref.?.innerIndex()))]);
                         _ = &symbol;
                         symbol.import_item_status = .generated;

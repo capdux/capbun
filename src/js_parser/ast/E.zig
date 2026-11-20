@@ -676,7 +676,8 @@ pub fn isIdentifier(self: *String, allocator: std.mem.Allocator) bool {
             if ((!self.isUTF8())) {
                 return bun.js_lexer.isIdentifierUTF16(self.slice16());
             }
-            return bun.js_lexer.isIdentifier(cp_iter_slice(self)[@intCast(allocator)..]);
+            const slice_fn = E.String.slice;
+            return bun.js_lexer.isIdentifier(slice_fn(self, allocator));
     }
 
 pub fn push(self: *String, other: *String) void {
@@ -1026,7 +1027,7 @@ pub const TemplateContents = union(Tag) {
     cooked: E.String,
     raw: []const u8,
 
-pub fn isUTF8(self: *const TemplateContents) bool {
+pub fn isUTF8(self: TemplateContents) bool {
             return ((self == .cooked) and self.cooked.isUTF8());
     }
     const Tag = enum {

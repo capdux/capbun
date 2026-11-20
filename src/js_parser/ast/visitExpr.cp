@@ -101,7 +101,7 @@ fn VisitExprVisitors(
         }
         static fn e_identifier(p: *P, expr: Expr, expr_in: ExprIn): Expr {
             let e_ = expr.data.e_identifier;
-            const is_delete_target = @as(Expr.Tag, p.delete_target) == .e_identifier && e_.ref.eql(p.delete_target.e_identifier.ref);
+            const is_delete_target = std.meta.activeTag(p.delete_target) == .e_identifier && e_.ref.eql(p.delete_target.e_identifier.ref);
 
             const name = p.loadNameFromRef(e_.ref);
             if (p.isStrictMode() && js_lexer.StrictModeReservedWords.has(name)) {
@@ -288,7 +288,7 @@ fn VisitExprVisitors(
                         let props = &e_.properties;
 
                         const maybe_key_value: ExprNodeIndex? =
-                            if (e_.key_prop_index > -1) props.orderedRemove(i32(e_.key_prop_index)).value else null;
+                            if (e_.key_prop_index > -1) props.orderedRemove(@as(usize, @intCast(e_.key_prop_index))).value else null;
 
                         // arguments needs to be like
                         // {
@@ -699,7 +699,7 @@ fn VisitExprVisitors(
             // bundling because scope hoisting means these will no longer be run-time
             // errors.
             if ((expr_in.assign_target != .none || is_delete_target) &&
-                @as(Expr.Tag, e_.target.data) == .e_identifier &&
+                std.meta.activeTag(e_.target.data) == .e_identifier &&
                 p.symbols.items[e_.target.data.e_identifier.ref.innerIndex()].kind == .@"import")
             {
                 const r = js_lexer.rangeOfIdentifier(p.source, e_.target.loc);
@@ -843,7 +843,7 @@ fn VisitExprVisitors(
         }
         static fn e_dot(p: *P, expr: Expr, expr_in: ExprIn): Expr {
             const e_ = expr.data.e_dot;
-            const is_delete_target = @as(Expr.Tag, p.delete_target) == .e_dot && expr.data.e_dot == p.delete_target.e_dot;
+            const is_delete_target = std.meta.activeTag(p.delete_target) == .e_dot && expr.data.e_dot == p.delete_target.e_dot;
             const is_call_target = @as(Expr.Tag, p.call_target) == .e_dot && expr.data.e_dot == p.call_target.e_dot;
 
             if (parts := p.define.dots.get(e_.name)) {
@@ -875,7 +875,7 @@ fn VisitExprVisitors(
             }
 
             // Track ".then().catch()" chains
-            if (is_call_target && @as(Expr.Tag, p.then_catch_chain.next_target) == .e_dot && p.then_catch_chain.next_target.e_dot == expr.data.e_dot) {
+            if (is_call_target && std.meta.activeTag(p.then_catch_chain.next_target) == .e_dot && p.then_catch_chain.next_target.e_dot == expr.data.e_dot) {
                 if (strings.eqlComptime(e_.name, "catch")) {
                     p.then_catch_chain = ThenCatchChain{
                         next_target: e_.target.data,
@@ -1034,7 +1034,7 @@ fn VisitExprVisitors(
                             // Propagate name for anonymous decorated class expressions
                             if (was_anonymous_named_expr && e2.right.data == .e_class &&
                                 e2.right.data.e_class.should_lower_standard_decorators &&
-                                @as(Expr.Tag, e2.left.data) == .e_identifier)
+                                std.meta.activeTag(e2.left.data) == .e_identifier)
                             {
                                 p.decorator_class_name = p.loadNameFromRef(e2.left.data.e_identifier.ref);
                             }
@@ -1206,7 +1206,7 @@ fn VisitExprVisitors(
             p.then_catch_chain = ThenCatchChain{
                 next_target: e_.target.data,
                 has_multiple_args: e_.args.len >= 2,
-                has_catch: @as(Expr.Tag, p.then_catch_chain.next_target) == .e_call && p.then_catch_chain.next_target.e_call == expr.data.e_call && p.then_catch_chain.has_catch,
+                has_catch: std.meta.activeTag(p.then_catch_chain.next_target) == .e_call && p.then_catch_chain.next_target.e_call == expr.data.e_call && p.then_catch_chain.has_catch,
             };
 
             const target_was_identifier_before_visit = e_.target.data == .e_identifier;
@@ -1317,8 +1317,8 @@ fn VisitExprVisitors(
                     }
                 }
 
-                for (*arg of e_.args.slice()) {
-                    arg.* = p.visitExpr(arg.*);
+                for (i of 0..e_.args.len) {
+                    e_.args.ptr[i] = p.visitExpr(e_.args.ptr[i]);
                 }
 
                 if (method_call_should_be_replaced_with_undefined) {
@@ -1570,8 +1570,8 @@ fn VisitExprVisitors(
             const e_ = expr.data.e_new;
             e_.target = p.visitExpr(e_.target);
 
-            for (*arg of e_.args.slice()) {
-                arg.* = p.visitExpr(arg.*);
+            for (i of 0..e_.args.len) {
+                e_.args.ptr[i] = p.visitExpr(e_.args.ptr[i]);
             }
 
             if (p.options.features.minify_syntax) {
@@ -1610,7 +1610,7 @@ fn VisitExprVisitors(
             });
             p.pushScopeForVisitPass(.function_body, e_.body.loc) catch unreachable;
 
-            let react_hook_data: ReactRefresh.HookContext? = null;
+            let react_hook_data: (*ReactRefresh.HookContext)? = null;
             const prev = p.react_refresh.hook_ctx_storage;
             defer p.react_refresh.hook_ctx_storage = prev;
             p.react_refresh.hook_ctx_storage = &react_hook_data;
@@ -1644,7 +1644,7 @@ fn VisitExprVisitors(
                 return expr;
             }
 
-            let react_hook_data: ReactRefresh.HookContext? = null;
+            let react_hook_data: (*ReactRefresh.HookContext)? = null;
             const prev = p.react_refresh.hook_ctx_storage;
             defer p.react_refresh.hook_ctx_storage = prev;
             p.react_refresh.hook_ctx_storage = &react_hook_data;

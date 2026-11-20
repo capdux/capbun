@@ -862,7 +862,8 @@ pub struct String {
             return bun.js_lexer.isIdentifierUTF16(_.slice16());
         }
 
-        return bun.js_lexer.isIdentifier(_.slice(allocator));
+        const slice_fn = E.String.slice;
+        return bun.js_lexer.isIdentifier(slice_fn(_, allocator));
     }
 
     pub const class = E.String{ data: "class" };

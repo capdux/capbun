@@ -343,7 +343,7 @@ fn VisitStmtVisitors(
                             func.func.name = data.default_name;
                         }
 
-                        let react_hook_data: ReactRefresh.HookContext? = null;
+                        let react_hook_data: (*ReactRefresh.HookContext)? = null;
                         const prev = p.react_refresh.hook_ctx_storage;
                         defer p.react_refresh.hook_ctx_storage = prev;
                         p.react_refresh.hook_ctx_storage = &react_hook_data;
@@ -528,7 +528,7 @@ fn VisitStmtVisitors(
                 }
             }
 
-            let react_hook_data: ReactRefresh.HookContext? = null;
+            let react_hook_data: (*ReactRefresh.HookContext)? = null;
             const prev = p.react_refresh.hook_ctx_storage;
             defer p.react_refresh.hook_ctx_storage = prev;
             p.react_refresh.hook_ctx_storage = &react_hook_data;

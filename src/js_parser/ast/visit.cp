@@ -111,7 +111,8 @@ pub fn Visit(
             let duplicate_args_check: (*StringVoidMap.Node)? = null;
             defer {
                 if (checker := duplicate_args_check) {
-                    StringVoidMap.release(checker);
+                    const release_fn = StringVoidMap.release;
+                    release_fn(checker);
                 }
             }
 
@@ -202,7 +203,8 @@ pub fn Visit(
                         if (last_hook := p.react_refresh.last_hook_seen) {
                             if (call := decl.value.?.data.@"as"(.e_call)) {
                                 if (last_hook == call) {
-                                    decl.binding.data.writeToHasher(&p.react_refresh.hook_ctx_storage.?.*.?.hasher, p.symbols.items);
+                                    const hook_ctx = p.react_refresh.hook_ctx_storage.?.*.?;
+                                    decl.binding.data.writeToHasher(&hook_ctx.hasher, p.symbols.items);
                                 }
                             }
                         }
@@ -632,7 +634,7 @@ pub fn Visit(
                     let name_to_keep: string? = null;
                     if (is_private) {} else if (!property.flags.contains(.is_method) && !property.flags.contains(.is_computed)) {
                         if (key := property.key) {
-                            if (@as(Expr.Tag, key.data) == .e_string) {
+                            if (std.meta.activeTag(key.data) == .e_string) {
                                 name_to_keep = key.data.e_string.string(p.allocator) catch unreachable;
                             }
                         }

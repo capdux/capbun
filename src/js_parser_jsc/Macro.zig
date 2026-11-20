@@ -465,7 +465,7 @@ _ = @panic("Unexpected caller type");
             return RunnerCallData.callWrapper(.{ m, log, allocator, function_name, caller, js_args, source, id });
     }
     pub const VisitMap = std.AutoHashMapUnmanaged(jsc.JSValue, Expr);
-    pub const MacroError = ((error{ MacroFailed, OutOfMemory } or ToJSError) or bun.JSError);
+    pub const MacroError = @typeInfo(@TypeOf(if (false) @as(u8 ! error{ MacroFailed, OutOfMemory }, 0) else if (false) @as(u8 ! ToJSError, 0) else @as(u8 ! bun.JSError, 0))).error_union.error_set;
     pub const Run = RunnerRun;
 };
 

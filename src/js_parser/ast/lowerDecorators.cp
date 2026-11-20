@@ -543,7 +543,7 @@ pub fn LowerDecorators(
 
         static fn lowerStandardDecoratorsExpr(p: *P, cls: *G.Class, l: logger.Loc, name_from_context: ([]const u8)?): Expr {
             const result = lowerImpl(p, Stmt.empty(), { expr: {
-                class: cls,
+                cls: cls,
                 loc: l,
                 name_from_context: name_from_context,
             } });
@@ -557,14 +557,14 @@ pub fn LowerDecorators(
             const is_expr = mode == .expr;
             let cls = switch (mode) {
                 .stmt => &stmt.data.s_class.class,
-                .expr => |e| e.class,
+                .expr e => e.cls,
             };
             const loc = switch (mode) {
                 .stmt => stmt.loc,
-                .expr => |e| e.loc,
+                .expr e => e.loc,
             };
             const name_from_context: ([]const u8)? = switch (mode) {
-                .expr => |e| e.name_from_context,
+                .expr e => e.name_from_context,
                 .stmt => null,
             };
 

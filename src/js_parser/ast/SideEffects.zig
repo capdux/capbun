@@ -243,7 +243,8 @@ else => {
 }
 },
 .bin_logical_and, .bin_logical_or, .bin_nullish_coalescing => {
-if (bin.right == null) { bin.right = bin.right.toEmpty(); }
+const right_simplified = SideEffects.simplifyUnusedExpr(p, bin.right);
+            bin.right = (if ((right_simplified != null)) right_simplified.? else bin.right.toEmpty());
             if (bin.right.isEmpty()) {
                 return SideEffects.simplifyUnusedExpr(p, bin.left);
             }

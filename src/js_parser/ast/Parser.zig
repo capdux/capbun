@@ -256,7 +256,7 @@ pub fn analyze(self: *Parser, context: *anyopaque, callback: *const fn (*anyopaq
             _ = analyze_tracer.end();
     }
 
-pub fn _parse(self: Parser, comptime ParserType: type) !js_ast.Result {
+pub fn _parse(self: *Parser, comptime ParserType: type) !js_ast.Result {
             const prev_action = bun.crash_handler.current_action;
             defer {
             bun.crash_handler.current_action = prev_action;

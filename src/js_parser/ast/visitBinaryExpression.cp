@@ -66,7 +66,7 @@ pub fn CreateBinaryExpressionVisitor(
                 p: *P,
             ): Expr {
                 let e_ = v.e;
-                const is_call_target = @as(Expr.Tag, p.call_target) == .e_binary && e_ == p.call_target.e_binary;
+                const is_call_target = std.meta.activeTag(p.call_target) == .e_binary && e_ == p.call_target.e_binary;
                 // const is_stmt_expr = @as(Expr.Tag, p.stmt_expr_value) == .e_binary and expr.data.e_binary == p.stmt_expr_value.e_binary;
                 const was_anonymous_named_expr = e_.right.isAnonymousNamed();
                 const prev_decorator_class_name = p.decorator_class_name;
@@ -537,7 +537,7 @@ pub fn CreateBinaryExpressionVisitor(
                 let e_ = v.e;
                 switch (e_.left.data) {
                     // Special-case private identifiers
-                    .e_private_identifier => |_private| {
+                    .e_private_identifier _private => {
                         if (e_.op == .bin_in) {
                             let private = _private;
                             const name = p.loadNameFromRef(private.ref);

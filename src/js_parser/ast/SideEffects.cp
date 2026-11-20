@@ -258,7 +258,8 @@ pub enum SideEffects: u1 {
                     },
 
                     .bin_logical_and, .bin_logical_or, .bin_nullish_coalescing => {
-                        bin.right = SideEffects.simplifyUnusedExpr(p, bin.right) ?? bin.right.toEmpty();
+                        const right_simplified = SideEffects.simplifyUnusedExpr(p, bin.right);
+                        bin.right = if (right_simplified != null) right_simplified.? else bin.right.toEmpty();
                         // Preserve short-circuit behavior: the left expression is only unused if
                         // the right expression can be completely removed. Otherwise, the left
                         // expression is important for the branch.
