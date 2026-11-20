@@ -75,7 +75,12 @@ pub fn acquire() *ThreadPoolLib {
                 if ((count == 0)) {
                     break;
                 }
-                if (count == null) { count = return (&io_thread_pool); }
+                if (io_ref_count.cmpxchgWeak(count, (count + 1), .monotonic, .monotonic)) |next_count| {
+                    _ = &next_count;
+                    count = next_count;
+                } else {
+                    return (&io_thread_pool);
+                }
             }
             _ = io_mutex.lock();
             defer {
@@ -187,14 +192,14 @@ pub fn scheduleWithOptions(self: *ThreadPool, parse_task: *ParseTask, is_inside_
             if (ThreadPool.usesIOPool()) {
                 switch (parse_task.stage) {
 .needs_parse => {
-_ = scheduleFn(self.worker_pool, .{ .@"from" = (&parse_task.task) });
+_ = scheduleFn(self.worker_pool, ThreadPoolLib.Batch.@"from"((&parse_task.task)));
 },
 .needs_source_code => {
-_ = scheduleFn(self.io_pool, .{ .@"from" = (&parse_task.io_task) });
+_ = scheduleFn(self.io_pool, ThreadPoolLib.Batch.@"from"((&parse_task.io_task)));
 },
 }
             } else {
-                _ = scheduleFn(self.worker_pool, .{ .@"from" = (&parse_task.task) });
+                _ = scheduleFn(self.worker_pool, ThreadPoolLib.Batch.@"from"((&parse_task.task)));
             }
     }
 
@@ -320,10 +325,12 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
     
     pub fn transpilerForTarget(self: *@This(), target: bun.options.Target) *Transpiler {
                 if (((target == .browser) and (self.data.transpiler.options.target != target))) {
-                    if (self.data.other_transpiler) |*other| {
-                        _ = &other;
-                        _ = bun.debugAssert(((other.*).options.target == target));
-                        return (other.*);
+                    if ((self.data.other_transpiler != null)) {
+                        const other_ptr = (&self.data.other_transpiler.?);
+                        var __other_ptr_moved = false; _ = &__other_ptr_moved;
+                        defer if (!__other_ptr_moved) { const __T = @TypeOf(other_ptr); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = other_ptr.release() catch {}; } else { other_ptr.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = other_ptr; _drop_val.release(); } };
+                        _ = bun.debugAssert((other_ptr.options.target == target));
+                        return other_ptr;
                     }
                     self.data.other_transpiler = undefined;
                     const other = (&self.data.other_transpiler.?);

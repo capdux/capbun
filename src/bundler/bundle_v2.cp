@@ -212,43 +212,43 @@ pub struct BundleV2 {
         const alloc = _.allocator();
 
         const this_transpiler = _.transpiler;
-        const client_transpiler = alloc.create(Transpiler)?;
-        client_transpiler.* = this_transpiler.*;
-        client_transpiler.options = this_transpiler.options;
+        const ct = alloc.create(Transpiler)?;
+        ct.* = this_transpiler.*;
+        ct.options = this_transpiler.options;
 
-        client_transpiler.options.target = .browser;
-        client_transpiler.options.main_fields = options.Target.DefaultMainFields.get(options.Target.browser);
-        client_transpiler.options.conditions = options.ESMConditions.init(
+        ct.options.target = .browser;
+        ct.options.main_fields = options.Target.DefaultMainFields.get(options.Target.browser);
+        ct.options.conditions = options.ESMConditions.init(
             alloc,
             options.Target.browser.defaultConditions(),
             false,
             [],
-        );
+        )?;
 
         // We need to make sure it has [hash] in the names so we don't get conflicts.
         if (this_transpiler.options.compile) {
-            client_transpiler.options.asset_naming = bun.options.PathTemplate.asset.data;
-            client_transpiler.options.chunk_naming = bun.options.PathTemplate.chunk.data;
-            client_transpiler.options.entry_naming = "./[name]-[hash].[ext]";
+            ct.options.asset_naming = bun.options.PathTemplate.asset.data;
+            ct.options.chunk_naming = bun.options.PathTemplate.chunk.data;
+            ct.options.entry_naming = "./[name]-[hash].[ext]";
 
             // Use "/" so that asset URLs in HTML are absolute (e.g. "/chunk-abc.js"
             // instead of "./chunk-abc.js"). Relative paths break when the HTML is
             // served from a nested route like "/foo/".
-            client_transpiler.options.public_path = "/";
+            ct.options.public_path = "/";
         }
 
-        client_transpiler.setLog(this_transpiler.log);
-        client_transpiler.setAllocator(alloc);
-        client_transpiler.linker.resolver = &client_transpiler.resolver;
-        client_transpiler.macro_context = js_ast.Macro.MacroContext.init(client_transpiler);
+        ct.setLog(this_transpiler.log);
+        ct.setAllocator(alloc);
+        ct.linker.resolver = &ct.resolver;
+        ct.macro_context = js_ast.Macro.MacroContext.init(ct);
         const CacheSet = @import("./cache.zig");
-        client_transpiler.resolver.caches = CacheSet.Set.init(alloc);
+        ct.resolver.caches = CacheSet.Set.init(alloc);
 
-        client_transpiler.configureDefines()?;
-        client_transpiler.resolver.opts = client_transpiler.options;
-        client_transpiler.resolver.env_loader = client_transpiler.env;
-        _.client_transpiler = client_transpiler;
-        return client_transpiler;
+        ct.configureDefines()?;
+        ct.resolver.opts = ct.options;
+        ct.resolver.env_loader = ct.env;
+        _.client_transpiler = ct;
+        return ct;
     }
 
     /// Most of the time, accessing .transpiler directly is OK. This is only
@@ -1075,7 +1075,7 @@ pub struct BundleV2 {
                 source: rt.source,
                 loader: .js,
                 side_effects: _resolver.SideEffects.no_side_effects__pure_data,
-            });
+            })?;
 
             // try this.graph.entry_points.append(allocator, Index.runtime);
             _.graph.ast.append(_.allocator(), JSAst.empty)?;
@@ -1105,6 +1105,7 @@ pub struct BundleV2 {
                 .normal => data.len,
                 .bake_production => data.files.count(),
                 .dev_server => data.files.set.count(),
+                else => comptime unreachable,
             };
 
             _.graph.entry_points.ensureUnusedCapacity(_.allocator(), num_entry_points)?;
@@ -1232,6 +1233,7 @@ pub struct BundleV2 {
                         * = _.enqueueEntryItem(resolved, true, target)?;
                     }
                 },
+                else => comptime unreachable,
             }
         }
     }
@@ -2462,7 +2464,7 @@ pub struct BundleV2 {
         _.enqueueEntryPoints(.dev_server, {
             files: bake_entry_points,
             css_data: &ctx.css_entry_points,
-        });
+        })?;
 
         _.graph.heap.helpCatchMemoryIssues();
 
@@ -2779,7 +2781,7 @@ pub struct BundleV2 {
     }
 
     fn enqueueOnLoadPluginIfNeeded(*_, parse: *ParseTask): bool {
-        const had_matches = enqueueOnLoadPluginIfNeededImpl(_, parse);
+        const had_matches = _.enqueueOnLoadPluginIfNeededImpl(parse);
         if (had_matches) return true;
 
         if (bun.strings.eqlComptime(parse.path.namespace, "dataurl")) {
@@ -3525,10 +3527,10 @@ pub struct BundleV2 {
             let record = &records_slice[i];
             if (source_index := path_to_source_index_map.getPath(&record.path)) {
                 if (save_import_record_source_index || input_file_loaders[source_index].isCSS())
-                    record.source_index.value = source_index;
+                    record.source_index = Index.init(source_index);
 
                 if (compare := getRedirectId(ctx.redirect_import_record_index)) {
-                    if (compare == @as(u32, @truncate(i))) {
+                    if (compare == @as(u32, @intCast(i))) {
                         path_to_source_index_map.put(
                             _.allocator(),
                             ctx.source_path,

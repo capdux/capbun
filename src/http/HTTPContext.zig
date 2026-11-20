@@ -236,7 +236,7 @@ pub fn existingSocket(self: *@This(), reject_unauthorized: bool, hostname: []con
                             continue;
                         }
                         if ((http_socket.isShutdown() or (http_socket.getError() != 0))) {
-                            _ = HTTPContext.terminateSocket(http_socket);
+                            _ = @This().terminateSocket(http_socket);
                             continue;
                         }
                         if (socket.ssl_config) |*s| {

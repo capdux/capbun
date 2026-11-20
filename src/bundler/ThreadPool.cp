@@ -9,12 +9,16 @@ pub struct IOThreadPool {
         let count = io_ref_count.load(.acquire);
         while (true) {
             if (count == 0) break;
-            count = io_ref_count.cmpxchgWeak(
+            if (next_count := io_ref_count.cmpxchgWeak(
                 count,
                 count + 1,
                 .monotonic,
                 .monotonic,
-            ) ?? return &io_thread_pool;
+            )) {
+                count = next_count;
+            } else {
+                return &io_thread_pool;
+            }
         }
 
         io_mutex.lock();
@@ -144,14 +148,14 @@ pub struct ThreadPool {
         if (usesIOPool()) {
             switch (parse_task.stage) {
                 .needs_parse => {
-                    scheduleFn(_.worker_pool, .@"from"(&parse_task.task));
+                    scheduleFn(_.worker_pool, ThreadPoolLib.Batch.@"from"(&parse_task.task));
                 },
                 .needs_source_code => {
-                    scheduleFn(_.io_pool, .@"from"(&parse_task.io_task));
+                    scheduleFn(_.io_pool, ThreadPoolLib.Batch.@"from"(&parse_task.io_task));
                 },
             }
         } else {
-            scheduleFn(_.worker_pool, .@"from"(&parse_task.task));
+            scheduleFn(_.worker_pool, ThreadPoolLib.Batch.@"from"(&parse_task.task));
         }
     }
 
@@ -296,9 +300,10 @@ pub struct ThreadPool {
 
         fn transpilerForTarget(*_, target: bun.options.Target): *Transpiler {
             if (target == .browser && _.data.transpiler.options.target != target) {
-                if (*other := _.data.other_transpiler) {
-                    bun.debugAssert(other.options.target == target);
-                    return other;
+                if (_.data.other_transpiler != null) {
+                    const other_ptr = &_.data.other_transpiler.?;
+                    bun.debugAssert(other_ptr.options.target == target);
+                    return other_ptr;
                 }
                 _.data.other_transpiler = undefined;
                 const other = &_.data.other_transpiler.?;

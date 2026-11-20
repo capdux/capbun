@@ -440,7 +440,7 @@ export class HTTPContext<const ssl: bool> {
                 }
 
                 if (http_socket.isShutdown() || http_socket.getError() != 0) {
-                    terminateSocket(http_socket);
+                    @This().terminateSocket(http_socket);
                     continue;
                 }
 

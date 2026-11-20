@@ -113,17 +113,26 @@ pub fn asUSockets(self: *const SSLConfig) uws.SocketContext.BunSocketContextOpti
         ctx_opts.ssl_prefer_low_memory_usage = @intFromBool(self.low_memory_mode);
         if (self.key) |key| {
             _ = &key;
-            ctx_opts.key = key.ptr;
+            ctx_opts.key = (blk: {
+            break :blk @ptrCast(@constCast(key.ptr));
+
+});
             ctx_opts.key_count = @intCast(key.len);
         }
         if (self.cert) |cert| {
             _ = &cert;
-            ctx_opts.cert = cert.ptr;
+            ctx_opts.cert = (blk: {
+            break :blk @ptrCast(@constCast(cert.ptr));
+
+});
             ctx_opts.cert_count = @intCast(cert.len);
         }
         if (self.ca) |ca| {
             _ = &ca;
-            ctx_opts.ca = ca.ptr;
+            ctx_opts.ca = (blk: {
+            break :blk @ptrCast(@constCast(ca.ptr));
+
+});
             ctx_opts.ca_count = @intCast(ca.len);
         }
         if ((self.ssl_ciphers != null)) {
@@ -322,17 +331,20 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
         result.requires_custom_request_ctx = (((result.requires_custom_request_ctx or (result.ca != null)) or (result.cert != null)) or (result.key != null));
         if (generated.key_file.get()) |key_file| {
             _ = &key_file;
-            result.key_file_name = try handlePath(global, "keyFile", key_file).ptr;
+            const key_path = try handlePath(global, "keyFile", key_file);
+            result.key_file_name = key_path.ptr;
             result.requires_custom_request_ctx = true;
         }
         if (generated.cert_file.get()) |cert_file| {
             _ = &cert_file;
-            result.cert_file_name = try handlePath(global, "certFile", cert_file).ptr;
+            const cert_path = try handlePath(global, "certFile", cert_file);
+            result.cert_file_name = cert_path.ptr;
             result.requires_custom_request_ctx = true;
         }
         if (generated.ca_file.get()) |ca_file| {
             _ = &ca_file;
-            result.ca_file_name = try handlePath(global, "caFile", ca_file).ptr;
+            const ca_path = try handlePath(global, "caFile", ca_file);
+            result.ca_file_name = ca_path.ptr;
             result.requires_custom_request_ctx = true;
         }
         const protocols: ?[*:0]const u8 = (switch (generated.alpn_protocols) {
@@ -340,7 +352,10 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
 .string => |*val| val.get().toOwnedSliceZ(bun.default_allocator).ptr,
 .buffer => |*val| blk: {
         const buffer: jsc.ArrayBuffer = val.get().asArrayBuffer();
-        break :blk try bun.default_allocator.dupeZ(u8, buffer.byteSlice()).ptr;
+        const duped = try bun.default_allocator.dupeZ(u8, buffer.byteSlice());
+        var __duped_moved = false; _ = &__duped_moved;
+        defer if (!__duped_moved) { const __T = @TypeOf(duped); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = duped.release() catch {}; } else { duped.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = duped; _drop_val.release(); } };
+        break :blk duped.ptr;
 },
 });
         if (protocols) |some_protocols| {
@@ -648,9 +663,9 @@ pub fn handleFileArray(global: *jsc.JSGlobalObject, elements: []const jsc.genera
             _ = result.deinit();
         }
         }
-        for (cp_mut_slice(&elements)) |*elem| {
+        for (cp_iter_slice(elements)) |elem| {
             _ = &elem;
-            _ = result.appendAssumeCapacity(try handleSingleFile(global, (switch ((elem.*).*) {
+            _ = result.appendAssumeCapacity(try handleSingleFile(global, (switch (elem) {
 .string => |*val| SingleFileInput{ .string = val.get() },
 .buffer => |*val| SingleFileInput{ .buffer = val.get() },
 .file => |*val| SingleFileInput{ .file = val.get() },

@@ -156,29 +156,29 @@ pub fn initializeClientTranspiler(self: *BundleV2) !*Transpiler {
             @branchHint(.cold);
             const alloc = self.allocator();
             const this_transpiler = self.transpiler;
-            const client_transpiler = try alloc.create(Transpiler);
-            client_transpiler.* = this_transpiler.*;
-            (client_transpiler).?.options = this_transpiler.options;
-            (client_transpiler).?.options.target = .browser;
-            (client_transpiler).?.options.main_fields = options.Target.DefaultMainFields.get(options.Target.browser);
-            (client_transpiler).?.options.conditions = options.ESMConditions.init(alloc, options.Target.browser.defaultConditions(), false, &.{});
+            const ct = try alloc.create(Transpiler);
+            ct.* = this_transpiler.*;
+            ct.options = this_transpiler.options;
+            ct.options.target = .browser;
+            ct.options.main_fields = options.Target.DefaultMainFields.get(options.Target.browser);
+            ct.options.conditions = try options.ESMConditions.init(alloc, options.Target.browser.defaultConditions(), false, &.{});
             if (this_transpiler.options.compile) {
-                (client_transpiler).?.options.asset_naming = bun.options.PathTemplate.asset.data;
-                (client_transpiler).?.options.chunk_naming = bun.options.PathTemplate.chunk.data;
-                (client_transpiler).?.options.entry_naming = "./[name]-[hash].[ext]";
-                (client_transpiler).?.options.public_path = "/";
+                ct.options.asset_naming = bun.options.PathTemplate.asset.data;
+                ct.options.chunk_naming = bun.options.PathTemplate.chunk.data;
+                ct.options.entry_naming = "./[name]-[hash].[ext]";
+                ct.options.public_path = "/";
             }
-            _ = (client_transpiler).?.setLog(this_transpiler.log);
-            _ = (client_transpiler).?.setAllocator(alloc);
-            (client_transpiler).?.linker.resolver = (&(client_transpiler).?.resolver);
-            (client_transpiler).?.macro_context = js_ast.Macro.MacroContext.init(client_transpiler);
+            _ = ct.setLog(this_transpiler.log);
+            _ = ct.setAllocator(alloc);
+            ct.linker.resolver = (&ct.resolver);
+            ct.macro_context = js_ast.Macro.MacroContext.init(ct);
             const CacheSet = @import("./cache.zig");
-            (client_transpiler).?.resolver.caches = CacheSet.Set.init(alloc);
-            _ = try (client_transpiler).?.configureDefines();
-            (client_transpiler).?.resolver.opts = (client_transpiler).?.options;
-            (client_transpiler).?.resolver.env_loader = (client_transpiler).?.env;
-            self.client_transpiler = client_transpiler;
-            return client_transpiler;
+            ct.resolver.caches = CacheSet.Set.init(alloc);
+            _ = try ct.configureDefines();
+            ct.resolver.opts = ct.options;
+            ct.resolver.env_loader = ct.env;
+            self.client_transpiler = ct;
+            return ct;
     }
 
 pub inline fn transpilerForTarget(self: *BundleV2, target: options.Target) *Transpiler {
@@ -701,7 +701,7 @@ pub fn onAfterDecrementScanCounter(self: *BundleV2) void {
 pub fn enqueueEntryPoints(self: *BundleV2, comptime variant: anytype, data: anytype) !void {
             {
                 const rt = ParseTask.getRuntimeSource(self.transpiler.options.target);
-                _ = self.graph.input_files.append(self.allocator(), Graph.InputFile{ .source = rt.source, .loader = .js, .side_effects = _resolver.SideEffects.no_side_effects__pure_data });
+                _ = try self.graph.input_files.append(self.allocator(), Graph.InputFile{ .source = rt.source, .loader = .js, .side_effects = _resolver.SideEffects.no_side_effects__pure_data });
                 _ = try self.graph.ast.append(self.allocator(), JSAst.empty);
                 _ = try self.pathToSourceIndexMap(self.transpiler.options.target).put(self.allocator(), "bun:wrap", Index.runtime.get());
                 var runtime_parse_task = try self.allocator().create(ParseTask);
@@ -723,6 +723,7 @@ pub fn enqueueEntryPoints(self: *BundleV2, comptime variant: anytype, data: anyt
 .normal => data.len,
 .bake_production => data.files.count(),
 .dev_server => data.files.set.count(),
+else => (comptime unreachable),
 });
                 _ = try self.graph.entry_points.ensureUnusedCapacity(self.allocator(), num_entry_points);
                 _ = try self.graph.input_files.ensureUnusedCapacity(self.allocator(), num_entry_points);
@@ -820,6 +821,9 @@ for (cp_iter_slice(data.files.keys())) |key| {
                     const resolved = (blk_catch_15: { break :blk_catch_15 ((self.transpiler.resolveEntryPoint(abs_path)) catch |__ce_15| { _ = &__ce_15; continue; }); });
                     _ = try self.enqueueEntryItem(resolved, true, target);
                 }
+},
+else => {
+_ = (comptime unreachable);
 },
 }
             }
@@ -1509,7 +1513,7 @@ pub fn startFromBakeDevServer(self: *BundleV2, bake_entry_points: bake.DevServer
             _ = self.graph.heap.helpCatchMemoryIssues();
             var ctx: DevServerInput = .{ .css_entry_points = .{} };
             _ = &ctx;
-            _ = self.enqueueEntryPoints(.dev_server, .{ .files = bake_entry_points, .css_data = (&ctx.css_entry_points) });
+            _ = try self.enqueueEntryPoints(.dev_server, .{ .files = bake_entry_points, .css_data = (&ctx.css_entry_points) });
             _ = self.graph.heap.helpCatchMemoryIssues();
             return ctx;
     }
@@ -1689,7 +1693,7 @@ pub fn enqueueEntryPointOnResolvePluginIfNeeded(self: *BundleV2, entry_point: []
     }
 
 pub fn enqueueOnLoadPluginIfNeeded(self: *BundleV2, parse: *ParseTask) bool {
-            const had_matches = self.enqueueOnLoadPluginIfNeededImpl(self, parse);
+            const had_matches = self.enqueueOnLoadPluginIfNeededImpl(parse);
             if (had_matches) {
                 return true;
             }
@@ -2199,11 +2203,11 @@ pub fn patchImportRecordSourceIndices(self: *BundleV2, import_records: *ImportRe
                     if (path_to_source_index_map.getPath((&record.path))) |source_index| {
                         _ = &source_index;
                         if ((save_import_record_source_index or input_file_loaders[@as(usize, @intCast(source_index))].isCSS())) {
-                            (if (@typeInfo(@TypeOf(record.source_index)) == .@"enum") @intFromEnum(record.source_index) else record.source_index.value) = source_index;
+                            record.source_index = Index.init(source_index);
                         }
                         if (getRedirectId(ctx.redirect_import_record_index)) |compare| {
                             _ = &compare;
-                            if ((compare == @as(u32, @truncate(i)))) {
+                            if ((compare == @as(u32, @intCast(i)))) {
                                 _ = ((path_to_source_index_map.put(self.allocator(), ctx.source_path, source_index)) catch unreachable);
                             }
                         }

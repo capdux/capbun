@@ -1216,10 +1216,10 @@ pub inline fn concatTuple(a: anytype, b: anytype) TupleCatType(@TypeOf(a),@TypeO
         var res: TupleCatType(AT,BT) = undefined;
         _ = &res;
         inline for (0..a_fields.len) |i| {
-            res[cp_cast_int(usize, i)] = a[@as(usize, @intCast(i))];
+            @field(res, std.fmt.comptimePrint("{d}", .{ i })) = @field(a, std.fmt.comptimePrint("{d}", .{ i }));
         }
         inline for (0..b_fields.len) |j| {
-            res[cp_cast_int(usize, (a_fields.len + j))] = b[@as(usize, @intCast(j))];
+            @field(res, std.fmt.comptimePrint("{d}", .{ (a_fields.len + j) })) = @field(b, std.fmt.comptimePrint("{d}", .{ j }));
         }
         return res;
 }

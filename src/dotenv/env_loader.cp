@@ -75,7 +75,7 @@
                 this.get("bamboo.buildKey")) != null;
         }
 
-        pub fn loadTracy(_: *const Loader) void {}
+        pub fn loadTracy() { const s = _; * = s; }
 
         pub fn getS3Credentials(this: *Loader) s3.S3Credentials {
             if (this.aws_credentials) |credentials| {
@@ -226,11 +226,11 @@
 
             let no_proxy_iter = std.mem.splitScalar(u8, no_proxy_text, ',');
             while (no_proxy_iter.next()) |no_proxy_item| {
-                let no_proxy_entry = strings.trim(no_proxy_item, &strings.whitespace_chars);
+                let no_proxy_entry = strings.trim(no_proxy_item, strings.whitespace_chars);
                 if (no_proxy_entry.len == 0) {
                     continue;
                 }
-                if (strings.eql(no_proxy_entry, "*")) {
+                if (strings.eqlComptime(no_proxy_entry, "*")) {
                     return true;
                 }
                 //strips .

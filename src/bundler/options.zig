@@ -162,7 +162,7 @@ pub fn bakeGraph(target: Target) bun.bake.Graph {
 pub fn outExtensions(target: Target, allocator: std.mem.Allocator) bun.StringHashMap(string) {
             var exts = bun.StringHashMap(string).init(allocator);
             _ = &exts;
-            const out_extensions_list: [][]const u8 = .{ ".js", ".cjs", ".mts", ".cts", ".ts", ".tsx", ".jsx", ".json" };
+            const out_extensions_list: [8][]const u8 = .{ ".js", ".cjs", ".mts", ".cts", ".ts", ".tsx", ".jsx", ".json" };
             if ((target == .node)) {
                 _ = ((exts.ensureTotalCapacity((out_extensions_list.len * 2))) catch unreachable);
                 for (cp_iter_slice(out_extensions_list)) |ext| {
@@ -475,27 +475,23 @@ else => .file,
 });
     }
 
-pub fn isJSX(self: Loader, loader: Loader) bool {
-        _ = self;
-            return ((loader == .jsx) or (loader == .tsx));
+pub fn isJSX(self: Loader) bool {
+            return ((self == .jsx) or (self == .tsx));
     }
 
-pub fn isTypeScript(self: Loader, loader: Loader) bool {
-        _ = self;
-            return ((loader == .tsx) or (loader == .ts));
+pub fn isTypeScript(self: Loader) bool {
+            return ((self == .tsx) or (self == .ts));
     }
 
-pub fn isJavaScriptLike(self: Loader, loader: Loader) bool {
-        _ = self;
-            return (switch (loader) {
+pub fn isJavaScriptLike(self: Loader) bool {
+            return (switch (self) {
 .jsx, .js, .ts, .tsx => true,
 else => false,
 });
     }
 
-pub fn isJavaScriptLikeOrJSON(self: Loader, loader: Loader) bool {
-        _ = self;
-            return (switch (loader) {
+pub fn isJavaScriptLikeOrJSON(self: Loader) bool {
+            return (switch (self) {
 .jsx, .js, .ts, .tsx, .json, .jsonc => true,
 .toml, .yaml, .json5 => true,
 else => false,
@@ -692,7 +688,7 @@ pub fn fromStrings(strs: []const []const u8) AllowUnresolved {
             return .{ .patterns = strs };
     }
 
-pub fn allows(self: *const AllowUnresolved, shape: []const u8) bool {
+pub fn allows(self: AllowUnresolved, shape: []const u8) bool {
             switch (self) {
 .all => {
 return true;
@@ -775,14 +771,20 @@ else => {
         prefix: []const u8,
         suffix: []const u8,
     };
-    const default_wildcard_patterns = (&.{ .{ .prefix = "/bun:", .suffix = "" } });
+    const default_wildcard_patterns: [1]WildcardPattern = .{ WildcardPattern{ .prefix = "/bun:", .suffix = "" } };
     const NodeBuiltinPatternsRaw = .{ "_http_agent", "_http_client", "_http_common", "_http_incoming", "_http_outgoing", "_http_server", "_stream_duplex", "_stream_passthrough", "_stream_readable", "_stream_transform", "_stream_wrap", "_stream_writable", "_tls_common", "_tls_wrap", "assert", "async_hooks", "buffer", "child_process", "cluster", "console", "constants", "crypto", "dgram", "diagnostics_channel", "dns", "domain", "events", "fs", "http", "http2", "https", "inspector", "module", "net", "os", "path", "perf_hooks", "process", "punycode", "querystring", "readline", "repl", "stream", "string_decoder", "sys", "test", "timers", "tls", "trace_events", "tty", "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib" };
     pub const NodeBuiltinPatterns = (NodeBuiltinPatternsRaw ++ brk: {
-            var builtins = NodeBuiltinPatternsRaw;
+            const n = NodeBuiltinPatternsRaw.len;
+            _ = &n;
+            var builtins: [n][]const u8 = NodeBuiltinPatternsRaw;
             _ = &builtins;
-            for (cp_mut_slice(&(&builtins))) |*builtin| {
-                _ = &builtin;
-                (builtin.*).* = ("node:" ++ (builtin.*).*);
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_7 = builtins.len;
+                while (i < __end_7) : (i += 1) {
+                    builtins[cp_cast_int(usize, i)] = ("node:" ++ builtins[@as(usize, @intCast(i))]);
+                }
             }
             break :brk builtins;
     });
@@ -818,31 +820,31 @@ pub fn init(allocator: std.mem.Allocator, defaults: []const []const u8, allow_ad
             _ = try import_condition_map.ensureTotalCapacity(((defaults.len + 2) + (if (allow_addons) 1 else (0 + conditions.len))));
             _ = try require_condition_map.ensureTotalCapacity(((defaults.len + 2) + (if (allow_addons) 1 else (0 + conditions.len))));
             _ = try style_condition_map.ensureTotalCapacity(((defaults.len + 2) + conditions.len));
-            _ = import_condition_map.putAssumeCapacity("import", .{});
-            _ = require_condition_map.putAssumeCapacity("require", .{});
-            _ = style_condition_map.putAssumeCapacity("style", .{});
+            _ = import_condition_map.putAssumeCapacity("import", undefined);
+            _ = require_condition_map.putAssumeCapacity("require", undefined);
+            _ = style_condition_map.putAssumeCapacity("style", undefined);
             for (cp_iter_slice(conditions)) |condition| {
                 _ = &condition;
-                _ = import_condition_map.putAssumeCapacity(condition, .{});
-                _ = require_condition_map.putAssumeCapacity(condition, .{});
-                _ = default_condition_amp.putAssumeCapacity(condition, .{});
+                _ = import_condition_map.putAssumeCapacity(condition, undefined);
+                _ = require_condition_map.putAssumeCapacity(condition, undefined);
+                _ = default_condition_amp.putAssumeCapacity(condition, undefined);
             }
             for (cp_iter_slice(defaults)) |default| {
                 _ = &default;
-                _ = default_condition_amp.putAssumeCapacity(default, .{});
-                _ = import_condition_map.putAssumeCapacity(default, .{});
-                _ = require_condition_map.putAssumeCapacity(default, .{});
-                _ = style_condition_map.putAssumeCapacity(default, .{});
+                _ = default_condition_amp.putAssumeCapacity(default, undefined);
+                _ = import_condition_map.putAssumeCapacity(default, undefined);
+                _ = require_condition_map.putAssumeCapacity(default, undefined);
+                _ = style_condition_map.putAssumeCapacity(default, undefined);
             }
             if (allow_addons) {
-                _ = default_condition_amp.putAssumeCapacity("node-addons", .{});
-                _ = import_condition_map.putAssumeCapacity("node-addons", .{});
-                _ = require_condition_map.putAssumeCapacity("node-addons", .{});
+                _ = default_condition_amp.putAssumeCapacity("node-addons", undefined);
+                _ = import_condition_map.putAssumeCapacity("node-addons", undefined);
+                _ = require_condition_map.putAssumeCapacity("node-addons", undefined);
             }
-            _ = default_condition_amp.putAssumeCapacity("default", .{});
-            _ = import_condition_map.putAssumeCapacity("default", .{});
-            _ = require_condition_map.putAssumeCapacity("default", .{});
-            _ = style_condition_map.putAssumeCapacity("default", .{});
+            _ = default_condition_amp.putAssumeCapacity("default", undefined);
+            _ = import_condition_map.putAssumeCapacity("default", undefined);
+            _ = require_condition_map.putAssumeCapacity("default", undefined);
+            _ = style_condition_map.putAssumeCapacity("default", undefined);
             return .{ .default = default_condition_amp, .@"import" = import_condition_map, .require = require_condition_map, .style = style_condition_map };
     }
 
@@ -877,15 +879,15 @@ pub fn appendSlice(self: *ESMConditions, conditions: []const []const u8) bun.OOM
             _ = try self.style.ensureUnusedCapacity(conditions.len);
             for (cp_iter_slice(conditions)) |condition| {
                 _ = &condition;
-                _ = self.default.putAssumeCapacity(condition, .{});
-                _ = self.@"import".putAssumeCapacity(condition, .{});
-                _ = self.require.putAssumeCapacity(condition, .{});
-                _ = self.style.putAssumeCapacity(condition, .{});
+                _ = self.default.putAssumeCapacity(condition, undefined);
+                _ = self.@"import".putAssumeCapacity(condition, undefined);
+                _ = self.require.putAssumeCapacity(condition, undefined);
+                _ = self.style.putAssumeCapacity(condition, undefined);
             }
     }
 
 pub fn append(self: *ESMConditions, condition: []const u8) bun.OOM!void {
-            _ = try self.default.put(condition, .{});
+            _ = try self.default.put(condition, undefined);
             _ = try self.@"import".put(condition, .{});
             _ = try self.require.put(condition, .{});
             _ = try self.style.put(condition, .{});
@@ -967,10 +969,10 @@ pub fn isReactLike(pragma: *const JSXPragma) bool {
     }
 
 pub fn setImportSource(pragma: *JSXPragma, allocator: std.mem.Allocator) void {
-            const dev_args: [][]const u8 = .{ pragma.package_name, "/jsx-dev-runtime" };
+            const dev_args: [2][]const u8 = .{ pragma.package_name, "/jsx-dev-runtime" };
             const dev_defs = .{ JSXDefaults.ImportSourceDev };
             _ = ((strings.concatIfNeeded(allocator, (&pragma.import_source.development), (&dev_args), (&dev_defs))) catch unreachable);
-            const prod_args: [][]const u8 = .{ pragma.package_name, "/jsx-runtime" };
+            const prod_args: [2][]const u8 = .{ pragma.package_name, "/jsx-runtime" };
             const prod_defs = .{ JSXDefaults.ImportSource };
             _ = ((strings.concatIfNeeded(allocator, (&pragma.import_source.production), (&prod_args), (&prod_defs))) catch unreachable);
     }
@@ -1246,7 +1248,7 @@ pub fn loader(self: BundleOptions, ext: []const u8) Loader {
     }
 
 pub fn fromApi(allocator: std.mem.Allocator, fs: *Fs.FileSystem, log: *logger.Log, transform: api.TransformOptions) !BundleOptions {
-            var opts: BundleOptions = BundleOptions{ .log = log, .define = undefined, .loaders = loadersFromTransformOptions(allocator, transform.loaders, Target.@"from"(transform.target)), .output_dir = ((transform.output_dir) orelse ("out")), .target = Target.@"from"(transform.target), .write = ((transform.write) orelse (false)), .external = undefined, .entry_points = transform.entry_points, .out_extensions = undefined, .env = Env.init(allocator), .transform_options = transform, .css_chunking = false, .drop = transform.drop, .bundler_feature_flags = Runtime.Features.initBundlerFeatureFlags(allocator, transform.feature_flags) };
+            var opts: BundleOptions = BundleOptions{ .log = log, .define = undefined, .loaders = try loadersFromTransformOptions(allocator, transform.loaders, Target.@"from"(transform.target)), .output_dir = ((transform.output_dir) orelse ("out")), .target = Target.@"from"(transform.target), .write = ((transform.write) orelse (false)), .external = undefined, .entry_points = transform.entry_points, .out_extensions = undefined, .env = Env.init(allocator), .transform_options = transform, .css_chunking = false, .drop = transform.drop, .bundler_feature_flags = Runtime.Features.initBundlerFeatureFlags(allocator, transform.feature_flags) };
             _ = &opts;
             analytics.Features.define = (analytics.Features.define + (if (comptime @typeInfo(@TypeOf(@intFromBool((transform.define != null)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((transform.define != null)))) else cp_cast_int(usize, @intFromBool((transform.define != null)))));
             analytics.Features.loaders = (analytics.Features.loaders + (if (comptime @typeInfo(@TypeOf(@intFromBool((transform.loaders != null)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((transform.loaders != null)))) else cp_cast_int(usize, @intFromBool((transform.loaders != null)))));
@@ -1273,7 +1275,7 @@ pub fn fromApi(allocator: std.mem.Allocator, fs: *Fs.FileSystem, log: *logger.Lo
                 opts.main_fields = Target.DefaultMainFields.get(opts.target);
             }
             {
-                opts.conditions = ESMConditions.init(allocator, opts.target.defaultConditions(), ((transform.allow_addons) orelse (true)), transform.conditions);
+                opts.conditions = try ESMConditions.init(allocator, opts.target.defaultConditions(), ((transform.allow_addons) orelse (true)), transform.conditions);
             }
             switch (opts.target) {
 .node => {
@@ -1284,8 +1286,9 @@ opts.import_path_format = .relative;
 opts.import_path_format = (if ((opts.import_path_format == .absolute_url)) .absolute_url else .absolute_path);
             opts.env.behavior = .load_all;
             if ((transform.extension_order.len == 0)) {
-                opts.extension_order.default.default = (comptime (Defaults.ExtensionOrder ++ (&.{ ".node" })));
-                opts.extension_order.node_modules.default = (comptime (Defaults.NodeModules.ExtensionOrder ++ (&.{ ".node" })));
+                const node_ext: [1][]const u8 = .{ ".node" };
+                opts.extension_order.default.default = (comptime (Defaults.ExtensionOrder ++ (&node_ext)));
+                opts.extension_order.node_modules.default = (comptime (Defaults.NodeModules.ExtensionOrder ++ (&node_ext)));
             }
 },
 else => {
@@ -1794,7 +1797,7 @@ pub fn validatePath(log: *logger.Log, _: *Fs.FileSystem.Implementation, cwd: []c
         if ((rel_path.len == 0)) {
             return "";
         }
-        const paths: [][]const u8 = .{ cwd, rel_path };
+        const paths: [2][]const u8 = .{ cwd, rel_path };
         const out = (blk_catch_17: { break :blk_catch_17 ((std.fs.path.resolve(allocator, (&paths))) catch |e| { _ = &e; _ = ((log.addErrorFmt(null, logger.Loc.Empty, allocator, "<r><red>{s}<r> resolving external: <b>\"{s}\"<r>", .{ @errorName(e), rel_path })) catch unreachable);
         return ""; }); });
         return out;
@@ -2011,22 +2014,22 @@ pub fn loadersFromTransformOptions(allocator: std.mem.Allocator, _loaders: ?api.
                 loader_values[cp_cast_int(usize, i)] = Loader.fromAPI(input_loaders.loaders[@as(usize, @intCast(i))]);
             }
         }
-        var loaders = stringHashMapFromArrays(bun.StringArrayHashMap(Loader), allocator, (input_loaders.extensions.len + (if (target.isBun()) default_loader_ext_bun.len else (0 + (if ((target == .browser)) default_loader_ext_browser.len else (0 + default_loader_ext.len))))), input_loaders.extensions, loader_values);
+        var loaders = try stringHashMapFromArrays(bun.StringArrayHashMap(Loader), allocator, (input_loaders.extensions.len + (if (target.isBun()) default_loader_ext_bun.len else (0 + (if ((target == .browser)) default_loader_ext_browser.len else (0 + default_loader_ext.len))))), input_loaders.extensions, loader_values);
         _ = &loaders;
         errdefer {
         _ = loaders.deinit();
         }
         inline for (default_loader_ext) |ext| {
-            _ = loaders.getOrPutValue(ext, (defaultLoaders.get(ext)).?);
+            _ = try loaders.getOrPutValue(ext, (defaultLoaders.get(ext)).?);
         }
         if (target.isBun()) {
             inline for (default_loader_ext_bun) |ext| {
-                _ = loaders.getOrPutValue(ext, (defaultLoaders.get(ext)).?);
+                _ = try loaders.getOrPutValue(ext, (defaultLoaders.get(ext)).?);
             }
         }
         if ((target == .browser)) {
             inline for (default_loader_ext_browser) |ext| {
-                _ = loaders.getOrPutValue(ext, (defaultLoaders.get(ext)).?);
+                _ = try loaders.getOrPutValue(ext, (defaultLoaders.get(ext)).?);
             }
         }
         return loaders;

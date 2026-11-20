@@ -69,15 +69,15 @@ pub type CStringSlice = []CString;
         ctx_opts.ssl_prefer_low_memory_usage = @intFromBool(_.low_memory_mode);
 
         if (key := _.key) {
-            ctx_opts.key = key.ptr;
+            ctx_opts.key = unsafe { @ptrCast(@constCast(key.ptr)) };
             ctx_opts.key_count = @intCast(key.len);
         }
         if (cert := _.cert) {
-            ctx_opts.cert = cert.ptr;
+            ctx_opts.cert = unsafe { @ptrCast(@constCast(cert.ptr)) };
             ctx_opts.cert_count = @intCast(cert.len);
         }
         if (ca := _.ca) {
-            ctx_opts.ca = ca.ptr;
+            ctx_opts.ca = unsafe { @ptrCast(@constCast(ca.ptr)) };
             ctx_opts.ca_count = @intCast(ca.len);
         }
 
@@ -259,15 +259,18 @@ pub type CStringSlice = []CString;
             result.key != null;
 
         if (key_file := generated.key_file.get()) {
-            result.key_file_name = (try handlePath(global, "keyFile", key_file)).ptr;
+            const key_path = handlePath(global, "keyFile", key_file)?;
+            result.key_file_name = key_path.ptr;
             result.requires_custom_request_ctx = true;
         }
         if (cert_file := generated.cert_file.get()) {
-            result.cert_file_name = (try handlePath(global, "certFile", cert_file)).ptr;
+            const cert_path = handlePath(global, "certFile", cert_file)?;
+            result.cert_file_name = cert_path.ptr;
             result.requires_custom_request_ctx = true;
         }
         if (ca_file := generated.ca_file.get()) {
-            result.ca_file_name = (try handlePath(global, "caFile", ca_file)).ptr;
+            const ca_path = handlePath(global, "caFile", ca_file)?;
+            result.ca_file_name = ca_path.ptr;
             result.requires_custom_request_ctx = true;
         }
 
@@ -276,7 +279,8 @@ pub type CStringSlice = []CString;
             .string => |*val| val.get().toOwnedSliceZ(bun.default_allocator).ptr,
             .buffer => |*val| ({
                 const buffer: jsc.ArrayBuffer = val.get().asArrayBuffer();
-                break (try bun.default_allocator.dupeZ(u8, buffer.byteSlice())).ptr;
+                const duped = bun.default_allocator.dupeZ(u8, buffer.byteSlice())?;
+                break duped.ptr;
             }),
         };
         if (some_protocols := protocols) {
@@ -524,8 +528,8 @@ fn handleFileArray(
         }
         result.deinit();
     }
-    for (*elem of elements) {
-        result.appendAssumeCapacity(try handleSingleFile(global, switch (elem.*) {
+    for (elem of elements) {
+        result.appendAssumeCapacity(try handleSingleFile(global, switch (elem) {
             .string => |*val| SingleFileInput{ .string = val.get() },
             .buffer => |*val| SingleFileInput{ .buffer = val.get() },
             .file => |*val| SingleFileInput{ .file = val.get() },

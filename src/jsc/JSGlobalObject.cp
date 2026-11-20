@@ -34,7 +34,7 @@ pub enum _BunPluginTarget: u8 {
     browser = 2,
 }
 
-pub type MicrotaskCallback = *const fn (ctx: *!);
+pub type MicrotaskCallback = *const fn (ctx: *!) callconv(.c);
 
 pub struct _SysErrOptions {
     code: jsc.Node.ErrorCode,
@@ -1043,7 +1043,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
         const slice = any_blob.slice();
         JSC__Wasm__StreamingCompiler__addBytes(streaming_compiler, slice.ptr, slice.len);
 
-        return .@"null";
+        return JSValue.@"null";
     }
 
     pub fn createError(

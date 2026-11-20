@@ -456,7 +456,8 @@ pub fn uninstall() void {
     pub const should_abort = (&abort_should_abort);
 };
 
-const cstr = [*:0]u8;
+const cstr = [*:0]const u8;
+const OptCString = ?[*:0]const u8;
 const DependencyMap = package_json.DependencyMap;
 const RunCommand = run_cmd.RunCommand;
 const Environment = bun.Environment;
@@ -468,14 +469,15 @@ const CLI = bun.cli;
 const Command = CLI.Command;
 var abort_should_abort: bool = false;
 
-pub fn getEnvp(env: *bun.DotEnv.Loader, path: []const u8, allocator: std.mem.Allocator) !?[*:null][*:0]u8 {
+pub fn getEnvp(env: *bun.DotEnv.Loader, path: []const u8, allocator: std.mem.Allocator) ![*:null]OptCString {
         {
             const original_path = ((env.map.get("PATH")) orelse (""));
             _ = bun.handleOom(env.map.put("PATH", path));
             defer {
             _ = bun.handleOom(env.map.put("PATH", original_path));
             }
-            return env.map.createNullDelimitedEnvMap(allocator);
+            const envp_slice = try env.map.createNullDelimitedEnvMap(allocator);
+            return envp_slice.ptr;
         }
 }
 
@@ -486,10 +488,8 @@ pub fn fmt(comptime str: []const u8) []const u8 {
 pub fn elide(data_: []const u8, max_lines: ?usize) ElideResult {
         var data = data_;
         _ = &data;
-        var empty: [0]u8 = &.{};
-        _ = &empty;
         if ((data.len == 0)) {
-            return ElideResult{ .content = empty[0..0], .elided_count = 0 };
+            return ElideResult{ .content = "", .elided_count = 0 };
         }
         if ((data[@as(usize, @intCast((data.len - 1)))] == 10)) {
             data = data[0..(data.len - 1)];
@@ -509,7 +509,7 @@ pub fn elide(data_: []const u8, max_lines: ?usize) ElideResult {
                 }
             }
         }
-        const content = (if ((i >= data.len)) empty[0..0] else data[i..]);
+        const content = (if ((i >= data.len)) "" else data[i..]);
         var elided: usize = 0;
         _ = &elided;
         while ((i > 0)) : (i = (i - 1)) {

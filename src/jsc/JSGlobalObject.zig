@@ -921,7 +921,7 @@ else => body.useAsAnyBlob(),
             }
             const slice = any_blob.slice();
             _ = JSC__Wasm__StreamingCompiler__addBytes(streaming_compiler, slice.ptr, slice.len);
-            return error.@"null";
+            return JSValue.@"null";
     }
 
 pub fn createError(self: *JSGlobalObject, comptime fmt: []const u8, args: anytype) jsc.JSValue {
@@ -973,7 +973,7 @@ pub fn scriptExecutionContextIdentifier(self: *JSGlobalObject) bun.webcore.Scrip
 
 const str_slice = []const u8;
 const string = []const u8;
-pub const MicrotaskCallback = *const fn (*anyopaque) void;
+pub const MicrotaskCallback = *const fn (*anyopaque) callconv(.c) void;
 const jsc = bun.jsc;
 const JSError = bun.JSError;
 const MutableString = bun.MutableString;

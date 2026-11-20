@@ -41,12 +41,15 @@ pub struct ElideResult {
     elided_count: usize,
 }
 
-fn getEnvp(env: *bun.DotEnv.Loader, path: []const u8, allocator: std.mem.Allocator)! [*:null]([*:0]u8?) {
+type OptCString = ([*:0]const u8)?;
+
+fn getEnvp(env: *bun.DotEnv.Loader, path: []const u8, allocator: std.mem.Allocator)! [*:null]OptCString {
     unsafe {
         const original_path = env.map.get("PATH") ?? "";
         bun.handleOom(env.map.put("PATH", path));
         defer bun.handleOom(env.map.put("PATH", original_path));
-        return env.map.createNullDelimitedEnvMap(allocator);
+        const envp_slice = env.map.createNullDelimitedEnvMap(allocator)?;
+        return envp_slice.ptr;
     }
 }
 
@@ -353,8 +356,7 @@ pub struct State {
 
 fn elide(data_: []const u8, max_lines: usize?): ElideResult {
     let data = data_;
-    let empty: [0]u8 = [];
-    if (data.len == 0) return ElideResult{ content: empty[0..0], elided_count: 0 };
+    if (data.len == 0) return ElideResult{ content: "", elided_count: 0 };
     if (data[data.len - 1] == '\n') {
         data = data[0 .. data.len - 1];
     }
@@ -369,7 +371,7 @@ fn elide(data_: []const u8, max_lines: usize?): ElideResult {
             }
         }
     }
-    const content = if (i >= data.len) empty[0..0] else data[i..];
+    const content = if (i >= data.len) "" else data[i..];
     let elided: usize = 0;
     while (i > 0) : (i -= 1) {
         if (data[i - 1] == '\n') {

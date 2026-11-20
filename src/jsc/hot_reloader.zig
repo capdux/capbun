@@ -297,34 +297,34 @@ pub fn enqueueTaskConcurrent(self: @This(), task: *jsc.ConcurrentTask) void {
             _ = self.eventLoop().enqueueTaskConcurrent(task);
     }
 
-pub fn enableHotModuleReloading(self: *@This(), entry_path: ?[]const u8) void {
-            if (comptime (@TypeOf(self.bun_watcher) == ImportWatcher)) {
-                if ((self.bun_watcher != .none)) {
+pub fn enableHotModuleReloading(ctx: *Ctx, entry_path: ?[]const u8) void {
+            if (comptime (@TypeOf(ctx.bun_watcher) == ImportWatcher)) {
+                if ((ctx.bun_watcher != .none)) {
                     return;
                 }
             } else {
-                if ((self.bun_watcher != null)) {
+                if ((ctx.bun_watcher != null)) {
                     return;
                 }
             }
             var reloader = bun.handleOom(bun.default_allocator.create(Reloader));
             _ = &reloader;
-            reloader.* = .{ .ctx = self, .verbose = (Environment.enable_logs or (if (@hasField(Ctx, "log")) self.log.level.atLeast(.info) else false)), .main = MainFile.init(((entry_path) orelse (""))) };
-            if (comptime (@TypeOf(self.bun_watcher) == ImportWatcher)) {
-                self.bun_watcher = (if (reload_immediately) ImportWatcher{ .watch = (blk_catch_2: { break :blk_catch_2 ((Watcher.init(Reloader, reloader, self.transpiler.fs, bun.default_allocator)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-                break :blk_catch_2 Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e) }); }); }) } else ImportWatcher{ .hot = (blk_catch_3: { break :blk_catch_3 ((Watcher.init(Reloader, reloader, self.transpiler.fs, bun.default_allocator)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+            reloader.* = .{ .ctx = ctx, .verbose = (Environment.enable_logs or (if (@hasField(Ctx, "log")) ctx.log.level.atLeast(.info) else false)), .main = MainFile.init(((entry_path) orelse (""))) };
+            if (comptime (@TypeOf(ctx.bun_watcher) == ImportWatcher)) {
+                ctx.bun_watcher = (if (reload_immediately) ImportWatcher{ .watch = (blk_catch_2: { break :blk_catch_2 ((Watcher.init(Reloader, reloader, ctx.transpiler.fs, bun.default_allocator)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                break :blk_catch_2 Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e) }); }); }) } else ImportWatcher{ .hot = (blk_catch_3: { break :blk_catch_3 ((Watcher.init(Reloader, reloader, ctx.transpiler.fs, bun.default_allocator)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 break :blk_catch_3 Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e) }); }); }) });
                 if (reload_immediately) {
-                    self.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(self.bun_watcher.watch);
+                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.watch);
                 } else {
-                    self.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(self.bun_watcher.hot);
+                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.hot);
                 }
             } else {
-                self.bun_watcher = (blk_catch_4: { break :blk_catch_4 ((Watcher.init(Reloader, reloader, self.transpiler.fs, bun.default_allocator)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                ctx.bun_watcher = (blk_catch_4: { break :blk_catch_4 ((Watcher.init(Reloader, reloader, ctx.transpiler.fs, bun.default_allocator)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 break :blk_catch_4 Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e) }); }); });
-                self.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(self.bun_watcher.?);
+                ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.?);
             }
-            self.clear_screen = (!self.transpiler.env.hasSetNoClearTerminalOnReload((!Output.enable_ansi_colors_stdout)));
+            clear_screen = (!ctx.transpiler.env.hasSetNoClearTerminalOnReload((!Output.enable_ansi_colors_stdout)));
             _ = (blk_catch_5: { break :blk_catch_5 ((reloader.getContext().start()) catch |__ce_5| { _ = &__ce_5; @panic("Failed to start File Watcher"); }); });
     }
 

@@ -145,7 +145,8 @@ pub const Coordinator = struct {
         for (spawned_workers) |*w| {
             if (w.process) |p| {
                 if (Environment.isPosix) {
-                    _ = std.c.kill(-p.pid, std.posix.SIG.TERM);
+                    const pid = p.pid;
+                    _ = std.c.kill(-pid, std.posix.SIG.TERM);
                 } else {
                     _ = p.kill(1);
                 }
@@ -431,8 +432,10 @@ pub const Coordinator = struct {
             .exited => |e| std.fmt.bufPrint(buf, "exit code {d}", .{e.code}) catch unreachable,
             // SignalCode is non-exhaustive (`_`); @tagName on an unnamed value
             // (e.g. Linux RT signals 32–64) is safety-checked illegal behavior.
-            .signaled => |sig| sig.name() ??
-                std.fmt.bufPrint(buf, "signal {d}", .{@intFromEnum(sig)}) catch unreachable,
+            .signaled => |sig| blk: {
+                const sigName = @TypeOf(sig).name;
+                break :blk sigName(sig) ?? std.fmt.bufPrint(buf, "signal {d}", .{@intFromEnum(sig)}) catch unreachable;
+            },
             .err => |e| @tagName(e.getErrno()),
             .running => "running",
         };
@@ -465,7 +468,8 @@ pub const Coordinator = struct {
             if (!other.alive) continue;
             if (other.process) |p| {
                 if (Environment.isPosix) {
-                    _ = std.c.kill(-p.pid, std.posix.SIG.TERM);
+                    const pid = p.pid;
+                    _ = std.c.kill(-pid, std.posix.SIG.TERM);
                 } else {
                     _ = p.kill(1);
                 }

@@ -1250,10 +1250,10 @@ inline fn concatTuple(a: auto, b: auto): TupleCatType(@TypeOf(a), @TypeOf(b)) {
     const b_fields = @typeInfo(BT).@"struct".fields;
     let res: TupleCatType(AT, BT) = undefined;
     inline for (i of 0..a_fields.len) {
-        res[i] = a[i];
+        @field(res, std.fmt.comptimePrint("{d}", [i])) = @field(a, std.fmt.comptimePrint("{d}", [i]));
     }
     inline for (j of 0..b_fields.len) {
-        res[a_fields.len + j] = b[j];
+        @field(res, std.fmt.comptimePrint("{d}", [a_fields.len + j])) = @field(b, std.fmt.comptimePrint("{d}", [j]));
     }
     return res;
 }

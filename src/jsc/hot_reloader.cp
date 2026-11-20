@@ -272,28 +272,28 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
         
         pub const Task = NewTask(Ctx, Reloader, reload_immediately);
 
-        pub fn enableHotModuleReloading(*_, entry_path: ([]const u8)?) {
-            if (comptime @TypeOf(_.bun_watcher) == ImportWatcher) {
-                if (_.bun_watcher != .none)
+        pub static fn enableHotModuleReloading(ctx: *Ctx, entry_path: ([]const u8)?) {
+            if (comptime @TypeOf(ctx.bun_watcher) == ImportWatcher) {
+                if (ctx.bun_watcher != .none)
                     return;
             } else {
-                if (_.bun_watcher != null)
+                if (ctx.bun_watcher != null)
                     return;
             }
 
             let reloader = bun.handleOom(bun.default_allocator.create(Reloader));
             reloader.* = {
-                ctx: _,
-                verbose: Environment.enable_logs || if (@hasField(Ctx, "log")) _.log.level.atLeast(.info) else false,
+                ctx: ctx,
+                verbose: Environment.enable_logs || if (@hasField(Ctx, "log")) ctx.log.level.atLeast(.info) else false,
                 main: MainFile.init(entry_path ?? ""),
             };
 
-            if (comptime @TypeOf(_.bun_watcher) == ImportWatcher) {
-                _.bun_watcher = if (reload_immediately)
+            if (comptime @TypeOf(ctx.bun_watcher) == ImportWatcher) {
+                ctx.bun_watcher = if (reload_immediately)
                     ImportWatcher{ watch: Watcher.init(
                         Reloader,
                         reloader,
-                        _.transpiler.fs,
+                        ctx.transpiler.fs,
                         bun.default_allocator,
                     ) catch |e| {
                         bun.handleErrorReturnTrace(e, @errorReturnTrace());
@@ -303,7 +303,7 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
                     ImportWatcher{ hot: Watcher.init(
                         Reloader,
                         reloader,
-                        _.transpiler.fs,
+                        ctx.transpiler.fs,
                         bun.default_allocator,
                     ) catch |e| {
                         bun.handleErrorReturnTrace(e, @errorReturnTrace());
@@ -311,24 +311,24 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
                     } };
 
                 if (reload_immediately) {
-                    _.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(_.bun_watcher.watch);
+                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.watch);
                 } else {
-                    _.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(_.bun_watcher.hot);
+                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.hot);
                 }
             } else {
-                _.bun_watcher = Watcher.init(
+                ctx.bun_watcher = Watcher.init(
                     Reloader,
                     reloader,
-                    _.transpiler.fs,
+                    ctx.transpiler.fs,
                     bun.default_allocator,
                 ) catch |e| {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
                     Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e)});
                 };
-                _.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(_.bun_watcher.?);
+                ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.?);
             }
 
-            clear_screen = !_.transpiler.env.hasSetNoClearTerminalOnReload(!Output.enable_ansi_colors_stdout);
+            clear_screen = !ctx.transpiler.env.hasSetNoClearTerminalOnReload(!Output.enable_ansi_colors_stdout);
 
             reloader.getContext().start() catch @panic("Failed to start File Watcher");
         }

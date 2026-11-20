@@ -53,7 +53,7 @@ pub fn validatePath(
     if (rel_path.len == 0) {
         return "";
     }
-    const paths = [ cwd, rel_path ];
+    const paths: [2][]const u8 = [ cwd, rel_path ];
     // TODO: switch to getFdPath()-based implementation
     const out = std.fs.path.resolve(allocator, &paths) catch |e| {
         log.addErrorFmt(
@@ -130,8 +130,8 @@ pub struct ExternalModules {
         return bun.jsc.ModuleLoader.HardcodedModule.Alias.has(str, .node, {});
     }
 
-    const default_wildcard_patterns = &[
-        {
+    const default_wildcard_patterns: [1]WildcardPattern = [
+        WildcardPattern{
             prefix: "/bun:",
             suffix: "",
         },
@@ -274,9 +274,10 @@ pub struct ExternalModules {
     ];
 
     pub const NodeBuiltinPatterns = NodeBuiltinPatternsRaw ++ brk: {
-        let builtins = NodeBuiltinPatternsRaw;
-        for (*builtin of &builtins) {
-            builtin.* = "node:" ++ builtin.*;
+        const n = NodeBuiltinPatternsRaw.len;
+        let builtins: [n]string = NodeBuiltinPatternsRaw;
+        for (i of 0..builtins.len) {
+            builtins[i] = "node:" ++ builtins[i];
         }
         break :brk builtins;
     };
@@ -479,7 +480,7 @@ pub enum Target {
     static fn outExtensions(target: Target, allocator: std.mem.Allocator): bun.StringHashMap(string) {
         let exts = bun.StringHashMap(string).init(allocator);
 
-        const out_extensions_list = [ ".js", ".cjs", ".mts", ".cts", ".ts", ".tsx", ".jsx", ".json" ];
+        const out_extensions_list: [8][]const u8 = [ ".js", ".cjs", ".mts", ".cts", ".ts", ".tsx", ".jsx", ".json" ];
 
         if (target == .node) {
             exts.ensureTotalCapacity(out_extensions_list.len * 2) catch unreachable;
@@ -885,23 +886,23 @@ pub enum Loader: u8 {
         };
     }
 
-    pub fn isJSX(loader: Loader): bool {
-        return loader == .jsx || loader == .tsx;
+    pub fn isJSX(): bool {
+        return _ == .jsx || _ == .tsx;
     }
 
-    pub fn isTypeScript(loader: Loader): bool {
-        return loader == .tsx || loader == .ts;
+    pub fn isTypeScript(): bool {
+        return _ == .tsx || _ == .ts;
     }
 
-    pub fn isJavaScriptLike(loader: Loader): bool {
-        return switch (loader) {
+    pub fn isJavaScriptLike(): bool {
+        return switch (_) {
             .jsx, .js, .ts, .tsx => true,
             else => false,
         };
     }
 
-    pub fn isJavaScriptLikeOrJSON(loader: Loader): bool {
-        return switch (loader) {
+    pub fn isJavaScriptLikeOrJSON(): bool {
+        return switch (_) {
             .jsx, .js, .ts, .tsx, .json, .jsonc => true,
 
             // toml, yaml, and json5 are included because we can serialize to the same AST as JSON
@@ -1140,35 +1141,35 @@ pub struct ESMConditions {
         require_condition_map.ensureTotalCapacity(defaults.len + 2 + if (allow_addons) 1 else 0 + conditions.len)?;
         style_condition_map.ensureTotalCapacity(defaults.len + 2 + conditions.len)?;
 
-        import_condition_map.putAssumeCapacity("import", {});
-        require_condition_map.putAssumeCapacity("require", {});
-        style_condition_map.putAssumeCapacity("style", {});
+        import_condition_map.putAssumeCapacity("import", undefined);
+        require_condition_map.putAssumeCapacity("require", undefined);
+        style_condition_map.putAssumeCapacity("style", undefined);
 
         for (condition of conditions) {
-            import_condition_map.putAssumeCapacity(condition, {});
-            require_condition_map.putAssumeCapacity(condition, {});
-            default_condition_amp.putAssumeCapacity(condition, {});
+            import_condition_map.putAssumeCapacity(condition, undefined);
+            require_condition_map.putAssumeCapacity(condition, undefined);
+            default_condition_amp.putAssumeCapacity(condition, undefined);
         }
 
         for (default of defaults) {
-            default_condition_amp.putAssumeCapacity(default, {});
-            import_condition_map.putAssumeCapacity(default, {});
-            require_condition_map.putAssumeCapacity(default, {});
-            style_condition_map.putAssumeCapacity(default, {});
+            default_condition_amp.putAssumeCapacity(default, undefined);
+            import_condition_map.putAssumeCapacity(default, undefined);
+            require_condition_map.putAssumeCapacity(default, undefined);
+            style_condition_map.putAssumeCapacity(default, undefined);
         }
 
         if (allow_addons) {
-            default_condition_amp.putAssumeCapacity("node-addons", {});
-            import_condition_map.putAssumeCapacity("node-addons", {});
-            require_condition_map.putAssumeCapacity("node-addons", {});
+            default_condition_amp.putAssumeCapacity("node-addons", undefined);
+            import_condition_map.putAssumeCapacity("node-addons", undefined);
+            require_condition_map.putAssumeCapacity("node-addons", undefined);
 
             // style is not here because you don't import N-API addons inside css files.
         }
 
-        default_condition_amp.putAssumeCapacity("default", {});
-        import_condition_map.putAssumeCapacity("default", {});
-        require_condition_map.putAssumeCapacity("default", {});
-        style_condition_map.putAssumeCapacity("default", {});
+        default_condition_amp.putAssumeCapacity("default", undefined);
+        import_condition_map.putAssumeCapacity("default", undefined);
+        require_condition_map.putAssumeCapacity("default", undefined);
+        style_condition_map.putAssumeCapacity("default", undefined);
 
         return {
             default: default_condition_amp,
@@ -1203,15 +1204,15 @@ pub struct ESMConditions {
         _.style.ensureUnusedCapacity(conditions.len)?;
 
         for (condition of conditions) {
-            _.default.putAssumeCapacity(condition, {});
-            _.@"import".putAssumeCapacity(condition, {});
-            _.require.putAssumeCapacity(condition, {});
-            _.style.putAssumeCapacity(condition, {});
+            _.default.putAssumeCapacity(condition, undefined);
+            _.@"import".putAssumeCapacity(condition, undefined);
+            _.require.putAssumeCapacity(condition, undefined);
+            _.style.putAssumeCapacity(condition, undefined);
         }
     }
 
     fn append(*_, condition: string): bun.OOM!void {
-        _.default.put(condition, {})?;
+        _.default.put(condition, undefined)?;
         _.@"import".put(condition, {})?;
         _.require.put(condition, {})?;
         _.style.put(condition, {})?;
@@ -1299,7 +1300,7 @@ pub struct JSXPragma {
     }
 
     static fn setImportSource(pragma: *JSXPragma, allocator: std.mem.Allocator) {
-        const dev_args = [ pragma.package_name, "/jsx-dev-runtime" ];
+        const dev_args: [2][]const u8 = [ pragma.package_name, "/jsx-dev-runtime" ];
         const dev_defs = [ JSXDefaults.ImportSourceDev ];
         strings.concatIfNeeded(
             allocator,
@@ -1308,7 +1309,7 @@ pub struct JSXPragma {
             &dev_defs,
         ) catch unreachable;
 
-        const prod_args = [ pragma.package_name, "/jsx-runtime" ];
+        const prod_args: [2][]const u8 = [ pragma.package_name, "/jsx-runtime" ];
         const prod_defs = [ JSXDefaults.ImportSource ];
         strings.concatIfNeeded(
             allocator,
@@ -1640,22 +1641,22 @@ pub fn loadersFromTransformOptions(allocator: std.mem.Allocator, _loaders: api.L
                     default_loader_ext.len,
         input_loaders.extensions,
         loader_values,
-    );
+    )?;
     errdefer loaders.deinit();
 
     inline for (ext of default_loader_ext) {
-        * = loaders.getOrPutValue(ext, defaultLoaders.get(ext).?);
+        * = loaders.getOrPutValue(ext, defaultLoaders.get(ext).?)?;
     }
 
     if (target.isBun()) {
         inline for (ext of default_loader_ext_bun) {
-            * = loaders.getOrPutValue(ext, defaultLoaders.get(ext).?);
+            * = loaders.getOrPutValue(ext, defaultLoaders.get(ext).?)?;
         }
     }
 
     if (target == .browser) {
         inline for (ext of default_loader_ext_browser) {
-            * = loaders.getOrPutValue(ext, defaultLoaders.get(ext).?);
+            * = loaders.getOrPutValue(ext, defaultLoaders.get(ext).?)?;
         }
     }
 
@@ -2042,7 +2043,7 @@ pub struct BundleOptions {
         let opts: BundleOptions = BundleOptions{
             log: log,
             define: undefined,
-            loaders: loadersFromTransformOptions(allocator, transform.loaders, Target.@"from"(transform.target)),
+            loaders: loadersFromTransformOptions(allocator, transform.loaders, Target.@"from"(transform.target))?,
             output_dir: transform.output_dir ?? "out",
             target: Target.@"from"(transform.target),
             write: transform.write ?? false,
@@ -2095,7 +2096,7 @@ pub struct BundleOptions {
                 opts.target.defaultConditions(),
                 transform.allow_addons ?? true,
                 transform.conditions,
-            );
+            )?;
         }
 
         switch (opts.target) {
@@ -2109,8 +2110,9 @@ pub struct BundleOptions {
                 opts.env.behavior = .load_all;
                 if (transform.extension_order.len == 0) {
                     // we must also support require'ing .node files
-                    opts.extension_order.default.default = comptime Defaults.ExtensionOrder ++ &[".node"];
-                    opts.extension_order.node_modules.default = comptime Defaults.NodeModules.ExtensionOrder ++ &[".node"];
+                    const node_ext: [1][]const u8 = [ ".node" ];
+                    opts.extension_order.default.default = comptime Defaults.ExtensionOrder ++ &node_ext;
+                    opts.extension_order.node_modules.default = comptime Defaults.NodeModules.ExtensionOrder ++ &node_ext;
                 }
             },
             else => {},

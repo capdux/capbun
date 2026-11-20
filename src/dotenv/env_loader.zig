@@ -133,8 +133,9 @@ pub fn isCI(self: *const @This()) bool {
             return (((self.get("CI")) orelse (((self.get("TDDIUM")) orelse (((self.get("GITHUB_ACTIONS")) orelse (((self.get("JENKINS_URL")) orelse (self.get("bamboo.buildKey"))))))))) != null);
     }
 
-pub fn loadTracy(self: @This(), _: *const Loader) void {
-        _ = self;
+pub fn loadTracy(self: @This()) void {
+            const s = self;
+            _ = &s;
     }
 
 pub fn getS3Credentials(self: *@This()) s3.S3Credentials {
@@ -307,12 +308,12 @@ pub fn isNoProxy(self: *const @This(), hostname: ?[]const u8, host: ?[]const u8)
             var no_proxy_iter = std.mem.splitScalar(u8, no_proxy_text, 44);
             _ = &no_proxy_iter;
             while (no_proxy_iter.next()) |no_proxy_item| {
-                var no_proxy_entry = strings.trim(no_proxy_item, (&strings.whitespace_chars));
+                var no_proxy_entry = strings.trim(no_proxy_item, strings.whitespace_chars);
                 _ = &no_proxy_entry;
                 if ((no_proxy_entry.len == 0)) {
                     continue;
                 }
-                if (strings.eql(no_proxy_entry, "*")) {
+                if (strings.eqlComptime(no_proxy_entry, "*")) {
                     return true;
                 }
                 if (strings.startsWithChar(no_proxy_entry, 46)) {
@@ -1103,10 +1104,10 @@ pub fn _parse(self: *@This(), allocator: std.mem.Allocator, map: *Map, comptime 
             var count = map.map.count();
             _ = &count;
             while ((self.pos < self.src.len)) {
-                const key = ((self.parseKey(true)) orelse (({
+                const key = ((self.parseKey(true)) orelse {
                 _ = self.skipLine();
                 continue;
-})));
+});
                 const value = try self.parseValue(is_process);
                 const entry = try map.map.getOrPut(key);
                 if (entry.found_existing) {

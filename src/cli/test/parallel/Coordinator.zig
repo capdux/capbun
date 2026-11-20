@@ -196,7 +196,8 @@ pub fn abortAll(self: *@This()) noreturn {
                 if (w.process) |p| {
                     _ = &p;
                     if (Environment.isPosix) {
-                        _ = std.c.kill((0 - p).pid, std.posix.SIG.TERM);
+                        const pid = p.pid;
+                        _ = std.c.kill((0 - pid), std.posix.SIG.TERM);
                     } else {
                         _ = p.kill(1);
                     }
@@ -498,7 +499,10 @@ else => false,
 pub fn describeStatus(buf: []u8, status: bun.spawn.Status) []const u8 {
             return (switch (status) {
 .exited => |e| ((std.fmt.bufPrint(buf, "exit code {d}", .{ e.code })) catch unreachable),
-.signaled => |sig| (((if (@typeInfo(@TypeOf(sig)) == .@"enum" or @typeInfo(@TypeOf(sig)) == .@"union") @tagName(sig) else sig.name)()) orelse (((std.fmt.bufPrint(buf, "signal {d}", .{ @intFromEnum(sig) })) catch unreachable))),
+.signaled => |sig| blk: {
+            const sigName = (if (@typeInfo(@TypeOf(@TypeOf(sig))) == .@"enum" or @typeInfo(@TypeOf(@TypeOf(sig))) == .@"union") @tagName(@TypeOf(sig)) else @TypeOf(sig).name);
+            break :blk ((sigName(sig)) orelse (((std.fmt.bufPrint(buf, "signal {d}", .{ @intFromEnum(sig) })) catch unreachable)));
+},
 .err => |e| @tagName(e.getErrno()),
 .running => "running",
 });
@@ -519,7 +523,8 @@ pub fn abortOnWorkerPanic(self: *@This(), file_idx: u32, status: bun.spawn.Statu
                 if (other.process) |p| {
                     _ = &p;
                     if (Environment.isPosix) {
-                        _ = std.c.kill((0 - p).pid, std.posix.SIG.TERM);
+                        const pid = p.pid;
+                        _ = std.c.kill((0 - pid), std.posix.SIG.TERM);
                     } else {
                         _ = p.kill(1);
                     }

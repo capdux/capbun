@@ -19,7 +19,7 @@ pub const Set = CacheSet;
 
 const debug = Output.scoped(.fs, .visible);
 
-pub const FreeFn = *const fn (*!?) callconv(.c) void;
+pub type FreeFn = *const fn (*!?) callconv(.c) void;
 pub type OptFreeFn = FreeFn?;
 
 pub struct FsExternalFreeFunction {
@@ -187,12 +187,20 @@ pub struct Fs {
             }
         }
 
-        const file = (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), _.stream)) catch |e| {
-            if (Environment.isDebug) {
-                Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
+        const file = if (_.stream)
+            (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), true)) catch |e| {
+                if (Environment.isDebug) {
+                    Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
+                }
+                return e;
             }
-            return e;
-        };
+        else
+            (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), false)) catch |e| {
+                if (Environment.isDebug) {
+                    Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
+                }
+                return e;
+            };
 
         return Entry{
             contents: file.contents,
