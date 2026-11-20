@@ -1682,15 +1682,15 @@ pub fn format(self: PathTemplate, writer: *std.Io.Writer) !void {
                 _ = &count;
                 var end_len: usize = remain.len;
                 _ = &end_len;
-                for (cp_mut_slice(&remain)) |*c| {
+                for (cp_iter_slice(remain)) |c| {
                     _ = &c;
-                    count = (count + (switch ((c.*).*) {
+                    count = (count + (switch (c) {
 '[' => 1,
 ']' => -1,
 else => 0,
 }));
                     if ((count == 0)) {
-                        end_len = (@intFromPtr((c.*)) - @intFromPtr(remain.ptr));
+                        end_len = (@intFromPtr(c) - @intFromPtr(remain.ptr));
                         _ = bun.assert((end_len <= remain.len));
                         break;
                     }

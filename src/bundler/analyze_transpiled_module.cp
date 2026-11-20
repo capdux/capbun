@@ -55,6 +55,24 @@ pub const Owner = union(enum) {
     allocated_slice: AllocatedSlice,
 };
 
+struct RemReader {
+    rem: []const u8,
+
+    inline fn eat(*_, len: usize): []const u8! {
+        if (_.rem.len < len) return error.BadModuleInfo;
+        const res = _.rem[0..len];
+        _.rem = _.rem[len..];
+        return res;
+    }
+
+    inline fn eatC(*_, comptime len: usize): (*const [len]u8)! {
+        if (_.rem.len < len) return error.BadModuleInfo;
+        const res = _.rem[0..len];
+        _.rem = _.rem[len..];
+        return res;
+    }
+}
+
 pub struct ModuleInfoDeserialized {
     strings_buf: []const u8,
     strings_lens: []align(1) const u32,
@@ -78,44 +96,30 @@ pub struct ModuleInfoDeserialized {
         }
     }
 
-    inline fn eat(rem: *[]const u8, len: usize): []const u8! {
-        if (rem.*.len < len) return error.BadModuleInfo;
-        const res = rem.*[0..len];
-        rem.* = rem.*[len..];
-        return res;
-    }
-
-    inline fn eatC(rem: *[]const u8, comptime len: usize): (*const [len]u8)! {
-        if (rem.*.len < len) return error.BadModuleInfo;
-        const res = rem.*[0..len];
-        rem.* = rem.*[len..];
-        return res;
-    }
-
     static fn create(source: []const u8, gpa: std.mem.Allocator): (*ModuleInfoDeserialized)! {
         const duped = gpa.dupe(u8, source)?;
         errdefer gpa.free(duped);
-        let rem: []const u8 = duped;
+        let reader = RemReader{ rem: duped };
         const res = gpa.create(ModuleInfoDeserialized)?;
         errdefer gpa.destroy(res);
 
-        const record_kinds_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const record_kinds = std.mem.bytesAsSlice(RecordKind, eat(unsafe { &rem }, record_kinds_len * @sizeOf(RecordKind))?);
-        * = eat(unsafe { &rem }, (4 - (record_kinds_len % 4)) % 4)?; // alignment padding
+        const record_kinds_len = std.mem.readInt(u32, reader.eatC(4)?, .little);
+        const record_kinds = std.mem.bytesAsSlice(RecordKind, reader.eat(record_kinds_len * @sizeOf(RecordKind))?);
+        * = reader.eat((4 - (record_kinds_len % 4)) % 4)?; // alignment padding
 
-        const buffer_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const buffer = std.mem.bytesAsSlice(StringID, eat(unsafe { &rem }, buffer_len * @sizeOf(StringID))?);
+        const buffer_len = std.mem.readInt(u32, reader.eatC(4)?, .little);
+        const buffer = std.mem.bytesAsSlice(StringID, reader.eat(buffer_len * @sizeOf(StringID))?);
 
-        const requested_modules_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const requested_modules_keys = std.mem.bytesAsSlice(StringID, eat(unsafe { &rem }, requested_modules_len * @sizeOf(StringID))?);
-        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, eat(unsafe { &rem }, requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
+        const requested_modules_len = std.mem.readInt(u32, reader.eatC(4)?, .little);
+        const requested_modules_keys = std.mem.bytesAsSlice(StringID, reader.eat(requested_modules_len * @sizeOf(StringID))?);
+        const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, reader.eat(requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
 
-        const flags: Flags = @bitCast((eatC(unsafe { &rem }, 1)?)[0]);
-        * = eat(unsafe { &rem }, 3)?; // alignment padding
+        const flags: Flags = @bitCast((reader.eatC(1)?)[0]);
+        * = reader.eat(3)?; // alignment padding
 
-        const strings_len = std.mem.readInt(u32, eatC(unsafe { &rem }, 4)?, .little);
-        const strings_lens = std.mem.bytesAsSlice(u32, eat(unsafe { &rem }, strings_len * @sizeOf(u32))?);
-        const strings_buf = rem;
+        const strings_len = std.mem.readInt(u32, reader.eatC(4)?, .little);
+        const strings_lens = std.mem.bytesAsSlice(u32, reader.eat(strings_len * @sizeOf(u32))?);
+        const strings_buf = reader.rem;
 
         res.* = .{
             .strings_buf = strings_buf,

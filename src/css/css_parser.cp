@@ -3302,7 +3302,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
                 &parser_extra,
             );
 
-            let license_comments = ArrayList(string){};
+            let license_comments: ArrayList(string) = .{};
             let state = parser.state();
             while (switch (parser.nextIncludingWhitespaceAndComments()) {
                 .result => |v| v,
@@ -7189,8 +7189,8 @@ pub inline fn copysign(client: f32, sign: f32): f32 {
 pub fn deepClone(comptime V: type, allocator: Allocator, list: *const ArrayList(V)): ArrayList(V) {
     let newlist = bun.handleOom(ArrayList(V).initCapacity(allocator, list.items.len));
 
-    for (*item of list.items) {
-        newlist.appendAssumeCapacity(generic.deepClone(V, item, allocator));
+    for (item of list.items) {
+        newlist.appendAssumeCapacity(generic.deepClone(V, &item, allocator));
     }
 
     return newlist;

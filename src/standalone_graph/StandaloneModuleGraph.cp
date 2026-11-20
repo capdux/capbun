@@ -778,14 +778,15 @@ pub struct StandaloneModuleGraph {
 
             let fd: bun.FD = bun.invalid_fd;
             let tried_changing_abs_dir = false;
-            for (retry of 0..3) {
+            let attempt: usize = 0;
+            while (attempt < 3) : (attempt += 1) {
                 switch (Syscall.open(zname, bun.O.CLOEXEC | bun.O.RDWR | bun.O.CREAT, 0)) {
                     .result res => {
                         fd = res;
-                        break;
+                        attempt = 3;
                     },
                     .err e => {
-                        if (retry < 2) {
+                        if (attempt < 2) {
                             if (!tried_changing_abs_dir) {
                                 tried_changing_abs_dir = true;
                                 const zero_byte: [1]u8 = [0];
@@ -800,7 +801,9 @@ pub struct StandaloneModuleGraph {
                             }
                             switch (e.getErrno()) {
                                 .PERM, .AGAIN, .BUSY => continue,
-                                else => break,
+                                else => {
+                                    attempt = 3;
+                                },
                             }
 
                             Output.prettyErrorln("<r><red>error<r><d>:<r> failed to open temporary file to copy bun into\n{f}", [e]);

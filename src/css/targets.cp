@@ -60,7 +60,7 @@ pub struct Targets {
         }
         i += 1;
         rhs = std.fmt.parseInt(u32, val[i..], 10) catch @panic("invalid bytes");
-        return lhs << @intCast(rhs);
+        return lhs << @as(u5, @intCast(rhs));
     }
 
     static fn forBundlerTarget(target: bun.transpiler.options.Target): Targets {

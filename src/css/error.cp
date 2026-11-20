@@ -399,8 +399,8 @@ pub enum MinifyErrorKind {
         custom_media_loc: Location,
     },
 
-    fn format(writer: *std.Io.Writer)! {
-        return switch (_) {
+    fn format(_: @This(), writer: *std.Io.Writer)! {
+        return switch (this) {
             .circular_custom_media => |n| try writer.print("Circular @custom-media rule: \"{s}\"", .{n.name}),
             .custom_media_not_defined => |n| try writer.print("Custom media rule \"{s}\" not defined", .{n.name}),
             .unsupported_custom_media_boolean_logic => |custom_media_loc| try writer.print(

@@ -2599,8 +2599,8 @@ pub struct PathTemplate {
 
             let count: isize = 1;
             let end_len: usize = remain.len;
-            for (*c of remain) {
-                count += switch (c.*) {
+            for (c of remain) {
+                count += switch (c) {
                     '[' => 1,
                     ']' => -1,
                     else => 0,

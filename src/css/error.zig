@@ -218,7 +218,7 @@ pub const MinifyErrorKind = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn format(self: *MinifyErrorKind, writer: *std.Io.Writer) !void {
+pub fn format(self: MinifyErrorKind, writer: *std.Io.Writer) !void {
             return (switch (self) {
 .circular_custom_media => |n| try writer.print("Circular @custom-media rule: \"{s}\"", .{ (if (@typeInfo(@TypeOf(n)) == .@"enum" or @typeInfo(@TypeOf(n)) == .@"union") @tagName(n) else n.name) }),
 .custom_media_not_defined => |n| try writer.print("Custom media rule \"{s}\" not defined", .{ (if (@typeInfo(@TypeOf(n)) == .@"enum" or @typeInfo(@TypeOf(n)) == .@"union") @tagName(n) else n.name) }),

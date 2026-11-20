@@ -1367,7 +1367,7 @@ pub struct BundleV2 {
                     value: server.newExpr(E.Object{
                         properties: G.Property.List.fromOwnedSlice(client_manifest_items),
                     }),
-                });
+                })?;
             } else {
                 bun.todoPanic(@src(), "\"use server\"", []);
             }

@@ -149,7 +149,7 @@ pub const SplitBundlerOptions = struct {
         if (opts.plugin == null) {
             opts.plugin = Plugin.create(global, .bun);
         }
-        const plugin = opts.plugin.?;
+        const plugin: *Plugin = opts.plugin.?;
         const empty_object = JSValue.createEmptyObject(global, 0);
 
         let iter = try plugin_array.arrayIterator(global);

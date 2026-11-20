@@ -2823,16 +2823,15 @@ pub const Token = union(TokenKind) {
     close_curly: void,
     comment: []const u8,
 
-pub fn eql(self: *const Token, lhs: *const Token, rhs: *const Token) bool {
-        _ = self;
+pub fn eql(lhs: *const Token, rhs: *const Token) bool {
             return implementEql(Token, lhs, rhs);
     }
 
-pub fn hash(self: *Token, hasher: *std.hash.Wyhash) void {
+pub fn hash(self: Token, hasher: *std.hash.Wyhash) void {
             return implementHash(@This(), self, hasher);
     }
 
-pub fn isParseError(self: *const Token) bool {
+pub fn isParseError(self: Token) bool {
             return (switch (self.*) {
 .bad_url, .bad_string, .close_paren, .close_square, .close_curly => true,
 else => false,
@@ -2941,21 +2940,21 @@ pub fn format(tok: *const Token, writer: *std.Io.Writer) !void {
 });
     }
 
-pub fn raw(self: *const Token) []const u8 {
+pub fn raw(self: Token) []const u8 {
             return (switch (self) {
 .ident => self.ident,
 });
     }
 
-pub inline fn kind(self: *const Token) TokenKind {
+pub inline fn kind(self: Token) TokenKind {
             return @as(TokenKind, @enumFromInt(self));
     }
 
-pub inline fn kindString(self: *const Token) []const u8 {
+pub inline fn kindString(self: Token) []const u8 {
             return cp_string_from(self.kind);
     }
 
-pub fn toCssGeneric(self: *const Token, writer: anytype) !void {
+pub fn toCssGeneric(self: Token, writer: anytype) !void {
             return (switch (self.*) {
 .ident => try serializer.serializeIdentifier(self.ident, writer),
 .at_keyword => {
@@ -3046,7 +3045,7 @@ pub fn toCssGeneric(self: *const Token, writer: anytype) !void {
 });
     }
 
-pub fn toCss(self: *Token, dest: *Printer) PrintErr!void {
+pub fn toCss(self: Token, dest: *Printer) PrintErr!void {
             return (switch (self.*) {
 .ident => |value| (blk_catch_7: { break :blk_catch_7 ((serializer.serializeIdentifier(value, dest)) catch |__ce_7| { _ = &__ce_7; return dest.addFmtError(); }); }),
 .at_keyword => |value| {
@@ -5969,10 +5968,8 @@ pub fn parseWith(allocator: Allocator, code: []const u8, options: ParserOptions,
             _ = &input;
             var parser = Parser.new((&input), import_records, .{ .css_modules = (options.css_modules != null) }, (&parser_extra));
             _ = &parser;
-            var license_comments = ArrayList(string);
+            var license_comments: ArrayList(string) = .{};
             _ = &license_comments;
-            {
-            }
             var state = parser.state();
             _ = &state;
             while ((switch (parser.nextIncludingWhitespaceAndComments()) {
@@ -6260,9 +6257,9 @@ pub inline fn copysign(client: f32, sign: f32) f32 {
 pub fn deepClone(comptime V: type, allocator: Allocator, list: *const ArrayList(V)) ArrayList(V) {
         var newlist = bun.handleOom(ArrayList(V).initCapacity(allocator, list.items.len));
         _ = &newlist;
-        for (list.items) |*item| {
+        for (list.items) |item| {
             _ = &item;
-            _ = newlist.appendAssumeCapacity(generic.deepClone(V, (item.*), allocator));
+            _ = newlist.appendAssumeCapacity(generic.deepClone(V, (&item), allocator));
         }
         return newlist;
 }

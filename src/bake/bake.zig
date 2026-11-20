@@ -199,7 +199,7 @@ pub fn parsePluginArray(opts: *SplitBundlerOptions, plugin_array: JSValue, globa
             if ((opts.plugin == null)) {
                 opts.plugin = Plugin.create(global, .bun);
             }
-            const plugin = opts.plugin.?;
+            const plugin: *Plugin = opts.plugin.?;
             const empty_object = JSValue.createEmptyObject(global, 0);
             var iter = try plugin_array.arrayIterator(global);
             _ = &iter;
@@ -223,7 +223,7 @@ pub fn parsePluginArray(opts: *SplitBundlerOptions, plugin_array: JSValue, globa
                     return global.throwInvalidArguments("Expected plugin to have a setup() function", .{});
                 }
                 const function = maybe_fn.?;
-                const plugin_result = try (plugin).?.addPlugin(function, empty_object, .@"null", false, true);
+                const plugin_result = try plugin.addPlugin(function, empty_object, .@"null", false, true);
                 if (plugin_result.asAnyPromise()) |promise| {
                     _ = &promise;
                     _ = promise.setHandled(global.vm());

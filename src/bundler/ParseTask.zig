@@ -555,7 +555,11 @@ var trace = bun.perf.trace("Bundler.ParseJS");
             _ = &res;
             return JSAst.init(res.ast);
         } else {
-            return try getEmptyAST(log, transpiler, opts, allocator, source, (if ((opts.module_type == .esm)) E.Undefined else E.Object));
+            if ((opts.module_type == .esm)) {
+                return try getEmptyAST(log, transpiler, opts, allocator, source, E.Undefined);
+            } else {
+                return try getEmptyAST(log, transpiler, opts, allocator, source, E.Object);
+            }
         }
 },
 .json, .jsonc => {

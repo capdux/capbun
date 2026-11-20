@@ -236,7 +236,7 @@ pub const LinkerContext = struct {
         server_component_boundaries: ServerComponentBoundary.List,
         reachable: []Index,
     ) !void {
-        const trace = bun.perf.trace("Bundler.CloneLinkerGraph");
+        let trace = bun.perf.trace("Bundler.CloneLinkerGraph");
         defer trace.end();
         this.parse_graph = &bundle.graph;
 

@@ -140,7 +140,7 @@ pub fn parseDebugTarget(val_: []const u8) ?u32 {
             }
             i = (i + 1);
             rhs = (blk_catch_2: { break :blk_catch_2 ((std.fmt.parseInt(u32, val[i..], 10)) catch |__ce_2| { _ = &__ce_2; @panic("invalid bytes"); }); });
-            return cp_shl(lhs, @intCast(rhs));
+            return cp_shl(lhs, @as(u5, @intCast(rhs)));
     }
 
 pub fn forBundlerTarget(target: bun.transpiler.options.Target) Targets {

@@ -134,7 +134,9 @@ pub fn CssRuleList(comptime AtRule: type): type {
             let style_rules: StyleRuleKey(AtRule).HashMap(usize) = .{};
             let rules: ArrayList(CssRule(AtRule)) = .{};
 
-            for (*rule of _.v.items) {
+            let rule_idx: usize = 0;
+            while (rule_idx < _.v.items.len) : (rule_idx += 1) {
+                const rule = &_.v.items[rule_idx];
                 // NOTE Anytime you append to `rules` with this `rule`, you must set `moved_rule` to true.
                 let moved_rule = false;
                 defer if (moved_rule) {
@@ -428,7 +430,9 @@ pub fn CssRuleList(comptime AtRule: type): type {
             let first = true;
             let last_without_block = false;
 
-            for (*rule of _.v.items) {
+            let rule_idx: usize = 0;
+            while (rule_idx < _.v.items.len) : (rule_idx += 1) {
+                const rule = &_.v.items[rule_idx];
                 if (rule.* == .ignored) continue;
 
                 // Skip @import rules if collecting dependencies.

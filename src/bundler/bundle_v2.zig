@@ -917,7 +917,7 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
                                 client_item.* = .{ .key = export_name, .value = server.newExpr(E.Object{ .properties = try G.Property.List.fromSlice(alloc, (&client_props)) }) };
                             }
                         }
-                        _ = client_manifest_props.append(alloc, .{ .key = client_path, .value = server.newExpr(E.Object{ .properties = G.Property.List.fromOwnedSlice(client_manifest_items) }) });
+                        _ = try client_manifest_props.append(alloc, .{ .key = client_path, .value = server.newExpr(E.Object{ .properties = G.Property.List.fromOwnedSlice(client_manifest_items) }) });
                     } else {
                         _ = bun.todoPanic(@src(), "\"use server\"", &.{});
                     }

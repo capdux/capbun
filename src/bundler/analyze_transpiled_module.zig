@@ -83,6 +83,28 @@ pub const Flags = packed struct(u8) {
     _padding: u5 = 0,
 };
 
+pub const RemReader = struct {
+    rem: []const u8,
+
+pub inline fn eat(self: *RemReader, len: usize) ![]const u8 {
+            if ((self.rem.len < len)) {
+                return error.BadModuleInfo;
+            }
+            const res = self.rem[0..len];
+            self.rem = self.rem[len..];
+            return res;
+    }
+
+pub inline fn eatC(self: *RemReader, comptime len: usize) !*const [len]u8 {
+            if ((self.rem.len < len)) {
+                return error.BadModuleInfo;
+            }
+            const res = self.rem[0..len];
+            self.rem = self.rem[len..];
+            return res;
+    }
+};
+
 pub const ModuleInfoDeserialized = struct {
     strings_buf: []const u8,
     strings_lens: []align(1) const u32,
@@ -106,84 +128,30 @@ _ = alloc_slice.allocator.free(alloc_slice.slice);
 }
     }
 
-pub inline fn eat(rem: *[]const u8, len: usize) ![]const u8 {
-            if ((rem.*.len < len)) {
-                return error.BadModuleInfo;
-            }
-            const res = rem.*[0..len];
-            rem.* = rem.*[len..];
-            return res;
-    }
-
-pub inline fn eatC(rem: *[]const u8, comptime len: usize) !*const [len]u8 {
-            if ((rem.*.len < len)) {
-                return error.BadModuleInfo;
-            }
-            const res = rem.*[0..len];
-            rem.* = rem.*[len..];
-            return res;
-    }
-
 pub fn create(source: []const u8, gpa: std.mem.Allocator) !*ModuleInfoDeserialized {
             const duped = try gpa.dupe(u8, source);
             errdefer {
             _ = gpa.free(duped);
             }
-            var rem: []const u8 = duped;
-            _ = &rem;
+            var reader = RemReader{ .rem = duped };
+            _ = &reader;
             const res = try gpa.create(ModuleInfoDeserialized);
             errdefer {
             _ = gpa.destroy(res);
             }
-            const record_kinds_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const record_kinds = std.mem.bytesAsSlice(RecordKind, try eat((blk: {
-            break :blk rem;
-
-}), (record_kinds_len * @sizeOf(RecordKind))));
-            _ = try eat((blk: {
-            break :blk rem;
-
-}), ((4 - (record_kinds_len % 4)) % 4));
-            const buffer_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const buffer = std.mem.bytesAsSlice(StringID, try eat((blk: {
-            break :blk rem;
-
-}), (buffer_len * @sizeOf(StringID))));
-            const requested_modules_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const requested_modules_keys = std.mem.bytesAsSlice(StringID, try eat((blk: {
-            break :blk rem;
-
-}), (requested_modules_len * @sizeOf(StringID))));
-            const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, try eat((blk: {
-            break :blk rem;
-
-}), (requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))));
-            const flags: Flags = @bitCast(try eatC((blk: {
-            break :blk rem;
-
-}), 1)[0]);
-            _ = try eat((blk: {
-            break :blk rem;
-
-}), 3);
-            const strings_len = std.mem.readInt(u32, try eatC((blk: {
-            break :blk rem;
-
-}), 4), .little);
-            const strings_lens = std.mem.bytesAsSlice(u32, try eat((blk: {
-            break :blk rem;
-
-}), (strings_len * @sizeOf(u32))));
-            const strings_buf = rem;
+            const record_kinds_len = std.mem.readInt(u32, try reader.eatC(4), .little);
+            const record_kinds = std.mem.bytesAsSlice(RecordKind, try reader.eat((record_kinds_len * @sizeOf(RecordKind))));
+            _ = try reader.eat(((4 - (record_kinds_len % 4)) % 4));
+            const buffer_len = std.mem.readInt(u32, try reader.eatC(4), .little);
+            const buffer = std.mem.bytesAsSlice(StringID, try reader.eat((buffer_len * @sizeOf(StringID))));
+            const requested_modules_len = std.mem.readInt(u32, try reader.eatC(4), .little);
+            const requested_modules_keys = std.mem.bytesAsSlice(StringID, try reader.eat((requested_modules_len * @sizeOf(StringID))));
+            const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, try reader.eat((requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))));
+            const flags: Flags = @bitCast(try reader.eatC(1)[0]);
+            _ = try reader.eat(3);
+            const strings_len = std.mem.readInt(u32, try reader.eatC(4), .little);
+            const strings_lens = std.mem.bytesAsSlice(u32, try reader.eat((strings_len * @sizeOf(u32))));
+            const strings_buf = reader.rem;
             res.* = .{ .strings_buf = strings_buf, .strings_lens = strings_lens, .requested_modules_keys = requested_modules_keys, .requested_modules_values = requested_modules_values, .buffer = buffer, .record_kinds = record_kinds, .flags = flags, .owner = .{ .allocated_slice = .{ .slice = duped, .allocator = gpa } } };
             return res;
     }
