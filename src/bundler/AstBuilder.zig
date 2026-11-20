@@ -348,7 +348,7 @@ pub fn get(self: @This(), _: SymbolRef) ?js_parser.ImportItemForNamespaceMap {
 };
 pub const default_options: js_parser.Parser.Options = .{ .jsx = .{}, .bundle = true };
 pub const default_import_items_for_namespace: ImportItemsForNamespace = .{};
-const empty_u32_slice: [0]u32 = &.{};
+const empty_u32_slice: [0]u32 = undefined;
 
 pub fn ImportStmtReturnType(comptime identifiers_to_import: anytype) type {
         return [identifiers_to_import.len]Expr;

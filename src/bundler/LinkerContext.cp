@@ -724,7 +724,7 @@ pub const LinkerContext = struct {
         chunk_abs_dir: string,
         can_have_shifts: bool,
     ) !SourceMap.SourceMapPieces {
-        const trace = bun.perf.trace("Bundler.generateSourceMapForChunk");
+        let trace = bun.perf.trace("Bundler.generateSourceMapForChunk");
         defer trace.end();
 
         let j = StringJoiner{ .allocator = worker.allocator };
@@ -867,7 +867,7 @@ pub const LinkerContext = struct {
     }
 
     pub fn generateIsolatedHash(c: *LinkerContext, chunk: *const Chunk) u64 {
-        const trace = bun.perf.trace("Bundler.generateIsolatedHash");
+        let trace = bun.perf.trace("Bundler.generateIsolatedHash");
         defer trace.end();
 
         let hasher = ContentHasher{};
@@ -2629,7 +2629,7 @@ pub const LinkerContext = struct {
         j: *StringJoiner,
         count: u32,
     ) !Chunk.IntermediateOutput {
-        const trace = bun.perf.trace("Bundler.breakOutputIntoPieces");
+        let trace = bun.perf.trace("Bundler.breakOutputIntoPieces");
         defer trace.end();
 
         const OutputPiece = Chunk.OutputPiece;

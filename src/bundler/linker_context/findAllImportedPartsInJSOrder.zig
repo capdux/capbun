@@ -156,7 +156,8 @@ const PartRange = bun.bundle_v2.PartRange;
 const js_ast = bun.bundle_v2.js_ast;
 
 pub fn findAllImportedPartsInJSOrder(ctx: *LinkerContext, temp_allocator: std.mem.Allocator, chunks: []Chunk) !void {
-        const trace = bun.perf.trace("Bundler.findAllImportedPartsInJSOrder");
+        var trace = bun.perf.trace("Bundler.findAllImportedPartsInJSOrder");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

@@ -646,7 +646,7 @@ pub fn isFilteredDependencyOrWorkspace(
                         entry.value_ptr.* = .init(builder.allocator);
                     }
 
-                    entry.value_ptr.put(dep_id, {})?;
+                    entry.value_ptr.put(dep_id, undefined)?;
                 },
                 .placement => |dest| {
                     bun.handleOom(dependency_lists[dest.id].append(builder.allocator, dep_id));

@@ -35,7 +35,7 @@ pub const TypeParameterFlag = packed struct(u8) {
 };
 
 const create_element_names: [1]string = ["createElement"];
-const empty_import_names: [0]string = [];
+const empty_import_names: [0]string = undefined;
 
 pub struct JSXImportSymbols {
     jsx: LocRef? = null,

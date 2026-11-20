@@ -410,7 +410,9 @@ pub struct Stringifier {
 
                     pkg_deps_sort_buf.clearRetainingCapacity();
                     pkg_deps_sort_buf.ensureUnusedCapacity(allocator, pkg_deps_list.len)?;
-                    for (pkg_dep_id of pkg_deps_list.begin()..pkg_deps_list.end()) {
+                    let pkg_dep_id: u32 = pkg_deps_list.begin();
+                    const pkg_dep_end: u32 = pkg_deps_list.end();
+                    while (pkg_dep_id < pkg_dep_end) : (pkg_dep_id += 1) {
                         pkg_deps_sort_buf.appendAssumeCapacity(@intCast(pkg_dep_id));
                     }
 
@@ -1935,7 +1937,9 @@ pub fn parseIntoBinaryLockfile(
             pkg_resolutions[0] = Resolution.init({ root: undefined });
             pkg_metas[0].origin = .local;
 
-            for (_dep_id of pkg_deps[0].begin()..pkg_deps[0].end()) {
+            let _dep_id: u32 = pkg_deps[0].begin();
+            const _dep_end: u32 = pkg_deps[0].end();
+            while (_dep_id < _dep_end) : (_dep_id += 1) {
                 const dep_id: DependencyID = @intCast(_dep_id);
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
 
@@ -1969,7 +1973,9 @@ pub fn parseIntoBinaryLockfile(
                 seen_deps.clearRetainingCapacity();
 
                 const deps = pkg_deps[pkg_id];
-                for (_dep_id of deps.begin()..deps.end()) {
+                let _dep_id: u32 = deps.begin();
+            const _dep_end: u32 = deps.end();
+            while (_dep_id < _dep_end) : (_dep_id += 1) {
                     const dep_id: DependencyID = @intCast(_dep_id);
                     const dep = &lockfile.buffers.dependencies.items[dep_id];
                     const dep_name = dep.name.slice(lockfile.buffers.string_bytes.items);
@@ -2016,7 +2022,9 @@ pub fn parseIntoBinaryLockfile(
 
             // find resolutions. iterate up to root through the pkg path.
             const deps = pkg_deps[pkg_id];
-            for (_dep_id of deps.begin()..deps.end()) {
+            let _dep_id: u32 = deps.begin();
+            const _dep_end: u32 = deps.end();
+            while (_dep_id < _dep_end) : (_dep_id += 1) {
                 const dep_id: DependencyID = @intCast(_dep_id);
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
 

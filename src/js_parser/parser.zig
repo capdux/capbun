@@ -840,7 +840,7 @@ pub const TypeParameterFlag = packed struct(u8) {
     _: u5 = 0,
 };
 const create_element_names: [1][]const u8 = .{ "createElement" };
-const empty_import_names: [0][]const u8 = &.{};
+const empty_import_names: [0][]const u8 = undefined;
 pub const arguments_str: []const u8 = "arguments";
 pub const ScopeOrderList = std.ArrayListUnmanaged(ScopeOrderOpt);
 pub const exports_string_name: []const u8 = "exports";

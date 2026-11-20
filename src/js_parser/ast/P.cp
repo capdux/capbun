@@ -1672,7 +1672,7 @@ pub fn NewParser_(
 
             const import_record_i = p.addImportRecordByRange(.stmt, logger.Range.None, import_path);
 
-            let declared_symbols = DeclaredSymbol.List{};
+            let declared_symbols: DeclaredSymbol.List = {};
             declared_symbols.ensureTotalCapacity(allocator, 2)?;
 
             let stmts = allocator.alloc(Stmt, 1)?;
@@ -1755,7 +1755,7 @@ pub fn NewParser_(
             let namespace_identifier = allocator.alloc(u8, import_path_identifier.len + prefix.len)?;
             const clause_items = allocator.alloc(js_ast.ClauseItem, imports.len)?;
             let stmts = allocator.alloc(Stmt, 1 + if (additional_stmt != null) @as(usize, 1) else @as(usize, 0))?;
-            let declared_symbols = DeclaredSymbol.List{};
+            let declared_symbols: DeclaredSymbol.List = {};
             declared_symbols.ensureTotalCapacity(allocator, imports.len + 1)?;
             bun.copy(u8, namespace_identifier, prefix);
             bun.copy(u8, namespace_identifier[prefix.len..], import_path_identifier);
@@ -1865,7 +1865,7 @@ pub fn NewParser_(
             let items = List(Item).initCapacity(allocator, len)?;
 
             const stmts = allocator.alloc(Stmt, 1)?;
-            let declared_symbols = DeclaredSymbol.List{};
+            let declared_symbols: DeclaredSymbol.List = {};
             declared_symbols.ensureTotalCapacity(allocator, len)?;
 
             const namespace_ref = p.newSymbol(.other, "RefreshRuntime")?;

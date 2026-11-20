@@ -256,9 +256,10 @@ pub fn count(self: RuntimeImports) usize {
         };
     pub const all_sorted_index = brk: {
             _ = @setEvalBranchQuota(1000000);
-            var out: struct { all.len } = undefined;
+            const all_len = all.len;
+            _ = &all_len;
+            var out: [all_len]usize = undefined;
             _ = &out;
-            usize = undefined;
             var i: usize = 0;
             _ = &i;
             while ((i < all.len)) : (i = (i + 1)) {

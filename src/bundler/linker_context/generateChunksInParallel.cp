@@ -2,6 +2,8 @@ fn ReturnType(comptime is_dev_server: bool): type {
     return if (is_dev_server) void else std.array_list.Managed(options.OutputFile);
 }
 
+type OptionalString = string?;
+
 pub fn generateChunksInParallel(
     c: *LinkerContext,
     chunks: []Chunk,
@@ -431,7 +433,7 @@ pub fn generateChunksInParallel(
     }
 
     if (is_standalone) {
-        let scc = bun.handleOom(bun.default_allocator.alloc(string?, chunks.len));
+        let scc = bun.handleOom(bun.default_allocator.alloc(OptionalString, chunks.len));
         @memset(scc, null);
         standalone_chunk_contents = scc;
 

@@ -431,13 +431,11 @@ _ = continue;
                         const pkg_deps_list = pkg_dep_lists[@as(usize, @intCast(pkg_id))];
                         _ = pkg_deps_sort_buf.clearRetainingCapacity();
                         _ = try pkg_deps_sort_buf.ensureUnusedCapacity(allocator, pkg_deps_list.len);
-                        {
-                            var pkg_dep_id: i32 = pkg_deps_list.begin();
-                            _ = &pkg_dep_id;
-                            const __end_11 = pkg_deps_list.end();
-                            while (pkg_dep_id < __end_11) : (pkg_dep_id += 1) {
-                                _ = pkg_deps_sort_buf.appendAssumeCapacity(@intCast(pkg_dep_id));
-                            }
+                        var pkg_dep_id: u32 = pkg_deps_list.begin();
+                        _ = &pkg_dep_id;
+                        const pkg_dep_end: u32 = pkg_deps_list.end();
+                        while ((pkg_dep_id < pkg_dep_end)) : (pkg_dep_id = (pkg_dep_id + 1)) {
+                            _ = pkg_deps_sort_buf.appendAssumeCapacity(@intCast(pkg_dep_id));
                         }
                         _ = std.sort.pdq(DependencyID, pkg_deps_sort_buf.items, TreeDepsSortCtx{ .string_buf = buf, .deps_buf = deps_buf }, TreeDepsSortCtx.isLessThan);
                         switch (res.tag) {
@@ -724,8 +722,8 @@ pub fn writeIndent(writer: *std.Io.Writer, indent: *const u32) !void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_15 = indent.*;
-                while (i < __end_15) : (i += 1) {
+                const __end_14 = indent.*;
+                while (i < __end_14) : (i += 1) {
                     _ = try writer.writeAll((" " * *indent_scalar));
                 }
             }
@@ -736,8 +734,8 @@ pub fn incIndent(writer: *std.Io.Writer, indent: *u32) !void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_16 = indent.*;
-                while (i < __end_16) : (i += 1) {
+                const __end_15 = indent.*;
+                while (i < __end_15) : (i += 1) {
                     _ = try writer.writeAll((" " * *indent_scalar));
                 }
             }
@@ -748,8 +746,8 @@ pub fn decIndent(writer: *std.Io.Writer, indent: *u32) !void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_17 = indent.*;
-                while (i < __end_17) : (i += 1) {
+                const __end_16 = indent.*;
+                while (i < __end_16) : (i += 1) {
                     _ = try writer.writeAll((" " * *indent_scalar));
                 }
             }
@@ -1377,8 +1375,8 @@ else => {
                         {
                             var _workspace_pkg_id: i32 = workspace_pkgs_off;
                             _ = &_workspace_pkg_id;
-                            const __end_29 = (workspace_pkgs_off + workspace_pkgs_len);
-                            while (_workspace_pkg_id < __end_29) : (_workspace_pkg_id += 1) {
+                            const __end_28 = (workspace_pkgs_off + workspace_pkgs_len);
+                            while (_workspace_pkg_id < __end_28) : (_workspace_pkg_id += 1) {
                                 const workspace_pkg_id: PackageID = @intCast(_workspace_pkg_id);
                                 if (res.eql((&pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))]), string_buf.bytes.items, string_buf.bytes.items)) {
                                     if (comptime Environment.isDebug) {
@@ -1544,26 +1542,24 @@ else => {
             {
                 pkg_resolutions[cp_cast_int(usize, 0)] = Resolution.init(.{ .root = undefined });
                 pkg_metas[0].origin = .local;
-                {
-                    var _dep_id: i32 = pkg_deps[0].begin();
-                    _ = &_dep_id;
-                    const __end_30 = pkg_deps[0].end();
-                    while (_dep_id < __end_30) : (_dep_id += 1) {
-                        const dep_id: DependencyID = @intCast(_dep_id);
-                        const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                        const res_id = ((pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items))) orelse {
-                        if (dep.behavior.optional) {
-                            continue;
-                        }
-                        _ = try dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
-                        return error.InvalidPackageInfo;
-});
-                        if (((!dep.behavior.isWorkspace()) and try seen_deps.getOrPut(allocator, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items)).found_existing)) {
-                            lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
-                            continue;
-                        }
-                        _ = mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
+                var _dep_id: u32 = pkg_deps[0].begin();
+                _ = &_dep_id;
+                const _dep_end: u32 = pkg_deps[0].end();
+                while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
+                    const dep_id: DependencyID = @intCast(_dep_id);
+                    const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
+                    const res_id = ((pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items))) orelse {
+                    if (dep.behavior.optional) {
+                        continue;
                     }
+                    _ = try dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
+                    return error.InvalidPackageInfo;
+});
+                    if (((!dep.behavior.isWorkspace()) and try seen_deps.getOrPut(allocator, (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items)).found_existing)) {
+                        lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
+                        continue;
+                    }
+                    _ = mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
                 }
             }
             var path_buf: bun.PathBuffer = undefined;
@@ -1572,35 +1568,33 @@ else => {
                 {
                     var _pkg_id: i32 = workspace_pkgs_off;
                     _ = &_pkg_id;
-                    const __end_31 = (workspace_pkgs_off + workspace_pkgs_len);
-                    while (_pkg_id < __end_31) : (_pkg_id += 1) {
+                    const __end_29 = (workspace_pkgs_off + workspace_pkgs_len);
+                    while (_pkg_id < __end_29) : (_pkg_id += 1) {
                         const pkg_id: PackageID = @intCast(_pkg_id);
                         const workspace_name = pkg_names[@as(usize, @intCast(pkg_id))].slice(lockfile.buffers.string_bytes.items);
                         _ = seen_deps.clearRetainingCapacity();
                         const deps = pkg_deps[@as(usize, @intCast(pkg_id))];
-                        {
-                            var _dep_id: i32 = deps.begin();
-                            _ = &_dep_id;
-                            const __end_32 = deps.end();
-                            while (_dep_id < __end_32) : (_dep_id += 1) {
-                                const dep_id: DependencyID = @intCast(_dep_id);
-                                const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                                const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items);
-                                const workspace_node_modules = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint((&path_buf), "{s}/{s}", .{ workspace_name, dep_name })) catch |__ce_6| { _ = &__ce_6; _ = try log.addErrorFmt(source, root_pkg_exr.loc, allocator, "Workspace and dependency name too long: '{s}/{s}'", .{ workspace_name, dep_name });
-                                return error.InvalidPackageInfo; }); });
-                                const res_id = ((pkg_map.get(workspace_node_modules)) orelse (((pkg_map.get(dep_name)) orelse {
-                                if (dep.behavior.optional) {
-                                    continue;
-                                }
-                                _ = try dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
-                                return error.InvalidPackageInfo;
-})));
-                                if (try seen_deps.getOrPut(allocator, dep_name).found_existing) {
-                                    lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
-                                    continue;
-                                }
-                                _ = mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
+                        var _dep_id: u32 = deps.begin();
+                        _ = &_dep_id;
+                        const _dep_end: u32 = deps.end();
+                        while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
+                            const dep_id: DependencyID = @intCast(_dep_id);
+                            const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
+                            const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items);
+                            const workspace_node_modules = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint((&path_buf), "{s}/{s}", .{ workspace_name, dep_name })) catch |__ce_6| { _ = &__ce_6; _ = try log.addErrorFmt(source, root_pkg_exr.loc, allocator, "Workspace and dependency name too long: '{s}/{s}'", .{ workspace_name, dep_name });
+                            return error.InvalidPackageInfo; }); });
+                            const res_id = ((pkg_map.get(workspace_node_modules)) orelse (((pkg_map.get(dep_name)) orelse {
+                            if (dep.behavior.optional) {
+                                continue;
                             }
+                            _ = try dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
+                            return error.InvalidPackageInfo;
+})));
+                            if (try seen_deps.getOrPut(allocator, dep_name).found_existing) {
+                                lockfile.buffers.resolutions.items[cp_cast_int(usize, dep_id)] = res_id;
+                                continue;
+                            }
+                            _ = mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
                         }
                     }
                 }
@@ -1617,28 +1611,26 @@ else => {
                     continue;
                 }
                 const deps = pkg_deps[@as(usize, @intCast(pkg_id))];
-                {
-                    var _dep_id: i32 = deps.begin();
-                    _ = &_dep_id;
-                    const __end_34 = deps.end();
-                    while (_dep_id < __end_34) : (_dep_id += 1) {
-                        const dep_id: DependencyID = @intCast(_dep_id);
-                        const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                        const res_id = (blk_catch_7: { break :blk_catch_7 ((pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf))) catch |e| { _ = &e; if ((e == error.InvalidPackageKey)) {
-                            _ = try log.addError(source, key.loc, "Invalid package path");
-                            return error.InvalidPackageKey;
-                        } else {
-                            if ((e == error.Unresolvable)) {
-                                if (dep.behavior.optional) {
-                                    continue;
-                                }
-                                _ = try dependencyResolutionFailure(dep, pkg_path, allocator, lockfile.buffers.string_bytes.items, source, log, key.loc);
-                                return error.InvalidPackageInfo;
+                var _dep_id: u32 = deps.begin();
+                _ = &_dep_id;
+                const _dep_end: u32 = deps.end();
+                while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
+                    const dep_id: DependencyID = @intCast(_dep_id);
+                    const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
+                    const res_id = (blk_catch_7: { break :blk_catch_7 ((pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf))) catch |e| { _ = &e; if ((e == error.InvalidPackageKey)) {
+                        _ = try log.addError(source, key.loc, "Invalid package path");
+                        return error.InvalidPackageKey;
+                    } else {
+                        if ((e == error.Unresolvable)) {
+                            if (dep.behavior.optional) {
+                                continue;
                             }
+                            _ = try dependencyResolutionFailure(dep, pkg_path, allocator, lockfile.buffers.string_bytes.items, source, log, key.loc);
+                            return error.InvalidPackageInfo;
                         }
-                        return error.InvalidPackageInfo; }); });
-                        _ = mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
                     }
+                    return error.InvalidPackageInfo; }); });
+                    _ = mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
                 }
             }
             _ = (blk_catch_8: { break :blk_catch_8 ((lockfile.resolve(log)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {

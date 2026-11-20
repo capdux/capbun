@@ -263,7 +263,7 @@ const entry = try builder.pending_optional_peers.getOrPut(dependency.name_hash);
             if ((!entry.found_existing)) {
                 entry.value_ptr.* = .init(builder.allocator);
             }
-            _ = try entry.value_ptr.put(dep_id, .{});
+            _ = try entry.value_ptr.put(dep_id, undefined);
 },
 .placement => |dest| {
 _ = bun.handleOom(dependency_lists[@as(usize, @intCast(dest.id))].append(builder.allocator, dep_id));

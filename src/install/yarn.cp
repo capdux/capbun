@@ -76,8 +76,8 @@ pub struct YarnLockEntry {
     commit: string? = null,
     workspace: bool = false,
     file: string? = null,
-    os: []string? = null,
-    cpu: []string? = null,
+    os: ([]string)? = null,
+    cpu: ([]string)? = null,
     git_repo_name: string? = null,
 
     fn deinit(*_, allocator: Allocator) {
@@ -357,12 +357,12 @@ pub struct YarnLock {
             if (trimmed.len == 0) continue;
 
             if (indent == 0 && strings.endsWithComptime(trimmed, ":")) {
-                if (*entry := current_entry) {
-                    entry.dependencies = current_deps;
-                    entry.optionalDependencies = current_optional_deps;
-                    entry.peerDependencies = current_peer_deps;
-                    entry.devDependencies = current_dev_deps;
-                    _.consolidateAndAppendEntry(entry.*)?;
+                if (current_entry != null) {
+                    current_entry.?.dependencies = current_deps;
+                    current_entry.?.optionalDependencies = current_optional_deps;
+                    current_entry.?.peerDependencies = current_peer_deps;
+                    current_entry.?.devDependencies = current_dev_deps;
+                    _.consolidateAndAppendEntry(current_entry.?)?;
                 }
 
                 current_specs.clearRetainingCapacity();
@@ -493,12 +493,12 @@ pub struct YarnLock {
             }
         }
 
-        if (*entry := current_entry) {
-            entry.dependencies = current_deps;
-            entry.optionalDependencies = current_optional_deps;
-            entry.peerDependencies = current_peer_deps;
-            entry.devDependencies = current_dev_deps;
-            _.consolidateAndAppendEntry(entry.*)?;
+        if (current_entry != null) {
+            current_entry.?.dependencies = current_deps;
+            current_entry.?.optionalDependencies = current_optional_deps;
+            current_entry.?.peerDependencies = current_peer_deps;
+            current_entry.?.devDependencies = current_dev_deps;
+            _.consolidateAndAppendEntry(current_entry.?)?;
         }
     }
 

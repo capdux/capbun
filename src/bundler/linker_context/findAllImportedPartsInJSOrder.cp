@@ -1,5 +1,5 @@
 pub fn findAllImportedPartsInJSOrder(ctx: *LinkerContext, temp_allocator: std.mem.Allocator, chunks: []Chunk)! {
-    const trace = bun.perf.trace("Bundler.findAllImportedPartsInJSOrder");
+    let trace = bun.perf.trace("Bundler.findAllImportedPartsInJSOrder");
     defer trace.end();
 
     let part_ranges_shared = std.array_list.Managed(PartRange).init(temp_allocator);

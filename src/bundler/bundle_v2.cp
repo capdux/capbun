@@ -2590,7 +2590,7 @@ pub struct BundleV2 {
                         _.allocator(),
                         entry_point,
                         { imported_on_server: false },
-                    );
+                    )?;
                 }
             }
 
@@ -3572,7 +3572,7 @@ pub struct BundleV2 {
 
         const transpiler = unsafe { _.transpilerForTarget(target) };
 
-        const ast_for_html_entrypoint = JSAst.init((bun.js_parser.newLazyExportAST(
+        const lazy_ast = bun.js_parser.newLazyExportAST(
             _.allocator(),
             transpiler.options.define,
             js_parser_options,
@@ -3588,7 +3588,8 @@ pub struct BundleV2 {
 
             // We replace this runtime API call's ref later via .link on the Symbol.
             "__jsonParse",
-        )).?);
+        )?;
+        const ast_for_html_entrypoint = JSAst.init(lazy_ast.?);
 
         let fake_input_file = Graph.InputFile{
             source: empty_html_file_source,

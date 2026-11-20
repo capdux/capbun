@@ -151,7 +151,8 @@ pub struct RuntimeImports {
     /// This is a lookup table so we don't need to resort the strings each time
     pub const all_sorted_index = brk: {
         @setEvalBranchQuota(1000000);
-        let out: [all.len]usize = undefined;
+        const all_len = all.len;
+        let out: [all_len]usize = undefined;
         let i: usize = 0;
         while (i < all.len) : (i += 1) {
             const name = all[i];

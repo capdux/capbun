@@ -424,18 +424,16 @@ _ = rewriteExpr(p, (&(if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(dat
 .s_if => |data| {
 _ = rewriteExpr(p, (&data.test_), kind);
                 _ = rewriteStmts(p, (&data.yes)[0..1], kind);
-                if (data.no) |*no| {
-                    _ = &no;
-                    _ = rewriteStmts(p, (no.*)[0..1], kind);
+                if ((data.no != null)) {
+                    _ = rewriteStmts(p, (&data.no.?)[0..1], kind);
                 }
 },
 .s_block => |data| {
 _ = rewriteStmts(p, data.stmts, kind);
 },
 .s_for => |data| {
-if (data.init) |*fi| {
-                    _ = &fi;
-                    _ = rewriteStmts(p, (fi.*)[0..1], kind);
+if ((data.init != null)) {
+                    _ = rewriteStmts(p, (&data.init.?)[0..1], kind);
                 }
                 if (data.test_) |*t| {
                     _ = &t;
@@ -712,9 +710,8 @@ _ = rewritePrivateAccessesInExpr(p, (&data.test_), map);
 _ = rewritePrivateAccessesInStmts(p, data.stmts, map);
 },
 .s_for => |data| {
-if (data.init) |*fi| {
-                    _ = &fi;
-                    _ = rewritePrivateAccessesInStmts(p, (fi.*)[0..1], map);
+if ((data.init != null)) {
+                    _ = rewritePrivateAccessesInStmts(p, (&data.init.?)[0..1], map);
                 }
                 if (data.test_) |*t| {
                     _ = &t;

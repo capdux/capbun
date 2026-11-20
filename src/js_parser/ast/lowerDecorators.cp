@@ -293,11 +293,11 @@ pub fn LowerDecorators(
                     .s_if => |data| {
                         rewriteExpr(p, &data.test_, kind);
                         rewriteStmts(p, (&data.yes)[0..1], kind);
-                        if (*no := data.no) rewriteStmts(p, no[0..1], kind);
+                        if (data.no != null) rewriteStmts(p, (&data.no.?)[0..1], kind);
                     },
                     .s_block => |data| rewriteStmts(p, data.stmts, kind),
                     .s_for => |data| {
-                        if (*fi := data.init) rewriteStmts(p, fi[0..1], kind);
+                        if (data.init != null) rewriteStmts(p, (&data.init.?)[0..1], kind);
                         if (*t := data.test_) rewriteExpr(p, t, kind);
                         if (*u := data.update) rewriteExpr(p, u, kind);
                         rewriteStmts(p, (&data.body)[0..1], kind);
@@ -494,7 +494,7 @@ pub fn LowerDecorators(
                     },
                     .s_block => |data| rewritePrivateAccessesInStmts(p, data.stmts, map),
                     .s_for => |data| {
-                        if (*fi := data.init) rewritePrivateAccessesInStmts(p, fi[0..1], map);
+                        if (data.init != null) rewritePrivateAccessesInStmts(p, (&data.init.?)[0..1], map);
                         if (*t := data.test_) rewritePrivateAccessesInExpr(p, t, map);
                         if (*u := data.update) rewritePrivateAccessesInExpr(p, u, map);
                         rewritePrivateAccessesInStmts(p, (&data.body)[0..1], map);

@@ -1008,7 +1008,7 @@ pub fn generateImportStmtForBakeResponse(p: *P, parts: *ListManaged(js_ast.Part)
             const allocator = p.allocator;
             const import_path: []const u8 = "bun:app";
             const import_record_i = p.addImportRecordByRange(.stmt, logger.Range.None, import_path);
-            var declared_symbols = DeclaredSymbol.List;
+            var declared_symbols: DeclaredSymbol.List = .{};
             _ = &declared_symbols;
             _ = try declared_symbols.ensureTotalCapacity(allocator, 2);
             var stmts = try allocator.alloc(Stmt, 1);
@@ -1046,7 +1046,7 @@ pub fn generateImportStmt(p: *P, import_path: []const u8, imports: anytype, part
             const clause_items = try allocator.alloc(js_ast.ClauseItem, imports.len);
             var stmts = try allocator.alloc(Stmt, (1 + (if ((additional_stmt != null)) (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)))));
             _ = &stmts;
-            var declared_symbols = DeclaredSymbol.List;
+            var declared_symbols: DeclaredSymbol.List = .{};
             _ = &declared_symbols;
             _ = try declared_symbols.ensureTotalCapacity(allocator, (imports.len + 1));
             _ = bun.copy(u8, namespace_identifier, prefix);
@@ -1100,7 +1100,7 @@ pub fn generateReactRefreshImportHmr(p: *P, parts: *ListManaged(js_ast.Part), im
             var items = try List(Item).initCapacity(allocator, len);
             _ = &items;
             const stmts = try allocator.alloc(Stmt, 1);
-            var declared_symbols = DeclaredSymbol.List;
+            var declared_symbols: DeclaredSymbol.List = .{};
             _ = &declared_symbols;
             _ = try declared_symbols.ensureTotalCapacity(allocator, len);
             const namespace_ref = try p.newSymbol(.other, "RefreshRuntime");

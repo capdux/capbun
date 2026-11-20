@@ -132,8 +132,8 @@ pub const YarnLockEntry = struct {
     commit: ?[]const u8 = null,
     workspace: bool = false,
     file: ?[]const u8 = null,
-    os: []?[]const u8 = null,
-    cpu: []?[]const u8 = null,
+    os: ?[][]const u8 = null,
+    cpu: ?[][]const u8 = null,
     git_repo_name: ?[]const u8 = null,
 
 pub fn deinit(self: *YarnLockEntry, allocator: Allocator) void {
@@ -453,13 +453,12 @@ pub fn parse(self: *YarnLock, content: []const u8) !void {
                     continue;
                 }
                 if (((indent == 0) and strings.endsWithComptime(trimmed, ":"))) {
-                    if (current_entry) |*entry| {
-                        _ = &entry;
-                        (entry.*).dependencies = current_deps;
-                        (entry.*).optionalDependencies = current_optional_deps;
-                        (entry.*).peerDependencies = current_peer_deps;
-                        (entry.*).devDependencies = current_dev_deps;
-                        _ = try self.consolidateAndAppendEntry((entry.*).*);
+                    if ((current_entry != null)) {
+                        current_entry.?.dependencies = current_deps;
+                        current_entry.?.optionalDependencies = current_optional_deps;
+                        current_entry.?.peerDependencies = current_peer_deps;
+                        current_entry.?.devDependencies = current_dev_deps;
+                        _ = try self.consolidateAndAppendEntry(current_entry.?);
                     }
                     _ = current_specs.clearRetainingCapacity();
                     const specs_str = trimmed[0..(trimmed.len - 1)];
@@ -603,13 +602,12 @@ pub fn parse(self: *YarnLock, content: []const u8) !void {
                     }
                 }
             }
-            if (current_entry) |*entry| {
-                _ = &entry;
-                (entry.*).dependencies = current_deps;
-                (entry.*).optionalDependencies = current_optional_deps;
-                (entry.*).peerDependencies = current_peer_deps;
-                (entry.*).devDependencies = current_dev_deps;
-                _ = try self.consolidateAndAppendEntry((entry.*).*);
+            if ((current_entry != null)) {
+                current_entry.?.dependencies = current_deps;
+                current_entry.?.optionalDependencies = current_optional_deps;
+                current_entry.?.peerDependencies = current_peer_deps;
+                current_entry.?.devDependencies = current_dev_deps;
+                _ = try self.consolidateAndAppendEntry(current_entry.?);
             }
     }
 

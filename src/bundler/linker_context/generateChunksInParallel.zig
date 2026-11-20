@@ -88,6 +88,7 @@ pub const ModuleInfoReplacement = struct {
     resolved_path: []const u8,
 };
 
+const OptionalString = ?[]const u8;
 pub const ThreadPool = bun.bundle_v2.ThreadPool;
 const debugPartRanges = Output.scoped(.PartRanges, .hidden);
 const Environment = bun.Environment;
@@ -502,7 +503,7 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
         }
         }
         if (is_standalone) {
-            var scc = bun.handleOom(bun.default_allocator.alloc(try string, chunks.len));
+            var scc = bun.handleOom(bun.default_allocator.alloc(OptionalString, chunks.len));
             _ = &scc;
             _ = @memset(scc, null);
             standalone_chunk_contents = scc;

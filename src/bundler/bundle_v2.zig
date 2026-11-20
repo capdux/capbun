@@ -1612,7 +1612,7 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             for (self.graph.entry_points.items) |entry_point| {
                 _ = &entry_point;
                 if ((css[@as(usize, @intCast(entry_point.get()))] != null)) {
-                    _ = start.css_entry_points.put(self.allocator(), entry_point, .{ .imported_on_server = false });
+                    _ = try start.css_entry_points.put(self.allocator(), entry_point, .{ .imported_on_server = false });
                 }
             }
             break :reachable_files js_files.items;
@@ -2246,7 +2246,8 @@ pub fn generateServerHTMLModule(self: *BundleV2, path: *const Fs.Path, target: o
             break :blk self.transpilerForTarget(target);
 
 });
-            const ast_for_html_entrypoint = JSAst.init((bun.js_parser.newLazyExportAST(self.allocator(), transpiler.options.define, js_parser_options, transpiler.log, Expr.init(E.String, E.String{ .data = unique_key }, Logger.Loc.Empty), (&empty_html_file_source), "__jsonParse")).?);
+            const lazy_ast = try bun.js_parser.newLazyExportAST(self.allocator(), transpiler.options.define, js_parser_options, transpiler.log, Expr.init(E.String, E.String{ .data = unique_key }, Logger.Loc.Empty), (&empty_html_file_source), "__jsonParse");
+            const ast_for_html_entrypoint = JSAst.init(lazy_ast.?);
             var fake_input_file = Graph.InputFile{ .source = empty_html_file_source, .side_effects = .no_side_effects__pure_data };
             _ = &fake_input_file;
             _ = try graph.input_files.append(self.allocator(), fake_input_file);
