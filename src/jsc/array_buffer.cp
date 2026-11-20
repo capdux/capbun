@@ -393,7 +393,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
                 _.ptr,
                 _.byte_len,
                 MarkedArrayBuffer_deallocator,
-                unsafe { @as(*!, &bun.default_allocator) },
+                unsafe { @as(*!, @constCast(&bun.default_allocator)) },
             );
         }
 
@@ -403,7 +403,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
             _.ptr,
             _.byte_len,
             MarkedArrayBuffer_deallocator,
-            unsafe { @as(*!, &bun.default_allocator) },
+            unsafe { @as(*!, @constCast(&bun.default_allocator)) },
         );
     }
 

@@ -70,31 +70,7 @@ pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { i
 pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const Output = @import("bun").Output;
-const Environment = @import("bun").Environment;
-const sys = @import("bun").sys;
-const io = @import("bun").io;
-const FD = @import("bun").FD;
-const Mode = @import("bun").Mode;
-const O = @import("bun").O;
-const JSError = @import("bun").JSError;
 pub const bun = @import("bun");
-const JSGlobalObject = @import("jsc").JSGlobalObject;
-const JSValue = @import("jsc").JSValue;
-const CallFrame = @import("jsc").CallFrame;
-const EventLoopHandle = @import("jsc").EventLoopHandle;
-const VirtualMachine = @import("jsc").VirtualMachine;
-const Strong = @import("jsc").Strong;
-const WebCore = @import("jsc").WebCore;
-pub const jsc = @import("jsc");
-const Blob = @import("webcore").Blob;
-const Sink = @import("webcore").Sink;
-const streams = @import("webcore").streams;
-const AutoFlusher = @import("webcore").AutoFlusher;
-const PathOrFileDescriptor = @import("webcore").PathOrFileDescriptor;
-const libuv = @import("windows").libuv;
-const as = @import("windows").as;
-const uv = @import("windows").uv;
 pub const FlushPendingTask = struct {
     has: bool = false,
     
@@ -788,7 +764,7 @@ _ = self.handleRejectStream(globalThis, promise.result(globalThis.vm()));
             }
             return promise_result;
     }
-    pub const RefCount = sys.RefCount(FileSink, "ref_count", deinit, .{});
+    pub const RefCount = bun.ptr.RefCount(FileSink, "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
     pub const IOWriter = io.StreamingWriter(FileSink, opaque {
@@ -802,8 +778,31 @@ _ = self.handleRejectStream(globalThis, promise.result(globalThis.vm()));
     pub const writeBytes = write;
 };
 
+const Output = bun.Output;
+const Environment = bun.Environment;
+const sys = bun.sys;
+const io = bun.io;
+const FD = bun.FD;
+const Mode = bun.Mode;
+const O = bun.O;
+const JSError = bun.JSError;
 const spawn = bun.spawn;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const CallFrame = jsc.CallFrame;
+const EventLoopHandle = jsc.EventLoopHandle;
+const VirtualMachine = jsc.VirtualMachine;
+const Strong = jsc.Strong;
+const WebCore = jsc.WebCore;
 const Task = jsc.Task;
+const webcore = bun.webcore;
+const Blob = webcore.Blob;
+const Sink = webcore.Sink;
+const streams = webcore.streams;
+const AutoFlusher = webcore.AutoFlusher;
+const PathOrFileDescriptor = webcore.PathOrFileDescriptor;
+const uv = bun.windows.libuv;
 const log = Output.scoped(.FileSink, .visible);
 pub var live_count = std.atomic.Value(i32).init(0);
 pub const Poll = FileSink.Poll;

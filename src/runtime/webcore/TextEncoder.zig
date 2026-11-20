@@ -68,8 +68,7 @@ pub fn init(self: *RopeStringEncoder, globalThis: *JSGlobalObject, buf: []u8, ta
             self.any_non_ascii = any_non_ascii;
     }
 
-pub fn append8(self: *RopeStringEncoder, it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32) callconv(.c) void {
-        _ = self;
+pub fn append8(it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32) callconv(.c) void {
             var enc = cast(*RopeStringEncoder, it.data.?);
             _ = &enc;
             const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[enc.tail..], ptr[0..len], true);
@@ -81,16 +80,14 @@ pub fn append8(self: *RopeStringEncoder, it: *jsc.JSString.Iterator, ptr: [*]con
             }
     }
 
-pub fn append16(self: *RopeStringEncoder, it: *jsc.JSString.Iterator, _: [*]const u16, _: u32) callconv(.c) void {
-        _ = self;
+pub fn append16(it: *jsc.JSString.Iterator, _: [*]const u16, _: u32) callconv(.c) void {
             var enc = cast(*RopeStringEncoder, it.data.?);
             _ = &enc;
             enc.any_non_ascii = true;
             it.stop = 1;
     }
 
-pub fn write8(self: *RopeStringEncoder, it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32, offset: u32) callconv(.c) void {
-        _ = self;
+pub fn write8(it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32, offset: u32) callconv(.c) void {
             var enc = cast(*RopeStringEncoder, it.data.?);
             _ = &enc;
             const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[offset..], ptr[0..len], true);
@@ -100,8 +97,7 @@ pub fn write8(self: *RopeStringEncoder, it: *jsc.JSString.Iterator, ptr: [*]cons
             }
     }
 
-pub fn write16(self: *RopeStringEncoder, it: *jsc.JSString.Iterator, _: [*]const u16, _: u32, _: u32) callconv(.c) void {
-        _ = self;
+pub fn write16(it: *jsc.JSString.Iterator, _: [*]const u16, _: u32, _: u32) callconv(.c) void {
             var enc = cast(*RopeStringEncoder, it.data.?);
             _ = &enc;
             enc.any_non_ascii = true;

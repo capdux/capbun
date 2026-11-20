@@ -34,7 +34,7 @@ const JSValue = jsc.JSValue;
         return @enumFromInt(_.errno * -1);
     }
 
-    pub fn deref(*_) {
+    pub fn deref() {
         _.path.deref();
         _.code.deref();
         _.message.deref();
@@ -52,7 +52,7 @@ const JSValue = jsc.JSValue;
         _.dest.ref();
     }
 
-    pub fn toErrorInstance(*_, global: *JSGlobalObject): JSValue {
+    pub fn toErrorInstance(global: *JSGlobalObject): JSValue {
         defer _.deref();
         return SystemError__toErrorInstance(&_, global);
     }
@@ -61,7 +61,7 @@ const JSValue = jsc.JSValue;
     /// frames from the given promise's await chain. Use when creating an error
     /// from native code at the top of the event loop (threadpool callback) to
     /// reject a promise — otherwise the error will have an empty stack.
-    pub fn toErrorInstanceWithAsyncStack(*_, global: *JSGlobalObject, promise: *jsc.JSPromise): JSValue {
+    pub fn toErrorInstanceWithAsyncStack(global: *JSGlobalObject, promise: *jsc.JSPromise): JSValue {
         const value = _.toErrorInstance(global);
         value.attachAsyncStackFromPromise(global, promise);
         return value;
@@ -86,7 +86,7 @@ const JSValue = jsc.JSValue;
     /// Before using this function, consider if the Node.js API it is
     /// implementing follows this convention. It is exclusively used
     /// to match the error code that `node:os` throws.
-    pub fn toErrorInstanceWithInfoObject(*_, global: *JSGlobalObject): JSValue {
+    pub fn toErrorInstanceWithInfoObject(global: *JSGlobalObject): JSValue {
         defer _.deref();
         return SystemError__toErrorInstanceWithInfoObject(&_, global);
     }

@@ -83,7 +83,7 @@ pub fn getErrno(self: SystemError) bun.sys.E {
             return @enumFromInt((self.errno * -1));
     }
 
-pub fn deref(self: *SystemError) void {
+pub fn deref(self: SystemError) void {
             _ = self.path.deref();
             _ = self.code.deref();
             _ = self.message.deref();
@@ -101,20 +101,20 @@ pub fn ref(self: *SystemError) void {
             _ = self.dest.ref();
     }
 
-pub fn toErrorInstance(self: *SystemError, global: *JSGlobalObject) JSValue {
+pub fn toErrorInstance(self: SystemError, global: *JSGlobalObject) JSValue {
             defer {
             _ = self.deref();
             }
             return SystemError__toErrorInstance((&self), global);
     }
 
-pub fn toErrorInstanceWithAsyncStack(self: *SystemError, global: *JSGlobalObject, promise: *jsc.JSPromise) JSValue {
+pub fn toErrorInstanceWithAsyncStack(self: SystemError, global: *JSGlobalObject, promise: *jsc.JSPromise) JSValue {
             const value = self.toErrorInstance(global);
             _ = value.attachAsyncStackFromPromise(global, promise);
             return value;
     }
 
-pub fn toErrorInstanceWithInfoObject(self: *SystemError, global: *JSGlobalObject) JSValue {
+pub fn toErrorInstanceWithInfoObject(self: SystemError, global: *JSGlobalObject) JSValue {
             defer {
             _ = self.deref();
             }

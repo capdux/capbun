@@ -1,11 +1,29 @@
-import { Output, Environment, sys, io, FD, Mode, O, JSError } from "bun";
 import bun from "bun";
+const Output = bun.Output;
+const Environment = bun.Environment;
+const sys = bun.sys;
+const io = bun.io;
+const FD = bun.FD;
+const Mode = bun.Mode;
+const O = bun.O;
+const JSError = bun.JSError;
 const spawn = bun.spawn;
-import { JSGlobalObject, JSValue, CallFrame, EventLoopHandle, VirtualMachine, Strong, WebCore } from "jsc";
-import jsc from "jsc";
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const CallFrame = jsc.CallFrame;
+const EventLoopHandle = jsc.EventLoopHandle;
+const VirtualMachine = jsc.VirtualMachine;
+const Strong = jsc.Strong;
+const WebCore = jsc.WebCore;
 const Task = jsc.Task;
-import { Blob, Sink, streams, AutoFlusher, PathOrFileDescriptor } from "webcore";
-import { libuv as uv } from "windows";
+const webcore = bun.webcore;
+const Blob = webcore.Blob;
+const Sink = webcore.Sink;
+const streams = webcore.streams;
+const AutoFlusher = webcore.AutoFlusher;
+const PathOrFileDescriptor = webcore.PathOrFileDescriptor;
+const uv = bun.windows.libuv;
 
 const log = Output.scoped(.FileSink, .visible);
 
@@ -68,7 +86,7 @@ export class FileSink {
     readable_stream: WebCore.ReadableStream.Strong = .{};
     js_sink_ref: Strong.Optional = .empty;
 
-    pub const RefCount = sys.RefCount(FileSink, "ref_count", deinit, .{});
+    pub const RefCount = bun.ptr.RefCount(FileSink, "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 

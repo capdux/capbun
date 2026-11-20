@@ -1612,3 +1612,6 @@
 
 ### 2026-11-20 06:10:44 UTC - zig:check 外部根因（App/Blob）修复入库
 - 完成：`uws_sys/App.cp` 补齐 `NewApp.Response`/`WebSocket`/`ListenSocket` 导出；`webcore/Blob.cp` 升级 `@root struct Blob` 并导出 `SizeType` 等根成员。
+
+### 2026-11-20 06:15:49 UTC - zig:check 第 3 轮 JSC+WebCore 簇 10 模块语义修复入库
+- 完成：`GeneratedBindings`/`SystemError`/`host_fn`/`ZigString`/`array_buffer`/`Body`/`FileSink`/`Response`/`TextEncoder`/`s3/client` 10/10 全 PASS。

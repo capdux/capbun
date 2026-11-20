@@ -430,12 +430,12 @@ pub fn toJSUnchecked(self: *ArrayBuffer, ctx: *jsc.JSGlobalObject) bun.JSError!j
             }
             if ((self.typed_array_type == .ArrayBuffer)) {
                 return makeArrayBufferWithBytesNoCopy(ctx, self.ptr, self.byte_len, MarkedArrayBuffer_deallocator, (blk: {
-                break :blk @as(*anyopaque, @ptrCast(@alignCast(&(bun.default_allocator))));
+                break :blk @as(*anyopaque, @ptrCast(@alignCast(@constCast((&bun.default_allocator)))));
 
 }));
             }
             return makeTypedArrayWithBytesNoCopy(ctx, self.typed_array_type.toTypedArrayType(), self.ptr, self.byte_len, MarkedArrayBuffer_deallocator, (blk: {
-            break :blk @as(*anyopaque, @ptrCast(@alignCast(&(bun.default_allocator))));
+            break :blk @as(*anyopaque, @ptrCast(@alignCast(@constCast((&bun.default_allocator)))));
 
 }));
     }

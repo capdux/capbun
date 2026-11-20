@@ -68,33 +68,16 @@ pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { i
 pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-pub const S3Acl = @import("../../../s3_signing/acl");
-pub const DownloadStream = @import("./download_stream");
-pub const MultiPartOptions = @import("./multipart_options");
-pub const MultiPart = @import("./multipart");
-pub const S3StorageClass = @import("../../../s3_signing/storage_class");
-pub const Error = @import("../../../s3_signing/error");
-pub const Credentials = @import("../../../s3_signing/credentials");
-pub const S3SimpleRequest = @import("./simple_request");
-pub const S3ListObjects = @import("./list_objects");
-const default_allocator = @import("bun").default_allocator;
-const handleOom = @import("bun").handleOom;
-const destroy = @import("bun").destroy;
-const assert = @import("bun").assert;
-const ByteList = @import("bun").ByteList;
-const MutableString = @import("bun").MutableString;
-const URL = @import("bun").URL;
-const ThreadPool = @import("bun").ThreadPool;
-const JSTerminated = @import("bun").JSTerminated;
-const JSError = @import("bun").JSError;
-const Output = @import("bun").Output;
-const JSGlobalObject = @import("bun:jsc").JSGlobalObject;
-const JSValue = @import("bun:jsc").JSValue;
-const JSPromise = @import("bun:jsc").JSPromise;
-const VirtualMachine = @import("bun:jsc").VirtualMachine;
-const WebCore = @import("bun:jsc").WebCore;
-const Header = @import("bun:picohttp").Header;
-const allocPrint = @import("std:fmt").allocPrint;
+pub const S3Acl = @import("../../../s3_signing/acl.zig");
+pub const DownloadStream = @import("./download_stream.zig");
+pub const MultiPartOptions = @import("./multipart_options.zig");
+pub const MultiPart = @import("./multipart.zig");
+pub const S3StorageClass = @import("../../../s3_signing/storage_class.zig");
+pub const Error = @import("../../../s3_signing/error.zig");
+pub const Credentials = @import("../../../s3_signing/credentials.zig");
+pub const S3SimpleRequest = @import("./simple_request.zig");
+pub const S3ListObjects = @import("./list_objects.zig");
+pub const bun = @import("bun");
 pub const NetworkSinkCallbackWrapper = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
@@ -335,7 +318,25 @@ pub fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: ?S3Error, op
 };
 
 const S3UploadVoidCallbackFn = *const fn (S3UploadResult, *anyopaque) void;
-const bun = @import("bun");
+const default_allocator = bun.default_allocator;
+const handleOom = bun.handleOom;
+const destroy = bun.destroy;
+const assert = bun.assert;
+const ByteList = bun.ByteList;
+const MutableString = bun.MutableString;
+const URL = bun.URL;
+const ThreadPool = bun.ThreadPool;
+const JSTerminated = bun.JSTerminated;
+const JSError = bun.JSError;
+const Output = bun.Output;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const JSPromise = jsc.JSPromise;
+const VirtualMachine = jsc.VirtualMachine;
+const WebCore = jsc.WebCore;
+const Header = bun.picohttp.Header;
+const allocPrint = std.fmt.allocPrint;
 const JSTerminatedError = bun.JSTerminated;
 const log = Output.scoped(.S3UploadStream, .visible);
 pub const ACL = S3Acl.ACL;

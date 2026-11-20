@@ -1,6 +1,24 @@
-import { Output, default_allocator, S3, webcore, http, jsc, String, ptr, sys, JSError, FormData } from "bun";
-import { JSGlobalObject, JSValue, CallFrame, ZigString, JSRef, Codegen } from "jsc";
-import { FetchHeaders, Blob, Body } from "webcore";
+import bun from "bun";
+const Output = bun.Output;
+const default_allocator = bun.default_allocator;
+const S3 = bun.S3;
+const webcore = bun.webcore;
+const http = bun.http;
+const jsc = bun.jsc;
+const String = bun.String;
+const ptr = bun.ptr;
+const sys = bun.sys;
+const JSError = bun.JSError;
+const FormData = bun.FormData;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const CallFrame = jsc.CallFrame;
+const ZigString = jsc.ZigString;
+const JSRef = jsc.JSRef;
+const Codegen = jsc.Codegen;
+const FetchHeaders = webcore.FetchHeaders;
+const Blob = webcore.Blob;
+const Body = webcore.Body;
 import { Method } from "../../http_types/Method.zig";
 
 extern fn Response__getAsyncLocalStorageStore(global: *JSGlobalObject, als: JSValue): JSValue;

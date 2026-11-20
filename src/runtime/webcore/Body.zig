@@ -62,33 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const Output = @import("bun").Output;
-const default_allocator = @import("bun").default_allocator;
-const strings = @import("bun").strings;
-const webcore = @import("bun").webcore;
-const http = @import("bun").http;
-const jsc = @import("bun").jsc;
-const String = @import("bun").String;
-const sys = @import("bun").sys;
-const JSError = @import("bun").JSError;
-const FormData = @import("bun").FormData;
-const MutableString = @import("bun").MutableString;
-const WTF = @import("bun").WTF;
-const HiveRef = @import("bun").HiveRef;
-const HiveArray = @import("bun").HiveArray;
-const heap_breakdown = @import("bun").heap_breakdown;
-const JSGlobalObject = @import("jsc").JSGlobalObject;
-const JSValue = @import("jsc").JSValue;
-const CallFrame = @import("jsc").CallFrame;
-const JSPromise = @import("jsc").JSPromise;
-const VirtualMachine = @import("jsc").VirtualMachine;
-const ZigString = @import("jsc").ZigString;
-const SystemError = @import("jsc").SystemError;
-const CommonAbortReason = @import("jsc").CommonAbortReason;
-const FetchHeaders = @import("webcore").FetchHeaders;
-const Blob = @import("webcore").Blob;
-const streams = @import("webcore").streams;
-const Sink = @import("webcore").Sink;
+pub const bun = @import("bun");
 const MimeType = @import("../../http_types/MimeType.zig").MimeType;
 pub const Action = union(enum) {
     none: void,
@@ -624,6 +598,33 @@ pub fn extract(globalThis: *JSGlobalObject, value: JSValue) JSError!*Body {
     }
 };
 
+const Output = bun.Output;
+const default_allocator = bun.default_allocator;
+const strings = bun.strings;
+const webcore = bun.webcore;
+const http = bun.http;
+const jsc = bun.jsc;
+const String = bun.String;
+const sys = bun.sys;
+const JSError = bun.JSError;
+const FormData = bun.FormData;
+const MutableString = bun.MutableString;
+const WTF = bun.WTF;
+const HiveRef = bun.HiveRef;
+const HiveArray = bun.HiveArray;
+const heap_breakdown = bun.heap_breakdown;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const CallFrame = jsc.CallFrame;
+const JSPromise = jsc.JSPromise;
+const VirtualMachine = jsc.VirtualMachine;
+const ZigString = jsc.ZigString;
+const SystemError = jsc.SystemError;
+const CommonAbortReason = jsc.CommonAbortReason;
+const FetchHeaders = webcore.FetchHeaders;
+const Blob = webcore.Blob;
+const streams = webcore.streams;
+const Sink = webcore.Sink;
 const log = Output.scoped(.Body, .visible);
 pub const OnReceiveValueFn = *const *const fn(?*anyopaque, *Value) callconv(.c) void;
 pub const OnStartBufferingFn = *const *const fn(?*anyopaque) callconv(.c) void;

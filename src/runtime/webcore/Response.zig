@@ -62,26 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
-const Output = @import("bun").Output;
-const default_allocator = @import("bun").default_allocator;
-const S3 = @import("bun").S3;
-const webcore = @import("bun").webcore;
-const http = @import("bun").http;
-const jsc = @import("bun").jsc;
-const String = @import("bun").String;
-const ptr = @import("bun").ptr;
-const sys = @import("bun").sys;
-const JSError = @import("bun").JSError;
-const FormData = @import("bun").FormData;
-const JSGlobalObject = @import("jsc").JSGlobalObject;
-const JSValue = @import("jsc").JSValue;
-const CallFrame = @import("jsc").CallFrame;
-const ZigString = @import("jsc").ZigString;
-const JSRef = @import("jsc").JSRef;
-const Codegen = @import("jsc").Codegen;
-const FetchHeaders = @import("webcore").FetchHeaders;
-const Blob = @import("webcore").Blob;
-const Body = @import("webcore").Body;
+pub const bun = @import("bun");
 const Method = @import("../../http_types/Method.zig").Method;
 pub const Init = struct {
     headers: ?*FetchHeaders = null,
@@ -554,6 +535,26 @@ pub inline fn emptyWithStatus(self: *Response, _: *JSGlobalObject, status: u16) 
     pub const WeakRef = ptr.WeakPtr(Response, "weak_ptr_data");
 };
 
+const Output = bun.Output;
+const default_allocator = bun.default_allocator;
+const S3 = bun.S3;
+const webcore = bun.webcore;
+const http = bun.http;
+const jsc = bun.jsc;
+const String = bun.String;
+const ptr = bun.ptr;
+const sys = bun.sys;
+const JSError = bun.JSError;
+const FormData = bun.FormData;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const CallFrame = jsc.CallFrame;
+const ZigString = jsc.ZigString;
+const JSRef = jsc.JSRef;
+const Codegen = jsc.Codegen;
+const FetchHeaders = webcore.FetchHeaders;
+const Blob = webcore.Blob;
+const Body = webcore.Body;
 pub const js = Codegen.JSResponse;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;

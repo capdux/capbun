@@ -245,7 +245,7 @@ pub fn debugExceptionAssertion(globalThis: *JSGlobalObject, value: JSValue, comp
                     defer {
                     _ = formatter.deinit();
                     }
-                    _ = bun.Output.err("Assertion failed", "Native function returned a non-zero JSValue while an exception is pending", "", "    fn: {s}", " value: {f}", "", .{ (&func), value.toFmt((&formatter)) });
+                    _ = bun.Output.err("Assertion failed", "Native function returned a non-zero JSValue while an exception is pending\n\n    fn: {s}\n value: {f}\n", .{ (&func), value.toFmt((&formatter)) });
                     _ = bun.Output.flush();
                 }
             }
@@ -329,7 +329,7 @@ pub inline fn parseErrorSet(T: type, errors: []const std.builtin.Type.Error) Par
 
 pub fn voidFromJSError(e: bun.JSError, globalThis: *jsc.JSGlobalObject) void {
         if ((e == error.OutOfMemory)) {
-            _ = (blk_catch_4: { break :blk_catch_4 ((globalThis.throwOutOfMemory()) catch |__ce_4| { _ = &__ce_4;  }); });
+            _ = globalThis.throwOutOfMemory();
         }
 }
 
