@@ -42,7 +42,7 @@ pub struct Opts {
 }
 
 pub struct Args {
-    sources: []const [*:0]const u8 = [],
+    sources: []const [:0]const u8 = [],
     target: [:0]const u8 = "",
     target_fd: bun.FD? = null,
 }
@@ -53,7 +53,7 @@ pub const CheckTargetState = union(enum) {
 };
 
 pub type OptionalFD = (bun.FD)?;
-pub type FilepathSlice = []const [*:0]const u8;
+pub type FilepathSlice = []const [:0]const u8;
 
 pub const ShellMvCheckTargetTask = struct {
     mv: *Mv,
@@ -95,7 +95,7 @@ pub const ShellMvBatchedTask = struct {
     pub const BATCH_SIZE = 5;
 
     mv: *Mv,
-    sources: []const [*:0]const u8,
+    sources: []const [:0]const u8,
     target: [:0]const u8,
     target_fd: bun.FD?,
     cwd: bun.FD,
@@ -379,7 +379,8 @@ pub const State = union(enum) {
         }
 
         _.state.check_target.state = .done;
-        _.next().run();
+        let y = _.next();
+        y.run();
     }
 
     pub fn batchedMoveTaskDone(*_, task: *ShellMvBatchedTask) {
@@ -388,7 +389,7 @@ pub const State = union(enum) {
             assert(_.state.executing.tasks_done < _.state.executing.task_count);
         }
 
-        let exec = &*_.state.executing;
+        let exec = &_.state.executing;
 
         if (*err_val := task.err) {
             exec.error_signal.store(true, .seq_cst);
@@ -413,7 +414,8 @@ pub const State = union(enum) {
             }
             _.state = .done;
 
-            _.next().run();
+            let y = _.next();
+            y.run();
         }
     }
 

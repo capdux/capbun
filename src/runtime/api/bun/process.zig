@@ -223,8 +223,8 @@ _ = @panic("Internal Bun error: ProcessExitHandler has an invalid tag. Please fi
 pub const Process = struct {
     pid: pid_t = 0,
     pidfd: PidFDType = 0,
-    status: Status = Status{ .running = .{} },
-    poller: Poller = Poller{ .detached = .{} },
+    status: Status = .running,
+    poller: Poller = .detached,
     ref_count: RefCount,
     exit_handler: ProcessExitHandler = ProcessExitHandler{  },
     sync: bool = false,
@@ -454,7 +454,7 @@ pub fn onCloseUV(uv_handle: *uv.uv_process_t) callconv(.c) void {
             _ = &proc;
             _ = bun.windows.libuv.log("Process.onClose({d})", .{ uv_handle.pid });
             if ((proc.poller == .uv)) {
-                proc.poller = .{ .detached = .{} };
+                proc.poller = .detached;
             }
             _ = proc.deref();
     }
@@ -464,11 +464,11 @@ pub fn close(self: *Process) void {
                 switch (self.poller) {
 .fd => |fd| {
 _ = fd.deinit();
-                self.poller = .{ .detached = .{} };
+                self.poller = .detached;
 },
 .waiter_thread => |*waiter| {
 _ = waiter.disable();
-                self.poller = .{ .detached = .{} };
+                self.poller = .detached;
 },
 else => {
 
@@ -482,7 +482,7 @@ if (comptime (!Environment.isWindows)) {
                         _ = unreachable;
                     }
                     if (process.isClosed()) {
-                        self.poller = .{ .detached = .{} };
+                        self.poller = .detached;
                     } else {
                         if ((!process.isClosing())) {
                             _ = self.ref();
@@ -555,7 +555,7 @@ if (handle.kill(signal).toError(.kill)) |e| {
                             return .{ .err = e };
                         }
                     }
-                    return .{ .result = .{} };
+                    return .success;
 },
 else => {
 
@@ -563,7 +563,7 @@ else => {
 }
                 }
             }
-            return .{ .result = .{} };
+            return .success;
     }
     const Self = @This();
     const RefCount = bun.ptr.ThreadSafeRefCount(@This(), "ref_count", deinit, .{});
@@ -1868,7 +1868,7 @@ if ((result.pid != pid)) {
     }
 
 pub fn signalCode(self: @This()) ?bun.SignalCode {
-            return (switch (self.*) {
+            return (switch (self) {
 .signaled => |sig| sig,
 .exited => |exit| (if ((@intFromEnum(exit.signal) > 0)) exit.signal else null),
 else => null,

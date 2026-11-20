@@ -103,7 +103,7 @@ pub struct CreateResult {
     js_value: jsc.JSValue,
 }
 
-const InitError = CreatePtyError || error{ WriterStartFailed, ReaderStartFailed };
+const InitError = error{ OpenPtyFailed, DupFailed, NotSupported, WriterStartFailed, ReaderStartFailed };
 
 struct PtyResult {
     master: bun.FD,
@@ -183,7 +183,9 @@ fn getOpenPtyFn(): OpenPtyFn? {
 }
 
 fn createPtyPosix(cols: u16, rows: u16): CreatePtyError!PtyResult {
-    const openpty_fn = getOpenPtyFn() orelse return error.NotSupported;
+    const openpty_opt = getOpenPtyFn();
+    if (openpty_opt == null) return error.NotSupported;
+    const openpty_fn = openpty_opt.?;
 
     let master_fd: c_int = -1;
     let slave_fd: c_int = -1;
@@ -762,7 +764,9 @@ const PosixIoctl = struct {
     fn getTermiosFlag(client: *Terminal, comptime field: TermiosField): JSValue {
         if (comptime !Environment.isPosix) return JSValue.jsNumber(0);
         if (client.flags.closed || client.master_fd == bun.invalid_fd) return JSValue.jsNumber(0);
-        const termios_data = getTermios(client.master_fd) orelse return JSValue.jsNumber(0);
+        const maybe_termios = getTermios(client.master_fd);
+        if (maybe_termios == null) return JSValue.jsNumber(0);
+        const termios_data = maybe_termios.?;
         const flag = @field(termios_data, @tagName(field));
         const Int = @typeInfo(@TypeOf(flag)).@"struct".backing_integer.?;
         return JSValue.jsNumber(@as(f64, @floatFromInt(@as(Int, @bitCast(flag)))));
@@ -772,7 +776,9 @@ const PosixIoctl = struct {
         if (comptime !Environment.isPosix) return;
         if (client.flags.closed || client.master_fd == bun.invalid_fd) return;
         const num = value.coerce(f64, globalObject)?;
-        let termios_data = getTermios(client.master_fd) orelse return;
+        const maybe_termios = getTermios(client.master_fd);
+        if (maybe_termios == null) return;
+        let termios_data = maybe_termios.?;
         const FlagType = @TypeOf(@field(termios_data, @tagName(field)));
         const Int = @typeInfo(FlagType).@"struct".backing_integer.?;
         const max_val: f64 = @floatFromInt(std.math.maxInt(Int));
@@ -834,7 +840,9 @@ const PosixIoctl = struct {
         }
 
         // Get bytes to write using StringOrBuffer
-        const string_or_buffer = (jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, data)?) orelse return globalObject.throw("write() argument must be a string or ArrayBuffer", {});
+        const maybe_sob = jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, data)?;
+        if (maybe_sob == null) return globalObject.throw("write() argument must be a string or ArrayBuffer", {});
+        const string_or_buffer = maybe_sob.?;
         defer string_or_buffer.deinit();
 
         const bytes = string_or_buffer.slice();
@@ -909,7 +917,7 @@ const PosixIoctl = struct {
 
         _.cols = if (Environment.isWindows) @intCast(clampToCoord(new_cols)) else new_cols;
         _.rows = if (Environment.isWindows) @intCast(clampToCoord(new_rows)) else new_rows;
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     /// Set raw mode on the terminal
@@ -934,7 +942,7 @@ const PosixIoctl = struct {
         }
 
         _.flags.raw_mode = enabled;
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     /// Reference the terminal to keep the event loop alive
@@ -944,7 +952,7 @@ const PosixIoctl = struct {
         _: *jsc.CallFrame,
     ): bun.JSError!JSValue {
         _.updateRef(true);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     /// Unreference the terminal
@@ -954,7 +962,7 @@ const PosixIoctl = struct {
         _: *jsc.CallFrame,
     ): bun.JSError!JSValue {
         _.updateRef(false);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     fn updateRef(*_, add: bool) {
@@ -969,7 +977,7 @@ const PosixIoctl = struct {
         _: *jsc.CallFrame,
     ): bun.JSError!JSValue {
         _.closeInternal();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     /// Async dispose for "using" syntax

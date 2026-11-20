@@ -229,10 +229,8 @@ pub struct Process {
 
     pid: pid_t = 0,
     pidfd: PidFDType = 0,
-    status: Status = Status{ running: {} },
-    poller: Poller = Poller{
-        detached: {},
-    },
+    status: Status = .running,
+    poller: Poller = .detached,
     ref_count: RefCount,
     exit_handler: ProcessExitHandler = ProcessExitHandler{},
     sync: bool = false,
@@ -511,7 +509,7 @@ pub struct Process {
         bun.windows.libuv.log("Process.onClose({d})", .{uv_handle.pid});
 
         if (proc.poller == .uv) {
-            proc.poller = { detached: {} };
+            proc.poller = .detached;
         }
         proc.deref();
     }
@@ -521,12 +519,12 @@ pub struct Process {
             switch (_.poller) {
                 .fd => |fd| {
                     fd.deinit();
-                    _.poller = { detached: {} };
+                    _.poller = .detached;
                 },
 
                 .waiter_thread => |*waiter| {
                     waiter.disable();
-                    _.poller = { detached: {} };
+                    _.poller = .detached;
                 },
                 else => {},
             }
@@ -538,7 +536,7 @@ pub struct Process {
                     }
 
                     if (process.isClosed()) {
-                        _.poller = { detached: {} };
+                        _.poller = .detached;
                     } else if (!process.isClosing()) {
                         _.ref();
                         process.close(&onCloseUV);
@@ -606,17 +604,13 @@ pub struct Process {
                         }
                     }
 
-                    return {
-                        result: {},
-                    };
+                    return .success;
                 },
                 else => {},
             }
         }
 
-        return {
-            result: {},
-        };
+        return .success;
     }
 }
 
@@ -685,7 +679,7 @@ pub const Status = union(enum) {
     }
 
     pub fn signalCode(): bun.SignalCode? {
-        return switch (_.*) {
+        return switch (_) {
             .signaled => |sig| sig,
             .exited => |exit| if (@intFromEnum(exit.signal) > 0) exit.signal else null,
             else => null,

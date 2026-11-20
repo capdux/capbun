@@ -282,10 +282,26 @@ pub fn createShellInterpreter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             const arguments_ = callframe.arguments_old(3);
             var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
             _ = &arguments;
-            const resolve = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shell: expected 3 arguments, got 0", .{}) }; });
-            const reject = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shell: expected 3 arguments, got 0", .{}) }; });
-            const parsed_shell_script_js = ((arguments.nextEat()) orelse { return .{ .ok = globalThis.throw("shell: expected 3 arguments, got 0", .{}) }; });
-            const parsed_shell_script = ((parsed_shell_script_js.@"as"(ParsedShellScript)) orelse { return .{ .ok = globalThis.throw("shell: expected a ParsedShellScript", .{}) }; });
+            const resolve_opt = arguments.nextEat();
+            if ((resolve_opt == null)) {
+                return globalThis.throw("shell: expected 3 arguments, got 0", .{});
+            }
+            const resolve = resolve_opt.?;
+            const reject_opt = arguments.nextEat();
+            if ((reject_opt == null)) {
+                return globalThis.throw("shell: expected 3 arguments, got 0", .{});
+            }
+            const reject = reject_opt.?;
+            const parsed_opt = arguments.nextEat();
+            if ((parsed_opt == null)) {
+                return globalThis.throw("shell: expected 3 arguments, got 0", .{});
+            }
+            const parsed_shell_script_js = parsed_opt.?;
+            const parsed_script_opt = parsed_shell_script_js.@"as"(ParsedShellScript);
+            if ((parsed_script_opt == null)) {
+                return globalThis.throw("shell: expected a ParsedShellScript", .{});
+            }
+            const parsed_shell_script = parsed_script_opt.?;
             var shargs: *ShellArgs = undefined;
             _ = &shargs;
             var jsobjs: std.array_list.Managed(JSValue) = std.array_list.Managed(JSValue).init(allocator);
@@ -346,7 +362,7 @@ pub fn createShellInterpreter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
 
 pub extern "c" fn Bun__createShellInterpreter(globalThis: *jsc.JSGlobalObject, ptr: *Interpreter, parsed_shell_script: JSValue, resolve: JSValue, reject: JSValue) callconv(.c) JSValue;
 
-pub fn parse(arena_allocator: std.mem.Allocator, script: []const u8, jsobjs: []JSValue, jsstrings_to_escape: []bun.String, out_parser: ?*bun.shell.Parser, out_lex_result: ?*shell.LexResult) !ast.Script {
+pub fn parse(arena_allocator: std.mem.Allocator, script: []const u8, jsobjs: []JSValue, jsstrings_to_escape: []bun.String, out_parser: *OptParser, out_lex_result: *OptLexResult) !ast.Script {
             const jsobjs_len: u32 = @intCast(jsobjs.len);
             const lex_result = brk: {
             if (bun.strings.isAllASCII(script)) {
@@ -572,11 +588,8 @@ else => {
     }
 
 pub fn setupIOBeforeRun(self: *Interpreter) Maybe(void) {
-            if (self.setupIOBeforeRunImpl()) {
-                return .success;
-            } else {
-                return .{ .err = self.takeErr() };
-            }
+            _ = (blk_catch_5: { break :blk_catch_5 ((self.setupIOBeforeRunImpl()) catch |__ce_5| { _ = &__ce_5; return .{ .err = self.takeErr() }; }); });
+            return .success;
     }
 
 pub fn setupIOBeforeRunImpl(self: *Interpreter) !void {
@@ -684,7 +697,7 @@ pub fn finish(self: *Interpreter, exit_code: ExitCode) Yield {
                         _ = self.keep_alive.disable();
                         _ = self.#derefRootShellAndIOIfNeeded(true);
                         _ = loop.enter();
-                        _ = (blk_catch_5: { break :blk_catch_5 ((resolve.call(globalThis, .js_undefined, (&.{ JSValue.jsNumberFromU16(exit_code), buffered_stdout, buffered_stderr }))) catch |e| { _ = &e; break :blk_catch_5 globalThis.reportActiveExceptionAsUnhandled(e); }); });
+                        _ = (blk_catch_6: { break :blk_catch_6 ((resolve.call(globalThis, .js_undefined, (&.{ JSValue.jsNumberFromU16(exit_code), buffered_stdout, buffered_stderr }))) catch |e| { _ = &e; break :blk_catch_6 globalThis.reportActiveExceptionAsUnhandled(e); }); });
                         _ = jsc.Codegen.JSShellInterpreter.resolveSetCached(this_jsvalue, globalThis, .js_undefined);
                         _ = jsc.Codegen.JSShellInterpreter.rejectSetCached(this_jsvalue, globalThis, .js_undefined);
                         _ = loop.exit();
@@ -1359,6 +1372,8 @@ pub fn dup(fd: bun.FD) Maybe(bun.FD) {
 };
 
 pub const StringZ = [:0]const u8;
+const OptParser = ?bun.shell.Parser;
+const OptLexResult = ?shell.LexResult;
 const OutputTaskErrBuf = ?[]const u8;
 const OutputTaskSysErr = ?jsc.SystemError;
 pub const FlagArgs = ?[]const [*:0]u8;

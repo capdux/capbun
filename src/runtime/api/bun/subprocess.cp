@@ -252,7 +252,7 @@ pub struct TestingAPIs {
                     }
                 }
 
-                return .js_undefined;
+                return JSValue.js_undefined;
             },
             globalObject,
         );
@@ -408,12 +408,12 @@ pub struct TestingAPIs {
         if (terminal := client.terminal) {
             return terminal.toJS(globalThis);
         }
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn asyncDispose(client: *Subprocess, global: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         if (client.process.hasExited()) {
-            return .js_undefined;
+            return JSValue.js_undefined;
         }
 
         const this_jsvalue = callframe.@"this"();
@@ -469,7 +469,7 @@ pub struct TestingAPIs {
         const arguments = callframe.arguments_old(1);
         const sig: SignalCode = bun.SignalCode.fromJS(arguments.ptr[0], globalThis)?;
 
-        if (globalThis.hasException()) return .zero;
+        if (globalThis.hasException()) return JSValue.zero;
 
         switch (client.tryKill(sig)) {
             .result => {},
@@ -478,7 +478,7 @@ pub struct TestingAPIs {
             },
         }
 
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn hasKilled(client: *const Subprocess): bool {
@@ -505,12 +505,12 @@ pub struct TestingAPIs {
 
     pub fn doRef(client: *Subprocess, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         client.jsRef();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn doUnref(client: *Subprocess, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         client.jsUnref();
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn onStdinDestroyed(client: *Subprocess) {
@@ -544,7 +544,7 @@ pub struct TestingAPIs {
         * = globalThis;
         * = callframe;
         client.disconnectIPC(true);
-        return .js_undefined;
+        return JSValue.js_undefined;
     }
 
     pub fn getConnected(client: *Subprocess, globalThis: *JSGlobalObject): JSValue {
@@ -806,7 +806,8 @@ pub struct TestingAPIs {
 
         client.clearAbortSignal();
 
-        bun.assert(!client.computeHasPendingActivity() || jsc.VirtualMachine.get().isShuttingDown());
+        const vm = jsc.VirtualMachine.get();
+        bun.assert(!client.computeHasPendingActivity() || vm.isShuttingDown());
         client.finalizeStreams();
 
         client.process.detach();
@@ -869,7 +870,7 @@ pub struct TestingAPIs {
         global: *JSGlobalObject,
     ): JSValue {
         if (signal := client.process.signalCode()) {
-            if (name := signal.name())
+            if (name := @call(.auto, @field(SignalCode, "name"), .{signal}))
                 return jsc.ZigString.init(name).toJS(global)
             else
                 return jsc.JSValue.jsNumber(@intFromEnum(signal));

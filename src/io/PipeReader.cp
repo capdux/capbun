@@ -31,20 +31,20 @@ const BufferedReaderVTable = struct {
 
         pub fn init(comptime Type: type) *const BufferedReaderVTable.Fn {
             const fns = struct {
-                fn onReadChunk(this: *!, chunk: []const u8, hasMore: ReadState) bool {
-                    return Type.onReadChunk(@as(*Type, this), chunk, hasMore);
+                static fn onReadChunk(ptr: *!, chunk: []const u8, hasMore: ReadState): bool {
+                    return Type.onReadChunk(@as(*Type, ptr), chunk, hasMore);
                 }
-                fn onReaderDone(this: *!) void {
-                    return Type.onReaderDone(@as(*Type, this));
+                static fn onReaderDone(ptr: *!) {
+                    return Type.onReaderDone(@as(*Type, ptr));
                 }
-                fn onReaderError(this: *!, err: bun.sys.Error) void {
-                    return Type.onReaderError(@as(*Type, this), err);
+                static fn onReaderError(ptr: *!, err_val: bun.sys.Error) {
+                    return Type.onReaderError(@as(*Type, ptr), err_val);
                 }
-                fn eventLoop(this: *!) jsc.EventLoopHandle {
-                    return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, this)));
+                static fn eventLoop(ptr: *!): jsc.EventLoopHandle {
+                    return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, ptr)));
                 }
-                fn loop(this: *!) *Async.Loop {
-                    return Type.loop(@as(*Type, this));
+                static fn loop(ptr: *!): *Async.Loop {
+                    return Type.loop(@as(*Type, ptr));
                 }
             };
             return comptime &BufferedReaderVTable.Fn{
@@ -418,7 +418,7 @@ const PosixBufferedReader = struct {
         return false;
     }
 
-    fn wrapReadFn(comptime func: *const fn (bun.FD, []u8) bun.sys.Maybe(usize)) *const fn (bun.FD, []u8, usize) bun.sys.Maybe(usize) {
+    fn wrapReadFn(comptime func: fn (bun.FD, []u8) bun.sys.Maybe(usize)) fn (bun.FD, []u8, usize) bun.sys.Maybe(usize) {
         return struct {
             pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
                 _ = offset;
@@ -538,7 +538,7 @@ const PosixBufferedReader = struct {
         }
     }
 
-    fn readWithFn(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: *const fn (bun.FD, []u8, usize) bun.sys.Maybe(usize)) void {
+    fn readWithFn(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: fn (bun.FD, []u8, usize) bun.sys.Maybe(usize)) void {
         _ = size_hint;
         const streaming = parent.vtable.isStreamingEnabled();
 

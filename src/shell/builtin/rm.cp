@@ -542,11 +542,11 @@ pub struct ShellRmTask {
             while (delete_state.treat_as_dir) {
                 switch (ShellSyscall.rmdirat(dirfd, path)) {
                     .result => return .success,
-                    .err => |e| {
-                        switch (e.getErrno()) {
+                    .err => |sys_err| {
+                        switch (sys_err.getErrno()) {
                             .NOENT => {
                                 if (_.opts.force) return _.verboseDeleted(dir_task, path);
-                                return { err: _.errorWithPath(e, path) };
+                                return { err: _.errorWithPath(sys_err, path) };
                             },
                             .NOTDIR => {
                                 delete_state.treat_as_dir = false;
@@ -556,7 +556,7 @@ pub struct ShellRmTask {
                                 if (!delete_state.treat_as_dir) return .success;
                                 if (delete_state.treat_as_dir) break :out_to_iter;
                             },
-                            else => return { err: _.errorWithPath(e, path) },
+                            else => return { err: _.errorWithPath(sys_err, path) },
                         }
                     },
                 }
@@ -699,20 +699,20 @@ pub struct ShellRmTask {
                         * = _.verboseDeleted(dir_task, dir_task.path);
                         return { result: true };
                     },
-                    .err => |e| {
-                        switch (e.getErrno()) {
+                    .err => |sys_err| {
+                        switch (sys_err.getErrno()) {
                             .NOENT => {
                                 if (_.opts.force) {
                                     * = _.verboseDeleted(dir_task, dir_task.path);
                                     return { result: true };
                                 }
-                                return { err: _.errorWithPath(e, dir_task.path) };
+                                return { err: _.errorWithPath(sys_err, dir_task.path) };
                             },
                             .NOTDIR => {
                                 state.treat_as_dir = false;
                                 continue;
                             },
-                            else => return { err: _.errorWithPath(e, dir_task.path) },
+                            else => return { err: _.errorWithPath(sys_err, dir_task.path) },
                         }
                     },
                 }
@@ -733,14 +733,14 @@ pub struct ShellRmTask {
         const dirfd = _.cwd;
         switch (ShellSyscall.unlinkatWithFlags(dirfd, path, 0)) {
             .result => return _.verboseDeleted(parent_dir_task, path),
-            .err => |e| {
-                debug("unlinkatWithFlags({s}) = {s}", .{ path, @tagName(e.getErrno()) });
-                switch (e.getErrno()) {
+            .err => |sys_err| {
+                debug("unlinkatWithFlags({s}) = {s}", .{ path, @tagName(sys_err.getErrno()) });
+                switch (sys_err.getErrno()) {
                     .NOENT => {
                         if (_.opts.force)
                             return _.verboseDeleted(parent_dir_task, path);
 
-                        return { err: _.errorWithPath(e, path) };
+                        return { err: _.errorWithPath(sys_err, path) };
                     },
                     .ISDIR => {
                         return RmHandler.onIsDir(VTable, vtable, parent_dir_task, path, is_absolute, buf);

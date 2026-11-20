@@ -29,7 +29,7 @@ pub fn PosixPipeWriter(
     comptime getFd: fn (*This) bun.FD,
     comptime getBuffer: fn (*This) []const u8,
     comptime onWrite: fn (*This, written: usize, status: WriteStatus) void,
-    comptime registerPoll: *const fn (*This) anyerror!void,
+    comptime registerPoll: auto,
     comptime onError: fn (*This, bun.sys.Error) void,
     comptime _unused: fn (*This) void,
     comptime getFileType: *const fn (*This) FileType,
@@ -174,7 +174,7 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
         const onWritable: ?*const fn (*Parent) void = if (@hasDecl(function_table, "onWritable")) function_table.onWritable else null;
         const onReady: ?*const fn (*Parent) void = if (@hasDecl(function_table, "onReady")) function_table.onReady else null;
 
-        handle: PollOrFd = .{ .closed = {} },
+        handle: PollOrFd = .closed,
         parent: *Parent = undefined,
         is_done: bool = false,
         pollable: bool = false,
@@ -375,7 +375,7 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
         const onClose: fn (*Parent) void = function_table.onClose;
 
         outgoing: StreamBuffer = .{},
-        handle: PollOrFd = .{ .closed = {} },
+        handle: PollOrFd = .closed,
         parent: *Parent = undefined,
         is_done: bool = false,
         closed_without_reporting: bool = false,

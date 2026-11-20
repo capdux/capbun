@@ -1423,3 +1423,5 @@
 - **[2026-11-20] Wave 14 Batch C 修复要点**：`Timer.cp` `clearTimer`/`getNextID` 补 `static`；`FormData.cp` 恢复 `@export` 绑定 `toJSHostFn`；`yaml.cp` 26 处 `unexpectedToken()` 改 `return error.UnexpectedToken` 并修复字面换行分支；`lifecycle_script_runner.cp` 局部变量避开字段遮蔽。
 
 - **[2026-11-20] Wave 14 Batch A 核心修复**：`node_fs_binding` 消除 77 处 `error.zero`；`host_fn` 33 处与 `HashObject` 改 `@field(args, comptimePrint)` 消除 65 处 comptime 错；`node_crypto_binding` 改 `AnyTask.AnyTask.New` 与 `@typeInfo(...).pointer.child` 消除 22 处错；`bindgen.cp` 改为只读构造 `@Type(.{ .@"union" = ... })`。
+
+- **[2026-11-20] Wave 14 Batch B 核心修复**：`PipeReader` `BufferedReaderVTable` 5 回调补 `static fn`；`ipc.cp` `IPCSocketUnion` 改值类型联合并补 `pub const Target = FromEnum;`；`subprocess.cp` 用 `@call(.auto, @field(SignalCode, "name"), ...)` 绕开枚举 `.name` 魔法；`interpreter.cp` 用顶层 `OptParser`/`OptLexResult` 修复可选指针优先级。

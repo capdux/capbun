@@ -371,7 +371,7 @@ pub fn doFileWrite(client: *IOWriter) Yield {
         break :amt amt;
 },
 .wrote => |amt| amt: {
-        if ((client.err != null)) {
+        if ((client.e != null)) {
             return .done;
         }
         break :amt amt;
@@ -480,7 +480,7 @@ pub fn onClose(client: *IOWriter) void {
 pub fn onError(client: *IOWriter, err__: bun.sys.Error) void {
         _ = client.setWriting(false);
         const ee = err__.toShellSystemError();
-        client.err = ee;
+        client.e = ee;
         if ((err__.getErrno() == .PIPE)) {
             client.flags.broken_pipe = true;
         }
@@ -517,11 +517,11 @@ pub fn onError(client: *IOWriter, err__: bun.sys.Error) void {
                 continue;
             }
             _ = bun.handleOom(seen.append(@intFromPtr(ptr)));
-            if (client.err) |*e| {
+            if (client.e) |*e| {
                 _ = &e;
                 _ = (e.*).ref();
             }
-            _ = w.ptr.onIOWriterChunk(0, client.err).run();
+            _ = w.ptr.onIOWriterChunk(0, client.e).run();
         }
         client.total_bytes_written = 0;
         client.writer_idx = 0;
@@ -651,7 +651,7 @@ pub fn handleBrokenPipe(client: *IOWriter, ptr: ChildPtr) ?Yield {
         if (client.flags.broken_pipe) {
             const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
             _ = log("IOWriter(0x{x}, fd={f}) broken pipe {s}(0x{x})", .{ @intFromPtr(client), client.fd, @tagName(ptr.ptr.tag()), @intFromPtr(ptr.ptr.ptr()) });
-            return .{ .on_io_writer_chunk = .{ .child = ptr.asAnyOpaque(), .written = 0, .err = e } };
+            return .{ .on_io_writer_chunk = .{ .child = ptr.asAnyOpaque(), .written = 0, .e = e } };
         }
         return null;
 }
@@ -664,7 +664,7 @@ pub fn enqueue(client: *IOWriter, ptr: anytype, bytelist: ?*bun.ByteList, buf: [
         }
         if ((buf.len == 0)) {
             _ = log("IOWriter(0x{x}, fd={f}) enqueue EMPTY", .{ @intFromPtr(client), client.fd });
-            return .{ .on_io_writer_chunk = .{ .child = childptr.asAnyOpaque(), .written = 0, .err = null } };
+            return .{ .on_io_writer_chunk = .{ .child = childptr.asAnyOpaque(), .written = 0, .e = null } };
         }
         const writer: Writer = .{ .ptr = childptr, .len = buf.len, .bytelist = bytelist };
         _ = log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, buf_len={d}, buf={s}, writer_len={d})", .{ @intFromPtr(client), client.fd, @intFromPtr(writer.rawPtr()), @tagName(writer.ptr.ptr.tag()), buf.len, buf[0..@min(128, buf.len)], (client.writers.len() + 1) });
@@ -713,7 +713,7 @@ pub fn deinitOnMainThread(client: *IOWriter) void {
         }
         _ = client.buf.deinit(bun.default_allocator);
         _ = client.writers.deinit();
-        if (client.err) |*e| {
+        if (client.e) |*e| {
             _ = &e;
             _ = (e.*).deref();
         }

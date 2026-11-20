@@ -261,7 +261,7 @@ pub fn getSharedSigalgs(*_: *This, globalObject: *jsc.JSGlobalObject, callframe:
         }
 
         const hash_str = BoringSSL.OBJ_nid2sn(hash_nid);
-        if (hash_str != null) {
+        if (@intFromPtr(hash_str) != 0) {
             const hash_str_len = bun.len(hash_str);
             const hash_slice = hash_str[0..hash_str_len];
             let buffer = bun.handleOom(bun.default_allocator.alloc(u8, sig_with_md.len + hash_str_len + 1));
@@ -298,21 +298,21 @@ pub fn getCipher(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     }
 
     const name = BoringSSL.SSL_CIPHER_get_name(cipher);
-    if (name == null) {
+    if (@intFromPtr(name) == 0) {
         result.put(globalObject, ZigString.static("name"), JSValue.jsNull());
     } else {
         result.put(globalObject, ZigString.static("name"), ZigString.fromUTF8(name[0..bun.len(name)]).toJS(globalObject));
     }
 
     const standard_name = BoringSSL.SSL_CIPHER_standard_name(cipher);
-    if (standard_name == null) {
+    if (@intFromPtr(standard_name) == 0) {
         result.put(globalObject, ZigString.static("standardName"), JSValue.jsNull());
     } else {
         result.put(globalObject, ZigString.static("standardName"), ZigString.fromUTF8(standard_name[0..bun.len(standard_name)]).toJS(globalObject));
     }
 
     const version = BoringSSL.SSL_CIPHER_get_version(cipher);
-    if (version == null) {
+    if (@intFromPtr(version) == 0) {
         result.put(globalObject, ZigString.static("version"), JSValue.jsNull());
     } else {
         result.put(globalObject, ZigString.static("version"), ZigString.fromUTF8(version[0..bun.len(version)]).toJS(globalObject));
@@ -452,7 +452,7 @@ pub fn getEphemeralKeyInfo(*_: *This, globalObject: *jsc.JSGlobalObject, callfra
 }
 
 pub fn getALPNProtocol(*_: *This, globalObject: *jsc.JSGlobalObject): bun.JSError!JSValue {
-    let alpn_proto: [*c]const u8? = null;
+    let alpn_proto: [*c]const u8 = std.mem.zeroes([*c]const u8);
     let alpn_proto_len: u32 = 0;
 
     const ssl_ptr_opt = this.socket.ssl();
@@ -460,7 +460,7 @@ pub fn getALPNProtocol(*_: *This, globalObject: *jsc.JSGlobalObject): bun.JSErro
     const ssl_ptr = ssl_ptr_opt.?;
 
     BoringSSL.SSL_get0_alpn_selected(ssl_ptr, &alpn_proto, &alpn_proto_len);
-    if (alpn_proto == null or alpn_proto_len == 0) {
+    if (@intFromPtr(alpn_proto) == 0 || alpn_proto_len == 0) {
         return JSValue.false;
     }
 
@@ -613,8 +613,9 @@ noinline fn getSSLException(globalThis: *jsc.JSGlobalObject, defaultMessage: []c
 
     output_buf[0] = 0;
     let written: usize = 0;
-    let ssl_error = BoringSSL.ERR_get_error();
-    while (ssl_error != 0 and written < output_buf.len) : (ssl_error = BoringSSL.ERR_get_error()) {
+    const get_err_fn = BoringSSL.ERR_get_error;
+    let ssl_error: u32 = get_err_fn();
+    while (ssl_error != 0 && written < output_buf.len) : (ssl_error = get_err_fn()) {
         if (written > 0) {
             output_buf[written] = '\n';
             written += 1;

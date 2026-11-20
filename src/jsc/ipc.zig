@@ -479,12 +479,6 @@ pub const IPCSendQueueOwner = union(enum) {
     virtual_machine: *bun.jsc.VirtualMachine.IPCInstance,
 };
 
-pub const IPCSocketUnion = union(enum) {
-    uninitialized: void,
-    open: IPCSocketType,
-    closed: void,
-};
-
 pub const WindowsState = struct {
     is_server: bool = false,
     windows_write: ?*WindowsWrite = null,
@@ -504,7 +498,7 @@ pub const SendQueue = struct {
     internal_msg_queue: node_cluster_binding.InternalMsgHolder = .{},
     incoming: *IncomingBuffer,
     incoming_fd: ?bun.FD = null,
-    socket: *IPCSocketUnion,
+    socket: IPCSocketUnion,
     owner: IPCSendQueueOwner,
     close_next_tick: ?jsc.Task = null,
     after_close_task: ?jsc.Task = null,
@@ -512,7 +506,7 @@ pub const SendQueue = struct {
     close_event_sent: bool = false,
     windows: WindowsQueueState = .{},
 
-pub fn init(mode: Mode, owner: IPCSendQueueOwner, socket: *IPCSocketUnion) SendQueue {
+pub fn init(mode: Mode, owner: IPCSendQueueOwner, socket: IPCSocketUnion) SendQueue {
             return SendQueue{ .queue = std.array_list.Managed(SendHandle).init(bun.default_allocator), .mode = mode, .owner = owner, .socket = socket, .incoming = IncomingBuffer.init(mode) };
     }
 
@@ -1214,6 +1208,11 @@ pub const AdvancedVersionPacket = extern struct {
 };
 pub const Socket = uws.NewSocketHandler(false);
 pub const IPCSocketType = (if (Environment.isWindows) *uv.Pipe else Socket);
+pub const IPCSocketUnion = union(enum) {
+    uninitialized: void,
+    open: IPCSocketType,
+    closed: void,
+};
 pub const CloseSocketReason = enum { normal, failure };
 pub const CloseSocketFrom = enum { user, deinit };
 pub const AckNack = enum { ack, nack };
@@ -1223,6 +1222,7 @@ pub const SendQueueOwner = IPCSendQueueOwner;
 pub const SocketType = IPCSocketType;
 pub const SocketUnion = IPCSocketUnion;
 pub const MAX_HANDLE_RETRANSMISSIONS = 3;
+pub const Target = FromEnum;
 
 pub fn decodeIPCMessage(mode: Mode, data: []const u8, global: *jsc.JSGlobalObject, known_newline: ?u32) IPCDecodeError!DecodeIPCMessageResult {
         return (switch (mode) {

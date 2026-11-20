@@ -284,6 +284,9 @@ pub enum CleanupState: u8 {
 
 /// This interpreter works by basically turning the AST into a state machine so
 /// that execution can be suspended and resumed to support async.
+type OptParser = bun.shell.Parser?;
+type OptLexResult = shell.LexResult?;
+
 pub struct Interpreter {
     pub const js = jsc.Codegen.JSShellInterpreter;
     pub const toJS = js.toJS;
@@ -788,13 +791,21 @@ pub struct Interpreter {
         const arguments_ = callframe.arguments_old(3);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
 
-        const resolve = arguments.nextEat() ?? return globalThis.throw("shell: expected 3 arguments, got 0", {});
+        const resolve_opt = arguments.nextEat();
+        if (resolve_opt == null) return globalThis.throw("shell: expected 3 arguments, got 0", {});
+        const resolve = resolve_opt.?;
 
-        const reject = arguments.nextEat() ?? return globalThis.throw("shell: expected 3 arguments, got 0", {});
+        const reject_opt = arguments.nextEat();
+        if (reject_opt == null) return globalThis.throw("shell: expected 3 arguments, got 0", {});
+        const reject = reject_opt.?;
 
-        const parsed_shell_script_js = arguments.nextEat() ?? return globalThis.throw("shell: expected 3 arguments, got 0", {});
+        const parsed_opt = arguments.nextEat();
+        if (parsed_opt == null) return globalThis.throw("shell: expected 3 arguments, got 0", {});
+        const parsed_shell_script_js = parsed_opt.?;
 
-        const parsed_shell_script = parsed_shell_script_js.@"as"(ParsedShellScript) ?? return globalThis.throw("shell: expected a ParsedShellScript", {});
+        const parsed_script_opt = parsed_shell_script_js.@"as"(ParsedShellScript);
+        if (parsed_script_opt == null) return globalThis.throw("shell: expected a ParsedShellScript", {});
+        const parsed_shell_script = parsed_script_opt.?;
 
         let shargs: *ShellArgs = undefined;
         let jsobjs: std.array_list.Managed(JSValue) = std.array_list.Managed(JSValue).init(allocator);
@@ -873,8 +884,8 @@ pub struct Interpreter {
         script: []const u8,
         jsobjs: []JSValue,
         jsstrings_to_escape: []bun.String,
-        out_parser: *bun.shell.Parser?,
-        out_lex_result: *shell.LexResult?,
+        out_parser: *OptParser,
+        out_lex_result: *OptLexResult,
     ): !ast.Script {
         const jsobjs_len: u32 = @intCast(jsobjs.len);
         const lex_result = brk: {
@@ -1175,11 +1186,8 @@ pub struct Interpreter {
     }
 
     fn setupIOBeforeRun(*_): Maybe(void) {
-        if (_.setupIOBeforeRunImpl()) {
-            return .success;
-        } else {
-            return { err: _.takeErr() };
-        }
+        _.setupIOBeforeRunImpl() catch return { err: _.takeErr() };
+        return .success;
     }
 
     fn setupIOBeforeRunImpl(*_)! {

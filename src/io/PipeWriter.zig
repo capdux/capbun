@@ -223,7 +223,7 @@ pub fn deinit(self: *@This()) void {
 pub const BufferedWriter = (if (bun.Environment.isPosix) PosixBufferedWriter else WindowsBufferedWriter);
 pub const StreamingWriter = (if (bun.Environment.isPosix) PosixStreamingWriter else WindowsStreamingWriter);
 
-pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bun.FD, comptime getBuffer: *const fn (*This) []const u8, comptime onWrite: *const fn (*This, usize, WriteStatus) void, comptime registerPoll: *const fn (*This) anyerror!void, comptime onError: *const fn (*This, bun.sys.Error) void, comptime _unused: *const fn (*This) void, comptime getFileType: *const fn (*This) FileType) type {
+pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bun.FD, comptime getBuffer: *const fn (*This) []const u8, comptime onWrite: *const fn (*This, usize, WriteStatus) void, comptime registerPoll: anytype, comptime onError: *const fn (*This, bun.sys.Error) void, comptime _unused: *const fn (*This) void, comptime getFileType: *const fn (*This) FileType) type {
         _ = &_unused;
         return struct {
         fn tryWrite(this: *This, force_sync: bool, buf_: []const u8) WriteResult {
@@ -356,7 +356,7 @@ pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bu
 
 pub fn PosixBufferedWriter(comptime Parent: type, comptime function_table: anytype) type {
         return struct {
-    handle: PollOrFd = .{ .closed = .{} },
+    handle: PollOrFd = .closed,
     parent: *Parent = undefined,
     is_done: bool = false,
     pollable: bool = false,
@@ -546,7 +546,7 @@ _ = self.enableKeepingProcessAlive(@as(*Parent, @ptrCast(@alignCast(self.parent)
 pub fn PosixStreamingWriter(comptime Parent: type, comptime function_table: anytype) type {
         return struct {
     outgoing: StreamBuffer = .{},
-    handle: PollOrFd = .{ .closed = .{} },
+    handle: PollOrFd = .closed,
     parent: *Parent = undefined,
     is_done: bool = false,
     closed_without_reporting: bool = false,
@@ -1226,7 +1226,7 @@ pub fn onWriteComplete(self: *@This(), status: uv.ReturnCode) void {
             if (status.toError(.write)) |err| {
                 _ = &err;
                 self.last_write_result = .{ .err = err };
-                _ = log("onWrite() = {s}", .{ (if (@typeInfo(@TypeOf(err)) == .@"enum" or @typeInfo(@TypeOf(err)) == .@"union") @tagName(err) else err.name)() });
+                _ = log("onWrite() = {s}", .{ err.name() });
                 _ = onError(self.parent, err);
                 _ = self.closeWithoutReporting();
                 return;

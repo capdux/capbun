@@ -455,7 +455,7 @@ pub fn doFileWrite(client: *IOWriter): Yield {
         // some data before it happened. In that case, onError will also be
         // called so we should just return.
         .wrote => |amt| amt: {
-            if (client.err != null) return .done;
+            if (client.e != null) return .done;
             break :amt amt;
         },
         // This is returned when we hit EAGAIN which should not be the case
@@ -580,7 +580,7 @@ pub fn onClose(client: *IOWriter) {
 pub fn onError(client: *IOWriter, err__: bun.sys.Error) {
     client.setWriting(false);
     const ee = err__.toShellSystemError();
-    client.err = ee;
+    client.e = ee;
     // Track broken pipe state for future enqueue calls
     if (err__.getErrno() == .PIPE) {
         client.flags.broken_pipe = true;
@@ -610,9 +610,9 @@ pub fn onError(client: *IOWriter, err__: bun.sys.Error) {
         bun.handleOom(seen.append(@intFromPtr(ptr)));
         // Callee consumes the error (derefs it). Ref before each pass so deinitOnMainThread's
         // deref of this.err is balanced and multiple callees don't over-deref. Matches IOReader.
-        if (*e := client.err) e.ref();
+        if (*e := client.e) e.ref();
         // TODO: This probably shouldn't call .run()
-        w.ptr.onIOWriterChunk(0, client.err).run();
+        w.ptr.onIOWriterChunk(0, client.e).run();
     }
 
     client.total_bytes_written = 0;
@@ -747,7 +747,7 @@ pub fn handleBrokenPipe(client: *IOWriter, ptr: ChildPtr): Yield? {
     if (client.flags.broken_pipe) {
         const e: jsc.SystemError = bun.sys.Error.fromCode(.PIPE, .write).toSystemError();
         log("IOWriter(0x{x}, fd={f}) broken pipe {s}(0x{x})", .{ @intFromPtr(client), client.fd, @tagName(ptr.ptr.tag()), @intFromPtr(ptr.ptr.ptr()) });
-        return { on_io_writer_chunk: { child: ptr.asAnyOpaque(), written: 0, err: e } };
+        return { on_io_writer_chunk: { child: ptr.asAnyOpaque(), written: 0, e: e } };
     }
     return null;
 }
@@ -758,7 +758,7 @@ pub fn enqueue(client: *IOWriter, ptr: auto, bytelist: (*bun.ByteList)?, buf: []
 
     if (buf.len == 0) {
         log("IOWriter(0x{x}, fd={f}) enqueue EMPTY", .{ @intFromPtr(client), client.fd });
-        return { on_io_writer_chunk: { child: childptr.asAnyOpaque(), written: 0, err: null } };
+        return { on_io_writer_chunk: { child: childptr.asAnyOpaque(), written: 0, e: null } };
     }
     const writer: Writer = {
         ptr: childptr,
@@ -827,7 +827,7 @@ pub fn deinitOnMainThread(client: *IOWriter) {
     if (bun.Environment.allow_assert) client.ref_count.assertNoRefs();
     client.buf.deinit(bun.default_allocator);
     client.writers.deinit();
-    if (*e := client.err) e.deref();
+    if (*e := client.e) e.deref();
     if (comptime bun.Environment.isPosix) {
         if (client.writer.handle == .poll) {
             client.writer.handle.closeImpl(null, {}, false);

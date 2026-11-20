@@ -54,24 +54,24 @@ pub fn onReaderError(self: @This(), err: bun.sys.Error) void {
     pub fn init(comptime Type: type) *const BufferedReaderVTable.Fn {
                 const fns = struct {
     
-    pub fn onReadChunk(self: *@This(), chunk: []const u8, hasMore: ReadState) bool {
-                return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(self))), chunk, hasMore);
+    pub fn onReadChunk(ptr: *anyopaque, chunk: []const u8, hasMore: ReadState) bool {
+                return Type.onReadChunk(@as(*Type, @ptrCast(@alignCast(ptr))), chunk, hasMore);
         }
     
-    pub fn onReaderDone(self: *@This()) void {
-                return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(self))));
+    pub fn onReaderDone(ptr: *anyopaque) void {
+                return Type.onReaderDone(@as(*Type, @ptrCast(@alignCast(ptr))));
         }
     
-    pub fn onReaderError(self: *@This(), err: bun.sys.Error) void {
-                return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(self))), err);
+    pub fn onReaderError(ptr: *anyopaque, err_val: bun.sys.Error) void {
+                return Type.onReaderError(@as(*Type, @ptrCast(@alignCast(ptr))), err_val);
         }
     
-    pub fn eventLoop(self: *@This()) jsc.EventLoopHandle {
-                return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, @ptrCast(@alignCast(self)))));
+    pub fn eventLoop(ptr: *anyopaque) jsc.EventLoopHandle {
+                return jsc.EventLoopHandle.init(Type.eventLoop(@as(*Type, @ptrCast(@alignCast(ptr)))));
         }
     
-    pub fn loop(self: *@This()) *Async.Loop {
-                return Type.loop(@as(*Type, @ptrCast(@alignCast(self))));
+    pub fn loop(ptr: *anyopaque) *Async.Loop {
+                return Type.loop(@as(*Type, @ptrCast(@alignCast(ptr))));
         }
     };
                 return (comptime (&BufferedReaderVTable.Fn{ .onReadChunk = (if (@hasDecl(Type, "onReadChunk")) (&fns.onReadChunk) else null), .onReaderDone = (&fns.onReaderDone), .onReaderError = (&fns.onReaderError), .eventLoop = (&fns.eventLoop), .loop = (&fns.loop) }));
@@ -414,7 +414,7 @@ const PosixBufferedReader = struct {
         return false;
     }
 
-    fn wrapReadFn(comptime func: *const *const fn(bun.FD, []u8) bun.sys.Maybe(usize)) *const *const fn(bun.FD, []u8, usize) bun.sys.Maybe(usize) {
+    fn wrapReadFn(comptime func: *const fn(bun.FD, []u8) bun.sys.Maybe(usize)) *const fn(bun.FD, []u8, usize) bun.sys.Maybe(usize) {
         return struct {
             pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
                 _ = offset;
@@ -534,7 +534,7 @@ const PosixBufferedReader = struct {
         }
     }
 
-    fn readWithFn(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: *const *const fn(bun.FD, []u8, usize) bun.sys.Maybe(usize)) void {
+    fn readWithFn(parent: *PosixBufferedReader, resizable_buffer: *std.array_list.Managed(u8), fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: *const fn(bun.FD, []u8, usize) bun.sys.Maybe(usize)) void {
         _ = size_hint;
         const streaming = parent.vtable.isStreamingEnabled();
 

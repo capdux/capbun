@@ -20,6 +20,8 @@ extern fn ntohs(nshort: u16): u16;
 extern fn htonl(hlong: u32): u32;
 extern fn htons(hshort: u16): u16;
 type ConstOpaquePtr = (*const void)?;
+type SockaddrInPtr = *std.posix.sockaddr.in;
+type SockaddrIn6Ptr = *std.posix.sockaddr.in6;
 extern fn inet_ntop(af: c_int, src: ConstOpaquePtr, dst: [*c]u8, size: c_int): ([*:0]const u8)?;
 extern fn inet_pton(af: c_int, src: [*c]const u8, dst: *!?): c_int;
 
@@ -85,11 +87,11 @@ fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_int) {
         let scope_id: u32? = null;
 
         if (peer.family == std.posix.AF.INET) {
-            const peer4: *std.posix.sockaddr.in = bun.cast(*std.posix.sockaddr.in, peer);
+            const peer4: *std.posix.sockaddr.in = bun.cast(SockaddrInPtr, peer);
             hostname = inet_ntop(peer.family, &peer4.addr, &addr_buf, addr_buf.len);
             port = ntohs(peer4.port);
         } else if (peer.family == std.posix.AF.INET6) {
-            const peer6: *std.posix.sockaddr.in6 = bun.cast(*std.posix.sockaddr.in6, peer);
+            const peer6: *std.posix.sockaddr.in6 = bun.cast(SockaddrIn6Ptr, peer);
             hostname = inet_ntop(peer.family, &peer6.addr, &addr_buf, addr_buf.len);
             port = ntohs(peer6.port);
             if (peer6.scope_id != 0) {
@@ -146,7 +148,7 @@ fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_int) {
     }
 }
 
-pub class UDPSocketConfig {
+pub struct UDPSocketConfig {
     const HandlerEntry = struct {
         name: []const u8,
         gc_field: []const u8,
@@ -459,7 +461,9 @@ export class UDPSocket {
         }
 
         let iface = std.mem.zeroes(std.posix.sockaddr.storage);
-        const socket = this.socket orelse return globalThis.throw("Socket is closed", .{});
+        const socket_opt = this.socket;
+        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
+        const socket = socket_opt.?;
 
         let res: c_int = 0;
         if (arguments.len > 1 and try parseAddr(this, globalThis, .jsNumber(0), arguments[1], &iface)) {
@@ -511,7 +515,9 @@ export class UDPSocket {
         }
 
         let iface: std.posix.sockaddr.storage = undefined;
-        const socket = this.socket orelse return globalThis.throw("Socket is closed", .{});
+        const socket_opt = this.socket;
+        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
+        const socket = socket_opt.?;
 
         let res: c_int = 0;
         if (arguments.len > 2 and try parseAddr(this, globalThis, .jsNumber(0), arguments[2], &iface)) {
@@ -554,7 +560,9 @@ export class UDPSocket {
             return JSValue.false;
         }
 
-        const socket = this.socket orelse return globalThis.throw("Socket is closed", .{});
+        const socket_opt = this.socket;
+        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
+        const socket = socket_opt.?;
         const res = socket.setMulticastInterface(&addr);
 
         if (err := getUSError(res, .setsockopt, true)) {
@@ -583,7 +591,9 @@ export class UDPSocket {
         }
 
         const ttl = try arguments[0].coerceToInt32(globalThis);
-        const socket = this.socket orelse return globalThis.throw("Socket is closed", .{});
+        const socket_opt = this.socket;
+        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
+        const socket = socket_opt.?;
         const res = function(socket, ttl);
 
         if (err := getUSError(res, .setsockopt, true)) {
@@ -600,7 +610,7 @@ export class UDPSocket {
             callframe: *CallFrame,
             result: bun.JSError!JSValue,
 
-            pub fn run(ctx: *@This(), payload_roots: *jsc.MarkedArgumentBuffer): void {
+            pub fn run(ctx: *@This(), payload_roots: *jsc.MarkedArgumentBuffer) callconv(.c) void {
                 ctx.result = sendManyImpl(ctx.this_ptr, ctx.globalThis, ctx.callframe, payload_roots);
             }
         };
@@ -661,7 +671,8 @@ export class UDPSocket {
                 if (val.asArrayBuffer(globalThis) != null) {
                     payload_val = val;
                 } else if (val.isString()) {
-                    payload_val = (try val.toJSString(globalThis)).toJS();
+                    const js_str = val.toJSString(globalThis)?;
+                    payload_val = js_str.toJS();
                 } else {
                     return globalThis.throwInvalidArguments("Expected ArrayBufferView or string as payload", .{});
                 }
@@ -703,7 +714,9 @@ export class UDPSocket {
             lens[slice_idx] = slice.len;
         }
 
-        const socket = this.socket orelse return globalThis.throw("Socket is closed", .{});
+        const socket_opt = this.socket;
+        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
+        const socket = socket_opt.?;
         const send_fn = uws.udp.Socket.send;
         const res = send_fn(socket, payloads, lens, addr_ptrs);
         if (err := getUSError(res, .send, true)) {
@@ -751,13 +764,16 @@ export class UDPSocket {
         if (array_buffer := payload_arg.asArrayBuffer(globalThis)) {
             payload = array_buffer.slice();
         } else if (payload_arg.isString()) {
-            payload_str = (try payload_arg.toJSString(globalThis)).toSlice(globalThis, bun.default_allocator);
+            const payload_js_str = payload_arg.toJSString(globalThis)?;
+            payload_str = payload_js_str.toSlice(globalThis, bun.default_allocator);
             payload = payload_str.slice();
         } else {
             return globalThis.throwInvalidArguments("Expected ArrayBufferView or string as first argument", .{});
         }
 
-        const socket = this.socket orelse return globalThis.throw("Socket is closed", .{});
+        const socket_opt = this.socket;
+        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
+        const socket = socket_opt.?;
         const send_fn = uws.udp.Socket.send;
         const res = send_fn(socket, &.{payload.ptr}, &.{payload.len}, &.{addr_ptr});
         if (err := getUSError(res, .send, true)) {
@@ -785,7 +801,9 @@ export class UDPSocket {
 
     pub fn close(*_, _: *JSGlobalObject, _: *CallFrame): bun.JSError!JSValue {
         if (!this.closed) {
-            const sock = this.socket orelse return JSValue.js_undefined;
+            const sock_opt = this.socket;
+            if (sock_opt == null) return JSValue.js_undefined;
+            const sock = sock_opt.?;
             this.socket = null;
             sock.close();
             this.this_value.downgrade();
@@ -800,7 +818,9 @@ export class UDPSocket {
         }
 
         const options = args.ptr[0];
-        const thisValue = this.this_value.tryGet() orelse return JSValue.js_undefined;
+        const thisValue_opt = this.this_value.tryGet();
+        if (thisValue_opt == null) return JSValue.js_undefined;
+        const thisValue = thisValue_opt.?;
         const config = try UDPSocketConfig.fromJS(globalThis, options, thisValue);
 
         let previous_config = this.config;
@@ -907,7 +927,9 @@ export class UDPSocket {
         const connect_port = connect_port_js.asInt32();
         const port: u16 = if (connect_port < 1 or connect_port > 0xffff) 0 else @as(u16, @intCast(connect_port));
 
-        const socket = this_socket.socket orelse return globalThis.throw("Socket is closed", .{});
+        const socket_opt = this_socket.socket;
+        if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
+        const socket = socket_opt.?;
         if (socket.connect(connect_host, port) == -1) {
             return globalThis.throw("Failed to connect socket", .{});
         }
@@ -952,12 +974,12 @@ fn parseAddr(_: *UDPSocket, globalThis: *JSGlobalObject, port_val: JSValue, addr
     let address_slice = try str.toOwnedSliceZ(default_allocator);
     defer default_allocator.free(address_slice);
 
-    let addr4: *std.posix.sockaddr.in = bun.cast(*std.posix.sockaddr.in, storage);
+    let addr4: *std.posix.sockaddr.in = bun.cast(SockaddrInPtr, storage);
     if (inet_pton(std.posix.AF.INET, address_slice.ptr, &addr4.addr) == 1) {
         addr4.port = htons(@truncate(port));
         addr4.family = std.posix.AF.INET;
     } else {
-        let addr6: *std.posix.sockaddr.in6 = bun.cast(*std.posix.sockaddr.in6, storage);
+        let addr6: *std.posix.sockaddr.in6 = bun.cast(SockaddrIn6Ptr, storage);
         addr6.scope_id = 0;
 
         if (percent := str.indexOfAsciiChar('%')) {

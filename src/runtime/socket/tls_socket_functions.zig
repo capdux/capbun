@@ -358,9 +358,9 @@ const sn_str = BoringSSL.OBJ_nid2sn(sign_nid);
 },
 }
                 const hash_str = BoringSSL.OBJ_nid2sn(hash_nid);
-                if ((hash_str != null)) {
-                    const hash_str_len = bun.len((hash_str.?));
-                    const hash_slice = (hash_str.?)[0..hash_str_len];
+                if ((@intFromPtr(hash_str) != 0)) {
+                    const hash_str_len = bun.len(hash_str);
+                    const hash_slice = hash_str[0..hash_str_len];
                     var buffer = bun.handleOom(bun.default_allocator.alloc(u8, ((sig_with_md.len + hash_str_len) + 1)));
                     _ = &buffer;
                     defer {
@@ -402,22 +402,22 @@ pub fn getCipher(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc
             return result;
         }
         const name = BoringSSL.SSL_CIPHER_get_name(cipher);
-        if ((name == null)) {
+        if ((@intFromPtr(name) == 0)) {
             _ = result.put(globalObject, ZigString.static("name"), JSValue.jsNull());
         } else {
-            _ = result.put(globalObject, ZigString.static("name"), ZigString.fromUTF8((name.?)[0..bun.len((name.?))]).toJS(globalObject));
+            _ = result.put(globalObject, ZigString.static("name"), ZigString.fromUTF8(name[0..bun.len(name)]).toJS(globalObject));
         }
         const standard_name = BoringSSL.SSL_CIPHER_standard_name(cipher);
-        if ((standard_name == null)) {
+        if ((@intFromPtr(standard_name) == 0)) {
             _ = result.put(globalObject, ZigString.static("standardName"), JSValue.jsNull());
         } else {
-            _ = result.put(globalObject, ZigString.static("standardName"), ZigString.fromUTF8((standard_name.?)[0..bun.len((standard_name.?))]).toJS(globalObject));
+            _ = result.put(globalObject, ZigString.static("standardName"), ZigString.fromUTF8(standard_name[0..bun.len(standard_name)]).toJS(globalObject));
         }
         const version = BoringSSL.SSL_CIPHER_get_version(cipher);
-        if ((version == null)) {
+        if ((@intFromPtr(version) == 0)) {
             _ = result.put(globalObject, ZigString.static("version"), JSValue.jsNull());
         } else {
-            _ = result.put(globalObject, ZigString.static("version"), ZigString.fromUTF8((version.?)[0..bun.len((version.?))]).toJS(globalObject));
+            _ = result.put(globalObject, ZigString.static("version"), ZigString.fromUTF8(version[0..bun.len(version)]).toJS(globalObject));
         }
         return result;
 }
@@ -564,7 +564,7 @@ else => {
 }
 
 pub fn getALPNProtocol(self: *This, globalObject: *jsc.JSGlobalObject) bun.JSError!JSValue {
-        var alpn_proto: ?[*c]const u8 = null;
+        var alpn_proto: [*c]const u8 = std.mem.zeroes([*c]const u8);
         _ = &alpn_proto;
         var alpn_proto_len: u32 = 0;
         _ = &alpn_proto_len;
@@ -574,7 +574,7 @@ pub fn getALPNProtocol(self: *This, globalObject: *jsc.JSGlobalObject) bun.JSErr
         }
         const ssl_ptr = ssl_ptr_opt.?;
         _ = BoringSSL.SSL_get0_alpn_selected(ssl_ptr, (&alpn_proto), (&alpn_proto_len));
-        if (((alpn_proto == null) or (alpn_proto_len == 0))) {
+        if (((@intFromPtr(alpn_proto) == 0) or (alpn_proto_len == 0))) {
             return JSValue.false;
         }
         const slice = alpn_proto[0..alpn_proto_len];
@@ -751,9 +751,10 @@ pub noinline fn getSSLException(globalThis: *jsc.JSGlobalObject, defaultMessage:
         output_buf[cp_cast_int(usize, 0)] = 0;
         var written: usize = 0;
         _ = &written;
-        var ssl_error = BoringSSL.ERR_get_error;
+        const get_err_fn = BoringSSL.ERR_get_error;
+        var ssl_error: u32 = get_err_fn();
         _ = &ssl_error;
-        while (((ssl_error != 0) and (written < output_buf.len))) : (ssl_error = BoringSSL.ERR_get_error) {
+        while (((ssl_error != 0) and (written < output_buf.len))) : (ssl_error = get_err_fn()) {
             if ((written > 0)) {
                 output_buf[cp_cast_int(usize, written)] = 10;
                 written = (written + 1);

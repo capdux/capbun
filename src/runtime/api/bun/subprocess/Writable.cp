@@ -224,13 +224,13 @@ pub const Writable = union(enum) {
                 return Writable{ .fd = result.? };
             },
             .inherit => {
-                return Writable{ .inherit = {} };
+                return .inherit;
             },
             .path, .ignore => {
-                return Writable{ .ignore = {} };
+                return .ignore;
             },
             .ipc, .capture => {
-                return Writable{ .ignore = {} };
+                return .ignore;
             },
         }
     }
@@ -241,7 +241,7 @@ pub const Writable = union(enum) {
             .memfd, .ignore => .js_undefined,
             .buffer, .inherit => .js_undefined,
             .pipe => |pipe| {
-                this.* = Writable{ ignore: {} };
+                this.* = .ignore;
                 if (subprocess.process.hasExited() && !subprocess.flags.has_stdin_destructor_called) {
                     // `Writable.init()` already called `subprocess.ref()` &&
                     // set `deref_on_stdin_destroyed`. `onAttachedProcessExit()`

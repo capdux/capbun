@@ -349,7 +349,11 @@ pub fn getTermiosFlag(client: *Terminal, comptime field: TermiosField) JSValue {
         if ((client.flags.closed or (client.master_fd == bun.invalid_fd))) {
             return JSValue.jsNumber(0);
         }
-        const termios_data = ((getTermios(client.master_fd)) orelse { return JSValue.jsNumber(0); });
+        const maybe_termios = getTermios(client.master_fd);
+        if ((maybe_termios == null)) {
+            return JSValue.jsNumber(0);
+        }
+        const termios_data = maybe_termios.?;
         const flag = @field(termios_data, @tagName(field));
         const Int = @typeInfo(@TypeOf(flag)).@"struct".backing_integer.?;
         return JSValue.jsNumber(@as(f64, @floatFromInt(@as(Int, @bitCast(flag)))));
@@ -363,7 +367,11 @@ pub fn setTermiosFlag(client: *Terminal, globalObject: *jsc.JSGlobalObject, comp
             return;
         }
         const num = try value.coerce(f64, globalObject);
-        var termios_data = ((getTermios(client.master_fd)) orelse { return .{ .ok = {} }; });
+        const maybe_termios = getTermios(client.master_fd);
+        if ((maybe_termios == null)) {
+            return;
+        }
+        var termios_data = maybe_termios.?;
         _ = &termios_data;
         const FlagType = @TypeOf(@field(termios_data, @tagName(field)));
         const Int = @typeInfo(FlagType).@"struct".backing_integer.?;
@@ -417,7 +425,11 @@ pub fn write(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe: *jsc
         if (data.isUndefinedOrNull()) {
             return globalObject.throw("write() requires data argument", .{});
         }
-        const string_or_buffer = ((try jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, data)) orelse { return .{ .ok = globalObject.throw("write() argument must be a string or ArrayBuffer", .{}) }; });
+        const maybe_sob = try jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, data);
+        if ((maybe_sob == null)) {
+            return globalObject.throw("write() argument must be a string or ArrayBuffer", .{});
+        }
+        const string_or_buffer = maybe_sob.?;
         defer {
         _ = string_or_buffer.deinit();
         }
@@ -477,7 +489,7 @@ pub fn resize(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe: *js
         }
         self.cols = (if (Environment.isWindows) @intCast(clampToCoord(new_cols)) else new_cols);
         self.rows = (if (Environment.isWindows) @intCast(clampToCoord(new_rows)) else new_rows);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn setRawMode(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -493,17 +505,17 @@ pub fn setRawMode(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe:
             }
         }
         self.flags.raw_mode = enabled;
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doRef(self: *Terminal, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
         _ = self.updateRef(true);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn doUnref(self: *Terminal, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
         _ = self.updateRef(false);
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn updateRef(self: *Terminal, add: bool) void {
@@ -513,7 +525,7 @@ pub fn updateRef(self: *Terminal, add: bool) void {
 
 pub fn close(self: *Terminal, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
         _ = self.closeInternal();
-        return error.js_undefined;
+        return JSValue.js_undefined;
 }
 
 pub fn asyncDispose(self: *Terminal, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
@@ -619,7 +631,7 @@ pub fn callExitCallback(client: *Terminal, exit_code: i32, signal: ?bun.SignalCo
         _ = &signal_value;
         if (signal) |s| {
             _ = &s;
-            signal_value = jsc.ZigString.init((((if (@typeInfo(@TypeOf(s)) == .@"enum" or @typeInfo(@TypeOf(s)) == .@"union") @tagName(s) else s.name)()) orelse ("unknown"))).toJS(globalThis);
+            signal_value = jsc.ZigString.init(((s.name()) orelse ("unknown"))).toJS(globalThis);
         }
         const args: [3]JSValue = .{ this_jsvalue, JSValue.jsNumber(exit_code), signal_value };
         _ = globalThis.bunVM().eventLoop().runCallback(callback, globalThis, this_jsvalue, (&args));
@@ -703,7 +715,7 @@ const Termios = (if (Environment.isPosix) std.posix.termios else void);
 const HANDLE = bun.windows.HANDLE;
 const HPCON = bun.windows.HPCON;
 var pipe_serial = std.atomic.Value(u32).init(0);
-const InitError = (CreatePtyError or error{ WriterStartFailed, ReaderStartFailed });
+const InitError = error{ OpenPtyFailed, DupFailed, NotSupported, WriterStartFailed, ReaderStartFailed };
 const OpenPtyTermios = extern struct {
     c_iflag: u32,
     c_oflag: u32,
@@ -760,7 +772,11 @@ pub fn getOpenPtyFn() ?OpenPtyFn {
 }
 
 pub fn createPtyPosix(cols: u16, rows: u16) CreatePtyError!PtyResult {
-        const openpty_fn = ((getOpenPtyFn()) orelse { return .{ .ok = error.NotSupported }; });
+        const openpty_opt = getOpenPtyFn();
+        if ((openpty_opt == null)) {
+            return error.NotSupported;
+        }
+        const openpty_fn = openpty_opt.?;
         var master_fd: c_int = -1;
         _ = &master_fd;
         var slave_fd: c_int = -1;

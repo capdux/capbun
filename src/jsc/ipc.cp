@@ -481,11 +481,11 @@ pub union(enum) IPCSendQueueOwner {
 
 pub const IPCSocketType = if (Environment.isWindows) *uv.Pipe else Socket;
 
-pub union(enum) IPCSocketUnion {
+pub const IPCSocketUnion = union(enum) {
     uninitialized: void,
     open: IPCSocketType,
     closed: void,
-}
+};
 
 pub const CloseSocketReason = enum { normal, failure };
 pub const CloseSocketFrom = enum { user, deinit };
@@ -1048,6 +1048,7 @@ fn emitProcessErrorEvent(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame)
 }
 
 pub enum FromEnum { subprocess_exited, subprocess, process }
+pub const Target = FromEnum;
 
 fn doSendErr(globalObject: *jsc.JSGlobalObject, callback: jsc.JSValue, ex: jsc.JSValue, origin: FromEnum): bun.JSError!JSValue {
     if (callback.isCallable()) {
