@@ -59,7 +59,9 @@ pub struct PluginRunner {
         )?;
         if (on_resolve_plugin_opt == null) return null;
         const on_resolve_plugin = on_resolve_plugin_opt.?;
-        const path_value = on_resolve_plugin.get(global, "path")? ?? return null;
+        const path_value_opt = on_resolve_plugin.get(global, "path")?;
+        if (path_value_opt == null) return null;
+        const path_value = path_value_opt.?;
         if (path_value.isEmptyOrUndefinedOrNull()) return null;
         if (!path_value.isString()) {
             log.addError(null, loc, "Expected \"path\" to be a string") catch unreachable;

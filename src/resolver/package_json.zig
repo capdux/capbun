@@ -1032,7 +1032,7 @@ pub fn parse(allocator: std.mem.Allocator, source: *const logger.Source, log: *l
                             _ = ((self.log.addRangeWarningFmtWithNote(self.source, key_range, self.allocator, "This object cannot contain keys that both start with \".\" and don't start with \".\"", .{}, "The previous key \"{s}\" is incompatible with the current key \"{s}\"", .{ prev_key, key }, prev_key_range)) catch unreachable);
                             _ = map_data.deinit(self.allocator);
                             _ = self.allocator.free(expansion_keys);
-                            return Entry{ .data = .{ .invalid = .{} }, .first_token = first_token };
+                            return Entry{ .data = .invalid, .first_token = first_token };
                         }
                     }
                     map_data_keys[cp_cast_int(usize, i)] = key;
@@ -1385,7 +1385,7 @@ if (r.debug_logs) |log| {
                 const status: Status = (if ((strings.endsWithCharOrIsZeroLength(result, 42) and ((strings.indexOfChar(result, 42)).? == (result.len - 1)))) .ExactEndsWithStar else .Exact);
                 return Resolution{ .path = result, .status = status, .debug = .{ .token = target.first_token } };
             } else {
-                const parts2: [][]const u8 = .{ package_url, str, subpath };
+                const parts2: [3][]const u8 = .{ package_url, str, subpath };
                 const result = resolve_path.joinStringBuf(resolve_target_buf2, parts2, .auto);
                 if (r.debug_logs) |log| {
                     _ = &log;

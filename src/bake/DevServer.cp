@@ -972,7 +972,7 @@ fn onJsRequest(dev: *DevServer, req: *Request, resp: AnyResponse) {
             source_id.kind,
             dev.allocator(),
             .client,
-        ) catch |e| bun.handleOom(e);
+        ) catch |e| if (e == error.OutOfMemory) bun.outOfMemory() else unreachable;
         const response = StaticRoute.initFromAnyBlob(&.fromOwnedSlice(dev.allocator(), json_bytes), {
             server: dev.server,
             mime_type: &.json,

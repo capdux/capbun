@@ -409,7 +409,7 @@ if ((self.suite_stack.items.len > 0)) {
             }
             _ = try self.contents.appendSlice(bun.default_allocator, ">\n");
             _ = try self.contents.appendSlice(bun.default_allocator, indent);
-            _ = try self.contents.writer(bun.default_allocator).print("  <failure message=\"test marked with .failing() did not throw\" type=\"AssertionError\"/>", "", .{});
+            _ = try self.contents.writer(bun.default_allocator).writeAll("  <failure message=\"test marked with .failing() did not throw\" type=\"AssertionError\"/>\n");
             _ = try self.contents.appendSlice(bun.default_allocator, indent);
             _ = try self.contents.appendSlice(bun.default_allocator, "</testcase>\n");
 },

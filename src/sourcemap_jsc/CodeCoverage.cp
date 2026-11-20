@@ -507,7 +507,8 @@ pub struct ByteRangeMapping {
                 if (!did_fn_execute) {
                     const end = @min(max_line, line_count);
                     @memset(line_hits_slice[min_line..end], 0);
-                    for (line of min_line..end) {
+                    let line: u32 = min_line;
+                    while (line < end) : (line += 1) {
                         executable_lines.set(line);
                         lines_which_have_executed.unset(line);
                     }
@@ -612,7 +613,8 @@ pub struct ByteRangeMapping {
                 const did_fn_execute = function.executionCount > 0 || function.hasExecuted;
                 if (!did_fn_execute) {
                     const end = @min(max_line, line_count);
-                    for (line of min_line..end) {
+                    let line: u32 = min_line;
+                    while (line < end) : (line += 1) {
                         executable_lines.set(line);
                         lines_which_have_executed.unset(line);
                         line_hits_slice[line] = 0;

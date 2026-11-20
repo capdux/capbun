@@ -1199,10 +1199,10 @@ fn runWithSourceCode(
     // This was the case in the situation where the ParseTask receives its `.contents` from an onLoad plugin, which caused it to be
     // allocated by `bun.default_allocator` and then freed in `BundleV2.deinit` (and also by `entry.deinit(allocator)` below).
     const debug_original_variant_check: if (bun.Environment.isDebug) ContentsOrFd.Tag else void =
-        if (bun.Environment.isDebug) @as(ContentsOrFd.Tag, task.contents_or_fd);
+        if (bun.Environment.isDebug) std.meta.activeTag(task.contents_or_fd);
     errdefer {
         if (comptime bun.Environment.isDebug) {
-            if (@as(ContentsOrFd.Tag, task.contents_or_fd) != debug_original_variant_check) {
+            if (std.meta.activeTag(task.contents_or_fd) != debug_original_variant_check) {
                 std.debug.panic("BUG: `task.contents_or_fd` changed in a way that will cause a double free or memory to leak!\n\n    Original = {s}\n    New = {s}\n", .{
                     @tagName(debug_original_variant_check),
                     @tagName(task.contents_or_fd),

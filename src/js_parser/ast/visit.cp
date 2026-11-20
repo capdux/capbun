@@ -799,7 +799,7 @@ pub fn Visit(
                 defer preprocessed_enums.deinit(p.allocator);
                 if (p.scopes_in_order_for_enum.count() > 0) {
                     let found: usize = 0;
-                    for (*stmt of stmts.items) {
+                    for (stmt of stmts.items) {
                         if (stmt.data == .s_enum) {
                             const old_scopes_in_order = p.scope_order_to_visit;
                             defer p.scope_order_to_visit = old_scopes_in_order;
@@ -828,7 +828,8 @@ pub fn Visit(
 
                 let preprocessed_enum_i: usize = 0;
 
-                for (*stmt of stmts.items) {
+                for (stmt_idx of 0..stmts.items.len) {
+                    const stmt = &stmts.items[stmt_idx];
                     const list = list_getter: {
                         switch (stmt.data) {
                             .s_export_equals => {

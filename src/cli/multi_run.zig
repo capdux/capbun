@@ -152,7 +152,8 @@ pub fn start(self: *ProcessHandle) !void {
             break :blk @ptrCast((&argv));
 
 });
-            break :brk try try bun.spawn.spawnProcess((&self.options), argv_ptr, envp).unwrap();
+            const spawn_res = try bun.spawn.spawnProcess((&self.options), argv_ptr, envp);
+            break :brk try spawn_res.unwrap();
 };
             _ = &spawned;
             var process = spawned.toProcess(self.state.event_loop, false);

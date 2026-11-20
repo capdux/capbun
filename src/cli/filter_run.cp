@@ -89,7 +89,8 @@ pub struct ProcessHandle {
             defer arena_allocator.deinit();
             const envp = getEnvp(_.state.env, _.config.PATH, arena_allocator.allocator())?;
             const argv_ptr: [*:null]OptCstr = unsafe { @ptrCast(&argv) };
-            break :brk (bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?).unwrap()?;
+            const spawn_res = bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?;
+            break :brk spawn_res.unwrap()?;
         };
         let process = spawned.toProcess(_.state.event_loop, false);
 

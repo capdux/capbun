@@ -263,10 +263,13 @@ _ = (blk_catch_3: { break :blk_catch_3 ((log.addRangeWarningFmt(source, source.r
                 if (compiler_opts.expr.asProperty("moduleSuffixes")) |prefixes| {
                     _ = &prefixes;
                     if ((!source.path.isNodeModule())) {
-                        if (prefixes.expr.asArray()) |array| {
+                        var array_opt = prefixes.expr.asArray();
+                        _ = &array_opt;
+                        if ((array_opt != null)) {
+                            var array = array_opt.?;
                             _ = &array;
-                            while (array.next()) |*element| {
-                                if ((element.*).asString(allocator)) |str| {
+                            while (array.next()) |element| {
+                                if (element.asString(allocator)) |str| {
                                     _ = &str;
                                     if ((str.len > 0)) {
                                         _ = (blk_catch_4: { break :blk_catch_4 ((log.addWarning(source, prefixes.loc, "moduleSuffixes is not supported yet")) catch |__ce_4| { _ = &__ce_4;  }); });

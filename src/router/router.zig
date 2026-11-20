@@ -235,8 +235,8 @@ pub fn matchPageWithAllocator(self: *Routes, __: []const u8, url_path: URLPath, 
                 redirect = false;
             }
             if ((path.len == 0)) {
-                if (self.index) |idx| {
-                    _ = &idx;
+                if ((self.index != null)) {
+                    const idx = self.index.?;
                     return Match{ .params = params, .name = (if (@typeInfo(@TypeOf(idx)) == .@"enum" or @typeInfo(@TypeOf(idx)) == .@"union") @tagName(idx) else idx.name), .path = (idx).?.abs_path.slice(), .pathname = url_path.pathname, .basename = (idx).?.basename, .hash = index_route_hash, .file_path = (idx).?.abs_path.slice(), .query_string = url_path.query_string, .client_framework_enabled = self.client_framework_enabled };
                 }
                 return null;

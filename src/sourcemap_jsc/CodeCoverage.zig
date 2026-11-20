@@ -521,14 +521,11 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                         if ((!did_fn_execute)) {
                             const end = @min(max_line, line_count);
                             _ = @memset(line_hits_slice[min_line..end], 0);
-                            {
-                                var line: i32 = min_line;
-                                _ = &line;
-                                const __end_2 = end;
-                                while (line < __end_2) : (line += 1) {
-                                    _ = executable_lines.set(line);
-                                    _ = lines_which_have_executed.unset(line);
-                                }
+                            var line: u32 = min_line;
+                            _ = &line;
+                            while ((line < end)) : (line = (line + 1)) {
+                                _ = executable_lines.set(line);
+                                _ = lines_which_have_executed.unset(line);
                             }
                         }
                         _ = try functions.append(allocator, .{ .start_line = min_line, .end_line = max_line });
@@ -557,8 +554,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_3 = blocks.len;
-                        while (i < __end_3) : (i += 1) {
+                        const __end_2 = blocks.len;
+                        while (i < __end_2) : (i += 1) {
                             const block = blocks[@as(usize, @intCast(i))];
                             if (((block.endOffset < 0) or (block.startOffset < 0))) {
                                 continue;
@@ -616,8 +613,8 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_4 = function_blocks.len;
-                        while (i < __end_4) : (i += 1) {
+                        const __end_3 = function_blocks.len;
+                        while (i < __end_3) : (i += 1) {
                             const function = function_blocks[@as(usize, @intCast(i))];
                             if (((function.endOffset < 0) or (function.startOffset < 0))) {
                                 continue;
@@ -664,15 +661,12 @@ pub fn generateReportFromBlocks(self: *ByteRangeMapping, allocator: std.mem.Allo
                             const did_fn_execute = ((function.executionCount > 0) or function.hasExecuted);
                             if ((!did_fn_execute)) {
                                 const end = @min(max_line, line_count);
-                                {
-                                    var line: i32 = min_line;
-                                    _ = &line;
-                                    const __end_5 = end;
-                                    while (line < __end_5) : (line += 1) {
-                                        _ = executable_lines.set(line);
-                                        _ = lines_which_have_executed.unset(line);
-                                        line_hits_slice[cp_cast_int(usize, line)] = 0;
-                                    }
+                                var line: u32 = min_line;
+                                _ = &line;
+                                while ((line < end)) : (line = (line + 1)) {
+                                    _ = executable_lines.set(line);
+                                    _ = lines_which_have_executed.unset(line);
+                                    line_hits_slice[cp_cast_int(usize, line)] = 0;
                                 }
                             }
                             _ = try functions.append(allocator, .{ .start_line = min_line, .end_line = max_line });

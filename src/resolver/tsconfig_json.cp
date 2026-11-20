@@ -214,8 +214,10 @@ pub struct TSConfigJSON {
 
             if (prefixes := compiler_opts.expr.asProperty("moduleSuffixes")) {
                 if (!source.path.isNodeModule()) {
-                    if (let array := prefixes.expr.asArray()) {
-                        while (*element := array.next()) {
+                    let array_opt = prefixes.expr.asArray();
+                    if (array_opt != null) {
+                        let array = array_opt.?;
+                        while (element := array.next()) {
                             if (str := element.asString(allocator)) {
                                 if (str.len > 0) {
                                     log.addWarning(source, prefixes.loc, "moduleSuffixes is not supported yet") catch {};

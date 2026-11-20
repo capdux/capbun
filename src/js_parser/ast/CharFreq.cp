@@ -107,7 +107,7 @@ fn scanSmall(out: *align(1) Buffer, text: string, delta: i32) {
                 };
             }
 
-            std.sort.pdq(CharAndCount, &_array, {}, CharAndCount.lessThan);
+            std.sort.pdq(CharAndCount, &_array, @as(void, {}), CharAndCount.lessThan);
 
             break :brk _array;
         };

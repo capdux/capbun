@@ -1944,10 +1944,9 @@ else => r.opts.conditions.@"import",
                     }
                     var tmp = r.loadAsFileOrDirectory(abs_path, kind);
                     _ = &tmp;
-                    if (tmp) |*res| {
-                        _ = &res;
-                        (res.*).is_node_module = true;
-                        return .{ .success = (res.*).* };
+                    if ((tmp != null)) {
+                        tmp.?.is_node_module = true;
+                        return .{ .success = tmp.? };
                     }
                 }
 };

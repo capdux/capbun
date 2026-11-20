@@ -111,8 +111,10 @@ pub fn canBeMoved(self: Class) bool {
                 }
                 if ((property.kind == .normal)) {
                     if (flags.contains(.is_static)) {
-                        for (cp_iter_slice(.{ property.value, property.initializer })) |val_| {
-                            _ = &val_;
+                        var i: usize = 0;
+                        _ = &i;
+                        while ((i < 2)) : (i = (i + 1)) {
+                            const val_ = (if ((i == 0)) property.value else property.initializer);
                             if (val_) |val| {
                                 _ = &val;
                                 switch (val.data) {

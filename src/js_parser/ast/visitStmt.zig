@@ -98,7 +98,7 @@ pub fn VisitStmt(comptime parser_feature__typescript: bool, comptime parser_feat
 pub fn visitAndAppendStmt(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt) anyerror!void {
             const was_after_after_const_local_prefix = p.current_scope.is_after_const_local_prefix;
             p.current_scope.is_after_const_local_prefix = true;
-            switch ((if (comptime @typeInfo(Stmt.Tag) == .@"enum") @as(Stmt.Tag, @enumFromInt(stmt.data)) else @as(Stmt.Tag, stmt.data))) {
+            switch (std.meta.activeTag(stmt.data)) {
 .s_directive, .s_comment, .s_empty => {
 p.current_scope.is_after_const_local_prefix = was_after_after_const_local_prefix;
             _ = try stmts.append(stmt.*);

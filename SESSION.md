@@ -3184,3 +3184,5 @@ Options:
 - **[2026-11-20 23:20] Wave 24 B 组 + E 组验收提交（26 模块全绿）**：完成 `CompileTarget`（清除最后 2 个 `std/Io/Writer.zig` 错）/JSC/SQL/API/WebCore/HTTP/Socket/Shell/String 23 模块及 3 个跨模块外部根因（`Blob.getLoader`/`PackageManagerLifecycle.determinePreinstallState`/`write_file.then`）独立验收（26/26 PASS，ratio 0.54x~1.147x）并原子提交；静待 D 组（`f99b0881`）完成即跑 Wave 25 `zig:check`。
 
 - **[2026-11-20 23:22] Wave 24 D 组验收提交（39 模块全绿，Wave 24 全部 106 模块清仓）**：完成 3 个 `Expr.init` 调用方（`parsePrefix`/`parseImportExport`/`toml`）及 36 个 1 错长尾模块独立验收（39/39 PASS，ratio 0.274x~1.136x）并原子提交；随即运行 Wave 25 全仓 `bun run zig:check`。
+
+- **[2026-11-20 23:29] Wave 25 A 组验收提交（23 模块全绿）**：完成 `CompileTarget`（消除 `Writer.zig` 2 错）、`toml`（消除 `std/mem.zig` `#origin` 错）、AST/Resolver/Router/DevServer/Bundler/CLI/Sourcemap 等 23 模块独立验收（23/23 PASS）并原子提交；记录外部根因 `OutputFile.cp`/`Headers.cp`/`json.cp`/`P.cp` 并补派 D 组扫除。

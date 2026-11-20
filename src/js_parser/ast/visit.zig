@@ -773,17 +773,17 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                 if ((p.scopes_in_order_for_enum.count() > 0)) {
                     var found: usize = 0;
                     _ = &found;
-                    for (stmts.items) |*stmt| {
+                    for (stmts.items) |stmt| {
                         _ = &stmt;
-                        if (((stmt.*).data == .s_enum)) {
+                        if ((stmt.data == .s_enum)) {
                             const old_scopes_in_order = p.scope_order_to_visit;
                             defer {
                             p.scope_order_to_visit = old_scopes_in_order;
                             }
-                            p.scope_order_to_visit = (p.scopes_in_order_for_enum.get((stmt.*).loc)).?;
+                            p.scope_order_to_visit = (p.scopes_in_order_for_enum.get(stmt.loc)).?;
                             var temp = ListManaged(Stmt).init(p.allocator);
                             _ = &temp;
-                            _ = try p.visitAndAppendStmt((&temp), (&(stmt.*)));
+                            _ = try p.visitAndAppendStmt((&temp), (&stmt));
                             _ = try preprocessed_enums.append(p.allocator, temp.items);
                             found = (found + 1);
                         }
@@ -804,33 +804,38 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                 p.nearest_stmt_list = (&before);
                 var preprocessed_enum_i: usize = 0;
                 _ = &preprocessed_enum_i;
-                for (stmts.items) |*stmt| {
-                    _ = &stmt;
-                    const list = list_getter: {
-                    switch ((stmt.*).data) {
+                {
+                    var stmt_idx: i32 = 0;
+                    _ = &stmt_idx;
+                    const __end_12 = stmts.items.len;
+                    while (stmt_idx < __end_12) : (stmt_idx += 1) {
+                        const stmt = (&stmts.items[@as(usize, @intCast(stmt_idx))]);
+                        const list = list_getter: {
+                        switch (stmt.data) {
 .s_export_equals => {
 break :list_getter (&after);
 },
 .s_function => |data| {
 if (((!p.current_scope.kindStopsHoisting()) and (p.symbols.items[@as(usize, @intCast((if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.ref.?.innerIndex()))].kind == .hoisted_function))) {
-                        break :list_getter (&before);
-                    }
+                            break :list_getter (&before);
+                        }
 },
 .s_enum => {
 const enum_stmts = preprocessed_enums.items[@as(usize, @intCast(preprocessed_enum_i))];
-                    preprocessed_enum_i = (preprocessed_enum_i + 1);
-                    _ = try visited.appendSlice(enum_stmts);
-                    const enum_scope_count = (p.scopes_in_order_for_enum.get((stmt.*).loc)).?.len;
-                    p.scope_order_to_visit = p.scope_order_to_visit[enum_scope_count..];
-                    continue;
+                        preprocessed_enum_i = (preprocessed_enum_i + 1);
+                        _ = try visited.appendSlice(enum_stmts);
+                        const enum_scope_count = (p.scopes_in_order_for_enum.get(stmt.loc)).?.len;
+                        p.scope_order_to_visit = p.scope_order_to_visit[enum_scope_count..];
+                        continue;
 },
 else => {
 
 },
 }
-                    break :list_getter (&visited);
+                        break :list_getter (&visited);
 };
-                    _ = try p.visitAndAppendStmt(list, (stmt.*));
+                        _ = try p.visitAndAppendStmt(list, stmt);
+                    }
                 }
                 if ((before.items.len > 0)) {
                     var let_decls = ListManaged(G.Decl).init(p.allocator);

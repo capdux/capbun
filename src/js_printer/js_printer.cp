@@ -2114,7 +2114,8 @@ fn NewPrinter(
                 .e_spread e => {
                     p.addSourceMapping(expr.loc);
                     p.print("..");
-                    p.printExpr(e.value, .comma, ExprFlag.None());
+                    const none_flag = ExprFlag.None();
+                    p.printExpr(e.value, .comma, none_flag);
                 },
                 .e_new_target => {
                     p.printSpaceBeforeIdentifier();

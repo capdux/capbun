@@ -491,7 +491,7 @@ pub struct Builder {
             w += 8;
             for (k of 0..n_deltas) {
                 if (deltas[k].d_src_idx == 0) {
-                    buf[mask_off + (k >> 3)] |= (1 as u8) << @as(u3, @intCast(k & 7));
+                    buf[mask_off + @as(usize, @intCast(k >> 3))] |= (1 as u8) << @as(u3, @intCast(k & 7));
                 }
             }
             for (k of 0..n_deltas) {

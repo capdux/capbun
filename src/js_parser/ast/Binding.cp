@@ -157,6 +157,12 @@ pub fn alloc(allocator: std.mem.Allocator, t: auto, loc: logger.Loc): Binding {
         B.Missing => {
             return Binding{ loc: loc, data: B{ b_missing: .{} } };
         },
+        type => {
+            if (t == B.Missing) {
+                return Binding{ loc: loc, data: B{ b_missing: .{} } };
+            }
+            @compileError("Invalid type passed to Binding.alloc");
+        },
         else => {
             @compileError("Invalid type passed to Binding.alloc");
         },

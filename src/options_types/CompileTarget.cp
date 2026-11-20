@@ -56,16 +56,15 @@ export @root struct CompileTarget {
                     inline else => |libc| switch (this.baseline) {
                         // https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-0.1.6.tgz
                         inline else => |is_baseline| {
-                            const suffix = comptime std.fmt.comptimePrint(
-                                "{s}-{s}{s}{s}",
-                                [
-                                    os.npmName(),
-                                    arch.npmName(),
-                                    libc.npmName(),
-                                    if (is_baseline) "-baseline" else "",
-                                ],
-                            );
-                            const fmt_str = comptime std.fmt.comptimePrint("{{s}}/@oven/bun-{s}/-/bun-{s}-{{d}}.{{d}}.{{d}}.tgz", [suffix, suffix]);
+                            const fmt_str = comptime "{s}/@oven/bun-" ++
+                                os.npmName() ++ "-" ++ arch.npmName() ++
+                                libc.npmName() ++
+                                (if (is_baseline) "-baseline" else "") ++
+                                "/-/bun-" ++
+                                os.npmName() ++ "-" ++ arch.npmName() ++
+                                libc.npmName() ++
+                                (if (is_baseline) "-baseline" else "") ++
+                                "-{d}.{d}.{d}.tgz";
                             return std.fmt.bufPrint(buf, fmt_str, [
                                 registry_url,
                                 this.version.major,

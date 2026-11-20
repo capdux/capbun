@@ -2085,7 +2085,8 @@ _ = p.printSpaceBeforeIdentifier();
 .e_spread => |e| {
 _ = p.addSourceMapping(expr.loc);
             _ = p.print("..");
-            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, ExprFlag.None);
+            const none_flag = ExprFlag.None;
+            _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, none_flag);
 },
 .e_new_target => {
 _ = p.printSpaceBeforeIdentifier();

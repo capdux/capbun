@@ -111,7 +111,7 @@ pub fn compile(self: CharFreq, allocator: std.mem.Allocator) NameMinifier {
         while ((i < char_freq_count)) : (i = (i + 1)) {
             _array[cp_cast_int(usize, i)] = CharAndCount{ .char = NameMinifier.default_tail[@as(usize, @intCast(i))], .index = i, .count = self.freqs[@as(usize, @intCast(i))] };
         }
-        _ = std.sort.pdq(CharAndCount, (&_array), .{}, CharAndCount.lessThan);
+        _ = std.sort.pdq(CharAndCount, (&_array), @as(void, .{}), CharAndCount.lessThan);
         break :brk _array;
 };
         var minifier = NameMinifier.init(allocator);

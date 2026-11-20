@@ -82,7 +82,11 @@ pub fn onResolve(self: *PluginRunner, specifier: []const u8, importer: []const u
                 return null;
             }
             const on_resolve_plugin = on_resolve_plugin_opt.?;
-            const path_value = ((try on_resolve_plugin.get(global, "path")) orelse { return .{ .ok = null }; });
+            const path_value_opt = try on_resolve_plugin.get(global, "path");
+            if ((path_value_opt == null)) {
+                return null;
+            }
+            const path_value = path_value_opt.?;
             if (path_value.isEmptyOrUndefinedOrNull()) {
                 return null;
             }

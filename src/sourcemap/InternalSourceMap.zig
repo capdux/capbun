@@ -578,7 +578,7 @@ pub fn flushWindow(self: *Builder) void {
                     const __end_9 = n_deltas;
                     while (k < __end_9) : (k += 1) {
                         if ((deltas[@as(usize, @intCast(k))].d_src_idx == 0)) {
-                            buf[cp_cast_int(usize, (mask_off + cp_shr(k, 3)))] = (buf[@as(usize, @intCast((mask_off + cp_shr(k, 3))))] | cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)), @as(u3, @intCast((k & 7)))));
+                            buf[cp_cast_int(usize, (mask_off + @as(usize, @intCast(cp_shr(k, 3)))))] = (buf[@as(usize, @intCast((mask_off + @as(usize, @intCast(cp_shr(k, 3))))))] | cp_shl((if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)), @as(u3, @intCast((k & 7)))));
                         }
                     }
                 }

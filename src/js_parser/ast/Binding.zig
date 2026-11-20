@@ -185,27 +185,26 @@ _ = @compileError("Invalid type passed to Binding.init");
 
 pub fn alloc(allocator: std.mem.Allocator, t: anytype, loc: logger.Loc) Binding {
         icount = (icount + 1);
-        switch (@TypeOf(t)) {
-B.Identifier => {
+        if (@TypeOf(t) == B.Identifier) {
 const data = ((allocator.create(B.Identifier)) catch unreachable);
         data.* = t;
         return Binding{ .loc = loc, .data = B{ .b_identifier = data } };
-},
-B.Array => {
+} else if (@TypeOf(t) == B.Array) {
 const data = ((allocator.create(B.Array)) catch unreachable);
         data.* = t;
         return Binding{ .loc = loc, .data = B{ .b_array = data } };
-},
-B.Object => {
+} else if (@TypeOf(t) == B.Object) {
 const data = ((allocator.create(B.Object)) catch unreachable);
         data.* = t;
         return Binding{ .loc = loc, .data = B{ .b_object = data } };
-},
-B.Missing => {
+} else if (@TypeOf(t) == B.Missing) {
 return Binding{ .loc = loc, .data = B{ .b_missing = .{} } };
-},
-else => {
+} else if (@TypeOf(t) == type) {
+if ((t == B.Missing)) {
+            return Binding{ .loc = loc, .data = B{ .b_missing = .{} } };
+        }
+        _ = @compileError("Invalid type passed to Binding.alloc");
+} else {
 _ = @compileError("Invalid type passed to Binding.alloc");
-},
 }
 }

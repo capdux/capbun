@@ -241,7 +241,8 @@ pub fn analyze(self: *Parser, context: *anyopaque, callback: *const fn (*anyopaq
                 }
                 return error.SyntaxError;
             }
-            const visit_tracer = bun.perf.trace("JSParser.visit");
+            var visit_tracer = bun.perf.trace("JSParser.visit");
+            _ = &visit_tracer;
             _ = try p.prepareForVisitPass();
             var parts = ListManaged(js_ast.Part).init(p.allocator);
             _ = &parts;
@@ -326,7 +327,8 @@ pub fn _parse(self: Parser, comptime ParserType: type) !js_ast.Result {
                 return error.SyntaxError;
             }
             bun.crash_handler.current_action = .{ .visit = self.source.path.text };
-            const visit_tracer = bun.perf.trace("JSParser.visit");
+            var visit_tracer = bun.perf.trace("JSParser.visit");
+            _ = &visit_tracer;
             _ = try p.prepareForVisitPass();
             var before = ListManaged(js_ast.Part).init(p.allocator);
             _ = &before;

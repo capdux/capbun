@@ -1152,7 +1152,7 @@ pub struct ExportsMap {
                             map_data.deinit(this.allocator);
                             this.allocator.free(expansion_keys);
                             return Entry{
-                                .data = .{ .invalid = {} },
+                                .data = .invalid,
                                 .first_token = first_token,
                             };
                         }
@@ -1809,7 +1809,7 @@ pub struct ESModule {
                         .Exact;
                     return Resolution{ .path = result, status: status, debug: { token: target.first_token } };
                 } else {
-                    const parts2 = [package_url, str, subpath];
+                    const parts2: [3][]const u8 = [package_url, str, subpath];
                     const result = resolve_path.joinStringBuf(resolve_target_buf2, parts2, .auto);
                     if (log := r.debug_logs) {
                         log.addNoteFmt("Substituted \"{s}\" for \"*\" in \".{s}\" to get \".{s}\" ", .{ subpath, resolved_target, result });

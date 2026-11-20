@@ -2344,9 +2344,9 @@ pub struct Resolver {
                         }
 
                         let tmp = r.loadAsFileOrDirectory(abs_path, kind);
-                        if (*res := tmp) {
-                            res.is_node_module = true;
-                            return { success: res.* };
+                        if (tmp != null) {
+                            tmp.?.is_node_module = true;
+                            return { success: tmp.? };
                         }
                     }
             }

@@ -1533,7 +1533,7 @@ pub inline fn isPropertyAccess(client: *const Expr): bool {
 }
 
 pub inline fn isPrimitiveLiteral(client: *const Expr): bool {
-    return @as(Tag, client.data).isPrimitiveLiteral();
+    return std.meta.activeTag(client.data).isPrimitiveLiteral();
 }
 
 pub inline fn isRef(client: *const Expr, r: Ref): bool {
@@ -3099,9 +3099,9 @@ pub union(Tag) Data {
             .e_inlined_enum => |inlined| return inlined.value.data.eql(right, p, kind),
 
             .e_null, .e_undefined => {
-                const ok = switch (@as(Expr.Tag, right)) {
+                const ok = switch (std.meta.activeTag(right)) {
                     .e_null, .e_undefined => true,
-                    else => @as(Expr.Tag, right).isPrimitiveLiteral(),
+                    else => std.meta.activeTag(right).isPrimitiveLiteral(),
                 };
 
                 if (comptime kind == .loose) {

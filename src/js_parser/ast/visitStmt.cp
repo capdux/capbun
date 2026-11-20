@@ -13,7 +13,7 @@ pub fn VisitStmt(
             const was_after_after_const_local_prefix = p.current_scope.is_after_const_local_prefix;
             p.current_scope.is_after_const_local_prefix = true;
 
-            switch (@as(Stmt.Tag, stmt.data)) {
+            switch (std.meta.activeTag(stmt.data)) {
                 .s_directive, .s_comment, .s_empty => {
                     p.current_scope.is_after_const_local_prefix = was_after_after_const_local_prefix;
                     stmts.append(stmt.*)?;

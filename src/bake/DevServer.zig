@@ -1462,7 +1462,7 @@ pub fn onJsRequest(dev: *DevServer, req: *Request, resp: AnyResponse) void {
             defer {
             _ = arena_.deinit();
             }
-            const json_bytes: []u8 = (blk_catch_17: { break :blk_catch_17 ((entry.renderJSON(dev, arena_.allocator(), source_id.kind, dev.allocator(), .client)) catch |e| { _ = &e; break :blk_catch_17 bun.handleOom(e); }); });
+            const json_bytes: []u8 = (blk_catch_17: { break :blk_catch_17 ((entry.renderJSON(dev, arena_.allocator(), source_id.kind, dev.allocator(), .client)) catch |e| { _ = &e; break :blk_catch_17 (if ((e == error.OutOfMemory)) bun.outOfMemory() else unreachable); }); });
             const response = StaticRoute.initFromAnyBlob((&.fromOwnedSlice(dev.allocator(), json_bytes)), .{ .server = dev.server, .mime_type = (&.json) });
             defer {
             _ = response.deref();

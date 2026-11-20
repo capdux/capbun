@@ -135,16 +135,46 @@ pub fn create(source: []const u8, gpa: std.mem.Allocator) !*ModuleInfoDeserializ
             errdefer {
             _ = gpa.destroy(res);
             }
-            const record_kinds_len = std.mem.readInt(u32, try eatC(rem, 4), .little);
-            const record_kinds = std.mem.bytesAsSlice(RecordKind, try eat(rem, (record_kinds_len * @sizeOf(RecordKind))));
-            _ = try eat(rem, ((4 - (record_kinds_len % 4)) % 4));
-            const buffer_len = std.mem.readInt(u32, try eatC(rem, 4), .little);
-            const buffer = std.mem.bytesAsSlice(StringID, try eat(rem, (buffer_len * @sizeOf(StringID))));
-            const requested_modules_len = std.mem.readInt(u32, try eatC(rem, 4), .little);
-            const requested_modules_keys = std.mem.bytesAsSlice(StringID, try eat(rem, (requested_modules_len * @sizeOf(StringID))));
-            const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, try eat(rem, (requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))));
-            const flags: Flags = @bitCast(try eatC(rem, 1)[0]);
-            _ = try eat(rem, 3);
+            const record_kinds_len = std.mem.readInt(u32, try eatC((blk: {
+            break :blk rem;
+
+}), 4), .little);
+            const record_kinds = std.mem.bytesAsSlice(RecordKind, try eat((blk: {
+            break :blk rem;
+
+}), (record_kinds_len * @sizeOf(RecordKind))));
+            _ = try eat((blk: {
+            break :blk rem;
+
+}), ((4 - (record_kinds_len % 4)) % 4));
+            const buffer_len = std.mem.readInt(u32, try eatC((blk: {
+            break :blk rem;
+
+}), 4), .little);
+            const buffer = std.mem.bytesAsSlice(StringID, try eat((blk: {
+            break :blk rem;
+
+}), (buffer_len * @sizeOf(StringID))));
+            const requested_modules_len = std.mem.readInt(u32, try eatC((blk: {
+            break :blk rem;
+
+}), 4), .little);
+            const requested_modules_keys = std.mem.bytesAsSlice(StringID, try eat((blk: {
+            break :blk rem;
+
+}), (requested_modules_len * @sizeOf(StringID))));
+            const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, try eat((blk: {
+            break :blk rem;
+
+}), (requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))));
+            const flags: Flags = @bitCast(try eatC((blk: {
+            break :blk rem;
+
+}), 1)[0]);
+            _ = try eat((blk: {
+            break :blk rem;
+
+}), 3);
             const strings_len = std.mem.readInt(u32, try eatC((blk: {
             break :blk rem;
 
@@ -314,7 +344,7 @@ pub fn str(self: *ModuleInfo, value: []const u8) !StringID {
                 return @enumFromInt(@as(u32, @truncate(gpres.index)));
             }
             gpres.key_ptr.* = @enumFromInt(@as(u32, @truncate(self.strings_buf.items.len)));
-            gpres.value_ptr.* = .{};
+            gpres.value_ptr.* = undefined;
             _ = self.strings_buf.appendSliceAssumeCapacity(value);
             _ = self.strings_lens.appendAssumeCapacity(@as(u32, @truncate(value.len)));
             return @enumFromInt(@as(u32, @truncate(gpres.index)));

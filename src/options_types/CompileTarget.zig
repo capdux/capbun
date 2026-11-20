@@ -138,8 +138,7 @@ inline else => |arch| (switch (self.libc) {
 inline else => |libc| (switch (self.baseline) {
 inline else => |is_baseline| {
 {
-            const suffix = (comptime std.fmt.comptimePrint("{s}-{s}{s}{s}", .{ os.npmName(), arch.npmName(), libc.npmName(), (if (is_baseline) "-baseline" else "") }));
-            const fmt_str = (comptime std.fmt.comptimePrint("{{s}}/@oven/bun-{s}/-/bun-{s}-{{d}}.{{d}}.{{d}}.tgz", .{ suffix, suffix }));
+            const fmt_str = (comptime (((((((((((("{s}/@oven/bun-" ++ os.npmName()) ++ "-") ++ arch.npmName()) ++ libc.npmName()) ++ (if (is_baseline) "-baseline" else "")) ++ "/-/bun-") ++ os.npmName()) ++ "-") ++ arch.npmName()) ++ libc.npmName()) ++ (if (is_baseline) "-baseline" else "")) ++ "-{d}.{d}.{d}.tgz"));
             return (blk_catch_0: { break :blk_catch_0 ((std.fmt.bufPrint(buf, fmt_str, .{ registry_url, self.version.major, self.version.minor, self.version.patch })) catch |err_val| { _ = &err_val; if ((err_val == error.NoSpaceLeft)) {
                 return error.BufferTooSmall;
             }

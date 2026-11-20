@@ -308,7 +308,7 @@ pub struct Parser {
             return error.SyntaxError;
         }
 
-        const visit_tracer = bun.perf.trace("JSParser.visit");
+        let visit_tracer = bun.perf.trace("JSParser.visit");
         p.prepareForVisitPass()?;
 
         let parts = ListManaged(js_ast.Part).init(p.allocator);
@@ -435,7 +435,7 @@ pub struct Parser {
 
         bun.crash_handler.current_action = { visit: _.source.path.text };
 
-        const visit_tracer = bun.perf.trace("JSParser.visit");
+        let visit_tracer = bun.perf.trace("JSParser.visit");
         p.prepareForVisitPass()?;
 
         let before = ListManaged(js_ast.Part).init(p.allocator);

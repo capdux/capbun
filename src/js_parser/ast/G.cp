@@ -55,7 +55,9 @@ pub struct Class {
 
             if (property.kind == .normal) {
                 if (flags.contains(.is_static)) {
-                    for (val_ of [property.value, property.initializer]) {
+                    let i: usize = 0;
+                    while (i < 2) : (i += 1) {
+                        const val_ = if (i == 0) property.value else property.initializer;
                         if (val := val_) {
                             switch (val.data) {
                                 .e_arrow, .e_function => {},

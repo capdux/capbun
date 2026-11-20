@@ -1422,9 +1422,9 @@ pub fn eql(left: Expr.Data, right: Expr.Data, p: anytype, comptime kind: EqlKind
 return (if (@typeInfo(@TypeOf(inlined)) == .@"enum") @intFromEnum(inlined) else inlined.value).data.eql(right, p, kind);
 },
 .e_null, .e_undefined => {
-const ok = (switch ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(right)) else @as(Expr.Tag, right))) {
+const ok = (switch (std.meta.activeTag(right)) {
 .e_null, .e_undefined => true,
-else => (if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(right)) else @as(Expr.Tag, right)).isPrimitiveLiteral(),
+else => std.meta.activeTag(right).isPrimitiveLiteral(),
 });
             if (comptime (kind == .loose)) {
                 return .{ .equal = (switch ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(right)) else @as(Expr.Tag, right))) {
@@ -2539,7 +2539,7 @@ pub inline fn isPropertyAccess(client: *const Expr) bool {
 }
 
 pub inline fn isPrimitiveLiteral(client: *const Expr) bool {
-        return @as(Tag, @enumFromInt(client.data)).isPrimitiveLiteral();
+        return std.meta.activeTag(client.data).isPrimitiveLiteral();
 }
 
 pub inline fn isRef(client: *const Expr, r: Ref) bool {

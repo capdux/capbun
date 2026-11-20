@@ -876,11 +876,11 @@ pub fn runWithSourceCode(task: *ParseTask, worker: *ThreadPool.Worker, step: *Re
         const resolver: *Resolver = (&transpiler.resolver);
         const file_path = (&task.path);
         const loader = ((task.loader) orelse (((file_path.loader((&transpiler.options.loaders))) orelse (options.Loader.file))));
-        const debug_original_variant_check: if (bun.Environment.isDebug) ContentsOrFd.Tag else void = (if (bun.Environment.isDebug) (if (comptime @typeInfo(ContentsOrFd.Tag) == .@"enum") @as(ContentsOrFd.Tag, @enumFromInt(task.contents_or_fd)) else @as(ContentsOrFd.Tag, task.contents_or_fd)) else null);
+        const debug_original_variant_check: if (bun.Environment.isDebug) ContentsOrFd.Tag else void = (if (bun.Environment.isDebug) std.meta.activeTag(task.contents_or_fd) else null);
         errdefer {
         {
             if (comptime bun.Environment.isDebug) {
-                if (((if (comptime @typeInfo(ContentsOrFd.Tag) == .@"enum") @as(ContentsOrFd.Tag, @enumFromInt(task.contents_or_fd)) else @as(ContentsOrFd.Tag, task.contents_or_fd)) != debug_original_variant_check)) {
+                if ((std.meta.activeTag(task.contents_or_fd) != debug_original_variant_check)) {
                     _ = std.debug.panic("BUG: `task.contents_or_fd` changed in a way that will cause a double free or memory to leak!\n\n    Original = {s}\n    New = {s}\n", .{ @tagName(debug_original_variant_check), @tagName(task.contents_or_fd) });
                 }
             }
