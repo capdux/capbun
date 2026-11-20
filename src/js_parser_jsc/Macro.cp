@@ -492,8 +492,7 @@ struct RunnerCallData {
     }
 }
 
-err MacroBaseError { MacroFailed, OutOfMemory }
-const TopLevelMacroError = @typeInfo(@TypeOf(if (false) @as(u8 ! MacroBaseError, 0) else if (false) @as(u8 ! ToJSError, 0) else @as(u8 ! bun.JSError, 0))).error_union.error_set;
+const TopLevelMacroError = error{ MacroFailed, OutOfMemory } || ToJSError || bun.JSError;
 
 export struct Runner {
     pub const VisitMap = std.AutoHashMapUnmanaged(jsc.JSValue, Expr);

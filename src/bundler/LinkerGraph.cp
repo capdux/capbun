@@ -1,6 +1,6 @@
 pub type string = []const u8;
 
-const empty_u32: [0]u32 = [];
+let empty_u32: [0]u32 = undefined;
 
 import bun from "bun";
 const BabyList = bun.BabyList;
@@ -185,7 +185,7 @@ pub struct AsyncDependencyState {
         const source_symbols = &_.symbols.symbols_for_source.slice()[source_index];
 
         let sym_ref = Ref.init(
-            @as(u32, @truncate(source_symbols.len)),
+            @as(Ref.Int, @truncate(source_symbols.len)),
             @as(u32, @truncate(source_index)),
             false,
         );

@@ -49,7 +49,7 @@ pub fn generateChunksInParallel(
             debug(" START {d} prepare CSS ast (total count)", [ total_count ]);
             defer debug("  DONE {d} prepare CSS ast (total count)", [ total_count ]);
 
-            let batch = ThreadPoolLib.Batch{};
+            let batch: ThreadPoolLib.Batch = {};
             let tasks = bun.handleOom(c.allocator().alloc(LinkerContext.PrepareCssAstTask, total_count));
             let i: usize = 0;
             for (*chunk of chunks) {
@@ -112,7 +112,7 @@ pub fn generateChunksInParallel(
             const combined_part_ranges = bun.handleOom(c.allocator().alloc(PendingPartRange, total_count));
             defer c.allocator().free(combined_part_ranges);
             let remaining_part_ranges = combined_part_ranges;
-            let batch = ThreadPoolLib.Batch{};
+            let batch: ThreadPoolLib.Batch = {};
             let c_idx: usize = 0;
             while (c_idx < chunks.len) : (c_idx += 1) {
                 const chunk = &chunks[c_idx];

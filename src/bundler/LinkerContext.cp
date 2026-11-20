@@ -608,7 +608,7 @@ pub const LinkerContext = struct {
         const distances = c.graph.files.items(.distance_from_entry_point);
 
         {
-            const trace2 = bun.perf.trace("Bundler.markFileLiveForTreeShaking");
+            let trace2 = bun.perf.trace("Bundler.markFileLiveForTreeShaking");
             defer trace2.end();
 
             // Tree shaking: Each entry point marks all files reachable from itself
@@ -625,7 +625,7 @@ pub const LinkerContext = struct {
         }
 
         {
-            const trace2 = bun.perf.trace("Bundler.markFileReachableForCodeSplitting");
+            let trace2 = bun.perf.trace("Bundler.markFileReachableForCodeSplitting");
             defer trace2.end();
 
             const file_entry_bits: []AutoBitSet = c.graph.files.items(.entry_bits);

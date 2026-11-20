@@ -147,7 +147,8 @@ pub fn create(source: []const u8, gpa: std.mem.Allocator) !*ModuleInfoDeserializ
             const requested_modules_len = std.mem.readInt(u32, try reader.eatC(4), .little);
             const requested_modules_keys = std.mem.bytesAsSlice(StringID, try reader.eat((requested_modules_len * @sizeOf(StringID))));
             const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, try reader.eat((requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))));
-            const flags: Flags = @bitCast(try reader.eatC(1)[0]);
+            const flags_bytes = try reader.eatC(1);
+            const flags: Flags = @bitCast(flags_bytes[0]);
             _ = try reader.eat(3);
             const strings_len = std.mem.readInt(u32, try reader.eatC(4), .little);
             const strings_lens = std.mem.bytesAsSlice(u32, try reader.eat((strings_len * @sizeOf(u32))));

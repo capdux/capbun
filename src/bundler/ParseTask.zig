@@ -965,7 +965,7 @@ else => (switch (use_directive) {
         task.jsx.parse = loader.isJSX();
         var unique_key_for_additional_file: FileLoaderHash = .{ .key = "", .content_hash = 0 };
         _ = &unique_key_for_additional_file;
-        var ast: JSAst = (if (((!is_empty) or loader.handlesEmptyFile())) try getAST(log, transpiler, opts, allocator, resolver, source, loader, task.ctx.unique_key, (&unique_key_for_additional_file), (&task.ctx.linker.has_any_css_locals)) else (if (loader.isCSS()) try getEmptyCSSAST(log, transpiler, opts, allocator, source) else try getEmptyAST(log, transpiler, opts, allocator, source, (if ((opts.module_type == .esm)) E.Undefined else E.Object))));
+        var ast: JSAst = (if (((!is_empty) or loader.handlesEmptyFile())) try getAST(log, transpiler, opts, allocator, resolver, source, loader, task.ctx.unique_key, (&unique_key_for_additional_file), (&task.ctx.linker.has_any_css_locals)) else (if (loader.isCSS()) try getEmptyCSSAST(log, transpiler, opts, allocator, source) else (if ((opts.module_type == .esm)) try getEmptyAST(log, transpiler, opts, allocator, source, E.Undefined) else try getEmptyAST(log, transpiler, opts, allocator, source, E.Object))));
         _ = &ast;
         ast.target = target;
         if ((((ast.parts.len <= 1) and (ast.css == null)) and ((task.loader == null) or (task.loader.? != .html)))) {

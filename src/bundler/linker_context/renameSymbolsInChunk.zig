@@ -90,7 +90,8 @@ const MinifyRenamer = renamer.MinifyRenamer;
 const StableSymbolCount = renamer.StableSymbolCount;
 
 pub fn renameSymbolsInChunk(c: *LinkerContext, allocator: std.mem.Allocator, chunk: *Chunk, files_in_order: []const u32) !renamer.Renamer {
-        const trace = bun.perf.trace("Bundler.renameSymbolsInChunk");
+        var trace = bun.perf.trace("Bundler.renameSymbolsInChunk");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

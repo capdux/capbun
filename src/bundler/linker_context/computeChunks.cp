@@ -69,7 +69,7 @@ pub noinline fn computeChunks(
     ctx: *LinkerContext,
     unique_key: u64,
 ): []Chunk! {
-    const trace = bun.perf.trace("Bundler.computeChunks");
+    let trace = bun.perf.trace("Bundler.computeChunks");
     defer trace.end();
 
     bun.assert(ctx.dev_server == null);

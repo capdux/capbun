@@ -791,7 +791,7 @@ pub fn isHookName(id: []const u8) bool {
 else => false,
 }));
     }
-    pub const HookContextPtr = ?*HookContext;
+    pub const HookContextPtr = ?HookContext;
     pub const HookContext = struct {
         hasher: std.hash.Wyhash,
         signature_cb: Ref,

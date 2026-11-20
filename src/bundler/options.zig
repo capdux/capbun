@@ -1685,9 +1685,9 @@ pub fn format(self: PathTemplate, writer: *std.Io.Writer) !void {
                 for (cp_iter_slice(remain)) |c| {
                     _ = &c;
                     count = (count + (switch (c) {
-'[' => 1,
-']' => -1,
-else => 0,
+'[' => (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(isize, @intFromEnum(1)) else cp_cast_int(isize, 1)),
+']' => (if (comptime @typeInfo(@TypeOf(-1)) == .@"enum") cp_cast_int(isize, @intFromEnum(-1)) else cp_cast_int(isize, -1)),
+else => (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(isize, @intFromEnum(0)) else cp_cast_int(isize, 0)),
 }));
                     if ((count == 0)) {
                         end_len = (@intFromPtr(c) - @intFromPtr(remain.ptr));

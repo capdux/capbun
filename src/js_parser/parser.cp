@@ -1175,7 +1175,7 @@ pub struct ReactRefresh {
     /// When a function is done visiting, the stack location is checked,
     /// and then it will insert `var _s = ...`, add the `_s()` call at
     /// the start of the function, and then add the call to `_s(func, ...)`.
-    pub type HookContextPtr = (*HookContext)?;
+    pub type HookContextPtr = HookContext?;
     hook_ctx_storage: (*HookContextPtr)? = null,
 
     /// This is the most recently generated `_s` call. This is used to compare

@@ -1337,8 +1337,10 @@ fn runWithSourceCode(
         getAST(log, transpiler, opts, allocator, resolver, source, loader, task.ctx.unique_key, &unique_key_for_additional_file, &task.ctx.linker.has_any_css_locals)?
     else if (loader.isCSS())
         getEmptyCSSAST(log, transpiler, opts, allocator, source)?
+    else if (opts.module_type == .esm)
+        getEmptyAST(log, transpiler, opts, allocator, source, E.Undefined)?
     else
-        getEmptyAST(log, transpiler, opts, allocator, source, if (opts.module_type == .esm) E.Undefined else E.Object)?;
+        getEmptyAST(log, transpiler, opts, allocator, source, E.Object)?;
 
     ast.target = target;
     if (ast.parts.len <= 1 && ast.css == null && (task.loader == null || task.loader.? != .html)) {

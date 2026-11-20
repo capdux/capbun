@@ -137,7 +137,8 @@ const PathTemplate = bundler.PathTemplate;
 const resolve_path = bun.bundle_v2.resolve_path;
 
 pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
-        const trace = bun.perf.trace("Bundler.computeChunks");
+        var trace = bun.perf.trace("Bundler.computeChunks");
+        _ = &trace;
         defer {
         _ = trace.end();
         }

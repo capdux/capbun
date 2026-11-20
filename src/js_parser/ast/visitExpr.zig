@@ -70,8 +70,7 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 const string = []const u8;
-const children_prefill = Prefill.String.Children;
-var jsxChildrenKeyData = Expr.Data{ .e_string = (&children_prefill) };
+var jsxChildrenKeyData = Expr.Data{ .e_string = (&@field(Prefill.String, "Children")) };
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;

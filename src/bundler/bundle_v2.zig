@@ -923,8 +923,10 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
                     }
                 }
             }
-            _ = server.appendStmt(S.Local{ .kind = .k_const, .decls = G.Decl.List.fromSlice(alloc, .{ .{ .binding = Binding.alloc(alloc, B.Identifier{ .ref = try server.newSymbol(.other, "serverManifest") }, Logger.Loc.Empty), .value = server.newExpr(E.Object{ .properties = G.Property.List.moveFromList((&server_manifest_props)) }) } }), .is_export = true });
-            _ = server.appendStmt(S.Local{ .kind = .k_const, .decls = G.Decl.List.fromSlice(alloc, .{ .{ .binding = Binding.alloc(alloc, B.Identifier{ .ref = try server.newSymbol(.other, "ssrManifest") }, Logger.Loc.Empty), .value = server.newExpr(E.Object{ .properties = G.Property.List.moveFromList((&client_manifest_props)) }) } }), .is_export = true });
+            const server_manifest_decls: [1]G.Decl = .{ .{ .binding = Binding.alloc(alloc, B.Identifier{ .ref = try server.newSymbol(.other, "serverManifest") }, Logger.Loc.Empty), .value = server.newExpr(E.Object{ .properties = G.Property.List.moveFromList((&server_manifest_props)) }) } };
+            _ = server.appendStmt(S.Local{ .kind = .k_const, .decls = G.Decl.List.fromSlice(alloc, (&server_manifest_decls)), .is_export = true });
+            const ssr_manifest_decls: [1]G.Decl = .{ .{ .binding = Binding.alloc(alloc, B.Identifier{ .ref = try server.newSymbol(.other, "ssrManifest") }, Logger.Loc.Empty), .value = server.newExpr(E.Object{ .properties = G.Property.List.moveFromList((&client_manifest_props)) }) } };
+            _ = server.appendStmt(S.Local{ .kind = .k_const, .decls = G.Decl.List.fromSlice(alloc, (&ssr_manifest_decls)), .is_export = true });
             _ = self.graph.ast.set(Index.bake_server_data.get(), try server.toBundledAst(.bun));
             _ = self.graph.ast.set(Index.bake_client_data.get(), try client.toBundledAst(.browser));
     }

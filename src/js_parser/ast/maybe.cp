@@ -261,7 +261,7 @@ pub fn AstMaybe(
                                                 kind: .k_var,
                                                 is_export: false,
                                                 was_commonjs_export: true,
-                                                decls: G.Decl.List.init(decls[0..1]),
+                                                decls: G.Decl.List.initWithBuffer(decls[0..1]),
                                             },
                                             prop.key.?.loc,
                                         ),

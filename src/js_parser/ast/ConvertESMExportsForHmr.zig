@@ -395,5 +395,5 @@ const ReactRefresh = js_parser.ReactRefresh;
 const Ref = js_parser.Ref;
 const options = js_parser.options;
 const List = std.ArrayListUnmanaged;
-const empty_stmts: [0]Stmt = &.{};
-const empty_clause_items: [0]js_ast.ClauseItem = &.{};
+var empty_stmts: [0]Stmt = undefined;
+var empty_clause_items: [0]js_ast.ClauseItem = undefined;

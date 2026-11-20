@@ -114,7 +114,8 @@ pub struct ModuleInfoDeserialized {
         const requested_modules_keys = std.mem.bytesAsSlice(StringID, reader.eat(requested_modules_len * @sizeOf(StringID))?);
         const requested_modules_values = std.mem.bytesAsSlice(ModuleInfo.FetchParameters, reader.eat(requested_modules_len * @sizeOf(ModuleInfo.FetchParameters))?);
 
-        const flags: Flags = @bitCast((reader.eatC(1)?)[0]);
+        const flags_bytes = reader.eatC(1)?;
+        const flags: Flags = @bitCast(flags_bytes[0]);
         * = reader.eat(3)?; // alignment padding
 
         const strings_len = std.mem.readInt(u32, reader.eatC(4)?, .little);

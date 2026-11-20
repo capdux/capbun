@@ -1541,18 +1541,17 @@ if ((result.data == .e_missing)) {
 },
 .e_template => |e| {
 {
-                if (e.tag) |*tag| {
-                    _ = &tag;
-                    switch (p.substituteSingleUseSymbolInExpr((tag.*).*, sym_ref, replacement, replacement_can_be_removed)) {
+                if ((e.tag != null)) {
+                    switch (p.substituteSingleUseSymbolInExpr(e.tag.?, sym_ref, replacement, replacement_can_be_removed)) {
 .continue_ => {
 
 },
 .success => |result| {
-(tag.*).* = result;
+e.tag = result;
                     return .{ .success = expr };
 },
 .failure => |result| {
-(tag.*).* = result;
+e.tag = result;
                     return .{ .failure = expr };
 },
 }
@@ -4407,7 +4406,7 @@ pub fn toAST(p: *P, parts: *ListManaged(js_ast.Part), exports_kind: js_ast.Expor
                         _ = &part;
                         _ = p.import_records_for_current_part.clearRetainingCapacity();
                         _ = p.declared_symbols.clearRetainingCapacity();
-                        const result = try ImportScanner.scan(P, p, part.stmts, (wrap_mode != .none), false, .{});
+                        const result = try ImportScanner.scan(P, p, part.stmts, (wrap_mode != .none), false, undefined);
                         kept_import_equals = (kept_import_equals or result.kept_import_equals);
                         removed_import_equals = (removed_import_equals or result.removed_import_equals);
                         part.stmts = result.stmts;

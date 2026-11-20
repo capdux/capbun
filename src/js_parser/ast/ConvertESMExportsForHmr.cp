@@ -21,8 +21,8 @@ const options = js_parser.options;
 
 const List = std.ArrayListUnmanaged;
 
-const empty_stmts: [0]Stmt = [];
-const empty_clause_items: [0]js_ast.ClauseItem = [];
+let empty_stmts: [0]Stmt = undefined;
+let empty_clause_items: [0]js_ast.ClauseItem = undefined;
 
 pub struct ImportRef {
     /// Index into ConvertESMExportsForHmr.stmts

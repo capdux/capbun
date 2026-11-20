@@ -900,7 +900,7 @@ pub fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
             {
                 const replacement_ref = (if (is_expr) ((expr_class_ref) orelse (class_name_ref)) else inner_class_ref);
                 if ((!replacement_ref.eql(class_name_ref))) {
-                    const rk: RewriteKind = .{ .replace_ref = .{ .old = class_name_ref, .new = replacement_ref } };
+                    const rk: RewriteKind = .{ .replace_ref = .{ .old = class_name_ref, .new_ref = replacement_ref } };
                     for (pre_eval_stmts.items) |*pre_stmt| {
                         _ = &pre_stmt;
                         if (((pre_stmt.*).data == .s_local)) {

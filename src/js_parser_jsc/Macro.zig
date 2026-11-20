@@ -68,11 +68,6 @@ pub const bun = @import("bun");
 pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const PackageJsonPkg = @import("../resolver/package_json.zig");
 pub const ResolverPkg = @import("../resolver/resolver.zig");
-pub const MacroBaseError = error{
-    MacroFailed,
-    OutOfMemory,
-};
-
 pub const MacroContextWrapper = struct {
     args: std.meta.ArgsTuple(@TypeOf(Macro.Runner.run)),
     ret: Runner.MacroError!Expr,
@@ -548,6 +543,6 @@ const JavaScript = bun.jsc;
 const jsc = bun.jsc;
 const js = bun.jsc.C;
 const empty_imports: [0]SImport = &.{};
-const TopLevelMacroError = @typeInfo(@TypeOf((if (false) @as(MacroBaseError!u8, 0) else (if (false) @as(ToJSError!u8, 0) else @as(bun.JSError!u8, 0))))).error_union.error_set;
+const TopLevelMacroError = ((error{ MacroFailed, OutOfMemory } || ToJSError) || bun.JSError);
 
 extern "c" fn Bun__startMacro(function: *const anyopaque, arg1: *anyopaque) callconv(.c) void;

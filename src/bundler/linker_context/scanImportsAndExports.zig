@@ -309,7 +309,8 @@ const Dependency = js_ast.Dependency;
 const Ref = bun.bundle_v2.js_ast.Ref;
 
 pub fn scanImportsAndExports(client: *LinkerContext) ScanImportsAndExportsError!void {
-        const outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
+        var outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
+        _ = &outer_trace;
         defer {
         _ = outer_trace.end();
         }
@@ -335,7 +336,8 @@ pub fn scanImportsAndExports(client: *LinkerContext) ScanImportsAndExportsError!
             const css_asts = client.graph.ast.items(.css);
             for (cp_iter_slice(reachable)) |source_index_| {
                 _ = &source_index_;
-                const trace = bun.perf.trace("Bundler.FigureOutCommonJS");
+                var trace = bun.perf.trace("Bundler.FigureOutCommonJS");
+                _ = &trace;
                 defer {
                 _ = trace.end();
                 }
@@ -443,7 +445,8 @@ else => {
                 _ = debug("Step 1: {d} CommonJS modules (+ {d} wrapped), {d} ES modules (+ {d} wrapped)", .{ cjs_count, wrap_cjs_count, esm_count, wrap_esm_count });
             }
             {
-                const trace = bun.perf.trace("Bundler.WrapDependencies");
+                var trace = bun.perf.trace("Bundler.WrapDependencies");
+                _ = &trace;
                 defer {
                 _ = trace.end();
                 }
@@ -479,7 +482,8 @@ else => {
             {
                 var export_star_ctx: ?ExportStarContext = null;
                 _ = &export_star_ctx;
-                const trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
+                var trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
+                _ = &trace;
                 defer {
                 _ = trace.end();
                 }
@@ -517,7 +521,8 @@ else => {
             }
             {
                 _ = client.cycle_detector.clearRetainingCapacity();
-                const trace = bun.perf.trace("Bundler.MatchImportsWithExports");
+                var trace = bun.perf.trace("Bundler.MatchImportsWithExports");
+                _ = &trace;
                 defer {
                 _ = trace.end();
                 }
@@ -561,7 +566,8 @@ else => {
             _ = client.checkForMemoryCorruption();
         }
         {
-            const trace = bun.perf.trace("Bundler.BindImportsToExports");
+            var trace = bun.perf.trace("Bundler.BindImportsToExports");
+            _ = &trace;
             defer {
             _ = trace.end();
             }

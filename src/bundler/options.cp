@@ -2601,9 +2601,9 @@ pub struct PathTemplate {
             let end_len: usize = remain.len;
             for (c of remain) {
                 count += switch (c) {
-                    '[' => 1,
-                    ']' => -1,
-                    else => 0,
+                    '[' => @as(isize, 1),
+                    ']' => @as(isize, -1),
+                    else => @as(isize, 0),
                 };
 
                 if (count == 0) {

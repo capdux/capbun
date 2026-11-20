@@ -211,7 +211,7 @@ else => (!(if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else pro
                                     _ = ((p.declared_symbols.append(p.allocator, .{ .@"ref" = ref_, .is_top_level = true })) catch unreachable);
                                     p.had_commonjs_named_exports_this_visit = true;
                                     clause_items[cp_cast_int(usize, 0)] = js_ast.ClauseItem{ .alias = key, .alias_loc = prop.key.?.loc, .name = named_export_entry.value_ptr.loc_ref };
-                                    const pair: [2]Stmt = .{ p.s(S.Local{ .kind = .k_var, .is_export = false, .was_commonjs_export = true, .decls = G.Decl.List.init(decls[0..1]) }, prop.key.?.loc), p.s(S.ExportClause{ .items = clause_items[0..1], .is_single_line = true }, prop.key.?.loc) };
+                                    const pair: [2]Stmt = .{ p.s(S.Local{ .kind = .k_var, .is_export = false, .was_commonjs_export = true, .decls = G.Decl.List.initWithBuffer(decls[0..1]) }, prop.key.?.loc), p.s(S.ExportClause{ .items = clause_items[0..1], .is_single_line = true }, prop.key.?.loc) };
                                     _ = ((stmts.appendSlice((&pair))) catch unreachable);
                                     decls = decls[1..];
                                     clause_items = clause_items[1..];

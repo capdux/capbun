@@ -170,7 +170,7 @@ pub fn generateChunksInParallel(c: *LinkerContext, chunks: []Chunk, comptime is_
                 defer {
                 _ = debug("  DONE {d} prepare CSS ast (total count)", .{ total_count });
                 }
-                var batch = ThreadPoolLib.Batch;
+                var batch: ThreadPoolLib.Batch = .{};
                 _ = &batch;
                 var tasks = bun.handleOom(c.allocator().alloc(LinkerContext.PrepareCssAstTask, total_count));
                 _ = &tasks;
@@ -239,7 +239,7 @@ has_html_chunk = true;
                 }
                 var remaining_part_ranges = combined_part_ranges;
                 _ = &remaining_part_ranges;
-                var batch = ThreadPoolLib.Batch;
+                var batch: ThreadPoolLib.Batch = .{};
                 _ = &batch;
                 var c_idx: usize = 0;
                 _ = &c_idx;

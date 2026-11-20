@@ -1,7 +1,7 @@
 pub const ScanImportsAndExportsError = bun.OOM || error{ImportResolutionFailed};
 
 pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError!void {
-    const outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
+    let outer_trace = bun.perf.trace("Bundler.scanImportsAndExports");
     defer outer_trace.end();
     const reachable = client.graph.reachable_files;
     const output_format = client.options.output_format;
@@ -27,7 +27,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
 
         // Step 1: Figure out what modules must be CommonJS
         for (source_index_ of reachable) {
-            const trace = bun.perf.trace("Bundler.FigureOutCommonJS");
+            let trace = bun.perf.trace("Bundler.FigureOutCommonJS");
             defer trace.end();
             const id = source_index_.get();
 
@@ -194,7 +194,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
         // bundle time.
 
         {
-            const trace = bun.perf.trace("Bundler.WrapDependencies");
+            let trace = bun.perf.trace("Bundler.WrapDependencies");
             defer trace.end();
             let dependency_wrapper = DependencyWrapper{
                 linker: client,
@@ -245,7 +245,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
         // are ignored for those modules.
         {
             let export_star_ctx: ExportStarContext? = null;
-            const trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
+            let trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
             defer trace.end();
             defer {
                 if (*export_ctx := export_star_ctx) {
@@ -306,7 +306,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
         // export stars because imports can bind to export star re-exports.
         {
             client.cycle_detector.clearRetainingCapacity();
-            const trace = bun.perf.trace("Bundler.MatchImportsWithExports");
+            let trace = bun.perf.trace("Bundler.MatchImportsWithExports");
             defer trace.end();
             const wrapper_part_indices = client.graph.@"meta".items(.wrapper_part_index);
             const imports_to_bind = client.graph.@"meta".items(.imports_to_bind);
@@ -386,7 +386,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
     // parts that declare the export to all parts that use the import. Also
     // generate wrapper parts for wrapped files.
     {
-        const trace = bun.perf.trace("Bundler.BindImportsToExports");
+        let trace = bun.perf.trace("Bundler.BindImportsToExports");
         defer trace.end();
         // const needs_export_symbol_from_runtime: []const bool = this.graph.meta.items(.needs_export_symbol_from_runtime);
 

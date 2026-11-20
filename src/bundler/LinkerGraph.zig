@@ -197,7 +197,7 @@ pub fn runtimeFunction(self: LinkerGraph, name: []const u8) Ref {
 
 pub fn generateNewSymbol(self: *LinkerGraph, source_index: u32, kind: Symbol.Kind, original_name: []const u8) Ref {
         const source_symbols = (&self.symbols.symbols_for_source.slice()[@as(usize, @intCast(source_index))]);
-        var sym_ref = Ref.init(@as(u32, @truncate(source_symbols.len)), @as(u32, @truncate(source_index)), false);
+        var sym_ref = Ref.init(@as(Ref.Int, @truncate(source_symbols.len)), @as(u32, @truncate(source_index)), false);
         _ = &sym_ref;
         sym_ref.tag = .symbol;
         _ = (blk_catch_3: { break :blk_catch_3 ((source_symbols.append(self.allocator, .{ .kind = kind, .original_name = original_name })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
@@ -492,7 +492,7 @@ pub fn propagateAsyncDependencies(self: *LinkerGraph) !void {
         _ = state.visitAll();
 }
 pub const string = []const u8;
-const empty_u32: [0]u32 = &.{};
+var empty_u32: [0]u32 = undefined;
 const BabyList = bun.BabyList;
 const Environment = bun.Environment;
 const ImportRecord = bun.ImportRecord;

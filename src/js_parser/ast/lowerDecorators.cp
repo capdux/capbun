@@ -675,7 +675,7 @@ pub fn LowerDecorators(
             {
                 const replacement_ref = if (is_expr) (expr_class_ref ?? class_name_ref) else inner_class_ref;
                 if (!replacement_ref.eql(class_name_ref)) {
-                    const rk: RewriteKind = { replace_ref: { old: class_name_ref, new: replacement_ref } };
+                    const rk: RewriteKind = { replace_ref: { old: class_name_ref, new_ref: replacement_ref } };
                     for (*pre_stmt of pre_eval_stmts.items) {
                         if (pre_stmt.data == .s_local) {
                             for (*decl of pre_stmt.data.s_local.decls.slice()) {

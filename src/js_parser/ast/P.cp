@@ -2366,15 +2366,15 @@ pub fn NewParser_(
                     },
 
                     .e_template => |e| {
-                        if (*tag := e.tag) {
-                            switch (p.substituteSingleUseSymbolInExpr(tag.*, sym_ref, replacement, replacement_can_be_removed)) {
+                        if (e.tag != null) {
+                            switch (p.substituteSingleUseSymbolInExpr(e.tag.?, sym_ref, replacement, replacement_can_be_removed)) {
                                 .continue_ => {},
                                 .success => |result| {
-                                    tag.* = result;
+                                    e.tag = result;
                                     return { success: expr };
                                 },
                                 .failure => |result| {
-                                    tag.* = result;
+                                    e.tag = result;
                                     return { failure: expr };
                                 },
                             }
@@ -6520,7 +6520,7 @@ pub fn NewParser_(
                         p.import_records_for_current_part.clearRetainingCapacity();
                         p.declared_symbols.clearRetainingCapacity();
 
-                        const result = ImportScanner.scan(P, p, part.stmts, wrap_mode != .none, false, {})?;
+                        const result = ImportScanner.scan(P, p, part.stmts, wrap_mode != .none, false, undefined)?;
                         kept_import_equals = kept_import_equals || result.kept_import_equals;
                         removed_import_equals = removed_import_equals || result.removed_import_equals;
 

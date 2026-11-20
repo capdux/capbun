@@ -6,7 +6,7 @@ pub fn renameSymbolsInChunk(
     chunk: *Chunk,
     files_in_order: []const u32,
 ): renamer.Renamer! {
-    const trace = bun.perf.trace("Bundler.renameSymbolsInChunk");
+    let trace = bun.perf.trace("Bundler.renameSymbolsInChunk");
     defer trace.end();
     const all_module_scopes = c.graph.ast.items(.module_scope);
     const all_flags: []const JSMeta.Flags = c.graph.@"meta".items(.flags);

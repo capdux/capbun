@@ -1373,28 +1373,30 @@ pub struct BundleV2 {
             }
         }
 
+        const server_manifest_decls: [1]G.Decl = [ {
+            binding: Binding.alloc(alloc, B.Identifier{
+                ref: server.newSymbol(.other, "serverManifest")?,
+            }, Logger.Loc.Empty),
+            value: server.newExpr(E.Object{
+                properties: G.Property.List.moveFromList(&server_manifest_props),
+            }),
+        } ];
         server.appendStmt(S.Local{
             kind: .k_const,
-            decls: G.Decl.List.fromSlice(alloc, [ {
-                binding: Binding.alloc(alloc, B.Identifier{
-                    ref: server.newSymbol(.other, "serverManifest")?,
-                }, Logger.Loc.Empty),
-                value: server.newExpr(E.Object{
-                    properties: G.Property.List.moveFromList(&server_manifest_props),
-                }),
-            } ]),
+            decls: G.Decl.List.fromSlice(alloc, &server_manifest_decls),
             is_export: true,
         });
+        const ssr_manifest_decls: [1]G.Decl = [ {
+            binding: Binding.alloc(alloc, B.Identifier{
+                ref: server.newSymbol(.other, "ssrManifest")?,
+            }, Logger.Loc.Empty),
+            value: server.newExpr(E.Object{
+                properties: G.Property.List.moveFromList(&client_manifest_props),
+            }),
+        } ];
         server.appendStmt(S.Local{
             kind: .k_const,
-            decls: G.Decl.List.fromSlice(alloc, [ {
-                binding: Binding.alloc(alloc, B.Identifier{
-                    ref: server.newSymbol(.other, "ssrManifest")?,
-                }, Logger.Loc.Empty),
-                value: server.newExpr(E.Object{
-                    properties: G.Property.List.moveFromList(&client_manifest_props),
-                }),
-            } ]),
+            decls: G.Decl.List.fromSlice(alloc, &ssr_manifest_decls),
             is_export: true,
         });
 

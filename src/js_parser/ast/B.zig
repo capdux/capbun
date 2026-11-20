@@ -98,13 +98,13 @@ pub const B = union(Binding.Tag) {
     b_missing: BMissing,
 
 pub fn writeToHasher(self: B, hasher: anytype, symbol_table: anytype) void {
-            switch (self.*) {
+            switch (self) {
 .b_identifier => |id| {
 const original_name = id.ref.getSymbol(symbol_table).original_name;
-            _ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self.*), original_name.len });
+            _ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self), original_name.len });
 },
 .b_array => |array| {
-_ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self.*), array.has_spread, array.items.len });
+_ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self), array.has_spread, array.items.len });
             for (array.items) |item| {
                 _ = &item;
                 _ = writeAnyToHasher(hasher, .{ (item.default_value != null) });
@@ -116,7 +116,7 @@ _ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self.*), array.has_spread, ar
             }
 },
 .b_object => |object| {
-_ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self.*), object.properties.len });
+_ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self), object.properties.len });
             for (cp_iter_slice(object.properties)) |property| {
                 _ = &property;
                 _ = writeAnyToHasher(hasher, .{ (property.default_value != null), property.flags });

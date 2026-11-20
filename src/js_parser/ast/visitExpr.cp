@@ -1773,8 +1773,7 @@ fn VisitExprVisitors(
     };
 }
 
-const children_prefill = Prefill.String.Children;
-let jsxChildrenKeyData = Expr.Data{ e_string: &children_prefill };
+let jsxChildrenKeyData = Expr.Data{ e_string: &@field(Prefill.String, "Children") };
 
 type string = []const u8;
 
