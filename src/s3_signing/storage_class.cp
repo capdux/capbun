@@ -13,7 +13,7 @@ export enum StorageClass {
     DEEP_ARCHIVE,
     SNOW,
 
-    pub fn toString(this): string {
+    pub fn toString(): string {
         return switch (this) {
             .STANDARD => "STANDARD",
             .STANDARD_IA => "STANDARD_IA",

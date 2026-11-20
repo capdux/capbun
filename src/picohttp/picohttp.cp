@@ -13,7 +13,7 @@ let EMPTY_HEADERS: [0]Header = [];
 export struct HeaderList {
     list: []Header = *EMPTY_HEADERS,
 
-    pub fn get(this, name: string): string? {
+    pub fn get(name: string): string? {
         for (header of this.list) {
             if (strings.eqlCaseInsensitiveASCII(header.name, name, true)) {
                 return header.value;
@@ -22,7 +22,7 @@ export struct HeaderList {
         return null;
     }
 
-    pub fn getIfOtherIsAbsent(this, name: string, other: string): string? {
+    pub fn getIfOtherIsAbsent(name: string, other: string): string? {
         let value: string? = null;
         for (header of this.list) {
             if (strings.eqlCaseInsensitiveASCII(header.name, other, true)) {
@@ -41,7 +41,7 @@ export struct HeaderList {
 export struct HeaderCURLFormatter {
     header: Header,
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         const header = this.header;
         if (header.value.len > 0) {
             writer.print("-H \"{s}: {s}\"", [header.name, header.value])?;
@@ -58,11 +58,11 @@ export struct Header {
     name: []const u8,
     value: []const u8,
 
-    pub fn isMultiline(this): bool {
-        return this.name.len == 0;
+    pub fn isMultiline(): bool {
+        return _.name.len == 0;
     }
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
             if (this.isMultiline()) {
                 writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}", true)), [this.value])?;
@@ -78,20 +78,20 @@ export struct Header {
         }
     }
 
-    pub fn count(this, builder: *StringBuilder): void {
+    pub fn count(builder: *StringBuilder) {
         builder.count(this.name);
         builder.count(this.value);
     }
 
-    pub fn clone(this, builder: *StringBuilder): Header {
+    pub fn clone(builder: *StringBuilder): Header {
         return Header{
             name: builder.append(this.name),
             value: builder.append(this.value),
         };
     }
 
-    pub fn curl(this): HeaderCURLFormatter {
-        const h = this;
+    pub fn curl(): HeaderCURLFormatter {
+        const h = _;
         return HeaderCURLFormatter{ header: h };
     }
 }
@@ -115,10 +115,10 @@ export struct RequestCURLFormatter {
             bun.strings.hasPrefixComptime(content_type, "application/x-www-form-urlencoded");
     }
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(*_, writer: *std.Io.Writer): ! {
         const request = this.request;
         if (Output.enable_ansi_colors_stderr) {
-            _ = writer.write(Output.prettyFmt("<r><d>[fetch] $<r> ", true))?;
+            * = writer.write(Output.prettyFmt("<r><d>[fetch] $<r> ", true))?;
 
             writer.print(Output.prettyFmt("<b><cyan>curl<r> <d>--http1.1<r> <b>\"{s}\"<r>", true), [request.path])?;
         } else {
@@ -130,13 +130,13 @@ export struct RequestCURLFormatter {
         }
 
         if (this.ignore_insecure) {
-            _ = writer.writeAll(" -k")?;
+            * = writer.writeAll(" -k")?;
         }
 
         let content_type: string = "";
 
         for (header of request.headers) {
-            _ = writer.writeAll(" ")?;
+            * = writer.writeAll(" ")?;
             if (content_type.len == 0) {
                 if (bun.strings.eqlCaseInsensitiveASCII("content-type", header.name, true)) {
                     content_type = header.value;
@@ -146,12 +146,12 @@ export struct RequestCURLFormatter {
             header.curl().format(writer)?;
 
             if (bun.strings.eqlCaseInsensitiveASCII("accept-encoding", header.name, true)) {
-                _ = writer.writeAll(" --compressed")?;
+                * = writer.writeAll(" --compressed")?;
             }
         }
 
         if (this.body.len > 0 && RequestCURLFormatter.isPrintableBody(content_type)) {
-            _ = writer.writeAll(" --data-raw ")?;
+            * = writer.writeAll(" --data-raw ")?;
             bun.js_printer.writeJSONString(this.body, @typeOf(writer), writer, .utf8)?;
         }
     }
@@ -166,7 +166,7 @@ export struct Request {
     headers: []const Header,
     bytes_read: u32 = 0,
 
-    pub fn curl(this, ignore_insecure: bool, body: []const u8): RequestCURLFormatter {
+    pub fn curl(ignore_insecure: bool, body: []const u8): RequestCURLFormatter {
         const r = this;
         return RequestCURLFormatter{
             request: r,
@@ -175,7 +175,7 @@ export struct Request {
         };
     }
 
-    pub fn clone(this, out_headers: []Header, builder: *StringBuilder): Request {
+    pub fn clone(out_headers: []Header, builder: *StringBuilder): Request {
         let i: usize = 0;
         while (i < this.headers.len) : (i += 1) {
             out_headers[i] = this.headers[i].clone(builder);
@@ -190,16 +190,16 @@ export struct Request {
         };
     }
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(*_, writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
-            _ = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
+            * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
         }
         writer.print("> HTTP/1.1 {s} {s}\n", [this.method, this.path])?;
         for (header of this.headers) {
             if (Output.enable_ansi_colors_stderr) {
-                _ = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
+                * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
             }
-            _ = writer.write("> ")?;
+            * = writer.write("> ")?;
             writer.print("{f}\n", [header])?;
         }
     }
@@ -245,7 +245,7 @@ export struct Request {
 struct StatusCodeFormatter {
     code: usize,
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
             if (this.code == 101 || (this.code >= 200 && this.code <= 299)) {
                 writer.print(@comptime(Output.prettyFmt("<r><green>{d}<r>", true)), [this.code])?;
@@ -267,9 +267,9 @@ export struct Response {
     headers: HeaderList = HeaderList{},
     bytes_read: c_int = 0,
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(*_, writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
-            _ = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
+            * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
         }
 
         writer.print(
@@ -283,15 +283,15 @@ export struct Response {
         )?;
         for (header of this.headers.list) {
             if (Output.enable_ansi_colors_stderr) {
-                _ = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
+                * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
             }
 
-            _ = writer.write("< ")?;
+            * = writer.write("< ")?;
             writer.print("{f}\n", [header])?;
         }
     }
 
-    pub fn count(this, builder: *StringBuilder): void {
+    pub fn count(builder: *StringBuilder) {
         builder.count(this.status);
 
         for (header of this.headers.list) {
@@ -299,7 +299,7 @@ export struct Response {
         }
     }
 
-    pub fn clone(this, out_headers: []Header, builder: *StringBuilder): Response {
+    pub fn clone(out_headers: []Header, builder: *StringBuilder): Response {
         let i: usize = 0;
         while (i < this.headers.list.len) : (i += 1) {
             out_headers[i] = this.headers.list[i].clone(builder);
@@ -368,7 +368,7 @@ export struct Response {
 export struct Headers {
     headers: []const Header,
 
-    pub fn format(this, writer: *std.Io.Writer): ! {
+    pub fn format(writer: *std.Io.Writer): ! {
         for (header of this.headers) {
             writer.print("{s}: {s}\r\n", [header.name, header.value])?;
         }

@@ -132,7 +132,7 @@ pub struct SerializedSourceMapLoaded {
     map: StandaloneSerializedSourceMap,
     decompressed_files: []OptMutBytes,
 
-    pub fn sourceFileContents(this, index: usize): ([]const u8)? {
+    pub fn sourceFileContents(*_, index: usize): ([]const u8)? {
         if (decompressed := this.decompressed_files[index]) {
             return if (decompressed.len == 0) null else decompressed;
         }
@@ -162,28 +162,28 @@ pub struct StandaloneSerializedSourceMap {
     pub const Header = SerializedSourceMapHeader;
     pub const Loaded = SerializedSourceMapLoaded;
 
-    pub fn header(this): Header {
+    pub fn header(): Header {
         return std.mem.bytesToValue(Header, this.bytes[0..@sizeOf(Header)]);
     }
 
-    pub fn mappingBlob(this): ([]const u8)? {
-        if (this.bytes.len < @sizeOf(Header)) return null;
-        const head = this.header();
+    pub fn mappingBlob(): ([]const u8)? {
+        if (_.bytes.len < @sizeOf(Header)) return null;
+        const head = _.header();
         const start = @sizeOf(Header) + head.source_files_count * @sizeOf(StringPointer) * 2;
-        if (start > this.bytes.len || head.map_bytes_length > this.bytes.len - start) return null;
-        return this.bytes[start..][0..head.map_bytes_length];
+        if (start > _.bytes.len || head.map_bytes_length > _.bytes.len - start) return null;
+        return _.bytes[start..][0..head.map_bytes_length];
     }
 
-    pub fn sourceFileNamesCount(this): usize {
-        return this.header().source_files_count;
+    pub fn sourceFileNamesCount(): usize {
+        return _.header().source_files_count;
     }
 
-    pub fn sourceFileNameAt(this, index: usize): StringPointer {
+    pub fn sourceFileNameAt(index: usize): StringPointer {
         const start = @sizeOf(Header) + index * @sizeOf(StringPointer);
         return std.mem.bytesToValue(StringPointer, this.bytes[start..][0..@sizeOf(StringPointer)]);
     }
 
-    pub fn compressedSourceFileAt(this, index: usize): StringPointer {
+    pub fn compressedSourceFileAt(index: usize): StringPointer {
         const head = this.header();
         const start = @sizeOf(Header) + (head.source_files_count + index) * @sizeOf(StringPointer);
         return std.mem.bytesToValue(StringPointer, this.bytes[start..][0..@sizeOf(StringPointer)]);
@@ -195,7 +195,7 @@ pub enum StandaloneLazySourceMap {
     parsed: *SourceMap.ParsedSourceMap,
     none,
 
-    pub fn load(*this): (*SourceMap.ParsedSourceMap)? {
+    pub fn load(*_): (*SourceMap.ParsedSourceMap)? {
         g_lazy_sourcemap_init_lock.lock();
         defer g_lazy_sourcemap_init_lock.unlock();
 
@@ -267,11 +267,11 @@ pub struct StandaloneFile {
 
     pub const blob = StandaloneGraphJsc.fileBlob;
 
-    pub fn appearsInEmbeddedFilesArray(this): bool {
-        return this.side == .client || !this.loader.isJavaScriptLike();
+    pub fn appearsInEmbeddedFilesArray(): bool {
+        return _.side == .client || !this.loader.isJavaScriptLike();
     }
 
-    pub fn stat(this): bun.Stat {
+    pub fn stat(): bun.Stat {
         let result = std.mem.zeroes(bun.Stat);
         result.size = this.contents.len as i64;
         result.mode = bun.S.IFREG | 0o644;
@@ -285,7 +285,7 @@ pub struct StandaloneFile {
         return bun.strings.cmpStringsAsc(empty_ctx, lhs.name, rhs.name);
     }
 
-    pub fn toWTFString(*this): bun.String {
+    pub fn toWTFString(*_): bun.String {
         if (this.wtf_string.isEmpty()) {
             switch (this.encoding) {
                 .binary, .utf8 => {
@@ -321,7 +321,7 @@ pub enum CompileResultReason {
     no_entry_point,
     no_output_files,
 
-    pub fn message(this): []const u8 {
+    pub fn message(): []const u8 {
         return switch (this) {
             .no_entry_point => "No entry point found for compilation",
             .no_output_files => "No output files to bundle",
@@ -335,7 +335,7 @@ pub enum CompileResultError {
 
     pub const Reason = CompileResultReason;
 
-    pub fn slice(this): []const u8 {
+    pub fn slice(): []const u8 {
         return switch (this) {
             .message msg => msg,
             .reason r => r.message(),
@@ -357,7 +357,7 @@ pub enum StandaloneCompileResult {
         return { err: { message: bun.handleOom(std.fmt.allocPrint(bun.default_allocator, fmt, args)) } };
     }
 
-    pub fn deinit(this) {
+    pub fn deinit() {
         switch (this) {
             .success => {},
             .err e => switch (e) {
@@ -370,10 +370,10 @@ pub enum StandaloneCompileResult {
 
 fn cleanupTempFile(name: [:0]const u8, fd: bun.FD) {
     if (Environment.isPosix) {
-        _ = Syscall.fchmod(fd, 0o777);
+        * = Syscall.fchmod(fd, 0o777);
     }
     fd.close();
-    _ = Syscall.unlink(name);
+    * = Syscall.unlink(name);
 }
 
 pub struct StandaloneModuleGraph {
@@ -404,8 +404,8 @@ pub struct StandaloneModuleGraph {
         return g_instance;
     }
 
-    pub fn set(*this) {
-        g_instance = this;
+    pub fn set(*_) {
+        g_instance = _;
     }
 
     pub static fn targetBasePublicPath(target: Environment.OperatingSystem, comptime suffix: [:0]const u8): [:0]const u8 {
@@ -428,11 +428,11 @@ pub struct StandaloneModuleGraph {
         return isBunStandaloneFilePathCanonicalized(str);
     }
 
-    pub fn entryPoint(this): *StandaloneFile {
+    pub fn entryPoint(): *StandaloneFile {
         return &this.files.values()[this.entry_point_id];
     }
 
-    pub fn find(this, name: []const u8): (*StandaloneFile)? {
+    pub fn find(name: []const u8): (*StandaloneFile)? {
         if (!isBunStandaloneFilePath(name)) {
             return null;
         }
@@ -440,12 +440,12 @@ pub struct StandaloneModuleGraph {
         return this.findAssumeStandalonePath(name);
     }
 
-    pub fn stat(this, name: []const u8): bun.Stat? {
+    pub fn stat(name: []const u8): bun.Stat? {
         const file = this.find(name) orelse return null;
         return file.stat();
     }
 
-    pub fn findAssumeStandalonePath(this, name: []const u8): (*StandaloneFile)? {
+    pub fn findAssumeStandalonePath(name: []const u8): (*StandaloneFile)? {
         if (Environment.isWindows) {
             let normalized_buf: bun.PathBuffer = undefined;
             const input = strings.withoutNTPrefix(u8, name);
@@ -684,7 +684,7 @@ pub struct StandaloneModuleGraph {
             if (output_file.source_map_index != std.math.maxInt(u32)) {
                 defer source_map_header_list.clearRetainingCapacity();
                 defer source_map_string_list.clearRetainingCapacity();
-                _ = source_map_arena.reset(.retain_capacity);
+                * = source_map_arena.reset(.retain_capacity);
                 serializeJsonSourceMapForStandalone(
                     &source_map_header_list,
                     &source_map_string_list,
@@ -707,8 +707,8 @@ pub struct StandaloneModuleGraph {
             flags: flags,
         };
 
-        _ = string_builder.append(std.mem.asBytes(&offsets));
-        _ = string_builder.append(trailer);
+        * = string_builder.append(std.mem.asBytes(&offsets));
+        * = string_builder.append(trailer);
 
         let output_bytes: []u8 = undefined;
         unsafe {
@@ -887,7 +887,7 @@ pub struct StandaloneModuleGraph {
                     return bun.invalid_fd;
                 };
                 if (comptime !Environment.isWindows) {
-                    _ = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
+                    * = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
                 }
                 return cloned_executable_fd;
             },
@@ -928,7 +928,7 @@ pub struct StandaloneModuleGraph {
                     return bun.invalid_fd;
                 };
                 if (comptime !Environment.isWindows) {
-                    _ = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
+                    * = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
                 }
                 return cloned_executable_fd;
             },
@@ -973,11 +973,11 @@ pub struct StandaloneModuleGraph {
                         return bun.invalid_fd;
                     },
                     .result => {},
-                }
-                _ = Syscall.ftruncate(cloned_executable_fd, elf_file.data.items.len as i64);
+                };
+                * = Syscall.ftruncate(cloned_executable_fd, elf_file.data.items.len as i64);
 
                 if (comptime !Environment.isWindows) {
-                    _ = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
+                    * = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
                 }
                 return cloned_executable_fd;
             },
@@ -1031,9 +1031,9 @@ pub struct StandaloneModuleGraph {
                     }
                 }
 
-                _ = Syscall.write(cloned_executable_fd, std.mem.asBytes(&total_byte_count));
+                * = Syscall.write(cloned_executable_fd, std.mem.asBytes(&total_byte_count));
                 if (comptime !Environment.isWindows) {
-                    _ = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
+                    * = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
                 }
 
                 return cloned_executable_fd;
@@ -1195,7 +1195,7 @@ pub struct StandaloneModuleGraph {
         bun.debugAssert(fd.kind == .system);
 
         if (Environment.isPosix) {
-            _ = Syscall.fchmod(fd, 0o755);
+            * = Syscall.fchmod(fd, 0o755);
         }
 
         if (Environment.isWindows) {
@@ -1283,7 +1283,7 @@ pub struct StandaloneModuleGraph {
             fd.close();
             fd = bun.invalid_fd;
 
-            _ = Syscall.unlink(&temp_posix);
+            * = Syscall.unlink(&temp_posix);
 
             if (e == error.IsDir || e == error.EISDIR) {
                 return StandaloneCompileResult.failFmt("{s} is a directory. Please choose a different --outfile or delete the directory", [outfile]);

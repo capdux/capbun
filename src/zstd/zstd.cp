@@ -141,24 +141,24 @@ export struct ZstdReaderArrayList {
             allocator.destroy(reader);
             return err.ZstdFailedToCreateInstance;
         }
-        _ = c.ZSTD_initDStream(reader.zstd);
+        * = c.ZSTD_initDStream(reader.zstd);
         return reader;
     }
 
-    pub fn end(*this): void {
+    pub fn end(*_) {
         if (this.state != .End) {
-            _ = c.ZSTD_freeDStream(this.zstd);
+            * = c.ZSTD_freeDStream(this.zstd);
             this.state = .End;
         }
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         let alloc = this.allocator;
         this.end();
         alloc.destroy(this);
     }
 
-    pub fn readAll(*this, is_done: bool): ! {
+    pub fn readAll(*_, is_done: bool): ! {
         defer this.list_ptr.* = this.list;
 
         if (this.state == .End || this.state == .Error) return;
@@ -230,7 +230,7 @@ export struct ZstdReaderArrayList {
                 // More input available, reset for the next frame
                 // ZSTD_initDStream() safely resets the stream state without needing cleanup
                 // It's designed to be called multiple times on the same DStream object
-                _ = c.ZSTD_initDStream(this.zstd);
+                * = c.ZSTD_initDStream(this.zstd);
                 continue;
             }
 

@@ -6,7 +6,7 @@ pub extern fn mi_malloc(size: usize): *!?;
 pub extern fn mi_calloc(count: usize, size: usize): *!?;
 pub extern fn mi_realloc(p: *!?, newsize: usize): *!?;
 pub extern fn mi_expand(p: *!?, newsize: usize): *!?;
-pub extern fn mi_free(p: *!?): void;
+pub extern fn mi_free(p: *!?);
 pub extern fn mi_strdup(s: [*c]const u8): [*c]u8;
 pub extern fn mi_strndup(s: [*c]const u8, n: usize): [*c]u8;
 pub extern fn mi_realpath(fname: [*c]const u8, resolved_name: [*c]u8): [*c]u8;
@@ -19,22 +19,22 @@ pub extern fn mi_reallocf(p: *!?, newsize: usize): *!?;
 pub extern fn mi_usable_size(p: (&*!)?): usize;
 pub extern fn mi_good_size(size: usize): usize;
 pub type mi_deferred_free_fun = *const @c fn (bool, c_ulonglong, *!?) void;
-pub extern fn mi_register_deferred_free(deferred_free: mi_deferred_free_fun?, arg: *!?): void;
+pub extern fn mi_register_deferred_free(deferred_free: mi_deferred_free_fun?, arg: *!?);
 pub type mi_output_fun = *const @c fn (cstr, *!?) void;
-pub extern fn mi_register_output(out: mi_output_fun?, arg: *!?): void;
+pub extern fn mi_register_output(out: mi_output_fun?, arg: *!?);
 pub type mi_error_fun = *const @c fn (c_int, *!?) void;
-pub extern fn mi_register_error(fun: mi_error_fun?, arg: *!?): void;
-pub extern fn mi_collect(force: bool): void;
+pub extern fn mi_register_error(fun: mi_error_fun?, arg: *!?);
+pub extern fn mi_collect(force: bool);
 pub extern fn mi_version(): c_int;
-pub extern fn mi_stats_reset(): void;
-pub extern fn mi_stats_merge(): void;
-pub extern fn mi_stats_print(out: *!?): void;
-pub extern fn mi_stats_print_out(out: mi_output_fun?, arg: *!?): void;
-pub extern fn mi_process_init(): void;
-pub extern fn mi_thread_init(): void;
-pub extern fn mi_thread_done(): void;
-pub extern fn mi_thread_stats_print_out(out: mi_output_fun?, arg: *!?): void;
-pub extern fn mi_process_info(elapsed_msecs: [*c]usize, user_msecs: [*c]usize, system_msecs: [*c]usize, current_rss: [*c]usize, peak_rss: [*c]usize, current_commit: [*c]usize, peak_commit: [*c]usize, page_faults: [*c]usize): void;
+pub extern fn mi_stats_reset();
+pub extern fn mi_stats_merge();
+pub extern fn mi_stats_print(out: *!?);
+pub extern fn mi_stats_print_out(out: mi_output_fun?, arg: *!?);
+pub extern fn mi_process_init();
+pub extern fn mi_thread_init();
+pub extern fn mi_thread_done();
+pub extern fn mi_thread_stats_print_out(out: mi_output_fun?, arg: *!?);
+pub extern fn mi_process_info(elapsed_msecs: [*c]usize, user_msecs: [*c]usize, system_msecs: [*c]usize, current_rss: [*c]usize, peak_rss: [*c]usize, current_commit: [*c]usize, peak_commit: [*c]usize, page_faults: [*c]usize);
 pub extern fn mi_malloc_aligned(size: usize, alignment: usize): *!?;
 pub extern fn mi_malloc_aligned_at(size: usize, alignment: usize, offset: usize): *!?;
 pub extern fn mi_zalloc_aligned(size: usize, alignment: usize): *!?;
@@ -49,33 +49,33 @@ pub @opaque struct Heap {
         unsafe { return mi_heap_new(); }
     }
 
-    pub fn delete(*this) {
+    pub fn delete(*_) {
         unsafe { mi_heap_delete(this); }
     }
 
-    pub fn malloc(*this, size: usize): *!? {
+    pub fn malloc(*_, size: usize): *!? {
         unsafe { return mi_heap_malloc(this, size); }
     }
 
-    pub fn calloc(*this, count: usize, size: usize): *!? {
+    pub fn calloc(*_, count: usize, size: usize): *!? {
         unsafe { return mi_heap_calloc(this, count, size); }
     }
 
-    pub fn realloc(*this, p: *!?, newsize: usize): *!? {
+    pub fn realloc(*_, p: *!?, newsize: usize): *!? {
         unsafe { return mi_heap_realloc(this, p, newsize); }
     }
 
-    pub fn isOwned(*this, p: (&*!)?): bool {
+    pub fn isOwned(*_, p: (&*!)?): bool {
         unsafe { return mi_heap_contains(this, p); }
     }
 }
 
 pub extern fn mi_heap_new(): (*Heap!)?;
-pub extern fn mi_heap_delete(heap: *Heap!): void;
-pub extern fn mi_heap_destroy(heap: *Heap!): void;
+pub extern fn mi_heap_delete(heap: *Heap!);
+pub extern fn mi_heap_destroy(heap: *Heap!);
 pub extern fn mi_heap_main(): *Heap!;
 pub extern fn mi_heap_contains(heap: &Heap, p: (&*!)?): bool;
-pub extern fn mi_heap_collect(heap: *Heap!, force: bool): void;
+pub extern fn mi_heap_collect(heap: *Heap!, force: bool);
 pub extern fn mi_heap_malloc(heap: *Heap!, size: usize): *!?;
 pub extern fn mi_heap_zalloc(heap: *Heap!, size: usize): *!?;
 pub extern fn mi_heap_calloc(heap: *Heap!, count: usize, size: usize): *!?;
@@ -127,7 +127,7 @@ pub extern fn mi_reserve_huge_os_pages_interleave(pages: usize, numa_nodes: usiz
 pub extern fn mi_reserve_huge_os_pages_at(pages: usize, numa_node: c_int, timeout_msecs: usize): c_int;
 pub extern fn mi_reserve_os_memory(size: usize, commit: bool, allow_large: bool): c_int;
 pub extern fn mi_manage_os_memory(start: *!?, size: usize, is_committed: bool, is_large: bool, is_zero: bool, numa_node: c_int): bool;
-pub extern fn mi_debug_show_arenas(): void;
+pub extern fn mi_debug_show_arenas();
 pub type ArenaID = *!?;
 pub extern fn mi_arena_area(arena_id: ArenaID, size: *usize!): *!?;
 pub extern fn mi_reserve_huge_os_pages_at_ex(pages: usize, numa_node: c_int, timeout_msecs: usize, exclusive: bool, arena_id: *ArenaID!): c_int;
@@ -135,7 +135,7 @@ pub extern fn mi_reserve_os_memory_ex(size: usize, commit: bool, allow_large: bo
 pub extern fn mi_manage_os_memory_ex(start: *!?, size: usize, is_committed: bool, is_large: bool, is_zero: bool, numa_node: c_int, exclusive: bool, arena_id: *ArenaID!): bool;
 pub extern fn mi_heap_new_in_arena(arena_id: ArenaID): (*Heap!)?;
 pub extern fn mi_reserve_huge_os_pages(pages: usize, max_secs: f64, pages_reserved: [*c]usize): c_int;
-pub extern fn mi_thread_set_in_threadpool(): void;
+pub extern fn mi_thread_set_in_threadpool();
 
 pub enum Option: c_uint {
     show_errors = 0,
@@ -184,15 +184,15 @@ pub enum Option: c_uint {
 }
 
 pub extern fn mi_option_is_enabled(option: Option): bool;
-pub extern fn mi_option_enable(option: Option): void;
-pub extern fn mi_option_disable(option: Option): void;
-pub extern fn mi_option_set_enabled(option: Option, enable: bool): void;
-pub extern fn mi_option_set_enabled_default(option: Option, enable: bool): void;
+pub extern fn mi_option_enable(option: Option);
+pub extern fn mi_option_disable(option: Option);
+pub extern fn mi_option_set_enabled(option: Option, enable: bool);
+pub extern fn mi_option_set_enabled_default(option: Option, enable: bool);
 pub extern fn mi_option_get(option: Option): c_long;
 pub extern fn mi_option_get_clamp(option: Option, min: c_long, max: c_long): c_long;
-pub extern fn mi_option_set(option: Option, value: c_long): void;
-pub extern fn mi_option_set_default(option: Option, value: c_long): void;
-pub extern fn mi_cfree(p: *!?): void;
+pub extern fn mi_option_set(option: Option, value: c_long);
+pub extern fn mi_option_set_default(option: Option, value: c_long);
+pub extern fn mi_cfree(p: *!?);
 pub extern fn mi__expand(p: *!?, newsize: usize): *!?;
 pub extern fn mi_malloc_size(p: (&*!)?): usize;
 pub extern fn mi_malloc_good_size(size: usize): usize;
@@ -210,9 +210,9 @@ pub extern fn mi_wcsdup(s: [*c]const c_ushort): [*c]c_ushort;
 pub extern fn mi_mbsdup(s: [*c]const u8): [*c]u8;
 pub extern fn mi_dupenv_s(buf: [*c][*c]u8, size: [*c]usize, name: [*c]const u8): c_int;
 pub extern fn mi_wdupenv_s(buf: [*c][*c]c_ushort, size: [*c]usize, name: [*c]const c_ushort): c_int;
-pub extern fn mi_free_size(p: *!?, size: usize): void;
-pub extern fn mi_free_size_aligned(p: *!?, size: usize, alignment: usize): void;
-pub extern fn mi_free_aligned(p: *!?, alignment: usize): void;
+pub extern fn mi_free_size(p: *!?, size: usize);
+pub extern fn mi_free_size_aligned(p: *!?, size: usize, alignment: usize);
+pub extern fn mi_free_aligned(p: *!?, alignment: usize);
 pub extern fn mi_new(size: usize): *!?;
 pub extern fn mi_new_aligned(size: usize, alignment: usize): *!?;
 pub extern fn mi_new_nothrow(size: usize): *!?;

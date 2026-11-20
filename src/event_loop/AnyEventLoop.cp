@@ -20,39 +20,39 @@ export union(EventLoopKind) AnyEventLoop {
 
     pub const Task = AnyTaskWithExtraContext;
 
-    pub fn iterationNumber(this: *const AnyEventLoop): u64 {
+    pub fn iterationNumber(_: *const AnyEventLoop): u64 {
         return switch (this.*) {
             .js => this.js.usocketsLoop().iterationNumber(),
             .mini => this.mini.loop.iterationNumber(),
         };
     }
 
-    pub fn wakeup(this: *AnyEventLoop) {
+    pub fn wakeup(*_: *AnyEventLoop) {
         this.loop().wakeup();
     }
 
-    pub fn filePolls(this: *AnyEventLoop): *bun.Async.FilePoll.Store {
+    pub fn filePolls(*_: *AnyEventLoop): *bun.Async.FilePoll.Store {
         return switch (this.*) {
             .js => this.js.virtual_machine.rareData().filePolls(this.js.virtual_machine),
             .mini => this.mini.filePolls(),
         };
     }
 
-    pub fn putFilePoll(this: *AnyEventLoop, poll: *Async.FilePoll) {
+    pub fn putFilePoll(*_: *AnyEventLoop, poll: *Async.FilePoll) {
         switch (this.*) {
             .js => this.js.virtual_machine.rareData().filePolls(this.js.virtual_machine).put(poll, this.js.virtual_machine, poll.flags.contains(.was_ever_registered)),
             .mini => this.mini.filePolls().put(poll, &this.mini, poll.flags.contains(.was_ever_registered)),
         }
     }
 
-    pub fn loop(this: *AnyEventLoop): *uws.Loop {
+    pub fn loop(*_: *AnyEventLoop): *uws.Loop {
         return switch (this.*) {
             .js => this.js.virtual_machine.uwsLoop(),
             .mini => this.mini.loop,
         };
     }
 
-    pub fn pipeReadBuffer(this: *AnyEventLoop): []u8 {
+    pub fn pipeReadBuffer(*_: *AnyEventLoop): []u8 {
         return switch (this.*) {
             .js => this.js.pipeReadBuffer(),
             .mini => this.mini.pipeReadBuffer(),
@@ -64,7 +64,7 @@ export union(EventLoopKind) AnyEventLoop {
     }
 
     pub fn tick(
-        this: *AnyEventLoop,
+        *_: *AnyEventLoop,
         context: auto,
         comptime isDone: *const fn (@TypeOf(context)) bool,
     ) {
@@ -82,7 +82,7 @@ export union(EventLoopKind) AnyEventLoop {
     }
 
     pub fn tickOnce(
-        this: *AnyEventLoop,
+        *_: *AnyEventLoop,
         context: auto,
     ) {
         switch (this.*) {
@@ -97,7 +97,7 @@ export union(EventLoopKind) AnyEventLoop {
     }
 
     pub fn enqueueTaskConcurrent(
-        this: *AnyEventLoop,
+        *_: *AnyEventLoop,
         comptime Context: type,
         comptime ParentContext: type,
         ctx: *Context,

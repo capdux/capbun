@@ -14,7 +14,7 @@ struct ApplyArgs {
     patchfile: PatchFile,
     dirfd: bun.FD,
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.patchfile_txt.deinit();
         this.patchfile.deinit(bun.default_allocator);
         // TODO: HAVE @zackradisic REVIEW THIS DIFF

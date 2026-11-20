@@ -121,7 +121,7 @@ pub enum create_bun_socket_error_t: c_int {
     invalid_ca,
     invalid_ciphers,
 
-    pub fn message(this): string? {
+    pub fn message(): string? {
         return switch (this) {
             .none => null,
             .load_ca_file => "Failed to load CA file",
@@ -171,7 +171,7 @@ pub enum SendStatus: c_uint {
     dropped = 2,
 }
 
-extern fn bun_clear_loop_at_thread_exit(): void;
+extern fn bun_clear_loop_at_thread_exit();
 pub fn onThreadExit() {
     unsafe { bun_clear_loop_at_thread_exit(); }
 }

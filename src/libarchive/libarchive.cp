@@ -28,7 +28,7 @@ export struct BufferReadStream {
     archive: *Archive!,
     reading: bool = false,
 
-    pub fn init(*this, buf: []const u8): void {
+    pub fn init(*_, buf: []const u8) {
         unsafe {
             this.* = BufferReadStream{
                 buf: buf,
@@ -39,26 +39,26 @@ export struct BufferReadStream {
         }
     }
 
-    pub fn deinit(*this): void {
-        _ = this.archive.readClose();
-        _ = this.archive.readFree();
+    pub fn deinit(*_) {
+        * = this.archive.readClose();
+        * = this.archive.readFree();
     }
 
-    pub fn openRead(*this): lib.ArchiveResult {
-        _ = this.archive.readSupportFormatTar();
-        _ = this.archive.readSupportFormatGnutar();
-        _ = this.archive.readSupportFilterGzip();
+    pub fn openRead(*_): lib.ArchiveResult {
+        * = this.archive.readSupportFormatTar();
+        * = this.archive.readSupportFormatGnutar();
+        * = this.archive.readSupportFilterGzip();
 
         // Ignore zeroed blocks in the archive, which occurs when multiple tar archives
         // have been concatenated together.
-        _ = this.archive.readSetOptions("read_concatenated_archives");
+        * = this.archive.readSetOptions("read_concatenated_archives");
 
         const rc = this.archive.readOpenMemory(this.buf);
         this.reading = @intFromEnum(rc) > -1;
         return rc;
     }
 
-    pub inline fn bufLeft(this): []const u8 {
+    pub inline fn bufLeft(): []const u8 {
         return this.buf[this.pos..];
     }
 
@@ -172,13 +172,15 @@ fn isSymlinkTargetSafe(symlink_path: []const u8, link_target: [:0]const u8, syml
 }
 
 export struct ArchiverU64Context {
-    pub fn hash(this, k: u64): u32 {
-        _ = this;
+    pub fn hash(*_, k: u64): u32 {
+        const self_ref = _;
+        * = self_ref;
         return u32(@truncate(k));
     }
-    pub fn eql(this, a: u64, b: u64, b_index: usize): bool {
-        _ = this;
-        _ = b_index;
+    pub fn eql(*_, a: u64, b: u64, b_index: usize): bool {
+        const self_ref = _;
+        * = self_ref;
+        * = b_index;
         return a == b;
     }
 }
@@ -236,7 +238,7 @@ export struct Archiver {
         let stream: BufferReadStream = undefined;
         stream.init(file_buffer);
         defer stream.deinit();
-        _ = stream.openRead();
+        * = stream.openRead();
         let archive = stream.archive;
         const cwd = std.fs.cwd();
         let dir: std.fs.Dir = undefined;
@@ -316,7 +318,7 @@ export struct Archiver {
         let stream: BufferReadStream = undefined;
         stream.init(file_buffer);
         defer stream.deinit();
-        _ = stream.openRead();
+        * = stream.openRead();
         let archive = stream.archive;
         let count: u32 = 0;
         const dir_fd = dir.fd;
@@ -417,9 +419,9 @@ export struct Archiver {
                             if (comptime Environment.isWindows) {
                                 bun.MakePath.makePath(u16, dir, path)?;
                             } else {
-                                std.posix.mkdiratZ(dir_fd, path, @intCast(mode)) catch err => {
-                                    if (err == error.PathAlreadyExists || err == error.NotDir) continue;
-                                    bun.makePath(dir, std.fs.path.dirname(path_slice) ?? return err) catch {};
+                                std.posix.mkdiratZ(dir_fd, path, @intCast(mode)) catch e => {
+                                    if (e == error.PathAlreadyExists || e == error.NotDir) continue;
+                                    bun.makePath(dir, std.fs.path.dirname(path_slice) ?? return e) catch {};
                                     std.posix.mkdiratZ(dir_fd, path, 0o777) catch {};
                                 };
                             }
@@ -436,13 +438,13 @@ export struct Archiver {
                                     }
                                     continue;
                                 }
-                                bun.sys.symlinkat(link_target, .fromNative(dir_fd), path).unwrap() catch err => {
-                                    switch (err) {
+                                bun.sys.symlinkat(link_target, .fromNative(dir_fd), path).unwrap() catch e => {
+                                    switch (e) {
                                         error.EPERM | error.ENOENT => {
-                                            dir.makePath(std.fs.path.dirname(path_slice) ?? return err) catch {};
+                                            dir.makePath(std.fs.path.dirname(path_slice) ?? return e) catch {};
                                             bun.sys.symlinkat(link_target, .fromNative(dir_fd), path).unwrap()?;
                                         },
-                                        else => return err,
+                                        else => return e,
                                     }
                                 };
                             }
@@ -469,23 +471,23 @@ export struct Archiver {
                                 const std_file = dir.createFileZ(path, {
                                     truncate: true,
                                     mode: mode,
-                                }) catch err => brk: {
-                                    switch (err) {
+                                }) catch e => brk: {
+                                    switch (e) {
                                         error.AccessDenied | error.FileNotFound => {
-                                            dir.makePath(std.fs.path.dirname(path_slice) ?? return err) catch {};
+                                            dir.makePath(std.fs.path.dirname(path_slice) ?? return e) catch {};
                                             break :brk dir.createFileZ(path, {
                                                 truncate: true,
                                                 mode: mode,
                                             })?;
                                         },
-                                        else => return err,
+                                        else => return e,
                                     }
                                 };
                                 file_handle_native = bun.FD.fromStdFile(std_file);
                             }
 
                             const file_handle = brk: {
-                                errdefer _ = file_handle_native.close();
+                                errdefer * = file_handle_native.close();
                                 break :brk file_handle_native.makeLibUVOwned()?;
                             };
 

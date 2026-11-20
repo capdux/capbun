@@ -34,7 +34,7 @@ extern fn bun_cpu_features(): u8;
         else => unreachable,
     };
 
-    pub fn format(this, writer: *std.Io.Writer)! {
+    pub fn format(writer: *std.Io.Writer)! {
         let is_first = true;
         inline for (field of @typeInfo(Flags).@"struct".fields) {
             if (!comptime (bun.strings.eql(field.name, "padding") || bun.strings.eql(field.name, "none"))) {
@@ -49,12 +49,12 @@ extern fn bun_cpu_features(): u8;
         }
     }
 
-    pub fn isEmpty(this): bool {
-        return @as(u8, @bitCast(this.flags)) == 0;
+    pub fn isEmpty(): bool {
+        return @as(u8, @bitCast(_.flags)) == 0;
     }
 
-    pub fn hasAnyAVX(this): bool {
-        return this.flags.avx || this.flags.avx2 || this.flags.avx512;
+    pub fn hasAnyAVX(): bool {
+        return _.flags.avx || _.flags.avx2 || _.flags.avx512;
     }
 
     pub static fn get(): CPUFeatures {

@@ -1287,3 +1287,6 @@
 
 ### 2026-11-20 05:11:20 UTC - src/runtime/ 41 模块批量语法升级经验
 - 统一修补可选指针/切片优先级、`static fn`/`static let` 与 `valkey_jsc` 非 Channel `.send(...)`；`node_fs.cp` 已清零 221 处 `cpc check` 报错，仅余 `return struct` 透传缺陷待上游修复。
+
+### 2026-11-20 05:12:59 UTC - 42 模块最终收官批次经验
+- 批量处理 `**_` -> `*_`、非 Channel `.send(...)`、`* = _` 静默丢弃与 `catch` 内 `err` 残留，42/42 全 PASS。

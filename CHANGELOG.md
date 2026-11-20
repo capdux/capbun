@@ -1558,3 +1558,6 @@
 
 ### 2026-11-20 05:11:20 UTC - src/runtime/ 41 模块新版 cpc 语法升级入库
 - 完成：`src/runtime/` 41/42 全部通过新版 `cpc --lib` + `zig ast-check` 及 4 项硬门禁（余 `node_fs.cp` 标 BLOCKED 上报 `cp_agy`）。
+
+### 2026-11-20 05:12:59 UTC - 全仓最后 42 个零散目录模块新版 cpc 语法升级全绿入库
+- 完成：37 个目录共 42/42 模块全部通过新版 `cpc --lib` + `zig ast-check` 及 4 项硬门禁（并补齐 `boringssl_.zig`/`SemverRange_.zig`）。

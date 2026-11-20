@@ -27,7 +27,7 @@ pub struct Names {
     long_aliases: []const []const u8 = &empty_aliases,
 
     /// Check if the given name matches the primary long name or any alias
-    pub fn matchesLong(this, name: []const u8): bool {
+    pub fn matchesLong(name: []const u8): bool {
         if (l := this.long) {
             if (mem.eql(u8, name, l)) return true;
         }
@@ -192,8 +192,8 @@ pub struct Diagnostic {
 
     /// Default diagnostics reporter when all you want is English with no colors.
     /// Use this as a reference for implementing your own if needed.
-    pub fn report(this, _stream: auto, the_err: anyerror)! {
-        _ = _stream;
+    pub fn report(*_, _stream: auto, the_err: anyerror)! {
+        * = _stream;
         let name_buf: [1024]u8 = undefined;
         let arg_name: string = this.arg;
         if (s := this.name.short) {
@@ -311,7 +311,7 @@ pub fn helpFull(
     stream: auto,
     comptime Id: type,
     params: []const Param(Id),
-    comptime Error: type,
+    comptime ErrorType: type,
     context: auto,
     helpText: auto,
     valueText: auto,
@@ -321,7 +321,7 @@ pub fn helpFull(
     while (p_i < params.len) : (p_i += 1) {
         const param = params[p_i];
         let cs = io.countingWriter(io.null_writer);
-        printParam(cs.writer(), Id, param, Error, context, valueText)?;
+        printParam(cs.writer(), Id, param, ErrorType, context, valueText)?;
         const written = cs.bytes_written as usize;
         if (max_spacing < written)
             max_spacing = written;
@@ -337,7 +337,7 @@ pub fn helpFull(
         if (help_text.len > 0) {
             let cs = io.countingWriter(stream);
             stream.print("\t", [])?;
-            printParam(cs.writer(), Id, param, Error, context, valueText)?;
+            printParam(cs.writer(), Id, param, ErrorType, context, valueText)?;
             stream.splatByteAll(' ', max_spacing - (cs.bytes_written as usize))?;
             stream.print("\t{s}\n", [helpText(context, param)?])?;
         }
@@ -352,7 +352,7 @@ fn printParam(
     context: auto,
     valueText: auto,
 )! {
-    _ = _Error;
+    * = _Error;
     if (s := param.names.short) {
         stream.print("-{c}", [s])?;
     } else {
@@ -540,7 +540,7 @@ pub fn usageFull(
     context: auto,
     valueText: auto,
 )! {
-    _ = _Error;
+    * = _Error;
     let cos = io.countingWriter(stream);
     const cs = cos.writer();
     let i: usize = 0;

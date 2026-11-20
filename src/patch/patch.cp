@@ -26,7 +26,7 @@ pub enum PatchFilePart {
     file_rename: *FileRename,
     file_mode_change: *FileModeChange,
 
-    pub fn deinit(*this, allocator: Allocator) {
+    pub fn deinit(*_, allocator: Allocator) {
         switch (this.*) {
             .file_patch => this.file_patch.deinit(allocator),
             .file_deletion => this.file_deletion.deinit(allocator),
@@ -41,7 +41,7 @@ struct ApplyState {
     pathbuf: bun.PathBuffer = undefined,
     patch_dir_abs_path: ([:0]const u8)? = null,
 
-    fn patchDirAbsPath(*this, fd: bun.FD): bun.sys.Maybe(ZStr) {
+    fn patchDirAbsPath(*_, fd: bun.FD): bun.sys.Maybe(ZStr) {
         if (p := this.patch_dir_abs_path) return { result: p };
         switch (bun.sys.getFdPath(fd, &this.pathbuf)) {
             .result p => {
@@ -56,19 +56,19 @@ struct ApplyState {
 pub struct PatchFile {
     parts: List(PatchFilePart) = {},
 
-    pub fn deinit(*this, allocator: Allocator) {
+    pub fn deinit(*_, allocator: Allocator) {
         for (*part of this.parts.items) part.deinit(allocator);
         this.parts.deinit(allocator);
     }
 
-    pub fn apply(this, allocator: Allocator, patch_dir: bun.FD): bun.sys.Error? {
+    pub fn apply(allocator: Allocator, patch_dir: bun.FD): bun.sys.Error? {
         let state: ApplyState = {};
         let sfb = std.heap.stackFallback(1024, allocator);
         let arena_alloc = bun.ArenaAllocator.init(sfb.get());
         defer arena_alloc.deinit();
 
         for (part of this.parts.items) {
-            defer _ = arena_alloc.reset(.retain_capacity);
+            defer * = arena_alloc.reset(.retain_capacity);
             switch (part) {
                 .file_deletion => {
                     const pathz = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_deletion.path));
@@ -300,7 +300,7 @@ pub struct PatchFile {
                         @memcpy(lines_to_insert, part.lines.items);
                         line_cursor += part.lines.items.len;
                         if (part.no_newline_at_end_of_file) {
-                            _ = lines.pop();
+                            * = lines.pop();
                         }
                     },
                     .deletion => {
@@ -359,20 +359,20 @@ struct FileDeets {
     to_path: ([]const u8)? = null,
     hunks: List(Hunk) = {},
 
-    fn takeHunks(*this): List(Hunk) {
+    fn takeHunks(*_): List(Hunk) {
         const hunks = this.hunks;
         this.hunks = {};
         return hunks;
     }
 
-    fn deinit(*this, allocator: Allocator) {
+    fn deinit(*_, allocator: Allocator) {
         for (*hunk of this.hunks.items) {
             hunk.deinit(allocator);
         }
         this.hunks.deinit(allocator);
     }
 
-    fn nullifyEmptyStrings(*this) {
+    fn nullifyEmptyStrings(*_) {
         const fields: []const std.builtin.Type.StructField = std.meta.fields(FileDeets);
 
         inline for (field of fields) {
@@ -397,7 +397,7 @@ pub struct PatchMutationPart {
     /// Ensure context, insertion, deletion values are in sync with HunkLineType enum
     pub const PartType = PatchMutationPartType;
 
-    pub fn deinit(*this, allocator: Allocator) {
+    pub fn deinit(*_, allocator: Allocator) {
         this.lines.deinit(allocator);
     }
 }
@@ -425,18 +425,18 @@ pub struct Hunk {
 
     pub const Header = HunkHeader;
 
-    pub fn deinit(*this, allocator: Allocator) {
+    pub fn deinit(*_, allocator: Allocator) {
         for (*part of this.parts.items) {
             part.deinit(allocator);
         }
         this.parts.deinit(allocator);
     }
 
-    pub fn verifyIntegrity(this): bool {
+    pub fn verifyIntegrity(): bool {
         let original_length: usize = 0;
         let patched_length: usize = 0;
 
-        for (part of this.parts.items) {
+        for (part of _.parts.items) {
             switch (part.type) {
                 .context => {
                     patched_length += part.lines.items.len;
@@ -447,7 +447,7 @@ pub struct Hunk {
             }
         }
 
-        if (original_length != this.header.original.len || patched_length != this.header.patched.len) return false;
+        if (original_length != _.header.original.len || patched_length != _.header.patched.len) return false;
         return true;
     }
 }
@@ -456,7 +456,7 @@ pub enum FileMode: u32 {
     non_executable = 0o644,
     executable = 0o755,
 
-    pub fn toBunMode(this): bun.Mode {
+    pub fn toBunMode(): bun.Mode {
         return @intFromEnum(this) as bun.Mode;
     }
 
@@ -474,9 +474,10 @@ pub struct FileRename {
     to_path: []const u8,
 
     /// Does not allocate
-    pub fn deinit(*this, allocator: Allocator) {
-        _ = this;
-        _ = allocator;
+    pub fn deinit(*_, allocator: Allocator) {
+        const self_ref = _;
+        * = self_ref;
+        * = allocator;
     }
 }
 
@@ -486,9 +487,10 @@ pub struct FileModeChange {
     new_mode: FileMode,
 
     /// Does not allocate
-    pub fn deinit(*this, allocator: Allocator) {
-        _ = this;
-        _ = allocator;
+    pub fn deinit(*_, allocator: Allocator) {
+        const self_ref = _;
+        * = self_ref;
+        * = allocator;
     }
 }
 
@@ -498,7 +500,7 @@ pub struct FilePatch {
     before_hash: ([]const u8)?,
     after_hash: ([]const u8)?,
 
-    pub fn deinit(*this, allocator: Allocator) {
+    pub fn deinit(*_, allocator: Allocator) {
         for (*hunk of this.hunks.items) hunk.deinit(allocator);
         this.hunks.deinit(allocator);
         bun.destroy(this);
@@ -511,7 +513,7 @@ pub struct FileDeletion {
     hunk: (*Hunk)?,
     hash: ([]const u8)?,
 
-    pub fn deinit(*this, allocator: Allocator) {
+    pub fn deinit(*_, allocator: Allocator) {
         if (hunk := this.hunk) hunk.deinit(allocator);
         bun.destroy(this);
     }
@@ -523,7 +525,7 @@ pub struct FileCreation {
     hunk: (*Hunk)?,
     hash: ([]const u8)?,
 
-    pub fn deinit(*this, allocator: Allocator) {
+    pub fn deinit(*_, allocator: Allocator) {
         if (hunk := this.hunk) hunk.deinit(allocator);
         bun.destroy(this);
     }
@@ -569,7 +571,7 @@ pub fn parsePatchFile(file: []const u8): PatchFile ! ParseErr {
     return patchFileSecondPass(files)?;
 }
 
-fn patchFileSecondPass(let files: []FileDeets): PatchFile ! ParseErr {
+fn patchFileSecondPass(files: []FileDeets): PatchFile ! ParseErr {
     let result: PatchFile = {};
 
     for (*file of files) {
@@ -694,12 +696,12 @@ struct LookbackIterator {
         return LookbackIterator{ inner: inner };
     }
 
-    pub fn next(*this): ([]const u8)? {
+    pub fn next(*_): ([]const u8)? {
         this.prev_index = this.inner.index orelse this.prev_index;
         return this.inner.next();
     }
 
-    pub fn back(*this) {
+    pub fn back(*_) {
         this.inner.index = this.prev_index;
     }
 }
@@ -734,7 +736,7 @@ struct PatchLinesParser {
     const State = PatchParserState;
     const HunkLineType = PatchHunkLineType;
 
-    fn deinit(*this, allocator: Allocator, comptime clear_result_retaining_capacity: bool) {
+    fn deinit(*_, allocator: Allocator, comptime clear_result_retaining_capacity: bool) {
         this.current_file_patch.deinit(allocator);
         if (*hunk := this.current_hunk) hunk.deinit(allocator);
         if (*part := this.current_hunk_mutation_part) part.deinit(allocator);
@@ -746,7 +748,7 @@ struct PatchLinesParser {
         }
     }
 
-    fn reset(*this, allocator: Allocator) {
+    fn reset(*_, allocator: Allocator) {
         this.deinit(allocator, true);
         this.result.clearRetainingCapacity();
         this.* = {
@@ -755,7 +757,7 @@ struct PatchLinesParser {
     }
 
     pub fn parse(
-        *this,
+        *_,
         file_: []const u8,
         opts: ParseOpts,
     ): void ! ParseErr {
@@ -887,7 +889,7 @@ struct PatchLinesParser {
         }
     }
 
-    fn commitHunk(*this) {
+    fn commitHunk(*_) {
         if (*hunk := this.current_hunk) {
             if (mutation_part := this.current_hunk_mutation_part) {
                 hunk.parts.append(bun.default_allocator, mutation_part) catch unreachable;
@@ -898,7 +900,7 @@ struct PatchLinesParser {
         }
     }
 
-    fn commitFilePatch(*this) {
+    fn commitFilePatch(*_) {
         this.commitHunk();
         this.current_file_patch.nullifyEmptyStrings();
         this.result.append(bun.default_allocator, this.current_file_patch) catch unreachable;
@@ -1246,7 +1248,7 @@ pub fn gitDiffInternal(
     }
     child_proc.spawn()?;
     child_proc.collectOutput(allocator, &stdout, &stderr, 1024 * 1024 * 4)?;
-    _ = child_proc.wait()?;
+    * = child_proc.wait()?;
     if (stderr.items.len > 0) {
         deinit_stderr = false;
         return { err: stderr.toManaged(allocator) };

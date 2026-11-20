@@ -190,7 +190,7 @@ pub extern fn ResizePseudoConsole(
 ): std.os.windows.HRESULT;
 
 @callconv("winapi")
-pub extern fn ClosePseudoConsole(hPC: HPCON): void;
+pub extern fn ClosePseudoConsole(hPC: HPCON);
 
 @callconv("winapi")
 pub extern fn CloseHandle(hObject: HANDLE): BOOL;
@@ -219,4 +219,4 @@ pub extern fn SetEndOfFile(hFile: HANDLE): BOOL;
 @callconv("winapi")
 pub extern fn GetProcessTimes(in_hProcess: HANDLE, out_lpCreationTime: *FILETIME!, out_lpExitTime: *FILETIME!, out_lpKernelTime: *FILETIME!, out_lpUserTime: *FILETIME!): BOOL;
 
-pub extern fn windows_enable_stdio_inheritance(): void;
+pub extern fn windows_enable_stdio_inheritance();

@@ -10,7 +10,7 @@ const Task = jsc.Task;
 export class AnyTaskWithExtraContext {
     ctx: *!? = null;
     callback: fn (*!, *!) void = undefined;
-    next: ?*AnyTaskWithExtraContext = null;
+    next: *AnyTaskWithExtraContext? = null;
 
     pub static fn fromCallbackAutoDeinit(ptr: auto, comptime fieldName: cstring): *AnyTaskWithExtraContext {
         const Ptr = std.meta.Child(@TypeOf(ptr));
@@ -59,15 +59,17 @@ export class AnyTaskWithExtraContext {
                 };
             }
 
-            pub fn wrap(this: *!?, extra: *!?) void {
-                @call(
-                    bun.callmod_inline,
-                    Callback,
-                    .{
-                        @as(*Type, @ptrCast(@alignCast(this.?))),
-                        @as(*ContextType, @ptrCast(@alignCast(extra.?))),
-                    },
-                );
+            pub fn wrap(ptr: *!?, extra: *!?) {
+                unsafe {
+                    @call(
+                        bun.callmod_inline,
+                        Callback,
+                        .{
+                            @as(*Type, ptr.?),
+                            @as(*ContextType, extra.?),
+                        },
+                    );
+                }
             }
         };
     }

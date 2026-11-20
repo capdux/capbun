@@ -15,7 +15,7 @@ const BrotliEncoder = c.BrotliEncoder;
     return mimalloc.mi_malloc(len) ?? bun.outOfMemory();
 }
 
-@c fn bun_brotli_free(opaque_ctx: *!?, data: *!?): void {
+@c fn bun_brotli_free(opaque_ctx: *!?, data: *!?) {
     if (bun.heap_breakdown.enabled) {
         const zone = bun.heap_breakdown.getZone("brotli");
         zone.malloc_zone_free(data);
@@ -80,9 +80,9 @@ export struct BrotliReaderArrayList {
 
         let brotli = BrotliDecoder.createInstance(&BrotliAllocator.alloc, &BrotliAllocator.free, null) ?? return err.BrotliFailedToCreateInstance;
         if (options.params.LARGE_WINDOW)
-            _ = brotli.setParameter(c.BrotliDecoderParameter.LARGE_WINDOW, 1);
+            * = brotli.setParameter(c.BrotliDecoderParameter.LARGE_WINDOW, 1);
         if (options.params.DISABLE_RING_BUFFER_REALLOCATION)
-            _ = brotli.setParameter(c.BrotliDecoderParameter.DISABLE_RING_BUFFER_REALLOCATION, 1);
+            * = brotli.setParameter(c.BrotliDecoderParameter.DISABLE_RING_BUFFER_REALLOCATION, 1);
 
         bun.assert(list.items.ptr != input.ptr);
 
@@ -98,11 +98,11 @@ export struct BrotliReaderArrayList {
         };
     }
 
-    pub fn end(*this): void {
+    pub fn end(*_) {
         this.state = .End;
     }
 
-    pub fn readAll(*this, is_done: bool): ! {
+    pub fn readAll(*_, is_done: bool): ! {
         defer this.list_ptr.* = this.list;
 
         if (this.state == .End || this.state == .Error) {
@@ -184,7 +184,7 @@ export struct BrotliReaderArrayList {
         }
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.brotli.destroyInstance();
         bun.destroy(this);
     }
@@ -220,7 +220,7 @@ export struct BrotliCompressionStream {
         };
     }
 
-    pub fn writeChunk(*this, input: []const u8, last: bool): ([]const u8)! {
+    pub fn writeChunk(*_, input: []const u8, last: bool): ([]const u8)! {
         this.total_in += input.len;
         const result = this.brotli.compressStream(if (last) this.finishFlushOp else this.flushOp, input);
 
@@ -232,7 +232,7 @@ export struct BrotliCompressionStream {
         return result.output;
     }
 
-    pub fn write(*this, input: []const u8, last: bool): ([]const u8)! {
+    pub fn write(*_, input: []const u8, last: bool): ([]const u8)! {
         if (this.state == .End || this.state == .Error) {
             return "";
         }
@@ -240,13 +240,13 @@ export struct BrotliCompressionStream {
         return this.writeChunk(input, last);
     }
 
-    pub fn end(*this): ([]const u8)! {
+    pub fn end(*_): ([]const u8)! {
         defer this.state = .End;
 
         return this.write("", true)?;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.brotli.destroyInstance();
     }
 
@@ -283,11 +283,11 @@ export struct BrotliCompressionStream {
         };
     }
 
-    pub fn writerContext(*this, writable: auto): NewWriter(@TypeOf(writable)) {
+    pub fn writerContext(*_, writable: auto): NewWriter(@TypeOf(writable)) {
         return NewWriter(@TypeOf(writable)).init(this, writable);
     }
 
-    pub fn writer(*this, writable: auto): NewWriter(@TypeOf(writable)).Writer {
+    pub fn writer(*_, writable: auto): NewWriter(@TypeOf(writable)).Writer {
         return this.writerContext(writable).writer();
     }
 }

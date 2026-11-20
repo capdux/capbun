@@ -38,13 +38,13 @@ const JavaScript = bun.jsc;
 const jsc = bun.jsc;
 const js = bun.jsc.C;
 
-extern fn Bun__startMacro(function: const *!, arg1: *!) void;
+extern fn Bun__startMacro(function: const *!, arg1: *!) ;
 
 struct MacroContextWrapper {
     args: std.meta.ArgsTuple(@TypeOf(Macro.Runner.run)),
     ret: Runner.MacroError!Expr,
 
-    pub fn call(*this) void {
+    pub fn call(*_)  {
         this.ret = @call(.auto, Macro.Runner.run, this.args);
     }
 }
@@ -58,12 +58,12 @@ export struct MacroContext {
     remap: MacroRemap,
     javascript_object: jsc.JSValue = jsc.JSValue.zero,
 
-    pub fn getRemap(this, path: string) ?MacroRemapEntry {
+    pub fn getRemap(path: string): MacroRemapEntry? {
         if (this.remap.entries.len == 0) return null;
         return this.remap.get(path);
     }
 
-    pub static fn init(transpiler: *Transpiler) MacroContext {
+    pub static fn init(transpiler: *Transpiler): MacroContext {
         return MacroContext{
             macros: MacroMap.init(default_allocator),
             resolver: &transpiler.resolver,
@@ -73,7 +73,7 @@ export struct MacroContext {
     }
 
     pub fn call(
-        *this,
+        *_,
         import_record_path: string,
         source_dir: string,
         log: *logger.Log,
@@ -81,7 +81,7 @@ export struct MacroContext {
         import_range: logger.Range,
         caller: Expr,
         function_name: string,
-    ) anyerror!Expr {
+    ): anyerror!Expr {
         Expr.Data.Store.disable_reset = true;
         Stmt.Data.Store.disable_reset = true;
         defer Expr.Data.Store.disable_reset = false;
@@ -98,31 +98,27 @@ export struct MacroContext {
                 break :brk replacement.path;
             }
 
-            const resolve_result = this.resolver.resolve(source_dir, import_record_path_without_macro_prefix, .stmt) catch |e| {
-                switch (e) {
-                    error.ModuleNotFound => {
-                        log.addResolveError(
-                            source,
-                            import_range,
-                            log.msgs.allocator,
-                            "Macro \"{s}\" not found",
-                            .{import_record_path},
-                            .stmt,
-                            e,
-                        ) catch unreachable;
-                        return error.MacroNotFound;
-                    },
-                    else => {
-                        log.addRangeErrorFmt(
-                            source,
-                            import_range,
-                            log.msgs.allocator,
-                            "{s} resolving macro \"{s}\"",
-                            .{ @errorName(e), import_record_path },
-                        ) catch unreachable;
-                        return e;
-                    },
+            const resolve_result = this.resolver.resolve(source_dir, import_record_path_without_macro_prefix, .stmt) catch e => {
+                if (e == error.ModuleNotFound) {
+                    log.addResolveError(
+                        source,
+                        import_range,
+                        log.msgs.allocator,
+                        "Macro \"{s}\" not found",
+                        .{import_record_path},
+                        .stmt,
+                        e,
+                    ) catch unreachable;
+                    return error.MacroNotFound;
                 }
+                log.addRangeErrorFmt(
+                    source,
+                    import_range,
+                    log.msgs.allocator,
+                    "{s} resolving macro \"{s}\"",
+                    .{ @errorName(e), import_record_path },
+                ) catch unreachable;
+                return e;
             };
             break :brk resolve_result.path_pair.primary.text;
         };
@@ -212,7 +208,7 @@ export struct RunnerRun {
         args: []jsc.JSValue,
         source: *const logger.Source,
         id: i32,
-    ) Runner.MacroError!Expr {
+    ): Runner.MacroError!Expr {
         if (macro_callback := m.vm.macros.get(id)) {
             const result = unsafe {
                 js.JSObjectCallAsFunctionReturnValueHoldingAPILock(
@@ -244,9 +240,9 @@ export struct RunnerRun {
     }
 
     pub fn run(
-        *this,
+        *_,
         value: jsc.JSValue,
-    ) Runner.MacroError!Expr {
+    ): Runner.MacroError!Expr {
         const fmt_tag = jsc.ConsoleObject.Formatter.Tag.get(value, this.global)?;
         return switch (fmt_tag.tag) {
             .Error => this.coerce(value, .Error),
@@ -277,13 +273,13 @@ export struct RunnerRun {
     }
 
     pub fn coerce(
-        *this,
+        *_,
         value: jsc.JSValue,
         comptime tag: jsc.ConsoleObject.Formatter.Tag,
-    ) Runner.MacroError!Expr {
+    ): Runner.MacroError!Expr {
         switch (comptime tag) {
             .Error => {
-                _ = this.@"macro".vm.uncaughtException(this.global, value, false);
+                * = this.@"macro".vm.uncaughtException(this.global, value, false);
                 return this.caller;
             },
             .Undefined => {
@@ -301,7 +297,7 @@ export struct RunnerRun {
                 }
 
                 let blob_: (*const jsc.WebCore.Blob)? = null;
-                const mime_type: ?MimeType = null;
+                const mime_type: MimeType? = null;
 
                 if (value.jsType() == .DOMWrapper) {
                     if (resp := value.as(jsc.WebCore.Response)) {
@@ -311,7 +307,7 @@ export struct RunnerRun {
                     } else if (resp := value.as(jsc.WebCore.Blob)) {
                         blob_ = resp;
                     } else if (value.as(bun.api.ResolveMessage) != null || value.as(bun.api.BuildMessage) != null) {
-                        _ = this.@"macro".vm.uncaughtException(this.global, value, false);
+                        * = this.@"macro".vm.uncaughtException(this.global, value, false);
                         return error.MacroFailed;
                     }
                 }
@@ -479,7 +475,7 @@ struct RunnerCallData {
     @tls pub let call_args: CallArgs = undefined;
     @tls pub let result: Runner.MacroError!Expr = undefined;
 
-    pub static fn callWrapper(args: CallArgs) Runner.MacroError!Expr {
+    pub static fn callWrapper(args: CallArgs): Runner.MacroError!Expr {
         jsc.markBinding(@src());
         RunnerCallData.call_args = args;
         const vm_instance: *jsc.VirtualMachine = jsc.VirtualMachine.get();
@@ -489,7 +485,7 @@ struct RunnerCallData {
         return RunnerCallData.result;
     }
 
-    @callconv("c") pub static fn call() void {
+    @callconv("c") pub static fn call()  {
         const call_args_copy = RunnerCallData.call_args;
         const local_result = @call(.auto, RunnerRun.runAsync, call_args_copy);
         RunnerCallData.result = local_result;
@@ -513,7 +509,7 @@ export struct Runner {
         source: *const logger.Source,
         id: i32,
         javascript_object: jsc.JSValue,
-    ) MacroError!Expr {
+    ): MacroError!Expr {
         if (comptime Environment.isDebug) Output.prettyln("<r><d>[macro]<r> call <d><b>{s}<r>", .{function_name});
 
         exception_holder = jsc.ZigException.Holder.init();
@@ -521,7 +517,7 @@ export struct Runner {
         let js_args: []jsc.JSValue = empty_js_args[0..0];
         let js_processed_args_len: usize = 0;
         defer {
-            for (js_args[0 .. js_processed_args_len -| @as(usize, @intFromBool(javascript_object != .zero))]) |arg| {
+            for (arg of js_args[0 .. js_processed_args_len -| @as(usize, @intFromBool(javascript_object != .zero))]) {
                 arg.unprotect();
             }
 
@@ -537,16 +533,18 @@ export struct Runner {
                 js_args = allocator.alloc(jsc.JSValue, call_args.len + @as(usize, @intFromBool(javascript_object != .zero)))?;
                 js_processed_args_len = js_args.len;
 
-                for (call_args, 0..) |in_arg, i| {
+                let i: usize = 0;
+                for (in_arg of call_args) {
                     const value = in_arg.toJS(
                         allocator,
                         globalObject,
-                    ) catch |e| {
+                    ) catch e => {
                         js_processed_args_len = i;
                         return e;
                     };
                     value.protect();
                     js_args[i] = value;
+                    i += 1;
                 }
             },
             .e_template => {
@@ -587,7 +585,7 @@ export struct Runner {
     resolved: ResolveResult = undefined,
     disabled: bool = false,
 
-    pub static fn isMacroPath(str: string) bool {
+    pub static fn isMacroPath(str: string): bool {
         return strings.hasPrefixComptime(str, namespaceWithColon);
     }
 
@@ -600,7 +598,7 @@ export struct Runner {
         function_name: string,
         specifier: string,
         hash: i32,
-    ) anyerror!Macro {
+    ): anyerror!Macro {
         let vm: *JavaScript.VirtualMachine = if (JavaScript.VirtualMachine.isLoaded())
             JavaScript.VirtualMachine.get()
         else brk: {

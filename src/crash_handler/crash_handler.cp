@@ -1388,13 +1388,13 @@ pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimi
     switch (bun.Environment.os) {
         .windows => {
             let dumped = false;
-            if (debug_info := debug.getSelfDebugInfo() catch err => {
-                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\nFallback trace:\n", [@errorName(err)]) catch return;
+            if (debug_info := debug.getSelfDebugInfo() catch e => {
+                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\nFallback trace:\n", [@errorName(e)]) catch return;
                 null;
             }) {
                 dumped = true;
-                writeStackTrace(trace, stderr, debug_info, std.io.tty.detectConfig(std.fs.File.stderr()), limits) catch err => {
-                    stderr.print("Unable to dump stack trace: {s}\nFallback trace:\n", [@errorName(err)]) catch return;
+                writeStackTrace(trace, stderr, debug_info, std.io.tty.detectConfig(std.fs.File.stderr()), limits) catch e => {
+                    stderr.print("Unable to dump stack trace: {s}\nFallback trace:\n", [@errorName(e)]) catch return;
                     dumped = false;
                 };
             }
@@ -1407,12 +1407,12 @@ pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimi
             }
         },
         else => {
-            const debug_info = debug.getSelfDebugInfo() catch err => {
-                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", [@errorName(err)]) catch return;
+            const debug_info = debug.getSelfDebugInfo() catch e => {
+                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", [@errorName(e)]) catch return;
                 return;
             };
-            writeStackTrace(trace, stderr, debug_info, std.io.tty.detectConfig(std.fs.File.stderr()), limits) catch err => {
-                stderr.print("Unable to dump stack trace: {s}", [@errorName(err)]) catch return;
+            writeStackTrace(trace, stderr, debug_info, std.io.tty.detectConfig(std.fs.File.stderr()), limits) catch e => {
+                stderr.print("Unable to dump stack trace: {s}", [@errorName(e)]) catch return;
                 return;
             };
             return;
@@ -1427,7 +1427,7 @@ pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimi
         let arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
         defer arena_alloc.deinit();
         let sfa = std.heap.stackFallback(16384, arena_alloc.allocator());
-        spawnSymbolizer(program, sfa.get(), &trace) catch err => switch (err) {
+        spawnSymbolizer(program, sfa.get(), &trace) catch e => switch (e) {
             error.FileNotFound => continue,
             else => {},
         };
@@ -1465,12 +1465,12 @@ fn spawnSymbolizer(program: cstring, alloc: std.mem.Allocator, trace: *const std
 
     let stderr_writer = std.fs.File.stderr().writerStreaming(empty_u8_slice);
     const stderr = &stderr_writer.interface;
-    const result = child.spawnAndWait() catch err => {
+    const result = child.spawnAndWait() catch e => {
         stderr.print("Failed to invoke command: {f}\n", [bun.fmt.fmtSlice(argv.items, " ")]) catch {};
         if (bun.Environment.isWindows) {
             stderr.print("(You can compile pdb-addr2line from https://github.com/oven-sh/bun.report, cd pdb-addr2line && cargo build)\n", {}) catch {};
         }
-        return err;
+        return e;
     };
 
     if (result != .Exited || result.Exited != 0) {
@@ -1698,14 +1698,14 @@ pub fn writeStackTrace(
 }
 
 pub fn getSourceAtAddress(debug_info: *debug.SelfInfo, address: usize): SourceAtAddress?! {
-    const module = debug_info.getModuleForAddress(address) catch err => switch (err) {
+    const module = debug_info.getModuleForAddress(address) catch e => switch (e) {
         error.MissingDebugInfo | error.InvalidDebugInfo => return null,
-        else => return err,
+        else => return e,
     };
 
-    const symbol_info = module.getSymbolAtAddress(debug_info.allocator, address) catch err => switch (err) {
+    const symbol_info = module.getSymbolAtAddress(debug_info.allocator, address) catch e => switch (e) {
         error.MissingDebugInfo | error.InvalidDebugInfo => return null,
-        else => return err,
+        else => return e,
     };
 
     return SourceAtAddress{
@@ -1757,11 +1757,11 @@ fn printLineInfo(
 
     if (sl := source_location) {
         let line_printed = true;
-        printLineFromFileAnyOs(out_stream, tty_config, sl) catch err => {
+        printLineFromFileAnyOs(out_stream, tty_config, sl) catch e => {
             line_printed = false;
-            switch (err) {
+            switch (e) {
                 error.EndOfFile | error.FileNotFound | error.BadPathName | error.AccessDenied => {},
-                else => return err,
+                else => return e,
             }
         };
         if (line_printed && sl.column > 0 && tty_config == .no_color) {
@@ -1871,11 +1871,11 @@ fn printLineFromFileAnyOs(out_stream: auto, tty_config: std.io.tty.Config, sourc
     out_stream.writeByte('\n')?;
 }
 
-@export @c pub fn CrashHandler__setInsideNativePlugin(name: cstr?): void {
+@export @c pub fn CrashHandler__setInsideNativePlugin(name: cstr?) {
     inside_native_plugin = name;
 }
 
-@export @c pub fn CrashHandler__unsupportedUVFunction(name: cstr?): void {
+@export @c pub fn CrashHandler__unsupportedUVFunction(name: cstr?) {
     bun.analytics.Features.unsupported_uv_function += 1;
     unsupported_uv_function = name;
     if (bun.feature_flag.BUN_INTERNAL_SUPPRESS_CRASH_ON_UV_STUB.get()) {
@@ -1888,7 +1888,7 @@ fn printLineFromFileAnyOs(out_stream: auto, tty_config: std.io.tty.Config, sourc
     crashHandler(CrashReason{ panic: unsafe { message_ptr[0..message_len] } }, null, @returnAddress());
 }
 
-@export pub fn CrashHandler__setDlOpenAction(action: cstr?): void {
+@export pub fn CrashHandler__setDlOpenAction(action: cstr?) {
     if (str := action) {
         bun.debugAssert(current_action == null);
         current_action = Action{ dlopen: bun.sliceTo(str, 0) };
@@ -1898,15 +1898,15 @@ fn printLineFromFileAnyOs(out_stream: auto, tty_config: std.io.tty.Config, sourc
     }
 }
 
-pub fn fixDeadCodeElimination(): void {
+pub fn fixDeadCodeElimination() {
     const fn_ref = CrashHandler__unsupportedUVFunction;
     std.mem.doNotOptimizeAway(&fn_ref);
 }
 
 comptime {
     @export(&Bun__reported_memory_size, { name: "Bun__reported_memory_size" });
-    _ = CrashHandler__unsupportedUVFunction;
-    _ = Bun__crashHandler;
+    * = CrashHandler__unsupportedUVFunction;
+    * = Bun__crashHandler;
     if (!bun.Environment.isWindows) {
         const fn_ref = CrashHandler__unsupportedUVFunction;
         std.mem.doNotOptimizeAway(&fn_ref);

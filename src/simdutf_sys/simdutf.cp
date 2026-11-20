@@ -20,8 +20,8 @@ pub @c struct SIMDUTFResult {
     status: SIMDUTFResultStatus,
     count: usize = 0,
 
-    pub fn isSuccessful(this): bool {
-        return this.status == Status.success;
+    pub fn isSuccessful(): bool {
+        return _.status == Status.success;
     }
 
     pub const Status = SIMDUTFResultStatus;
@@ -68,7 +68,7 @@ pub extern fn simdutf__convert_utf16be_to_utf32_with_errors(buf: [*]const u16, l
 pub extern fn simdutf__convert_valid_utf16le_to_utf32(buf: [*]const u16, len: usize, utf32_buffer: [*]u32): usize;
 pub extern fn simdutf__convert_valid_utf16be_to_utf32(buf: [*]const u16, len: usize, utf32_buffer: [*]u32): usize;
 pub extern fn simdutf__convert_latin1_to_utf8(buf: [*]const u8, len: usize, utf8_buffer: [*]u8): usize;
-pub extern fn simdutf__change_endianness_utf16(buf: [*]const u16, length: usize, output: [*]u16): void;
+pub extern fn simdutf__change_endianness_utf16(buf: [*]const u16, length: usize, output: [*]u16);
 pub extern fn simdutf__count_utf16le(buf: [*]const u16, length: usize): usize;
 pub extern fn simdutf__count_utf16be(buf: [*]const u16, length: usize): usize;
 pub extern fn simdutf__count_utf8(buf: [*]const u8, length: usize): usize;

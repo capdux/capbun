@@ -10,7 +10,7 @@ const testing = std.testing;
 pub struct ExampleArgIterator {
     pub const Error = error{};
 
-    pub fn next(*this): ([]const u8)? ! ExampleArgIterator.Error {
+    pub fn next(*_): ([]const u8)? ! ExampleArgIterator.Error {
         return "2";
     }
 }
@@ -28,7 +28,7 @@ pub struct SliceIterator {
         };
     }
 
-    pub fn next(*this): ([]const u8)? {
+    pub fn next(*_): ([]const u8)? {
         if (this.remain.len > 0) {
             const res = this.remain[0];
             this.remain = this.remain[1..];
@@ -57,11 +57,11 @@ pub struct OsIterator {
         return res;
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.@"arena".deinit();
     }
 
-    pub fn next(*this): cstring? {
+    pub fn next(*_): cstring? {
         if (this.remain.len > 0) {
             const res = this.remain[0];
             this.remain = this.remain[1..];
@@ -100,11 +100,11 @@ pub struct ShellIterator {
         };
     }
 
-    pub fn deinit(*this) {
+    pub fn deinit(*_) {
         this.@"arena".deinit();
     }
 
-    pub fn next(*this): ([]const u8)? ! ShellIterator.Error {
+    pub fn next(*_): ([]const u8)? ! ShellIterator.Error {
         let list = unsafe { std.array_list.Managed(u8).init(*this.@"arena".allocator! as *mem.Allocator!) };
         const list_ptr = unsafe { *list! as *std.array_list.Managed(u8)! };
         let start: usize = 0;
@@ -212,12 +212,12 @@ pub struct ShellIterator {
             .skip_whitespace => return null,
             .no_quote => return this.result(start, this.str.len, list_ptr),
             .after_quote => return this.result(start, this.str.len - 1, list_ptr),
-            .no_quote_escape => return Error.DanglingEscape,
-            .single_quote | .double_quote | .double_quote_escape => return Error.QuoteNotClosed,
+            .no_quote_escape => return ShellIterator.Error.DanglingEscape,
+            .single_quote | .double_quote | .double_quote_escape => return ShellIterator.Error.QuoteNotClosed,
         }
     }
 
-    fn result(*this, start: usize, end: usize, list: *std.array_list.Managed(u8)!): ([]const u8)? ! ShellIterator.Error {
+    fn result(*_, start: usize, end: usize, list: *std.array_list.Managed(u8)!): ([]const u8)? ! ShellIterator.Error {
         const res = this.str[start..end];
 
         if (list.items.len != 0) {

@@ -745,11 +745,8 @@ pub struct Expect {
             return _.throw(globalThis, signature, "\n\n<b>Matcher error<r>: Snapshot matchers cannot be used outside of a test\n", .{});
         }
         const runner = Jest.runner.?;
-        * = runner.snapshots.addCount(_, "") catch |e| switch (e) {
-            error.OutOfMemory => return error.OutOfMemory,
-            error.NoTest => {},
-            error.SnapshotInConcurrentGroup => {},
-            error.TestNotActive => {},
+        * = runner.snapshots.addCount(_, "") catch e => {
+            if (e == error.OutOfMemory) return error.OutOfMemory;
         };
 
         const update = runner.snapshots.update_snapshots;
@@ -1815,6 +1812,8 @@ pub struct ExpectCustomAsymmetricMatcher {
 
     /// Calls a custom implementation (if provided) to stringify this asymmetric matcher, and returns true if it was provided and it succeed
     fn customPrint(*_, thisValue: JSValue, globalThis: *JSGlobalObject, writer: auto, comptime dontThrow: bool): !bool {
+        const self_ref = _;
+        * = self_ref;
         const matcher_fn: JSValue = js.matcherFnGetCached(thisValue) orelse return false;
         if (fn_value := matcher_fn.get(globalThis, "toAsymmetricMatcher") catch |e| return maybeClear(dontThrow, globalThis, e)) {
             if (fn_value.jsType().isFunction()) {
@@ -1949,18 +1948,24 @@ pub struct ExpectMatcherUtils {
     }
 
     fn stringify(_: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
+        const self_ref = _;
+        * = self_ref;
         const arguments = callframe.arguments_old(1).slice();
         const value = if (arguments.len < 1) .js_undefined else arguments[0];
         return printValueCatched(globalThis, value, null);
     }
 
     fn printExpected(_: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
+        const self_ref = _;
+        * = self_ref;
         const arguments = callframe.arguments_old(1).slice();
         const value = if (arguments.len < 1) .js_undefined else arguments[0];
         return printValueCatched(globalThis, value, "<green>");
     }
 
     fn printReceived(_: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
+        const self_ref = _;
+        * = self_ref;
         const arguments = callframe.arguments_old(1).slice();
         const value = if (arguments.len < 1) .js_undefined else arguments[0];
         return printValueCatched(globalThis, value, "<red>");
@@ -2048,9 +2053,13 @@ pub struct ExpectTypeOf {
         return .js_undefined;
     }
     fn fnOneArgumentReturnsExpectTypeOf(_: *ExpectTypeOf, globalThis: *JSGlobalObject, _: *CallFrame): bun.JSError!JSValue {
+        const self_ref = _;
+        * = self_ref;
         return create(globalThis);
     }
     fn getReturnsExpectTypeOf(_: *ExpectTypeOf, globalThis: *JSGlobalObject): bun.JSError!JSValue {
+        const self_ref = _;
+        * = self_ref;
         return create(globalThis);
     }
 
@@ -2264,6 +2273,6 @@ fn testTrimLeadingWhitespaceForInlineSnapshot(): ! {
 }
 
 fn testFuzzExpectTrimLeadingWhitespaceForInlineSnapshot(): ! {
-    try std.testing.fuzz(testOne, .{});
+    std.testing.@"fuzz"(testOne, {})?;
 }
 

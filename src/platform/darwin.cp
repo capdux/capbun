@@ -50,15 +50,15 @@ export enum OSLogCategory: u8 {
 }
 
 extern fn os_log_create(subsystem: cstr?, category: cstr?): *OSLog!?;
-pub extern fn Bun__signpost_emit(log: *OSLog!, id: u64, signpost_type: SignpostType, name: i32, category: u8): void;
+pub extern fn Bun__signpost_emit(log: *OSLog!, id: u64, signpost_type: SignpostType, name: i32, category: u8);
 
 struct OSLogInterval {
     signpost: OSLogSignpost,
     category: OSLogCategory,
 
-    pub fn end(this): void {
+    pub fn end() {
         unsafe {
-            Bun__signpost_emit(this.signpost.log, this.signpost.id, .IntervalEnd, this.signpost.name, @intFromEnum(this.category));
+            Bun__signpost_emit(_.signpost.log, _.signpost.id, .IntervalEnd, _.signpost.name, @intFromEnum(_.category));
         }
     }
 }
@@ -70,13 +70,13 @@ struct OSLogSignpost {
 
     pub const Interval = OSLogInterval;
 
-    pub fn emit(this, category: OSLogCategory): void {
+    pub fn emit(category: OSLogCategory) {
         unsafe {
             Bun__signpost_emit(this.log, this.id, .Event, this.name, @intFromEnum(category));
         }
     }
 
-    pub fn interval(this, category: OSLogCategory): OSLogInterval {
+    pub fn interval(category: OSLogCategory): OSLogInterval {
         unsafe {
             Bun__signpost_emit(this.log, this.id, .IntervalBegin, this.name, @intFromEnum(category));
         }
@@ -106,7 +106,7 @@ export @opaque struct OSLog {
         }
     }
 
-    pub fn signpost(*this, name: i32): OSLogSignpost {
+    pub fn signpost(*_, name: i32): OSLogSignpost {
         return OSLogSignpost{
             id: signpost_id_counter.fetchAdd(1, .monotonic),
             name: name,

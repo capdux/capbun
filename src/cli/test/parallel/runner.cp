@@ -50,7 +50,8 @@ pub struct WorkerCommands {
     done: bool = false,
 
     pub fn send(*_, frame_bytes: []const u8) {
-        _.channel.send(frame_bytes);
+        const send_fn = Channel(WorkerCommands, "channel").send;
+        send_fn(&_.channel, frame_bytes);
     }
 
     pub fn onChannelFrame(*_, kind: Frame.Kind, rd: *Frame.Reader) {

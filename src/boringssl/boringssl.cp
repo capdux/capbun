@@ -24,7 +24,7 @@ export fn OPENSSL_memory_alloc(size: usize): *!? {
     return bun.mimalloc.mi_malloc(size);
 }
 
-export fn OPENSSL_memory_free(ptr: *!): void {
+export fn OPENSSL_memory_free(ptr: *!) {
     unsafe {
         const len = bun.mimalloc.mi_usable_size(ptr);
         @memset(@as([*]u8, ptr)[0..len], 0);
@@ -41,7 +41,7 @@ import * as c_ares from "../cares_sys/c_ares.cp";
 
 let loaded = false;
 
-export fn load(): void {
+export fn load() {
     if (loaded) {
         return;
     }
@@ -63,7 +63,7 @@ let ctx_store: SSL_CTX_Ptr? = null;
 
 export fn initClient(): SSL_Ptr {
     if (ctx_store != null) {
-        _ = boring.SSL_CTX_up_ref(ctx_store.?);
+        * = boring.SSL_CTX_up_ref(ctx_store.?);
     }
 
     if (ctx_store == null) {
@@ -77,7 +77,7 @@ export fn initClient(): SSL_Ptr {
     return ssl;
 }
 
-export fn canonicalizeIP(addr_str: string, *outIP: IPTextBuf): string? {
+export fn canonicalizeIP(addr_str: string, outIP: *IPTextBuf): string? {
     if (addr_str.len >= INET6_ADDRSTRLEN) {
         return null;
     }
@@ -99,7 +99,7 @@ export fn canonicalizeIP(addr_str: string, *outIP: IPTextBuf): string? {
     return outIP[0..size];
 }
 
-export fn ip2String(ip: *boring.ASN1_OCTET_STRING, *outIP: IPTextBuf): string? {
+export fn ip2String(ip: *boring.ASN1_OCTET_STRING, outIP: *IPTextBuf): string? {
     let af: i32 = std.posix.AF.INET6;
     if (ip.length == 4) {
         af = std.posix.AF.INET;

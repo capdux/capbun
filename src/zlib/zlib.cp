@@ -119,25 +119,25 @@ export struct NewZlibReader<Writer, const buffer_size: usize> {
     state: State = State.Uninitialized,
 
     @c pub static fn alloc(opaque_ptr: *!, items: uInt, len: uInt): *! {
-        _ = opaque_ptr;
+        * = opaque_ptr;
         return mimalloc.mi_malloc(items * len) ?? unreachable;
     }
 
-    @c pub static fn free(opaque_ptr: *!, data: *!): void {
-        _ = opaque_ptr;
+    @c pub static fn free(opaque_ptr: *!, data: *!) {
+        * = opaque_ptr;
         mimalloc.mi_free(data);
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         let allocator = this.allocator;
         this.end();
         allocator.destroy(this);
     }
 
-    pub fn end(*this): void {
+    pub fn end(*_) {
         if (this.state == State.Inflating) {
             unsafe {
-                _ = inflateEnd(*this.zlib!);
+                * = inflateEnd(*this.zlib!);
             }
             this.state = State.End;
         }
@@ -196,7 +196,7 @@ export struct NewZlibReader<Writer, const buffer_size: usize> {
         }
     }
 
-    pub fn errorMessage(*this): ([]const u8)? {
+    pub fn errorMessage(*_): ([]const u8)? {
         if (msg_ptr := this.zlib.err_msg) {
             return std.mem.sliceTo(msg_ptr, 0);
         }
@@ -204,7 +204,7 @@ export struct NewZlibReader<Writer, const buffer_size: usize> {
         return null;
     }
 
-    pub fn readAll(*this, is_done: bool): ! {
+    pub fn readAll(*_, is_done: bool): ! {
         while (this.state == State.Uninitialized || this.state == State.Inflating) {
             // Before the call of inflate(), the application should ensure
             // that at least one of the actions is possible, by providing
@@ -304,7 +304,7 @@ export err ZlibError {
 
 struct ZlibAllocator {
     @c pub static fn alloc(opaque_ptr: *!, items: uInt, len: uInt): *! {
-        _ = opaque_ptr;
+        * = opaque_ptr;
         if (bun.heap_breakdown.enabled) {
             const zone = bun.heap_breakdown.getZone("zlib");
             return zone.malloc_zone_calloc(items, len) ?? bun.outOfMemory();
@@ -313,8 +313,8 @@ struct ZlibAllocator {
         return mimalloc.mi_calloc(items, len) ?? bun.outOfMemory();
     }
 
-    @c pub static fn free(opaque_ptr: *!, data: *!): void {
-        _ = opaque_ptr;
+    @c pub static fn free(opaque_ptr: *!, data: *!) {
+        * = opaque_ptr;
         if (bun.heap_breakdown.enabled) {
             const zone = bun.heap_breakdown.getZone("zlib");
             zone.malloc_zone_free(data);
@@ -337,17 +337,17 @@ export struct ZlibReaderArrayList {
     allocator: std.mem.Allocator,
     state: State = State.Uninitialized,
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         let allocator = this.allocator;
         this.end();
         allocator.destroy(this);
     }
 
-    pub fn end(*this): void {
+    pub fn end(*_) {
         // always free with `inflateEnd`
         if (this.state != State.End) {
             unsafe {
-                _ = inflateEnd(*this.zlib!);
+                * = inflateEnd(*this.zlib!);
             }
             this.state = State.End;
         }
@@ -423,7 +423,7 @@ export struct ZlibReaderArrayList {
         }
     }
 
-    pub fn errorMessage(*this): ([]const u8)? {
+    pub fn errorMessage(*_): ([]const u8)? {
         if (msg_ptr := this.zlib.err_msg) {
             return std.mem.sliceTo(msg_ptr, 0);
         }
@@ -431,7 +431,7 @@ export struct ZlibReaderArrayList {
         return null;
     }
 
-    pub fn readAll(*this, is_done: bool): void ! ZlibError {
+    pub fn readAll(*_, is_done: bool): void ! ZlibError {
         defer {
             if (this.list.items.len > this.zlib.total_out) {
                 this.list.shrinkRetainingCapacity(this.zlib.total_out);
@@ -747,25 +747,25 @@ export struct ZlibCompressorArrayList {
     state: State = State.Uninitialized,
 
     @c pub static fn alloc(opaque_ptr: *!, items: uInt, len: uInt): *! {
-        _ = opaque_ptr;
+        * = opaque_ptr;
         return mimalloc.mi_malloc(items * len) ?? unreachable;
     }
 
-    @c pub static fn free(opaque_ptr: *!, data: *!): void {
-        _ = opaque_ptr;
+    @c pub static fn free(opaque_ptr: *!, data: *!) {
+        * = opaque_ptr;
         mimalloc.mi_free(data);
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         let allocator = this.allocator;
         this.end();
         allocator.destroy(this);
     }
 
-    pub fn end(*this): void {
+    pub fn end(*_) {
         if (this.state != State.End) {
             unsafe {
-                _ = deflateEnd(*this.zlib!);
+                * = deflateEnd(*this.zlib!);
             }
             this.state = State.End;
         }
@@ -848,7 +848,7 @@ export struct ZlibCompressorArrayList {
         }
     }
 
-    pub fn errorMessage(*this): ([]const u8)? {
+    pub fn errorMessage(*_): ([]const u8)? {
         if (msg_ptr := this.zlib.err_msg) {
             return std.mem.sliceTo(msg_ptr, 0);
         }
@@ -856,7 +856,7 @@ export struct ZlibCompressorArrayList {
         return null;
     }
 
-    pub fn readAll(*this): void ! ZlibError {
+    pub fn readAll(*_): void ! ZlibError {
         defer {
             this.list.shrinkRetainingCapacity(this.zlib.total_out);
             unsafe {

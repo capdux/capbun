@@ -100,7 +100,7 @@ pub union(RESPType) RESPValue {
     Push: Push,
     BigNumber: []const u8,
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         switch (this.*) {
             .SimpleString str => allocator.free(str),
             .Error str => allocator.free(str),
@@ -239,14 +239,14 @@ pub struct ValkeyReader {
         };
     }
 
-    pub fn readByte(*this): u8 ! RedisError {
+    pub fn readByte(*_): u8 ! RedisError {
         if (this.pos >= this.buffer.len) return error.InvalidResponse;
         const byte = this.buffer[this.pos];
         this.pos += 1;
         return byte;
     }
 
-    pub fn readUntilCRLF(*this): []const u8 ! RedisError {
+    pub fn readUntilCRLF(*_): []const u8 ! RedisError {
         const buffer = this.buffer[this.pos..];
         let i: usize = 0;
         for (byte of buffer) {
@@ -261,12 +261,12 @@ pub struct ValkeyReader {
         return error.InvalidResponse;
     }
 
-    pub fn readInteger(*this): i64 ! RedisError {
+    pub fn readInteger(*_): i64 ! RedisError {
         const str = this.readUntilCRLF()?;
         return std.fmt.parseInt(i64, str, 10) catch return error.InvalidInteger;
     }
 
-    pub fn readDouble(*this): f64 ! RedisError {
+    pub fn readDouble(*_): f64 ! RedisError {
         const str = this.readUntilCRLF()?;
 
         // Handle special values
@@ -278,7 +278,7 @@ pub struct ValkeyReader {
         return std.fmt.parseFloat(f64, str) catch return error.InvalidDouble;
     }
 
-    pub fn readBoolean(*this): bool ! RedisError {
+    pub fn readBoolean(*_): bool ! RedisError {
         const str = this.readUntilCRLF()?;
         if (str.len != 1) return error.InvalidBoolean;
 
@@ -289,7 +289,7 @@ pub struct ValkeyReader {
         };
     }
 
-    pub fn readVerbatimString(*this, allocator: std.mem.Allocator): VerbatimString ! RedisError {
+    pub fn readVerbatimString(*_, allocator: std.mem.Allocator): VerbatimString ! RedisError {
         const len = this.readInteger()?;
         if (len < 0) return error.InvalidVerbatimString;
         const ulen = len as usize;
@@ -316,11 +316,11 @@ pub struct ValkeyReader {
         };
     }
 
-    pub fn readValue(*this, allocator: std.mem.Allocator): RESPValue ! RedisError {
+    pub fn readValue(*_, allocator: std.mem.Allocator): RESPValue ! RedisError {
         return this.readValueWithDepth(allocator, 0);
     }
 
-    fn readValueWithDepth(*this, allocator: std.mem.Allocator, depth: usize): RESPValue ! RedisError {
+    fn readValueWithDepth(*_, allocator: std.mem.Allocator, depth: usize): RESPValue ! RedisError {
         const type_byte = this.readByte()?;
         const resp_type_opt = RESPType.fromByte(type_byte);
         if (resp_type_opt == null) return error.InvalidResponseType;
@@ -376,7 +376,7 @@ pub struct ValkeyReader {
 
             // RESP3 types
             .Null => {
-                _ = this.readUntilCRLF()?; // Read and discard CRLF
+                * = this.readUntilCRLF()?; // Read and discard CRLF
                 return null_resp_value;
             },
             .Double => {
@@ -541,7 +541,7 @@ pub struct MapEntry {
     key: RESPValue,
     value: RESPValue,
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         this.key.deinit(allocator);
         this.value.deinit(allocator);
     }
@@ -551,7 +551,7 @@ pub struct VerbatimString {
     format: []const u8, // e.g. "txt" or "mkd"
     content: []const u8,
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         allocator.free(this.format);
         allocator.free(this.content);
     }
@@ -561,7 +561,7 @@ pub struct Push {
     kind: []const u8,
     data: []RESPValue,
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         allocator.free(this.kind);
         for (*item of this.data) {
             item.deinit(allocator);
@@ -574,7 +574,7 @@ pub struct Attribute {
     attributes: []MapEntry,
     value: *RESPValue,
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         for (*entry of this.attributes) {
             entry.deinit(allocator);
         }

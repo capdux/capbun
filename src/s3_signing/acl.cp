@@ -10,7 +10,7 @@ export enum ACL {
     bucket_owner_full_control,
     log_delivery_write,
 
-    pub fn toString(this): string {
+    pub fn toString(): string {
         return switch (this) {
             .@"private" => "private",
             .public_read => "public-read",

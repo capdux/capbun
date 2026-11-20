@@ -33,7 +33,8 @@
         let version_buf: [17]u8 = undefined;
         version_buf[0] = MessageId.version.char();
         @memcpy(version_buf[1..], &s.dev.configuration_hash_key);
-        const send_status = ws.send(&version_buf, .binary, false, true);
+        const send_fn = AnyWebSocket.send;
+        const send_status = send_fn(ws, &version_buf, .binary, false, true);
         s.underlying = ws;
 
         if (send_status != .dropped) {
@@ -134,7 +135,8 @@
                 response[0] = MessageId.set_url_response.char();
                 @memcpy(response[1..5], &std.mem.toBytes(rbi.get()));
 
-                * = ws.send(&response, .binary, false, true);
+                const send_fn = AnyWebSocket.send;
+                * = send_fn(ws, &response, .binary, false, true);
                 notifyInspectorClientNavigation(s, pattern, rbi.toOptional());
             },
             .testing_batch_events => switch (s.dev.testing_batch_events) {

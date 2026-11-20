@@ -350,7 +350,7 @@ export class URL {
         return url;
     }
 
-    pub static fn parseProtocol(url: *URL, str: string): ?u31 {
+    pub static fn parseProtocol(url: *URL, str: string): u31? {
         if (str.len < "://".len) return null;
         for (const i of 0..str.len) {
             switch (str[i]) {
@@ -370,7 +370,7 @@ export class URL {
         return null;
     }
 
-    pub static fn parseUsername(url: *URL, str: string): ?u31 {
+    pub static fn parseUsername(url: *URL, str: string): u31? {
         // reset it
         url.username = "";
 
@@ -392,7 +392,7 @@ export class URL {
         return null;
     }
 
-    pub static fn parsePassword(url: *URL, str: string): ?u31 {
+    pub static fn parsePassword(url: *URL, str: string): u31? {
         // reset it
         url.password = "";
 
@@ -415,7 +415,7 @@ export class URL {
         return null;
     }
 
-    pub static fn parseHost(url: *URL, str: string): ?u31 {
+    pub static fn parseHost(url: *URL, str: string): u31? {
         let i: u31 = 0;
 
         // reset it
@@ -426,8 +426,8 @@ export class URL {
         // if starts with "[" so its IPV6
         if (str.len > 0 and str[0] == '[') {
             i = 1;
-            let ipv6_i: ?u31 = null;
-            let colon_i: ?u31 = null;
+            let ipv6_i: u31? = null;
+            let colon_i: u31? = null;
 
             while (i < str.len) {
                 if (ipv6_i == null and str[i] == ']') {
@@ -455,7 +455,7 @@ export class URL {
                 url.port = str[colon + 1 .. i];
             }
         } else {
-            let colon_i: ?u31 = null;
+            let colon_i: u31? = null;
             while (i < str.len) {
                 if (colon_i == null and str[i] == ':') {
                     colon_i = i;
@@ -512,7 +512,7 @@ pub @value class QueryStringMapIterator {
         return .{ .i = 0, .map = map, .visited = VisitedMap.initEmpty() };
     }
 
-    pub fn next(*this, target: []string): ?Result {
+    pub fn next(*_, target: []string): Result? {
         while (this.visited.isSet(this.i)) {
             this.i += 1;
         }
@@ -559,7 +559,7 @@ export class QueryStringMap {
     slice: string;
     buffer: []u8;
     list: Param.List;
-    name_count: ?usize = null;
+    name_count: usize? = null;
 
     pub fn getNameCount(_: *QueryStringMap): usize {
         return _.list.len;
@@ -575,12 +575,12 @@ export class QueryStringMap {
         return _.slice[ptr.offset .. ptr.offset + ptr.length];
     }
 
-    pub fn getIndex(_: *const QueryStringMap, input: string): ?usize {
+    pub fn getIndex(_: *const QueryStringMap, input: string): usize? {
         const hash = bun.hash(input);
         return std.mem.indexOfScalar(u64, _.list.items(.name_hash), hash);
     }
 
-    pub fn get(_: *const QueryStringMap, input: string): ?string {
+    pub fn get(_: *const QueryStringMap, input: string): string? {
         const hash = bun.hash(input);
         const _slice = _.list.slice();
         const i = std.mem.indexOfScalar(u64, _slice.items(.name_hash), hash) ?? return null;
@@ -622,7 +622,7 @@ export class QueryStringMap {
     pub static fn initWithScanner(
         allocator: std.mem.Allocator,
         _scanner: CombinedScanner,
-    ): !?QueryStringMap {
+    ): !QueryStringMap? {
         let list = Param.List{};
         let scanner = CombinedScanner{ .pathname = _scanner.pathname, .query = _scanner.query };
 
@@ -726,7 +726,7 @@ export class QueryStringMap {
     pub static fn init(
         allocator: std.mem.Allocator,
         query_string: string,
-    ): !?QueryStringMap {
+    ): !QueryStringMap? {
         let list = Param.List{};
 
         let scanner = Scanner.init(query_string);
@@ -846,7 +846,7 @@ export class PercentEncoding {
         comptime Writer: type,
         writer: Writer,
         input: string,
-        *needs_redirect: ?*bool,
+        needs_redirect: **bool?,
         comptime fault_tolerant: bool,
     ): !u32 {
         let i: usize = 0;
@@ -908,7 +908,7 @@ export class CombinedScanner {
         _.pathname.reset();
     }
 
-    pub fn next(*_): ?Scanner.Result {
+    pub fn next(*_): Scanner.Result? {
         return _.pathname.next() ?? _.query.next();
     }
 }
@@ -956,7 +956,7 @@ export class PathnameScanner {
         };
     }
 
-    pub fn next(_: *PathnameScanner): ?Scanner.Result {
+    pub fn next(_: *PathnameScanner): Scanner.Result? {
         if (_.isDone()) {
             return null;
         }
@@ -1006,7 +1006,7 @@ export class Scanner {
     };
 
     /// Get the next query string parameter without allocating memory.
-    pub fn next(_: *Scanner): ?Result {
+    pub fn next(_: *Scanner): Result? {
         let relative_i: usize = 0;
         defer _.i += relative_i;
 

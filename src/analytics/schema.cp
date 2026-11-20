@@ -20,7 +20,7 @@ pub struct Reader {
         };
     }
 
-    pub fn read(*this, count: usize): []u8! {
+    pub fn read(*_, count: usize): []u8! {
         const read_count = @min(count, this.remain.len);
         if (read_count < count) {
             return err.EOF;
@@ -31,7 +31,7 @@ pub struct Reader {
         return slice;
     }
 
-    @inline pub fn readAs(*this, comptime T: type): T! {
+    @inline pub fn readAs(*_, comptime T: type): T! {
         if (!std.meta.hasUniqueRepresentation(T)) {
             @compileError(std.fmt.comptimePrint("{s} must have unique representation.", [@typeName(T)]));
         }
@@ -39,12 +39,12 @@ pub struct Reader {
         return std.mem.bytesAsValue(T, this.read(@sizeOf(T))?);
     }
 
-    @inline pub fn readByte(*this): u8! {
+    @inline pub fn readByte(*_): u8! {
         const s = this.read(1)?;
         return s[0];
     }
 
-    pub fn readEnum(*this, comptime Enum: type): Enum! {
+    pub fn readEnum(*_, comptime Enum: type): Enum! {
         const type_info = @typeInfo(Enum).Enum;
         const tag = this.readInt(type_info.tag_type)?;
 
@@ -57,7 +57,7 @@ pub struct Reader {
         return err.InvalidValue;
     }
 
-    pub fn readArray(*this, comptime T: type): ([]const T)! {
+    pub fn readArray(*_, comptime T: type): ([]const T)! {
         const length = this.readInt(u32)?;
         if (length == 0) {
             return &[];
@@ -107,7 +107,7 @@ pub struct Reader {
         }
     }
 
-    @inline pub fn readByteArray(*this): []u8! {
+    @inline pub fn readByteArray(*_): []u8! {
         const length = this.readInt(u32)?;
         if (length == 0) {
             return this.read(0)?;
@@ -116,17 +116,17 @@ pub struct Reader {
         return this.read(usize(length))?;
     }
 
-    @inline pub fn readInt(*this, comptime T: type): T! {
+    @inline pub fn readInt(*_, comptime T: type): T! {
         const slice = this.read(@sizeOf(T))?;
         return std.mem.readIntSliceNative(T, slice);
     }
 
-    @inline pub fn readBool(*this): bool! {
+    @inline pub fn readBool(*_): bool! {
         const b = this.readByte()?;
         return b > 0;
     }
 
-    @inline pub fn readValue(*this, comptime T: type): T! {
+    @inline pub fn readValue(*_, comptime T: type): T! {
         switch (comptime T) {
             bool => {
                 return this.readBool()?;
@@ -335,7 +335,7 @@ enum AnalyticsOperatingSystem: u8 {
     freebsd,
     _,
 
-    pub fn jsonStringify(this, writer: auto): void! {
+    pub fn jsonStringify(writer: auto): void! {
         return writer.write(this.name)?;
     }
 }
@@ -346,7 +346,7 @@ enum AnalyticsArchitecture: u8 {
     arm,
     _,
 
-    pub fn jsonStringify(this, writer: auto): void! {
+    pub fn jsonStringify(writer: auto): void! {
         return writer.write(this.name)?;
     }
 }
@@ -360,7 +360,7 @@ enum AnalyticsEventKind: u32 {
     bundle_start,
     _,
 
-    pub fn jsonStringify(this, writer: auto): void! {
+    pub fn jsonStringify(writer: auto): void! {
         return writer.write(this.name)?;
     }
 }
@@ -379,7 +379,7 @@ pub struct AnalyticsPlatform {
         return res;
     }
 
-    pub fn encode(this, writer: auto): void! {
+    pub fn encode(writer: auto): void! {
         writer.writeEnum(this.os)?;
         writer.writeEnum(this.arch)?;
         writer.writeArray(u8, this.version)?;
@@ -398,7 +398,7 @@ pub struct AnalyticsPlatform {
         return res;
     }
 
-    pub fn encode(this, writer: auto): void! {
+    pub fn encode(writer: auto): void! {
         writer.writeInt(this.first)?;
         writer.writeInt(this.second)?;
     }
@@ -426,7 +426,7 @@ pub struct AnalyticsEventListHeader {
         return res;
     }
 
-    pub fn encode(this, writer: auto): void! {
+    pub fn encode(writer: auto): void! {
         writer.writeValue(@TypeOf(this.machine_id), this.machine_id)?;
         writer.writeInt(this.session_id)?;
         writer.writeValue(@TypeOf(this.platform), this.platform)?;
@@ -449,7 +449,7 @@ pub struct AnalyticsEventHeader {
         return res;
     }
 
-    pub fn encode(this, writer: auto): void! {
+    pub fn encode(writer: auto): void! {
         writer.writeValue(@TypeOf(this.timestamp), this.timestamp)?;
         writer.writeEnum(this.kind)?;
     }
@@ -467,7 +467,7 @@ pub struct AnalyticsEventList {
         return res;
     }
 
-    pub fn encode(this, writer: auto): void! {
+    pub fn encode(writer: auto): void! {
         writer.writeValue(@TypeOf(this.header), this.header)?;
         writer.writeInt(this.event_count)?;
     }

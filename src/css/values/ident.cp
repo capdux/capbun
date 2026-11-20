@@ -188,7 +188,7 @@ pub struct Ident {
         };
     }
 
-    pub fn fromRef(ref_val: bun.bundle_v2.Ref, debug_ident: DebugIdent): @This() {
+    pub fn fromRef(*_, ref_val: bun.bundle_v2.Ref, debug_ident: DebugIdent): @This() {
         let this = IdentOrRef{
             __len: @bitCast(ref_val),
             __ref_bit: true,

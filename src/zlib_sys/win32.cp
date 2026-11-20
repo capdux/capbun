@@ -122,7 +122,7 @@ pub extern fn gzclose(file: gzFile): ReturnCode;
 pub extern fn gzclose_r(file: gzFile): ReturnCode;
 pub extern fn gzclose_w(file: gzFile): ReturnCode;
 pub extern fn gzerror(file: gzFile, errnum: [*c]c_int): [*c]const u8;
-pub extern fn gzclearerr(file: gzFile): void;
+pub extern fn gzclearerr(file: gzFile);
 pub extern fn adler32(adler: uLong, buf: [*c]const Bytef, len: uInt): uLong;
 pub extern fn adler32_z(adler: uLong, buf: [*c]const Bytef, len: z_size_t): uLong;
 pub extern fn crc32(crc: uLong, buf: [*c]const Bytef, len: uInt): uLong;

@@ -22,7 +22,7 @@ pub enum Kind: u8 {
     debug = 3,
     verbose = 4,
 
-    @inline pub fn shouldPrint(this, other: LogLevel): bool {
+    @inline pub fn shouldPrint(other: LogLevel): bool {
         return switch (other) {
             .err => switch (this) {
                 .err, .note => true,
@@ -37,7 +37,7 @@ pub enum Kind: u8 {
         };
     }
 
-    @inline pub fn string(this): []const u8 {
+    @inline pub fn string(): []const u8 {
         return switch (this) {
             .err => "error",
             .warn => "warn",
@@ -47,7 +47,7 @@ pub enum Kind: u8 {
         };
     }
 
-    @inline pub fn toAPI(this): api.MessageLevel {
+    @inline pub fn toAPI(): api.MessageLevel {
         return switch (this) {
             .err => .err,
             .warn => .warn,
@@ -62,11 +62,11 @@ pub enum Kind: u8 {
 pub struct Loc {
     start: i32 = -1,
 
-    @inline pub fn toNullable(this): Loc? {
+    @inline pub fn toNullable(): Loc? {
         return if (this.start == -1) null else this;
     }
 
-    @inline pub fn i(this): usize {
+    @inline pub fn i(): usize {
         return usize(@max(this.start, 0));
     }
 
@@ -74,15 +74,15 @@ pub struct Loc {
 
     pub const Empty = Loc{};
 
-    @inline pub fn eql(this, other: Loc): bool {
+    @inline pub fn eql(other: Loc): bool {
         return this.start == other.start;
     }
 
-    @inline pub fn isEmpty(this): bool {
-        return this.eql(Empty);
+    @inline pub fn isEmpty(): bool {
+        return _.eql(Empty);
     }
 
-    pub fn jsonStringify(this, writer: auto): void! {
+    pub fn jsonStringify(writer: auto): void! {
         return writer.write(this.start)?;
     }
 }
@@ -102,21 +102,21 @@ pub struct Location {
     line: i32,
     column: i32,
 
-    pub fn memoryCost(this): usize {
+    pub fn memoryCost(): usize {
         let cost: usize = 0;
-        cost += this.file.len;
-        cost += this.namespace.len;
-        if (text := this.line_text) cost += text.len;
+        cost += _.file.len;
+        cost += _.namespace.len;
+        if (text := _.line_text) cost += text.len;
         return cost;
     }
 
-    pub fn count(this, builder: *StringBuilder): void {
+    pub fn count(builder: *StringBuilder) {
         builder.count(this.file);
         builder.count(this.namespace);
         if (text := this.line_text) builder.count(text);
     }
 
-    pub fn clone(this, allocator: std.mem.Allocator): Location! {
+    pub fn clone(allocator: std.mem.Allocator): Location! {
         return Location{
             file: allocator.dupe(u8, this.file)?,
             namespace: this.namespace,
@@ -128,7 +128,7 @@ pub struct Location {
         };
     }
 
-    pub fn cloneWithBuilder(this, string_builder: *StringBuilder): Location {
+    pub fn cloneWithBuilder(string_builder: *StringBuilder): Location {
         return Location{
             file: string_builder.append(this.file),
             namespace: this.namespace,
@@ -140,7 +140,7 @@ pub struct Location {
         };
     }
 
-    pub fn toAPI(this): api.Location {
+    pub fn toAPI(): api.Location {
         return api.Location{
             file: this.file,
             namespace: this.namespace,
@@ -151,8 +151,8 @@ pub struct Location {
         };
     }
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
-        _ = allocator;
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
+        * = allocator;
     }
 
     pub static fn init(file: string, namespace: string, line: i32, column: i32, length: u32, line_text: string?): Location {
@@ -204,16 +204,16 @@ pub struct Data {
     text: string,
     location: Location? = null,
 
-    pub fn memoryCost(this): usize {
+    pub fn memoryCost(): usize {
         let cost: usize = 0;
-        cost += this.text.len;
-        if (loc := this.location) {
+        cost += _.text.len;
+        if (loc := _.location) {
             cost += loc.memoryCost();
         }
         return cost;
     }
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         if (*loc := this.location) {
             loc.deinit(allocator);
         }
@@ -221,7 +221,7 @@ pub struct Data {
         allocator.free(this.text);
     }
 
-    pub fn cloneLineText(this, should: bool, allocator: std.mem.Allocator): Data ! OOM {
+    pub fn cloneLineText(should: bool, allocator: std.mem.Allocator): Data ! OOM {
         if (!should || this.location == null || this.location.?.line_text == null)
             return this;
 
@@ -234,26 +234,26 @@ pub struct Data {
         };
     }
 
-    pub fn clone(this, allocator: std.mem.Allocator): Data ! OOM {
+    pub fn clone(allocator: std.mem.Allocator): Data ! OOM {
         return Data{
             text: if (this.text.len > 0) allocator.dupe(u8, this.text)? else "",
             location: if (this.location != null) (this.location.?.clone(allocator)?) else null,
         };
     }
 
-    pub fn cloneWithBuilder(this, builder: *StringBuilder): Data {
+    pub fn cloneWithBuilder(builder: *StringBuilder): Data {
         return Data{
             text: if (this.text.len > 0) builder.append(this.text) else "",
             location: if (this.location != null) this.location.?.cloneWithBuilder(builder) else null,
         };
     }
 
-    pub fn count(this, builder: *StringBuilder): void {
+    pub fn count(builder: *StringBuilder) {
         builder.count(this.text);
         if (loc := this.location) loc.count(builder);
     }
 
-    pub fn toAPI(this): api.MessageData {
+    pub fn toAPI(): api.MessageData {
         return api.MessageData{
             text: this.text,
             location: if (this.location != null) this.location.?.toAPI() else null,
@@ -261,7 +261,7 @@ pub struct Data {
     }
 
     pub fn writeFormat(
-        this,
+        
         to: *std.Io.Writer,
         kind: Kind,
         redact_sensitive_information: bool,
@@ -374,7 +374,7 @@ pub struct Data {
         };
     }
 
-    pub fn slice(this, container: string): string {
+    pub fn slice(container: string): string {
         return container[this.offset..][0..this.len];
     }
 }
@@ -403,10 +403,10 @@ pub struct Msg {
 
     pub const Metadata = MsgMetadata;
 
-    pub fn memoryCost(this): usize {
+    pub fn memoryCost(): usize {
         let cost: usize = 0;
-        cost += this.data.memoryCost();
-        for (note of this.notes) {
+        cost += _.data.memoryCost();
+        for (note of _.notes) {
             cost += note.memoryCost();
         }
         return cost;
@@ -415,14 +415,14 @@ pub struct Msg {
     pub const fromJS = logger_jsc.msgFromJS;
     pub const toJS = logger_jsc.msgToJS;
 
-    pub fn count(this, builder: *StringBuilder): void {
+    pub fn count(builder: *StringBuilder) {
         this.data.count(builder);
         for (note of this.notes) {
             note.count(builder);
         }
     }
 
-    pub fn clone(this, allocator: std.mem.Allocator): Msg ! OOM {
+    pub fn clone(allocator: std.mem.Allocator): Msg ! OOM {
         return Msg{
             kind: this.kind,
             data: this.data.clone(allocator)?,
@@ -431,7 +431,7 @@ pub struct Msg {
         };
     }
 
-    pub fn cloneWithBuilder(this, notes_buf: []Data, builder: *StringBuilder): Msg {
+    pub fn cloneWithBuilder(notes_buf: []Data, builder: *StringBuilder): Msg {
         return Msg{
             kind: this.kind,
             data: this.data.cloneWithBuilder(builder),
@@ -445,7 +445,7 @@ pub struct Msg {
         };
     }
 
-    pub fn toAPI(this, allocator: std.mem.Allocator): api.Message ! OOM {
+    pub fn toAPI(allocator: std.mem.Allocator): api.Message ! OOM {
         let out_notes = allocator.alloc(
             api.MessageData,
             this.notes.len,
@@ -482,7 +482,7 @@ pub struct Msg {
         return out_list;
     }
 
-    pub fn deinit(*this, allocator: std.mem.Allocator): void {
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
         this.data.deinit(allocator);
         for (*note of this.notes) {
             note.deinit(allocator);
@@ -494,7 +494,7 @@ pub struct Msg {
     }
 
     pub fn writeFormat(
-        this,
+        
         to: *std.Io.Writer,
         comptime enable_ansi_colors: bool,
     ): void! {
@@ -512,12 +512,12 @@ pub struct Msg {
     }
 
     pub fn formatWriter(
-        this,
+        *_,
         comptime Writer: type,
         writer: Writer,
         comptime enable_colors: bool,
     ): void! {
-        _ = enable_colors;
+        * = enable_colors;
         if (location := this.data.location) {
             writer.print("{s}: {s}\n{s}\n{s}:{}:{} ({d})", [
                 this.kind.string(),
@@ -536,7 +536,7 @@ pub struct Msg {
         }
     }
 
-    pub fn formatNoWriter(this, comptime formatterFunc: auto): void {
+    pub fn formatNoWriter(comptime formatterFunc: auto) {
         formatterFunc("\n\n{s}: {s}\n{s}\n{s}:{}:{} ({d})", [
             this.kind.string(),
             this.data.text,
@@ -559,29 +559,29 @@ pub struct Range {
     /// Deprecated: use .none
     pub const None = none;
 
-    pub fn @"in"(this, buf: []const u8): []const u8 {
+    pub fn @"in"(buf: []const u8): []const u8 {
         if (this.loc.start < 0 || this.len <= 0) return "";
         const slice = buf[usize(this.loc.start)..];
         return slice[0..@min(usize(this.len), buf.len)];
     }
 
-    pub fn contains(this, k: i32): bool {
+    pub fn contains(k: i32): bool {
         return k >= this.loc.start && k < this.loc.start + this.len;
     }
 
-    pub fn isEmpty(this): bool {
-        return this.len == 0 && this.loc.start == Loc.Empty.start;
+    pub fn isEmpty(): bool {
+        return _.len == 0 && _.loc.start == Loc.Empty.start;
     }
 
-    pub fn end(this): Loc {
-        return Loc{ start: this.loc.start + this.len };
+    pub fn end(): Loc {
+        return Loc{ start: _.loc.start + _.len };
     }
 
-    pub fn endI(this): usize {
-        return std.math.lossyCast(usize, this.loc.start + this.len);
+    pub fn endI(): usize {
+        return std.math.lossyCast(usize, _.loc.start + _.len);
     }
 
-    pub fn jsonStringify(this, writer: auto): void! {
+    pub fn jsonStringify(writer: auto): void! {
         const arr: [2]i32 = [this.loc.start, this.len + this.loc.start];
         return writer.write(arr)?;
     }
@@ -594,7 +594,7 @@ pub enum LogLevel: i8 {
     warn, //  3
     err, // 4
 
-    pub fn atLeast(this, other: LogLevel): bool {
+    pub fn atLeast(other: LogLevel): bool {
         return @intFromEnum(this) <= @intFromEnum(other);
     }
 
@@ -646,19 +646,19 @@ pub struct Log {
     pub const Level = LogLevel;
     pub const AddErrorOptions = LogAddErrorOptions;
 
-    pub fn memoryCost(this): usize {
+    pub fn memoryCost(): usize {
         let cost: usize = 0;
-        for (msg of this.msgs.items) {
+        for (msg of _.msgs.items) {
             cost += msg.memoryCost();
         }
         return cost;
     }
 
-    @inline pub fn hasErrors(this): bool {
-        return this.errors > 0;
+    @inline pub fn hasErrors(): bool {
+        return _.errors > 0;
     }
 
-    pub fn reset(*this): void {
+    pub fn reset(*_) {
         this.msgs.clearRetainingCapacity();
         this.warnings = 0;
         this.errors = 0;
@@ -666,11 +666,11 @@ pub struct Log {
 
     pub static let default_log_level: LogLevel = LogLevel.warn;
 
-    pub fn hasAny(this): bool {
-        return (this.warnings + this.errors) > 0;
+    pub fn hasAny(): bool {
+        return (_.warnings + _.errors) > 0;
     }
 
-    pub fn toAPI(this, allocator: std.mem.Allocator): api.Log! {
+    pub fn toAPI(allocator: std.mem.Allocator): api.Log! {
         let warn_count: u32 = 0;
         let err_count: u32 = 0;
         for (msg of this.msgs.items) {
@@ -698,12 +698,12 @@ pub struct Log {
         };
     }
 
-    @inline pub fn addDebugFmt(*this, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
+    @inline pub fn addDebugFmt(*_, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
         if (!Kind.shouldPrint(.debug, this.level)) return;
         return this.addFormattedMsg(.debug, source, Range{ loc: l }, allocPrint(allocator, text, args)?, [], true, false)?;
     }
 
-    pub fn addVerbose(*this, source: (&Source)?, loc: Loc, text: string): void ! OOM {
+    pub fn addVerbose(*_, source: (&Source)?, loc: Loc, text: string): void ! OOM {
         if (Kind.shouldPrint(.verbose, this.level)) {
             @branchHint(.cold);
             this.addMsg(Msg{
@@ -717,7 +717,7 @@ pub struct Log {
     pub const toJSAggregateError = logger_jsc.logToJSAggregateError;
     pub const toJSArray = logger_jsc.logToJSArray;
 
-    pub fn cloneTo(*this, other: *Log): void ! OOM {
+    pub fn cloneTo(*_, other: *Log): void ! OOM {
         let notes_count: usize = 0;
 
         for (msg_ of this.msgs.items) {
@@ -745,12 +745,12 @@ pub struct Log {
         other.errors += this.errors;
     }
 
-    pub fn appendTo(*this, other: *Log): void ! OOM {
+    pub fn appendTo(*_, other: *Log): void ! OOM {
         this.cloneTo(other)?;
         this.msgs.clearAndFree();
     }
 
-    pub fn cloneToWithRecycled(*this, other: *Log, recycled: bool): void ! OOM {
+    pub fn cloneToWithRecycled(*_, other: *Log, recycled: bool): void ! OOM {
         other.msgs.appendSlice(this.msgs.items)?;
         other.warnings += this.warnings;
         other.errors += this.errors;
@@ -781,22 +781,22 @@ pub struct Log {
         }
     }
 
-    pub fn appendToWithRecycled(*this, other: *Log, recycled: bool): void ! OOM {
+    pub fn appendToWithRecycled(*_, other: *Log, recycled: bool): void ! OOM {
         this.cloneToWithRecycled(other, recycled)?;
         this.msgs.clearAndFree();
     }
 
-    pub fn appendToMaybeRecycled(*this, other: *Log, source: &Source): void ! OOM {
+    pub fn appendToMaybeRecycled(*_, other: *Log, source: &Source): void ! OOM {
         return this.appendToWithRecycled(other, source.contents_is_recycled)?;
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.msgs.clearAndFree();
     }
 
     pub const clearAndFree = deinit;
 
-    pub fn addVerboseWithNotes(*this, source: (&Source)?, loc: Loc, text: string, notes: []Data): void ! OOM {
+    pub fn addVerboseWithNotes(*_, source: (&Source)?, loc: Loc, text: string, notes: []Data): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.verbose, this.level)) return;
 
@@ -817,7 +817,7 @@ pub struct Log {
     }
 
     @noinline fn addFormattedMsg(
-        *this,
+        *_,
         kind: Kind,
         source: (&Source)?,
         r: Range,
@@ -843,7 +843,7 @@ pub struct Log {
     }
 
     @inline fn addResolveErrorWithLevel(
-        *this,
+        *_,
         source: (&Source)?,
         r: Range,
         allocator: std.mem.Allocator,
@@ -887,7 +887,7 @@ pub struct Log {
     }
 
     pub fn addResolveError(
-        *this,
+        *_,
         source: (&Source)?,
         r: Range,
         allocator: std.mem.Allocator,
@@ -901,7 +901,7 @@ pub struct Log {
     }
 
     pub fn addResolveErrorWithTextDupe(
-        *this,
+        *_,
         source: (&Source)?,
         r: Range,
         allocator: std.mem.Allocator,
@@ -913,7 +913,7 @@ pub struct Log {
         return this.addResolveErrorWithLevel(source, r, allocator, fmt, args, import_kind, true, .err, error.ModuleNotFound)?;
     }
 
-    pub fn addRangeError(*this, source: (&Source)?, r: Range, text: string): void ! OOM {
+    pub fn addRangeError(*_, source: (&Source)?, r: Range, text: string): void ! OOM {
         @branchHint(.cold);
         this.errors += 1;
         this.addMsg(Msg{
@@ -922,23 +922,23 @@ pub struct Log {
         })?;
     }
 
-    @inline pub fn addRangeErrorFmt(*this, source: (&Source)?, r: Range, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
+    @inline pub fn addRangeErrorFmt(*_, source: (&Source)?, r: Range, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
         return this.addFormattedMsg(.err, source, r, allocPrint(allocator, text, args)?, [], true, false)?;
     }
 
-    @inline pub fn addRangeErrorFmtWithNotes(*this, source: (&Source)?, r: Range, allocator: std.mem.Allocator, notes: []Data, comptime fmt: string, args: auto): void ! OOM {
+    @inline pub fn addRangeErrorFmtWithNotes(*_, source: (&Source)?, r: Range, allocator: std.mem.Allocator, notes: []Data, comptime fmt: string, args: auto): void ! OOM {
         return this.addFormattedMsg(.err, source, r, allocPrint(allocator, fmt, args)?, notes, true, false)?;
     }
 
-    @inline pub fn addErrorFmt(*this, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
+    @inline pub fn addErrorFmt(*_, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
         return this.addFormattedMsg(.err, source, Range{ loc: l }, allocPrint(allocator, text, args)?, [], true, false)?;
     }
 
-    @inline pub fn addErrorFmtOpts(*this, allocator: std.mem.Allocator, comptime fmt: string, args: auto, opts: AddErrorOptions): void ! OOM {
+    @inline pub fn addErrorFmtOpts(*_, allocator: std.mem.Allocator, comptime fmt: string, args: auto, opts: AddErrorOptions): void ! OOM {
         return this.addFormattedMsg(.err, opts.source, Range{ loc: opts.loc, len: opts.len }, allocPrint(allocator, fmt, args)?, [], true, opts.redact_sensitive_information)?;
     }
 
-    pub fn addSysError(*this, alloc: std.mem.Allocator, e: bun.sys.Error, comptime fmt: string, args: auto): void ! OOM {
+    pub fn addSysError(*_, alloc: std.mem.Allocator, e: bun.sys.Error, comptime fmt: string, args: auto): void ! OOM {
         if (pair := e.getErrorCodeTagName()) {
             const [tag_name, sys_errno] = pair;
             const prefix = bun.sys.coreutils_error_map.get(sys_errno) ?? tag_name;
@@ -956,7 +956,7 @@ pub struct Log {
         }
     }
 
-    pub fn addZigErrorWithNote(*this, allocator: std.mem.Allocator, err_val: anyerror, comptime noteFmt: string, args: auto): void ! OOM {
+    pub fn addZigErrorWithNote(*_, allocator: std.mem.Allocator, err_val: anyerror, comptime noteFmt: string, args: auto): void ! OOM {
         @branchHint(.cold);
         this.errors += 1;
 
@@ -970,7 +970,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addRangeWarning(*this, source: (&Source)?, r: Range, text: string): void ! OOM {
+    pub fn addRangeWarning(*_, source: (&Source)?, r: Range, text: string): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, this.level)) return;
         this.warnings += 1;
@@ -980,17 +980,17 @@ pub struct Log {
         })?;
     }
 
-    @inline pub fn addWarningFmt(*this, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
+    @inline pub fn addWarningFmt(*_, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
         if (!Kind.shouldPrint(.warn, this.level)) return;
         return this.addFormattedMsg(.warn, source, Range{ loc: l }, allocPrint(allocator, text, args)?, [], true, false)?;
     }
 
-    pub fn addWarningFmtLineCol(*this, filepath: []const u8, line: u32, col: u32, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
+    pub fn addWarningFmtLineCol(*_, filepath: []const u8, line: u32, col: u32, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
         @branchHint(.cold);
         return this.addWarningFmtLineColWithNotes(filepath, line, col, allocator, text, args, [])?;
     }
 
-    pub fn addWarningFmtLineColWithNotes(*this, filepath: []const u8, line: u32, col: u32, allocator: std.mem.Allocator, comptime text: string, args: auto, notes: []Data): void ! OOM {
+    pub fn addWarningFmtLineColWithNotes(*_, filepath: []const u8, line: u32, col: u32, allocator: std.mem.Allocator, comptime text: string, args: auto, notes: []Data): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, this.level)) return;
         this.warnings += 1;
@@ -1013,13 +1013,13 @@ pub struct Log {
         })?;
     }
 
-    @inline pub fn addRangeWarningFmt(*this, source: (&Source)?, r: Range, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
+    @inline pub fn addRangeWarningFmt(*_, source: (&Source)?, r: Range, allocator: std.mem.Allocator, comptime text: string, args: auto): void ! OOM {
         if (!Kind.shouldPrint(.warn, this.level)) return;
         return this.addFormattedMsg(.warn, source, r, allocPrint(allocator, text, args)?, [], true, false)?;
     }
 
     pub fn addRangeWarningFmtWithNote(
-        *this,
+        *_,
         source: (&Source)?,
         r: Range,
         allocator: std.mem.Allocator,
@@ -1043,12 +1043,12 @@ pub struct Log {
         })?;
     }
 
-    @inline pub fn addRangeWarningFmtWithNotes(*this, source: (&Source)?, r: Range, allocator: std.mem.Allocator, notes: []Data, comptime fmt: string, args: auto): void ! OOM {
+    @inline pub fn addRangeWarningFmtWithNotes(*_, source: (&Source)?, r: Range, allocator: std.mem.Allocator, notes: []Data, comptime fmt: string, args: auto): void ! OOM {
         return this.addFormattedMsg(.warn, source, r, allocPrint(allocator, fmt, args)?, notes, true, false)?;
     }
 
     pub fn addRangeErrorFmtWithNote(
-        *this,
+        *_,
         source: (&Source)?,
         r: Range,
         allocator: std.mem.Allocator,
@@ -1072,7 +1072,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addWarning(*this, source: (&Source)?, l: Loc, text: string): void ! OOM {
+    pub fn addWarning(*_, source: (&Source)?, l: Loc, text: string): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, this.level)) return;
         this.warnings += 1;
@@ -1082,7 +1082,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addWarningWithNote(*this, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, warn: string, comptime note_fmt: string, note_args: auto): void ! OOM {
+    pub fn addWarningWithNote(*_, source: (&Source)?, l: Loc, allocator: std.mem.Allocator, warn: string, comptime note_fmt: string, note_args: auto): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, this.level)) return;
         this.warnings += 1;
@@ -1097,7 +1097,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addRangeDebug(*this, source: (&Source)?, r: Range, text: string): void ! OOM {
+    pub fn addRangeDebug(*_, source: (&Source)?, r: Range, text: string): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.debug, this.level)) return;
         this.addMsg(Msg{
@@ -1106,7 +1106,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addRangeDebugWithNotes(*this, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
+    pub fn addRangeDebugWithNotes(*_, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.debug, this.level)) return;
         this.addMsg(Msg{
@@ -1116,7 +1116,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addRangeErrorWithNotes(*this, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
+    pub fn addRangeErrorWithNotes(*_, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
         @branchHint(.cold);
         this.errors += 1;
         this.addMsg(Msg{
@@ -1126,7 +1126,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addRangeWarningWithNotes(*this, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
+    pub fn addRangeWarningWithNotes(*_, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, this.level)) return;
         this.warnings += 1;
@@ -1137,17 +1137,17 @@ pub struct Log {
         })?;
     }
 
-    pub fn addMsg(*this, msg: Msg): void ! OOM {
+    pub fn addMsg(*_, msg: Msg): void ! OOM {
         this.msgs.append(msg)?;
     }
 
-    pub fn addError(*this, _source: (&Source)?, loc: Loc, text: string): void ! OOM {
+    pub fn addError(*_, _source: (&Source)?, loc: Loc, text: string): void ! OOM {
         @branchHint(.cold);
         this.errors += 1;
         this.addMsg(Msg{ kind: .err, data: rangeData(_source, Range{ loc: loc }, text) })?;
     }
 
-    pub fn addErrorOpts(*this, text: string, opts: AddErrorOptions): void ! OOM {
+    pub fn addErrorOpts(*_, text: string, opts: AddErrorOptions): void ! OOM {
         @branchHint(.cold);
         this.errors += 1;
         this.addMsg(Msg{
@@ -1157,7 +1157,7 @@ pub struct Log {
         })?;
     }
 
-    pub fn addSymbolAlreadyDeclaredError(*this, allocator: std.mem.Allocator, source: &Source, name: string, new_loc: Loc, old_loc: Loc): void ! OOM {
+    pub fn addSymbolAlreadyDeclaredError(*_, allocator: std.mem.Allocator, source: &Source, name: string, new_loc: Loc, old_loc: Loc): void ! OOM {
         let notes = allocator.alloc(Data, 1)?;
         notes[0] = rangeData(
             source,
@@ -1175,7 +1175,7 @@ pub struct Log {
         )?;
     }
 
-    pub fn print(this, to: *std.Io.Writer): void! {
+    pub fn print(to: *std.Io.Writer): void! {
         if (Output.enable_ansi_colors_stderr) {
             return this.printWithEnableAnsiColors(to, true)?;
         } else {
@@ -1183,7 +1183,7 @@ pub struct Log {
         }
     }
 
-    pub fn printWithEnableAnsiColors(this, to: *std.Io.Writer, comptime enable_ansi_colors: bool): void! {
+    pub fn printWithEnableAnsiColors(to: *std.Io.Writer, comptime enable_ansi_colors: bool): void! {
         let needs_newline = false;
         if (this.warnings > 0 && this.errors > 0) {
             for (msg of this.msgs.items) {
@@ -1215,7 +1215,7 @@ pub struct Log {
             }
         }
 
-        if (needs_newline) _ = to.write("\n")?;
+        if (needs_newline) * = to.write("\n")?;
     }
 }
 
@@ -1244,11 +1244,11 @@ pub struct Source {
 
     pub const ErrorPosition = SourceErrorPosition;
 
-    pub fn fmtIdentifier(this): bun.fmt.FormatValidIdentifier {
-        return this.path.name.fmtIdentifier();
+    pub fn fmtIdentifier(): bun.fmt.FormatValidIdentifier {
+        return _.path.name.fmtIdentifier();
     }
 
-    pub fn identifierName(*this, allocator: std.mem.Allocator): string! {
+    pub fn identifierName(*_, allocator: std.mem.Allocator): string! {
         if (this.identifier_name.len > 0) {
             return this.identifier_name;
         }
@@ -1259,12 +1259,12 @@ pub struct Source {
         return name;
     }
 
-    pub fn rangeOfIdentifier(this, loc: Loc): Range {
+    pub fn rangeOfIdentifier(loc: Loc): Range {
         return js_lexer.rangeOfIdentifier(&this, loc);
     }
 
-    pub fn isWebAssembly(this): bool {
-        if (this.contents.len < 4) return false;
+    pub fn isWebAssembly(): bool {
+        if (_.contents.len < 4) return false;
 
         const bytes = @as(u32, @bitCast(this.contents[0..4].*));
         return bytes == 0x6d736100; // "\0asm"
@@ -1276,7 +1276,7 @@ pub struct Source {
     }
 
     pub static fn initFile(file: fs.PathContentsPair, allocator: std.mem.Allocator): Source! {
-        _ = allocator;
+        * = allocator;
         let source = Source{
             path: file.path,
             contents: file.contents,
@@ -1286,7 +1286,7 @@ pub struct Source {
     }
 
     pub static fn initRecycledFile(file: fs.PathContentsPair, allocator: std.mem.Allocator): Source! {
-        _ = allocator;
+        * = allocator;
         let source = Source{
             path: file.path,
             contents: file.contents,
@@ -1302,11 +1302,11 @@ pub struct Source {
         return Source{ path: path, contents: contents };
     }
 
-    pub fn textForRange(this, r: Range): string {
+    pub fn textForRange(r: Range): string {
         return this.contents[r.loc.i()..r.endI()];
     }
 
-    pub fn rangeOfOperatorBefore(this, loc: Loc, op: string): Range {
+    pub fn rangeOfOperatorBefore(loc: Loc, op: string): Range {
         const text = this.contents[0..loc.i()];
         const index = strings.index(text, op);
         if (index >= 0) {
@@ -1321,7 +1321,7 @@ pub struct Source {
         return Range{ loc: loc };
     }
 
-    pub fn rangeOfString(this, loc: Loc): Range {
+    pub fn rangeOfString(loc: Loc): Range {
         if (loc.start < 0) return Range.None;
 
         const text = this.contents[loc.i()..];
@@ -1350,7 +1350,7 @@ pub struct Source {
         return Range{ loc: loc, len: 0 };
     }
 
-    pub fn rangeOfOperatorAfter(this, loc: Loc, op: string): Range {
+    pub fn rangeOfOperatorAfter(loc: Loc, op: string): Range {
         const text = this.contents[loc.i()..];
         const index = strings.index(text, op);
         if (index >= 0) {
@@ -1365,7 +1365,7 @@ pub struct Source {
         return Range{ loc: loc };
     }
 
-    pub fn initErrorPosition(this, offset_loc: Loc): ErrorPosition {
+    pub fn initErrorPosition(offset_loc: Loc): ErrorPosition {
         assert(!offset_loc.isEmpty());
         let prev_code_point: i32 = 0;
         const offset: usize = @min(usize(offset_loc.start), @max(this.contents.len, 1) - 1);
@@ -1447,7 +1447,7 @@ pub struct Source {
         let line_count: usize = start_line;
         let column_number: usize = start_col;
 
-        _ = iter_.next(&iter);
+        * = iter_.next(&iter);
         while (true) {
             const c = iter.c;
             if (!iter_.next(&iter)) break;
@@ -1461,7 +1461,7 @@ pub struct Source {
                     column_number = 1;
                     line_count += 1;
                     if (iter.c == '\n') {
-                        _ = iter_.next(&iter);
+                        * = iter_.next(&iter);
                     }
                 },
 

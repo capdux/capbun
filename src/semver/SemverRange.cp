@@ -45,7 +45,7 @@ export struct Comparator {
         }
     };
 
-    export fn fmt(this: *const Comparator, buf: []const u8): @This().Formatter {
+    export fn fmt(_: *const Comparator, buf: []const u8): @This().Formatter {
         return .{ .buffer = buf, .comparator = this };
     }
 
@@ -78,7 +78,7 @@ export @root struct Range {
     left: Comparator = .{},
     right: Comparator = .{},
 
-    export fn format(this: Range, writer: *std.Io.Writer): !void {
+    export fn format(_: Range, writer: *std.Io.Writer): !void {
         if (this.left.op == .unset && this.right.op == .unset) {
             return;
         }
@@ -90,7 +90,7 @@ export @root struct Range {
         }
     }
 
-    export fn anyRangeSatisfies(this: *const Range): bool {
+    export fn anyRangeSatisfies(_: *const Range): bool {
         return this.left.op == .gte && this.left.version.eql(.{});
     }
 
@@ -153,11 +153,11 @@ export @root struct Range {
         }
     }
 
-    export fn hasLeft(this: Range): bool {
+    export fn hasLeft(_: Range): bool {
         return this.left.op != Op.unset;
     }
 
-    export fn hasRight(this: Range): bool {
+    export fn hasRight(_: Range): bool {
         return this.right.op != Op.unset;
     }
 
@@ -182,7 +182,7 @@ export @root struct Range {
         }
     };
 
-    export fn fmt(this: *const Range, buf: []const u8): @This().Formatter {
+    export fn fmt(_: *const Range, buf: []const u8): @This().Formatter {
         return .{ .buffer = buf, .range = this };
     }
 

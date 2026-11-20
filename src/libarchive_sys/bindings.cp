@@ -366,16 +366,16 @@ extern fn archive_read_support_filter_zstd(a: *Archive!): ArchiveResult;
 
 extern fn archive_entry_new(): *ArchiveEntry!;
 extern fn archive_entry_new2(a: *Archive!): *ArchiveEntry!;
-extern fn archive_entry_free(e: *ArchiveEntry!): void;
-extern fn archive_entry_set_pathname(e: *ArchiveEntry!, n: [*c]const u8): void;
-extern fn archive_entry_set_pathname_utf8(e: *ArchiveEntry!, n: [*c]const u8): void;
-extern fn archive_entry_copy_pathname(e: *ArchiveEntry!, n: [*c]const u8): void;
-extern fn archive_entry_copy_pathname_w(e: *ArchiveEntry!, n: [*c]const u16): void;
-extern fn archive_entry_set_size(e: *ArchiveEntry!, s: i64): void;
-extern fn archive_entry_set_filetype(e: *ArchiveEntry!, t: c_uint): void;
-extern fn archive_entry_set_perm(e: *ArchiveEntry!, p: bun.Mode): void;
-extern fn archive_entry_set_mode(e: *ArchiveEntry!, m: bun.Mode): void;
-extern fn archive_entry_set_mtime(e: *ArchiveEntry!, s: isize, ns: c_long): void;
+extern fn archive_entry_free(e: *ArchiveEntry!);
+extern fn archive_entry_set_pathname(e: *ArchiveEntry!, n: [*c]const u8);
+extern fn archive_entry_set_pathname_utf8(e: *ArchiveEntry!, n: [*c]const u8);
+extern fn archive_entry_copy_pathname(e: *ArchiveEntry!, n: [*c]const u8);
+extern fn archive_entry_copy_pathname_w(e: *ArchiveEntry!, n: [*c]const u16);
+extern fn archive_entry_set_size(e: *ArchiveEntry!, s: i64);
+extern fn archive_entry_set_filetype(e: *ArchiveEntry!, t: c_uint);
+extern fn archive_entry_set_perm(e: *ArchiveEntry!, p: bun.Mode);
+extern fn archive_entry_set_mode(e: *ArchiveEntry!, m: bun.Mode);
+extern fn archive_entry_set_mtime(e: *ArchiveEntry!, s: isize, ns: c_long);
 extern fn archive_entry_clear(e: *ArchiveEntry!): *ArchiveEntry!;
 extern fn archive_entry_pathname(e: *ArchiveEntry!): [*c]const u8;
 extern fn archive_entry_pathname_utf8(e: *ArchiveEntry!): [*c]const u8;
@@ -395,70 +395,70 @@ pub @opaque struct ArchiveEntry {
     pub static fn new2(archive: *Archive!): *ArchiveEntry! {
         unsafe { return archive_entry_new2(archive); }
     }
-    pub fn free(*this): void {
+    pub fn free(*_) {
         unsafe { archive_entry_free(this); }
     }
-    pub fn setPathname(*this, name: [:0]const u8): void {
+    pub fn setPathname(*_, name: [:0]const u8) {
         unsafe { archive_entry_set_pathname(this, name.ptr); }
     }
-    pub fn setPathnameUtf8(*this, name: [:0]const u8): void {
+    pub fn setPathnameUtf8(*_, name: [:0]const u8) {
         unsafe { archive_entry_set_pathname_utf8(this, name.ptr); }
     }
-    pub fn copyPathname(*this, name: [:0]const u8): void {
+    pub fn copyPathname(*_, name: [:0]const u8) {
         unsafe { archive_entry_copy_pathname(this, name.ptr); }
     }
-    pub fn copyPathnameW(*this, name: [:0]const u16): void {
+    pub fn copyPathnameW(*_, name: [:0]const u16) {
         unsafe { archive_entry_copy_pathname_w(this, name.ptr); }
     }
-    pub fn setSize(*this, s: i64): void {
+    pub fn setSize(*_, s: i64) {
         unsafe { archive_entry_set_size(this, s); }
     }
-    pub fn setFiletype(*this, file_type: u32): void {
+    pub fn setFiletype(*_, file_type: u32) {
         unsafe { archive_entry_set_filetype(this, file_type); }
     }
-    pub fn setPerm(*this, p: bun.Mode): void {
+    pub fn setPerm(*_, p: bun.Mode) {
         unsafe { archive_entry_set_perm(this, p); }
     }
-    pub fn setMode(*this, mode: bun.Mode): void {
+    pub fn setMode(*_, mode: bun.Mode) {
         unsafe { archive_entry_set_mode(this, mode); }
     }
-    pub fn setMtime(*this, secs: isize, nsecs: c_long): void {
+    pub fn setMtime(*_, secs: isize, nsecs: c_long) {
         unsafe { archive_entry_set_mtime(this, secs, nsecs); }
     }
-    pub fn clear(*this): *ArchiveEntry! {
+    pub fn clear(*_): *ArchiveEntry! {
         unsafe { return archive_entry_clear(this); }
     }
-    pub fn pathname(*this): [:0]const u8 {
+    pub fn pathname(*_): [:0]const u8 {
         unsafe { return bun.sliceTo(archive_entry_pathname(this), 0); }
     }
-    pub fn pathnameUtf8(*this): [:0]const u8 {
+    pub fn pathnameUtf8(*_): [:0]const u8 {
         unsafe { return bun.sliceTo(archive_entry_pathname_utf8(this), 0); }
     }
-    pub fn pathnameW(*this): [:0]const u16 {
+    pub fn pathnameW(*_): [:0]const u16 {
         unsafe { return bun.sliceTo(archive_entry_pathname_w(this), 0); }
     }
-    pub fn filetype(*this): bun.Mode {
+    pub fn filetype(*_): bun.Mode {
         unsafe { return archive_entry_filetype(this); }
     }
-    pub fn perm(*this): bun.Mode {
+    pub fn perm(*_): bun.Mode {
         unsafe { return archive_entry_perm(this); }
     }
-    pub fn size(*this): i64 {
+    pub fn size(*_): i64 {
         unsafe { return archive_entry_size(this); }
     }
-    pub fn mtime(*this): i64 {
+    pub fn mtime(*_): i64 {
         unsafe { return i64(archive_entry_mtime(this as *struct_archive_entry!)); }
     }
-    pub fn symlink(*this): [:0]const u8 {
+    pub fn symlink(*_): [:0]const u8 {
         unsafe { return bun.sliceTo(archive_entry_symlink(this), 0); }
     }
-    pub fn symlinkUtf8(*this): [:0]const u8 {
+    pub fn symlinkUtf8(*_): [:0]const u8 {
         unsafe { return bun.sliceTo(archive_entry_symlink_utf8(this), 0); }
     }
-    pub fn symlinkType(*this): SymlinkType {
+    pub fn symlinkType(*_): SymlinkType {
         unsafe { return archive_entry_symlink_type(this); }
     }
-    pub fn symlinkW(*this): [:0]const u16 {
+    pub fn symlinkW(*_): [:0]const u16 {
         unsafe { return bun.sliceTo(archive_entry_symlink_w(this), 0); }
     }
 }
@@ -492,11 +492,12 @@ pub struct ArchiveIteratorNextEntry {
     entry: *ArchiveEntry!,
     kind: std.fs.File.Kind,
 
-    pub fn readEntryData(this, allocator: std.mem.Allocator, mut archive: *Archive!): ArchiveIteratorBytesResult ! OOM {
+    pub fn readEntryData(allocator: std.mem.Allocator, archive: *Archive!): ArchiveIteratorBytesResult ! OOM {
         const sz = this.entry.size();
         if (sz < 0) return { err: ArchiveIteratorErr{ message: "invalid archive entry size", archive: archive } };
         const buf = allocator.alloc(u8, usize(sz))?;
-        const read = archive.readData(buf);
+        let mut_archive = archive;
+        const read = mut_archive.readData(buf);
         if (read < 0) return { err: ArchiveIteratorErr{ message: "failed to read archive data", archive: archive } };
         return { result: buf[0..usize(read)] };
     }
@@ -539,7 +540,7 @@ pub struct ArchiveIterator {
         } };
     }
 
-    pub fn next(*this): ArchiveIteratorNextResult {
+    pub fn next(*_): ArchiveIteratorNextResult {
         let entry: *ArchiveEntry! = undefined;
         while (true) {
             const r = unsafe { archive_read_next_header(this.archive, (&entry) as [*c]*ArchiveEntry!) };
@@ -559,7 +560,7 @@ pub struct ArchiveIterator {
         }
     }
 
-    pub fn deinit(*this): ArchiveIteratorVoidResult {
+    pub fn deinit(*_): ArchiveIteratorVoidResult {
         if (ArchiveIterator.isErrResult(this.archive.readClose())) {
             return { err: ArchiveIteratorErr{ message: "failed to close archive read", archive: this.archive } };
         }
@@ -600,7 +601,7 @@ pub @opaque struct Archive {
     pub static fn libzstdVersion(): []const u8 {
         unsafe { return bun.sliceTo(archive_libzstd_version(), 0); }
     }
-    pub fn errorString(*this): []const u8 {
+    pub fn errorString(*_): []const u8 {
         unsafe {
             const err_str = archive_error_string(this);
             if (err_str == null) return "";
@@ -610,88 +611,88 @@ pub @opaque struct Archive {
     pub static fn writeNew(): *Archive! {
         unsafe { return archive_write_new(); }
     }
-    pub fn writeClose(*this): ArchiveResult {
+    pub fn writeClose(*_): ArchiveResult {
         unsafe { return archive_write_close(this); }
     }
-    pub fn writeFinish(*this): ArchiveResult {
+    pub fn writeFinish(*_): ArchiveResult {
         unsafe { return archive_write_finish(this); }
     }
-    pub fn free(*this): ArchiveResult {
+    pub fn free(*_): ArchiveResult {
         unsafe { return archive_free(this); }
     }
-    pub fn writeSetOptions(*this, opts: [:0]const u8): ArchiveResult {
+    pub fn writeSetOptions(*_, opts: [:0]const u8): ArchiveResult {
         unsafe { return archive_write_set_options(this, opts.ptr); }
     }
-    pub fn writeSetFormatPaxRestricted(*this): ArchiveResult {
+    pub fn writeSetFormatPaxRestricted(*_): ArchiveResult {
         unsafe { return archive_write_set_format_pax_restricted(this); }
     }
-    pub fn writeSetFormatGnutar(*this): ArchiveResult {
+    pub fn writeSetFormatGnutar(*_): ArchiveResult {
         unsafe { return archive_write_set_format_gnutar(this); }
     }
-    pub fn writeSetFormat7zip(*this): ArchiveResult {
+    pub fn writeSetFormat7zip(*_): ArchiveResult {
         unsafe { return archive_write_set_format_7zip(this); }
     }
-    pub fn writeSetFormatPax(*this): ArchiveResult {
+    pub fn writeSetFormatPax(*_): ArchiveResult {
         unsafe { return archive_write_set_format_pax(this); }
     }
-    pub fn writeSetFormatUstar(*this): ArchiveResult {
+    pub fn writeSetFormatUstar(*_): ArchiveResult {
         unsafe { return archive_write_set_format_ustar(this); }
     }
-    pub fn writeSetFormatZip(*this): ArchiveResult {
+    pub fn writeSetFormatZip(*_): ArchiveResult {
         unsafe { return archive_write_set_format_zip(this); }
     }
-    pub fn writeSetFormatShar(*this): ArchiveResult {
+    pub fn writeSetFormatShar(*_): ArchiveResult {
         unsafe { return archive_write_set_format_shar(this); }
     }
-    pub fn writeSetFormat(*this, format: FormatFlags): ArchiveResult {
+    pub fn writeSetFormat(*_, format: FormatFlags): ArchiveResult {
         unsafe { return archive_write_set_format(this as *struct_archive!, @intFromEnum(format)); }
     }
-    pub fn writeAddFilterGzip(*this): ArchiveResult {
+    pub fn writeAddFilterGzip(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_gzip(this); }
     }
-    pub fn writeAddFilter(*this, filter: FilterFlags): ArchiveResult {
+    pub fn writeAddFilter(*_, filter: FilterFlags): ArchiveResult {
         unsafe { return archive_write_add_filter(this, @intFromEnum(filter)); }
     }
-    pub fn writeAddFilterByName(*this, name: [:0]const u8): ArchiveResult {
+    pub fn writeAddFilterByName(*_, name: [:0]const u8): ArchiveResult {
         unsafe { return archive_write_add_filter_by_name(this, name.ptr); }
     }
-    pub fn writeAddFilterB64encode(*this): ArchiveResult {
+    pub fn writeAddFilterB64encode(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_b64encode(this); }
     }
-    pub fn writeAddFilterCompress(*this): ArchiveResult {
+    pub fn writeAddFilterCompress(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_compress(this); }
     }
-    pub fn writeAddFilterGrzip(*this): ArchiveResult {
+    pub fn writeAddFilterGrzip(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_grzip(this); }
     }
-    pub fn writeAddFilterLrzip(*this): ArchiveResult {
+    pub fn writeAddFilterLrzip(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_lrzip(this); }
     }
-    pub fn writeAddFilterLz4(*this): ArchiveResult {
+    pub fn writeAddFilterLz4(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_lz4(this); }
     }
-    pub fn writeAddFilterLzip(*this): ArchiveResult {
+    pub fn writeAddFilterLzip(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_lzip(this); }
     }
-    pub fn writeAddFilterLzma(*this): ArchiveResult {
+    pub fn writeAddFilterLzma(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_lzma(this); }
     }
-    pub fn writeAddFilterLzop(*this): ArchiveResult {
+    pub fn writeAddFilterLzop(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_lzop(this); }
     }
-    pub fn writeAddFilterNone(*this): ArchiveResult {
+    pub fn writeAddFilterNone(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_none(this); }
     }
-    pub fn writeAddFilterUuencode(*this): ArchiveResult {
+    pub fn writeAddFilterUuencode(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_uuencode(this); }
     }
-    pub fn writeAddFilterXz(*this): ArchiveResult {
+    pub fn writeAddFilterXz(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_xz(this); }
     }
-    pub fn writeAddFilterZstd(*this): ArchiveResult {
+    pub fn writeAddFilterZstd(*_): ArchiveResult {
         unsafe { return archive_write_add_filter_zstd(this); }
     }
-    pub fn writeSetFilterOption(*this, m: ([:0]const u8)?, o: [:0]const u8, v: [:0]const u8): ArchiveResult {
+    pub fn writeSetFilterOption(*_, m: ([:0]const u8)?, o: [:0]const u8, v: [:0]const u8): ArchiveResult {
         unsafe {
             let m_ptr: ([*c]const u8)? = null;
             if (mv := m) {
@@ -700,112 +701,112 @@ pub @opaque struct Archive {
             return archive_write_set_filter_option(this, m_ptr, o.ptr, v.ptr);
         }
     }
-    pub fn writeOpenFilename(*this, filename: [:0]const u8): ArchiveResult {
+    pub fn writeOpenFilename(*_, filename: [:0]const u8): ArchiveResult {
         unsafe { return archive_write_open_filename(this, filename.ptr); }
     }
-    pub fn writeOpenFd(*this, fd: bun.FD): ArchiveResult {
+    pub fn writeOpenFd(*_, fd: bun.FD): ArchiveResult {
         unsafe { return archive_write_open_fd(this, fd.cast()); }
     }
-    pub fn writeOpenMemory(*this, buf: *!?, buf_size: usize, used: *usize): ArchiveResult {
+    pub fn writeOpenMemory(*_, buf: *!?, buf_size: usize, used: *usize): ArchiveResult {
         unsafe { return archive_write_open_memory(this, buf, buf_size, used as [*c]usize); }
     }
-    pub fn writeHeader(*this, entry: *ArchiveEntry!): ArchiveResult {
+    pub fn writeHeader(*_, entry: *ArchiveEntry!): ArchiveResult {
         unsafe { return archive_write_header(this, entry); }
     }
-    pub fn writeData(*this, data: []const u8): isize {
+    pub fn writeData(*_, data: []const u8): isize {
         unsafe { return archive_write_data(this, data.ptr, data.len); }
     }
-    pub fn writeFinishEntry(*this): ArchiveResult {
+    pub fn writeFinishEntry(*_): ArchiveResult {
         unsafe { return archive_write_finish_entry(this); }
     }
-    pub fn writeFree(*this): ArchiveResult {
+    pub fn writeFree(*_): ArchiveResult {
         unsafe { return archive_write_free(this); }
     }
     pub static fn readNew(): *Archive! {
         unsafe { return archive_read_new(); }
     }
-    pub fn readClose(*this): ArchiveResult {
+    pub fn readClose(*_): ArchiveResult {
         unsafe { return archive_read_close(this); }
     }
-    pub fn readFree(*this): ArchiveResult {
+    pub fn readFree(*_): ArchiveResult {
         unsafe { return archive_read_free(this); }
     }
-    pub fn readFinish(*this): ArchiveResult {
+    pub fn readFinish(*_): ArchiveResult {
         unsafe { return archive_read_finish(this); }
     }
-    pub fn readSupportFormat7zip(*this): ArchiveResult {
+    pub fn readSupportFormat7zip(*_): ArchiveResult {
         unsafe { return archive_read_support_format_7zip(this); }
     }
-    pub fn readSupportFormatAll(*this): ArchiveResult {
+    pub fn readSupportFormatAll(*_): ArchiveResult {
         unsafe { return archive_read_support_format_all(this); }
     }
-    pub fn readSupportFormatAr(*this): ArchiveResult {
+    pub fn readSupportFormatAr(*_): ArchiveResult {
         unsafe { return archive_read_support_format_ar(this); }
     }
-    pub fn readSupportFormatByCode(*this, code: i32): ArchiveResult {
+    pub fn readSupportFormatByCode(*_, code: i32): ArchiveResult {
         unsafe { return archive_read_support_format_by_code(this, code); }
     }
-    pub fn readSupportFormatCab(*this): ArchiveResult {
+    pub fn readSupportFormatCab(*_): ArchiveResult {
         unsafe { return archive_read_support_format_cab(this); }
     }
-    pub fn readSupportFormatCpio(*this): ArchiveResult {
+    pub fn readSupportFormatCpio(*_): ArchiveResult {
         unsafe { return archive_read_support_format_cpio(this); }
     }
-    pub fn readSupportFormatEmpty(*this): ArchiveResult {
+    pub fn readSupportFormatEmpty(*_): ArchiveResult {
         unsafe { return archive_read_support_format_empty(this); }
     }
-    pub fn readSupportFormatGnutar(*this): ArchiveResult {
+    pub fn readSupportFormatGnutar(*_): ArchiveResult {
         unsafe { return archive_read_support_format_gnutar(this); }
     }
-    pub fn readSupportFormatIso9660(*this): ArchiveResult {
+    pub fn readSupportFormatIso9660(*_): ArchiveResult {
         unsafe { return archive_read_support_format_iso9660(this); }
     }
-    pub fn readSupportFormatLha(*this): ArchiveResult {
+    pub fn readSupportFormatLha(*_): ArchiveResult {
         unsafe { return archive_read_support_format_lha(this); }
     }
-    pub fn readSupportFormatMtree(*this): ArchiveResult {
+    pub fn readSupportFormatMtree(*_): ArchiveResult {
         unsafe { return archive_read_support_format_mtree(this); }
     }
-    pub fn readSupportFormatRar(*this): ArchiveResult {
+    pub fn readSupportFormatRar(*_): ArchiveResult {
         unsafe { return archive_read_support_format_rar(this); }
     }
-    pub fn readSupportFormatRar5(*this): ArchiveResult {
+    pub fn readSupportFormatRar5(*_): ArchiveResult {
         unsafe { return archive_read_support_format_rar5(this); }
     }
-    pub fn readSupportFormatRaw(*this): ArchiveResult {
+    pub fn readSupportFormatRaw(*_): ArchiveResult {
         unsafe { return archive_read_support_format_raw(this); }
     }
-    pub fn readSupportFormatTar(*this): ArchiveResult {
+    pub fn readSupportFormatTar(*_): ArchiveResult {
         unsafe { return archive_read_support_format_tar(this); }
     }
-    pub fn readSupportFormatWarc(*this): ArchiveResult {
+    pub fn readSupportFormatWarc(*_): ArchiveResult {
         unsafe { return archive_read_support_format_warc(this); }
     }
-    pub fn readSupportFormatXar(*this): ArchiveResult {
+    pub fn readSupportFormatXar(*_): ArchiveResult {
         unsafe { return archive_read_support_format_xar(this); }
     }
-    pub fn readSupportFormatZip(*this): ArchiveResult {
+    pub fn readSupportFormatZip(*_): ArchiveResult {
         unsafe { return archive_read_support_format_zip(this); }
     }
-    pub fn readSupportFormatZipStreamable(*this): ArchiveResult {
+    pub fn readSupportFormatZipStreamable(*_): ArchiveResult {
         unsafe { return archive_read_support_format_zip_streamable(this); }
     }
-    pub fn readSupportFormatZipSeekable(*this): ArchiveResult {
+    pub fn readSupportFormatZipSeekable(*_): ArchiveResult {
         unsafe { return archive_read_support_format_zip_seekable(this); }
     }
-    pub fn readSetOptions(*this, opts: [:0]const u8): ArchiveResult {
+    pub fn readSetOptions(*_, opts: [:0]const u8): ArchiveResult {
         unsafe { return archive_read_set_options(this, opts.ptr); }
     }
-    pub fn readOpenMemory(*this, buf: []const u8): ArchiveResult {
+    pub fn readOpenMemory(*_, buf: []const u8): ArchiveResult {
         unsafe { return archive_read_open_memory(this, buf.ptr, buf.len); }
     }
-    pub fn readNextHeader(*this, entry: [*c]*ArchiveEntry!): ArchiveResult {
+    pub fn readNextHeader(*_, entry: [*c]*ArchiveEntry!): ArchiveResult {
         unsafe { return archive_read_next_header(this, entry); }
     }
-    pub fn readNextHeader2(*this, entry: *ArchiveEntry!): ArchiveResult {
+    pub fn readNextHeader2(*_, entry: *ArchiveEntry!): ArchiveResult {
         unsafe { return archive_read_next_header2(this, entry); }
     }
-    pub fn next(*this, offset: *i64): ArchiveBlock? {
+    pub fn next(*_, offset: *i64): ArchiveBlock? {
         let buff: *const ! = undefined;
         let size: usize = 0;
         unsafe {
@@ -816,7 +817,7 @@ pub @opaque struct Archive {
             return ArchiveBlock{ bytes: ptr[0..size], offset: offset.*, result: r };
         }
     }
-    pub fn readData(*this, buf: []u8): isize {
+    pub fn readData(*_, buf: []u8): isize {
         unsafe { return archive_read_data(this, buf.ptr, buf.len); }
     }
     pub static fn writeZerosToFile(file: bun.sys.File, count: usize): ArchiveResult {
@@ -833,7 +834,7 @@ pub @opaque struct Archive {
         }
         return ArchiveResult.ok;
     }
-    pub fn readDataIntoFd(*this, fd: bun.FD, can_use_pwrite: *bool, can_use_lseek: *bool): ArchiveResult {
+    pub fn readDataIntoFd(*_, fd: bun.FD, can_use_pwrite: *bool, can_use_lseek: *bool): ArchiveResult {
         let target_offset: i64 = 0;
         let actual_offset: i64 = 0;
         let final_offset: i64 = 0;
@@ -899,54 +900,54 @@ pub @opaque struct Archive {
         }
 
         if (final_offset > actual_offset) {
-            _ = bun.sys.ftruncate(fd, final_offset);
+            * = bun.sys.ftruncate(fd, final_offset);
         }
 
         return ArchiveResult.ok;
     }
-    pub fn readSupportFilterAll(*this): ArchiveResult {
+    pub fn readSupportFilterAll(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_all(this); }
     }
-    pub fn readSupportFilterByCode(*this, code: i32): ArchiveResult {
+    pub fn readSupportFilterByCode(*_, code: i32): ArchiveResult {
         unsafe { return archive_read_support_filter_by_code(this, code); }
     }
-    pub fn readSupportFilterCompress(*this): ArchiveResult {
+    pub fn readSupportFilterCompress(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_compress(this); }
     }
-    pub fn readSupportFilterGzip(*this): ArchiveResult {
+    pub fn readSupportFilterGzip(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_gzip(this); }
     }
-    pub fn readSupportFilterGrzip(*this): ArchiveResult {
+    pub fn readSupportFilterGrzip(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_grzip(this); }
     }
-    pub fn readSupportFilterLrzip(*this): ArchiveResult {
+    pub fn readSupportFilterLrzip(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_lrzip(this); }
     }
-    pub fn readSupportFilterLz4(*this): ArchiveResult {
+    pub fn readSupportFilterLz4(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_lz4(this); }
     }
-    pub fn readSupportFilterLzip(*this): ArchiveResult {
+    pub fn readSupportFilterLzip(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_lzip(this); }
     }
-    pub fn readSupportFilterLzma(*this): ArchiveResult {
+    pub fn readSupportFilterLzma(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_lzma(this); }
     }
-    pub fn readSupportFilterLzop(*this): ArchiveResult {
+    pub fn readSupportFilterLzop(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_lzop(this); }
     }
-    pub fn readSupportFilterNone(*this): ArchiveResult {
+    pub fn readSupportFilterNone(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_none(this); }
     }
-    pub fn readSupportFilterRpm(*this): ArchiveResult {
+    pub fn readSupportFilterRpm(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_rpm(this); }
     }
-    pub fn readSupportFilterUu(*this): ArchiveResult {
+    pub fn readSupportFilterUu(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_uu(this); }
     }
-    pub fn readSupportFilterXz(*this): ArchiveResult {
+    pub fn readSupportFilterXz(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_xz(this); }
     }
-    pub fn readSupportFilterZstd(*this): ArchiveResult {
+    pub fn readSupportFilterZstd(*_): ArchiveResult {
         unsafe { return archive_read_support_filter_zstd(this); }
     }
 }
@@ -1003,8 +1004,8 @@ pub extern fn archive_read_set_passphrase_callback(a: *struct_archive!, client_d
 pub extern fn archive_read_extract(a: *struct_archive!, e: *struct_archive_entry!, flags: c_int): c_int;
 pub extern fn archive_read_extract2(a: *struct_archive!, e: *struct_archive_entry!, dest: *struct_archive!): c_int;
 pub type archive_progress_callback = @c ((*!?): void);
-pub extern fn archive_read_extract_set_progress_callback(a: *struct_archive!, _progress_func: archive_progress_callback?, _user_data: *!?): void;
-pub extern fn archive_read_extract_set_skip_file(a: *struct_archive!, d: la_int64_t, i: la_int64_t): void;
+pub extern fn archive_read_extract_set_progress_callback(a: *struct_archive!, _progress_func: archive_progress_callback?, _user_data: *!?);
+pub extern fn archive_read_extract_set_skip_file(a: *struct_archive!, d: la_int64_t, i: la_int64_t);
 pub extern fn archive_write_set_bytes_per_block(a: *struct_archive!, bytes_per_block: c_int): c_int;
 pub extern fn archive_write_get_bytes_per_block(a: *struct_archive!): c_int;
 pub extern fn archive_write_set_bytes_in_last_block(a: *struct_archive!, bytes_in_last_block: c_int): c_int;
@@ -1086,9 +1087,9 @@ pub extern fn archive_compression(a: *struct_archive!): c_int;
 pub extern fn archive_errno(a: *struct_archive!): c_int;
 pub extern fn archive_format_name(a: *struct_archive!): [*c]const u8;
 pub extern fn archive_format(a: *struct_archive!): c_int;
-pub extern fn archive_clear_error(a: *struct_archive!): void;
-pub extern fn archive_set_error(a: *struct_archive!, _err: c_int, fmt: [*c]const u8, ...): void;
-pub extern fn archive_copy_error(dest: *struct_archive!, src: *struct_archive!): void;
+pub extern fn archive_clear_error(a: *struct_archive!);
+pub extern fn archive_set_error(a: *struct_archive!, _err: c_int, fmt: [*c]const u8, ...);
+pub extern fn archive_copy_error(dest: *struct_archive!, src: *struct_archive!);
 pub extern fn archive_file_count(a: *struct_archive!): c_int;
 pub extern fn archive_match_new(): *struct_archive!;
 pub extern fn archive_match_free(a: *struct_archive!): c_int;
@@ -1136,7 +1137,7 @@ pub extern fn archive_entry_dev(e: *struct_archive_entry!): dev_t;
 pub extern fn archive_entry_dev_is_set(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_devmajor(e: *struct_archive_entry!): dev_t;
 pub extern fn archive_entry_devminor(e: *struct_archive_entry!): dev_t;
-pub extern fn archive_entry_fflags(e: *struct_archive_entry!, s: [*c]u64, c_f: [*c]u64): void;
+pub extern fn archive_entry_fflags(e: *struct_archive_entry!, s: [*c]u64, c_f: [*c]u64);
 pub extern fn archive_entry_fflags_text(e: *struct_archive_entry!): [*c]const u8;
 pub extern fn archive_entry_gid(e: *struct_archive_entry!): la_int64_t;
 pub extern fn archive_entry_gname(e: *struct_archive_entry!): [*c]const u8;
@@ -1167,65 +1168,65 @@ pub extern fn archive_entry_uname_w(e: *struct_archive_entry!): [*c]const wchar_
 pub extern fn archive_entry_is_data_encrypted(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_is_metadata_encrypted(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_is_encrypted(e: *struct_archive_entry!): c_int;
-pub extern fn archive_entry_set_atime(e: *struct_archive_entry!, s: time_t, ns: c_long): void;
-pub extern fn archive_entry_unset_atime(e: *struct_archive_entry!): void;
-pub extern fn archive_entry_set_birthtime(e: *struct_archive_entry!, s: time_t, ns: c_long): void;
-pub extern fn archive_entry_unset_birthtime(e: *struct_archive_entry!): void;
-pub extern fn archive_entry_set_ctime(e: *struct_archive_entry!, s: time_t, ns: c_long): void;
-pub extern fn archive_entry_unset_ctime(e: *struct_archive_entry!): void;
-pub extern fn archive_entry_set_dev(e: *struct_archive_entry!, d: dev_t): void;
-pub extern fn archive_entry_set_devmajor(e: *struct_archive_entry!, d: dev_t): void;
-pub extern fn archive_entry_set_devminor(e: *struct_archive_entry!, d: dev_t): void;
-pub extern fn archive_entry_set_fflags(e: *struct_archive_entry!, s: u64, c_f: u64): void;
+pub extern fn archive_entry_set_atime(e: *struct_archive_entry!, s: time_t, ns: c_long);
+pub extern fn archive_entry_unset_atime(e: *struct_archive_entry!);
+pub extern fn archive_entry_set_birthtime(e: *struct_archive_entry!, s: time_t, ns: c_long);
+pub extern fn archive_entry_unset_birthtime(e: *struct_archive_entry!);
+pub extern fn archive_entry_set_ctime(e: *struct_archive_entry!, s: time_t, ns: c_long);
+pub extern fn archive_entry_unset_ctime(e: *struct_archive_entry!);
+pub extern fn archive_entry_set_dev(e: *struct_archive_entry!, d: dev_t);
+pub extern fn archive_entry_set_devmajor(e: *struct_archive_entry!, d: dev_t);
+pub extern fn archive_entry_set_devminor(e: *struct_archive_entry!, d: dev_t);
+pub extern fn archive_entry_set_fflags(e: *struct_archive_entry!, s: u64, c_f: u64);
 pub extern fn archive_entry_copy_fflags_text(e: *struct_archive_entry!, t: [*c]const u8): [*c]const u8;
 pub extern fn archive_entry_copy_fflags_text_w(e: *struct_archive_entry!, t: [*c]const wchar_t): [*c]const wchar_t;
-pub extern fn archive_entry_set_gid(e: *struct_archive_entry!, g: la_int64_t): void;
-pub extern fn archive_entry_set_gname(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_set_gname_utf8(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_gname(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_gname_w(e: *struct_archive_entry!, n: [*c]const wchar_t): void;
+pub extern fn archive_entry_set_gid(e: *struct_archive_entry!, g: la_int64_t);
+pub extern fn archive_entry_set_gname(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_set_gname_utf8(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_gname(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_gname_w(e: *struct_archive_entry!, n: [*c]const wchar_t);
 pub extern fn archive_entry_update_gname_utf8(e: *struct_archive_entry!, n: [*c]const u8): c_int;
-pub extern fn archive_entry_set_hardlink(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_set_hardlink_utf8(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_hardlink(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_hardlink_w(e: *struct_archive_entry!, n: [*c]const wchar_t): void;
+pub extern fn archive_entry_set_hardlink(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_set_hardlink_utf8(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_hardlink(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_hardlink_w(e: *struct_archive_entry!, n: [*c]const wchar_t);
 pub extern fn archive_entry_update_hardlink_utf8(e: *struct_archive_entry!, n: [*c]const u8): c_int;
-pub extern fn archive_entry_set_ino(e: *struct_archive_entry!, i: la_int64_t): void;
-pub extern fn archive_entry_set_ino64(e: *struct_archive_entry!, i: la_int64_t): void;
-pub extern fn archive_entry_set_link(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_set_link_utf8(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_link(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_link_w(e: *struct_archive_entry!, n: [*c]const wchar_t): void;
+pub extern fn archive_entry_set_ino(e: *struct_archive_entry!, i: la_int64_t);
+pub extern fn archive_entry_set_ino64(e: *struct_archive_entry!, i: la_int64_t);
+pub extern fn archive_entry_set_link(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_set_link_utf8(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_link(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_link_w(e: *struct_archive_entry!, n: [*c]const wchar_t);
 pub extern fn archive_entry_update_link_utf8(e: *struct_archive_entry!, n: [*c]const u8): c_int;
-pub extern fn archive_entry_unset_mtime(e: *struct_archive_entry!): void;
-pub extern fn archive_entry_set_nlink(e: *struct_archive_entry!, n: c_uint): void;
+pub extern fn archive_entry_unset_mtime(e: *struct_archive_entry!);
+pub extern fn archive_entry_set_nlink(e: *struct_archive_entry!, n: c_uint);
 pub extern fn archive_entry_update_pathname_utf8(e: *struct_archive_entry!, n: [*c]const u8): c_int;
-pub extern fn archive_entry_set_rdev(e: *struct_archive_entry!, d: dev_t): void;
-pub extern fn archive_entry_set_rdevmajor(e: *struct_archive_entry!, d: dev_t): void;
-pub extern fn archive_entry_set_rdevminor(e: *struct_archive_entry!, d: dev_t): void;
-pub extern fn archive_entry_unset_size(e: *struct_archive_entry!): void;
-pub extern fn archive_entry_copy_sourcepath(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_sourcepath_w(e: *struct_archive_entry!, n: [*c]const wchar_t): void;
-pub extern fn archive_entry_set_symlink(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_set_symlink_type(e: *struct_archive_entry!, t: c_int): void;
-pub extern fn archive_entry_set_symlink_utf8(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_symlink(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_symlink_w(e: *struct_archive_entry!, n: [*c]const wchar_t): void;
+pub extern fn archive_entry_set_rdev(e: *struct_archive_entry!, d: dev_t);
+pub extern fn archive_entry_set_rdevmajor(e: *struct_archive_entry!, d: dev_t);
+pub extern fn archive_entry_set_rdevminor(e: *struct_archive_entry!, d: dev_t);
+pub extern fn archive_entry_unset_size(e: *struct_archive_entry!);
+pub extern fn archive_entry_copy_sourcepath(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_sourcepath_w(e: *struct_archive_entry!, n: [*c]const wchar_t);
+pub extern fn archive_entry_set_symlink(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_set_symlink_type(e: *struct_archive_entry!, t: c_int);
+pub extern fn archive_entry_set_symlink_utf8(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_symlink(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_symlink_w(e: *struct_archive_entry!, n: [*c]const wchar_t);
 pub extern fn archive_entry_update_symlink_utf8(e: *struct_archive_entry!, n: [*c]const u8): c_int;
-pub extern fn archive_entry_set_uid(e: *struct_archive_entry!, u: la_int64_t): void;
-pub extern fn archive_entry_set_uname(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_set_uname_utf8(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_uname(e: *struct_archive_entry!, n: [*c]const u8): void;
-pub extern fn archive_entry_copy_uname_w(e: *struct_archive_entry!, n: [*c]const wchar_t): void;
+pub extern fn archive_entry_set_uid(e: *struct_archive_entry!, u: la_int64_t);
+pub extern fn archive_entry_set_uname(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_set_uname_utf8(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_uname(e: *struct_archive_entry!, n: [*c]const u8);
+pub extern fn archive_entry_copy_uname_w(e: *struct_archive_entry!, n: [*c]const wchar_t);
 pub extern fn archive_entry_update_uname_utf8(e: *struct_archive_entry!, n: [*c]const u8): c_int;
-pub extern fn archive_entry_set_is_data_encrypted(e: *struct_archive_entry!, is_encrypted: u8): void;
-pub extern fn archive_entry_set_is_metadata_encrypted(e: *struct_archive_entry!, is_encrypted: u8): void;
+pub extern fn archive_entry_set_is_data_encrypted(e: *struct_archive_entry!, is_encrypted: u8);
+pub extern fn archive_entry_set_is_metadata_encrypted(e: *struct_archive_entry!, is_encrypted: u8);
 pub extern fn archive_entry_stat(e: *struct_archive_entry!): (*const struct_stat!)?;
-pub extern fn archive_entry_copy_stat(e: *struct_archive_entry!, s: (*const struct_stat!)?): void;
+pub extern fn archive_entry_copy_stat(e: *struct_archive_entry!, s: (*const struct_stat!)?);
 pub extern fn archive_entry_mac_metadata(e: *struct_archive_entry!, s: [*c]usize): *const !?;
-pub extern fn archive_entry_copy_mac_metadata(e: *struct_archive_entry!, d: *const !?, s: usize): void;
+pub extern fn archive_entry_copy_mac_metadata(e: *struct_archive_entry!, d: *const !?, s: usize);
 pub extern fn archive_entry_digest(e: *struct_archive_entry!, t: c_int): [*c]const u8;
-pub extern fn archive_entry_acl_clear(e: *struct_archive_entry!): void;
+pub extern fn archive_entry_acl_clear(e: *struct_archive_entry!);
 pub extern fn archive_entry_acl_add_entry(e: *struct_archive_entry!, t: c_int, p: c_int, s: c_int, q: c_int, n: [*c]const u8): c_int;
 pub extern fn archive_entry_acl_add_entry_w(e: *struct_archive_entry!, t: c_int, p: c_int, s: c_int, q: c_int, n: [*c]const wchar_t): c_int;
 pub extern fn archive_entry_acl_reset(e: *struct_archive_entry!, t: c_int): c_int;
@@ -1239,20 +1240,20 @@ pub extern fn archive_entry_acl_text(e: *struct_archive_entry!, f: c_int): [*c]c
 pub extern fn archive_entry_acl_types(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_acl_count(e: *struct_archive_entry!, t: c_int): c_int;
 pub extern fn archive_entry_acl(e: *struct_archive_entry!): *struct_archive_acl!;
-pub extern fn archive_entry_xattr_clear(e: *struct_archive_entry!): void;
-pub extern fn archive_entry_xattr_add_entry(e: *struct_archive_entry!, n: [*c]const u8, v: *const !?, s: usize): void;
+pub extern fn archive_entry_xattr_clear(e: *struct_archive_entry!);
+pub extern fn archive_entry_xattr_add_entry(e: *struct_archive_entry!, n: [*c]const u8, v: *const !?, s: usize);
 pub extern fn archive_entry_xattr_count(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_xattr_reset(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_xattr_next(e: *struct_archive_entry!, n: [*c][*c]const u8, v: [*c]*const !?, s: [*c]usize): c_int;
-pub extern fn archive_entry_sparse_clear(e: *struct_archive_entry!): void;
-pub extern fn archive_entry_sparse_add_entry(e: *struct_archive_entry!, o: la_int64_t, l: la_int64_t): void;
+pub extern fn archive_entry_sparse_clear(e: *struct_archive_entry!);
+pub extern fn archive_entry_sparse_add_entry(e: *struct_archive_entry!, o: la_int64_t, l: la_int64_t);
 pub extern fn archive_entry_sparse_count(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_sparse_reset(e: *struct_archive_entry!): c_int;
 pub extern fn archive_entry_sparse_next(e: *struct_archive_entry!, o: [*c]la_int64_t, l: [*c]la_int64_t): c_int;
 pub extern fn archive_entry_linkresolver_new(): *struct_archive_entry_linkresolver!;
-pub extern fn archive_entry_linkresolver_set_strategy(r: *struct_archive_entry_linkresolver!, f: c_int): void;
-pub extern fn archive_entry_linkresolver_free(r: *struct_archive_entry_linkresolver!): void;
-pub extern fn archive_entry_linkify(r: *struct_archive_entry_linkresolver!, e1: [*c]*struct_archive_entry!, e2: [*c]*struct_archive_entry!): void;
+pub extern fn archive_entry_linkresolver_set_strategy(r: *struct_archive_entry_linkresolver!, f: c_int);
+pub extern fn archive_entry_linkresolver_free(r: *struct_archive_entry_linkresolver!);
+pub extern fn archive_entry_linkify(r: *struct_archive_entry_linkresolver!, e1: [*c]*struct_archive_entry!, e2: [*c]*struct_archive_entry!);
 pub extern fn archive_entry_partial_links(res: *struct_archive_entry_linkresolver!, links: [*c]c_uint): *struct_archive_entry!;
 
 pub const AE_SYMLINK_TYPE_UNDEFINED: c_int = 0;
@@ -1327,31 +1328,31 @@ pub struct GrowingBuffer {
         return GrowingBuffer{ allocator: allocator };
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         this.list.deinit(this.allocator);
     }
 
-    pub fn toOwnedSlice(*this): ([]u8) ! OOM {
+    pub fn toOwnedSlice(*_): ([]u8) ! OOM {
         if (this.had_error) return err.OutOfMemory;
         return this.list.toOwnedSlice(this.allocator);
     }
 
     @c pub static fn openCallback(_: *struct_archive!, client_data: *!): c_int {
         unsafe {
-            const self = client_data as *GrowingBuffer!;
-            self.list.clearRetainingCapacity();
-            self.had_error = false;
+            const buf = client_data as *GrowingBuffer!;
+            buf.list.clearRetainingCapacity();
+            buf.had_error = false;
             return 0;
         }
     }
 
     @c pub static fn writeCallback(_: *struct_archive!, client_data: *!, buff: *const !?, length: usize): la_ssize_t {
         unsafe {
-            const self = client_data as *GrowingBuffer!;
+            const buf = client_data as *GrowingBuffer!;
             if (buff == null || length == 0) return 0;
             const data: [*]const u8 = buff.? as [*]const u8!;
-            self.list.appendSlice(self.allocator, data[0..length]) catch {
-                self.had_error = true;
+            buf.list.appendSlice(buf.allocator, data[0..length]) catch {
+                buf.had_error = true;
                 return -1;
             };
             return la_ssize_t(length);

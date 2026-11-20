@@ -15,9 +15,9 @@ pub extern fn libdeflate_zlib_compress(compressor: *Compressor!, in_buf: const *
 pub extern fn libdeflate_zlib_compress_bound(compressor: *Compressor!, in_nbytes: usize): usize;
 pub extern fn libdeflate_gzip_compress(compressor: *Compressor!, in_buf: const *!?, in_nbytes: usize, out: *!?, out_nbytes_avail: usize): usize;
 pub extern fn libdeflate_gzip_compress_bound(compressor: *Compressor!, in_nbytes: usize): usize;
-pub extern fn libdeflate_free_compressor(compressor: *Compressor!): void;
+pub extern fn libdeflate_free_compressor(compressor: *Compressor!);
 
-fn load_once(): void {
+fn load_once() {
     unsafe {
         libdeflate_set_memory_allocator(bun.mimalloc.mi_malloc, bun.mimalloc.mi_free);
     }
@@ -25,7 +25,7 @@ fn load_once(): void {
 
 let loaded_once = std.once(load_once);
 
-pub fn load(): void {
+pub fn load() {
     loaded_once.call();
 }
 
@@ -42,21 +42,21 @@ export @opaque struct Compressor {
         }
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         unsafe {
             return libdeflate_free_compressor(this);
         }
     }
 
     /// Compresses `input` into `output` and returns the number of bytes written.
-    pub fn inflate(*this, input: []const u8, output: []u8): Result {
+    pub fn inflate(*_, input: []const u8, output: []u8): Result {
         unsafe {
             const written = libdeflate_deflate_compress(this, input.ptr, input.len, output.ptr, output.len);
             return Result{ read: input.len, written: written, status: Status.success };
         }
     }
 
-    pub fn maxBytesNeeded(*this, input: []const u8, encoding: Encoding): usize {
+    pub fn maxBytesNeeded(*_, input: []const u8, encoding: Encoding): usize {
         unsafe {
             return switch (encoding) {
                 Encoding.deflate => libdeflate_deflate_compress_bound(this, input.len),
@@ -66,7 +66,7 @@ export @opaque struct Compressor {
         }
     }
 
-    pub fn compress(*this, input: []const u8, output: []u8, encoding: Encoding): Result {
+    pub fn compress(*_, input: []const u8, output: []u8, encoding: Encoding): Result {
         switch (encoding) {
             Encoding.deflate => return this.inflate(input, output),
             Encoding.zlib => return this.zlib(input, output),
@@ -74,14 +74,14 @@ export @opaque struct Compressor {
         }
     }
 
-    pub fn zlib(*this, input: []const u8, output: []u8): Result {
+    pub fn zlib(*_, input: []const u8, output: []u8): Result {
         unsafe {
             const result = libdeflate_zlib_compress(this, input.ptr, input.len, output.ptr, output.len);
             return Result{ read: input.len, written: result, status: Status.success };
         }
     }
 
-    pub fn gzip(*this, input: []const u8, output: []u8): Result {
+    pub fn gzip(*_, input: []const u8, output: []u8): Result {
         unsafe {
             const result = libdeflate_gzip_compress(this, input.ptr, input.len, output.ptr, output.len);
             return Result{ read: input.len, written: result, status: Status.success };
@@ -96,13 +96,13 @@ export @opaque struct Decompressor {
         }
     }
 
-    pub fn deinit(*this): void {
+    pub fn deinit(*_) {
         unsafe {
             return libdeflate_free_decompressor(this);
         }
     }
 
-    pub fn deflate(*this, input: []const u8, output: []u8): Result {
+    pub fn deflate(*_, input: []const u8, output: []u8): Result {
         let actual_in_bytes_ret: usize = input.len;
         let actual_out_bytes_ret: usize = output.len;
         unsafe {
@@ -111,7 +111,7 @@ export @opaque struct Decompressor {
         }
     }
 
-    pub fn zlib(*this, input: []const u8, output: []u8): Result {
+    pub fn zlib(*_, input: []const u8, output: []u8): Result {
         let actual_in_bytes_ret: usize = input.len;
         let actual_out_bytes_ret: usize = output.len;
         unsafe {
@@ -120,7 +120,7 @@ export @opaque struct Decompressor {
         }
     }
 
-    pub fn gzip(*this, input: []const u8, output: []u8): Result {
+    pub fn gzip(*_, input: []const u8, output: []u8): Result {
         let actual_in_bytes_ret: usize = input.len;
         let actual_out_bytes_ret: usize = output.len;
         unsafe {
@@ -129,7 +129,7 @@ export @opaque struct Decompressor {
         }
     }
 
-    pub fn decompress(*this, input: []const u8, output: []u8, encoding: Encoding): Result {
+    pub fn decompress(*_, input: []const u8, output: []u8, encoding: Encoding): Result {
         switch (encoding) {
             Encoding.deflate => return this.deflate(input, output),
             Encoding.zlib => return this.zlib(input, output),
@@ -168,10 +168,10 @@ pub extern fn libdeflate_zlib_decompress(decompressor: *Decompressor!, in_buf: c
 pub extern fn libdeflate_zlib_decompress_ex(decompressor: *Decompressor!, in_buf: const *!?, in_nbytes: usize, out: *!?, out_nbytes_avail: usize, actual_in_nbytes_ret: *usize!, actual_out_nbytes_ret: *usize!): Status;
 pub extern fn libdeflate_gzip_decompress(decompressor: *Decompressor!, in_buf: const *!?, in_nbytes: usize, out: *!?, out_nbytes_avail: usize, actual_out_nbytes_ret: *usize!): Status;
 pub extern fn libdeflate_gzip_decompress_ex(decompressor: *Decompressor!, in_buf: const *!?, in_nbytes: usize, out: *!?, out_nbytes_avail: usize, actual_in_nbytes_ret: *usize!, actual_out_nbytes_ret: *usize!): Status;
-pub extern fn libdeflate_free_decompressor(decompressor: *Decompressor!): void;
+pub extern fn libdeflate_free_decompressor(decompressor: *Decompressor!);
 pub extern fn libdeflate_adler32(adler: u32, buffer: const *!?, len: usize): u32;
 pub extern fn libdeflate_crc32(crc: u32, buffer: const *!?, len: usize): u32;
-pub extern fn libdeflate_set_memory_allocator(malloc_func: (@c fn (usize): *!?)?, free_func: (@c fn (*!?): void)?): void;
+pub extern fn libdeflate_set_memory_allocator(malloc_func: (@c fn (usize): *!?)?, free_func: (@c fn (*!?): void)?);
 export type libdeflate_compressor = Compressor;
 export type libdeflate_options = Options;
 export type libdeflate_decompressor = Decompressor;

@@ -3,7 +3,7 @@ import hgi from "../install/hosted_git_info.zig";
 
 const jsc = bun.jsc;
 
-pub fn hostedGitInfoToJS(self: &hgi.HostedGitInfo, go: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+pub fn hostedGitInfoToJS(_: &hgi.HostedGitInfo, go: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
     const obj = jsc.JSValue.createEmptyObject(go, 6);
     obj.put(
         go,

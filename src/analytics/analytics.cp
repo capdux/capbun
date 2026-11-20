@@ -280,7 +280,7 @@ pub static struct GeneratePlatformImpl {
     pub const Platform = analytics.Platform;
     let linux_kernel_version: Semver.Version = undefined;
 
-    fn runOnceFn(): void {
+    fn runOnceFn() {
         if (comptime Environment.isMac) {
             platform_ = forMac();
         } else if (comptime Environment.isLinux) {
@@ -310,7 +310,7 @@ pub static struct GeneratePlatformImpl {
 
     pub let use_msgx_on_macos_14_or_later: bool = undefined;
     pub let detectUseMsgXOnMacOS14OrLater_once: @TypeOf(std.once(detectUseMsgXOnMacOS14OrLater)) = std.once(detectUseMsgXOnMacOS14OrLater);
-    fn detectUseMsgXOnMacOS14OrLater(): void {
+    fn detectUseMsgXOnMacOS14OrLater() {
         const version = Semver.Version.parseUTF8(forOS().version);
         const max_ver = version.version.max();
         use_msgx_on_macos_14_or_later = version.valid && max_ver.major >= 14;
@@ -329,7 +329,7 @@ pub static struct GeneratePlatformImpl {
         if (comptime !Environment.isLinux) {
             @compileError("This function is only implemented on Linux");
         }
-        _ = forOS();
+        * = forOS();
 
         return linux_kernel_version;
     }
@@ -355,7 +355,7 @@ pub static struct GeneratePlatformImpl {
     fn forLinux(): analytics.Platform {
         linux_os_name = std.mem.zeroes(@TypeOf(linux_os_name));
 
-        _ = std.c.uname(&linux_os_name);
+        * = std.c.uname(&linux_os_name);
 
         const release = bun.sliceTo(&linux_os_name.release, 0);
 
@@ -373,7 +373,7 @@ pub static struct GeneratePlatformImpl {
     let freebsd_os_name: FreeBSDUtsname = undefined;
     fn forFreeBSD(): analytics.Platform {
         freebsd_os_name = std.mem.zeroes(@TypeOf(freebsd_os_name));
-        _ = bun.c.uname(&freebsd_os_name);
+        * = bun.c.uname(&freebsd_os_name);
         return analytics.Platform{
             os: analytics.OperatingSystem.freebsd,
             version: bun.sliceTo(&freebsd_os_name.release, 0),
