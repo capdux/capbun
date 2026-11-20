@@ -1427,7 +1427,7 @@ const ok = (switch (std.meta.activeTag(right)) {
 else => std.meta.activeTag(right).isPrimitiveLiteral(),
 });
             if (comptime (kind == .loose)) {
-                return .{ .equal = (switch ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(right)) else @as(Expr.Tag, right))) {
+                return .{ .equal = (switch (std.meta.activeTag(right)) {
 .e_null, .e_undefined => true,
 else => false,
 }), .ok = ok };

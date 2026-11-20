@@ -384,8 +384,8 @@ pub fn checkDynamicSpecifier(p: *P, arg: Expr, loc: logger.Loc, comptime kind: [
                     }
                     for (cp_mut_slice(&display)) |*c| {
                         _ = &c;
-                        if (((c.*).* == 0)) {
-                            (c.*).* = 42;
+                        if (((c.*) == 0)) {
+                            (c.*) = 42;
                         }
                     }
                 } else {
@@ -1459,16 +1459,16 @@ e.target = result;
                 if ((replacement_can_be_removed or (e.optional_chain == null))) {
                     for (cp_mut_slice(&e.args.slice())) |*arg| {
                         _ = &arg;
-                        switch (p.substituteSingleUseSymbolInExpr((arg.*).*, sym_ref, replacement, replacement_can_be_removed)) {
+                        switch (p.substituteSingleUseSymbolInExpr((arg.*), sym_ref, replacement, replacement_can_be_removed)) {
 .continue_ => {
 
 },
 .success => |result| {
-(arg.*).* = result;
+(arg.*) = result;
                         return .{ .success = expr };
 },
 .failure => |result| {
-(arg.*).* = result;
+(arg.*) = result;
                         return .{ .failure = expr };
 },
 }
@@ -1479,12 +1479,12 @@ e.target = result;
 .e_array => |e| {
 for (cp_mut_slice(&e.items.slice())) |*item| {
                 _ = &item;
-                switch (p.substituteSingleUseSymbolInExpr((item.*).*, sym_ref, replacement, replacement_can_be_removed)) {
+                switch (p.substituteSingleUseSymbolInExpr((item.*), sym_ref, replacement, replacement_can_be_removed)) {
 .continue_ => {
 
 },
 .success => |result| {
-(item.*).* = result;
+(item.*) = result;
                 return .{ .success = expr };
 },
 .failure => |result| {
@@ -3014,7 +3014,7 @@ pub fn ignoreUsageOfRuntimeRequire(p: *P) void {
 
 pub inline fn valueForRequire(p: *P, loc: logger.Loc) Expr {
             _ = bun.assert((!p.isSourceRuntime()));
-            return Expr{ .data = .{ .e_require_call_target = .{} }, .loc = loc };
+            return Expr{ .data = .{ .e_require_call_target = undefined }, .loc = loc };
     }
 
 pub inline fn valueForImportMetaMain(p: *P, inverted: bool, loc: logger.Loc) Expr {

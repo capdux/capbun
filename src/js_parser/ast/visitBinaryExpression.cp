@@ -1,3 +1,34 @@
+fn checkAndPrepareImpl(comptime P: type, v: auto, p: *P): Expr? {
+    let e_ = v.e;
+    if (e_.op == .bin_in && e_.left.data == .e_private_identifier) {
+        let priv_ident = e_.left.data.e_private_identifier;
+        const ident_name = p.loadNameFromRef(priv_ident.ref);
+        const result = p.findSymbol(e_.left.loc, ident_name) catch unreachable;
+        priv_ident.ref = result.ref;
+
+        // Unlike regular identifiers, there are no unbound private identifiers
+        const kind: Symbol.Kind = p.symbols.items[result.ref.innerIndex()].kind;
+        if (!Symbol.isKindPrivate(kind)) {
+            const r = logger.Range{ loc: e_.left.loc, len: @as(i32, @intCast(ident_name.len)) };
+            p.log.addRangeErrorFmt(p.source, r, p.allocator, "Private name \"{s}\" must be declared in an enclosing class", .{ident_name}) catch unreachable;
+        }
+
+        e_.right = p.visitExpr(e_.right);
+        e_.left = Expr{ data: { e_private_identifier: priv_ident }, loc: e_.left.loc };
+
+        // privateSymbolNeedsToBeLowered
+        return Expr{ loc: v.loc, data: { e_binary: e_ } };
+    }
+
+    v.is_stmt_expr = p.stmt_expr_value == .e_binary && p.stmt_expr_value.e_binary == e_;
+
+    v.left_in = ExprIn{
+        assign_target: e_.op.binaryAssignTarget(),
+    };
+
+    return null;
+}
+
 pub fn CreateBinaryExpressionVisitor(
     comptime parser_feature__typescript: bool,
     comptime parser_feature__jsx: JSXTransformType,
@@ -10,7 +41,7 @@ pub fn CreateBinaryExpressionVisitor(
         /// Returns the optimized expression if successful, null otherwise
         static fn tryOptimizeTypeofUndefined(e_: *E.Binary, p: *P, replacement_op: js_ast.Op.Code): Expr? {
             // Check if this is a typeof comparison with "undefined"
-            const typeof_expr, const string_expr, const flip_comparison = exprs: {
+            const expr_res = exprs: {
                 // Try left side as typeof, right side as string
                 if (e_.left.data == .e_unary && e_.left.data.e_unary.op == .un_typeof) {
                     if (e_.right.data == .e_string &&
@@ -35,6 +66,9 @@ pub fn CreateBinaryExpressionVisitor(
 
                 return null;
             };
+            const typeof_expr = expr_res[0];
+            const string_expr = expr_res[1];
+            const flip_comparison = expr_res[2];
 
             // Create new string with "u"
             const u_string = p.newExpr(E.String{ data: "u" }, string_expr.loc);
@@ -185,9 +219,9 @@ pub fn CreateBinaryExpressionVisitor(
 
                             // "x == void 0" => "x == null"
                             if (e_.left.data == .e_undefined) {
-                                e_.left.data = { e_null: E.Null{} };
+                                e_.left.data = { e_null: std.mem.zeroes(E.Null) };
                             } else if (e_.right.data == .e_undefined) {
-                                e_.right.data = { e_null: E.Null{} };
+                                e_.right.data = { e_null: std.mem.zeroes(E.Null) };
                             }
                         }
 
@@ -534,40 +568,7 @@ pub fn CreateBinaryExpressionVisitor(
             }
 
             pub fn checkAndPrepare(v: *BinaryExpressionVisitor, p: *P): Expr? {
-                let e_ = v.e;
-                switch (e_.left.data) {
-                    // Special-case private identifiers
-                    .e_private_identifier _private => {
-                        if (e_.op == .bin_in) {
-                            let private = _private;
-                            const name = p.loadNameFromRef(private.ref);
-                            const result = p.findSymbol(e_.left.loc, name) catch unreachable;
-                            private.ref = result.ref;
-
-                            // Unlike regular identifiers, there are no unbound private identifiers
-                            const kind: Symbol.Kind = p.symbols.items[result.ref.innerIndex()].kind;
-                            if (!Symbol.isKindPrivate(kind)) {
-                                const r = logger.Range{ loc: e_.left.loc, len: @as(i32, @intCast(name.len)) };
-                                p.log.addRangeErrorFmt(p.source, r, p.allocator, "Private name \"{s}\" must be declared in an enclosing class", .{name}) catch unreachable;
-                            }
-
-                            e_.right = p.visitExpr(e_.right);
-                            e_.left = { data: { e_private_identifier: private }, loc: e_.left.loc };
-
-                            // privateSymbolNeedsToBeLowered
-                            return Expr{ loc: v.loc, data: { e_binary: e_ } };
-                        }
-                    },
-                    else => {},
-                }
-
-                v.is_stmt_expr = p.stmt_expr_value == .e_binary && p.stmt_expr_value.e_binary == e_;
-
-                v.left_in = ExprIn{
-                    assign_target: e_.op.binaryAssignTarget(),
-                };
-
-                return null;
+                return checkAndPrepareImpl(P, v, p);
             }
         };
     };

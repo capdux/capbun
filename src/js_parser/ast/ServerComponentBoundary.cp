@@ -12,6 +12,8 @@ pub struct ServerComponentBoundaryAdapter {
     list: std.MultiArrayList(ServerComponentBoundary).Slice,
 
     fn hash(key: Index.Int): u32 {
+        const _unused = _.list.len;
+        * = _unused;
         return std.hash.int(@as(u32, key));
     }
 

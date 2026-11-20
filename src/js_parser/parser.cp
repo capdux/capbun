@@ -901,11 +901,11 @@ pub struct PrefillValue {
 }
 
 pub struct PrefillString {
-    static let Key: E.String = E.String{ data: &Prefill.StringLiteral.Key };
-    static let Children: E.String = E.String{ data: &Prefill.StringLiteral.Children };
-    static let Filename: E.String = E.String{ data: &Prefill.StringLiteral.Filename };
-    static let LineNumber: E.String = E.String{ data: &Prefill.StringLiteral.LineNumber };
-    static let ColumnNumber: E.String = E.String{ data: &Prefill.StringLiteral.ColumnNumber };
+    static let Key: E.String = E.String{ data: "key" };
+    static let Children: E.String = E.String{ data: "children" };
+    static let Filename: E.String = E.String{ data: "fileName" };
+    static let LineNumber: E.String = E.String{ data: "lineNumber" };
+    static let ColumnNumber: E.String = E.String{ data: "columnNumber" };
 
     static let @"$$typeof": E.String = E.String{ data: "$$typeof" };
     static let @"type": E.String = E.String{ data: "type" };
@@ -1175,7 +1175,8 @@ pub struct ReactRefresh {
     /// When a function is done visiting, the stack location is checked,
     /// and then it will insert `var _s = ...`, add the `_s()` call at
     /// the start of the function, and then add the call to `_s(func, ...)`.
-    hook_ctx_storage: (*HookContext?)? = null,
+    pub type HookContextPtr = (*HookContext)?;
+    hook_ctx_storage: (*HookContextPtr)? = null,
 
     /// This is the most recently generated `_s` call. This is used to compare
     /// against seen calls to plain identifiers when in "export default" and in

@@ -124,24 +124,24 @@ fn VisitExprVisitors(
                     };
 
                     const is_error = p.const_values.contains(result.ref) || p.options.bundle;
-                    switch (is_error) {
-                        true => p.log.addRangeErrorFmtWithNotes(
+                    if (is_error) {
+                        p.log.addRangeErrorFmtWithNotes(
                             p.source,
                             r,
                             p.allocator,
                             notes,
                             "Cannot assign to \"{s}\" because it is a constant",
                             .{name},
-                        ) catch unreachable,
-
-                        false => p.log.addRangeErrorFmtWithNotes(
+                        ) catch unreachable;
+                    } else {
+                        p.log.addRangeErrorFmtWithNotes(
                             p.source,
                             r,
                             p.allocator,
                             notes,
                             "This assignment will throw because \"{s}\" is a constant",
                             .{name},
-                        ) catch unreachable,
+                        ) catch unreachable;
                     }
                 } else if (p.exports_ref.eql(e_.ref)) {
                     // Assigning to `exports` in a CommonJS module must be tracked to undo the
@@ -162,7 +162,7 @@ fn VisitExprVisitors(
 
                         // Don't substitute an identifier for a non-identifier if this is an
                         // assignment target, since it'll cause a syntax error
-                        if (@as(Expr.Tag, newvalue.data) == .e_identifier || expr_in.assign_target == .none) {
+                        if (std.meta.activeTag(newvalue.data) == .e_identifier || expr_in.assign_target == .none) {
                             p.ignoreUsage(e_.ref);
                             return newvalue;
                         }
@@ -201,7 +201,7 @@ fn VisitExprVisitors(
             return p.handleIdentifier(expr.loc, e_, original_name, IdentifierOpts{
                 assign_target: expr_in.assign_target,
                 is_delete_target: is_delete_target,
-                is_call_target: @as(Expr.Tag, p.call_target) == .e_identifier && expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref),
+                is_call_target: std.meta.activeTag(p.call_target) == .e_identifier && expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref),
                 was_originally_identifier: true,
             });
         }
@@ -844,7 +844,7 @@ fn VisitExprVisitors(
         static fn e_dot(p: *P, expr: Expr, expr_in: ExprIn): Expr {
             const e_ = expr.data.e_dot;
             const is_delete_target = std.meta.activeTag(p.delete_target) == .e_dot && expr.data.e_dot == p.delete_target.e_dot;
-            const is_call_target = @as(Expr.Tag, p.call_target) == .e_dot && expr.data.e_dot == p.call_target.e_dot;
+            const is_call_target = std.meta.activeTag(p.call_target) == .e_dot && expr.data.e_dot == p.call_target.e_dot;
 
             if (parts := p.define.dots.get(e_.name)) {
                 for (*define of parts) {
@@ -1042,7 +1042,7 @@ fn VisitExprVisitors(
                             e2.right = p.visitExpr(e2.right);
                             p.decorator_class_name = null;
 
-                            if (@as(Expr.Tag, e2.left.data) == .e_identifier) {
+                            if (std.meta.activeTag(e2.left.data) == .e_identifier) {
                                 e2.right = p.maybeKeepExprSymbolName(
                                     e2.right,
                                     p.symbols.items[e2.left.data.e_identifier.ref.innerIndex()].original_name,
@@ -1134,7 +1134,7 @@ fn VisitExprVisitors(
                         property.initializer.?.data.e_class.should_lower_standard_decorators)
                     {
                         if (val := property.value) {
-                            if (@as(Expr.Tag, val.data) == .e_identifier) {
+                            if (std.meta.activeTag(val.data) == .e_identifier) {
                                 p.decorator_class_name = p.loadNameFromRef(val.data.e_identifier.ref);
                             }
                         }
@@ -1143,7 +1143,7 @@ fn VisitExprVisitors(
                     p.decorator_class_name = null;
 
                     if (val := property.value) {
-                        if (@as(Expr.Tag, val.data) == .e_identifier) {
+                        if (std.meta.activeTag(val.data) == .e_identifier) {
                             property.initializer = p.maybeKeepExprSymbolName(
                                 property.initializer ?? unreachable,
                                 p.symbols.items[val.data.e_identifier.ref.innerIndex()].original_name,

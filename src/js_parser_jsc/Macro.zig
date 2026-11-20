@@ -68,6 +68,11 @@ pub const bun = @import("bun");
 pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const PackageJsonPkg = @import("../resolver/package_json.zig");
 pub const ResolverPkg = @import("../resolver/resolver.zig");
+pub const MacroBaseError = error{
+    MacroFailed,
+    OutOfMemory,
+};
+
 pub const MacroContextWrapper = struct {
     args: std.meta.ArgsTuple(@TypeOf(Macro.Runner.run)),
     ret: Runner.MacroError!Expr,
@@ -465,7 +470,7 @@ _ = @panic("Unexpected caller type");
             return RunnerCallData.callWrapper(.{ m, log, allocator, function_name, caller, js_args, source, id });
     }
     pub const VisitMap = std.AutoHashMapUnmanaged(jsc.JSValue, Expr);
-    pub const MacroError = @typeInfo(@TypeOf(if (false) @as(u8 ! error{ MacroFailed, OutOfMemory }, 0) else if (false) @as(u8 ! ToJSError, 0) else @as(u8 ! bun.JSError, 0))).error_union.error_set;
+    pub const MacroError = TopLevelMacroError;
     pub const Run = RunnerRun;
 };
 
@@ -543,5 +548,6 @@ const JavaScript = bun.jsc;
 const jsc = bun.jsc;
 const js = bun.jsc.C;
 const empty_imports: [0]SImport = &.{};
+const TopLevelMacroError = @typeInfo(@TypeOf((if (false) @as(MacroBaseError!u8, 0) else (if (false) @as(ToJSError!u8, 0) else @as(bun.JSError!u8, 0))))).error_union.error_set;
 
 extern "c" fn Bun__startMacro(function: *const anyopaque, arg1: *anyopaque) callconv(.c) void;

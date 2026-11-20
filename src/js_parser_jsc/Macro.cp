@@ -492,12 +492,15 @@ struct RunnerCallData {
     }
 }
 
+err MacroBaseError { MacroFailed, OutOfMemory }
+const TopLevelMacroError = @typeInfo(@TypeOf(if (false) @as(u8 ! MacroBaseError, 0) else if (false) @as(u8 ! ToJSError, 0) else @as(u8 ! bun.JSError, 0))).error_union.error_set;
+
 export struct Runner {
     pub const VisitMap = std.AutoHashMapUnmanaged(jsc.JSValue, Expr);
 
     @tls pub let args_buf: [3]js.JSObjectRef = undefined;
     @tls pub let exception_holder: jsc.ZigException.Holder = undefined;
-    pub const MacroError = @typeInfo(@TypeOf(if (false) @as(u8 ! error{ MacroFailed, OutOfMemory }, 0) else if (false) @as(u8 ! ToJSError, 0) else @as(u8 ! bun.JSError, 0))).error_union.error_set;
+    pub const MacroError = TopLevelMacroError;
     pub const Run = RunnerRun;
 
     pub static fn run(

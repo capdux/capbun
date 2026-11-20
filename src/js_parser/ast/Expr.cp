@@ -3106,7 +3106,7 @@ pub union(Tag) Data {
 
                 if (comptime kind == .loose) {
                     return {
-                        equal: switch (@as(Expr.Tag, right)) {
+                        equal: switch (std.meta.activeTag(right)) {
                             .e_null, .e_undefined => true,
                             else => false,
                         },

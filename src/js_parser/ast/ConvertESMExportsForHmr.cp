@@ -157,12 +157,11 @@ pub struct DeduplicatedImportResult {
                                 value: Expr.initIdentifier(temp_id, stmt.loc),
                             })?;
 
-                            const decl_slice: [1]G = [
-                                G.Decl{
-                                    binding: Binding.alloc(p.allocator, B.Identifier{ ref: temp_id }, stmt.loc),
-                                    value: st.value.toExpr(),
-                                },
-                            ];
+                            let decl_slice: [1]G.Decl = undefined;
+                            decl_slice[0] = {
+                                binding: Binding.alloc(p.allocator, B.Identifier{ ref: temp_id }, stmt.loc),
+                                value: st.value.toExpr(),
+                            };
                             new_stmt = Stmt.alloc(S.Local, {
                                 kind: .k_const,
                                 decls: G.Decl.List.fromSlice(p.allocator, &decl_slice)?,

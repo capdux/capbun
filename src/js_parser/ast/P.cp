@@ -853,8 +853,8 @@ pub fn NewParser_(
                     // Print a human-readable shape: replace \x00 with *
                     const display = p.allocator.dupe(u8, shape)?;
                     defer p.allocator.free(display);
-                    for (*c of display) if (c.* == 0) {
-                        c.* = '*';
+                    for (*c of display) if (c == 0) {
+                        c = '*';
                     };
                     try p.log.addRangeErrorFmtWithNote(
                         p.source,
@@ -1374,6 +1374,9 @@ pub fn NewParser_(
 
         static fn newExpr(p: *P, t: auto, loc: logger.Loc): Expr {
             const Type = @TypeOf(t);
+            if (comptime Type == type) {
+                return Expr.init(t, std.mem.zeroes(t), loc);
+            }
 
             comptime {
                 if (jsx_transform_type == .none) {
@@ -2030,14 +2033,14 @@ pub fn NewParser_(
 
                         if (replacement_can_be_removed) {
                             for (*arg of new.args.slice()) {
-                                switch (p.substituteSingleUseSymbolInExpr(arg.*, sym_ref, replacement, replacement_can_be_removed)) {
+                                switch (p.substituteSingleUseSymbolInExpr(arg, sym_ref, replacement, replacement_can_be_removed)) {
                                     .continue_ => {},
                                     .success => |result| {
-                                        arg.* = result;
+                                        arg = result;
                                         return { success: expr };
                                     },
                                     .failure => |result| {
-                                        arg.* = result;
+                                        arg = result;
                                         return { failure: expr };
                                     },
                                 }
@@ -2285,14 +2288,14 @@ pub fn NewParser_(
                         // unless the value itself has no side effects
                         if (replacement_can_be_removed || e.optional_chain == null) {
                             for (*arg of e.args.slice()) {
-                                switch (p.substituteSingleUseSymbolInExpr(arg.*, sym_ref, replacement, replacement_can_be_removed)) {
+                                switch (p.substituteSingleUseSymbolInExpr(arg, sym_ref, replacement, replacement_can_be_removed)) {
                                     .continue_ => {},
                                     .success => |result| {
-                                        arg.* = result;
+                                        arg = result;
                                         return { success: expr };
                                     },
                                     .failure => |result| {
-                                        arg.* = result;
+                                        arg = result;
                                         return { failure: expr };
                                     },
                                 }
@@ -2302,10 +2305,10 @@ pub fn NewParser_(
 
                     .e_array => |e| {
                         for (*item of e.items.slice()) {
-                            switch (p.substituteSingleUseSymbolInExpr(item.*, sym_ref, replacement, replacement_can_be_removed)) {
+                            switch (p.substituteSingleUseSymbolInExpr(item, sym_ref, replacement, replacement_can_be_removed)) {
                                 .continue_ => {},
                                 .success => |result| {
-                                    item.* = result;
+                                    item = result;
                                     return { success: expr };
                                 },
                                 .failure => |result| {
@@ -4278,7 +4281,7 @@ pub fn NewParser_(
             bun.assert(!p.isSourceRuntime());
             return Expr{
                 data: {
-                    e_require_call_target: {},
+                    e_require_call_target: undefined,
                 },
                 loc: loc,
             };

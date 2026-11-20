@@ -53,7 +53,9 @@ pub const bun = @import("bun");
 pub const ServerComponentBoundaryAdapter = struct {
     list: std.MultiArrayList(ServerComponentBoundary).Slice,
 
-pub fn hash(key: Index.Int) u32 {
+pub fn hash(self: ServerComponentBoundaryAdapter, key: Index.Int) u32 {
+            const _unused = self.list.len;
+            _ = &_unused;
             return std.hash.int((if (comptime @typeInfo(@TypeOf(key)) == .@"enum") cp_cast_int(u32, @intFromEnum(key)) else cp_cast_int(u32, key)));
     }
 

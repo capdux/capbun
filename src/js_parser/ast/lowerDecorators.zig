@@ -860,10 +860,8 @@ pub fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
                     class_dec_stmt = varDecl(p, class_dec_ref.?, arr, loc);
                 }
             }
-            var prop_dec_refs = std.AutoHashMapUnmanaged(usize, Ref);
+            var prop_dec_refs: std.AutoHashMapUnmanaged(usize,Ref) = .{};
             _ = &prop_dec_refs;
-            {
-            }
             var computed_key_refs = std.AutoHashMapUnmanaged(usize, Ref);
             _ = &computed_key_refs;
             {

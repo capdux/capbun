@@ -683,11 +683,11 @@ pub const PrefillValue = struct {
 };
 
 pub const PrefillString = struct {
-    pub var Key: E.String = E.String{ .data = *const Prefill.StringLiteral.Key };
-    pub var Children: E.String = E.String{ .data = *const Prefill.StringLiteral.Children };
-    pub var Filename: E.String = E.String{ .data = *const Prefill.StringLiteral.Filename };
-    pub var LineNumber: E.String = E.String{ .data = *const Prefill.StringLiteral.LineNumber };
-    pub var ColumnNumber: E.String = E.String{ .data = *const Prefill.StringLiteral.ColumnNumber };
+    pub var Key: E.String = E.String{ .data = "key" };
+    pub var Children: E.String = E.String{ .data = "children" };
+    pub var Filename: E.String = E.String{ .data = "fileName" };
+    pub var LineNumber: E.String = E.String{ .data = "lineNumber" };
+    pub var ColumnNumber: E.String = E.String{ .data = "columnNumber" };
     pub var @"$$typeof": E.String = E.String{ .data = "$$typeof" };
     pub var @"type": E.String = E.String{ .data = "type" };
     pub var @"ref": E.String = E.String{ .data = "ref" };
@@ -772,7 +772,7 @@ pub const ReactRefresh = struct {
     create_signature_ref: Ref = Ref.None,
     force_reset: bool = false,
     last_hook_seen: ?*E.Call = null,
-    hook_ctx_storage: ??*HookContext = null,
+    hook_ctx_storage: ?*HookContextPtr = null,
     latest_signature_ref: Ref = Ref.None,
 
 pub fn isComponentishName(id: []const u8) bool {
@@ -791,6 +791,7 @@ pub fn isHookName(id: []const u8) bool {
 else => false,
 }));
     }
+    pub const HookContextPtr = ?*HookContext;
     pub const HookContext = struct {
         hasher: std.hash.Wyhash,
         signature_cb: Ref,

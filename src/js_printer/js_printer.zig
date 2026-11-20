@@ -745,8 +745,8 @@ pub fn formatUnsignedIntegerBetween(comptime len: u16, buf: *[len]u8, val: u64) 
         var remainder = val;
         _ = &remainder;
         inline while ((i > 0)) {
-            (comptime i) = ((comptime i) - 1);
-            buf[cp_cast_int(usize, (comptime i))] = (@as(u8, @intCast((remainder % 10))) + 48);
+            i = (i - 1);
+            buf[cp_cast_int(usize, i)] = (@as(u8, @intCast((remainder % 10))) + 48);
             remainder = (remainder / 10);
         }
 }

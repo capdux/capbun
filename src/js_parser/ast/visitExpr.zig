@@ -208,15 +208,11 @@ pub fn e_identifier(p: *P, expr: Expr, expr_in: ExprIn) Expr {
                     _ = &notes;
                     notes[cp_cast_int(usize, 0)] = logger.Data{ .text = ((std.fmt.allocPrint(p.allocator, "The symbol \"{s}\" was declared a constant here:", .{ name })) catch unreachable), .location = logger.Location.initOrNull(p.source, js_lexer.rangeOfIdentifier(p.source, result.declare_loc.?)) };
                     const is_error = (p.const_values.contains(result.ref) or p.options.bundle);
-                    switch (is_error) {
-true => {
-_ = ((p.log.addRangeErrorFmtWithNotes(p.source, r, p.allocator, notes, "Cannot assign to \"{s}\" because it is a constant", .{ name })) catch unreachable);
-},
-false => {
-_ = ((p.log.addRangeErrorFmtWithNotes(p.source, r, p.allocator, notes, "This assignment will throw because \"{s}\" is a constant", .{ name })) catch unreachable);
-},
-else => unreachable,
-}
+                    if (is_error) {
+                        _ = ((p.log.addRangeErrorFmtWithNotes(p.source, r, p.allocator, notes, "Cannot assign to \"{s}\" because it is a constant", .{ name })) catch unreachable);
+                    } else {
+                        _ = ((p.log.addRangeErrorFmtWithNotes(p.source, r, p.allocator, notes, "This assignment will throw because \"{s}\" is a constant", .{ name })) catch unreachable);
+                    }
                 } else {
                     if (p.exports_ref.eql(e_.ref)) {
                         p.commonjs_module_exports_assigned_deoptimized = true;
@@ -231,7 +227,7 @@ else => unreachable,
                     _ = &def;
                     if ((!def.valueless())) {
                         const newvalue = p.valueForDefine(expr.loc, expr_in.assign_target, is_delete_target, def);
-                        if ((((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(newvalue.data)) else @as(Expr.Tag, newvalue.data)) == .e_identifier) or (expr_in.assign_target == .none))) {
+                        if (((std.meta.activeTag(newvalue.data) == .e_identifier) or (expr_in.assign_target == .none))) {
                             _ = p.ignoreUsage(e_.ref);
                             return newvalue;
                         }
@@ -254,7 +250,7 @@ else => unreachable,
                     return p.valueForRequire(expr.loc);
                 }
             }
-            return p.handleIdentifier(expr.loc, e_, original_name, IdentifierOpts{ .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target, .is_call_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.call_target)) else @as(Expr.Tag, p.call_target)) == .e_identifier) and expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref)), .was_originally_identifier = true });
+            return p.handleIdentifier(expr.loc, e_, original_name, IdentifierOpts{ .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target, .is_call_target = ((std.meta.activeTag(p.call_target) == .e_identifier) and expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref)), .was_originally_identifier = true });
     }
 
 pub fn e_jsx_element(p: *P, expr: Expr, unused_in: ExprIn) Expr {
@@ -679,7 +675,7 @@ else => {
 pub fn e_dot(p: *P, expr: Expr, expr_in: ExprIn) Expr {
             const e_ = expr.data.e_dot;
             const is_delete_target = ((std.meta.activeTag(p.delete_target) == .e_dot) and (expr.data.e_dot == p.delete_target.e_dot));
-            const is_call_target = (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(p.call_target)) else @as(Expr.Tag, p.call_target)) == .e_dot) and (expr.data.e_dot == p.call_target.e_dot));
+            const is_call_target = ((std.meta.activeTag(p.call_target) == .e_dot) and (expr.data.e_dot == p.call_target.e_dot));
             if (p.define.dots.get((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name))) |parts| {
                 _ = &parts;
                 for (cp_mut_slice(&parts)) |*define| {
@@ -825,7 +821,7 @@ if (((expr_in.assign_target != .none) and (e2.op == .bin_assign))) {
                     e2.left = p.visitExprInOut(e2.left, ExprIn{ .assign_target = .replace });
                     e2.right = p.visitExpr(e2.right);
                     p.decorator_class_name = null;
-                    if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(e2.left.data)) else @as(Expr.Tag, e2.left.data)) == .e_identifier)) {
+                    if ((std.meta.activeTag(e2.left.data) == .e_identifier)) {
                         e2.right = p.maybeKeepExprSymbolName(e2.right, p.symbols.items[@as(usize, @intCast(e2.left.data.e_identifier.ref.innerIndex()))].original_name, was_anonymous_named_expr);
                     }
                 } else {
@@ -892,7 +888,7 @@ else => {
                     if (((was_anonymous_named_expr and ((property.*).initializer.?.data == .e_class)) and (property.*).initializer.?.data.e_class.should_lower_standard_decorators)) {
                         if ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)) |val| {
                             _ = &val;
-                            if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(val.data)) else @as(Expr.Tag, val.data)) == .e_identifier)) {
+                            if ((std.meta.activeTag(val.data) == .e_identifier)) {
                                 p.decorator_class_name = p.loadNameFromRef(val.data.e_identifier.ref);
                             }
                         }
@@ -901,7 +897,7 @@ else => {
                     p.decorator_class_name = null;
                     if ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)) |val| {
                         _ = &val;
-                        if (((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(val.data)) else @as(Expr.Tag, val.data)) == .e_identifier)) {
+                        if ((std.meta.activeTag(val.data) == .e_identifier)) {
                             (property.*).initializer = p.maybeKeepExprSymbolName((((property.*).initializer) orelse (unreachable)), p.symbols.items[@as(usize, @intCast(val.data.e_identifier.ref.innerIndex()))].original_name, was_anonymous_named_expr);
                         }
                     }

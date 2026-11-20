@@ -15,8 +15,8 @@ fn formatUnsignedIntegerBetween(comptime len: u16, buf: *[len]u8, val: u64) {
 
     // Write out the number from the end to the front
     inline while (i > 0) {
-        comptime i -= 1;
-        buf[comptime i] = @as(u8, @intCast((remainder % 10))) + '0';
+        i -= 1;
+        buf[i] = @as(u8, @intCast((remainder % 10))) + '0';
         remainder /= 10;
     }
 }
