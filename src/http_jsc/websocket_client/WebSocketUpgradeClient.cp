@@ -28,7 +28,7 @@ const ZigSlice = jsc.ZigString.Slice;
 const log = Output.scoped(.WebSocketUpgradeClient, .visible);
 
 const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
-const empty_zig_slices: [0]ZigSlice = std.mem.zeroes([0]ZigSlice);
+const empty_zig_slices: [0]ZigSlice = undefined;
 const empty_byte_slices: []const []const u8 = [];
 
 export struct TopDeflateNegotiationResult {
@@ -509,7 +509,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
             let client = bun.new(HTTPClient, {
                 ref_count: RefCount.init(),
-                tcp: Socket{ socket: { detached: {} } },
+                tcp: Socket{ socket: { detached: undefined } },
                 outgoing_websocket: websocket,
                 input_body_buf: if (using_proxy) connect_request else req_body,
                 state: .initializing,

@@ -95,7 +95,7 @@ pub struct ReadPtr {
         }
 
         this.fd = .fromNative(std.posix.inotify_init1(IN.CLOEXEC)?);
-        const allocated = bun.default_allocator.alignedAlloc(EventListBytes, .@"of"(Event), 1)?;
+        const allocated = bun.default_allocator.alignedAlloc(EventListBytes, std.mem.Alignment.fromByteUnits(@alignOf(Event)), 1)?;
         this.eventlist_bytes = &allocated[0];
         log("{f} init", [this.fd]);
     }
@@ -103,7 +103,7 @@ pub struct ReadPtr {
     pub fn read(*_): bun.sys.Maybe(ConstUnalignedEventSlice) {
         bun.assert(this.loaded);
         let i: u32 = 0;
-        let empty_u8: [0]u8 = [];
+        let empty_u8: [0]u8 = undefined;
         let read_eventlist_bytes: []u8 = empty_u8[0..0];
         if (this.read_ptr != null) {
             const ptr = this.read_ptr.?;
@@ -308,7 +308,7 @@ pub struct ReadPtr {
 
         let name_off: u8 = 0;
         let all_events = watcher.watch_events[0..event_count];
-        std.sort.pdq(WatchEvent, all_events, undefined, WatchEvent.sortByIndex);
+        std.sort.pdq(WatchEvent, all_events, {}, WatchEvent.sortByIndex);
 
         let last_event_index: usize = 0;
         let last_event_id: EventListIndex = std.math.maxInt(EventListIndex);

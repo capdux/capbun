@@ -51,6 +51,7 @@ pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (c
 
 pub const bun = @import("bun");
 pub const codecs = @import("./codecs.zig");
+const OptU8ManyPtr = ?[*]u8;
 const tjhandle = ?*void;
 const ScalingFactor = extern struct { num: c_int, denom: c_int };
 const CropRegion = extern struct { x: c_int, y: c_int, w: c_int, h: c_int };
@@ -76,7 +77,7 @@ pub extern "c" fn tj3DecompressHeader(h: tjhandle, buf: [*]const u8, len: usize)
 
 extern "c" fn tj3Decompress8(h: tjhandle, buf: [*]const u8, len: usize, dst: [*]u8, pitch: c_int, pf: c_int) callconv(.c) c_int;
 
-extern "c" fn tj3Compress8(h: tjhandle, src: [*]const u8, w: c_int, pitch: c_int, height: c_int, pf: c_int, out: ?*[*]u8, out_len: *usize) callconv(.c) c_int;
+extern "c" fn tj3Compress8(h: tjhandle, src: [*]const u8, w: c_int, pitch: c_int, height: c_int, pf: c_int, out: *OptU8ManyPtr, out_len: *usize) callconv(.c) c_int;
 
 extern "c" fn tj3SetScalingFactor(h: tjhandle, sf: ScalingFactor) callconv(.c) c_int;
 
@@ -88,7 +89,7 @@ pub extern "c" fn tj3Free(ptr: ?*anyopaque) callconv(.c) void;
 
 extern "c" fn tj3GetErrorStr(h: tjhandle) callconv(.c) [*:0]const u8;
 
-extern "c" fn tj3GetICCProfile(h: tjhandle, icc_buf: ?*[*]u8, icc_size: *usize) callconv(.c) c_int;
+extern "c" fn tj3GetICCProfile(h: tjhandle, icc_buf: *OptU8ManyPtr, icc_size: *usize) callconv(.c) c_int;
 
 extern "c" fn tj3SetICCProfile(h: tjhandle, icc_buf: ?[*]const u8, icc_size: usize) callconv(.c) c_int;
 
@@ -161,7 +162,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         if (((tj3Get(h, TJPARAM_JPEGWIDTH) != rw) or (tj3Get(h, TJPARAM_JPEGHEIGHT) != rh))) {
             return error.DecodeFailed;
         }
-        var icc_ptr: ?[*]u8 = null;
+        var icc_ptr: OptU8ManyPtr = null;
         _ = &icc_ptr;
         var icc_size: usize = 0;
         _ = &icc_size;
@@ -207,7 +208,7 @@ pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool,
                 _ = tj3SetICCProfile(h, p.ptr, p.len);
             }
         }
-        var out_ptr: ?[*]u8 = null;
+        var out_ptr: OptU8ManyPtr = null;
         _ = &out_ptr;
         var out_len: usize = 0;
         _ = &out_len;

@@ -671,7 +671,7 @@ fn doWrite(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc
 fn schedule(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue, kind: PipelineTask.Kind, deliver: PipelineTask.Deliver): bun.JSError!jsc.JSValue {
     if (_.source == .blob)
         return BlobReadChain.start(_, global, this_value, kind, deliver);
-    const input = _.pinForTask(this_value, global) catch |e| {
+    let input = _.pinForTask(this_value, global) catch |e| {
         // `deliver` may own a Strong; the task that would have freed it in
         // deinit() is never created on this branch.
         let mut_del = blk: { break :blk deliver; };
@@ -738,7 +738,7 @@ fn encodeForBody(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue): bun.
             } else return global.throw(refuse, {});
         } else return global.throw(refuse, {});
     }
-    const input = _.pinForTask(this_value, global) catch |e| {
+    let input = _.pinForTask(this_value, global) catch |e| {
         if (e == error.OutOfMemory) bun.outOfMemory();
         return global.throw("Image: source ArrayBuffer was detached", {});
     };
@@ -1084,7 +1084,8 @@ pub struct PipelineTask {
             owned = codecs.resize(rgba, sw, sh, w, h, .box)?;
             pixels = owned.?;
         }
-        let buf: [thumbhash.max_len]u8 = undefined;
+        const thumbhash_max_len = comptime thumbhash.max_len;
+        let buf: [thumbhash_max_len]u8 = undefined;
         const hash = thumbhash.encode(&buf, w, h, pixels);
         const rendered = thumbhash.decode(hash)?;
         defer bun.default_allocator.free(rendered.rgba);

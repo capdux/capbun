@@ -223,8 +223,9 @@ pub struct json {
         if (kn := known_newline) {
             idx = kn;
         } else {
-            const found = bun.strings.indexOfChar(data, '\n') ??
-                return IPCDecodeError.NotEnoughBytes;
+            const found_opt = bun.strings.indexOfChar(data, '\n');
+            if (found_opt == null) return IPCDecodeError.NotEnoughBytes;
+            const found = found_opt.?;
             // Individual IPC messages should not exceed 4GB, and idx+1 must not overflow
             if (found >= std.math.maxInt(u32)) return IPCDecodeError.InvalidFormat;
             idx = @as(u32, @intCast(found));
@@ -678,7 +679,7 @@ pub struct SendQueue {
         _.close_event_sent = true;
         switch (_.owner) {
             inline else => |owner| {
-                owner.handleIPCClose();
+                owner.*.handleIPCClose();
             },
         }
     }
@@ -1160,7 +1161,8 @@ pub union(enum) IPCCommand {
 
 fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalThis: *jsc.JSGlobalObject) {
     if (comptime Environment.isDebug) {
-        let formatter = jsc.JSValue.Formatter{ global: globalThis };
+        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
+        defer formatter.deinit();
         switch (message) {
             .version => |version| log("received ipc message: version: {}", .{ version }),
             .data => |jsvalue| log("received ipc message: {f}", .{ jsvalue.toFmt(&formatter) }),

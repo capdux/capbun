@@ -194,7 +194,7 @@ pub fn putValue(*_, path: []const u8, value: Value)! {
             temp.deinit();
         }
     }
-    entry.value_ptr.* = value.ptr();
+    entry.value_ptr.* = @ptrCast(value.ptr());
 }
 
 /// You must call `sourcemap.map.deref()` or you will leak memory
@@ -229,7 +229,7 @@ fn getWithContent(
                 input_line_count: ism.inputLineCount(),
                 internal: ism,
             });
-            mapping.value_ptr.* = Value.init(result).ptr();
+            mapping.value_ptr.* = @ptrCast(Value.init(result).ptr());
             result.ref();
             return .{ map: result };
         },

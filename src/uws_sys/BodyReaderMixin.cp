@@ -28,8 +28,8 @@ pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime
                     onError(@fieldParentPtr(field, mixin));
                 }
             };
-            resp.onData(@This(), handlers.onDataGeneric, ctx);
-            resp.onAborted(@This(), handlers.onAborted, ctx);
+            resp.onData(ctx, handlers.onDataGeneric);
+            resp.onAborted(ctx, handlers.onAborted);
         }
 
         fn onData(ctx: *@This(), resp: uws.AnyResponse, chunk: []const u8, last: bool) !void {

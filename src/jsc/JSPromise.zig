@@ -53,6 +53,7 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const VM = jsc.VM;
+const WrapCallback = *const fn(*anyopaque, *JSGlobalObject) callconv(.c) JSValue;
 pub const JSPromiseStatus = enum(u32) {
     pending = 0, // Making this as 0, so that, we can change the status from Pending to others without masking.
     fulfilled = 1,
@@ -181,7 +182,9 @@ pub const JSPromise = opaque {
     pub fn wrapValue(globalObject: *JSGlobalObject, value: JSValue) JSValue {
         if (value == .zero) {
             return resolvedPromiseValue(globalObject, .js_undefined);
-        } else if (value.isEmptyOrUndefinedOrNull() || !value.isCell()) {
+        } else if (value.isEmptyOrUndefinedOrNull()) {
+            return resolvedPromiseValue(globalObject, value);
+        } else if (!value.isCell()) {
             return resolvedPromiseValue(globalObject, value);
         }
 
@@ -334,7 +337,7 @@ extern "c" fn JSC__JSPromise__resolvedPromise(arg0: *JSGlobalObject, JSValue1: J
 
 extern "c" fn JSC__JSPromise__resolvedPromiseValue(arg0: *JSGlobalObject, JSValue1: JSValue) callconv(.c) JSValue;
 
-extern "c" fn JSC__JSPromise__wrap(global: *jsc.JSGlobalObject, ptr: *anyopaque, callback: *const fn (*anyopaque, *JSGlobalObject) JSValue) callconv(.c) JSValue;
+extern "c" fn JSC__JSPromise__wrap(global: *jsc.JSGlobalObject, ptr: *anyopaque, callback: WrapCallback) callconv(.c) JSValue;
 
 pub fn JSPromiseWeak(comptime T: type) type {
         return struct {

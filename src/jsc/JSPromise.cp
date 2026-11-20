@@ -13,7 +13,8 @@ const VM = jsc.VM;
     fn JSC__JSPromise__rejectedPromiseValue(arg0: *JSGlobalObject, JSValue1: JSValue): JSValue;
     fn JSC__JSPromise__resolvedPromise(arg0: *JSGlobalObject, JSValue1: JSValue): *JSPromise;
     fn JSC__JSPromise__resolvedPromiseValue(arg0: *JSGlobalObject, JSValue1: JSValue): JSValue;
-    fn JSC__JSPromise__wrap(global: *jsc.JSGlobalObject, ptr: *!, callback: *const fn (*!, *JSGlobalObject) JSValue): JSValue;
+    const WrapCallback = *const fn (*!, *JSGlobalObject) callconv(.c) JSValue;
+    fn JSC__JSPromise__wrap(global: *jsc.JSGlobalObject, ptr: *!, callback: WrapCallback): JSValue;
 }
 
 pub const JSPromiseStatus = enum(u32) {
@@ -239,7 +240,9 @@ pub const JSPromise = opaque {
     pub fn wrapValue(globalObject: *JSGlobalObject, value: JSValue): JSValue {
         if (value == .zero) {
             return resolvedPromiseValue(globalObject, .js_undefined);
-        } else if (value.isEmptyOrUndefinedOrNull() || !value.isCell()) {
+        } else if (value.isEmptyOrUndefinedOrNull()) {
+            return resolvedPromiseValue(globalObject, value);
+        } else if (!value.isCell()) {
             return resolvedPromiseValue(globalObject, value);
         }
 

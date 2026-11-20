@@ -1941,7 +1941,7 @@ pub const FFI = struct {
 
             try writer.writeAll("  ");
             let inner_buf_: [372]u8 = undefined;
-            let inner_buf: []u8 = &{};
+            let inner_buf: []u8 = inner_buf_[0..0];
 
             {
                 const ptr = @intFromPtr(context_ptr);
@@ -2399,7 +2399,7 @@ const CompilerRT = struct {
     pub fn inject(state: *TCC.State) void {
         state.addSymbol("memset", &memset) catch unreachable;
         state.addSymbol("memcpy", &memcpy) catch unreachable;
-        state.addSymbol("NapiHandleScope__open", &bun.api.napi.NapiHandleScope.NapiHandleScope__open) catch unreachable;
+        state.addSymbol("NapiHandleScope__open", &bun.api.napi.NapiHandleScope__open) catch unreachable;
         state.addSymbol("NapiHandleScope__close", &bun.api.napi.NapiHandleScope.NapiHandleScope__close) catch unreachable;
 
         state.addSymbol("JSVALUE_TO_INT64_SLOW", workaround.JSVALUE_TO_INT64) catch unreachable;

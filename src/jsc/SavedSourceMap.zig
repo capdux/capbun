@@ -254,7 +254,7 @@ pub fn putValue(self: *SavedSourceMap, path: []const u8, value: Value) !void {
                 }
             }
         }
-        entry.value_ptr.* = value.ptr();
+        entry.value_ptr.* = @ptrCast(value.ptr());
 }
 
 pub fn getWithContent(self: *SavedSourceMap, path: []const u8, hint: SourceMap.ParseUrlResultHint) SourceMap.ParseUrl {
@@ -271,7 +271,7 @@ defer {
         }
         const ism: InternalSourceMap = .{ .data = @alignCast(@ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap))) };
         const result = bun.new(ParsedSourceMap, .{ .ref_count = .init(), .input_line_count = ism.inputLineCount(), .internal = ism });
-        mapping.value_ptr.* = Value.init(result).ptr();
+        mapping.value_ptr.* = @ptrCast(Value.init(result).ptr());
         _ = result.ref();
         return .{ .map = result };
 },

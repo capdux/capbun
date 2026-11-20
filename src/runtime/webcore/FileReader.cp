@@ -99,7 +99,7 @@ pub fn openFileBlobImpl(file: *Blob.Store.File): bun.sys.Maybe(FileReaderOpenedF
         const stat: bun.Stat = stat_res.result;
 
         if (bun.S.ISDIR(stat.mode)) {
-            bun.Async.Closer.close(fd, {});
+            bun.Async.Closer.close(fd, undefined);
             return .{ .err = .fromCode(.ISDIR, .fstat) };
         }
 
@@ -276,7 +276,7 @@ pub union(enum) Lazy {
             }
         }
 
-        return .{ .ready = {} };
+        return .{ .ready = undefined };
     }
 
     pub fn parent(*_): *Source {
@@ -379,7 +379,7 @@ pub union(enum) Lazy {
                         @memcpy(_.pending_view[0..buffer.items.len], buffer.items);
                         _.pending.result = .{ .into_array_and_done = .{ .value = _.pending_value.get() ?? .zero, .len = @truncate(buffer.items.len) } };
                     } else {
-                        _.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(buffer) };
+                        _.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(&_.buffered) };
                     }
                 } else {
                     _.pending.result = .done;

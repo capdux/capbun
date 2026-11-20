@@ -658,10 +658,7 @@ pub fn transpileSourceCode(
                 if (source := virtual_source) {
                     if (globalThis := globalObject) {
                         // attempt to avoid reading the WASM file twice.
-                        const decoded: jsc.DecodedJSValue = {
-                            u: { ptr: @ptrCast(globalThis) },
-                        };
-                        const globalValue = decoded.encode();
+                        const globalValue = jsc.JSValue.fromCell(globalThis);
                         globalValue.put(
                             globalThis,
                             ZigString.static("wasmSourceBytes"),

@@ -82,9 +82,9 @@ pub const Walker = @This();
 
 stack: std.array_list.Managed(StackItem),
 name_buffer: NameBufferList,
-skip_filenames: []u64 = (&&.{}),
-skip_dirnames: []u64 = (&&.{}),
-skip_all: []u64 = (&&.{}),
+skip_filenames: []u64 = &.{},
+skip_dirnames: []u64 = &.{},
+skip_all: []u64 = &.{},
 seed: u64 = 0,
 resolve_unknown_entry_types: bool = false,
 
@@ -176,7 +176,7 @@ pub fn deinit(self: *Walker) void {
         _ = self.name_buffer.deinit();
 }
 
-pub fn walk(self: Walker, _: FD, allocator: Allocator, skip_filenames: []const OSPathSlice, skip_dirnames: []const OSPathSlice) OOM!Walker {
+pub fn walk(dir: FD, allocator: Allocator, skip_filenames: []const OSPathSlice, skip_dirnames: []const OSPathSlice) OOM!Walker {
         var name_buffer = NameBufferList.init(allocator);
         _ = &name_buffer;
         errdefer {
@@ -207,7 +207,7 @@ pub fn walk(self: Walker, _: FD, allocator: Allocator, skip_filenames: []const O
             skip_dirnames_[cp_cast_int(usize, mut_i)] = bun.hashWithSeed(seed, std.mem.sliceAsBytes(name));
             mut_i = (mut_i + 1);
         }
-        _ = try stack.append(Walker.StackItem{ .iter = DirIterator.iterate(self, iter_kind), .dirname_len = 0 });
+        _ = try stack.append(Walker.StackItem{ .iter = DirIterator.iterate(dir, iter_kind), .dirname_len = 0 });
         return Walker{ .stack = stack, .name_buffer = name_buffer, .skip_all = skip_names, .seed = seed, .skip_filenames = skip_filenames_, .skip_dirnames = skip_dirnames_ };
 }
 const NameBufferList = std.array_list.Managed(bun.OSPathChar);

@@ -113,6 +113,7 @@ pub const ProxySlot = struct {
     ptr: *((*RefCountedEnvValue)?),
 }
 
+type OptRefCountedEnvValue = (*RefCountedEnvValue)?;
 pub struct ProxyEnvStorage {
     HTTP_PROXY: (*RefCountedEnvValue)? = null,
     http_proxy: (*RefCountedEnvValue)? = null,
@@ -131,7 +132,7 @@ pub struct ProxyEnvStorage {
         else
             bun.strings.eql;
         inline for (f of @typeInfo(ProxyEnvStorage).@"struct".fields) {
-            if (comptime f.type == (*RefCountedEnvValue)?) {
+            if (comptime f.type == OptRefCountedEnvValue) {
                 if (eql(name, f.name)) {
                     return ProxySlot{ key: f.name, ptr: &@field(_, f.name) };
                 }
@@ -142,7 +143,7 @@ pub struct ProxyEnvStorage {
 
     pub fn cloneFrom(*_, parent: *const ProxyEnvStorage) {
         inline for (f of @typeInfo(ProxyEnvStorage).@"struct".fields) {
-            if (comptime f.type == (*RefCountedEnvValue)?) {
+            if (comptime f.type == OptRefCountedEnvValue) {
                 if (val := @field(parent, f.name)) {
                     val.ref();
                     @field(_, f.name) = val;
@@ -153,7 +154,7 @@ pub struct ProxyEnvStorage {
 
     pub fn syncInto(*_, map: *bun.DotEnv.Map) {
         inline for (f of @typeInfo(ProxyEnvStorage).@"struct".fields) {
-            if (comptime f.type == (*RefCountedEnvValue)?) {
+            if (comptime f.type == OptRefCountedEnvValue) {
                 if (val := @field(_, f.name)) {
                     bun.handleOom(map.put(f.name, val.bytes));
                 }
@@ -163,7 +164,7 @@ pub struct ProxyEnvStorage {
 
     pub fn deinit(*_) {
         inline for (f of @typeInfo(ProxyEnvStorage).@"struct".fields) {
-            if (comptime f.type == (*RefCountedEnvValue)?) {
+            if (comptime f.type == OptRefCountedEnvValue) {
                 if (val := @field(_, f.name)) {
                     val.deref();
                     @field(_, f.name) = null;
@@ -825,7 +826,6 @@ pub enum StdinFdType: i32 {
     }
 
     pub fn deinit(*_) {
-        _.editor_context.deinit();
         if (m := _.mime_types) {
             m.deinit();
         }

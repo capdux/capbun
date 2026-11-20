@@ -239,7 +239,7 @@ pub inline fn throw(self: GlobalJS, comptime fmt: []const u8, args: anytype) She
             return .{ .custom = str };
     }
 
-pub inline fn createNullDelimitedEnvMap(self: GlobalJS, alloc: Allocator) !?[:null][*:0]u8 {
+pub inline fn createNullDelimitedEnvMap(self: GlobalJS, alloc: Allocator) !?[:null][*:0]const u8 {
             return self.globalThis.bunVM().transpiler.env.map.createNullDelimitedEnvMap(alloc);
     }
 
@@ -301,7 +301,7 @@ pub inline fn handleError(self: GlobalMini, e: anytype, comptime fmt: []const u8
             return .{ .custom = str };
     }
 
-pub inline fn createNullDelimitedEnvMap(self: GlobalMini, alloc: Allocator) !?[:null][*:0]u8 {
+pub inline fn createNullDelimitedEnvMap(self: GlobalMini, alloc: Allocator) !?[:null][*:0]const u8 {
             return self.mini.env.?.map.createNullDelimitedEnvMap(alloc);
     }
 
@@ -1295,7 +1295,7 @@ pub const Test = struct {
             Delimit,
             Eof,
     
-            fn from_real(the_token: Token, buf: []const u8) TestToken {
+            pub fn from_real(the_token: Token, buf: []const u8) TestToken {
                 switch (the_token) {
                     .Var => |txt| return .{ .Var = buf[txt.start..txt.end] },
                     .VarArgv => |int| return .{ .VarArgv = int },
@@ -2791,9 +2791,9 @@ pub fn asErr(self: @This()) ?ShellErr {
 };
 }
 
-extern "c" fn setenv(name: [*:0]u8, value: [*:0]u8, overwrite: i32) callconv(.c) i32;
+extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: i32) callconv(.c) i32;
 
-pub fn setEnv(name: [*:0]u8, value: [*:0]u8) void {
+pub fn setEnv(name: [*:0]const u8, value: [*:0]const u8) void {
         _ = setenv(name, value, 1);
 }
 
@@ -3965,7 +3965,7 @@ pub fn isValidVarName(var_name: []const u8) bool {
         }
         var iter = CodepointIterator.init(var_name);
         _ = &iter;
-        var cursor = CodepointIterator.Cursor;
+        var cursor: CodepointIterator.Cursor = .{};
         _ = &cursor;
         if ((!iter.next((&cursor)))) {
             return false;
@@ -4031,7 +4031,7 @@ pub fn hasEqSign(str: []const u8) ?u32 {
         }
         var iter = CodepointIterator.init(str);
         _ = &iter;
-        var cursor = CodepointIterator.Cursor;
+        var cursor: CodepointIterator.Cursor = .{};
         _ = &cursor;
         while (iter.next((&cursor))) {
             if ((cursor.c == 61)) {

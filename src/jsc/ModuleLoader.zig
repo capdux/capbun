@@ -522,8 +522,7 @@ if ((strings.eqlComptime(referrer, "undefined") and strings.eqlLong(jsc_vm.main,
                 _ = &source;
                 if (globalObject) |globalThis| {
                     _ = &globalThis;
-                    const decoded: jsc.DecodedJSValue = .{ .u = .{ .ptr = @ptrCast(globalThis) } };
-                    const globalValue = decoded.encode();
+                    const globalValue = jsc.JSValue.fromCell(globalThis);
                     _ = globalValue.put(globalThis, ZigString.static("wasmSourceBytes"), try jsc.ArrayBuffer.create(globalThis, source.contents, .Uint8Array));
                 }
             }

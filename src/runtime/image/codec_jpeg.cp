@@ -9,7 +9,8 @@ extern fn tj3Set(h: tjhandle, param: c_int, value: c_int): c_int ;
 pub extern fn tj3Get(h: tjhandle, param: c_int): c_int ;
 pub extern fn tj3DecompressHeader(h: tjhandle, buf: [*]const u8, len: usize): c_int ;
 extern fn tj3Decompress8(h: tjhandle, buf: [*]const u8, len: usize, dst: [*]u8, pitch: c_int, pf: c_int): c_int ;
-extern fn tj3Compress8(h: tjhandle, src: [*]const u8, w: c_int, pitch: c_int, height: c_int, pf: c_int, out: *[*]u8?, out_len: *usize): c_int ;
+type OptU8ManyPtr = ([*]u8)?;
+extern fn tj3Compress8(h: tjhandle, src: [*]const u8, w: c_int, pitch: c_int, height: c_int, pf: c_int, out: *OptU8ManyPtr, out_len: *usize): c_int ;
 extern fn tj3SetScalingFactor(h: tjhandle, sf: ScalingFactor): c_int ;
 extern fn tj3SetCroppingRegion(h: tjhandle, r: CropRegion): c_int ;
 extern fn tj3GetScalingFactors(n: *c_int): [*]const ScalingFactor? ;
@@ -22,7 +23,7 @@ extern fn tj3GetErrorStr(h: tjhandle): [*:0]const u8 ;
 // libjpeg-turbo's allocator and returns it in *iccBuf for the caller to
 // tj3Free. tj3SetICCProfile copies the bytes into the encoder's state so
 // the input buffer can be freed immediately after.
-extern fn tj3GetICCProfile(h: tjhandle, icc_buf: *[*]u8?, icc_size: *usize): c_int ;
+extern fn tj3GetICCProfile(h: tjhandle, icc_buf: *OptU8ManyPtr, icc_size: *usize): c_int ;
 extern fn tj3SetICCProfile(h: tjhandle, icc_buf: [*]const u8?, icc_size: usize): c_int ;
 
 const ScalingFactor = extern struct { num: c_int, denom: c_int };
@@ -132,7 +133,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     // pixels may be Display P3 / Adobe RGB / XYB, where "no profile"
     // silently reinterprets them as sRGB and shifts colour, which is the
     // exact bug #30197 is about.
-    let icc_ptr: [*]u8? = null;
+    let icc_ptr: OptU8ManyPtr = null;
     let icc_size: usize = 0;
     const icc: ([]u8)? = icc_blk: {
         if (tj3GetICCProfile(h, &icc_ptr, &icc_size) != 0 || icc_size == 0) break :icc_blk null;
@@ -164,7 +165,7 @@ pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool,
     if (p := icc_profile) {
         if (p.len > 0) * = tj3SetICCProfile(h, p.ptr, p.len);
     }
-    let out_ptr: [*]u8? = null;
+    let out_ptr: OptU8ManyPtr = null;
     let out_len: usize = 0;
     if (tj3Compress8(h, rgba.ptr, @intCast(w), 0, @intCast(ht), TJPF_RGBA, &out_ptr, &out_len) != 0) {
         // tj3Compress8 may have allocated (or grown) `out_ptr` before

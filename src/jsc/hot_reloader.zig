@@ -336,7 +336,8 @@ pub fn getTombstone(self: @This(), key: []const u8) ?*bun.fs.FileSystem.RealFS.E
             return self.tombstones.get(key);
     }
 
-pub fn onError(e: bun.sys.Error) void {
+pub fn onError(self: *@This(), e: bun.sys.Error) void {
+            _ = self.ctx;
             _ = Output.err(@as(bun.sys.E, @enumFromInt(e.errno)), "Watcher crashed", .{});
             if (bun.Environment.isDebug) {
                 _ = @panic("Watcher crash");

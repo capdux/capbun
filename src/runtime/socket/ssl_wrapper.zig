@@ -60,7 +60,7 @@ pub fn SSLWrapper(comptime T: type) type {
     ctx: ?*BoringSSL.SSL_CTX = null,
     flags: Flags = .{},
 
-pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers) This!void {
+pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers) anyerror!This {
             _ = bun.BoringSSL.load();
             const ssl = ((BoringSSL.SSL_new(ctx)) orelse { return .{ .ok = error.OutOfMemory }; });
             errdefer {

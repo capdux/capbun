@@ -342,8 +342,10 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
         }
 
         pub fn onError(
+            *_,
             e: bun.sys.Error,
         ) {
+            * = _.ctx;
             Output.err(@as(bun.sys.E, @enumFromInt(e.errno)), "Watcher crashed", .{});
             if (bun.Environment.isDebug) {
                 @panic("Watcher crash");

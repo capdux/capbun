@@ -1227,7 +1227,9 @@ pub fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: anytype, stdin_opt
         defer {
         _ = envp_arena.deinit();
         }
-        const envp: ?[*:null]ConstCString = (if (comptime bun.Environment.isPosix) @ptrCast(@constCast(std.c.environ)) else @ptrCast((blk_catch_45: { break :blk_catch_45 ((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator())) catch |__ce_45| { _ = &__ce_45; _ = job.setErr("Failed to create environment block", .{});
+        const OptConstCString = try ConstCString;
+        _ = &OptConstCString;
+        const envp: ?[*:null]OptConstCString = (if (comptime bun.Environment.isPosix) @ptrCast(@constCast(std.c.environ)) else @ptrCast((blk_catch_45: { break :blk_catch_45 ((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator())) catch |__ce_45| { _ = &__ce_45; _ = job.setErr("Failed to create environment block", .{});
         _ = job.finish();
         return; }); }).ptr));
         var spawned = (blk_catch_48: { break :blk_catch_48 (((blk_catch_46: { break :blk_catch_46 ((bun.spawn.spawnProcess((&spawn_options), @ptrCast(argv), envp)) catch |e| { _ = &e; _ = job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });

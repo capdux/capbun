@@ -757,7 +757,7 @@ pub fn schedule(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSVal
         if ((self.source == .blob)) {
             return BlobReadChain.start(self, global, this_value, kind, deliver);
         }
-        const input = (blk_catch_4: { break :blk_catch_4 ((self.pinForTask(this_value, global)) catch |e| { _ = &e; var mut_del = blk: {
+        var input = (blk_catch_4: { break :blk_catch_4 ((self.pinForTask(this_value, global)) catch |e| { _ = &e; var mut_del = blk: {
         break :blk deliver;
 };
         var __mut_del_moved = false; _ = &__mut_del_moved;
@@ -819,7 +819,7 @@ pub fn encodeForBody(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.
                 return global.throw(refuse, .{});
             }
         }
-        const input = (blk_catch_5: { break :blk_catch_5 ((self.pinForTask(this_value, global)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        var input = (blk_catch_5: { break :blk_catch_5 ((self.pinForTask(this_value, global)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             _ = bun.outOfMemory();
         }
         return global.throw("Image: source ArrayBuffer was detached", .{}); }); });
@@ -1142,9 +1142,11 @@ pub fn makePlaceholder(rgba: []const u8, sw: u32, sh: u32) codecs.Error!Pipeline
                 owned = try codecs.resize(rgba, sw, sh, w, h, .box);
                 pixels = owned.?;
             }
-            var buf: struct { thumbhash.max_len } = undefined;
+            const thumbhash_max_len = (comptime thumbhash.max_len);
+            var __thumbhash_max_len_moved = false; _ = &__thumbhash_max_len_moved;
+            defer if (!__thumbhash_max_len_moved) { const __T = @TypeOf(thumbhash_max_len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = thumbhash_max_len.release() catch {}; } else { thumbhash_max_len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = thumbhash_max_len; _drop_val.release(); } };
+            var buf: [thumbhash_max_len]u8 = undefined;
             _ = &buf;
-            u8 = undefined;
             const hash = thumbhash.encode((&buf), w, h, pixels);
             var __hash_moved = false; _ = &__hash_moved;
             defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };

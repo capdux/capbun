@@ -254,7 +254,7 @@ pub fn takeErr(self: *Interpreter) Syscall.Error {
             return e;
     }
 
-pub fn #computeEstimatedSizeForGC(self: Interpreter, _: *const ThisInterpreter) usize {
+pub fn #computeEstimatedSizeForGC(self: Interpreter) usize {
             var size: usize = @sizeOf(ThisInterpreter);
             _ = &size;
             size = (size + self.args.memoryCost());
@@ -302,8 +302,8 @@ pub fn createShellInterpreter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
                 return globalThis.throw("shell: expected a ParsedShellScript", .{});
             }
             const parsed_shell_script = parsed_script_opt.?;
-            var shargs: *ShellArgs = undefined;
-            _ = &shargs;
+            var shargs_buf: [1]*ShellArgs = undefined;
+            _ = &shargs_buf;
             var jsobjs: std.array_list.Managed(JSValue) = std.array_list.Managed(JSValue).init(allocator);
             _ = &jsobjs;
             var quiet: bool = false;
@@ -315,10 +315,8 @@ pub fn createShellInterpreter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             if ((parsed_shell_script.args == null)) {
                 return globalThis.throw("shell: shell args is null, this is a bug in Bun. Please file a GitHub issue.", .{});
             }
-            _ = parsed_shell_script.take(globalThis, (blk: {
-            break :blk shargs;
-
-}), (&jsobjs), (&quiet), (&cwd), (&export_env));
+            _ = parsed_shell_script.take(globalThis, @ptrCast(shargs_buf[0..1].ptr), (&jsobjs), (&quiet), (&cwd), (&export_env));
+            const shargs = shargs_buf[0];
             defer {
             if (cwd) |*cc| {
                 _ = &cc;

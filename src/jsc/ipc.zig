@@ -350,7 +350,11 @@ pub fn decodeIPCMessage(data: []const u8, globalThis: *jsc.JSGlobalObject, known
                 _ = &kn;
                 idx = kn;
             } else {
-                const found = ((bun.strings.indexOfChar(data, 10)) orelse { return .{ .ok = IPCDecodeError.NotEnoughBytes }; });
+                const found_opt = bun.strings.indexOfChar(data, 10);
+                if ((found_opt == null)) {
+                    return IPCDecodeError.NotEnoughBytes;
+                }
+                const found = found_opt.?;
                 if ((found >= std.math.maxInt(u32))) {
                     return IPCDecodeError.InvalidFormat;
                 }
@@ -655,7 +659,7 @@ pub fn _onAfterIPCClosed(self: *SendQueue) void {
             self.close_event_sent = true;
             switch (self.owner) {
 inline else => |owner| {
-_ = owner.handleIPCClose();
+_ = owner.*.handleIPCClose();
 },
 }
     }
@@ -1365,8 +1369,11 @@ _ = &namedPipe;
 
 pub fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalThis: *jsc.JSGlobalObject) void {
         if (comptime Environment.isDebug) {
-            var formatter = jsc.JSValue.Formatter{ .global = globalThis };
+            var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis };
             _ = &formatter;
+            defer {
+            _ = formatter.deinit();
+            }
             switch (message) {
 .version => |version| {
 _ = log("received ipc message: version: {}", .{ version });

@@ -967,7 +967,7 @@ pub fn onWritable(self: *HTTPClient, comptime is_first_call: bool, comptime is_s
 .pending, .headers, .opened => {
 _ = log("sendInitialRequestPayload", .{});
         _ = self.setTimeout(socket);
-        const result = (blk_catch_5: { break :blk_catch_5 ((self.sendInitialRequestPayload(self, is_first_call, is_ssl, socket)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+        const result = (blk_catch_5: { break :blk_catch_5 ((self.sendInitialRequestPayload(is_first_call, is_ssl, socket)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
         const has_sent_headers = result.has_sent_headers;
         const has_sent_body = result.has_sent_body;

@@ -77,8 +77,8 @@ pub fn onAborted(mixin: *Mixin, _: Response) void {
             _ = onError(@fieldParentPtr(field, mixin));
     }
 };
-            _ = resp.onData(@This(), handlers.onDataGeneric, ctx);
-            _ = resp.onAborted(@This(), handlers.onAborted, ctx);
+            _ = resp.onData(ctx, handlers.onDataGeneric);
+            _ = resp.onAborted(ctx, handlers.onAborted);
     }
 
 pub fn onData(ctx: *@This(), resp: uws.AnyResponse, chunk: []const u8, last: bool) !void {

@@ -159,7 +159,7 @@ pub fn onStart(self: *FileReader) streams.Start {
                 }
             }
         }
-        return .{ .ready = .{} };
+        return .{ .ready = undefined };
 }
 
 pub fn parent(self: *FileReader) *Source {
@@ -280,7 +280,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                             _ = @memcpy(self.pending_view[0..buffer.items.len], buffer.items);
                             self.pending.result = .{ .into_array_and_done = .{ .value = ((self.pending_value.get()) orelse (.zero)), .len = @truncate(buffer.items.len) } };
                         } else {
-                            self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList(buffer) };
+                            self.pending.result = .{ .owned_and_done = bun.ByteList.moveFromList((&self.buffered)) };
                         }
                     } else {
                         self.pending.result = .done;
@@ -599,7 +599,7 @@ pub fn openFileBlobImpl(file: *Blob.Store.File) bun.sys.Maybe(FileReaderOpenedFi
             }
             const stat: bun.Stat = stat_res.result;
             if (bun.S.ISDIR(stat.mode)) {
-                _ = bun.Async.Closer.close(fd, .{});
+                _ = bun.Async.Closer.close(fd, undefined);
                 return .{ .err = .fromCode(.ISDIR, .fstat) };
             }
             if (bun.S.ISREG(stat.mode)) {

@@ -3138,3 +3138,5 @@ Options:
 - **[2026-11-20 22:22] Wave 19 C 组验收提交（45 模块全绿）**：完成 23 个 2 错 + 22 个 1 错模块独立验收（45/45 `cpc`+`ast-check` PASS，ratio 0.653x~1.118x，`json.cp` 原无备份除外）并原子提交；已记录 6 项清单外根因（`bundle_v2.Result` `@"err"`、`quic/Socket.makeStream` `pub`、`quic/Header.classify` `static`、`walker_skippable.walk` `static`、`hot_reloader.onError` 接收者、`DevServer.source_dir_prefix`）；静待 B 组（`dc6fb57d`）收尾。
 
 - **[2026-11-20 22:25] Wave 19 B 组验收提交（37 模块全绿）**：完成 JSParser/Bake/WebCore/Socket/Bundler/JSC/API/Shell 等 37 模块独立验收（全部 PASS，ratio 0.834x~1.089x）并原子提交；`interpreter.cp` 已修正 `memoryCost`/`estimatedSize` 接收者消除 `ZigGeneratedClasses` 最后 2 错；已记录 `shell.cp:3812` `TestToken.from_real` 缺 `pub`。
+
+- **[2026-11-20 22:32] Wave 20 B 组验收提交（23 模块全绿）**：完成 3 个外部根因（`walker_skippable`/`hot_reloader`/`shell`）+ 20 个 2~4 错模块独立验收（23/23 PASS，ratio 0.773x~1.038x）并原子提交；静待 Wave 20 A 组（`65d84f45`）完成后跑全仓 `zig:check` 并启动全仓机械清雷提速。

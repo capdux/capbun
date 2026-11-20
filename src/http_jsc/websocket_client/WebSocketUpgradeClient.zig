@@ -217,7 +217,7 @@ const ByteList = std.ArrayListUnmanaged(u8);
 const ZigSlice = jsc.ZigString.Slice;
 const log = Output.scoped(.WebSocketUpgradeClient, .visible);
 const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
-const empty_zig_slices: [0]ZigSlice = std.mem.zeroes([0]ZigSlice);
+const empty_zig_slices: [0]ZigSlice = undefined;
 const empty_byte_slices: []const []const u8 = &.{};
 
 pub fn buildConnectRequest(target_host: []const u8, target_port: u16, proxy_authorization: ?[]const u8, proxy_headers: ?Headers) std.mem.Allocator.Error![]u8 {
@@ -534,7 +534,7 @@ pub fn connect(global: *jsc.JSGlobalObject, websocket: *CppWebSocket, host: *con
                 const target_host_dup = (blk_catch_5: { break :blk_catch_5 ((allocator.dupe(u8, host_slice.slice())) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
                 proxy_state = WebSocketProxy.init(target_host_dup, target_is_secure, req_body);
             }
-            var client = bun.new(HTTPClient, .{ .ref_count = RefCount.init(), .tcp = Socket{ .socket = .{ .detached = .{} } }, .outgoing_websocket = websocket, .input_body_buf = (if (using_proxy) connect_request else req_body), .state = .initializing, .proxy = proxy_state, .expected_accept = request_result.expected_accept, .offered_permessage_deflate = offer_permessage_deflate, .subprotocols = brk: {
+            var client = bun.new(HTTPClient, .{ .ref_count = RefCount.init(), .tcp = Socket{ .socket = .{ .detached = undefined } }, .outgoing_websocket = websocket, .input_body_buf = (if (using_proxy) connect_request else req_body), .state = .initializing, .proxy = proxy_state, .expected_accept = request_result.expected_accept, .offered_permessage_deflate = offer_permessage_deflate, .subprotocols = brk: {
             var subprotocols = bun.StringSet.init(bun.default_allocator);
             _ = &subprotocols;
             var it = bun.http.HeaderValueIterator.init(protocol_for_subprotocols);

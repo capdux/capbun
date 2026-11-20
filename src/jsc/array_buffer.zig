@@ -294,7 +294,10 @@ bytes = bytes[amount..];
                 }
 },
 .err => |e| {
-return (blk_catch_1: { break :blk_catch_1 ((globalObject.throwValue((blk_catch_0: { break :blk_catch_0 ((e.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return .zero; }); }))) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 .zero; }); });
+const js_err = (blk_catch_0: { break :blk_catch_0 ((e.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return .zero; }); });
+                if ((globalObject.throwValue(js_err) == error.JSTerminated)) {
+                }
+                return .zero;
 },
 }
             }
@@ -329,7 +332,8 @@ pub fn toJSBufferFromMemfd(fd: bun.FD, globalObject: *jsc.JSGlobalObject) bun.JS
 return JSBuffer__fromMmap(globalObject, buf.ptr, buf.len);
 },
 .err => |e| {
-if ((globalObject.throwValue((blk_catch_2: { break :blk_catch_2 ((e.toJS(globalObject)) catch |__ce_2| { _ = &__ce_2; return error.zero; }); })) == error.JSTerminated)) {
+const js_err = (blk_catch_1: { break :blk_catch_1 ((e.toJS(globalObject)) catch |__ce_1| { _ = &__ce_1; return error.zero; }); });
+            if ((globalObject.throwValue(js_err) == error.JSTerminated)) {
             }
             return error.zero;
 },

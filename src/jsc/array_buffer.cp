@@ -260,7 +260,9 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
                     }
                 },
                 .err e => {
-                    return globalObject.throwValue(e.toJS(globalObject) catch return .zero) catch .zero;
+                    const js_err = e.toJS(globalObject) catch return .zero;
+                    if (globalObject.throwValue(js_err) == error.JSTerminated) {}
+                    return .zero;
                 },
             }
         }
@@ -307,7 +309,8 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
                 return JSBuffer__fromMmap(globalObject, buf.ptr, buf.len);
             },
             .err e => {
-                if (globalObject.throwValue(e.toJS(globalObject) catch return .zero) == error.JSTerminated) {}
+                const js_err = e.toJS(globalObject) catch return .zero;
+                if (globalObject.throwValue(js_err) == error.JSTerminated) {}
                 return .zero;
             },
         }

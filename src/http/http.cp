@@ -1514,7 +1514,7 @@ export @root @value struct HTTPClient {
                 .pending, .headers, .opened => {
                     log("sendInitialRequestPayload", .{});
                     this.setTimeout(socket);
-                    const result = sendInitialRequestPayload(this, is_first_call, is_ssl, socket) catch |e| {
+                    const result = this.sendInitialRequestPayload(is_first_call, is_ssl, socket) catch |e| {
                         this.closeAndFail(e, is_ssl, socket);
                         return;
                     };

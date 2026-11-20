@@ -3651,7 +3651,7 @@ pub fn isValidVarName(var_name: []const u8): bool {
 
     if (var_name.len == 0) return false;
     let iter = CodepointIterator.init(var_name);
-    let cursor = CodepointIterator.Cursor{};
+    let cursor: CodepointIterator.Cursor = .{};
 
     if (!iter.next(&cursor)) return false;
 
@@ -3701,7 +3701,7 @@ pub fn hasEqSign(str: []const u8): u32? {
 
     // TODO actually i think that this can also use the simd stuff
     let iter = CodepointIterator.init(str);
-    let cursor = CodepointIterator.Cursor{};
+    let cursor: CodepointIterator.Cursor = .{};
     while (iter.next(&cursor)) {
         if (cursor.c == '=') {
             return @intCast(cursor.i);
@@ -3809,7 +3809,7 @@ pub struct Test {
         Delimit,
         Eof,
 
-        fn from_real(the_token: Token, buf: []const u8): TestToken {
+        pub fn from_real(the_token: Token, buf: []const u8): TestToken {
             switch (the_token) {
                 .Var => |txt| return .{ .Var = buf[txt.start..txt.end] },
                 .VarArgv => |int| return .{ .VarArgv = int },

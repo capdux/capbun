@@ -766,16 +766,16 @@ pub struct Interpreter {
         }
     };
 
-    fn #computeEstimatedSizeForGC(_: *const ThisInterpreter): usize {
+    fn #computeEstimatedSizeForGC(): usize {
         let size: usize = @sizeOf(ThisInterpreter);
-        size += this.args.memoryCost();
-        size += this.root_shell.memoryCost();
-        size += this.root_io.memoryCost();
-        size += this.jsobjs.len * @sizeOf(JSValue);
-        for (arg of this.vm_args_utf8.items) {
+        size += _.args.memoryCost();
+        size += _.root_shell.memoryCost();
+        size += _.root_io.memoryCost();
+        size += _.jsobjs.len * @sizeOf(JSValue);
+        for (arg of _.vm_args_utf8.items) {
             size += arg.byteSlice().len;
         }
-        size += this.vm_args_utf8.allocatedSlice().len * @sizeOf(jsc.ZigString.Slice);
+        size += _.vm_args_utf8.allocatedSlice().len * @sizeOf(jsc.ZigString.Slice);
         return size;
     }
 
@@ -808,7 +808,7 @@ pub struct Interpreter {
         if (parsed_script_opt == null) return globalThis.throw("shell: expected a ParsedShellScript", {});
         const parsed_shell_script = parsed_script_opt.?;
 
-        let shargs: *ShellArgs = undefined;
+        let shargs_buf: [1]*ShellArgs = undefined;
         let jsobjs: std.array_list.Managed(JSValue) = std.array_list.Managed(JSValue).init(allocator);
         let quiet: bool = false;
         let cwd: bun.String? = null;
@@ -818,12 +818,13 @@ pub struct Interpreter {
 
         parsed_shell_script.take(
             globalThis,
-            unsafe { &shargs },
+            @ptrCast(shargs_buf[0..1].ptr),
             &jsobjs,
             &quiet,
             &cwd,
             &export_env,
         );
+        const shargs = shargs_buf[0];
 
         defer if (*cc := cwd) cc.deref();
         let cwd_string: bun.jsc.ZigString.Slice? = null;

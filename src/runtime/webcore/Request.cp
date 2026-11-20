@@ -302,7 +302,7 @@ pub fn toJSForBake(client: *Request, globalObject: *JSGlobalObject): bun.JSError
     );
 }
 
-pub fn writeFormat(client: *Request, this_value: JSValue, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool)! {
+pub fn writeFormat(client: *Request, this_value: JSValue, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool): anyerror!void {
     const Writer = @TypeOf(writer);
 
     const params_object = Bun__getParamsIfBunRequest(this_value);
@@ -696,7 +696,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
         if (value_type == .DOMWrapper) {
             if (request := value.asDirect(Request)) {
                 if (values_to_try.len == 1) {
-                    request.cloneInto(&req, bun.default_allocator, globalThis, fields.contains(.url))?;
+                    request.cloneInto(unsafe { &req }, bun.default_allocator, globalThis, fields.contains(.url))?;
                     success = true;
                     return req;
                 }

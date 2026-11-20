@@ -14,9 +14,9 @@ const OSPathSliceZ = bun.OSPathSliceZ;
 @root struct Walker {
     stack: std.array_list.Managed(StackItem),
     name_buffer: NameBufferList,
-    skip_filenames: u64[] = &[],
-    skip_dirnames: u64[] = &[],
-    skip_all: u64[] = &[],
+    skip_filenames: []u64 = [],
+    skip_dirnames: []u64 = [],
+    skip_all: []u64 = [],
     seed: u64 = 0,
     resolve_unknown_entry_types: bool = false,
 
@@ -157,8 +157,8 @@ const OSPathSliceZ = bun.OSPathSliceZ;
     /// Must call `Walker.deinit` when done.
     /// The order of returned file system entries is undefined.
     /// `self` will not be closed after walking it.
-    pub fn walk(
-        _: FD,
+    pub static fn walk(
+        dir: FD,
         allocator: Allocator,
         skip_filenames: []const OSPathSlice,
         skip_dirnames: []const OSPathSlice,
@@ -187,7 +187,7 @@ const OSPathSliceZ = bun.OSPathSliceZ;
         }
 
         stack.append(Walker.StackItem{
-            .iter = DirIterator.iterate(self, iter_kind),
+            .iter = DirIterator.iterate(dir, iter_kind),
             .dirname_len = 0,
         })?;
 

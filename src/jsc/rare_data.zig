@@ -169,7 +169,7 @@ pub const ProxyEnvStorage = struct {
 pub fn slot(self: *ProxyEnvStorage, name: []const u8) ?ProxySlot {
             const eql = (if (comptime bun.Environment.isWindows) bun.strings.eqlCaseInsensitiveASCIIICheckLength else bun.strings.eql);
             inline for (@typeInfo(ProxyEnvStorage).@"struct".fields) |f| {
-                if (comptime (f.type == try *RefCountedEnvValue)) {
+                if (comptime (f.type == OptRefCountedEnvValue)) {
                     if (eql(name, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name))) {
                         return ProxySlot{ .key = (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name), .ptr = (&@field(self, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name))) };
                     }
@@ -180,7 +180,7 @@ pub fn slot(self: *ProxyEnvStorage, name: []const u8) ?ProxySlot {
 
 pub fn cloneFrom(self: *ProxyEnvStorage, parent: *const ProxyEnvStorage) void {
             inline for (@typeInfo(ProxyEnvStorage).@"struct".fields) |f| {
-                if (comptime (f.type == try *RefCountedEnvValue)) {
+                if (comptime (f.type == OptRefCountedEnvValue)) {
                     if (@field(parent, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name))) |val| {
                         _ = &val;
                         _ = val.ref();
@@ -192,7 +192,7 @@ pub fn cloneFrom(self: *ProxyEnvStorage, parent: *const ProxyEnvStorage) void {
 
 pub fn syncInto(self: *ProxyEnvStorage, map: *bun.DotEnv.Map) void {
             inline for (@typeInfo(ProxyEnvStorage).@"struct".fields) |f| {
-                if (comptime (f.type == try *RefCountedEnvValue)) {
+                if (comptime (f.type == OptRefCountedEnvValue)) {
                     if (@field(self, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name))) |val| {
                         _ = &val;
                         _ = bun.handleOom(map.put((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name), val.bytes));
@@ -203,7 +203,7 @@ pub fn syncInto(self: *ProxyEnvStorage, map: *bun.DotEnv.Map) void {
 
 pub fn deinit(self: *ProxyEnvStorage) void {
             inline for (@typeInfo(ProxyEnvStorage).@"struct".fields) |f| {
-                if (comptime (f.type == try *RefCountedEnvValue)) {
+                if (comptime (f.type == OptRefCountedEnvValue)) {
                     if (@field(self, (if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name))) |val| {
                         _ = &val;
                         _ = val.deref();
@@ -362,7 +362,7 @@ pub fn execute(self: CleanupHook) void {
 pub fn init(globalThis: *jsc.JSGlobalObject, ctx: ?*anyopaque, func: *const fn (?*anyopaque) void) CleanupHook {
             return CleanupHook{ .ctx = ctx, .func = func, .globalThis = globalThis };
     }
-    pub const Function = *const *const fn(?*anyopaque) void;
+    pub const Function = *const fn(?*anyopaque) void;
 };
 
 pub const RareData = @This();
@@ -790,7 +790,6 @@ pub fn defaultCSRFSecret(self: *RareData) []const u8 {
 }
 
 pub fn deinit(self: *RareData) void {
-        _ = self.editor_context.deinit();
         if (self.mime_types) |m| {
             _ = &m;
             _ = m.deinit();
@@ -841,6 +840,7 @@ pub fn spawnSyncEventLoop(self: *RareData, vm: *jsc.VirtualMachine) *SpawnSyncEv
         return ptr;
 }
 const OptSpawnSyncEventLoop = ?*SpawnSyncEventLoop;
+const OptRefCountedEnvValue = ?*RefCountedEnvValue;
 const SpawnSyncEventLoopOwned = bun.ptr.Owned(OptSpawnSyncEventLoop);
 const EditorContext = @import("../cli/open.zig").EditorContext;
 const FSWatcher = @import("../runtime/node/node_fs_watcher.zig").FSWatcher;
