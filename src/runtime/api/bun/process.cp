@@ -1066,7 +1066,7 @@ pub struct PosixSpawnOptions {
     extra_fds: []const Stdio = [],
     cwd: []const u8 = "",
     detached: bool = false,
-    windows: void = {},
+    windows: void = undefined,
     argv0: [*:0]const u8? = null,
     stream: bool = true,
     sync: bool = false,
@@ -1090,7 +1090,7 @@ pub struct PosixSpawnOptions {
     /// PTY slave fd for controlling terminal setup (-1 if not using PTY).
     pty_slave_fd: i32 = -1,
     /// Windows-only ConPTY handle; void placeholder on POSIX.
-    pseudoconsole: void = {},
+    pseudoconsole: void = undefined,
     /// Linux only. When non-null, the child sets PR_SET_PDEATHSIG to this
     /// signal between vfork and exec in posix_spawn_bun, so the kernel kills
     /// it when the spawning thread dies. When null, defaults to SIGKILL if
@@ -1193,7 +1193,7 @@ pub struct WindowsSpawnOptions {
     /// POSIX-only; placeholder for struct compatibility.
     new_process_group: bool = false,
     /// POSIX-only PTY slave fd; void placeholder on Windows.
-    pty_slave_fd: void = {},
+    pty_slave_fd: void = undefined,
     /// Windows ConPTY handle. When set, the child is attached to the
     /// pseudoconsole and stdin/stdout/stderr are provided by ConPTY.
     pseudoconsole: bun.windows.HPCON? = null,

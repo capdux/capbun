@@ -1347,3 +1347,6 @@
 
 ### 2026-11-20 06:16:26 UTC - zig:check 第 3 轮 Core+Shell+Sys 修复经验
 - `SemverQuery` 改 `@root struct Query` 避 `class` 指针化、`pool.cp` 统一 `*_` 接收者、`sys.cp` 用 `if (isX86)` 避 bool switch `else => unreachable`。
+
+### 2026-11-20 06:17:25 UTC - zig:check 第 3 轮 Runtime 簇修复经验
+- `BunObject` 去外层 `@root struct` 暴露 `EnvironmentVariables`；`dns`/`path` 显式写 `return jsc.JSValue.js_undefined;` 避误生成 `error.js_undefined`；`SSLConfig` 用 `type OptCString` 修正 `*?T` 优先级。

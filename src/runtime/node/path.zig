@@ -2502,7 +2502,7 @@ pub fn toNamespacedPathJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject,
 
 pub fn toNamespacedPath(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16) bun.JSError!jsc.JSValue {
         if ((args_len == 0)) {
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
         }
         var path_ptr = args_ptr[0];
         _ = &path_ptr;

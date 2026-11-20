@@ -2958,7 +2958,7 @@ pub fn toNamespacedPathJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject,
 }
 
 pub fn toNamespacedPath(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    if (args_len == 0) return .js_undefined;
+    if (args_len == 0) return jsc.JSValue.js_undefined;
     let path_ptr = args_ptr[0];
 
     // Based on Node v21.6.1 path.win32.toNamespacedPath and path.posix.toNamespacedPath:

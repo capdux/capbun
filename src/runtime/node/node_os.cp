@@ -194,11 +194,12 @@ fn cpusImplLinux(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
     }
 
     // Read /sys/devices/system/cpu/cpu{}/cpufreq/scaling_cur_freq to get current frequency (optional)
-    for (cpu_index of 0..num_cpus) {
-        const cpu = values.getIndex(globalThis, @as(u32, @truncate(cpu_index)))?;
+    let freq_cpu_index: usize = 0;
+    while (freq_cpu_index < num_cpus) : (freq_cpu_index += 1) {
+        const cpu = values.getIndex(globalThis, @as(u32, @truncate(freq_cpu_index)))?;
 
         let path_buf: [128]u8 = undefined;
-        const path = std.fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{ cpu_index })?;
+        const path = std.fmt.bufPrint(&path_buf, "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{ freq_cpu_index })?;
         if (file := std.fs.cwd().openFile(path, {}) catch null) {
             defer file.close();
 
@@ -570,8 +571,8 @@ struct NetworkInterfaceHelpers {
     // We'll skip interfaces that aren't actually available
     static fn skip(iface: *c.ifaddrs): bool {
         // Skip interfaces that aren't actually available
-        if (iface.ifa_flags & c.IFF_RUNNING == 0) return true;
-        if (iface.ifa_flags & c.IFF_UP == 0) return true;
+        if ((iface.ifa_flags & c.IFF_RUNNING) == 0) return true;
+        if ((iface.ifa_flags & c.IFF_UP) == 0) return true;
         if (iface.ifa_addr == null) return true;
 
         return false;
@@ -582,16 +583,20 @@ struct NetworkInterfaceHelpers {
     static fn isLinkLayer(iface: *c.ifaddrs): bool {
         if (iface.ifa_addr == null) return false;
         if (comptime Environment.isLinux) {
-            return iface.ifa_addr.sa_family == std.posix.AF.PACKET;
+            unsafe {
+                return iface.ifa_addr.*.sa_family == std.posix.AF.PACKET;
+            }
         } else if (comptime Environment.isMac || Environment.isFreeBSD) {
-            return iface.ifa_addr.?.sa_family == std.posix.AF.LINK;
+            unsafe {
+                return iface.ifa_addr.?.*.sa_family == std.posix.AF.LINK;
+            }
         } else {
             @compileError("unreachable");
         }
     }
 
     static fn isLoopback(iface: *c.ifaddrs): bool {
-        return iface.ifa_flags & c.IFF_LOOPBACK == c.IFF_LOOPBACK;
+        return (iface.ifa_flags & c.IFF_LOOPBACK) == c.IFF_LOOPBACK;
     }
 }
 
@@ -645,8 +650,8 @@ fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject): bun.JSError!jsc.JSVa
         if (NetworkInterfaceHelpers.skip(iface) || NetworkInterfaceHelpers.isLinkLayer(iface)) continue;
 
         const interface_name = std.mem.sliceTo(iface.ifa_name, 0);
-        const addr = std.net.Address.initPosix(@ptrCast(iface.ifa_addr));
-        const netmask = std.net.Address.initPosix(@ptrCast(iface.ifa_netmask));
+        const addr = unsafe { std.net.Address.initPosix(@alignCast(@ptrCast(iface.ifa_addr))) };
+        const netmask = unsafe { std.net.Address.initPosix(@alignCast(@ptrCast(iface.ifa_netmask))) };
 
         let iface_obj = jsc.JSValue.createEmptyObject(globalThis, 0);
 

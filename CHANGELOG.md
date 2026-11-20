@@ -1618,3 +1618,6 @@
 
 ### 2026-11-20 06:16:26 UTC - zig:check 第 3 轮 Core+Shell+Sys+Install 簇 11 模块语义修复入库
 - 完成：`fmt`/`multi_array_list`/`pool`/`path_buffer_pool`/`PackageManagerTask`/`tsconfig_json`/`router`/`SemverQuery`/`interpreter`/`immutable`/`sys` 11/11 全 PASS。
+
+### 2026-11-20 06:17:25 UTC - zig:check 第 3 轮 Runtime 簇 9 模块语义修复入库
+- 完成：`BunObject`/`NativePromiseContext`/`bun/process`/`cares_jsc`/`dns`/`node_os`/`node/path`/`SSLConfig`/`Blob` 9/9 全 PASS。

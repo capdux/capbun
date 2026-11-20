@@ -1,6 +1,14 @@
 import bun from "bun";
 import { Output, default_allocator, strings, webcore, http, jsc, String, sys, JSError, FormData, Environment, ptr } from "bun";
-import { JSGlobalObject, JSValue, CallFrame, JSPromise, VirtualMachine, ZigString, ArrayBuffer, DOMFormData, URLSearchParams } from "jsc";
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const CallFrame = jsc.CallFrame;
+const JSPromise = jsc.JSPromise;
+const VirtualMachine = jsc.VirtualMachine;
+const ZigString = jsc.ZigString;
+const ArrayBuffer = jsc.ArrayBuffer;
+const DOMFormData = jsc.DOMFormData;
+const URLSearchParams = jsc.URLSearchParams;
 import * as StoreMod from "./blob/Store.zig";
 import * as read_file_mod from "./blob/read_file.zig";
 import * as write_file_mod from "./blob/write_file.zig";

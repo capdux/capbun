@@ -777,7 +777,7 @@ pub const PosixSpawnOptions = struct {
     extra_fds: []const Stdio = &.{},
     cwd: []const u8 = "",
     detached: bool = false,
-    windows: void = .{},
+    windows: void = undefined,
     argv0: ?[*:0]u8 = null,
     stream: bool = true,
     sync: bool = false,
@@ -786,7 +786,7 @@ pub const PosixSpawnOptions = struct {
     no_sigpipe: bool = true,
     new_process_group: bool = false,
     pty_slave_fd: i32 = -1,
-    pseudoconsole: void = .{},
+    pseudoconsole: void = undefined,
     linux_pdeathsig: ?u8 = null,
 
 pub fn deinit() void {
@@ -856,7 +856,7 @@ pub const WindowsSpawnOptions = struct {
     can_block_entire_thread_to_reduce_cpu_usage_in_fast_path: bool = false,
     linux_pdeathsig: ?u8 = null,
     new_process_group: bool = false,
-    pty_slave_fd: void = .{},
+    pty_slave_fd: void = undefined,
     pseudoconsole: ?bun.windows.HPCON = null,
 
 pub fn deinit(self: WindowsSpawnOptions) void {

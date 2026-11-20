@@ -383,6 +383,8 @@ pub const SingleFileInput = union(enum) {
 };
 
 pub const CString = [*:0]u8;
+const OptCStringSlice = ?[][*:0]u8;
+const OptCString = ?[*:0]u8;
 const strings = bun.strings;
 const uws = bun.uws;
 const jsc = bun.jsc;
@@ -511,7 +513,7 @@ pub fn stringsEqual(a: [*:0]u8, b: [*:0]u8) bool {
         return strings.eqlLong(lhs, rhs, true);
 }
 
-pub fn freeStrings(slice: ?[][*:0]u8) void {
+pub fn freeStrings(slice: *OptCStringSlice) void {
         const inner = ((slice.*) orelse { return; });
         for (cp_iter_slice(inner)) |str_item| {
             _ = &str_item;
@@ -521,7 +523,7 @@ pub fn freeStrings(slice: ?[][*:0]u8) void {
         slice.* = null;
 }
 
-pub fn freeString(str_ptr: ?*[*:0]u8) void {
+pub fn freeString(str_ptr: *OptCString) void {
         const inner = ((str_ptr.*) orelse { return; });
         _ = bun.freeSensitive(bun.default_allocator, std.mem.span(inner));
         str_ptr.* = null;

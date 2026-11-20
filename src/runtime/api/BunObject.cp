@@ -82,7 +82,7 @@ pub struct CSRFObject {
     }
 }
 
-@root struct Bun {
+const Bun = @This();
 
 /// How to add a new function or property to the Bun global
 ///
@@ -2197,8 +2197,6 @@ pub fn createBunStdout(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
         jsc.WebCore.Blob.initWithStore(store, globalThis),
     );
     return blob.toJS(globalThis);
-}
-
 }
 
 comptime {

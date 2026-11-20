@@ -1747,7 +1747,7 @@ pub struct internal {
             443;
 
         prefetch(jsc.VirtualMachine.get().uwsLoop(), hostname_z, port);
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub static fn prefetch(loop: *bun.uws.Loop, hostname: ([:0]const u8)?, port: u16) {
@@ -2676,7 +2676,8 @@ pub struct Resolver {
 
             lookup_options = GetAddrInfo.Options.fromJS(optionsObject, globalThis) catch |e| {
                 if (e == error.InvalidFlags) {
-                    return globalThis.throwInvalidArgumentValue("flags", try optionsObject.getTruthy(globalThis, "flags") orelse .js_undefined);
+                    const flags_val = (optionsObject.getTruthy(globalThis, "flags")?) ?? jsc.JSValue.js_undefined;
+                    return globalThis.throwInvalidArgumentValue("flags", flags_val);
                 } else if (e == error.JSError) {
                     return error.JSError;
                 } else if (e == error.OutOfMemory) {
@@ -3147,12 +3148,12 @@ pub struct Resolver {
         const first_af = try setChannelLocalAddress(channel, globalThis, arguments[0]);
 
         if (arguments.len < 2 or arguments[1].isUndefined()) {
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         const second_af = try setChannelLocalAddress(channel, globalThis, arguments[1]);
         if (first_af != second_af) {
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         if (first_af == c_ares.AF.INET) {
@@ -3210,7 +3211,7 @@ pub struct Resolver {
                 const err = c_ares.Error.get(r).?;
                 return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{c_ares.Error.label(err)}));
             }
-            return .js_undefined;
+            return jsc.JSValue.js_undefined;
         }
 
         const allocator = bun.default_allocator;
@@ -3269,7 +3270,7 @@ pub struct Resolver {
             return globalThis.throwValue(globalThis.createErrorInstance("ares_set_servers_ports error: {s}", .{c_ares.Error.label(err)}));
         }
 
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub fn setGlobalServers(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -3301,7 +3302,7 @@ pub struct Resolver {
         * = callframe;
         const channel = try _.getChannelOrError(globalThis);
         c_ares.ares_cancel(channel);
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     pub fn globalLookupService(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {

@@ -80,7 +80,8 @@ pub export fn Bun__NativePromiseContext__destroy(ctx: *!, tag: u8) {
 }
 
 comptime {
-    * = &Bun__NativePromiseContext__destroy;
+    const fn_destroy = Bun__NativePromiseContext__destroy;
+    * = &fn_destroy;
 }
 
 const tag_mask: usize = 0b111;

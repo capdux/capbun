@@ -341,7 +341,10 @@ fn stringsEqual(a: [*:0]const u8, b: [*:0]const u8): bool {
     return strings.eqlLong(lhs, rhs, true);
 }
 
-fn freeStrings(slice: *([][*:0]const u8)?) {
+type OptCStringSlice = ([][*:0]const u8)?;
+type OptCString = ([*:0]const u8)?;
+
+fn freeStrings(slice: *OptCStringSlice) {
     const inner = slice.* orelse return;
     for (str_item of inner) {
         bun.freeSensitive(bun.default_allocator, std.mem.span(str_item));
@@ -350,7 +353,7 @@ fn freeStrings(slice: *([][*:0]const u8)?) {
     slice.* = null;
 }
 
-fn freeString(str_ptr: *([*:0]const u8)?) {
+fn freeString(str_ptr: *OptCString) {
     const inner = str_ptr.* orelse return;
     bun.freeSensitive(bun.default_allocator, std.mem.span(inner));
     str_ptr.* = null;

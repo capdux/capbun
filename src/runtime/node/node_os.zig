@@ -85,10 +85,10 @@ pub fn toValue(self: CPUTimes, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
 pub const NetworkInterfaceHelpers = struct {
 
 pub fn skip(iface: *c.ifaddrs) bool {
-            if ((iface.ifa_flags & (c.IFF_RUNNING == 0))) {
+            if (((iface.ifa_flags & c.IFF_RUNNING) == 0)) {
                 return true;
             }
-            if ((iface.ifa_flags & (c.IFF_UP == 0))) {
+            if (((iface.ifa_flags & c.IFF_UP) == 0)) {
                 return true;
             }
             if ((iface.ifa_addr == null)) {
@@ -102,10 +102,14 @@ pub fn isLinkLayer(iface: *c.ifaddrs) bool {
                 return false;
             }
             if (comptime Environment.isLinux) {
-                return (iface.ifa_addr.sa_family == std.posix.AF.PACKET);
+                {
+                    return (iface.ifa_addr.*.sa_family == std.posix.AF.PACKET);
+                }
             } else {
                 if (comptime (Environment.isMac or Environment.isFreeBSD)) {
-                    return (iface.ifa_addr.?.sa_family == std.posix.AF.LINK);
+                    {
+                        return ((iface.ifa_addr.?).*.sa_family == std.posix.AF.LINK);
+                    }
                 } else {
                     _ = @compileError("unreachable");
                 }
@@ -113,7 +117,7 @@ pub fn isLinkLayer(iface: *c.ifaddrs) bool {
     }
 
 pub fn isLoopback(iface: *c.ifaddrs) bool {
-            return (iface.ifa_flags & (c.IFF_LOOPBACK == c.IFF_LOOPBACK));
+            return ((iface.ifa_flags & c.IFF_LOOPBACK) == c.IFF_LOOPBACK);
     }
 };
 
@@ -290,32 +294,29 @@ pub fn cpusImplLinux(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
                 _ = cpu.put(globalThis, jsc.ZigString.static("model"), jsc.ZigString.static("unknown").withEncoding().toJS(globalThis));
             }
         }
-        {
-            var cpu_index: i32 = 0;
-            _ = &cpu_index;
-            const __end_0 = num_cpus;
-            while (cpu_index < __end_0) : (cpu_index += 1) {
-                const cpu = try values.getIndex(globalThis, @as(u32, @truncate(cpu_index)));
-                var path_buf: [128]u8 = undefined;
-                _ = &path_buf;
-                const path = try std.fmt.bufPrint((&path_buf), "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{ cpu_index });
-                if ((blk_catch_3: { break :blk_catch_3 ((std.fs.cwd().openFile(path, .{})) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); })) |file| {
-                    _ = &file;
-                    defer {
-                    _ = file.close();
-                    }
-                    const file_buf_ptr = (&file_buf);
-                    const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
-                    defer {
-                    _ = file_buf.clearRetainingCapacity();
-                    }
-                    const contents = file_buf.items[0..read];
-                    const digits = std.mem.trim(u8, contents, " \n");
-                    const speed = ((blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(u64, digits, 10)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); }) / 1000);
-                    _ = cpu.put(globalThis, jsc.ZigString.static("speed"), jsc.JSValue.jsNumber(speed));
-                } else {
-                    _ = cpu.put(globalThis, jsc.ZigString.static("speed"), jsc.JSValue.jsNumber(0));
+        var freq_cpu_index: usize = 0;
+        _ = &freq_cpu_index;
+        while ((freq_cpu_index < num_cpus)) : (freq_cpu_index = (freq_cpu_index + 1)) {
+            const cpu = try values.getIndex(globalThis, @as(u32, @truncate(freq_cpu_index)));
+            var path_buf: [128]u8 = undefined;
+            _ = &path_buf;
+            const path = try std.fmt.bufPrint((&path_buf), "/sys/devices/system/cpu/cpu{d}/cpufreq/scaling_cur_freq", .{ freq_cpu_index });
+            if ((blk_catch_3: { break :blk_catch_3 ((std.fs.cwd().openFile(path, .{})) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); })) |file| {
+                _ = &file;
+                defer {
+                _ = file.close();
                 }
+                const file_buf_ptr = (&file_buf);
+                const read = try bun.sys.File.@"from"(file).readToEndWithArrayList(file_buf_ptr, .probably_small).unwrap();
+                defer {
+                _ = file_buf.clearRetainingCapacity();
+                }
+                const contents = file_buf.items[0..read];
+                const digits = std.mem.trim(u8, contents, " \n");
+                const speed = ((blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(u64, digits, 10)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); }) / 1000);
+                _ = cpu.put(globalThis, jsc.ZigString.static("speed"), jsc.JSValue.jsNumber(speed));
+            } else {
+                _ = cpu.put(globalThis, jsc.ZigString.static("speed"), jsc.JSValue.jsNumber(0));
             }
         }
         return values;
@@ -644,8 +645,14 @@ pub fn networkInterfacesPosix(globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.J
                 continue;
             }
             const interface_name = std.mem.sliceTo(iface.ifa_name, 0);
-            const addr = std.net.Address.initPosix(@ptrCast(iface.ifa_addr));
-            const netmask = std.net.Address.initPosix(@ptrCast(iface.ifa_netmask));
+            const addr = (blk: {
+            break :blk std.net.Address.initPosix(@alignCast(@ptrCast(iface.ifa_addr)));
+
+});
+            const netmask = (blk: {
+            break :blk std.net.Address.initPosix(@alignCast(@ptrCast(iface.ifa_netmask)));
+
+});
             var iface_obj = jsc.JSValue.createEmptyObject(globalThis, 0);
             _ = &iface_obj;
             {

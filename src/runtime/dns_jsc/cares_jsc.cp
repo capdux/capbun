@@ -605,8 +605,8 @@ pub fn errorToJSWithSyscallAndHostname(err: c_ares.Error, globalThis: *jsc.JSGlo
 
 // ── canonicalizeIP host fn ─────────────────────────────────────────────────
 ! {
-    const Bun__canonicalizeIP = jsc.toJSHostFn(Bun__canonicalizeIP_);
-    @export(&Bun__canonicalizeIP, .{ .name = "Bun__canonicalizeIP" });
+    const bun_canonicalize_ip = jsc.toJSHostFn(Bun__canonicalizeIP_);
+    @export(&bun_canonicalize_ip, .{ .name = "Bun__canonicalizeIP" });
 }
 
 pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): !jsc.JSValue {
