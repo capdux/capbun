@@ -1827,3 +1827,4 @@
 - **[2026-11-21] Wave 32 B 组 (19 模块)**：更新 `bundler/{LinkerGraph,LinkerContext,ParseTask,analyze_transpiled_module,bundle_v2,options,linker_context/{computeChunks,generateChunksInParallel,renameSymbolsInChunk,scanImportsAndExports}}`, `js_parser/{parser,ast/{P,ConvertESMExportsForHmr,B,Parser,lowerDecorators,maybe,visitExpr}}`, `js_parser_jsc/Macro`。
 - **[2026-11-21] Wave 33 A 组 (13 模块)**：更新 `css/{generics,css_parser,declaration,rules/{style,supports},values/{position,gradient,ident,image,resolution},media_query,selectors/selector}`, `exe_format/macho`。
 - **[2026-11-21] Wave 33 D 组 (2 跨模块根因)**：更新 `css/values/length`, `css/rules/media`。
+- **[2026-11-21] Wave 33 附增 (1 模块)**：重编更新 `css/properties/properties_generated`。

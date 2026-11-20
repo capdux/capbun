@@ -18,3 +18,4 @@
 - **[2026-11-21 00:46] Wave 32 B 组验收提交（19 模块全绿，Wave 32 清仓）**：完成 Bundler/LinkerContext/JSParser(`parser.cp` `HookContextPtr` 等)/Macro 19 模块独立验收（19/19 PASS，4 项门禁全绿，ratio 0.899x~1.134x）并原子提交；随即运行 Wave 33 全仓 `bun run zig:check`。
 - **[2026-11-21 00:55] Wave 33 A 组验收提交（13 模块全绿）**：完成 CSS 全家桶(`VendorPrefix.eq` 解封 `properties_generated`)/`macho` 13 模块独立验收（13/13 PASS，4 项门禁全绿，ratio 0.886x~1.027x）并原子提交；补派 D 组修复外部根因 `css/values/length.cp` 与 `css/rules/media.cp`。
 - **[2026-11-21 00:58] Wave 33 D 组验收提交（2 CSS 根因全绿）**：完成 `css/values/length`（`LengthPercentageOrAuto.eql` 改为 `static fn`）与 `css/rules/media`（`deepClone` 改为只读接收者）独立验收（2/2 PASS，ratio 0.98x~1.029x）并原子提交；同时确认 `properties_generated.zig:6083/6337` 返回类型系旧版 `cpc` 误生成 `*PropertyId`/`*Property`，待 B/C 组完成后一并处置。
+- **[2026-11-21 00:58] `css/properties/properties_generated.cp` 新版 `cpc` 重编提交**：使用新版 `cpc` 重新生成 `properties_generated.zig` 并通过 4 项门禁（PASS，ratio 1.14x），修复旧版 `cpc` 误生成 `*PropertyId`/`*Property` 问题。
