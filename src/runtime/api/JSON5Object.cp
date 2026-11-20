@@ -71,22 +71,20 @@ pub fn parse(
 
     const source = &logger.Source.initPathString("input.json5", input.slice());
 
-    const root = json5.JSON5Parser.parse(source, &log, allocator) catch |e| return switch (e) {
-        error.OutOfMemory => |oom| oom,
-        error.StackOverflow => global.throwStackOverflow(),
-        else => {
-            if (log.msgs.items.len > 0) {
-                const first_msg = log.msgs.items[0];
-                return global.throwValue(global.createSyntaxErrorInstance(
-                    "JSON5 Parse error: {s}",
-                    { first_msg.data.text},
-                ));
-            }
+    const root = json5.JSON5Parser.parse(source, &log, allocator) catch |e| {
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.StackOverflow) return global.throwStackOverflow();
+        if (log.msgs.items.len > 0) {
+            const first_msg = log.msgs.items[0];
             return global.throwValue(global.createSyntaxErrorInstance(
-                "JSON5 Parse error: Unable to parse JSON5 string",
-                {},
+                "JSON5 Parse error: {s}",
+                { first_msg.data.text},
             ));
-        },
+        }
+        return global.throwValue(global.createSyntaxErrorInstance(
+            "JSON5 Parse error: Unable to parse JSON5 string",
+            {},
+        ));
     };
 
     return exprToJS(root, global);

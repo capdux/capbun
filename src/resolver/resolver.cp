@@ -2791,23 +2791,33 @@ pub struct Resolver {
     ): !(*PackageJSON)? {
         let pkg: PackageJSON = undefined;
         if (!r.care_about_scripts) {
-            pkg = PackageJSON.parse(
+            const parsed = PackageJSON.parse(
                 r,
                 file,
                 dirname_fd,
                 package_id,
                 .ignore_scripts,
                 if (allow_dependencies) .local else .none,
-            ) ?? return null;
+            );
+            if (p := parsed) {
+                pkg = p;
+            } else {
+                return null;
+            }
         } else {
-            pkg = PackageJSON.parse(
+            const parsed = PackageJSON.parse(
                 r,
                 file,
                 dirname_fd,
                 package_id,
                 .include_scripts,
                 if (allow_dependencies) .local else .none,
-            ) ?? return null;
+            );
+            if (p := parsed) {
+                pkg = p;
+            } else {
+                return null;
+            }
         }
 
         return PackageJSON.new(pkg);

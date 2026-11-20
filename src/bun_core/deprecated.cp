@@ -12,7 +12,7 @@ pub fn BufferedReader(comptime buffer_size: usize, comptime ReaderType: type): t
         end: usize = 0;
 
         pub const Error = ReaderType.Error;
-        pub const Reader = std.Io.GenericReader(*Self, Error, read);
+        pub const Reader = std.Io.GenericReader(*Self, ReaderType.Error, Self.read);
 
         const Self = @This();
 

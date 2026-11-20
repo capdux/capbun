@@ -381,14 +381,11 @@ fn UnsignedCache(comptime ip: UnsignedInput): type {
                 }
             }
 
-            const formatted = std.fmt.parseInt(StoredType, raw_env.?, 10) catch err => {
-                switch (err) {
-                    error.Overflow => {
-                        return this.handleError(raw_env.?, "overflows u64");
-                    },
-                    error.InvalidCharacter => {
-                        return this.handleError(raw_env.?, "is not a valid integer");
-                    },
+            const formatted = std.fmt.parseInt(StoredType, raw_env.?, 10) catch |e| {
+                if (e == error.Overflow) {
+                    return this.handleError(raw_env.?, "overflows u64");
+                } else {
+                    return this.handleError(raw_env.?, "is not a valid integer");
                 }
             };
 

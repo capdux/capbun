@@ -1251,7 +1251,7 @@ pub struct AlignHandler {
         _.flushLegacyProperty(dest, context, Feature.align_content, &align_content, null, .{ FlexLinePack, "flex-line-pack" });
         _.flushLegacyProperty(dest, context, Feature.justify_content, &justify_content, .{ BoxPack, "box-pack" }, .{ FlexPack, "flex-pack" });
         if (context.targets.isCompatible(.place_content)) {
-            _.flushShorthandHelper(
+            flushShorthandHelper(
                 dest,
                 context,
                 { prop: "place-content", ty: PlaceContent },
@@ -1261,21 +1261,21 @@ pub struct AlignHandler {
                 { feature: Feature.justify_content, prop: "justify-content" },
             );
         }
-        _.flushStandardPropertyHelper(dest, context, "align-content", bun.take(&align_content), Feature.align_content);
-        _.flushStandardPropertyHelper(dest, context, "justify-content", bun.take(&justify_content), Feature.justify_content);
+        flushStandardPropertyHelper(dest, context, "align-content", bun.take(&align_content), Feature.align_content);
+        flushStandardPropertyHelper(dest, context, "justify-content", bun.take(&justify_content), Feature.justify_content);
 
         _.flushLegacyProperty(dest, context, Feature.align_self, &align_self, null, .{ FlexItemAlign, "flex-item-align" });
         if (context.targets.isCompatible(.place_self)) {
-            _.flushShorthandHelper(dest, context, { prop: "place-self", ty: PlaceSelf }, { feature: Feature.align_self, prop: "align-self" }, &align_self, &justify_self, null);
+            flushShorthandHelper(dest, context, { prop: "place-self", ty: PlaceSelf }, { feature: Feature.align_self, prop: "align-self" }, &align_self, &justify_self, null);
         }
-        _.flushStandardPropertyHelper(dest, context, "align-self", bun.take(&align_self), Feature.align_self);
+        flushStandardPropertyHelper(dest, context, "align-self", bun.take(&align_self), Feature.align_self);
         _.flushUnprefixProperty(dest, context, "justify-self", bun.take(&justify_self));
 
         _.flushLegacyProperty(dest, context, Feature.align_items, &align_items, .{ BoxAlign, "box-align" }, .{ FlexAlign, "flex-align" });
         if (context.targets.isCompatible(css.compat.Feature.place_items)) {
-            _.flushShorthandHelper(dest, context, { prop: "place-items", ty: PlaceItems }, { feature: Feature.align_items, prop: "align-items" }, &align_items, &justify_items, null);
+            flushShorthandHelper(dest, context, { prop: "place-items", ty: PlaceItems }, { feature: Feature.align_items, prop: "align-items" }, &align_items, &justify_items, null);
         }
-        _.flushStandardPropertyHelper(dest, context, "align-items", bun.take(&align_items), Feature.align_items);
+        flushStandardPropertyHelper(dest, context, "align-items", bun.take(&align_items), Feature.align_items);
         _.flushUnprefixProperty(dest, context, "justify-items", bun.take(&justify_items));
 
         if (row_gap != null && column_gap != null) {
@@ -1326,7 +1326,7 @@ pub struct AlignHandler {
         return prefix;
     }
 
-    fn flushStandardPropertyHelper(*_, dest: *css.DeclarationList, context: *css.PropertyHandlerContext, comptime prop: []const u8, key: auto, comptime feature: Feature) {
+    static fn flushStandardPropertyHelper(dest: *css.DeclarationList, context: *css.PropertyHandlerContext, comptime prop: []const u8, key: auto, comptime feature: Feature) {
         if (v := key) {
             const val = v[0];
             let prefix = v[1];
@@ -1419,8 +1419,7 @@ pub struct AlignHandler {
         }
     }
 
-    fn flushShorthandHelper(
-        *_,
+    static fn flushShorthandHelper(
         dest: *css.DeclarationList,
         context: *css.PropertyHandlerContext,
         comptime prop: auto,

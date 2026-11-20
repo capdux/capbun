@@ -937,11 +937,11 @@ pub struct JSFrameworkRouter {
         errdefer style.deinit();
 
         let log = TinyLog.empty;
-        const parsed = style.parse(filepath.slice(), std.fs.path.extension(filepath.slice()), &log, true, alloc) catch |e| switch (e) {
-            error.InvalidRoutePattern => {
+        const parsed = style.parse(filepath.slice(), std.fs.path.extension(filepath.slice()), &log, true, alloc) catch |e| {
+            if (e == error.InvalidRoutePattern) {
                 return global.throw("{s} ({d}:{d})", .{ log.msg.slice(), log.cursor_at, log.cursor_len });
-            },
-            else => |err_other| return err_other,
+            }
+            return e;
         } ??
             return JSValue.jsNull();
 
@@ -1422,16 +1422,16 @@ fn scanInner(
                         },
                     };
 
-                    result catch |e| switch (e) {
-                        error.OutOfMemory => |oom| return oom,
-                        error.RouteCollision => {
+                    result catch |e| {
+                        if (e == error.OutOfMemory) return error.OutOfMemory;
+                        if (e == error.RouteCollision) {
                             try ctx.vtable.onRouterCollisionError(
                                 ctx.opaque_ctx,
                                 full_rel_path,
                                 out_colliding_file_id,
                                 file_kind,
                             );
-                        },
+                        }
                     };
                 },
             }

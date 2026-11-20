@@ -2233,10 +2233,10 @@ pub fn renderToAnsi(
 ): ([]u8)? ! anyerror {
     let renderer = AnsiRenderer.init(allocator, text, theme);
     defer renderer.deinit();
-    root.renderWithRenderer(text, allocator, options, renderer.renderer()) catch |e| switch (e) {
-        error.JSError, error.JSTerminated => return null,
-        error.OutOfMemory => return error.OutOfMemory,
-        error.StackOverflow => return error.StackOverflow,
+    root.renderWithRenderer(text, allocator, options, renderer.renderer()) catch |e| {
+        if (e == error.JSError || e == error.JSTerminated) return null;
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.StackOverflow) return error.StackOverflow;
     };
     if (renderer.out.oom) return error.OutOfMemory;
     return renderer.out.list.toOwnedSlice(allocator)?;

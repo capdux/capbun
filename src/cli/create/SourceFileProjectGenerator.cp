@@ -179,7 +179,7 @@ fn runInstall(argv: [][]const u8) !void {
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
         },
     }) catch |e| {
-        Output.err(err, "failed to install dependencies", {});
+        Output.err(e, "failed to install dependencies", {});
         Global.crash();
     };
 
@@ -379,7 +379,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
         },
     }) catch |e| {
-        Output.err(err, "failed to start app", {});
+        Output.err(e, "failed to start app", {});
         Global.crash();
     };
 

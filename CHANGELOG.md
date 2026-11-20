@@ -1570,3 +1570,6 @@
 
 ### 2026-11-20 05:25:49 UTC - 全仓终极清零 2 组 15 模块全 PASS 入库
 - 完成：`runtime`/`shell`/`shell_parser`/`test_runner` 15 个残余报错模块 15/15 全 PASS，同步补充 2 条新坑至 `CP_PITFALLS.md`。
+
+### 2026-11-20 05:30:48 UTC - 全仓终极清零 1 组 15 模块 + JSON5Object.cp 全 PASS 入库
+- 完成：`bake`/`bun_core`/`cli/create`/`crash_handler`/`css`/`js_parser/ast`/`md`/`resolver`/`sha_hmac`/`uws_sys` 15 模块 + `JSON5Object.cp`，全部 4 项硬门禁 PASS。

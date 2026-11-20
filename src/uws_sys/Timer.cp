@@ -6,11 +6,13 @@ const debug = bun.Output.scoped(.uws, .visible);
 
 pub type OptionalRawPtr = *!?;
 
+const TimerCallback = *const fn (*Timer) callconv(.c) void;
+
 const c = struct {
     pub extern fn us_create_timer(loop: ?*Loop, fallthrough: i32, ext_size: c_uint) ?*Timer;
     pub extern fn us_timer_ext(timer: ?*Timer) *OptionalRawPtr;
     pub extern fn us_timer_close(timer: ?*Timer, fallthrough: i32) void;
-    pub extern fn us_timer_set(timer: ?*Timer, cb: ?*const fn (*Timer) callconv(.c) void, ms: i32, repeat_ms: i32) void;
+    pub extern fn us_timer_set(timer: ?*Timer, cb: TimerCallback?, ms: i32, repeat_ms: i32) void;
     pub extern fn us_timer_loop(t: ?*Timer) ?*Loop;
 };
 
@@ -30,23 +32,27 @@ pub const Timer = struct {
         return c.us_create_timer(loop, 1, @sizeOf(Type)) orelse bun.Output.panic("us_create_timer: returned null: {d}", .{std.c._errno().*});
     }
 
-    pub fn set(this: *Timer, ptr: anytype, cb: ?*const fn (*Timer) callconv(.c) void, ms: i32, repeat_ms: i32) void {
+    pub fn set(this: *Timer, ptr: anytype, cb: TimerCallback?, ms: i32, repeat_ms: i32) void {
         c.us_timer_set(this, cb, ms, repeat_ms);
         const value_ptr = c.us_timer_ext(this);
         @setRuntimeSafety(false);
-        @as(*@TypeOf(ptr), @ptrCast(@alignCast(value_ptr))).* = ptr;
+        const typed: *@TypeOf(ptr) = @ptrCast(@alignCast(value_ptr));
+        typed.* = ptr;
     }
 
     pub fn deinit(this: *Timer, comptime fallthrough: bool) void {
-        this.release(fallthrough);
+        const release_fn = Timer.release;
+        release_fn(this, fallthrough);
     }
 
     pub fn ext(this: *Timer, comptime Type: type) ?*Type {
-        return @as(*Type, @ptrCast(@alignCast(c.us_timer_ext(this).*.?)));
+        const ptr: *Type = @ptrCast(@alignCast(c.us_timer_ext(this).*.?));
+        return ptr;
     }
 
     pub fn as(this: *Timer, comptime Type: type) Type {
         @setRuntimeSafety(false);
-        return @as(*?Type, @ptrCast(@alignCast(c.us_timer_ext(this)))).*.?;
+        const ptr: *?Type = @ptrCast(@alignCast(c.us_timer_ext(this)));
+        return ptr.*.?;
     }
 };

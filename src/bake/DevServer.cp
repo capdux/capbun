@@ -1326,9 +1326,9 @@ fn deferRequest(
                     cb: DeferredRequest.onAbortWrapper,
                     data: &deferred.data,
                     deref_fn: struct {
-                        fn deref_fn(ptr: *!) {
-                            let self: *DeferredRequest = @ptrCast(@alignCast(ptr));
-                            self.weakDeref();
+                        static fn deref_fn(ptr: *!) {
+                            let deferred_req: *DeferredRequest = @ptrCast(@alignCast(ptr));
+                            deferred_req.weakDeref();
                         }
                     }.deref_fn,
                 });
@@ -3375,10 +3375,12 @@ pub fn respondForHTMLBundle(dev: *DevServer, html: *HTMLBundle.HTMLBundleRoute, 
         ctx.route_bundle_index,
         RequestEnsureRouteBundledCtx,
         &ctx,
-    ) catch |e| switch (e) {
-        error.JSError => dev.vm.global.reportActiveExceptionAsUnhandled(e),
-        error.JSTerminated => dev.vm.global.reportActiveExceptionAsUnhandled(e),
-        else => |other| return other,
+    ) catch |e| {
+        if (e == error.JSError || e == error.JSTerminated) {
+            dev.vm.global.reportActiveExceptionAsUnhandled(e);
+        } else {
+            return e;
+        }
     };
 }
 

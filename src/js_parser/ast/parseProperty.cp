@@ -7,7 +7,7 @@ pub fn ParseProperty(
         const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
         const is_typescript_enabled = P.is_typescript_enabled;
 
-        static fn parseMethodExpression(p: *P, kind: Property.Kind, opts: *PropertyOpts, is_computed: bool, key: *Expr, key_range: logger.Range): (G.Property?)! {
+        static fn parseMethodExpression(p: *P, kind: Property.Kind, opts: *PropertyOpts, is_computed: bool, key: *Expr, key_range: logger.Range): anyerror!G.Property? {
             if (p.lexer.token == .t_open_paren && kind != .get && kind != .set) {
                 // markSyntaxFeature object extensions
             }
@@ -91,31 +91,29 @@ pub fn ParseProperty(
             }
 
             // Special-case private identifiers
-            switch (key.data) {
-                .e_private_identifier => |*private| {
-                    const declare: Symbol.Kind = switch (kind) {
-                        .get => if (opts.is_static)
-                            .private_static_get
-                        else
-                            .private_get,
+            if (key.data == .e_private_identifier) {
+                const priv_ident = &key.data.e_private_identifier;
+                const declare: Symbol.Kind = switch (kind) {
+                    .get => if (opts.is_static)
+                        .private_static_get
+                    else
+                        .private_get,
 
-                        .set => if (opts.is_static)
-                            .private_static_set
-                        else
-                            .private_set,
-                        else => if (opts.is_static)
-                            .private_static_method
-                        else
-                            .private_method,
-                    };
+                    .set => if (opts.is_static)
+                        .private_static_set
+                    else
+                        .private_set,
+                    else => if (opts.is_static)
+                        .private_static_method
+                    else
+                        .private_method,
+                };
 
-                    const name = p.loadNameFromRef(private.ref);
-                    if (strings.eqlComptime(name, "#constructor")) {
-                        p.log.addRangeError(p.source, key_range, "Invalid method name \"#constructor\"") catch unreachable;
-                    }
-                    private.ref = p.declareSymbol(declare, key.loc, name) catch unreachable;
-                },
-                else => {},
+                const name = p.loadNameFromRef(priv_ident.ref);
+                if (strings.eqlComptime(name, "#constructor")) {
+                    p.log.addRangeError(p.source, key_range, "Invalid method name \"#constructor\"") catch unreachable;
+                }
+                priv_ident.ref = p.declareSymbol(declare, key.loc, name) catch unreachable;
             }
 
             return G.Property{
@@ -132,7 +130,7 @@ pub fn ParseProperty(
             };
         }
 
-        pub static fn parseProperty(p: *P, kind_: Property.Kind, opts: *PropertyOpts, errors_: (*DeferredErrors)?): (G.Property?)! {
+        static fn parseProperty(p: *P, kind_: Property.Kind, opts: *PropertyOpts, errors_: (*DeferredErrors)?): anyerror!G.Property? {
             let kind = kind_;
             let errors = errors_;
             // This while loop exists to conserve stack space by reducing (but not completely eliminating) recursion.
@@ -386,8 +384,8 @@ pub fn ParseProperty(
                                 }
                             }
 
-                            const ref = p.storeNameInRef(name) catch unreachable;
-                            const value = p.newExpr(E.Identifier{ ref: ref }, key.loc);
+                            const sym_ref = p.storeNameInRef(name) catch unreachable;
+                            const value = p.newExpr(E.Identifier{ ref: sym_ref }, key.loc);
 
                             // Destructuring patterns have an optional default value
                             let initializer: Expr? = null;
@@ -496,21 +494,19 @@ pub fn ParseProperty(
                     }
 
                     // Special-case private identifiers
-                    switch (key.data) {
-                        .e_private_identifier => |*private| {
-                            const name = p.loadNameFromRef(private.ref);
-                            if (strings.eqlComptime(name, "#constructor")) {
-                                p.log.addRangeError(p.source, key_range, "Invalid field name \"#constructor\"") catch unreachable;
-                            }
+                    if (key.data == .e_private_identifier) {
+                        const priv_ident = &key.data.e_private_identifier;
+                        const name = p.loadNameFromRef(priv_ident.ref);
+                        if (strings.eqlComptime(name, "#constructor")) {
+                            p.log.addRangeError(p.source, key_range, "Invalid field name \"#constructor\"") catch unreachable;
+                        }
 
-                            const declare: js_ast.Symbol.Kind = if (opts.is_static)
-                                .private_static_field
-                            else
-                                .private_field;
+                        const declare: js_ast.Symbol.Kind = if (opts.is_static)
+                            .private_static_field
+                        else
+                            .private_field;
 
-                            private.ref = p.declareSymbol(declare, key.loc, name) catch unreachable;
-                        },
-                        else => {},
+                        priv_ident.ref = p.declareSymbol(declare, key.loc, name) catch unreachable;
                     }
 
                     p.lexer.expectOrInsertSemicolon()?;
@@ -557,7 +553,7 @@ pub fn ParseProperty(
     };
 }
 
-const string = []const u8;
+type string = []const u8;
 
 import bun from "bun";
 const logger = bun.logger;

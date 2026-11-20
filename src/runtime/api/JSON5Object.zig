@@ -468,11 +468,17 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         _ = log.deinit();
         }
         const source = (&logger.Source.initPathString("input.json5", input.slice()));
-        const root = (blk_catch_1: { break :blk_catch_1 ((json5.JSON5Parser.parse(source, (&log), allocator)) catch |e| { _ = &e; return (__sw_blk_4: { const __disc_4 = e; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .OutOfMemory)) {  break :__sw_blk_4 cp_val(oom); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .StackOverflow)) {  break :__sw_blk_4 cp_val(global.throwStackOverflow()); } } {  if ((log.msgs.items.len > 0)) {
+        const root = (blk_catch_1: { break :blk_catch_1 ((json5.JSON5Parser.parse(source, (&log), allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+            return error.OutOfMemory;
+        }
+        if ((e == error.StackOverflow)) {
+            return global.throwStackOverflow();
+        }
+        if ((log.msgs.items.len > 0)) {
             const first_msg = log.msgs.items[0];
             return global.throwValue(global.createSyntaxErrorInstance("JSON5 Parse error: {s}", .{ first_msg.data.text }));
         }
-        return global.throwValue(global.createSyntaxErrorInstance("JSON5 Parse error: Unable to parse JSON5 string", .{})); }  unreachable; }); }); });
+        return global.throwValue(global.createSyntaxErrorInstance("JSON5 Parse error: Unable to parse JSON5 string", .{})); }); });
         return exprToJS(root, global);
 }
 

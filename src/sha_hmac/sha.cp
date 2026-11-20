@@ -12,12 +12,12 @@ fn NewHasher(comptime digest_size: comptime_int, comptime ContextType: type, com
 
         pub fn init() @This() {
             bun.BoringSSL.load();
-            let this: @This() = .{
+            let res: @This() = .{
                 .hasher = undefined,
             };
 
-            bun.assert(Init(&this.hasher) == 1);
-            return this;
+            bun.assert(Init(&res.hasher) == 1);
+            return res;
         }
 
         pub fn hash(bytes: []const u8, out: *Digest) void {
@@ -48,13 +48,13 @@ fn NewEVP(comptime digest_size: comptime_int, comptime MDName: []const u8): type
             bun.BoringSSL.load();
 
             const md = @field(BoringSSL, MDName)();
-            let this = @This(){};
+            let res = @This(){};
 
-            BoringSSL.EVP_MD_CTX_init(&this.ctx);
+            BoringSSL.EVP_MD_CTX_init(&res.ctx);
 
-            bun.assert(BoringSSL.EVP_DigestInit(&this.ctx, md) == 1);
+            bun.assert(BoringSSL.EVP_DigestInit(&res.ctx, md) == 1);
 
-            return this;
+            return res;
         }
 
         pub fn hash(bytes: []const u8, out: *Digest, engine: ?*BoringSSL.ENGINE) void {

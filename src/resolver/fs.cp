@@ -884,7 +884,7 @@ pub const ModKeyError = error{
                 return bun.hash(&hash_bytes);
             }
 
-            fn generate(_: *RealFS, _: string, file: std.fs.File): anyerror!ModKey {
+            static fn generate(_: *RealFS, _: string, file: std.fs.File): anyerror!ModKey {
                 const stat = file.stat()?;
 
                 const seconds = @divTrunc(stat.mtime, @as(@TypeOf(stat.mtime), std.time.ns_per_s));
@@ -977,7 +977,7 @@ pub struct RealFS {
             return bun.env_var.BUN_TMPDIR.getNotEmpty() ?? platformTempDir();
         }
 
-        fn openTmpDir(_: *const RealFS): !std.fs.Dir {
+        static fn openTmpDir(_: *const RealFS): !std.fs.Dir {
             if (comptime Environment.isWindows) {
                 return (try bun.sys.openDirAtWindowsA(bun.invalid_fd, tmpdirPath(), {
                     iterable: true,

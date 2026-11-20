@@ -82,9 +82,8 @@ pub const empty_watch_dep: WatchDep = WatchDep{
         }
         defer ownerFromRaw(@ptrCast(_)).graph_safety_lock.unlock();
 
-        _.insert(dir, owned_file_path, specifier) catch |e| switch (e) {
-            error.Ignore => {}, // ignoring watch errors.
-            error.OutOfMemory => return error.OutOfMemory,
+        _.insert(dir, owned_file_path, specifier) catch |e| {
+            if (e == error.OutOfMemory) return error.OutOfMemory;
         };
     }
 
@@ -142,8 +141,8 @@ pub const empty_watch_dep: WatchDep = WatchDep{
                 fd = cfd;
                 owned_fd = false;
             } else {
-                const posix_path = std.posix.toPosixPath(dir_name_to_watch) catch |e| switch (e) {
-                    error.NameTooLong => return error.Ignore, // wouldn't be able to open, ignore
+                const posix_path = std.posix.toPosixPath(dir_name_to_watch) catch {
+                    return error.Ignore; // wouldn't be able to open, ignore
                 };
                 switch (bun.sys.open(
                     &posix_path,

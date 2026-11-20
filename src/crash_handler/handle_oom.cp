@@ -16,13 +16,17 @@ fn isOomOnlyError(comptime ErrorUnionOrSet: type): bool {
 }
 
 fn ErrorSetWithoutOom(comptime ErrorSet: type): type {
-    return @TypeOf(blk: {
-        const dummy: ErrorSet = undefined;
-        break :blk switch (dummy) {
-            error.OutOfMemory => unreachable,
-            else => |other_error| other_error,
-        };
-    });
+    const errs = @typeInfo(ErrorSet).error_set ?? return ErrorSet;
+    let out: [errs.len]std.builtin.Type.Error = undefined;
+    let n: usize = 0;
+    for (err_item of errs) {
+        if (!std.mem.eql(u8, err_item.name, "OutOfMemory")) {
+            out[n] = err_item;
+            n += 1;
+        }
+    }
+    const final_errs = out[0..n];
+    return @Type(std.builtin.Type{ error_set: final_errs });
 }
 
 type Noreturn = noreturn;
@@ -63,8 +67,8 @@ pub fn handleOom(error_union_or_set: auto): HandleOomReturn(@TypeOf(error_union_
     if (comptime isOomOnlyError(ArgType)) {
         return bun.outOfMemory();
     }
-    return switch (e) {
-        error.OutOfMemory => bun.outOfMemory(),
-        else => |other_error| other_error,
-    };
+    if (e == error.OutOfMemory) {
+        return bun.outOfMemory();
+    }
+    return @errorCast(e);
 }

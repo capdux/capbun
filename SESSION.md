@@ -2988,3 +2988,7 @@ Options:
 - [2026-11-20 05:23:39 UTC] 验收并提交 `src/shell/shell.cp` (4658行, 0.990x PASS)，彻底解除 `NewLexer` 透传阻塞。
 
 - [2026-11-20 05:25:49 UTC] 验收并提交终极清零 2 组 15 模块（15/15 全 PASS，膨胀率 0.802x~1.137x），全仓全绿达 1277/1293。
+
+- [2026-11-20 05:30:24 UTC] [收到 cp_agy 结单并已 ack] 工单 `task-bun-20261120-return-struct-rawzig-fallback`（`cpc` 已修复 `callconv` 修饰符、无点号位置元组、`?? { stmt }` 块回退与 `lower_extra_zig_member`）；`node_fs.cp` 未 lower 函数从 64 处降至 3 处，已派发专人收尾最后 3 处嵌套结构体提升。
+
+- [2026-11-20 05:30:48 UTC] 验收并提交终极清零 1 组 15 模块 + `JSON5Object.cp`（16/16 全 PASS，膨胀率 0.653x~1.121x），全仓全绿达 **1,292 / 1,293 (99.92%)**。

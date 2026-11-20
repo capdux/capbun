@@ -1299,3 +1299,6 @@
 
 ### 2026-11-20 05:25:49 UTC - 全仓终极清零 2 组经验
 - 彻底清除标量 `switch (e)`、未用 `self`、匿名 `struct` 缺少 `static fn` 及 `_.field = opt ?? default` 降级坑，15/15 全绿。
+
+### 2026-11-20 05:30:48 UTC - 全仓终极清零 1 组收官总结
+- 清零最后 15 个本地 `ast-check` 残余报错（标量 `switch (e)`、缺失 `static fn`、关键字 `private`/`priv`/`ref` 与 `GenericReader` 限定），全仓 1,292/1,293 模块已全绿 PASS，仅余 `node_fs.cp` 收尾中。

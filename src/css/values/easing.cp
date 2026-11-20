@@ -72,7 +72,7 @@ pub union(enum) EasingFunction {
         @"step-end",
     });
 
-    pub fn parse(input: *css.Parser): Result(EasingFunction) {
+    static fn parse(input: *css.Parser): Result(EasingFunction) {
         const location = input.currentSourceLocation();
         if (ident := input.tryParse(css.Parser.expectIdent, {}).asValue()) {
             let keyword: EasingFunction = undefined;
