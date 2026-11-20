@@ -434,6 +434,7 @@ export @root struct CompileTarget {
 
     // Exists for consistentcy with values.
     pub fn defineKeys(): []const []const u8 {
+        * = _.os;
         return &[
             "process.platform",
             "process.arch",

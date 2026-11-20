@@ -927,7 +927,7 @@ pub enum Loader: u8 {
         };
     }
 
-    pub fn fromMimeType(mime_type: bun.http.MimeType): Loader {
+    static fn fromMimeType(mime_type: bun.http.MimeType): Loader {
         if (strings.hasPrefixComptime(mime_type.value, "application/javascript-jsx")) {
             return .jsx;
         } else if (strings.hasPrefixComptime(mime_type.value, "application/typescript-jsx")) {

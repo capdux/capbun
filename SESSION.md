@@ -3188,3 +3188,5 @@ Options:
 - **[2026-11-20 23:29] Wave 25 A 组验收提交（23 模块全绿）**：完成 `CompileTarget`（消除 `Writer.zig` 2 错）、`toml`（消除 `std/mem.zig` `#origin` 错）、AST/Resolver/Router/DevServer/Bundler/CLI/Sourcemap 等 23 模块独立验收（23/23 PASS）并原子提交；记录外部根因 `OutputFile.cp`/`Headers.cp`/`json.cp`/`P.cp` 并补派 D 组扫除。
 
 - **[2026-11-20 23:30] Wave 25 B 组 + C 组验收提交（52 模块全绿）**：完成 Install/JSC/SQL 25 模块及 Runtime/Shell/String/Watcher 27 模块独立验收（52/52 PASS，4 项门禁全绿）并原子提交；记录外部根因 `CompileTarget.defineKeys`、`bundler/options.Loader.fromMimeType` 待 D 组完成后派发 E 组。
+
+- **[2026-11-20 23:31] Wave 25 E 组验收提交（2 根因全绿）**：完成 `CompileTarget.defineKeys`（引用 `_.os` 恢复 `self`）与 `bundler/options.Loader.fromMimeType`（补 `static fn`）独立验收（2/2 PASS）并原子提交（`dns.cp` 经核对已由 C 组解决）；静待 D 组（`9b50977b`）完成即跑 Wave 26 `zig:check`。

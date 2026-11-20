@@ -514,8 +514,7 @@ else => bun.resolver.SideEffects.has_side_effects,
 });
     }
 
-pub fn fromMimeType(self: Loader, mime_type: bun.http.MimeType) Loader {
-        _ = self;
+pub fn fromMimeType(mime_type: bun.http.MimeType) Loader {
             if (strings.hasPrefixComptime((if (@typeInfo(@TypeOf(mime_type)) == .@"enum") @intFromEnum(mime_type) else mime_type.value), "application/javascript-jsx")) {
                 return .jsx;
             } else {

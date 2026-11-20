@@ -439,7 +439,8 @@ pub fn from(input_: []const u8) CompileTarget {
         return res;
 }
 
-pub fn defineKeys() []const []const u8 {
+pub fn defineKeys(self: CompileTarget) []const []const u8 {
+        _ = self.os;
         return (&.{ "process.platform", "process.arch", "process.versions.bun" });
 }
 
