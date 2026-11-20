@@ -159,8 +159,18 @@ if (ident.must_keep_due_to_with_stmt) {
             }
 },
 .e_if => |ternary| {
-if (ternary.yes == null) { ternary.yes = ternary.yes.toEmpty(); }
-            if (ternary.no == null) { ternary.no = ternary.no.toEmpty(); }
+if (SideEffects.simplifyUnusedExpr(p, ternary.yes)) |y| {
+                _ = &y;
+                ternary.yes = y;
+            } else {
+                ternary.yes = ternary.yes.toEmpty();
+            }
+            if (SideEffects.simplifyUnusedExpr(p, ternary.no)) |n| {
+                _ = &n;
+                ternary.no = n;
+            } else {
+                ternary.no = ternary.no.toEmpty();
+            }
             if ((ternary.yes.isEmpty() and ternary.no.isEmpty())) {
                 return SideEffects.simplifyUnusedExpr(p, ternary.test_);
             }
@@ -275,7 +285,7 @@ var properties_slice = expr.data.e_object.properties.slice();
                     return expr;
                 }
             }
-            var result = Expr.init(E.Missing, E.Missing, expr.loc);
+            var result = Expr.init(E.Missing, .{}, expr.loc);
             _ = &result;
             for (cp_iter_slice(properties_slice)) |prop| {
                 _ = &prop;

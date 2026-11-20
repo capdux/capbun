@@ -69,7 +69,7 @@ pub const CharAndCount = struct {
     count: i32 = 0,
     index: usize = 0,
 
-pub fn lessThan(ctx: anytype, a: CharAndCount, b: CharAndCount) bool {
+pub fn lessThan(ctx: void, a: CharAndCount, b: CharAndCount) bool {
             _ = &ctx;
             if ((a.count != b.count)) {
                 return (a.count > b.count);
@@ -112,7 +112,8 @@ pub fn compile(self: CharFreq, allocator: std.mem.Allocator) NameMinifier {
         while ((i < char_freq_count)) : (i = (i + 1)) {
             _array[cp_cast_int(usize, i)] = CharAndCount{ .char = NameMinifier.default_tail[@as(usize, @intCast(i))], .index = i, .count = self.freqs[@as(usize, @intCast(i))] };
         }
-        _ = std.sort.pdq(CharAndCount, (&_array), .{}, CharAndCount.lessThan);
+        const sort_ctx: void = undefined;
+        _ = std.sort.pdq(CharAndCount, (&_array), sort_ctx, CharAndCount.lessThan);
         break :brk _array;
 };
         var minifier = NameMinifier.init(allocator);

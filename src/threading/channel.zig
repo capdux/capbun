@@ -280,7 +280,7 @@ pub fn tryReadItem(self: *@This()) !?T {
             return items[0];
     }
 
-pub fn readItem(self: *@This()) T!void {
+pub fn readItem(self: *@This()) !T {
             var items: [1]T = undefined;
             _ = &items;
             _ = try self.readAll((&items));

@@ -449,10 +449,10 @@ pub var active_requests_count: std.atomic.Value(usize) = std.atomic.Value(usize)
 pub var max_simultaneous_requests: std.atomic.Value(usize) = std.atomic.Value(usize).init(256);
 
 pub fn sendSyncCallback(channel_holder: *SingleHTTPChannel, async_http: *AsyncHTTP, result: HTTPClientResult) void {
-        if (async_http.real) |real| {
-            _ = &real;
-            real.* = async_http.*;
-            (real).?.response_buffer = async_http.response_buffer;
+        if ((async_http.real != null)) {
+            const real_ptr: *AsyncHTTP = async_http.real.?;
+            real_ptr.* = async_http.*;
+            real_ptr.response_buffer = async_http.response_buffer;
         }
         _ = (blk_catch_16: { break :blk_catch_16 ((channel_holder.channel.writeItem(result)) catch |__ce_16| { _ = &__ce_16; @panic("unreachable"); }); });
 }

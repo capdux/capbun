@@ -269,7 +269,7 @@ pub fn fnSuffix(k: u8) []const u8 {
             return (if ((k == 2)) "_get" else (if ((k == 3)) "_set" else "_fn"));
     }
 
-pub fn rewriteExpr(p: *P, expr: *Expr, kind: *RewriteKind) void {
+pub fn rewriteExpr(p: *P, expr: *Expr, kind: RewriteKind) void {
             switch (kind) {
 .replace_ref => |r| {
 if (((expr.data == .e_identifier) and expr.data.e_identifier.ref.eql(r.old))) {
@@ -375,7 +375,7 @@ else => {
 }
     }
 
-pub fn rewriteStmts(p: *P, stmts: []Stmt, kind: *RewriteKind) void {
+pub fn rewriteStmts(p: *P, stmts: []Stmt, kind: RewriteKind) void {
             for (cp_mut_slice(&stmts)) |*cur_stmt| {
                 _ = &cur_stmt;
                 switch ((cur_stmt.*).data) {
@@ -756,7 +756,8 @@ else => {
     }
 
 pub fn lowerStandardDecoratorsStmt(p: *P, stmt: Stmt) []Stmt {
-            return lowerImpl(p, stmt, .stmt);
+            const m: StdDecMode = .stmt;
+            return lowerImpl(p, stmt, m);
     }
 
 pub fn lowerStandardDecoratorsExpr(p: *P, cls: *G.Class, l: logger.Loc, name_from_context: ?[]const u8) Expr {
@@ -767,7 +768,7 @@ pub fn lowerStandardDecoratorsExpr(p: *P, cls: *G.Class, l: logger.Loc, name_fro
             return (if (@typeInfo(@TypeOf(result[0].data.s_expr)) == .@"enum") @intFromEnum(result[0].data.s_expr) else result[0].data.s_expr.value);
     }
 
-pub fn lowerImpl(p: *P, stmt: Stmt, mode: *StdDecMode) []Stmt {
+pub fn lowerImpl(p: *P, stmt: Stmt, mode: StdDecMode) []Stmt {
             const is_expr = (mode == .expr);
             var cls = (switch (mode) {
 .stmt => (&stmt.data.s_class.class),
@@ -895,7 +896,7 @@ pub fn lowerImpl(p: *P, stmt: Stmt, mode: *StdDecMode) []Stmt {
             {
                 const replacement_ref = (if (is_expr) ((expr_class_ref) orelse (class_name_ref)) else inner_class_ref);
                 if ((!replacement_ref.eql(class_name_ref))) {
-                    const rk: *RewriteKind = .{ .replace_ref = .{ .old = class_name_ref, .new = replacement_ref } };
+                    const rk: RewriteKind = .{ .replace_ref = .{ .old = class_name_ref, .new = replacement_ref } };
                     for (pre_eval_stmts.items) |*pre_stmt| {
                         _ = &pre_stmt;
                         if (((pre_stmt.*).data == .s_local)) {

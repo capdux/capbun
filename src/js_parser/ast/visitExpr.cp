@@ -25,7 +25,7 @@ pub fn VisitExpr(
                 p.log.addError(p.source, expr.loc, "Invalid assignment target") catch unreachable;
             }
 
-            switch (@as(Expr.Tag, expr.data)) {
+            switch (std.meta.activeTag(expr.data)) {
                 inline else => |tag| {
                     if (comptime @hasDecl(visitors, @tagName(tag))) {
                         return @field(visitors, @tagName(tag))(p, expr, expr_in);

@@ -308,7 +308,7 @@ for (cp_iter_slice(object.properties)) |item| {
 }
 }
 
-pub fn visitRefToExport(self: *ConvertESMExportsForHmr, p: anytype, r: Ref, export_symbol_name: []const ?u8, loc: logger.Loc, is_live_binding_source: bool) !void {
+pub fn visitRefToExport(self: *ConvertESMExportsForHmr, p: anytype, r: Ref, export_symbol_name: ?[]const u8, loc: logger.Loc, is_live_binding_source: bool) !void {
         const symbol = p.symbols.items[@as(usize, @intCast(r.inner_index))];
         const id = (if ((symbol.kind == .@"import")) Expr.init(E.ImportIdentifier, .{ .ref = r }, loc) else Expr.initIdentifier(r, loc));
         if (((is_live_binding_source or ((symbol.kind == .@"import") and (!self.is_in_node_modules))) or symbol.has_been_assigned_to)) {

@@ -1799,6 +1799,7 @@ pub fn reapChild(child: std.c.pid_t) Status {
     const JobControl = SyncJobControl;
 };
 
+const OptFD = ?bun.FD;
 const OptCStr = ?[*:0]const u8;
 const ArgPtr = ?[*:0]u8;
 const pid_t = (if (Environment.isPosix) std.posix.pid_t else uv.uv_pid_t);
@@ -2198,7 +2199,7 @@ pub fn spawnProcessPosix(options: *const PosixSpawnOptions, argv: [*:null]OptCSt
         const Stdio = PosixSpawnOptions.Stdio;
         _ = &Stdio;
         const stdio_options: [3]Stdio = .{ options.stdin, options.stdout, options.stderr };
-        const stdios: [3]?*bun.FD = .{ (&spawned.stdin), (&spawned.stdout), (&spawned.stderr) };
+        const stdios: [3]*OptFD = .{ (&spawned.stdin), (&spawned.stdout), (&spawned.stderr) };
         var dup_stdout_to_stderr: bool = false;
         _ = &dup_stdout_to_stderr;
         {

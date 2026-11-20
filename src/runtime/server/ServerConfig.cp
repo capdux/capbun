@@ -203,7 +203,7 @@ fn normalizeStaticRoutesList(*_: *ServerConfig): !void {
         }
     }
 
-    std.mem.sort(StaticRouteEntry, list.items, {}, StaticRouteEntry.isLessThan);
+    std.mem.sort(StaticRouteEntry, list.items, @as(void, {}), StaticRouteEntry.isLessThan);
 }
 
 pub fn cloneForReloadingStaticRoutes(*_: *ServerConfig): !ServerConfig {

@@ -767,12 +767,12 @@ exports_kind = .esm;
 },
 .unknown => {
 const uses_any_import_statements = brk: {
-                        for (p.import_records.items) |*import_record| {
-                            _ = &import_record;
-                            if ((((import_record.*)).?.flags.is_internal or ((import_record.*)).?.flags.is_unused)) {
+                        for (p.import_records.items) |*rec| {
+                            _ = &rec;
+                            if (((rec.*).flags.is_internal or (rec.*).flags.is_unused)) {
                                 continue;
                             }
-                            if ((((import_record.*)).?.kind == .stmt)) {
+                            if (((rec.*).kind == .stmt)) {
                                 break :brk true;
                             }
                         }

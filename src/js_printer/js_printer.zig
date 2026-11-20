@@ -2282,7 +2282,7 @@ var wrap = (level.gte(.@"new") or flags.contains(.forbid_call));
             var target_flags = ExprFlag.Set.initEmpty();
             _ = &target_flags;
             if ((e.optional_chain == null)) {
-                target_flags = ExprFlag.HasNonOptionalChainParent;
+                target_flags = ExprFlag.Set.init(.{ .has_non_optional_chain_parent = true });
             } else {
                 if (flags.contains(.has_non_optional_chain_parent)) {
                     wrap = true;
@@ -3396,7 +3396,7 @@ else => {
 if (comptime is_json) {
                 _ = unreachable;
             }
-            _ = p.printExpr(_key, .lowest, ExprFlag.Set);
+            _ = p.printExpr(_key, .lowest, ExprFlag.Set.initEmpty());
 },
 }
             if (((item.kind != .normal) and (item.kind != .auto_accessor))) {

@@ -1849,7 +1849,7 @@ export struct SocketHandlerSSL {
                             },
                         };
 
-                        this.authentication_state = { md5: {} };
+                        this.authentication_state = .md5;
                         response.writeInternal(Writer, this.writer())?;
                         this.flushData();
                     },

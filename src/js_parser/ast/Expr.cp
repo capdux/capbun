@@ -3024,7 +3024,7 @@ pub union(Tag) Data {
                 // +'1' => 1
                 return stringToEquivalentNumberValue(str.slice8());
             },
-            .e_boolean, .e_branch_boolean => |b| @as(f64, if (b.value) 1.0 else 0.0),
+            .e_boolean, .e_branch_boolean => |b| if (b.value) @as(f64, 1.0) else @as(f64, 0.0),
             .e_number => data.e_number.value,
             .e_inlined_enum => |inlined| switch (inlined.value.data) {
                 .e_number => |num| num.value,
@@ -3043,7 +3043,7 @@ pub union(Tag) Data {
 
     static fn toFiniteNumber(data: Expr.Data): f64? {
         return switch (data) {
-            .e_boolean, .e_branch_boolean => |b| @as(f64, if (b.value) 1.0 else 0.0),
+            .e_boolean, .e_branch_boolean => |b| if (b.value) @as(f64, 1.0) else @as(f64, 0.0),
             .e_number => if (std.math.isFinite(data.e_number.value))
                 data.e_number.value
             else

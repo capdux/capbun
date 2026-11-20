@@ -174,7 +174,7 @@ var iter = set.iterator();
                 index = (index - 1);
             }
         }
-        _ = std.mem.sort(StaticRouteEntry, list.items, .{}, StaticRouteEntry.isLessThan);
+        _ = std.mem.sort(StaticRouteEntry, list.items, @as(void, .{}), StaticRouteEntry.isLessThan);
 }
 
 pub fn cloneForReloadingStaticRoutes(self: *ServerConfig) !ServerConfig {

@@ -411,7 +411,7 @@ pub struct DeduplicatedImportResult {
         *_,
         p: auto,
         r: Ref,
-        export_symbol_name: []const u8?,
+        export_symbol_name: ([]const u8)?,
         loc: logger.Loc,
         is_live_binding_source: bool,
     )! {

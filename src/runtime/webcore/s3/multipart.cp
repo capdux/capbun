@@ -414,11 +414,11 @@ export class MultiPartUpload {
         } else if (this.state == .singlefile_started) {
             this.state = .finished;
             defer this.deref();
-            this.callback(.{ .success = {} }, this.callback_context)?;
+            this.callback(.success, this.callback_context)?;
         }
     }
 
-    @c static fn startMultiPartRequestResult(result: S3SimpleRequest.S3DownloadResult, self_any: *!): JSTerminatedError!void {
+    static fn startMultiPartRequestResult(result: S3SimpleRequest.S3DownloadResult, self_any: *!): JSTerminatedError!void {
         const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
         defer upload.deref();
         if (upload.state == .finished) return;
@@ -459,7 +459,7 @@ export class MultiPartUpload {
         }
     }
 
-    @c static fn onCommitMultiPartRequest(result: S3SimpleRequest.S3CommitResult, self_any: *!): JSTerminatedError!void {
+    static fn onCommitMultiPartRequest(result: S3SimpleRequest.S3CommitResult, self_any: *!): JSTerminatedError!void {
         const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
         log("onCommitMultiPartRequest {s}", .{ upload.upload_id });
         switch (result) {
@@ -476,7 +476,7 @@ export class MultiPartUpload {
             .success => {
                 defer upload.deref();
                 upload.state = .finished;
-                upload.callback(.{ .success = {} }, upload.callback_context)?;
+                upload.callback(.success, upload.callback_context)?;
             },
         }
     }

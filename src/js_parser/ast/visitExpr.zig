@@ -121,7 +121,7 @@ pub fn visitExprInOut(p: *P, expr: Expr, expr_in: ExprIn) Expr {
             if (((expr_in.assign_target != .none) and (!p.isValidAssignmentTarget(expr)))) {
                 _ = ((p.log.addError(p.source, expr.loc, "Invalid assignment target")) catch unreachable);
             }
-            switch ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt(expr.data)) else @as(Expr.Tag, expr.data))) {
+            switch (std.meta.activeTag(expr.data)) {
 inline else => |tag| {
 if (comptime @hasDecl(visitors, @tagName(tag))) {
                 return @field(visitors, @tagName(tag))(p, expr, expr_in);

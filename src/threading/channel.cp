@@ -68,20 +68,20 @@ pub fn Channel(
             self.getters.broadcast();
         }
 
-        pub fn tryWriteItem(self: *Self, item: T) !bool {
+        pub fn tryWriteItem(self: *Self, item: T): bool! {
             const wrote = try self.write(&[1]T{item});
             return wrote == 1;
         }
 
-        pub fn writeItem(self: *Self, item: T) !void {
+        pub fn writeItem(self: *Self, item: T)! {
             return self.writeAll(&[1]T{item});
         }
 
-        pub fn write(self: *Self, items: []const T) !usize {
+        pub fn write(self: *Self, items: []const T): usize! {
             return self.writeItems(items, false);
         }
 
-        pub fn tryReadItem(self: *Self) !?T {
+        pub fn tryReadItem(self: *Self): (T?)! {
             let items: [1]T = undefined;
             if ((try self.read(&items)) != 1) {
                 return null;
@@ -89,25 +89,25 @@ pub fn Channel(
             return items[0];
         }
 
-        pub fn readItem(self: *Self) !T {
+        pub fn readItem(self: *Self): T! {
             let items: [1]T = undefined;
             try self.readAll(&items);
             return items[0];
         }
 
-        pub fn read(self: *Self, items: []T) !usize {
+        pub fn read(self: *Self, items: []T): usize! {
             return self.readItems(items, false);
         }
 
-        pub fn writeAll(self: *Self, items: []const T) !void {
+        pub fn writeAll(self: *Self, items: []const T)! {
             bun.assert((try self.writeItems(items, true)) == items.len);
         }
 
-        pub fn readAll(self: *Self, items: []T) !void {
+        pub fn readAll(self: *Self, items: []T)! {
             bun.assert((try self.readItems(items, true)) == items.len);
         }
 
-        fn writeItems(self: *Self, items: []const T, should_block: bool) !usize {
+        fn writeItems(self: *Self, items: []const T, should_block: bool): usize! {
             self.mutex.lock();
             defer self.mutex.unlock();
 
@@ -132,7 +132,7 @@ pub fn Channel(
             return pushed;
         }
 
-        fn readItems(self: *Self, items: []T, should_block: bool) !usize {
+        fn readItems(self: *Self, items: []T, should_block: bool): usize! {
             self.mutex.lock();
             defer self.mutex.unlock();
 

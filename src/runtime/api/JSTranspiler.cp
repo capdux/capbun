@@ -457,8 +457,10 @@ pub struct Config {
             }
         }
 
-        _.tree_shaking = tree_shaking ?? false;
-        _.trim_unused_imports = trim_unused_imports ?? _.tree_shaking;
+        const ts = tree_shaking ?? false;
+        _.tree_shaking = ts;
+        const tui = trim_unused_imports ?? ts;
+        _.trim_unused_imports = tui;
     }
 }
 

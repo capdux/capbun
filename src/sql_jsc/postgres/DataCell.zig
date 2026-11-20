@@ -97,7 +97,7 @@ pub const Putter = struct {
     count: usize = 0,
     globalObject: *jsc.JSGlobalObject,
 
-pub fn toJS(self: *Putter, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: ?PostgresCachedStructure) anyerror!JSValue {
+pub fn toJS(self: *Putter, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: ?PostgresCachedStructure) !JSValue {
             var names: ?[*]jsc.JSObject.ExternColumnIdentifier = null;
             _ = &names;
             var names_count: u32 = 0;
@@ -571,9 +571,9 @@ is_infinity = true;
                 }
                 if (bun.strings.eqlCaseInsensitiveASCII(element[0..8], "Infinity", false)) {
                     if ((((arrayType == .date_array) or (arrayType == .timestamp_array)) or (arrayType == .timestamptz_array))) {
-                        _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .date, .value = .{ .date = (if (is_negative) (0 - std).math.inf(f64) else std.math.inf(f64)) } });
+                        _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .date, .value = .{ .date = (if (is_negative) (0.0 - std.math.inf(f64)) else std.math.inf(f64)) } });
                     } else {
-                        _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = (if (is_negative) (0 - std).math.inf(f64) else std.math.inf(f64)) } });
+                        _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = (if (is_negative) (0.0 - std.math.inf(f64)) else std.math.inf(f64)) } });
                     }
                     pos = (pos + (8 + (if (comptime @typeInfo(@TypeOf(@intFromBool(is_negative))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(is_negative))) else cp_cast_int(usize, @intFromBool(is_negative)))));
                     break;
@@ -707,7 +707,7 @@ pub fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, byte
         }
 }
 
-pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject) anyerror!SQLDataCell {
+pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject) !SQLDataCell {
         switch (oid) {
 .int4_array => {
 return fromTypedArrayBytes(.int4_array, binary, bigint, bytes, globalObject);

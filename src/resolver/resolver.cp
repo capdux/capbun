@@ -2525,7 +2525,7 @@ pub struct Resolver {
                     name: Semver.String.@"from"(""),
                     resolution: {
                         tag: .root,
-                        value: { root: {} },
+                        value: { root: undefined },
                     },
                 };
                 package.@"meta".setHasInstallScript(package.scripts.hasAny());

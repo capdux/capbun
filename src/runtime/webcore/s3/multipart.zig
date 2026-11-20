@@ -492,12 +492,12 @@ pub fn done(self: *MultiPartUpload) JSTerminatedError!void {
                     defer {
                     _ = self.deref();
                     }
-                    _ = try self.callback(.{ .success = .{} }, self.callback_context);
+                    _ = try self.callback(.success, self.callback_context);
                 }
             }
     }
 
-pub fn startMultiPartRequestResult(result: S3SimpleRequest.S3DownloadResult, self_any: *anyopaque) callconv(.c) JSTerminatedError!void {
+pub fn startMultiPartRequestResult(result: S3SimpleRequest.S3DownloadResult, self_any: *anyopaque) JSTerminatedError!void {
             const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
             defer {
             _ = upload.deref();
@@ -538,7 +538,7 @@ _ = try upload.fail(.{ .code = "UnknownError", .message = "Failed to initiate mu
 }
     }
 
-pub fn onCommitMultiPartRequest(result: S3SimpleRequest.S3CommitResult, self_any: *anyopaque) callconv(.c) JSTerminatedError!void {
+pub fn onCommitMultiPartRequest(result: S3SimpleRequest.S3CommitResult, self_any: *anyopaque) JSTerminatedError!void {
             const upload: *MultiPartUpload = @ptrCast(@alignCast(self_any));
             _ = log("onCommitMultiPartRequest {s}", .{ upload.upload_id });
             switch (result) {
@@ -559,7 +559,7 @@ defer {
             _ = upload.deref();
             }
             upload.state = .finished;
-            _ = try upload.callback(.{ .success = .{} }, upload.callback_context);
+            _ = try upload.callback(.success, upload.callback_context);
 },
 }
     }

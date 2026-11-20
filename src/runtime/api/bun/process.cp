@@ -7,6 +7,7 @@ import bun from "bun";
 const pid_t = if (Environment.isPosix) std.posix.pid_t else uv.uv_pid_t;
 const fd_t = if (Environment.isPosix) std.posix.fd_t else i32;
 const log = bun.Output.scoped(.PROCESS, .visible);
+type OptFD = bun.FD?;
 
 struct WinTimeval {
     sec: i64 = 0,
@@ -1458,7 +1459,7 @@ pub fn spawnProcessPosix(
 
     const Stdio = PosixSpawnOptions.Stdio;
     const stdio_options: [3]Stdio = [ options.stdin, options.stdout, options.stderr ];
-    const stdios: [3]*bun.FD? = [ &spawned.stdin, &spawned.stdout, &spawned.stderr ];
+    const stdios: [3]*OptFD = [ &spawned.stdin, &spawned.stdout, &spawned.stderr ];
 
     let dup_stdout_to_stderr: bool = false;
 

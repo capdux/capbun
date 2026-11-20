@@ -1360,7 +1360,7 @@ pub fn toNumber(data: Expr.Data) ?f64 {
                 return stringToEquivalentNumberValue(str.slice8());
             }
 },
-.e_boolean, .e_branch_boolean => |b| @as(f64, @floatCast((if ((if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value)) 1.0 else 0.0))),
+.e_boolean, .e_branch_boolean => |b| (if ((if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value)) @as(f64, @floatCast(1.0)) else @as(f64, @floatCast(0.0))),
 .e_number => (if (@typeInfo(@TypeOf(data.e_number)) == .@"enum") @intFromEnum(data.e_number) else data.e_number.value),
 .e_inlined_enum => |inlined| (switch ((if (@typeInfo(@TypeOf(inlined)) == .@"enum") @intFromEnum(inlined) else inlined.value).data) {
 .e_number => |num| (if (@typeInfo(@TypeOf(num)) == .@"enum") @intFromEnum(num) else num.value),
@@ -1383,7 +1383,7 @@ else => null,
 
 pub fn toFiniteNumber(data: Expr.Data) ?f64 {
             return (switch (data) {
-.e_boolean, .e_branch_boolean => |b| @as(f64, @floatCast((if ((if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value)) 1.0 else 0.0))),
+.e_boolean, .e_branch_boolean => |b| (if ((if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value)) @as(f64, @floatCast(1.0)) else @as(f64, @floatCast(0.0))),
 .e_number => (if (std.math.isFinite((if (@typeInfo(@TypeOf(data.e_number)) == .@"enum") @intFromEnum(data.e_number) else data.e_number.value))) (if (@typeInfo(@TypeOf(data.e_number)) == .@"enum") @intFromEnum(data.e_number) else data.e_number.value) else null),
 .e_inlined_enum => |inlined| (switch ((if (@typeInfo(@TypeOf(inlined)) == .@"enum") @intFromEnum(inlined) else inlined.value).data) {
 .e_number => |num| (if (std.math.isFinite((if (@typeInfo(@TypeOf(num)) == .@"enum") @intFromEnum(num) else num.value))) (if (@typeInfo(@TypeOf(num)) == .@"enum") @intFromEnum(num) else num.value) else null),

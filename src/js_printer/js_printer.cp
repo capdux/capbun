@@ -2322,7 +2322,7 @@ fn NewPrinter(
                     let wrap = level.gte(.@"new") || flags.contains(.forbid_call);
                     let target_flags = ExprFlag.Set.initEmpty();
                     if (e.optional_chain == null) {
-                        target_flags = ExprFlag.HasNonOptionalChainParent();
+                        target_flags = ExprFlag.Set.init({ has_non_optional_chain_parent: true });
                     } else if (flags.contains(.has_non_optional_chain_parent)) {
                         wrap = true;
                     }
@@ -3621,7 +3621,7 @@ fn NewPrinter(
                         unreachable;
                     }
 
-                    p.printExpr(_key, .lowest, ExprFlag.Set{});
+                    p.printExpr(_key, .lowest, ExprFlag.Set.initEmpty());
                 },
             }
 

@@ -1485,7 +1485,8 @@ pub const Parser = struct {
 
         const arg1_opt = _.parse_atom()?;
         if (arg1_opt == null) {
-            _.add_error("Expected a conditional expression operand, but got: {s}", .{_.peek().asHumanReadable(_.strpool)})?;
+            const tok: Token = _.peek();
+            _.add_error("Expected a conditional expression operand, but got: {s}", .{tok.asHumanReadable(_.strpool)})?;
             return ParseError.Expected;
         }
         const arg1 = arg1_opt.?;

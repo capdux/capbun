@@ -412,7 +412,7 @@ pub fn statementCaresAboutScope(stmt: Stmt): bool {
         .s_label,
         => false,
 
-        .s_local => |local| local.kind != .k_var,
+        .s_local local => local.kind != .k_var,
         else => true,
     };
 }
@@ -1177,7 +1177,7 @@ pub struct ReactRefresh {
     /// When a function is done visiting, the stack location is checked,
     /// and then it will insert `var _s = ...`, add the `_s()` call at
     /// the start of the function, and then add the call to `_s(func, ...)`.
-    hook_ctx_storage: ?*HookContext? = null,
+    hook_ctx_storage: (*HookContext?)? = null,
 
     /// This is the most recently generated `_s` call. This is used to compare
     /// against seen calls to plain identifiers when in "export default" and in

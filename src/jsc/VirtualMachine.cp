@@ -3511,7 +3511,8 @@ fn printErrorInstance(
             }
 
             client.printErrorNameAndMessage(name, message, !exception.browser_url.isEmpty(), code, Writer, writer, allow_ansi_color, formatter.error_display_level)?;
-        } else if (top := top_frame) {
+        } else {
+            const top = top_frame.?;
             defer did_print_name = true;
             const display_line = source.line + 1;
             const int_size = std.fmt.count("{d}", .{display_line});

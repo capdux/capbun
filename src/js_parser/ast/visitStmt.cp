@@ -96,7 +96,7 @@ fn VisitStmtVisitors(
                     }
 
                     item.name.ref = sym_ref;
-                    data.items[end] = item.*;
+                    data.items[end] = item;
                     end += 1;
                 }
             } else {
@@ -118,7 +118,7 @@ fn VisitStmtVisitors(
                     }
 
                     item.name.ref = sym_ref;
-                    data.items[end] = item.*;
+                    data.items[end] = item;
                     end += 1;
                 }
             }
@@ -962,7 +962,7 @@ fn VisitStmtVisitors(
                 data.value = p.visitExpr(val);
 
                 // "return undefined;" can safely just always be "return;"
-                if (data.value != null && @as(Expr.Tag, data.value.?.data) == .e_undefined) {
+                if (data.value != null && std.meta.activeTag(data.value.?.data) == .e_undefined) {
                     // Returning undefined is implicit
                     data.value = null;
                 }

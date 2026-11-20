@@ -22,7 +22,7 @@ pub fn AstMaybe(
                 return { ok: false };
             }
 
-            let value: Expr = Expr{ loc: logger.Loc.Empty, data: Expr.Data{ e_missing: E.Missing{} } };
+            let value: Expr = Expr{ loc: logger.Loc.Empty, data: Expr.Data{ e_missing: {} } };
 
             for (decl of decls) {
                 const binding = Binding.toExpr(

@@ -537,7 +537,8 @@ pub fn LowerDecorators(
         // ── Public API ───────────────────────────────────────
 
         static fn lowerStandardDecoratorsStmt(p: *P, stmt: Stmt): []Stmt {
-            return lowerImpl(p, stmt, .stmt);
+            const m: StdDecMode = .stmt;
+            return lowerImpl(p, stmt, m);
         }
 
         static fn lowerStandardDecoratorsExpr(p: *P, cls: *G.Class, l: logger.Loc, name_from_context: ([]const u8)?): Expr {

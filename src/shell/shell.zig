@@ -1952,7 +1952,8 @@ else => {
 }
             const arg1_opt = try self.parse_atom();
             if ((arg1_opt == null)) {
-                _ = try self.add_error("Expected a conditional expression operand, but got: {s}", .{ (self.peek()).?.asHumanReadable(self.strpool) });
+                const tok: Token = self.peek();
+                _ = try self.add_error("Expected a conditional expression operand, but got: {s}", .{ tok.asHumanReadable(self.strpool) });
                 return ParseError.Expected;
             }
             const arg1 = arg1_opt.?;

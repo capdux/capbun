@@ -1804,3 +1804,7 @@
 - **[2026-11-20] Wave 27 A 组 (15 模块)**：更新 `options_types/CompileTarget`, `interchange/toml`, `js_printer/js_printer`, `js_parser/ast/{CharFreq,ConvertESMExportsForHmr,P,Parser,visit}`, `bake/DevServer`, `bundler/{HTMLScanner,analyze_transpiled_module,bundle_v2}`, `cli/test_command`, `sourcemap_jsc/CodeCoverage`, `router/router`。
 
 - **[2026-11-20] Wave 27 D 组 (2 跨模块根因)**：更新 `bun_alloc/maybe_owned`, `runtime/api/JSTranspiler`。
+
+- **[2026-11-20] Wave 28 A 组 (15 模块)**：更新 `js_printer/js_printer`, `js_parser/{parser,ast/{Expr,P,visit,visitStmt,Binding,CharFreq,ConvertESMExportsForHmr,Parser,SideEffects,lowerDecorators,maybe,visitExpr}}`, `resolver/resolver`。
+
+- **[2026-11-20] Wave 28 C 组 (11 模块)**：更新 `jsc/VirtualMachine`, `sql_jsc/postgres/{PostgresSQLConnection,DataCell}`, `runtime/{webcore/s3/multipart,api/{JSTranspiler,bun/process},server/ServerConfig}`, `http/AsyncHTTP`, `shell/shell`, `threading/channel`, `watcher/INotifyWatcher`。

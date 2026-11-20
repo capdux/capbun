@@ -123,8 +123,16 @@ pub enum SideEffects: u1 {
                 }
             },
             .e_if => |ternary| {
-                ternary.yes = SideEffects.simplifyUnusedExpr(p, ternary.yes) ?? ternary.yes.toEmpty();
-                ternary.no = SideEffects.simplifyUnusedExpr(p, ternary.no) ?? ternary.no.toEmpty();
+                if (y := SideEffects.simplifyUnusedExpr(p, ternary.yes)) {
+                    ternary.yes = y;
+                } else {
+                    ternary.yes = ternary.yes.toEmpty();
+                }
+                if (n := SideEffects.simplifyUnusedExpr(p, ternary.no)) {
+                    ternary.no = n;
+                } else {
+                    ternary.no = ternary.no.toEmpty();
+                }
 
                 // "foo() ? 1 : 2" => "foo()"
                 if (ternary.yes.isEmpty() && ternary.no.isEmpty()) {
@@ -296,7 +304,7 @@ pub enum SideEffects: u1 {
                     }
                 }
 
-                let result = Expr.init(E.Missing, E.Missing{}, expr.loc);
+                let result = Expr.init(E.Missing, {}, expr.loc);
 
                 // Otherwise, the object can be completely removed. We only need to keep any
                 // object properties with side effects. Apply this simplification recursively.

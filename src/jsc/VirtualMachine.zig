@@ -2969,36 +2969,34 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                 }
                 _ = try client.printErrorNameAndMessage(name, message, (!exception.browser_url.isEmpty()), code, Writer, writer, allow_ansi_color, formatter.error_display_level);
             } else {
-                if ((top_frame.?)) |top| {
-                    _ = &top;
-                    defer {
-                    did_print_name = true;
-                    }
-                    const display_line = (source.line + 1);
-                    const int_size = std.fmt.count("{d}", .{ display_line });
-                    const pad = (max_line_number_pad - int_size);
-                    _ = try writer.splatByteAll(32, pad);
-                    defer {
-                    _ = source.text.deinit();
-                    }
-                    const text = source.text.slice();
-                    const trimmed = std.mem.trimRight(u8, std.mem.trim(u8, text, "\n"), "\t ");
-                    const clamped = trimmed[0..@min(trimmed.len, max_line_length)];
-                    if ((clamped.len != trimmed.len)) {
-                        const fmt = (if (comptime allow_ansi_color) "<r><d> | ... truncated <r>\n\n" else "\n\n");
-                        _ = try writer.print((comptime Output.prettyFmt(("<r><b>{d} |<r> {f}" ++ fmt), allow_ansi_color)), .{ display_line, bun.fmt.fmtJavaScript(clamped, .{ .enable_colors = allow_ansi_color }) });
-                    } else {
-                        _ = try writer.print((comptime Output.prettyFmt("<r><b>{d} |<r> {f}\n", allow_ansi_color)), .{ display_line, bun.fmt.fmtJavaScript(clamped, .{ .enable_colors = allow_ansi_color }) });
-                        if (((clamped.len < max_line_length_with_divot) or (top.position.column.zeroBased() > max_line_length_with_divot))) {
-                            const indent = ((max_line_number_pad + " | ".len) + (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(top.position.column.zeroBased())) == .@"enum") cp_cast_int(i32, @intFromEnum(top.position.column.zeroBased())) else cp_cast_int(i32, top.position.column.zeroBased())))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(top.position.column.zeroBased())) == .@"enum") cp_cast_int(i32, @intFromEnum(top.position.column.zeroBased())) else cp_cast_int(i32, top.position.column.zeroBased())))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(top.position.column.zeroBased())) == .@"enum") cp_cast_int(i32, @intFromEnum(top.position.column.zeroBased())) else cp_cast_int(i32, top.position.column.zeroBased())))));
-                            _ = try writer.splatByteAll(32, indent);
-                            _ = try writer.print((comptime Output.prettyFmt("<red><b>^<r>\n", allow_ansi_color)), .{});
-                        } else {
-                            _ = try writer.writeAll("\n");
-                        }
-                    }
-                    _ = try client.printErrorNameAndMessage(name, message, (!exception.browser_url.isEmpty()), code, Writer, writer, allow_ansi_color, formatter.error_display_level);
+                const top = top_frame.?;
+                defer {
+                did_print_name = true;
                 }
+                const display_line = (source.line + 1);
+                const int_size = std.fmt.count("{d}", .{ display_line });
+                const pad = (max_line_number_pad - int_size);
+                _ = try writer.splatByteAll(32, pad);
+                defer {
+                _ = source.text.deinit();
+                }
+                const text = source.text.slice();
+                const trimmed = std.mem.trimRight(u8, std.mem.trim(u8, text, "\n"), "\t ");
+                const clamped = trimmed[0..@min(trimmed.len, max_line_length)];
+                if ((clamped.len != trimmed.len)) {
+                    const fmt = (if (comptime allow_ansi_color) "<r><d> | ... truncated <r>\n\n" else "\n\n");
+                    _ = try writer.print((comptime Output.prettyFmt(("<r><b>{d} |<r> {f}" ++ fmt), allow_ansi_color)), .{ display_line, bun.fmt.fmtJavaScript(clamped, .{ .enable_colors = allow_ansi_color }) });
+                } else {
+                    _ = try writer.print((comptime Output.prettyFmt("<r><b>{d} |<r> {f}\n", allow_ansi_color)), .{ display_line, bun.fmt.fmtJavaScript(clamped, .{ .enable_colors = allow_ansi_color }) });
+                    if (((clamped.len < max_line_length_with_divot) or (top.position.column.zeroBased() > max_line_length_with_divot))) {
+                        const indent = ((max_line_number_pad + " | ".len) + (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(top.position.column.zeroBased())) == .@"enum") cp_cast_int(i32, @intFromEnum(top.position.column.zeroBased())) else cp_cast_int(i32, top.position.column.zeroBased())))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(top.position.column.zeroBased())) == .@"enum") cp_cast_int(i32, @intFromEnum(top.position.column.zeroBased())) else cp_cast_int(i32, top.position.column.zeroBased())))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(top.position.column.zeroBased())) == .@"enum") cp_cast_int(i32, @intFromEnum(top.position.column.zeroBased())) else cp_cast_int(i32, top.position.column.zeroBased())))));
+                        _ = try writer.splatByteAll(32, indent);
+                        _ = try writer.print((comptime Output.prettyFmt("<red><b>^<r>\n", allow_ansi_color)), .{});
+                    } else {
+                        _ = try writer.writeAll("\n");
+                    }
+                }
+                _ = try client.printErrorNameAndMessage(name, message, (!exception.browser_url.isEmpty()), code, Writer, writer, allow_ansi_color, formatter.error_display_level);
             }
 };
         }

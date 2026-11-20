@@ -1135,9 +1135,9 @@ pub struct Parser {
                     //
                     // If they use an import statement, we say it's ESM because that's not allowed in CommonJS files.
                     const uses_any_import_statements = brk: {
-                        for (*import_record of p.import_records.items) {
-                            if (import_record.flags.is_internal || import_record.flags.is_unused) continue;
-                            if (import_record.kind == .stmt) break :brk true;
+                        for (*rec of p.import_records.items) {
+                            if (rec.flags.is_internal || rec.flags.is_unused) continue;
+                            if (rec.kind == .stmt) break :brk true;
                         }
 
                         break :brk false;

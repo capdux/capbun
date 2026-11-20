@@ -112,7 +112,7 @@ pub fn maybeRelocateVarsToTopLevel(p: *P, decls: []const G.Decl, mode: RelocateV
             if ((scope != p.module_scope)) {
                 return .{ .ok = false };
             }
-            var value: Expr = Expr{ .loc = logger.Loc.Empty, .data = Expr.Data{ .e_missing = E.Missing } };
+            var value: Expr = Expr{ .loc = logger.Loc.Empty, .data = Expr.Data{ .e_missing = .{} } };
             _ = &value;
             for (cp_iter_slice(decls)) |decl| {
                 _ = &decl;

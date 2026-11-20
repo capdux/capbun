@@ -1849,7 +1849,7 @@ _ = debug("MD5Password", .{});
         const final_password = ((std.fmt.bufPrintZ((&final_password_buf), "md5{s}", .{ final_hash_str_output })) catch unreachable);
         var response = protocol.PasswordMessage{ .password = .{ .temporary = final_password } };
         _ = &response;
-        self.authentication_state = .{ .md5 = .{} };
+        self.authentication_state = .md5;
         _ = try response.writeInternal(Writer, self.writer());
         _ = self.flushData();
 },

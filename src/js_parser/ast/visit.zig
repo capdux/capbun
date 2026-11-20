@@ -598,7 +598,7 @@ pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name
                         continue;
                     }
                     (property.*).ts_decorators = p.visitTSDecorators((property.*).ts_decorators);
-                    const is_private = (if (((property.*).key != null)) ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt((property.*).key.?.data)) else @as(Expr.Tag, (property.*).key.?.data)) == .e_private_identifier) else false);
+                    const is_private = (if (((property.*).key != null)) (std.meta.activeTag((property.*).key.?.data) == .e_private_identifier) else false);
                     if (is_private) {
                         _ = ((p.recordDeclaredSymbol((property.*).key.?.data.e_private_identifier.ref)) catch unreachable);
                     } else {
@@ -964,51 +964,56 @@ _ = ((non_fn_stmts.append(stmt)) catch unreachable);
             if (((p.current_scope.parent != null) and (!p.current_scope.contains_direct_eval))) {
                 if ((p.const_values.count() > 0)) {
                     const items: []Stmt = stmts.items;
-                    for (cp_mut_slice(&items)) |*stmt| {
-                        _ = &stmt;
-                        switch ((stmt.*).data) {
+                    {
+                        var stmt_i: i32 = 0;
+                        _ = &stmt_i;
+                        const __end_18 = items.len;
+                        while (stmt_i < __end_18) : (stmt_i += 1) {
+                            const stmt = (&items[@as(usize, @intCast(stmt_i))]);
+                            switch (stmt.data) {
 .s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => {
 _ = continue;
 },
 .s_local => |local| {
 if (local.kind.isUsing()) {
-                            continue;
-                        }
-                        if (((!local.is_export) and (!local.was_commonjs_export))) {
-                            var decls: []Decl = local.decls.slice();
-                            _ = &decls;
-                            var end: usize = 0;
-                            _ = &end;
-                            var any_decl_in_const_values = (local.kind == .k_const);
-                            _ = &any_decl_in_const_values;
-                            for (cp_iter_slice(decls)) |decl| {
-                                _ = &decl;
-                                if ((decl.binding.data == .b_identifier)) {
-                                    if (p.const_values.contains(decl.binding.data.b_identifier.ref)) {
-                                        any_decl_in_const_values = true;
-                                        const symbol = p.symbols.items[@as(usize, @intCast(decl.binding.data.b_identifier.ref.innerIndex()))];
-                                        if ((symbol.use_count_estimate == 0)) {
-                                            continue;
-                                        }
-                                    }
-                                }
-                                decls[cp_cast_int(usize, end)] = decl;
-                                end = (end + 1);
-                            }
-                            local.decls.len = @as(u32, @truncate(end));
-                            if (any_decl_in_const_values) {
-                                if ((end == 0)) {
-                                    (stmt.*).* = (stmt.*).*.toEmpty();
-                                }
                                 continue;
                             }
-                        }
+                            if (((!local.is_export) and (!local.was_commonjs_export))) {
+                                var decls: []Decl = local.decls.slice();
+                                _ = &decls;
+                                var end: usize = 0;
+                                _ = &end;
+                                var any_decl_in_const_values = (local.kind == .k_const);
+                                _ = &any_decl_in_const_values;
+                                for (cp_iter_slice(decls)) |decl| {
+                                    _ = &decl;
+                                    if ((decl.binding.data == .b_identifier)) {
+                                        if (p.const_values.contains(decl.binding.data.b_identifier.ref)) {
+                                            any_decl_in_const_values = true;
+                                            const symbol = p.symbols.items[@as(usize, @intCast(decl.binding.data.b_identifier.ref.innerIndex()))];
+                                            if ((symbol.use_count_estimate == 0)) {
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    decls[cp_cast_int(usize, end)] = decl;
+                                    end = (end + 1);
+                                }
+                                local.decls.len = @as(u32, @truncate(end));
+                                if (any_decl_in_const_values) {
+                                    if ((end == 0)) {
+                                        items[cp_cast_int(usize, stmt_i)] = stmt.toEmpty();
+                                    }
+                                    continue;
+                                }
+                            }
 },
 else => {
 
 },
 }
-                        break;
+                            break;
+                        }
                     }
                 }
             }

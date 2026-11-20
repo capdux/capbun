@@ -366,9 +366,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                             if (element.len < 8) return error.UnsupportedArrayFormat;
                                             if (bun.strings.eqlCaseInsensitiveASCII(element[0..8], "Infinity", false)) {
                                                 if (arrayType == .date_array || arrayType == .timestamp_array || arrayType == .timestamptz_array) {
-                                                    array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: if (is_negative) -std.math.inf(f64) else std.math.inf(f64) } })?;
+                                                    array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: if (is_negative) 0.0 - std.math.inf(f64) else std.math.inf(f64) } })?;
                                                 } else {
-                                                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: if (is_negative) -std.math.inf(f64) else std.math.inf(f64) } })?;
+                                                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: if (is_negative) 0.0 - std.math.inf(f64) else std.math.inf(f64) } })?;
                                                 }
                                                 pos += 8 + @as(usize, @intFromBool(is_negative));
                                                 break;
@@ -510,7 +510,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
     }
 }
 
-pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject): anyerror!SQLDataCell {
+pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, globalObject: *jsc.JSGlobalObject): SQLDataCell! {
     switch (oid) {
         .int4_array => return fromTypedArrayBytes(.int4_array, binary, bigint, bytes, globalObject),
         .float4_array => return fromTypedArrayBytes(.float4_array, binary, bigint, bytes, globalObject),
@@ -845,7 +845,7 @@ export struct Putter {
     count: usize = 0,
     globalObject: *jsc.JSGlobalObject,
 
-    pub fn toJS(*_, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: PostgresCachedStructure?): anyerror!JSValue {
+    pub fn toJS(*_, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: PostgresSQLQueryResultMode, cached_structure: PostgresCachedStructure?): JSValue! {
         let names: [*]jsc.JSObject.ExternColumnIdentifier? = null;
         let names_count: u32 = 0;
         if (c := cached_structure) {

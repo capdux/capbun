@@ -2046,7 +2046,7 @@ pub fn enqueueDependencyToResolve(r: *ThisResolver, package_json_: ?*PackageJSON
                     package = (blk_catch_44: { break :blk_catch_44 ((pm.lockfile.appendPackage(package)) catch |e| { _ = &e; return .{ .failure = e }; }); });
                     package_json.package_manager_package_id = package.@"meta".id;
                 } else {
-                    package = Package{ .name = Semver.String.@"from"(""), .resolution = .{ .tag = .root, .value = .{ .root = .{} } } };
+                    package = Package{ .name = Semver.String.@"from"(""), .resolution = .{ .tag = .root, .value = .{ .root = undefined } } };
                     _ = package.@"meta".setHasInstallScript(package.scripts.hasAny());
                     package = (blk_catch_45: { break :blk_catch_45 ((pm.lockfile.appendPackage(package)) catch |e| { _ = &e; return .{ .failure = e }; }); });
                 }

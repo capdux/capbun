@@ -3499,7 +3499,7 @@ pub fn generateClosureForTypeScriptNamespaceOrEnum(p: *P, stmts: *ListManaged(St
             }
             const allocator = p.allocator;
             if ((((symbol.kind == .ts_namespace) or (symbol.kind == .ts_enum)) and (!p.emitted_namespace_vars.contains(name_ref)))) {
-                _ = bun.handleOom(p.emitted_namespace_vars.putNoClobber(allocator, name_ref, .{}));
+                _ = bun.handleOom(p.emitted_namespace_vars.putNoClobber(allocator, name_ref, undefined));
                 var decls = bun.handleOom(allocator.alloc(G.Decl, 1));
                 _ = &decls;
                 decls[cp_cast_int(usize, 0)] = G.Decl{ .binding = p.b(B.Identifier{ .ref = name_ref }, name_loc) };
@@ -3747,7 +3747,7 @@ _ = (if ((prop.*).flags.contains(.is_method)) ({
                     }
                     continue;
                 }
-                _ = ((class_properties.append((prop.*).*)) catch unreachable);
+                _ = ((class_properties.append((prop.*))) catch unreachable);
             }
             cls.properties = class_properties.items;
             if ((instance_members.items.len > 0)) {
@@ -4005,7 +4005,7 @@ pub fn stmtsToSingleStmt(p: *P, loc: logger.Loc, stmts: []Stmt) Stmt {
     }
 
 pub fn findLabelSymbol(p: *P, loc: logger.Loc, name: []const u8) FindLabelSymbolResult {
-            var res = FindLabelSymbolResult{ .sym_ref = Ref.None, .is_loop = false };
+            var res = FindLabelSymbolResult{ .ref = Ref.None, .is_loop = false };
             _ = &res;
             var _scope: ?*Scope = p.current_scope;
             _ = &_scope;
@@ -4790,13 +4790,13 @@ pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source
                     }
                     for (cp_mut_slice(&local.decls.slice())) |*decl| {
                         _ = &decl;
-                        if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |*decl_value| {
-                            _ = &decl_value;
-                            const value_loc = (decl_value.*).loc;
+                        if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
+                            const decl_value = (&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?);
+                            const value_loc = decl_value.loc;
                             _ = p.recordUsage(ctx.stack_ref);
                             const args = bun.handleOom(p.allocator.alloc(Expr, 3));
                             args[cp_cast_int(usize, 0)] = Expr{ .data = .{ .e_identifier = .{ .ref = ctx.stack_ref } }, .loc = stmt.loc };
-                            args[cp_cast_int(usize, 1)] = (decl_value.*).*;
+                            args[cp_cast_int(usize, 1)] = decl_value.*;
                             args[cp_cast_int(usize, 2)] = Expr{ .data = .{ .e_number = .{ .value = (if ((local.kind == .k_await_using)) 1 else 0) } }, .loc = stmt.loc };
                             (if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) = p.callRuntime(value_loc, "__using", args);
                         }

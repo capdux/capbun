@@ -70,9 +70,10 @@ struct SingleHTTPChannel {
 }
 
 fn sendSyncCallback(channel_holder: *SingleHTTPChannel, async_http: *AsyncHTTP, result: HTTPClientResult) {
-    if (real := async_http.real) {
-        real.* = async_http.*;
-        real.response_buffer = async_http.response_buffer;
+    if (async_http.real != null) {
+        const real_ptr: *AsyncHTTP = async_http.real.?;
+        real_ptr.* = async_http.*;
+        real_ptr.response_buffer = async_http.response_buffer;
     }
     channel_holder.channel.writeItem(result) catch @panic("unreachable");
 }

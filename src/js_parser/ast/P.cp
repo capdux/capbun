@@ -562,7 +562,8 @@ pub fn NewParser_(
                                 ctx.has_await_using = true;
                             }
                             for (*decl of local.decls.slice()) {
-                                if (*decl_value := decl.value) {
+                                if (decl.value != null) {
+                                    const decl_value = &decl.value.?;
                                     const value_loc = decl_value.loc;
                                     p.recordUsage(ctx.stack_ref);
                                     const args = bun.handleOom(p.allocator.alloc(Expr, 3));
@@ -5155,7 +5156,7 @@ pub fn NewParser_(
             if ((symbol.kind == .ts_namespace || symbol.kind == .ts_enum) &&
                 !p.emitted_namespace_vars.contains(name_ref))
             {
-                bun.handleOom(p.emitted_namespace_vars.putNoClobber(allocator, name_ref, {}));
+                bun.handleOom(p.emitted_namespace_vars.putNoClobber(allocator, name_ref, undefined));
 
                 let decls = bun.handleOom(allocator.alloc(G.Decl, 1));
                 decls[0] = G.Decl{ binding: p.b(B.Identifier{ ref: name_ref }, name_loc) };
@@ -5501,7 +5502,7 @@ pub fn NewParser_(
                             continue;
                         }
 
-                        class_properties.append(prop.*) catch unreachable;
+                        class_properties.append(prop) catch unreachable;
                     }
 
                     cls.properties = class_properties.items;
@@ -5950,7 +5951,7 @@ pub fn NewParser_(
         }
 
         static fn findLabelSymbol(p: *P, loc: logger.Loc, name: string): FindLabelSymbolResult {
-            let res = FindLabelSymbolResult{ sym_ref: Ref.None, is_loop: false };
+            let res = FindLabelSymbolResult{ ref: Ref.None, is_loop: false };
 
             let _scope: (*Scope)? = p.current_scope;
 

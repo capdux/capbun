@@ -178,7 +178,7 @@ pub fn s_export_clause(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.E
                         continue;
                     }
                     (if (@typeInfo(@TypeOf((item.*))) == .@"enum" or @typeInfo(@TypeOf((item.*))) == .@"union") @tagName((item.*)) else (item.*).name).ref = sym_ref;
-                    data.items[cp_cast_int(usize, end)] = (item.*).*;
+                    data.items[cp_cast_int(usize, end)] = (item.*);
                     end = (end + 1);
                 }
             } else {
@@ -196,7 +196,7 @@ pub fn s_export_clause(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.E
                         continue;
                     }
                     (if (@typeInfo(@TypeOf((item.*))) == .@"enum" or @typeInfo(@TypeOf((item.*))) == .@"union") @tagName((item.*)) else (item.*).name).ref = sym_ref;
-                    data.items[cp_cast_int(usize, end)] = (item.*).*;
+                    data.items[cp_cast_int(usize, end)] = (item.*);
                     end = (end + 1);
                 }
             }
@@ -852,7 +852,7 @@ pub fn s_return(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.Return) 
             if ((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)) |val| {
                 _ = &val;
                 (if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value) = p.visitExpr(val);
-                if ((((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value) != null) and ((if (comptime @typeInfo(Expr.Tag) == .@"enum") @as(Expr.Tag, @enumFromInt((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value).?.data)) else @as(Expr.Tag, (if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value).?.data)) == .e_undefined))) {
+                if ((((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value) != null) and (std.meta.activeTag((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value).?.data) == .e_undefined))) {
                     (if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value) = null;
                 }
             }

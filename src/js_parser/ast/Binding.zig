@@ -123,7 +123,7 @@ pub fn toExpr(binding: *const Binding, wrapper: anytype) Expr {
         const loc = binding.loc;
         switch (binding.data) {
 .b_missing => {
-return Expr{ .data = .{ .e_missing = E.Missing }, .loc = loc };
+return Expr{ .data = .{ .e_missing = .{} }, .loc = loc };
 },
 .b_identifier => |b| {
 return wrapper.wrapIdentifier(loc, b.ref);

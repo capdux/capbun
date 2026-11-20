@@ -601,7 +601,7 @@ pub fn Visit(
                         continue;
                     }
                     property.ts_decorators = p.visitTSDecorators(property.ts_decorators);
-                    const is_private = if (property.key != null) @as(Expr.Tag, property.key.?.data) == .e_private_identifier else false;
+                    const is_private = if (property.key != null) std.meta.activeTag(property.key.?.data) == .e_private_identifier else false;
 
                     // Special-case EPrivateIdentifier to allow it here
 
@@ -1042,7 +1042,8 @@ pub fn Visit(
                 // if they are exported (which could be in a nested TypeScript namespace).
                 if (p.const_values.count() > 0) {
                     const items: []Stmt = stmts.items;
-                    for (*stmt of items) {
+                    for (stmt_i of 0..items.len) {
+                        const stmt = &items[stmt_i];
                         switch (stmt.data) {
                             .s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => continue,
                             .s_local => |local| {
@@ -1073,7 +1074,7 @@ pub fn Visit(
                                     local.decls.len = @as(u32, @truncate(end));
                                     if (any_decl_in_const_values) {
                                         if (end == 0) {
-                                            stmt.* = stmt.*.toEmpty();
+                                            items[stmt_i] = stmt.toEmpty();
                                         }
                                         continue;
                                     }

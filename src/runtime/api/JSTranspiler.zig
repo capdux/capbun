@@ -471,8 +471,10 @@ pub fn fromJS(self: *Config, globalThis: *jsc.JSGlobalObject, object: jsc.JSValu
                     return globalThis.throwInvalidArguments("logLevel must be one of \"verbose\", \"debug\", \"info\", \"warn\", or \"error\"", .{});
                 }
             }
-            if (self.tree_shaking == null) { self.tree_shaking = false; }
-            if (self.trim_unused_imports == null) { self.trim_unused_imports = self.tree_shaking; }
+            const ts = ((tree_shaking) orelse (false));
+            self.tree_shaking = ts;
+            const tui = ((trim_unused_imports) orelse (ts));
+            self.trim_unused_imports = tui;
     }
 };
 

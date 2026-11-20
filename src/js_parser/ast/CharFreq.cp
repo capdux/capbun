@@ -6,7 +6,7 @@ pub struct CharAndCount {
 
     pub const Array = [char_freq_count]CharAndCount;
 
-    fn lessThan(ctx: auto, a: CharAndCount, b: CharAndCount): bool {
+    fn lessThan(ctx: void, a: CharAndCount, b: CharAndCount): bool {
         * = ctx;
         if (a.count != b.count) {
             return a.count > b.count;
@@ -108,7 +108,8 @@ fn scanSmall(out: *align(1) Buffer, text: string, delta: i32) {
                 };
             }
 
-            std.sort.pdq(CharAndCount, &_array, {}, CharAndCount.lessThan);
+            const sort_ctx: void = undefined;
+            std.sort.pdq(CharAndCount, &_array, sort_ctx, CharAndCount.lessThan);
 
             break :brk _array;
         };
