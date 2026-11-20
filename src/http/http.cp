@@ -24,7 +24,8 @@ import * as H2Wire from "./H2FrameParser.cp";
 import * as H3 from "./H3Client.cp";
 
 import * as ETag from "../http_types/ETag.cp";
-import { Method } from "../http_types/Method.cp";
+import * as MethodMod from "../http_types/Method.cp";
+pub const Method = MethodMod.Method;
 import * as MimeType from "../http_types/MimeType.cp";
 import * as URLPath from "../http_types/URLPath.cp";
 import { Encoding } from "../http_types/Encoding.cp";

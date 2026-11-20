@@ -95,7 +95,7 @@ pub const ChunkOutputPiece = struct {
             html_import,
         };
 
-        pub const none: Query = {};
+        pub const none: Query = .{ .index = 0, .kind = .none };
     };
 
     pub fn init(data_slice: []const u8, query: Query): ChunkOutputPiece {

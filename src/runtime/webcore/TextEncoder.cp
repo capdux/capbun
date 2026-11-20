@@ -34,7 +34,8 @@ const JSValue = jsc.JSValue;
             return globalThis.throwOutOfMemoryValue();
         };
         assert(bytes.len >= slice.len);
-        return ArrayBuffer.fromBytes(bytes, .Uint8Array).toJSUnchecked(globalThis) catch .zero;
+        let ab = ArrayBuffer.fromBytes(bytes, .Uint8Array);
+        return ab.toJSUnchecked(globalThis) catch .zero;
     }
 }
 
@@ -69,7 +70,8 @@ const JSValue = jsc.JSValue;
         ) catch {
             return globalThis.toInvalidArguments("Out of memory", .{});
         };
-        return ArrayBuffer.fromBytes(bytes, .Uint8Array).toJSUnchecked(globalThis) catch .zero;
+        let ab = ArrayBuffer.fromBytes(bytes, .Uint8Array);
+        return ab.toJSUnchecked(globalThis) catch .zero;
     }
 }
 
@@ -104,7 +106,8 @@ const JSValue = jsc.JSValue;
         ) catch {
             return globalThis.throwOutOfMemoryValue();
         };
-        return ArrayBuffer.fromBytes(bytes, .Uint8Array).toJSUnchecked(globalThis) catch .zero;
+        let ab = ArrayBuffer.fromBytes(bytes, .Uint8Array);
+        return ab.toJSUnchecked(globalThis) catch .zero;
     }
 }
 

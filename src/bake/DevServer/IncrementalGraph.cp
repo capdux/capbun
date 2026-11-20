@@ -82,9 +82,13 @@ const Content = union(enum) {
 };
 
 fn makeUntaggedContent(): type {
-    let info = @typeInfo(Content);
-    info.@"union".tag_type = null;
-    return @Type(info);
+    const orig = @typeInfo(Content).@"union";
+    return @Type(.{ .@"union" = .{
+        .layout = orig.layout,
+        .tag_type = null,
+        .fields = orig.fields,
+        .decls = orig.decls,
+    } });
 }
 const ContentUntagged = makeUntaggedContent();
 

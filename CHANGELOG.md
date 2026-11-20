@@ -1588,3 +1588,6 @@
 
 ### 2026-11-20 05:54:33 UTC - zig:check 基础库与字符串簇 8 模块语义修复入库
 - 完成：8/8 全部通过 `cpc_brief.py` 4 项硬门禁，彻底消除 `baby_list` 24 处 `[0]T` 指针、`StringImpl` 误指针化与 `0x8080808080808080` 溢出等 50+ 处语义错。
+
+### 2026-11-20 05:57:46 UTC - zig:check Runtime+Bundler+Bake 簇 13 模块语义修复入库
+- 完成：`http`/`HTMLBundle`/`FileSink`/`server`/`ServerConfig`/`uws_dispatch`/`Blob`/`encoding`/`TextEncoder`/`IncrementalGraph`/`Chunk`/`cache`/`options` 13/13 全 PASS。

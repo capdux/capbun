@@ -133,7 +133,9 @@ pub export fn TextEncoder__encode8(globalThis: *JSGlobalObject, ptr: [*]const u8
         } else {
             const bytes = (blk_catch_1: { break :blk_catch_1 ((strings.allocateLatin1IntoUTF8(globalThis.bunVM().allocator, slice)) catch |__ce_1| { _ = &__ce_1; return globalThis.throwOutOfMemoryValue(); }); });
             _ = assert((bytes.len >= slice.len));
-            return (blk_catch_2: { break :blk_catch_2 ((ArrayBuffer.fromBytes(bytes, .Uint8Array).toJSUnchecked(globalThis)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); });
+            var ab = ArrayBuffer.fromBytes(bytes, .Uint8Array);
+            _ = &ab;
+            return (blk_catch_2: { break :blk_catch_2 ((ab.toJSUnchecked(globalThis)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); });
         }
 }
 
@@ -162,7 +164,9 @@ pub export fn TextEncoder__encode16(globalThis: *JSGlobalObject, ptr: [*]const u
             return uint8array;
         } else {
             const bytes = (blk_catch_5: { break :blk_catch_5 ((strings.toUTF8AllocWithType(default_allocator, slice)) catch |__ce_5| { _ = &__ce_5; return globalThis.toInvalidArguments("Out of memory", .{}); }); });
-            return (blk_catch_6: { break :blk_catch_6 ((ArrayBuffer.fromBytes(bytes, .Uint8Array).toJSUnchecked(globalThis)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 .zero; }); });
+            var ab = ArrayBuffer.fromBytes(bytes, .Uint8Array);
+            _ = &ab;
+            return (blk_catch_6: { break :blk_catch_6 ((ab.toJSUnchecked(globalThis)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 .zero; }); });
         }
 }
 
@@ -191,7 +195,9 @@ pub export fn c(globalThis: *JSGlobalObject, ptr: [*]const u16, len: usize) call
             return uint8array;
         } else {
             const bytes = (blk_catch_9: { break :blk_catch_9 ((strings.toUTF8AllocWithType(default_allocator, slice)) catch |__ce_9| { _ = &__ce_9; return globalThis.throwOutOfMemoryValue(); }); });
-            return (blk_catch_10: { break :blk_catch_10 ((ArrayBuffer.fromBytes(bytes, .Uint8Array).toJSUnchecked(globalThis)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 .zero; }); });
+            var ab = ArrayBuffer.fromBytes(bytes, .Uint8Array);
+            _ = &ab;
+            return (blk_catch_10: { break :blk_catch_10 ((ab.toJSUnchecked(globalThis)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 .zero; }); });
         }
 }
 

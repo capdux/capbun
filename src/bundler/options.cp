@@ -1583,10 +1583,21 @@ const node_modules_default_loader_ext = [
     ".html",
 ];
 
+const _nm_esm = BundleOptions.Defaults.NodeModules.ModuleExtensionOrder;
+const _nm_default = BundleOptions.Defaults.NodeModules.ExtensionOrder;
+const _esm_ext = BundleOptions.Defaults.ModuleExtensionOrder;
+const _default_ext = BundleOptions.Defaults.ExtensionOrder;
+const _main_field_ext = BundleOptions.Defaults.MainFieldExtensionOrder;
+const default_nm_esm: []const string = &_nm_esm;
+const default_nm_default: []const string = &_nm_default;
+const default_esm: []const string = &_esm_ext;
+const default_ext: []const string = &_default_ext;
+const default_main_field_ext: []const string = &_main_field_ext;
+
 pub struct ResolveFileExtensions {
     node_modules: Group = {
-        esm: &BundleOptions.Defaults.NodeModules.ModuleExtensionOrder,
-        default: &BundleOptions.Defaults.NodeModules.ExtensionOrder,
+        esm: default_nm_esm,
+        default: default_nm_default,
     },
     default: Group = {},
 
@@ -1605,8 +1616,8 @@ pub struct ResolveFileExtensions {
     }
 
     pub const Group = struct {
-        esm: []const string = &BundleOptions.Defaults.ModuleExtensionOrder,
-        default: []const string = &BundleOptions.Defaults.ExtensionOrder,
+        esm: []const string = default_esm,
+        default: []const string = default_ext,
     };
 }
 
@@ -1771,7 +1782,7 @@ pub struct BundleOptions {
     chunk_naming: []const u8 = "",
     public_path: []const u8 = "",
     extension_order: ResolveFileExtensions = {},
-    main_field_extension_order: []const string = &Defaults.MainFieldExtensionOrder,
+    main_field_extension_order: []const string = default_main_field_ext,
     /// This list applies to all extension resolution cases. The runtime uses
     /// this for implementing `require.extensions`
     extra_cjs_extensions: []const []const u8 = [],

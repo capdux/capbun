@@ -320,7 +320,7 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
 };
 pub const ServerConfig = @import("./ServerConfig.zig");
 pub const ServerWebSocket = @import("./ServerWebSocket.zig");
-pub const NodeHTTPResponse = @import("./NodeHTTPResponse.zig");
+pub const NodeHTTPResponse = @import("./NodeHTTPResponse.zig").NodeHTTPResponse;
 const ServePlugins = struct {
     state: State,
     ref_count: RefCount,
@@ -1177,7 +1177,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
         pub const App = uws.NewApp(ssl_enabled);
         app: ?*App = null,
-        listener: ?*App.ListenSocket = null,
+        listener: ?*uws.ListenSocket = null,
         h3_app: if (has_h3) ?*uws.H3.App else void = if (has_h3) null else {},
         h3_listener: if (has_h3) ?*uws.H3.ListenSocket else void = if (has_h3) null else {},
         /// Cached `h3=":<port>"; ma=86400` value for Alt-Svc on H1 responses;
@@ -2590,7 +2590,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             globalThis.throwValue(error_instance) catch {};
         }
 
-        pub fn onListen(this: *ThisServer, socket: ?*App.ListenSocket) void {
+        pub fn onListen(this: *ThisServer, socket: ?*uws.ListenSocket) void {
             if (socket == null) {
                 return this.onListenFailed();
             }

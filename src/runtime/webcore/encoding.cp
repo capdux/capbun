@@ -1,3 +1,4 @@
+import bun from "bun";
 import {
     default_allocator,
     assert,
@@ -5,12 +6,13 @@ import {
     base64,
     simdutf,
     memmove,
-    String as BunString,
     JSError,
     jsc,
 } from "bun";
-import { Allocator } from "std:mem";
 import { mem, ascii } from "std";
+
+const BunString = bun.String;
+const Allocator = std.mem.Allocator;
 
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
@@ -18,6 +20,7 @@ const Encoding = jsc.Node.Encoding;
 
 pub const Types = struct {
     pub const U16Slice = []align(1) u16;
+    pub const U16SliceAligned = []u16;
     pub const U16Ptr = [*]align(1) u16;
 };
 
@@ -297,12 +300,14 @@ pub fn writeU8(input: [*]const u8, len: usize, to_ptr: [*]u8, to_len: usize, com
 
             if (mem.isAligned(@intFromPtr(to_ptr), @alignOf([*]u16))) {
                 const buf = input[0..len];
-                const output = @as([*]u16, to_ptr)[0 .. to_len / 2];
-                const written = strings.copyLatin1IntoUTF16([]u16, output, buf).written;
+                const output_ptr: [*]u16 = unsafe { @ptrCast(@alignCast(to_ptr)) };
+                const output = output_ptr[0 .. to_len / 2];
+                const written = strings.copyLatin1IntoUTF16(Types.U16SliceAligned, output, buf).written;
                 return written * 2;
             } else {
                 const buf = input[0..len];
-                const output = @as(Types.U16Ptr, to_ptr)[0 .. to_len / 2];
+                const output_ptr: Types.U16Ptr = unsafe { @ptrCast(to_ptr) };
+                const output = output_ptr[0 .. to_len / 2];
                 const written = strings.copyLatin1IntoUTF16(Types.U16Slice, output, buf).written;
                 return written * 2;
             }
@@ -370,7 +375,7 @@ pub fn writeU16(input: [*]const u16, len: usize, to: [*]u8, to_len: usize, compt
             if (allow_partial_write) {
                 const bytes_input_len = len * 2;
                 const written = @min(bytes_input_len, to_len);
-                const input_u8 = @as([*]const u8, input);
+                const input_u8: [*]const u8 = unsafe { @ptrCast(input) };
                 memmove(to[0..written], input_u8[0..written]);
                 return written;
             } else {
@@ -379,7 +384,7 @@ pub fn writeU16(input: [*]const u16, len: usize, to: [*]u8, to_len: usize, compt
                 if (written < 2) return 0;
 
                 const fixed_len = (written / 2) * 2;
-                const input_u8 = @as([*]const u8, input);
+                const input_u8: [*]const u8 = unsafe { @ptrCast(input) };
                 memmove(to[0..written], input_u8[0..fixed_len]);
                 return fixed_len;
             }

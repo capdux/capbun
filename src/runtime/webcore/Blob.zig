@@ -62,6 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const Output = @import("bun").Output;
 const default_allocator = @import("bun").default_allocator;
 const strings = @import("bun").strings;
@@ -83,12 +84,7 @@ const ZigString = @import("jsc").ZigString;
 const ArrayBuffer = @import("jsc").ArrayBuffer;
 const DOMFormData = @import("jsc").DOMFormData;
 const URLSearchParams = @import("jsc").URLSearchParams;
-const Store = @import("./blob/Store.zig").Store;
-const as = @import("./blob/Store.zig").as;
-const BlobStore = @import("./blob/Store.zig").BlobStore;
-const read_file = @import("./blob/Store.zig").read_file;
-const write_file = @import("./blob/Store.zig").write_file;
-const copy_file = @import("./blob/Store.zig").copy_file;
+pub const StoreMod = @import("./blob/Store.zig");
 pub const Blob = struct {
     reported_estimated_size: usize = 0,
     size: SizeType = 0,
@@ -271,12 +267,12 @@ pub fn toJS(self: *Blob, globalThis: *JSGlobalObject) JSValue {
 };
 
 pub const Internal = struct {
-    bytes: sys.ManagedArray(u8),
+    bytes: std.array_list.Managed(u8),
     was_string: bool = false,
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.was_string = false; return self_ptr; }
 
-pub fn init(self: *Internal, bytes: sys.ManagedArray(u8), was_string: bool) void {
+pub fn init(self: *Internal, bytes: std.array_list.Managed(u8), was_string: bool) void {
         var __bytes_moved = false; _ = &__bytes_moved;
         defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
             self.bytes = bytes;
@@ -303,7 +299,7 @@ pub fn clearAndFree(self: *Internal) void {
 pub const Any = union(enum) {
     Blob: Blob,
     InternalBlob: *Internal,
-    WTFStringImpl: *String.Impl,
+    WTFStringImpl: bun.WTF.StringImpl,
 
 pub fn slice(self: *const Any) []const u8 {
             switch (self.*) {
@@ -358,6 +354,11 @@ pub fn toStringTransfer(self: *Any, globalObject: *JSGlobalObject) JSError!JSVal
     }
 };
 
+pub const Store = StoreMod.Store;
+const BlobStore = StoreMod.Store;
+const read_file = StoreMod.read_file;
+const write_file = StoreMod.write_file;
+const copy_file = StoreMod.copy_file;
 const debug = Output.scoped(.Blob, .visible);
 
 pub fn Bun__Blob__getSizeForBindings(blob: *Blob) callconv(.c) usize {

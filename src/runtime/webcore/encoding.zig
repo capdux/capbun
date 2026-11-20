@@ -70,25 +70,25 @@ pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { i
 pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
+pub const bun = @import("bun");
 const default_allocator = @import("bun").default_allocator;
 const assert = @import("bun").assert;
 const strings = @import("bun").strings;
 const base64 = @import("bun").base64;
 const simdutf = @import("bun").simdutf;
 const memmove = @import("bun").memmove;
-const String = @import("bun").String;
-const as = @import("bun").as;
-const BunString = @import("bun").BunString;
 const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
-const Allocator = @import("std:mem").Allocator;
 const mem = @import("std").mem;
 const ascii = @import("std").ascii;
+const BunString = bun.String;
+const Allocator = std.mem.Allocator;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const Encoding = jsc.Node.Encoding;
 pub const Types = struct {
     pub const U16Slice = []align(1) u16;
+    pub const U16SliceAligned = []u16;
     pub const U16Ptr = [*]align(1) u16;
 };
 
@@ -390,12 +390,20 @@ if ((to_len < 2)) {
         }
         if (mem.isAligned(@intFromPtr(to_ptr), @alignOf([*]u16))) {
             const buf = input[0..len];
-            const output = @as([*]u16, @ptrCast(&(to_ptr)))[0..(to_len / 2)];
-            const written = strings.copyLatin1IntoUTF16(&.{}, u16, output, buf).written;
+            const output_ptr: [*]u16 = (blk: {
+            break :blk @ptrCast(@alignCast(to_ptr));
+
+});
+            const output = output_ptr[0..(to_len / 2)];
+            const written = strings.copyLatin1IntoUTF16(Types.U16SliceAligned, output, buf).written;
             return (written * 2);
         } else {
             const buf = input[0..len];
-            const output = (if (comptime @typeInfo(Types.U16Ptr) == .@"enum") @as(Types.U16Ptr, @enumFromInt(to_ptr)) else @as(Types.U16Ptr, to_ptr))[0..(to_len / 2)];
+            const output_ptr: Types.U16Ptr = (blk: {
+            break :blk @ptrCast(to_ptr);
+
+});
+            const output = output_ptr[0..(to_len / 2)];
             const written = strings.copyLatin1IntoUTF16(Types.U16Slice, output, buf).written;
             return (written * 2);
         }
@@ -457,7 +465,10 @@ const out = @min(len, to_len);
 if (allow_partial_write) {
             const bytes_input_len = (len * 2);
             const written = @min(bytes_input_len, to_len);
-            const input_u8 = @as([*]const u8, @ptrCast(&(input)));
+            const input_u8: [*]const u8 = (blk: {
+            break :blk @ptrCast(input);
+
+});
             _ = memmove(to[0..written], input_u8[0..written]);
             return written;
         } else {
@@ -467,7 +478,10 @@ if (allow_partial_write) {
                 return 0;
             }
             const fixed_len = ((written / 2) * 2);
-            const input_u8 = @as([*]const u8, @ptrCast(&(input)));
+            const input_u8: [*]const u8 = (blk: {
+            break :blk @ptrCast(input);
+
+});
             _ = memmove(to[0..written], input_u8[0..fixed_len]);
             return fixed_len;
         }

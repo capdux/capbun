@@ -479,9 +479,9 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
             }
             if (try getRoutesObject(global, arg)) |static_val| {
                 _ = &static_val;
-                const static_obj = ((static_val.getObject()) orelse (({
+                const static_obj = ((static_val.getObject()) orelse {
                 return global.throwInvalidArguments("Bun.serve() expects 'routes' to be an object shaped like:\n\n  {\n    \"/path\": {\n      GET: (req) => new Response(\"Hello\"),\n      POST: (req) => new Response(\"Hello\"),\n    },\n    \"/path2/:param\": new Response(\"Hello\"),\n    \"/path3/:param1/:param2\": (req) => new Response(\"Hello\")\n  }\n\nLearn more at https://bun.com/docs/api/http", .{});
-})));
+});
                 var __static_obj_moved = false; _ = &__static_obj_moved;
                 defer if (!__static_obj_moved) { const __T = @TypeOf(static_obj); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = static_obj.release() catch {}; } else { static_obj.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = static_obj; _drop_val.release(); } };
                 args.had_routes_object = true;
@@ -584,9 +584,9 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
                             }
                         }
                     }
-                    const route = try ((AnyRoute.fromJS(global, path, value, init_ctx)) orelse (({
+                    const route = try ((AnyRoute.fromJS(global, path, value, init_ctx)) orelse {
                     return global.throwInvalidArguments("'routes' expects a Record<string, Response | HTMLBundle | {[method: string]: (req: BunRequest) => Response|Promise<Response>}>\n\nTo bundle frontend apps on-demand with Bun.serve(), import HTML files.\n\nExample:\n\n```js\nimport { serve } from \"bun\";\nimport app from \"./app.html\";\n\nserve({\n  routes: {\n    \"/index.json\": Response.json({ message: \"Hello World\" }),\n    \"/app\": app,\n    \"/path/:param\": (req) => {\n      const param = req.params.param;\n      return Response.json({ message: `Hello ${param}` });\n    },\n    \"/path\": {\n      GET(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n      POST(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n    },\n  },\n\n  fetch(request) {\n    return new Response(\"fallback response\");\n  },\n});\n```\n\nSee https://bun.com/docs/api/http for more information.", .{});
-})));
+});
                     var __route_moved = false; _ = &__route_moved;
                     defer if (!__route_moved) { const __T = @TypeOf(route); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = route.release() catch {}; } else { route.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = route; _drop_val.release(); } };
                     _ = (blk_catch_8: { break :blk_catch_8 ((args.static_routes.append(.{ .path = path, .route = route })) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });

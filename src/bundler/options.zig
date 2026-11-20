@@ -1068,7 +1068,7 @@ pub const DefaultUserDefines = struct {
 };
 
 pub const ResolveFileExtensions = struct {
-    node_modules: Group = .{ .esm = *const BundleOptions.Defaults.NodeModules.ModuleExtensionOrder, .default = *const BundleOptions.Defaults.NodeModules.ExtensionOrder },
+    node_modules: Group = .{ .esm = default_nm_esm, .default = default_nm_default },
     default: Group = .{},
 
 pub inline fn group(self: ResolveFileExtensions, is_node_modules: bool) *const Group {
@@ -1086,8 +1086,8 @@ else => self.group(is_node_modules).default,
 });
     }
     pub const Group = struct {
-        esm: []const []const u8 = *const BundleOptions.Defaults.ModuleExtensionOrder,
-        default: []const []const u8 = *const BundleOptions.Defaults.ExtensionOrder,
+        esm: []const []const u8 = default_esm,
+        default: []const []const u8 = default_ext,
     };
 };
 
@@ -1134,7 +1134,7 @@ pub const BundleOptions = struct {
     chunk_naming: []const u8 = "",
     public_path: []const u8 = "",
     extension_order: ResolveFileExtensions = .{},
-    main_field_extension_order: []const []const u8 = *const Defaults.MainFieldExtensionOrder,
+    main_field_extension_order: []const []const u8 = default_main_field_ext,
     extra_cjs_extensions: []const []const u8 = &.{},
     out_extensions: bun.StringHashMap(string),
     import_path_format: ImportPathFormat = ImportPathFormat.relative,
@@ -1780,6 +1780,16 @@ const default_loader_ext_bun = .{ ".node", ".html" };
 const default_loader_ext = .{ ".jsx", ".json", ".js", ".mjs", ".cjs", ".css", ".ts", ".tsx", ".mts", ".cts", ".toml", ".yaml", ".yml", ".wasm", ".txt", ".text", ".jsonc", ".json5" };
 const default_loader_ext_browser = .{ ".html" };
 const node_modules_default_loader_ext = .{ ".jsx", ".js", ".cjs", ".mjs", ".ts", ".mts", ".toml", ".yaml", ".yml", ".txt", ".json", ".jsonc", ".json5", ".css", ".tsx", ".cts", ".wasm", ".text", ".html" };
+const _nm_esm = BundleOptions.Defaults.NodeModules.ModuleExtensionOrder;
+const _nm_default = BundleOptions.Defaults.NodeModules.ExtensionOrder;
+const _esm_ext = BundleOptions.Defaults.ModuleExtensionOrder;
+const _default_ext = BundleOptions.Defaults.ExtensionOrder;
+const _main_field_ext = BundleOptions.Defaults.MainFieldExtensionOrder;
+const default_nm_esm: []const []const u8 = (&_nm_esm);
+const default_nm_default: []const []const u8 = (&_nm_default);
+const default_esm: []const []const u8 = (&_esm_ext);
+const default_ext: []const []const u8 = (&_default_ext);
+const default_main_field_ext: []const []const u8 = (&_main_field_ext);
 const Dir = std.fs.Dir;
 
 pub fn validatePath(log: *logger.Log, _: *Fs.FileSystem.Implementation, cwd: []const u8, rel_path: []const u8, allocator: std.mem.Allocator, _: []const u8) []const u8 {

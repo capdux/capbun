@@ -806,6 +806,7 @@ const spawn = bun.spawn;
 const Task = jsc.Task;
 const log = Output.scoped(.FileSink, .visible);
 pub var live_count = std.atomic.Value(i32).init(0);
+pub const Poll = FileSink.Poll;
 
 pub fn Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio(_: *JSGlobalObject, jsvalue: JSValue) callconv(.c) void {
         var this_sink: *FileSink = ((FileSink.JSSink.fromJS(jsvalue)) orelse { return; });

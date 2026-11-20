@@ -18,12 +18,13 @@ pub struct Set {
 const debug = Output.scoped(.fs, .visible);
 
 pub const FreeFn = *const fn (*!?) callconv(.c) void;
+pub type OptFreeFn = FreeFn?;
 
-pub struct ExternalFreeFunction {
+pub struct FsExternalFreeFunction {
     ctx: *!? = null,
-    function: FreeFn = null,
+    function: OptFreeFn = null,
 
-    pub const none: ExternalFreeFunction = { ctx: null, function: null };
+    pub const none: FsExternalFreeFunction = FsExternalFreeFunction{ ctx: null, function: null };
 
     pub fn call() {
         if (func := _.function) {
@@ -33,9 +34,10 @@ pub struct ExternalFreeFunction {
 }
 
 pub struct FsEntry {
+    pub const ExternalFreeFunction = FsExternalFreeFunction;
     contents: string,
     fd: FD,
-    external_free_function: ExternalFreeFunction = .none,
+    external_free_function: FsExternalFreeFunction = .none,
 
     pub static fn deinit(entry: *FsEntry, allocator: std.mem.Allocator) {
         if (func := entry.external_free_function.function) {

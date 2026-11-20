@@ -1317,3 +1317,6 @@
 
 ### 2026-11-20 05:54:33 UTC - zig:check 基础库与字符串簇修复经验
 - `ptr: [*]T = [];` 替代 `&([] as [0]T)`；`[:0]u8!` 需拆 `type SliceZ = [:0]u8; : SliceZ!`；`u64` 大十六进制常量用移位构造避免 `i64` 溢出。
+
+### 2026-11-20 05:57:46 UTC - zig:check Runtime+Bundler 簇修复经验
+- 沉淀 `import { A as B }`、`&UpperCase.Const` 与函数体内 `*UpperCaseType` 泛参 3 条核心语义坑至 `CP_PITFALLS.md`。

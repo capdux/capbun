@@ -1,6 +1,12 @@
+import bun from "bun";
 import { Output, default_allocator, strings, webcore, http, jsc, String, sys, JSError, FormData, Environment, ptr } from "bun";
 import { JSGlobalObject, JSValue, CallFrame, JSPromise, VirtualMachine, ZigString, ArrayBuffer, DOMFormData, URLSearchParams } from "jsc";
-import { Store as BlobStore, read_file, write_file, copy_file } from "./blob/Store.zig";
+import * as StoreMod from "./blob/Store.zig";
+pub const Store = StoreMod.Store;
+const BlobStore = StoreMod.Store;
+const read_file = StoreMod.read_file;
+const write_file = StoreMod.write_file;
+const copy_file = StoreMod.copy_file;
 
 const debug = Output.scoped(.Blob, .visible);
 
@@ -185,7 +191,7 @@ export class Blob {
 }
 
 export class Internal {
-    bytes: sys.ManagedArray(u8);
+    bytes: std.array_list.Managed(u8);
     was_string: bool = false;
 
     pub fn slice(_: &Internal): []u8 {
@@ -208,7 +214,7 @@ export class Internal {
 export union(enum) Any {
     Blob: Blob,
     InternalBlob: Internal,
-    WTFStringImpl: *String.Impl,
+    WTFStringImpl: bun.WTF.StringImpl,
 
     pub fn slice(_: &Any): []const u8 {
         switch (this.*) {

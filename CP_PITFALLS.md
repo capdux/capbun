@@ -112,3 +112,7 @@
 
 - **赋值右侧 `_.field = opt ?? default` 误降级**：改用 `if (v := opt) { _.field = v; } else { _.field = default; }`。
 - **`switch` 分支右值匿名结构体 `{ field: val }`**：会被误解析为带标签代码块，须显式写 `Type{ field: val }`。
+
+- **`import { A as B }` 成员名误映射**：会误生成 `.B` 而非 `.A`，改用 `import * as M from "..."; const B = M.A;`。
+- **字段默认值 `&UpperCase.Const` 误解析为指针类型**：先用小写绑定 `const _v = UpperCase.Const;` 再取 `&_v`。
+- **函数体内 `*UpperCaseType` 作为类型实参**：会被误解析为 `(&UpperCaseType)`，先在顶层声明 `type Ptr = *UpperCaseType;`。

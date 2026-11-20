@@ -51,6 +51,7 @@ fn deinit(this: *HTMLBundle) void {
 pub fn getIndex(this: *HTMLBundle, globalObject: *JSGlobalObject) bun.JSError!JSValue {
     return bun.String.createUTF8ForJS(globalObject, this.path);
 }
+};
 
 /// Deprecated: use Route instead.
 pub const HTMLBundleRoute = Route;
@@ -531,11 +532,4 @@ pub const Route = struct {
             }
         }
     };
-};
-
-
-
-
-
-
 };

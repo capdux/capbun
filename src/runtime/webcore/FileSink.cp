@@ -695,3 +695,5 @@ fn onRejectStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!J
     this_sink.handleRejectStream(globalThis, err);
     return JSValue.js_undefined;
 }
+
+pub const Poll = FileSink.Poll;

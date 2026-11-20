@@ -10,9 +10,11 @@ const uws = bun.uws;
 const ConnectingSocket = uws.ConnectingSocket;
 const SocketKind = uws.SocketKind;
 const us_socket_t = uws.us_socket_t;
-const VTable = uws.SocketGroup.VTable;
+const VTable = uws.SocketGroup_mod.VTable;
 
 type OptVTable = *const VTable?;
+const TLSSocket = bun.jsc.API.NewSocket(true);
+type TLSSocketPtr = *TLSSocket;
 
 const tables = ({
     let t = std.EnumArray(SocketKind, OptVTable).initFill(null);
@@ -143,8 +145,7 @@ const tables = ({
 
 @export pub fn us_dispatch_ssl_raw_tap(s: *us_socket_t, data: [*c]u8, len: i32): *us_socket_t? {
     bun.debugAssert(s.kind() == .bun_socket_tls);
-    const TLSSocket = bun.jsc.API.NewSocket(true);
-    const tls = s.ext(*TLSSocket).*;
+    const tls = s.ext(TLSSocketPtr).*;
     if (raw := tls.twin) {
         raw.onData(TLSSocket.Socket.from(s), data[0..@intCast(len)]);
     }

@@ -56,23 +56,23 @@ pub const JsonMode = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
-pub const ExternalFreeFunction = struct {
+pub const FsExternalFreeFunction = struct {
     ctx: ?*anyopaque = null,
-    function: FreeFn = null,
+    function: OptFreeFn = null,
 
-pub fn call(self: ExternalFreeFunction) void {
+pub fn call(self: FsExternalFreeFunction) void {
             if (self.function) |func| {
                 _ = &func;
                 _ = func(self.ctx);
             }
     }
-    pub const none: ExternalFreeFunction = .{ .ctx = null, .function = null };
+    pub const none: FsExternalFreeFunction = FsExternalFreeFunction{ .ctx = null, .function = null };
 };
 
 pub const FsEntry = struct {
     contents: []const u8,
     fd: FD,
-    external_free_function: ExternalFreeFunction = .none,
+    external_free_function: FsExternalFreeFunction = .none,
 
 pub fn deinit(entry: *FsEntry, allocator: std.mem.Allocator) void {
             if (entry.external_free_function.function) |func| {
@@ -95,6 +95,7 @@ pub fn closeFD(entry: *FsEntry) ?bun.sys.Error {
             }
             return null;
     }
+    pub const ExternalFreeFunction = FsExternalFreeFunction;
 };
 
 pub const Fs = struct {
@@ -288,6 +289,7 @@ pub fn parseTSConfig(cache: *Json, log: *logger.Log, source: *const logger.Sourc
     }
 };
 
+pub const OptFreeFn = ?FreeFn;
 const string = []const u8;
 const debug = Output.scoped(.fs, .visible);
 pub const FreeFn = *const *const fn(?*anyopaque) callconv(.c) void;
