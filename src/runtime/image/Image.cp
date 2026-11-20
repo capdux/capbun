@@ -1188,7 +1188,7 @@ pub struct PipelineTask {
                 promise.resolve(global, obj)?;
             },
             .@"err" => |e| promise.reject(global, rejectError(global, e))?,
-            .io_err => |e| promise.reject(global, e.toJS(global)?)?,
+            .io_err => |e| promise.reject(global, e.toJS(global))?,
         }
     }
 

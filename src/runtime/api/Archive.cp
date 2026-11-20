@@ -33,7 +33,7 @@ fn countFilesInArchive(data: []const u8): u32 {
 
     let count: u32 = 0;
     let entry_buf: [1]*libarchive.lib.Archive.Entry = [undefined];
-    while (archive.readNextHeader(entry_buf.ptr) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry_buf }) == .ok) {
         const entry = entry_buf[0];
         if (entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular)) {
             count += 1;
@@ -156,7 +156,7 @@ fn extractToDiskFiltered(
 
     let count: u32 = 0;
     let entry_buf: [1]*lib.Archive.Entry = [undefined];
-    while (archive.readNextHeader(entry_buf.ptr) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry_buf }) == .ok) {
         const entry = entry_buf[0];
         const pathname = entry.pathnameUtf8();
 
@@ -632,7 +632,7 @@ struct FilesContext {
         errdefer freeEntries(&entries);
 
         let entry_buf: [1]*lib.Archive.Entry = [undefined];
-    while (archive.readNextHeader(entry_buf.ptr) == .ok) {
+    while (archive.readNextHeader(unsafe { &entry_buf }) == .ok) {
         const entry = entry_buf[0];
             if (entry.filetype() != @intFromEnum(lib.FileType.regular)) continue;
 

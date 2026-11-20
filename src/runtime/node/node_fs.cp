@@ -1243,7 +1243,8 @@ pub struct AsyncReaddirRecursiveTask {
         let promise_value = _.promise.value();
         let promise = _.promise.get();
         let result: jsc.JSValue = undefined;
-        if (e := &_.pending_err) {
+        if (_.pending_err != null) {
+            let e = &_.pending_err.?;
             result = e.toJSWithAsyncStack(globalObject, promise) catch |err_val| return promise.reject(globalObject, globalObject.takeException(err_val));
         } else {
             const res = switch (_.result_list) {

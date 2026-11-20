@@ -819,7 +819,7 @@ pub fn checkServerIdentity(self: *FetchTasklet, certificate_info: http.Certifica
                             _ = self.tracker.didCancel(self.global_this);
                             if (self.http) |http_| {
                                 _ = &http_;
-                                _ = http_.http_thread.scheduleShutdown(http_);
+                                _ = bun.http.http_thread.scheduleShutdown(http_);
                             }
                             self.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                             return false;

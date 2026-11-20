@@ -195,10 +195,10 @@ pub fn extract(self: ExtractTarball, log: *logger.Log, tgz_bytes: []const u8) !I
         const tmpdir = self.temp_dir;
         var tmpname_buf: if (Environment.isWindows) bun.WPathBuffer else bun.PathBuffer = undefined;
         _ = &tmpname_buf;
-        const _tmp_v0 = self.nameAndBasename();
-        var name = cp_unpack_elem(_tmp_v0, 0);
+        const name_pair = self.nameAndBasename();
+        var name = @field(name_pair, "0");
         _ = &name;
-        var basename = cp_unpack_elem(_tmp_v0, 1);
+        var basename = @field(name_pair, "1");
         _ = &basename;
         var resolved: []const u8 = "";
         _ = &resolved;
@@ -397,14 +397,14 @@ _ = dir_to_move.close();
 .github, .local_tarball, .remote_tarball => true,
 else => ((self.package_manager.lockfile.trusted_dependencies != null) and self.package_manager.lockfile.trusted_dependencies.?.contains(@truncate(Semver.String.Builder.stringHash(name)))),
 })) {
-            const _tmp_v1 = (blk_catch_20: { break :blk_catch_20 ((bun.sys.File.readFileFrom(bun.FD.fromStdDir(cache_dir), bun.path.joinZBuf((&bufs.json_path_buf), .{ folder_name, "package.json" }, .auto), bun.default_allocator).unwrap()) catch |e| { _ = &e; if (((self.resolution.tag == .github) and (e == error.ENOENT))) {
+            const _tmp_v0 = (blk_catch_20: { break :blk_catch_20 ((bun.sys.File.readFileFrom(bun.FD.fromStdDir(cache_dir), bun.path.joinZBuf((&bufs.json_path_buf), .{ folder_name, "package.json" }, .auto), bun.default_allocator).unwrap()) catch |e| { _ = &e; if (((self.resolution.tag == .github) and (e == error.ENOENT))) {
                 return .{ .url = url, .resolved = resolved };
             }
             _ = ((log.addErrorFmt(null, logger.Loc.Empty, bun.default_allocator, "\"package.json\" for \"{s}\" failed to open: {s}", .{ name, @errorName(e) })) catch unreachable);
             return error.InstallFailed; }); });
-            var json_file = cp_unpack_elem(_tmp_v1, 0);
+            var json_file = cp_unpack_elem(_tmp_v0, 0);
             _ = &json_file;
-            var json_buf_read = cp_unpack_elem(_tmp_v1, 1);
+            var json_buf_read = cp_unpack_elem(_tmp_v0, 1);
             _ = &json_buf_read;
             defer {
             _ = json_file.close();

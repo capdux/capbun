@@ -82,14 +82,21 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
                 _ = BoringSSL.SSL_set_renegotiate_mode(ssl, BoringSSL.ssl_renegotiate_never);
                 _ = BoringSSL.SSL_set_accept_state(ssl);
             }
-            const bio_method_in = BoringSSL.BIO_s_mem;
+            const s_mem = BoringSSL.BIO_s_mem;
+            var __s_mem_moved = false; _ = &__s_mem_moved;
+            defer if (!__s_mem_moved) { const __T = @TypeOf(s_mem); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s_mem.release() catch {}; } else { s_mem.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s_mem; _drop_val.release(); } };
+            const bio_method_in = s_mem();
+            var __bio_method_in_moved = false; _ = &__bio_method_in_moved;
+            defer if (!__bio_method_in_moved) { const __T = @TypeOf(bio_method_in); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bio_method_in.release() catch {}; } else { bio_method_in.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bio_method_in; _drop_val.release(); } };
             const input = ((BoringSSL.BIO_new(bio_method_in)) orelse {
             return @as(anyerror!This, error.OutOfMemory);
 });
             errdefer {
             _ = BoringSSL.BIO_free(input);
             }
-            const bio_method_out = BoringSSL.BIO_s_mem;
+            const bio_method_out = s_mem();
+            var __bio_method_out_moved = false; _ = &__bio_method_out_moved;
+            defer if (!__bio_method_out_moved) { const __T = @TypeOf(bio_method_out); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bio_method_out.release() catch {}; } else { bio_method_out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bio_method_out; _drop_val.release(); } };
             const output = ((BoringSSL.BIO_new(bio_method_out)) orelse {
             return @as(anyerror!This, error.OutOfMemory);
 });

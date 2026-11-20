@@ -259,7 +259,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
                 package.resolution = {
                     tag: .root,
-                    value: { root: {} },
+                    value: { root: undefined },
                 };
 
                 const total_len = dependencies_list.items.len + total_dependencies_count;
@@ -1638,7 +1638,7 @@ pub fn Package(comptime SemverIntType: type): type {
             } else {
                 package.resolution = {
                     tag: .root,
-                    value: { root: {} },
+                    value: { root: undefined },
                 };
             }
 

@@ -573,21 +573,22 @@ pub struct TransformTask {
         defer _.deinit();
 
         if (_.log.hasAny() || _.e != null) {
-            const error_value: bun.JSError!JSValue = brk: {
-                if (e := _.e) {
-                    if (!_.log.hasAny()) {
-                        break :brk bun.api.BuildMessage.create(
-                            _.global,
-                            bun.default_allocator,
-                            logger.Msg{
-                                data: logger.Data{ text: bun.asByteSlice(@errorName(e)) },
-                            },
-                        );
-                    }
+            let error_value: bun.JSError!JSValue = undefined;
+            if (e := _.e) {
+                if (!_.log.hasAny()) {
+                    error_value = bun.api.BuildMessage.create(
+                        _.global,
+                        bun.default_allocator,
+                        logger.Msg{
+                            data: logger.Data{ text: bun.asByteSlice(@errorName(e)) },
+                        },
+                    );
+                } else {
+                    error_value = _.log.toJS(_.global, bun.default_allocator, "Transform failed");
                 }
-
-                break :brk _.log.toJS(_.global, bun.default_allocator, "Transform failed");
-            };
+            } else {
+                error_value = _.log.toJS(_.global, bun.default_allocator, "Transform failed");
+            }
 
             promise.rejectWithAsyncStack(_.global, error_value)?;
             return;

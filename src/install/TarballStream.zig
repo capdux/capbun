@@ -427,10 +427,11 @@ return;
 .want_header => {
 var entry: *lib.Archive.Entry = undefined;
             _ = &entry;
-            switch (archive.readNextHeader((blk: {
+            const entry_ptr = (blk: {
             break :blk entry;
 
-}))) {
+});
+            switch (archive.readNextHeader(entry_ptr)) {
 .retry => {
 return;
 },

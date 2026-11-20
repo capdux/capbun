@@ -231,31 +231,33 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
             _ = try workspace_names.insert(workspace_path, Entry{ .name = workspace_entry.name, .version = workspace_entry.version, .name_loc = workspace_entry.name_loc });
         }
         if ((workspace_globs.items.len > 0)) {
-            const cwd = bun.toFD((blk_catch_6: { break :blk_catch_6 ((bun.openDirAt(bun.FD.cwd(), (if (@typeInfo(@TypeOf(source.path)) == .@"enum" or @typeInfo(@TypeOf(source.path)) == .@"union") @tagName(source.path) else source.path.name).dir)) catch |e| { _ = &e; _ = (blk_catch_7: { break :blk_catch_7 ((log.addErrorFmt(source, loc, allocator, "Failed to open directory {s} for workspace pattern: {s}", .{ (if (@typeInfo(@TypeOf(source.path)) == .@"enum" or @typeInfo(@TypeOf(source.path)) == .@"union") @tagName(source.path) else source.path.name).dir, @errorName(e) })) catch |__ce_7| { _ = &__ce_7;  }); });
-            return error.GlobError; }); }));
+            var arena_alloc = std.heap.ArenaAllocator.init(allocator);
+            _ = &arena_alloc;
             defer {
-            _ = bun.sys.close(cwd);
+            _ = arena_alloc.deinit();
             }
             for (workspace_globs.items) |user_pattern| {
                 _ = &user_pattern;
-                var glob_pattern: []const u8 = user_pattern;
-                _ = &glob_pattern;
-                if (strings.hasPrefix(glob_pattern, "./")) {
-                    glob_pattern = glob_pattern[2..];
-                } else {
-                    if (strings.hasPrefix(glob_pattern, ".\\\\")) {
-                        glob_pattern = glob_pattern[2..];
-                    }
+                defer {
+                _ = arena_alloc.reset(.retain_capacity);
                 }
+                const glob_pattern = (if ((user_pattern.len == 0)) "package.json" else brk: {
+                const parts: [2][]const u8 = .{ user_pattern, "package.json" };
+                break :brk bun.handleOom(arena_alloc.allocator().dupe(u8, bun.path.join((&parts), .auto)));
+});
                 var walker: GlobWalker = .{};
                 _ = &walker;
-                defer {
-                _ = walker.deinit();
+                var cwd = bun.path.dirname(source.path.text, .auto);
+                _ = &cwd;
+                cwd = (if (bun.strings.eql(cwd, "")) bun.fs.FileSystem.instance.top_level_dir else cwd);
+                if (try walker.initWithCwd((&arena_alloc), glob_pattern, cwd, false, false, false, false, true).asErr()) |err_opt| {
+                    _ = &err_opt;
+                    const e = err_opt;
+                    _ = (blk_catch_6: { break :blk_catch_6 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_6| { _ = &__ce_6;  }); });
+                    return error.GlobError;
                 }
-                var arena_alloc = std.heap.ArenaAllocator.init(allocator);
-                _ = &arena_alloc;
                 defer {
-                _ = arena_alloc.deinit();
+                _ = walker.deinit(false);
                 }
                 var iter = GlobWalker.Iterator{ .walker = (&walker) };
                 _ = &iter;
@@ -265,7 +267,7 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
                 if (try iter.init().asErr()) |err_opt| {
                     _ = &err_opt;
                     const e = err_opt;
-                    _ = (blk_catch_8: { break :blk_catch_8 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_8| { _ = &__ce_8;  }); });
+                    _ = (blk_catch_7: { break :blk_catch_7 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_7| { _ = &__ce_7;  }); });
                     return error.GlobError;
                 }
                 next_match: while (true) {
@@ -282,16 +284,16 @@ if (r) |path_slice| {
                     }
 },
 .err => |e| {
-_ = (blk_catch_9: { break :blk_catch_9 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_9| { _ = &__ce_9;  }); });
+_ = (blk_catch_8: { break :blk_catch_8 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_8| { _ = &__ce_8;  }); });
                     return error.GlobError;
 },
 }
                     const entry_dir: []const u8 = Path.dirname(matched_path, .auto);
                     const abs_package_json_path: stringZ = Path.joinAbsStringBufZ((if (@typeInfo(@TypeOf(source.path)) == .@"enum" or @typeInfo(@TypeOf(source.path)) == .@"union") @tagName(source.path) else source.path.name).dir, filepath_buf, (&.{ entry_dir, "package.json" }), .auto);
                     const abs_workspace_dir_path: []const u8 = strings.withoutSuffixComptime(abs_package_json_path, "package.json");
-                    const workspace_entry = (blk_catch_10: { break :blk_catch_10 ((processWorkspaceName(allocator, json_cache, abs_package_json_path, log)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                    const workspace_entry = (blk_catch_9: { break :blk_catch_9 ((processWorkspaceName(allocator, json_cache, abs_package_json_path, log)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
                     const entry_base: []const u8 = Path.basename(matched_path);
-                    __sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if ((cp_match_tag(__err_v_5, .FileNotFound) or cp_match_tag(__err_v_5, .PermissionDenied))) {  _ = continue; break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .MissingPackageName)) {  _ = (blk_catch_11: { break :blk_catch_11 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "Missing \"name\" from package.json in {s}/{s}", .{ entry_dir, entry_base })) catch |__ce_11| { _ = &__ce_11;  }); }); break :__sw_blk_5; } } {  _ = (blk_catch_12: { break :blk_catch_12 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "{s} reading package.json for workspace package \"{s}\" from \"{s}\"", .{ @errorName(e), entry_dir, entry_base })) catch |__ce_12| { _ = &__ce_12;  }); }); break :__sw_blk_5; }  }
+                    __sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if ((cp_match_tag(__err_v_5, .FileNotFound) or cp_match_tag(__err_v_5, .PermissionDenied))) {  _ = continue; break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .MissingPackageName)) {  _ = (blk_catch_10: { break :blk_catch_10 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "Missing \"name\" from package.json in {s}/{s}", .{ entry_dir, entry_base })) catch |__ce_10| { _ = &__ce_10;  }); }); break :__sw_blk_5; } } {  _ = (blk_catch_11: { break :blk_catch_11 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "{s} reading package.json for workspace package \"{s}\" from \"{s}\"", .{ @errorName(e), entry_dir, entry_base })) catch |__ce_11| { _ = &__ce_11;  }); }); break :__sw_blk_5; }  }
                     continue; }); });
                     if ((workspace_entry.name.len == 0)) {
                         continue;

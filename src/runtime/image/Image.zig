@@ -1275,7 +1275,7 @@ const obj = jsc.JSValue.createEmptyObject(global, 3);
 _ = try promise.reject(global, rejectError(global, e));
 },
 .io_err => |e| {
-_ = try promise.reject(global, try e.toJS(global));
+_ = try promise.reject(global, e.toJS(global));
 },
 }
     }

@@ -181,7 +181,7 @@ const OwnedString = bun.MutableString;
             }).init(globalThis, files_obj);
             defer files_iter.deinit();
 
-            file_map.map.ensureTotalCapacity(bun.default_allocator, i32(files_iter.len))?;
+            file_map.map.ensureTotalCapacity(bun.default_allocator, @intCast(files_iter.len))?;
 
             while (prop := files_iter.next()?) {
                 const property_value = files_iter.value;
@@ -241,7 +241,10 @@ const OwnedString = bun.MutableString;
                 errdefer opts.deinit();
 
                 const object = brk: {
-                    const compile_value = (try config.getTruthy(globalThis, "compile")) orelse return null;
+                    let compile_value: JSValue = undefined;
+                    if (v := config.getTruthy(globalThis, "compile")?) {
+                        compile_value = v;
+                    } else return null;
 
                     if (compile_value.isBoolean()) {
                         if (compile_value == .false) {

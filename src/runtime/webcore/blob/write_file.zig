@@ -741,7 +741,7 @@ value.Locked.onReceiveValue = thenWrap;
     }
 };
 
-pub const WriteFileOnWriteFileCallback = *const fn (*anyopaque, WriteFileResultType) anyerror!void;
+pub const WriteFileOnWriteFileCallback = *const fn (*anyopaque, WriteFileResultType) bun.JSTerminated!void;
 const atomic = std.atomic;
 const posix = std.posix;
 const jsc = bun.jsc;

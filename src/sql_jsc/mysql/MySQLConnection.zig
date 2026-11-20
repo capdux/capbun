@@ -536,7 +536,12 @@ pub fn handleHandshake(self: *MySQLConnection, comptime Context: type, reader: N
         _ = try self.@"#auth_data".appendSlice(handshake.auth_plugin_data_part_1[0..]);
         _ = try self.@"#auth_data".appendSlice(handshake.auth_plugin_data_part_2[0..]);
         if ((handshake.auth_plugin_name.slice().len > 0)) {
-            if (self.@"#auth_plugin" == null) { self.@"#auth_plugin" = return error.UnsupportedAuthPlugin; }
+            if (AuthMethod.get(handshake.auth_plugin_name.slice())) |auth_method| {
+                _ = &auth_method;
+                self.@"#auth_plugin" = auth_method;
+            } else {
+                return error.UnsupportedAuthPlugin;
+            }
         }
         _ = self.setStatus(.authenticating);
         if (self.@"#capabilities".CLIENT_SSL) {
@@ -701,12 +706,16 @@ var auth_switch = AuthSwitchRequest{ .packet_size = header_length };
         defer {
         _ = auth_switch.deinit();
         }
-        const auth_method = ((AuthMethod.get(auth_switch.plugin_name.slice())) orelse { return .{ .ok = error.UnsupportedAuthPlugin }; });
-        const auth_data = auth_switch.plugin_data.slice();
-        self.@"#auth_plugin" = auth_method;
-        _ = self.@"#auth_data".clearRetainingCapacity();
-        _ = try self.@"#auth_data".appendSlice(auth_data);
-        _ = try self.sendAuthSwitchResponse(auth_method, auth_data);
+        if (AuthMethod.get(auth_switch.plugin_name.slice())) |auth_method| {
+            _ = &auth_method;
+            const auth_data = auth_switch.plugin_data.slice();
+            self.@"#auth_plugin" = auth_method;
+            _ = self.@"#auth_data".clearRetainingCapacity();
+            _ = try self.@"#auth_data".appendSlice(auth_data);
+            _ = try self.sendAuthSwitchResponse(auth_method, auth_data);
+        } else {
+            return error.UnsupportedAuthPlugin;
+        }
 },
 else => {
 _ = debug("Unexpected auth packet: 0x{x:0>2}", .{ first_byte });

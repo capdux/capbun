@@ -551,7 +551,11 @@ export struct Reader {
         this.@"#auth_data".appendSlice(handshake.auth_plugin_data_part_2[0..])?;
 
         if (handshake.auth_plugin_name.slice().len > 0) {
-            this.@"#auth_plugin" = AuthMethod.fromString(handshake.auth_plugin_name.slice()) orelse return error.UnsupportedAuthPlugin;
+            if (auth_method := AuthMethod.fromString(handshake.auth_plugin_name.slice())) {
+                this.@"#auth_plugin" = auth_method;
+            } else {
+                return error.UnsupportedAuthPlugin;
+            }
         }
 
         this.setStatus(.authenticating);
@@ -710,13 +714,15 @@ export struct Reader {
                 auth_switch.decode(reader)?;
                 defer auth_switch.deinit();
 
-                const auth_method = AuthMethod.fromString(auth_switch.plugin_name.slice()) orelse return error.UnsupportedAuthPlugin;
-                const auth_data = auth_switch.plugin_data.slice();
-                this.@"#auth_plugin" = auth_method;
-                this.@"#auth_data".clearRetainingCapacity();
-                this.@"#auth_data".appendSlice(auth_data)?;
-
-                this.sendAuthSwitchResponse(auth_method, auth_data)?;
+                if (auth_method := AuthMethod.fromString(auth_switch.plugin_name.slice())) {
+                    const auth_data = auth_switch.plugin_data.slice();
+                    this.@"#auth_plugin" = auth_method;
+                    this.@"#auth_data".clearRetainingCapacity();
+                    this.@"#auth_data".appendSlice(auth_data)?;
+                    this.sendAuthSwitchResponse(auth_method, auth_data)?;
+                } else {
+                    return error.UnsupportedAuthPlugin;
+                }
             },
             else => {
                 debug("Unexpected auth packet: 0x{x:0>2}", .{first_byte});

@@ -133,13 +133,13 @@ export struct UploadPart {
             this.partNumber,
             this.ctx.upload_id,
         }) catch unreachable;
-        const req_opts = .{
-            .path = this.ctx.path,
-            .method = bun.http.Method.PUT,
-            .proxy_url = this.ctx.proxyUrl(),
-            .body = this.data,
-            .search_params = search_params,
-            .request_payer = this.ctx.request_payer,
+        const req_opts = S3SimpleRequest.S3SimpleRequestOptions{
+            path: this.ctx.path,
+            method: bun.http.Method.PUT,
+            proxy_url: this.ctx.proxyUrl(),
+            body: this.data,
+            search_params: search_params,
+            request_payer: this.ctx.request_payer,
         };
         const cb = .{ .part = @ptrCast(&onPartResponse) };
         executeSimpleS3Request(this.ctx.credentials, req_opts, cb, this)?;
@@ -268,19 +268,19 @@ export class MultiPartUpload {
                     const retry_val = upload.options.retry;
                     log("singleSendUploadResponse {} retry", .{ retry_val });
                     upload.options.retry -= 1;
-                    const req_opts = .{
-                        .path = upload.path,
-                        .method = bun.http.Method.PUT,
-                        .proxy_url = upload.proxyUrl(),
-                        .body = upload.buffered.slice(),
-                        .content_type = upload.content_type,
-                        .content_disposition = upload.content_disposition,
-                        .content_encoding = upload.content_encoding,
-                        .acl = upload.acl,
-                        .storage_class = upload.storage_class,
-                        .request_payer = upload.request_payer,
+                    const req_opts = S3SimpleRequest.S3SimpleRequestOptions{
+                        path: upload.path,
+                        method: bun.http.Method.PUT,
+                        proxy_url: upload.proxyUrl(),
+                        body: upload.buffered.slice(),
+                        content_type: upload.content_type,
+                        content_disposition: upload.content_disposition,
+                        content_encoding: upload.content_encoding,
+                        acl: upload.acl,
+                        storage_class: upload.storage_class,
+                        request_payer: upload.request_payer,
                     };
-                    const cb = .{ .upload = @ptrCast(&singleSendUploadResponse) };
+                    const cb = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
                     executeSimpleS3Request(upload.credentials, req_opts, cb, upload)?;
                     return;
                 } else {
@@ -506,13 +506,13 @@ export class MultiPartUpload {
             this.upload_id,
         }) catch unreachable;
 
-        const req_opts = .{
-            .path = this.path,
-            .method = bun.http.Method.POST,
-            .proxy_url = this.proxyUrl(),
-            .body = this.multipart_upload_list.slice(),
-            .search_params = searchParams,
-            .request_payer = this.request_payer,
+        const req_opts = S3SimpleRequest.S3SimpleRequestOptions{
+            path: this.path,
+            method: bun.http.Method.POST,
+            proxy_url: this.proxyUrl(),
+            body: this.multipart_upload_list.slice(),
+            search_params: searchParams,
+            request_payer: this.request_payer,
         };
         const cb = .{ .commit = @ptrCast(&onCommitMultiPartRequest) };
         executeSimpleS3Request(this.credentials, req_opts, cb, this)?;
@@ -622,7 +622,7 @@ export class MultiPartUpload {
                 storage_class: this.storage_class,
                 request_payer: this.request_payer,
             };
-            const cb = .{ .upload = @ptrCast(&singleSendUploadResponse) };
+            const cb = .{ .upload = @constCast(@ptrCast(&singleSendUploadResponse)) };
             executeSimpleS3Request(this.credentials, req_opts, cb, this) catch {};
         } else {
             this.processMultiPart(part_size) catch {};

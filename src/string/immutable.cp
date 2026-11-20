@@ -1730,7 +1730,7 @@ pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range
     }
 
     if (ranges.len == line_range_count && current_line <= target_line) {
-        let new_ranges = bun.BoundedArray(LineRange, line_range_count){};
+        let new_ranges: bun.BoundedArray(LineRange, line_range_count) = .{};
         new_ranges.appendSliceAssumeCapacity(ranges.slice()[1..]);
         ranges = new_ranges;
     }

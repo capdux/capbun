@@ -458,7 +458,7 @@ pub union(enum) Value {
         let stream = std.io.fixedBufferStream(&buffer);
         let writer = stream.writer();
         switch (unsafe { this.* }) {
-            .@"null" => return Data{ empty: {} },
+            .@"null" => return Data{ empty: undefined },
             .@"bool" => |b| writer.writeByte(if (b) 1 else 0) catch undefined,
             .short => |s| writer.writeInt(i16, s, .little) catch undefined,
             .ushort => |s| writer.writeInt(u16, s, .little) catch undefined,
@@ -472,8 +472,8 @@ pub union(enum) Value {
                 stream.pos = d.toBinary(field_type, &buffer);
             },
             .string_data, .bytes_data => |data| return data,
-            .@"string" => |slice| return if (slice.len > 0) Data{ temporary: slice.slice() } else Data{ empty: {} },
-            .bytes => |b| return if (b.slice.len > 0) Data{ temporary: b.slice.slice() } else Data{ empty: {} },
+            .@"string" => |slice| return if (slice.len > 0) Data{ temporary: slice.slice() } else Data{ empty: undefined },
+            .bytes => |b| return if (b.slice.len > 0) Data{ temporary: b.slice.slice() } else Data{ empty: undefined },
         }
 
         return Data.create(buffer[0..stream.pos], bun.default_allocator)?;

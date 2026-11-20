@@ -125,13 +125,13 @@ pub const PipelineState = union(enum) {
 
         for (*c of _.cmds.?) c = .{ .result = 0 };
 
-        let pipes = bun.handleOom(_.base.allocator().alloc(Pipe, if (cmd_count > 1) cmd_count - 1 else 1));
-        _.pipes = pipes;
+        let pipes_slice = bun.handleOom(_.base.allocator().alloc(Pipe, if (cmd_count > 1) cmd_count - 1 else 1));
+        _.pipes = pipes_slice;
 
         if (cmd_count > 1) {
             let pipes_set: u32 = 0;
-            if (err_val := Pipeline.initializePipes(pipes, &pipes_set).asErr()) {
-                for (*pipe of pipes[0..pipes_set]) {
+            if (err_val := Pipeline.initializePipes(pipes_slice, &pipes_set).asErr()) {
+                for (*pipe of pipes_slice[0..pipes_set]) {
                     closefd(pipe[0]);
                     closefd(pipe[1]);
                 }
@@ -147,8 +147,8 @@ pub const PipelineState = union(enum) {
             switch (item) {
                 .@"if", .cmd, .condexpr, .subshell => {
                     let cmd_io = _.getIO();
-                    const stdin = if (cmd_count > 1) Pipeline.readPipe(pipes, i, &cmd_io, evtloop) else cmd_io.stdin.ref();
-                    const stdout = if (cmd_count > 1) Pipeline.writePipe(pipes, i, cmd_count, &cmd_io, evtloop) else cmd_io.stdout.ref();
+                    const stdin = if (cmd_count > 1) Pipeline.readPipe(pipes_slice, i, &cmd_io, evtloop) else cmd_io.stdin.ref();
+                    const stdout = if (cmd_count > 1) Pipeline.writePipe(pipes_slice, i, cmd_count, &cmd_io, evtloop) else cmd_io.stdout.ref();
                     cmd_io.stdin = stdin;
                     cmd_io.stdout = stdout;
                     * = cmd_io.stderr.ref();
@@ -157,9 +157,9 @@ pub const PipelineState = union(enum) {
                         .err => |err_dupe| {
                             cmd_io.deref();
                             if (cmd_count > 1) {
-                                for (p of pipes[i..]) closefd(p[0]);
-                                const w_start = @min(i + 1, @as(u32, @intCast(pipes.len)));
-                                for (p of pipes[w_start..]) closefd(p[1]);
+                                for (p of pipes_slice[i..]) closefd(p[0]);
+                                const w_start = @min(i + 1, @as(u32, @intCast(pipes_slice.len)));
+                                for (p of pipes_slice[w_start..]) closefd(p[1]);
                             }
                             const system_err = err_dupe.toShellSystemError();
                             defer system_err.deref();

@@ -1778,7 +1778,9 @@ pub fn checkTimeouts(self: *Resolver, now: *const timespec, vm: *jsc.VirtualMach
             }
             }
             self.event_loop_timer.state = .PENDING;
-            const maybe_channel: ?*c_ares.Channel = (blk_catch_14: { break :blk_catch_14 ((self.getChannelOrError(vm.global)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 @as(*c_ares.Channel, @as(?*c_ares.Channel, null)); }); });
+            const maybe_channel: ?*c_ares.Channel = blk: {
+            break :blk (blk_catch_14: { break :blk_catch_14 ((self.getChannelOrError(vm.global)) catch |__ce_14| { _ = &__ce_14; break :blk null; }); });
+};
             if (maybe_channel) |channel| {
                 _ = &channel;
                 if (self.anyRequestsPending()) {

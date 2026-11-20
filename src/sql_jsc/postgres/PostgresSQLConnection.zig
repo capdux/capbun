@@ -1514,7 +1514,8 @@ cached_structure = statement.structure(self.js_value, self.globalObject);
 
 },
 }
-        const empty_cells: [0]DataCell.SQLDataCell = &.{};
+        var empty_cells: [0]DataCell.SQLDataCell = undefined;
+        _ = &empty_cells;
         var putter = DataCell.Putter{ .list = empty_cells[0..], .fields = statement.fields, .binary = request.flags.binary, .bigint = request.flags.bigint, .globalObject = self.globalObject };
         _ = &putter;
         var stack_buf: [70]DataCell.SQLDataCell = undefined;
@@ -1744,7 +1745,11 @@ var sasl_cont = auth.SASLContinue;
         }
         _ = debug("SASLContinue", .{});
         const iteration_count = try cont.iterationCount();
-        const server_salt_decoded_base64 = (blk_catch_21: { break :blk_catch_21 ((bun.base64.decodeAlloc(bun.z_allocator, cont.s)) catch |e| { _ = &e; return (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .DecodingFailed)) {  break :__sw_blk_2 cp_val(error.SASL_SIGNATURE_INVALID_BASE64); } } {  break :__sw_blk_2 cp_val(e); }  unreachable; }); }); });
+        const server_salt_decoded_base64 = (blk_catch_21: { break :blk_catch_21 ((bun.base64.decodeAlloc(bun.z_allocator, cont.s)) catch |e| { _ = &e; if ((e == error.DecodingFailed)) {
+            return error.SASL_SIGNATURE_INVALID_BASE64;
+        } else {
+            return e;
+        } }); });
         defer {
         _ = bun.z_allocator.free(server_salt_decoded_base64);
         }
@@ -1761,8 +1766,8 @@ var sasl_cont = auth.SASLContinue;
         {
             var idx: i32 = 0;
             _ = &idx;
-            const __end_3 = 32;
-            while (idx < __end_3) : (idx += 1) {
+            const __end_2 = 32;
+            while (idx < __end_2) : (idx += 1) {
                 client_key_xor_buffer[cp_cast_int(usize, idx)] = (client_key[@as(usize, @intCast(idx))] ^ client_key_signature[@as(usize, @intCast(idx))]);
             }
         }

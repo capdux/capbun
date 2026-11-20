@@ -502,7 +502,7 @@ pub const Enable = packed struct(u16) {
         }
 
         {
-            const token_keys = [
+            const token_keys: [3]string = [
                 "BUN_CONFIG_TOKEN",
                 "NPM_CONFIG_TOKEN",
                 "npm_config_token",

@@ -1103,8 +1103,9 @@ pub struct PosixSpawnOptions {
         dup2: struct { out: bun.jsc.Subprocess.StdioKind, to: bun.jsc.Subprocess.StdioKind },
     };
 
-    fn deinit() {
+    pub fn deinit() {
         // no-op
+        * = _.stdin;
     }
 }
 
@@ -1367,8 +1368,8 @@ pub fn spawnProcess(
 }
 pub fn spawnProcessPosix(
     options: *const PosixSpawnOptions,
-    argv: ([*:null][*:0]const u8)?,
-    envp: ([*:null][*:0]const u8)?,
+    argv: [*:null]OptCStr,
+    envp: [*:null]OptCStr,
 ): !bun.sys.Maybe(PosixSpawnResult) {
     bun.analytics.Features.spawn += 1;
     let actions = PosixSpawn.Actions.init()?;

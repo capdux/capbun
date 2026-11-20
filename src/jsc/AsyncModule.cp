@@ -254,8 +254,8 @@ pub struct AsyncModuleQueue {
                 const package = pm.lockfile.packages.get(package_id);
                 bun.assert(package.resolution.tag != .root);
 
-                let name_and_version_hash: u64 = 0;
-                let patchfile_hash: u64 = 0;
+                let name_and_version_hash: u64? = null;
+                let patchfile_hash: u64? = null;
                 switch (pm.determinePreinstallState(package, pm.lockfile, &name_and_version_hash, &patchfile_hash)) {
                     .done => {
                         // we are only truly done if all the dependencies are done.

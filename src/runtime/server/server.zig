@@ -150,7 +150,14 @@ pub fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const 
             if ((!argument.isObject())) {
                 return null;
             }
-            const path_val = ((try argument.get(init_ctx.global, "path")) orelse { return .{ .ok = null }; });
+            var path_val: jsc.JSValue = undefined;
+            _ = &path_val;
+            if (try argument.get(init_ctx.global, "path")) |v| {
+                _ = &v;
+                path_val = v;
+            } else {
+                return null;
+            }
             var path_string = try bun.String.fromJS(path_val, init_ctx.global);
             _ = &path_string;
             defer {

@@ -661,7 +661,7 @@ pub inline fn cmp(lhs: DependencyBehavior, rhs: DependencyBehavior) std.math.Ord
     }
 
 pub inline fn isRequired(self: DependencyBehavior) bool {
-            return (!self.isOptional(self));
+            return (!self.isOptional());
     }
 
 pub fn isEnabled(self: DependencyBehavior, features: Features) bool {
@@ -687,7 +687,8 @@ pub fn isLessThan(string_buf: []const u8, lhs: Dependency, rhs: Dependency) bool
 }
 
 pub fn countWithDifferentBuffers(client: *const Dependency, name_buf: []const u8, version_buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {
-        _ = builder.count(cp_iter_slice(client.name)[@intCast(name_buf)..]);
+        const slice_fn = String.slice;
+        _ = builder.count(slice_fn((&client.name), name_buf));
         _ = builder.count(client.version.literal.slice(version_buf));
 }
 

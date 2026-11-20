@@ -565,7 +565,7 @@ const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = 
                         const owner = owners.items[@as(usize, @intCast(oi))];
                         const watcher = owner.watcher;
                         const rel: []const u8 = (if (watcher.is_file) bun.path.basename(watcher.path) else (if ((owner.subpath.len == 0)) name else (if ((name.len == 0)) owner.subpath else bun.path.joinStringBuf((&path_buf), (&.{ owner.subpath, name }), .posix))));
-                        _ = watcher.emit(event_type, rel, ((!is_dir_child) and (!((ev.mask & ((IN.DELETE_SELF | IN.MOVE_SELF) != 0)) and (!watcher.is_file)))));
+                        _ = watcher.emit(event_type, rel, ((!is_dir_child) and (!(((ev.mask & (IN.DELETE_SELF | IN.MOVE_SELF)) != 0) and (!watcher.is_file)))));
                         _ = bun.handleOom(touched.getOrPut(bun.default_allocator, watcher));
                         if ((((watcher.recursive and is_dir_child) and (ev.mask & ((IN.CREATE | IN.MOVED_TO) != 0))) and (name.len > 0))) {
                             const abs_buf = bun.path_buffer_pool.get();

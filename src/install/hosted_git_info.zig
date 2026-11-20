@@ -543,7 +543,7 @@ host_provider_opt = HostProvider.fromUrl(parsed.url);
             _ = allocator.free(fragment);
             }
             const committish: ?[]const u8 = (if ((fragment.len > 0)) fragment else null);
-            return HostedGitInfo.copyFrom(committish, project_trimmed, user_part, host_provider, .shortcut, allocator);
+            return try HostedGitInfo.copyFrom(committish, project_trimmed, user_part, host_provider, .shortcut, allocator);
     }
     pub const toJS = hosted_git_info_jsc.hostedGitInfoToJS;
     pub const StringPair = GitInfoStringPair;

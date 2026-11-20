@@ -452,7 +452,7 @@ self.ca = (&.{ ca_str });
             }
         }
         {
-            const token_keys: [][]const u8 = .{ "BUN_CONFIG_TOKEN", "NPM_CONFIG_TOKEN", "npm_config_token" };
+            const token_keys: [3][]const u8 = .{ "BUN_CONFIG_TOKEN", "NPM_CONFIG_TOKEN", "npm_config_token" };
             var did_set = false;
             _ = &did_set;
             inline for (token_keys) |registry_key| {

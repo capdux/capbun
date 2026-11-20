@@ -663,7 +663,7 @@ pub struct DependencyVersion {
     }
 
     pub inline fn isRequired(): bool {
-        return !isOptional(_);
+        return !_.isOptional();
     }
 
     pub fn isEnabled(features: Features): bool {
@@ -743,7 +743,8 @@ static fn isLessThan(string_buf: []const u8, lhs: Dependency, rhs: Dependency): 
 }
 
 static fn countWithDifferentBuffers(client: *const Dependency, name_buf: []const u8, version_buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) {
-    builder.count(client.name.slice(name_buf));
+    const slice_fn = String.slice;
+    builder.count(slice_fn(&client.name, name_buf));
     builder.count(client.version.literal.slice(version_buf));
 }
 

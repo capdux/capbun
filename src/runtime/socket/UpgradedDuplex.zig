@@ -127,8 +127,7 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
             _ = &duplex;
             if (self.global) |global_obj| {
                 _ = &global_obj;
-                const g = global_obj;
-                const writeOrEnd_opt = (if (msg_more) (blk_catch_0: { break :blk_catch_0 ((duplex.getFunction(g, "write")) catch |__ce_0| { _ = &__ce_0; return; }); }) else (blk_catch_1: { break :blk_catch_1 ((duplex.getFunction(g, "end")) catch |__ce_1| { _ = &__ce_1; return; }); }));
+                const writeOrEnd_opt = (if (msg_more) (blk_catch_0: { break :blk_catch_0 ((duplex.getFunction(global_obj, "write")) catch |__ce_0| { _ = &__ce_0; return; }); }) else (blk_catch_1: { break :blk_catch_1 ((duplex.getFunction(global_obj, "end")) catch |__ce_1| { _ = &__ce_1; return; }); }));
                 var __writeOrEnd_opt_moved = false; _ = &__writeOrEnd_opt_moved;
                 defer if (!__writeOrEnd_opt_moved) { const __T = @TypeOf(writeOrEnd_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writeOrEnd_opt.release() catch {}; } else { writeOrEnd_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd_opt; _drop_val.release(); } };
                 const writeOrEnd = ((writeOrEnd_opt) orelse { return; });
@@ -136,12 +135,12 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
                 defer if (!__writeOrEnd_moved) { const __T = @TypeOf(writeOrEnd); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = writeOrEnd.release() catch {}; } else { writeOrEnd.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = writeOrEnd; _drop_val.release(); } };
                 if (data) |data_| {
                     _ = &data_;
-                    const buffer = (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, g)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, (g).?.takeException(e));
+                    const buffer = (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, (global_obj).?.takeException(e));
                     return; }); });
                     var __buffer_moved = false; _ = &__buffer_moved;
                     defer if (!__buffer_moved) { const __T = @TypeOf(buffer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buffer.release() catch {}; } else { buffer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buffer; _drop_val.release(); } };
                     _ = buffer.ensureStillAlive();
-                    _ = (blk_catch_3: { break :blk_catch_3 ((writeOrEnd.call(g, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_3 self.handlers.onError(self.handlers.ctx, (g).?.takeException(e)); }); });
+                    _ = (blk_catch_3: { break :blk_catch_3 ((writeOrEnd.call(global_obj, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_3 self.handlers.onError(self.handlers.ctx, (global_obj).?.takeException(e)); }); });
                 } else {
                     _ = (blk_catch_4: { break :blk_catch_4 ((writeOrEnd.call(global_obj, duplex, (&.{ jsc.JSValue.js_null }))) catch |e| { _ = &e; break :blk_catch_4 self.handlers.onError(self.handlers.ctx, (global_obj).?.takeException(e)); }); });
                 }

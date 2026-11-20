@@ -3300,7 +3300,9 @@ pub fn remapZigException(
     }
 
     if (frames.len > 1) {
-        for (*frame of frames) {
+        let frame_i: usize = 0;
+        while (frame_i < frames.len) : (frame_i += 1) {
+            const frame = &frames[frame_i];
             if (@intFromPtr(frame) == @intFromPtr(top) || frame.position.isInvalid()) continue;
             const source_url = frame.source_url.toUTF8(bun.default_allocator);
             defer source_url.deinit();
@@ -3363,7 +3365,7 @@ fn printErrorInstance(
     comptime allow_ansi_color: bool,
     comptime allow_side_effects: bool,
 )! {
-    let exception_holder = if (mode == .js) ZigException.Holder.init();
+    let exception_holder = if (mode == .js) ZigException.Holder.init() else undefined;
     let exception = if (mode == .js) exception_holder.zigException() else error_instance;
     defer if (mode == .js) exception_holder.deinit(client);
     defer if (mode == .js) error_instance.ensureStillAlive();
@@ -3472,7 +3474,10 @@ fn printErrorInstance(
         let top_frame = if (exception.stack.frames_len > 0) &exception.stack.frames()[0] else null;
 
         if (client.hide_bun_stackframes) {
-            for (*frame of exception.stack.frames()) {
+            const stack_frames = exception.stack.frames();
+            let frame_idx: usize = 0;
+            while (frame_idx < stack_frames.len) : (frame_idx += 1) {
+                const frame = &stack_frames[frame_idx];
                 if (frame.position.isInvalid() || frame.source_url.hasPrefixComptime("bun:") || frame.source_url.hasPrefixComptime("node:")) continue;
                 top_frame = unsafe { @ptrFromInt(@intFromPtr(frame)) };
                 break;

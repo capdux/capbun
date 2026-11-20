@@ -196,7 +196,7 @@ pub fn perform(self: *UploadPart) JSTerminatedError!void {
             _ = &params_buffer;
             var search_params = ((bufPrint((&params_buffer), "?partNumber={}&uploadId={s}&x-id=UploadPart", .{ self.partNumber, self.ctx.upload_id })) catch unreachable);
             _ = &search_params;
-            const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url__anyopaque_body___const_u8_search_params__anyopaque_request_payer_bool = .{ .path = self.ctx.path, .method = bun.http.Method.PUT, .proxy_url = self.ctx.proxyUrl(), .body = self.data, .search_params = search_params, .request_payer = self.ctx.request_payer };
+            const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = self.ctx.path, .method = bun.http.Method.PUT, .proxy_url = self.ctx.proxyUrl(), .body = self.data, .search_params = search_params, .request_payer = self.ctx.request_payer };
             const cb: __CpObj_part__anyopaque = .{ .part = @ptrCast((&onPartResponse)) };
             _ = try executeSimpleS3Request(self.ctx.credentials, req_opts, cb, self);
     }
@@ -360,8 +360,8 @@ if ((upload.options.retry > 0)) {
                 const retry_val = upload.options.retry;
                 _ = log("singleSendUploadResponse {} retry", .{ retry_val });
                 upload.options.retry = (upload.options.retry - 1);
-                const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body__anyopaque_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = .{ .path = upload.path, .method = bun.http.Method.PUT, .proxy_url = upload.proxyUrl(), .body = upload.buffered.slice(), .content_type = upload.content_type, .content_disposition = upload.content_disposition, .content_encoding = upload.content_encoding, .acl = upload.acl, .storage_class = upload.storage_class, .request_payer = upload.request_payer };
-                const cb: __CpObj_upload__anyopaque = .{ .upload = @ptrCast((&singleSendUploadResponse)) };
+                const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = upload.path, .method = bun.http.Method.PUT, .proxy_url = upload.proxyUrl(), .body = upload.buffered.slice(), .content_type = upload.content_type, .content_disposition = upload.content_disposition, .content_encoding = upload.content_encoding, .acl = upload.acl, .storage_class = upload.storage_class, .request_payer = upload.request_payer };
+                const cb: __CpObj_upload__anyopaque = .{ .upload = @constCast(@ptrCast((&singleSendUploadResponse))) };
                 _ = try executeSimpleS3Request(upload.credentials, req_opts, cb, upload);
                 return;
             } else {
@@ -589,7 +589,7 @@ pub fn commitMultiPartRequest(self: *MultiPartUpload) JSTerminatedError!void {
             _ = &params_buffer;
             var searchParams = ((bufPrint((&params_buffer), "?uploadId={s}", .{ self.upload_id })) catch unreachable);
             _ = &searchParams;
-            const req_opts: __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body__anyopaque_search_params__anyopaque_request_payer_bool = .{ .path = self.path, .method = bun.http.Method.POST, .proxy_url = self.proxyUrl(), .body = self.multipart_upload_list.slice(), .search_params = searchParams, .request_payer = self.request_payer };
+            const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = self.path, .method = bun.http.Method.POST, .proxy_url = self.proxyUrl(), .body = self.multipart_upload_list.slice(), .search_params = searchParams, .request_payer = self.request_payer };
             const cb: __CpObj_commit__anyopaque = .{ .commit = @ptrCast((&onCommitMultiPartRequest)) };
             _ = try executeSimpleS3Request(self.credentials, req_opts, cb, self);
     }
@@ -672,7 +672,7 @@ pub fn processBuffered(self: *MultiPartUpload, part_size: usize) void {
                 _ = log("processBuffered {s} singlefile_started", .{ self.path });
                 self.state = .singlefile_started;
                 const req_opts = S3SimpleRequest.S3SimpleRequestOptions{ .path = self.path, .method = bun.http.Method.PUT, .proxy_url = self.proxyUrl(), .body = self.buffered.slice(), .content_type = self.content_type, .content_disposition = self.content_disposition, .content_encoding = self.content_encoding, .acl = self.acl, .storage_class = self.storage_class, .request_payer = self.request_payer };
-                const cb: __CpObj_upload__anyopaque = .{ .upload = @ptrCast((&singleSendUploadResponse)) };
+                const cb: __CpObj_upload__anyopaque = .{ .upload = @constCast(@ptrCast((&singleSendUploadResponse))) };
                 _ = (blk_catch_4: { break :blk_catch_4 ((executeSimpleS3Request(self.credentials, req_opts, cb, self)) catch |__ce_4| { _ = &__ce_4;  }); });
             } else {
                 _ = (blk_catch_5: { break :blk_catch_5 ((self.processMultiPart(part_size)) catch |__ce_5| { _ = &__ce_5;  }); });
@@ -803,7 +803,4 @@ const OOMError = bun.OOM;
 const log = Output.scoped(.S3MultiPartUpload, .hidden);
 pub const __CpObj_commit__anyopaque = struct { commit: *anyopaque };
 pub const __CpObj_part__anyopaque = struct { part: *anyopaque };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body__anyopaque_content_type____const_u8_content_disposition____const_u8_content_encoding____const_u8_acl__ACL_storage_class__StorageClass_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: *anyopaque, content_type: ?[]const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, acl: ?ACL, storage_class: ?StorageClass, request_payer: bool };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url____const_u8_body__anyopaque_search_params__anyopaque_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: ?[]const u8, body: *anyopaque, search_params: *anyopaque, request_payer: bool };
-pub const __CpObj_path___const_u8_method__anyopaque_proxy_url__anyopaque_body___const_u8_search_params__anyopaque_request_payer_bool = struct { path: []const u8, method: *anyopaque, proxy_url: *anyopaque, body: []const u8, search_params: *anyopaque, request_payer: bool };
 pub const __CpObj_upload__anyopaque = struct { upload: *anyopaque };

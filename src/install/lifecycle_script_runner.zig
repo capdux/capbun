@@ -224,7 +224,8 @@ pub fn spawnNextScript(self: *LifecycleScriptSubprocess, next_script_index: u8) 
             self.remaining_fds = 0;
             self.started_at = bun.timespec.now(.allow_mocked_time).ns();
             _ = self.manager.active_lifecycle_scripts.insert(self);
-            var spawned = try try bun.spawn.spawnProcess((&spawn_options), @ptrCast((&argv)), self.envp).unwrap();
+            const spawn_res = try bun.spawn.spawnProcess((&spawn_options), @ptrCast((&argv)), self.envp);
+            var spawned = try spawn_res.unwrap();
             _ = &spawned;
             if (comptime Environment.isPosix) {
                 if (spawned.stdout) |stdout| {

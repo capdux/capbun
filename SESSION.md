@@ -3186,3 +3186,5 @@ Options:
 - **[2026-11-20 23:22] Wave 24 D 组验收提交（39 模块全绿，Wave 24 全部 106 模块清仓）**：完成 3 个 `Expr.init` 调用方（`parsePrefix`/`parseImportExport`/`toml`）及 36 个 1 错长尾模块独立验收（39/39 PASS，ratio 0.274x~1.136x）并原子提交；随即运行 Wave 25 全仓 `bun run zig:check`。
 
 - **[2026-11-20 23:29] Wave 25 A 组验收提交（23 模块全绿）**：完成 `CompileTarget`（消除 `Writer.zig` 2 错）、`toml`（消除 `std/mem.zig` `#origin` 错）、AST/Resolver/Router/DevServer/Bundler/CLI/Sourcemap 等 23 模块独立验收（23/23 PASS）并原子提交；记录外部根因 `OutputFile.cp`/`Headers.cp`/`json.cp`/`P.cp` 并补派 D 组扫除。
+
+- **[2026-11-20 23:30] Wave 25 B 组 + C 组验收提交（52 模块全绿）**：完成 Install/JSC/SQL 25 模块及 Runtime/Shell/String/Watcher 27 模块独立验收（52/52 PASS，4 项门禁全绿）并原子提交；记录外部根因 `CompileTarget.defineKeys`、`bundler/options.Loader.fromMimeType` 待 D 组完成后派发 E 组。

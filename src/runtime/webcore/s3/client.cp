@@ -264,7 +264,7 @@ pub fn listObjects(
     );
 
     bun.http.HTTPThread.init(&.{});
-    let batch = ThreadPool.Batch {};
+    let batch: ThreadPool.Batch = .{};
     task.http.schedule(default_allocator, &batch);
     bun.http.http_thread.schedule(batch);
 }
@@ -660,7 +660,7 @@ pub fn downloadStream(
     );
     task.http.enableResponseBodyStreaming();
     bun.http.HTTPThread.init(&.{});
-    let batch = ThreadPool.Batch {};
+    let batch: ThreadPool.Batch = .{};
     task.http.schedule(default_allocator, &batch);
     bun.http.http_thread.schedule(batch);
 }

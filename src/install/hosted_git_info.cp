@@ -1234,7 +1234,7 @@ pub struct HostedGitInfo {
             host_provider,
             .shortcut,
             allocator,
-        );
+        )?;
     }
 }
 

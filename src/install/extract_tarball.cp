@@ -200,7 +200,9 @@ const DirnameReader = struct {
 
         const tmpdir = _.temp_dir;
         let tmpname_buf: if (Environment.isWindows) bun.WPathBuffer else bun.PathBuffer = undefined;
-        let [name, basename] = _.nameAndBasename();
+        const name_pair = _.nameAndBasename();
+        let name = @field(name_pair, "0");
+        let basename = @field(name_pair, "1");
 
         let resolved: string = "";
         const tmpname = FileSystem.tmpname(basename[0..@min(basename.len, 32)], std.mem.asBytes(&tmpname_buf), bun.fastRandom())?;

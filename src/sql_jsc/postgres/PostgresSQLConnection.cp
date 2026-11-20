@@ -1510,7 +1510,7 @@ export struct SocketHandlerSSL {
                     .raw, .values => {},
                 }
 
-                const empty_cells: [0]DataCell.SQLDataCell = [];
+                let empty_cells: [0]DataCell.SQLDataCell = undefined;
                 let putter = DataCell.Putter{
                     list: empty_cells[0..],
                     fields: statement.fields,
@@ -1722,10 +1722,11 @@ export struct SocketHandlerSSL {
                         const iteration_count = cont.iterationCount()?;
 
                         const server_salt_decoded_base64 = bun.base64.decodeAlloc(bun.z_allocator, cont.s) catch |e| {
-                            return switch (e) {
-                                error.DecodingFailed => error.SASL_SIGNATURE_INVALID_BASE64,
-                                else => e,
-                            };
+                            if (e == error.DecodingFailed) {
+                                return error.SASL_SIGNATURE_INVALID_BASE64;
+                            } else {
+                                return e;
+                            }
                         };
                         defer bun.z_allocator.free(server_salt_decoded_base64);
                         this.authentication_state.SASL.computeSaltedPassword(server_salt_decoded_base64, iteration_count, this)?;

@@ -157,7 +157,7 @@ pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const
         next = i + 1;
         if (i == 0) continue;
         const ext = basename[i..];
-        if (value := vm.commonjs_custom_extensions.get(ext)) {
+        if (value := vm.commonjs_custom_extensions.getPtr(ext)) {
             return value;
         }
     }

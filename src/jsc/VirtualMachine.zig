@@ -2779,16 +2779,18 @@ pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, erro
             }
         }
         if ((frames.len > 1)) {
-            for (cp_mut_slice(&frames)) |*frame| {
-                _ = &frame;
-                if (((@intFromPtr((frame.*)) == @intFromPtr(top)) or (frame.*).position.isInvalid())) {
+            var frame_i: usize = 0;
+            _ = &frame_i;
+            while ((frame_i < frames.len)) : (frame_i = (frame_i + 1)) {
+                const frame = (&frames[@as(usize, @intCast(frame_i))]);
+                if (((@intFromPtr(frame) == @intFromPtr(top)) or frame.position.isInvalid())) {
                     continue;
                 }
-                const source_url = (frame.*).source_url.toUTF8(bun.default_allocator);
+                const source_url = frame.source_url.toUTF8(bun.default_allocator);
                 defer {
                 _ = source_url.deinit();
                 }
-                if (client.resolveSourceMapping(source_url.slice(), (frame.*).position.line, (frame.*).position.column, .no_source_contents)) |lookup| {
+                if (client.resolveSourceMapping(source_url.slice(), frame.position.line, frame.position.column, .no_source_contents)) |lookup| {
                     _ = &lookup;
                     defer {
                     if (lookup.source_map) |map| {
@@ -2798,13 +2800,13 @@ pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, erro
                     }
                     if (lookup.displaySourceURLIfNeeded(source_url.slice())) |src| {
                         _ = &src;
-                        _ = (frame.*).source_url.deref();
-                        (frame.*).source_url = src;
+                        _ = frame.source_url.deref();
+                        frame.source_url = src;
                     }
                     const mapping = lookup.mapping;
-                    (frame.*).remapped = true;
-                    (frame.*).position.line = mapping.original.lines;
-                    (frame.*).position.column = mapping.original.columns;
+                    frame.remapped = true;
+                    frame.position.line = mapping.original.lines;
+                    frame.position.column = mapping.original.columns;
                 }
             }
         }
@@ -2823,7 +2825,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
         .js => JSValue,
         .zig_exception => *ZigException,
     }, exception_list: ?*ExceptionList, formatter: *ConsoleObject.Formatter, comptime Writer: type, writer: Writer, comptime allow_ansi_color: bool, comptime allow_side_effects: bool) !void {
-        var exception_holder = (if ((mode == .js)) ZigException.Holder.init() else null);
+        var exception_holder = (if ((mode == .js)) ZigException.Holder.init() else undefined);
         _ = &exception_holder;
         var exception = (if ((mode == .js)) exception_holder.zigException() else error_instance);
         _ = &exception;
@@ -2925,13 +2927,16 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
             var top_frame = (if ((exception.stack.frames_len > 0)) (&exception.stack.frames()[0]) else null);
             _ = &top_frame;
             if (client.hide_bun_stackframes) {
-                for (cp_mut_slice(&exception.stack.frames())) |*frame| {
-                    _ = &frame;
-                    if ((((frame.*).position.isInvalid() or (frame.*).source_url.hasPrefixComptime("bun:")) or (frame.*).source_url.hasPrefixComptime("node:"))) {
+                const stack_frames = exception.stack.frames();
+                var frame_idx: usize = 0;
+                _ = &frame_idx;
+                while ((frame_idx < stack_frames.len)) : (frame_idx = (frame_idx + 1)) {
+                    const frame = (&stack_frames[@as(usize, @intCast(frame_idx))]);
+                    if (((frame.position.isInvalid() or frame.source_url.hasPrefixComptime("bun:")) or frame.source_url.hasPrefixComptime("node:"))) {
                         continue;
                     }
                     top_frame = (blk: {
-                    break :blk @ptrFromInt(@intFromPtr((frame.*)));
+                    break :blk @ptrFromInt(@intFromPtr(frame));
 
 });
                     break;

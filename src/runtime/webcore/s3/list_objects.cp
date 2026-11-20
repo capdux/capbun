@@ -24,7 +24,7 @@ export struct S3ListObjectsOptions {
     _prefix: ZigString.Slice? = null;
     _start_after: ZigString.Slice? = null;
 
-    pub fn release(*_) {
+    pub fn deinit(*_) {
         if (slice := _._continuation_token) slice.deinit();
         if (slice := _._delimiter) slice.deinit();
         if (slice := _._encoding_type) slice.deinit();
@@ -54,7 +54,7 @@ export struct S3ListObjectsContents {
     owner: ObjectOwner? = null;
     restore_status: ObjectRestoreStatus? = null;
 
-    pub fn release(*_) {
+    pub fn deinit(*_) {
         if (*etag := _.etag) etag.deinit();
     }
 }
@@ -73,7 +73,7 @@ export struct S3ListObjectsV2Result {
     common_prefixes: Managed(string)? = null;
     contents: Managed(S3ListObjectsContents)? = null;
 
-    pub fn release(*_) {
+    pub fn deinit(*_) {
         if (contents := _.contents) {
             for (*item of contents.items) item.deinit();
             contents.deinit();
@@ -292,7 +292,7 @@ pub fn parseS3ListObjectsResult(xml: string): !S3ListObjectsV2Result {
                                     if (__tag_end := strings.indexOf(xml[i..], "</ETag>")) {
                                         let input = xml[i .. i + __tag_end];
                                         let size = replacementSize(u8, input, "&quot;", "\"");
-                                        let output: string = default_allocator.alloc(u8, size)?;
+                                        let output: []u8 = default_allocator.alloc(u8, size)?;
                                         let len = replace(u8, input, "&quot;", "\"", output);
 
                                         if (len != 0) {

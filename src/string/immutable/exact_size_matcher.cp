@@ -14,9 +14,9 @@ pub fn ExactSizeMatcher(comptime max_bytes: usize): type {
     );
 
     return struct {
-        pub fn match(str: anytype) T {
+        pub fn match(str: auto): T {
             switch (str.len) {
-                1...max_bytes - 1 => {
+                1..=max_bytes - 1 => {
                     let tmp: [max_bytes]u8 = undefined;
                     @memcpy(tmp[0..str.len], str);
                     @memset(tmp[str.len..], 0);
@@ -35,12 +35,13 @@ pub fn ExactSizeMatcher(comptime max_bytes: usize): type {
             }
         }
 
-        pub fn matchLower(str: anytype) T {
+        pub fn matchLower(str: auto): T {
             switch (str.len) {
-                1...max_bytes - 1 => {
+                1..=max_bytes - 1 => {
                     let tmp: [max_bytes]u8 = undefined;
-                    for (str, 0..) |char, i| {
-                        tmp[i] = std.ascii.toLower(char);
+                    let i: usize = 0;
+                    while (i < str.len) : (i += 1) {
+                        tmp[i] = std.ascii.toLower(str[i]);
                     }
                     @memset(tmp[str.len..], 0);
                     return std.mem.readInt(T, &tmp, .little);

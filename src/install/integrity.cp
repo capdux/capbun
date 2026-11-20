@@ -43,13 +43,18 @@ pub enum IntegrityTag: u8 {
             return .{ IntegrityTag.unknown, 0 };
         }
 
-        return switch (Matcher.match(buf[0..i])) {
-            Matcher.case("sha1") => .{ IntegrityTag.sha1, i + 1 },
-            Matcher.case("sha256") => .{ IntegrityTag.sha256, i + 1 },
-            Matcher.case("sha384") => .{ IntegrityTag.sha384, i + 1 },
-            Matcher.case("sha512") => .{ IntegrityTag.sha512, i + 1 },
-            else => .{ IntegrityTag.unknown, 0 },
-        };
+        const matched = Matcher.match(buf[0..i]);
+        if (matched == Matcher.case("sha1")) {
+            return .{ IntegrityTag.sha1, i + 1 };
+        } else if (matched == Matcher.case("sha256")) {
+            return .{ IntegrityTag.sha256, i + 1 };
+        } else if (matched == Matcher.case("sha384")) {
+            return .{ IntegrityTag.sha384, i + 1 };
+        } else if (matched == Matcher.case("sha512")) {
+            return .{ IntegrityTag.sha512, i + 1 };
+        } else {
+            return .{ IntegrityTag.unknown, 0 };
+        }
     }
 
     @inline pub fn digestLen(): usize {
@@ -198,7 +203,9 @@ pub const Streaming = IntegrityStreaming;
         }
 
         let out: [MAX_DIGEST_BUF_LEN]u8 = empty_digest_buf;
-        let [tag, offset] = IntegrityTag.parse(buf);
+        const parsed = IntegrityTag.parse(buf);
+        let tag = @field(parsed, "0");
+        let offset = @field(parsed, "1");
         if (tag == IntegrityTag.unknown) {
             return Integrity{
                 tag: IntegrityTag.unknown,

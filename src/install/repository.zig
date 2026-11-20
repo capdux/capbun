@@ -269,7 +269,7 @@ pub fn format(self: TopFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!vo
                 if ((!self.repository.committish.isEmpty())) {
                     _ = try writer.writeAll("#");
                     const committish_slice_fn = String.slice;
-                    _ = try writer.writeAll(committish_slice_fn(self.repository.committish, self.buf));
+                    _ = try writer.writeAll(committish_slice_fn((&self.repository.committish), self.buf));
                 }
             }
     }
@@ -558,8 +558,7 @@ pub fn download(allocator: std.mem.Allocator, env: DotEnv.Map, log: *logger.Log,
     }
 
 pub fn findCommit(allocator: std.mem.Allocator, env: *DotEnv.Loader, log: *logger.Log, repo_dir: std.fs.Dir, name: []const u8, committish: []const u8, task_id: Install.Task.Id) ![]const u8 {
-            const fmt_args: struct { *anyopaque } = .{ bun.fmt.hexIntLower(task_id.get()) };
-            const printed = try std.fmt.bufPrint((&tl_bufs.get().folder_name_buf), "{f}.git", fmt_args);
+            const printed = try std.fmt.bufPrint((&tl_bufs.get().folder_name_buf), "{f}.git", .{ bun.fmt.hexIntLower(task_id.get()) });
             const path_parts: [1][]const u8 = .{ printed };
             const path = Path.joinAbsString(PackageManager.get().cache_directory_path, (&path_parts), .auto);
             _ = &repo_dir;

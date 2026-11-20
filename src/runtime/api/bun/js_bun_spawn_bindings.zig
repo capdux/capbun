@@ -367,7 +367,7 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
                     var envp_managed = env_array.toManaged(allocator);
                     _ = &envp_managed;
                     _ = try appendEnvpFromJS(globalThis, object, (&envp_managed), (blk: {
-                    break :blk @ptrCast(new_path_buf.ptr);
+                    break :blk @ptrCast((&new_path_buf));
 
 }));
                     env_array = envp_managed.moveToUnmanaged();

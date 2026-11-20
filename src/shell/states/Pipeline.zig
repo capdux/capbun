@@ -118,15 +118,15 @@ else => true,
             _ = &c;
             (c.*) = .{ .result = 0 };
         }
-        var pipes = bun.handleOom(self.base.allocator().alloc(Pipe, (if ((cmd_count > 1)) (cmd_count - 1) else 1)));
-        _ = &pipes;
-        self.pipes = pipes;
+        var pipes_slice = bun.handleOom(self.base.allocator().alloc(Pipe, (if ((cmd_count > 1)) (cmd_count - 1) else 1)));
+        _ = &pipes_slice;
+        self.pipes = pipes_slice;
         if ((cmd_count > 1)) {
             var pipes_set: u32 = 0;
             _ = &pipes_set;
-            if (Pipeline.initializePipes(pipes, (&pipes_set)).asErr()) |err_val| {
+            if (Pipeline.initializePipes(pipes_slice, (&pipes_set)).asErr()) |err_val| {
                 _ = &err_val;
-                for (cp_mut_slice(&pipes[0..pipes_set])) |*pipe| {
+                for (cp_mut_slice(&pipes_slice[0..pipes_set])) |*pipe| {
                     _ = &pipe;
                     _ = closefd((pipe.*)[0]);
                     _ = closefd((pipe.*)[1]);
@@ -147,8 +147,8 @@ else => true,
 .@"if", .cmd, .condexpr, .subshell => {
 var cmd_io = self.getIO();
             _ = &cmd_io;
-            const stdin = (if ((cmd_count > 1)) Pipeline.readPipe(pipes, i, (&cmd_io), evtloop) else cmd_io.stdin.ref());
-            const stdout = (if ((cmd_count > 1)) Pipeline.writePipe(pipes, i, cmd_count, (&cmd_io), evtloop) else cmd_io.stdout.ref());
+            const stdin = (if ((cmd_count > 1)) Pipeline.readPipe(pipes_slice, i, (&cmd_io), evtloop) else cmd_io.stdin.ref());
+            const stdout = (if ((cmd_count > 1)) Pipeline.writePipe(pipes_slice, i, cmd_count, (&cmd_io), evtloop) else cmd_io.stdout.ref());
             cmd_io.stdin = stdin;
             cmd_io.stdout = stdout;
             _ = cmd_io.stderr.ref();
@@ -158,12 +158,12 @@ var cmd_io = self.getIO();
 {
                 _ = cmd_io.deref();
                 if ((cmd_count > 1)) {
-                    for (cp_iter_slice(pipes[i..])) |p| {
+                    for (cp_iter_slice(pipes_slice[i..])) |p| {
                         _ = &p;
                         _ = closefd(p[0]);
                     }
-                    const w_start = @min((i + 1), @as(u32, @intCast((pipes).?.len)));
-                    for (cp_iter_slice(pipes[w_start..])) |p| {
+                    const w_start = @min((i + 1), @as(u32, @intCast(pipes_slice.len)));
+                    for (cp_iter_slice(pipes_slice[w_start..])) |p| {
                         _ = &p;
                         _ = closefd(p[1]);
                     }

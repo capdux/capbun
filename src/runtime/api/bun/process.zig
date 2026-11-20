@@ -789,7 +789,8 @@ pub const PosixSpawnOptions = struct {
     pseudoconsole: void = undefined,
     linux_pdeathsig: ?u8 = null,
 
-pub fn deinit() void {
+pub fn deinit(self: PosixSpawnOptions) void {
+            _ = self.stdin;
     }
     pub const Stdio = union(enum) {
             path: []const u8,
@@ -2100,7 +2101,7 @@ pub fn spawnProcess(options: *const SpawnOptions, argv: [*:null]OptCStr, envp: [
         }
 }
 
-pub fn spawnProcessPosix(options: *const PosixSpawnOptions, argv: ?[*:null][*:0]const u8, envp: ?[*:null][*:0]const u8) !bun.sys.Maybe(PosixSpawnResult) {
+pub fn spawnProcessPosix(options: *const PosixSpawnOptions, argv: [*:null]OptCStr, envp: [*:null]OptCStr) !bun.sys.Maybe(PosixSpawnResult) {
         bun.analytics.Features.spawn = (bun.analytics.Features.spawn + 1);
         var actions = try PosixSpawn.Actions.init();
         _ = &actions;

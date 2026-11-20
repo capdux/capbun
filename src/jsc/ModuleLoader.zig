@@ -692,7 +692,10 @@ pub fn Bun__transpileFile(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject
                 @branchHint(.unlikely);
                 if (node_module_module.findLongestRegisteredExtension(jsc_vm, _specifier.slice())) |entry| {
                     _ = &entry;
-                    switch (entry) {
+                    switch ((blk: {
+                    break :blk entry.*;
+
+})) {
 .loader => |loader| {
 lr.loader = loader;
 },
@@ -767,7 +770,10 @@ ret.* = jsc.ErrorableResolvedSource.ok(ResolvedSource{ .allocator = null, .sourc
                     @branchHint(.unlikely);
                     if (node_module_module.findLongestRegisteredExtension(jsc_vm, lr.path.text)) |entry| {
                         _ = &entry;
-                        switch (entry) {
+                        switch ((blk: {
+                        break :blk entry.*;
+
+})) {
 .loader => |loader| {
 break :loader loader;
 },

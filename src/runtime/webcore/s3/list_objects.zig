@@ -66,7 +66,7 @@ pub const S3ListObjectsOptions = struct {
     _prefix: ?ZigString.Slice = null,
     _start_after: ?ZigString.Slice = null,
 
-pub fn release(self: *S3ListObjectsOptions) void {
+pub fn deinit(self: *S3ListObjectsOptions) void {
             if (self._continuation_token) |slice| {
                 _ = &slice;
                 _ = slice.deinit();
@@ -111,7 +111,7 @@ pub const S3ListObjectsContents = struct {
     owner: ?ObjectOwner = null,
     restore_status: ?ObjectRestoreStatus = null,
 
-pub fn release(self: *S3ListObjectsContents) void {
+pub fn deinit(self: *S3ListObjectsContents) void {
             if (self.etag) |*etag| {
                 _ = &etag;
                 _ = (etag.*).deinit();
@@ -133,7 +133,7 @@ pub const S3ListObjectsV2Result = struct {
     common_prefixes: ?Managed(string) = null,
     contents: ?Managed(S3ListObjectsContents) = null,
 
-pub fn release(self: *S3ListObjectsV2Result) void {
+pub fn deinit(self: *S3ListObjectsV2Result) void {
             if (self.contents) |contents| {
                 _ = &contents;
                 for (contents.items) |*item| {
@@ -150,8 +150,7 @@ pub fn release(self: *S3ListObjectsV2Result) void {
 
 pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError!JSValue {
             var jsResult = JSValue.createEmptyObject(globalObject, 0);
-            var __jsResult_moved = false; _ = &__jsResult_moved;
-            defer if (!__jsResult_moved) { const __T = @TypeOf(jsResult); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsResult.release() catch {}; } else { jsResult.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsResult; _drop_val.release(); } };
+            _ = &jsResult;
             if (self.name) |name| {
                 _ = &name;
                 _ = jsResult.put(globalObject, ZigString.static("name"), try BunString.createUTF8ForJS(globalObject, name));
@@ -195,15 +194,13 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
             if (self.contents) |contents| {
                 _ = &contents;
                 var jsContents = try JSValue.createEmptyArray(globalObject, contents.items.len);
-                var __jsContents_moved = false; _ = &__jsContents_moved;
-                defer if (!__jsContents_moved) { const __T = @TypeOf(jsContents); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsContents.release() catch {}; } else { jsContents.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsContents; _drop_val.release(); } };
+                _ = &jsContents;
                 var i: usize = 0;
                 _ = &i;
                 for (contents.items) |item| {
                     _ = &item;
                     var objectInfo = JSValue.createEmptyObject(globalObject, 0);
-                    var __objectInfo_moved = false; _ = &__objectInfo_moved;
-                    defer if (!__objectInfo_moved) { const __T = @TypeOf(objectInfo); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = objectInfo.release() catch {}; } else { objectInfo.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = objectInfo; _drop_val.release(); } };
+                    _ = &objectInfo;
                     _ = objectInfo.put(globalObject, ZigString.static("key"), try BunString.createUTF8ForJS(globalObject, item.key));
                     if (item.etag) |etag| {
                         _ = &etag;
@@ -232,8 +229,7 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
                     if (item.owner) |owner| {
                         _ = &owner;
                         var jsOwner = JSValue.createEmptyObject(globalObject, 0);
-                        var __jsOwner_moved = false; _ = &__jsOwner_moved;
-                        defer if (!__jsOwner_moved) { const __T = @TypeOf(jsOwner); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsOwner.release() catch {}; } else { jsOwner.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsOwner; _drop_val.release(); } };
+                        _ = &jsOwner;
                         if (owner.id) |id| {
                             _ = &id;
                             _ = jsOwner.put(globalObject, ZigString.static("id"), try BunString.createUTF8ForJS(globalObject, id));
@@ -252,22 +248,19 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
             if (self.common_prefixes) |common_prefixes| {
                 _ = &common_prefixes;
                 var jsCommonPrefixes = try JSValue.createEmptyArray(globalObject, common_prefixes.items.len);
-                var __jsCommonPrefixes_moved = false; _ = &__jsCommonPrefixes_moved;
-                defer if (!__jsCommonPrefixes_moved) { const __T = @TypeOf(jsCommonPrefixes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsCommonPrefixes.release() catch {}; } else { jsCommonPrefixes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsCommonPrefixes; _drop_val.release(); } };
+                _ = &jsCommonPrefixes;
                 var i: usize = 0;
                 _ = &i;
                 for (common_prefixes.items) |cp_prefix| {
                     _ = &cp_prefix;
                     var jsPrefix = JSValue.createEmptyObject(globalObject, 0);
-                    var __jsPrefix_moved = false; _ = &__jsPrefix_moved;
-                    defer if (!__jsPrefix_moved) { const __T = @TypeOf(jsPrefix); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsPrefix.release() catch {}; } else { jsPrefix.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsPrefix; _drop_val.release(); } };
+                    _ = &jsPrefix;
                     _ = jsPrefix.put(globalObject, ZigString.static("prefix"), try BunString.createUTF8ForJS(globalObject, cp_prefix));
                     _ = try jsCommonPrefixes.putIndex(globalObject, @intCast(i), jsPrefix);
                     i = (i + 1);
                 }
                 _ = jsResult.put(globalObject, ZigString.static("commonPrefixes"), jsCommonPrefixes);
             }
-            __jsResult_moved = true;
             return jsResult;
     }
 };
@@ -283,14 +276,11 @@ const replacementSize = std.mem.replacementSize;
 
 pub fn parseS3ListObjectsResult(xml: []const u8) !S3ListObjectsV2Result {
         var result = S3ListObjectsV2Result{ .contents = null, .common_prefixes = null, .continuation_token = null, .delimiter = null, .encoding_type = null, .is_truncated = null, .key_count = null, .max_keys = null, .name = null, .next_continuation_token = null, .prefix = null, .start_after = null };
-        var __result_moved = false; _ = &__result_moved;
-        defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
+        _ = &result;
         var contents = Managed(S3ListObjectsContents).init(default_allocator);
-        var __contents_moved = false; _ = &__contents_moved;
-        defer if (!__contents_moved) { const __T = @TypeOf(contents); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = contents.release() catch {}; } else { contents.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = contents; _drop_val.release(); } };
+        _ = &contents;
         var common_prefixes = Managed(string).init(default_allocator);
-        var __common_prefixes_moved = false; _ = &__common_prefixes_moved;
-        defer if (!__common_prefixes_moved) { const __T = @TypeOf(common_prefixes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = common_prefixes.release() catch {}; } else { common_prefixes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = common_prefixes; _drop_val.release(); } };
+        _ = &common_prefixes;
         if (strings.indexOf(xml, "<ListBucketResult")) |delete_result_pos| {
             _ = &delete_result_pos;
             var i: usize = 0;
@@ -398,13 +388,11 @@ pub fn parseS3ListObjectsResult(xml: []const u8) !S3ListObjectsV2Result {
                                                                         var input = xml[i..(i + __tag_end)];
                                                                         _ = &input;
                                                                         var size = replacementSize(u8, input, "&quot;", "\"");
-                                                                        var __size_moved = false; _ = &__size_moved;
-                                                                        defer if (!__size_moved) { const __T = @TypeOf(size); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = size.release() catch {}; } else { size.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = size; _drop_val.release(); } };
-                                                                        var output: []const u8 = try default_allocator.alloc(u8, size);
+                                                                        _ = &size;
+                                                                        var output: []u8 = try default_allocator.alloc(u8, size);
                                                                         _ = &output;
                                                                         var len = replace(u8, input, "&quot;", "\"", output);
-                                                                        var __len_moved = false; _ = &__len_moved;
-                                                                        defer if (!__len_moved) { const __T = @TypeOf(len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = len.release() catch {}; } else { len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = len; _drop_val.release(); } };
+                                                                        _ = &len;
                                                                         if ((len != 0)) {
                                                                             etag = output[0..(input.len - (len * 5))];
                                                                             etag_owned = true;
@@ -512,8 +500,7 @@ pub fn parseS3ListObjectsResult(xml: []const u8) !S3ListObjectsV2Result {
                                 restore_status = ObjectRestoreStatus{ .is_restore_in_progress = is_restore_in_progress, .restore_expiry_date = restore_expiry_date };
                             }
                             var etag_val = (if ((etag != null)) (if (etag_owned) ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(etag.?, .init()) else ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(etag.?, .initBorrowed())) else null);
-                            var __etag_val_moved = false; _ = &__etag_val_moved;
-                            defer if (!__etag_val_moved) { const __T = @TypeOf(etag_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = etag_val.release() catch {}; } else { etag_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = etag_val; _drop_val.release(); } };
+                            _ = &etag_val;
                             _ = try contents.append(S3ListObjectsContents{ .key = object_key_val, .etag = etag_val, .checksum_type = checksum_type, .checksum_algorithme = checksum_algorithme, .last_modified = last_modified, .object_size = object_size, .storage_class = storage_class, .owner = owner, .restore_status = restore_status });
                         }
                     } else {
@@ -656,24 +643,20 @@ pub fn parseS3ListObjectsResult(xml: []const u8) !S3ListObjectsV2Result {
                 _ = common_prefixes.deinit();
             }
         }
-        __result_moved = true;
         return result;
 }
 
 pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSValue) !S3ListObjectsOptions {
         var listObjectsOptions = S3ListObjectsOptions{ .continuation_token = null, .delimiter = null, .encoding_type = null, .fetch_owner = null, .max_keys = null, .prefix = null, .start_after = null, ._continuation_token = null, ._delimiter = null, ._encoding_type = null, ._prefix = null, ._start_after = null };
-        var __listObjectsOptions_moved = false; _ = &__listObjectsOptions_moved;
-        defer if (!__listObjectsOptions_moved) { const __T = @TypeOf(listObjectsOptions); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = listObjectsOptions.release() catch {}; } else { listObjectsOptions.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = listObjectsOptions; _drop_val.release(); } };
+        _ = &listObjectsOptions;
         if ((!listOptions.isObject())) {
-            __listObjectsOptions_moved = true;
             return listObjectsOptions;
         }
         if (try listOptions.getTruthyComptime(globalThis, "continuationToken")) |val| {
             _ = &val;
             if (val.isString()) {
                 var str = try BunString.fromJS(val, globalThis);
-                var __str_moved = false; _ = &__str_moved;
-                defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                _ = &str;
                 if (((str.tag != .Empty) and (str.tag != .Dead))) {
                     listObjectsOptions._continuation_token = str.toUTF8(default_allocator);
                     listObjectsOptions.continuation_token = listObjectsOptions._continuation_token.?.slice();
@@ -684,8 +667,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
             _ = &val;
             if (val.isString()) {
                 var str = try BunString.fromJS(val, globalThis);
-                var __str_moved = false; _ = &__str_moved;
-                defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                _ = &str;
                 if (((str.tag != .Empty) and (str.tag != .Dead))) {
                     listObjectsOptions._delimiter = str.toUTF8(default_allocator);
                     listObjectsOptions.delimiter = listObjectsOptions._delimiter.?.slice();
@@ -696,8 +678,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
             _ = &val;
             if (val.isString()) {
                 var str = try BunString.fromJS(val, globalThis);
-                var __str_moved = false; _ = &__str_moved;
-                defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                _ = &str;
                 if (((str.tag != .Empty) and (str.tag != .Dead))) {
                     listObjectsOptions._encoding_type = str.toUTF8(default_allocator);
                     listObjectsOptions.encoding_type = listObjectsOptions._encoding_type.?.slice();
@@ -718,8 +699,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
             _ = &val;
             if (val.isString()) {
                 var str = try BunString.fromJS(val, globalThis);
-                var __str_moved = false; _ = &__str_moved;
-                defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                _ = &str;
                 if (((str.tag != .Empty) and (str.tag != .Dead))) {
                     listObjectsOptions._prefix = str.toUTF8(default_allocator);
                     listObjectsOptions.prefix = listObjectsOptions._prefix.?.slice();
@@ -730,14 +710,12 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
             _ = &val;
             if (val.isString()) {
                 var str = try BunString.fromJS(val, globalThis);
-                var __str_moved = false; _ = &__str_moved;
-                defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                _ = &str;
                 if (((str.tag != .Empty) and (str.tag != .Dead))) {
                     listObjectsOptions._start_after = str.toUTF8(default_allocator);
                     listObjectsOptions.start_after = listObjectsOptions._start_after.?.slice();
                 }
             }
         }
-        __listObjectsOptions_moved = true;
         return listObjectsOptions;
 }

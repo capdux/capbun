@@ -279,7 +279,10 @@ pub fn run(self: *FilesContext) std.mem.Allocator.Error!Result {
             }
             var entry_buf: [1]*lib.Archive.Entry = .{ undefined };
             _ = &entry_buf;
-            while ((archive.readNextHeader(entry_buf.ptr) == .ok)) {
+            while ((archive.readNextHeader((blk: {
+            break :blk (&entry_buf);
+
+})) == .ok)) {
                 const entry = entry_buf[0];
                 if ((entry.filetype() != @intFromEnum(lib.FileType.regular))) {
                     continue;
@@ -605,7 +608,10 @@ pub fn countFilesInArchive(data: []const u8) u32 {
         _ = &count;
         var entry_buf: [1]*libarchive.lib.Archive.Entry = .{ undefined };
         _ = &entry_buf;
-        while ((archive.readNextHeader(entry_buf.ptr) == .ok)) {
+        while ((archive.readNextHeader((blk: {
+        break :blk (&entry_buf);
+
+})) == .ok)) {
             const entry = entry_buf[0];
             if ((entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular))) {
                 count = (count + 1);
@@ -729,7 +735,10 @@ pub fn extractToDiskFiltered(file_buffer: []const u8, root: []const u8, glob_pat
         _ = &count;
         var entry_buf: [1]*lib.Archive.Entry = .{ undefined };
         _ = &entry_buf;
-        while ((archive.readNextHeader(entry_buf.ptr) == .ok)) {
+        while ((archive.readNextHeader((blk: {
+        break :blk (&entry_buf);
+
+})) == .ok)) {
             const entry = entry_buf[0];
             const pathname = entry.pathnameUtf8();
             if ((!isSafePath(pathname))) {

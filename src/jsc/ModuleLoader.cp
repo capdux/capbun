@@ -916,7 +916,7 @@ pub export fn Bun__transpileFile(
     } else if (is_commonjs_require && jsc_vm.has_mutated_built_in_extensions > 0) {
         @branchHint(.unlikely);
         if (entry := node_module_module.findLongestRegisteredExtension(jsc_vm, _specifier.slice())) {
-            switch (entry) {
+            switch (unsafe { entry.* }) {
                 .loader loader => {
                     lr.loader = loader;
                 },
@@ -1046,7 +1046,7 @@ pub export fn Bun__transpileFile(
                 {
                     @branchHint(.unlikely);
                     if (entry := node_module_module.findLongestRegisteredExtension(jsc_vm, lr.path.text)) {
-                        switch (entry) {
+                        switch (unsafe { entry.* }) {
                             .loader loader => break :loader loader,
                             .custom strong => {
                                 ret.* = jsc.ErrorableResolvedSource.ok(ResolvedSource{

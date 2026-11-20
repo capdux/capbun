@@ -344,7 +344,8 @@ fn step(client: *TarballStream)! {
             .done => { return; },
             .want_header => {
                 let entry: *lib.Archive.Entry = undefined;
-                switch (archive.readNextHeader(unsafe { &entry })) {
+                const entry_ptr = unsafe { &entry };
+                switch (archive.readNextHeader(entry_ptr)) {
                     .retry => { return; },
                     .eof => {
                         client.phase = .done;

@@ -509,7 +509,7 @@ defer {
             _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
             if (log_level.showProgress()) {
                 if ((!has_updated_this_run)) {
-                    _ = manager.setNodeName(manager.downloads_node.?, (if (@typeInfo(@TypeOf(manifest)) == .@"enum" or @typeInfo(@TypeOf(manifest)) == .@"union") @tagName(manifest) else manifest.name)(), ProgressStrings.download_emoji, true);
+                    _ = manager.setNodeName(manager.downloads_node.?, manifest.name(), ProgressStrings.download_emoji, true);
                     has_updated_this_run = true;
                 }
             }
@@ -855,7 +855,7 @@ pub fn flushDependencyQueue(client: *PackageManager) void {
 
 pub fn scheduleTasks(manager: *PackageManager) usize {
         const count = ((((manager.task_batch.len + manager.network_resolve_batch.len) + manager.network_tarball_batch.len) + manager.patch_apply_batch.len) + manager.patch_calc_hash_batch.len);
-        _ = manager.incrementPendingTasks((if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(i32, @intFromEnum(count)) else cp_cast_int(i32, count)));
+        _ = manager.incrementPendingTasks(@as(u32, @intCast(count)));
         _ = manager.thread_pool.schedule(manager.patch_apply_batch);
         _ = manager.thread_pool.schedule(manager.patch_calc_hash_batch);
         _ = manager.thread_pool.schedule(manager.task_batch);

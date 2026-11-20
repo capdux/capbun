@@ -351,8 +351,9 @@ _ = unreachable;
             if (is_done) {
                 const err: ?JSValue = brk_err: {
                 if ((stream == .err)) {
-                    const js_err = undefined;
-                    const was_strong = stream.err.toJSWeak(self.globalThis);
+                    const weak_pair = stream.err.toJSWeak(self.globalThis);
+                    const js_err = weak_pair[0];
+                    const was_strong = weak_pair[1];
                     _ = js_err.ensureStillAlive();
                     if ((was_strong == .Strong)) {
                         _ = js_err.unprotect();

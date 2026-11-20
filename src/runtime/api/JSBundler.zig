@@ -32,7 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 comptime {
     _ = BundlerResolve.JSBundlerPlugin__onResolveAsync;
     _ = BundlerLoad.JSBundlerPlugin__onLoadAsync;
@@ -230,7 +229,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, files_value: jsc.JSValue) JSError
             defer {
             _ = files_iter.deinit();
             }
-            _ = try file_map.map.ensureTotalCapacity(bun.default_allocator, (if (comptime @typeInfo(@TypeOf(files_iter.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(files_iter.len)) else cp_cast_int(i32, files_iter.len)));
+            _ = try file_map.map.ensureTotalCapacity(bun.default_allocator, @intCast(files_iter.len));
             while (try files_iter.next()) |prop| {
                 const property_value = (if (@typeInfo(@TypeOf(files_iter)) == .@"enum") @intFromEnum(files_iter) else files_iter.value);
                 const maybe_blob_or_string = try jsc.Node.BlobOrStringOrBuffer.fromJSAsync(globalThis, bun.default_allocator, property_value);
@@ -274,7 +273,14 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, allocator: s
             _ = opts.deinit();
             }
             const object = brk: {
-            const compile_value = ((try config.getTruthy(globalThis, "compile")) orelse { return .{ .ok = null }; });
+            var compile_value: JSValue = undefined;
+            _ = &compile_value;
+            if (try config.getTruthy(globalThis, "compile")) |v| {
+                _ = &v;
+                compile_value = v;
+            } else {
+                return null;
+            }
             if (compile_value.isBoolean()) {
                 if ((compile_value == .false)) {
                     return null;

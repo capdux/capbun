@@ -211,8 +211,8 @@ pub fn prepareAndQueryWithSignature(
     signature: *Signature,
 ): AnyPostgresError!void {
     writeQuery(query, signature.prepared_statement_name, signature.fields, Context, writer)?;
-    const empty_params: [0]int4 = std.mem.zeroes([0]int4);
-    const empty_fields: [0]protocol.FieldDescription = std.mem.zeroes([0]protocol.FieldDescription);
+    const empty_params: [0]int4 = [];
+    const empty_fields: [0]protocol.FieldDescription = [];
     writeBind(signature.prepared_statement_name, bun.String.empty, globalObject, array_value, .zero, &empty_params, &empty_fields, Context, writer)?;
     let exec = protocol.Execute{
         p: { prepared_statement: signature.prepared_statement_name },

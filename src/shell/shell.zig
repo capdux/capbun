@@ -2404,10 +2404,7 @@ return null;
                 return AST.Atom.new_simple(atoms.items[0]);
             }
 },
-else => compound: {
-            break :compound atoms;
-
-},
+else => AST.Atom{ .compound = .{ .atoms = atoms.items[0..atoms.items.len], .brace_expansion_hint = ((has_brace_open and has_brace_close) and has_comma), .glob_hint = has_glob_syntax } },
 });
     }
 

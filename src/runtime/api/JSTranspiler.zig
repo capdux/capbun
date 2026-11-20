@@ -555,15 +555,18 @@ pub fn then(self: *TransformTask, promise: *jsc.JSPromise) bun.JSTerminated!void
             _ = self.deinit();
             }
             if ((self.log.hasAny() or (self.e != null))) {
-                const error_value: bun.JSError!JSValue = .{ .ok = brk: {
+                var error_value: bun.JSError!JSValue = .{ .ok = undefined };
+                _ = &error_value;
                 if (self.e) |e| {
                     _ = &e;
                     if ((!self.log.hasAny())) {
-                        break :brk bun.api.BuildMessage.create(self.global, bun.default_allocator, logger.Msg{ .data = logger.Data{ .text = bun.asByteSlice(@errorName(e)) } });
+                        error_value = bun.api.BuildMessage.create(self.global, bun.default_allocator, logger.Msg{ .data = logger.Data{ .text = bun.asByteSlice(@errorName(e)) } });
+                    } else {
+                        error_value = self.log.toJS(self.global, bun.default_allocator, "Transform failed");
                     }
+                } else {
+                    error_value = self.log.toJS(self.global, bun.default_allocator, "Transform failed");
                 }
-                break :brk self.log.toJS(self.global, bun.default_allocator, "Transform failed");
-} };
                 _ = try promise.rejectWithAsyncStack(self.global, error_value);
                 return;
             }

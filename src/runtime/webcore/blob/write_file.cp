@@ -29,7 +29,7 @@ const log = Output.scoped(.WriteFile, .hidden);
 const bloblog = Output.scoped(.WriteFile, .hidden);
 
 export const WriteFileResultType = SystemError.Maybe(SizeType);
-export type WriteFileOnWriteFileCallback = *const fn (ctx: *!, count: WriteFileResultType) anyerror!void;
+export type WriteFileOnWriteFileCallback = *const fn (ctx: *!, count: WriteFileResultType) void!bun.JSTerminated;
 export const WriteFileTask = WorkTask(WriteFile);
 
 export class WriteFile {

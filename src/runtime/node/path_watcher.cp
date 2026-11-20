@@ -698,7 +698,7 @@ struct Linux {
                     else
                         bun.path.joinStringBuf(&path_buf, &[ owner.subpath, name ], .posix);
 
-                    watcher.emit(event_type, rel, !is_dir_child && !(ev.mask & (IN.DELETE_SELF | IN.MOVE_SELF) != 0 && !watcher.is_file));
+                    watcher.emit(event_type, rel, !is_dir_child && !(((ev.mask & (IN.DELETE_SELF | IN.MOVE_SELF)) != 0) && !watcher.is_file));
                     * = bun.handleOom(touched.getOrPut(bun.default_allocator, watcher));
 
                     // Recursive: a new directory appeared under this owner's tree —

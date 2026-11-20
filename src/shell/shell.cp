@@ -1946,7 +1946,7 @@ pub const Parser = struct {
                 if (bun.Environment.allow_assert) assert(atoms.capacity == 1);
                 return AST.Atom.new_simple(atoms.items[0]);
             },
-            else => { compound: {
+            else => AST.Atom{ compound: {
                 atoms: atoms.items[0..atoms.items.len],
                 brace_expansion_hint: has_brace_open && has_brace_close && has_comma,
                 glob_hint: has_glob_syntax,

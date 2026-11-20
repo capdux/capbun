@@ -80,7 +80,10 @@ pub const AnyRoute = union(enum) {
     fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext): (AnyRoute?) ! bun.JSError {
         if (!argument.isObject()) return null;
 
-        const path_val = (argument.get(init_ctx.global, "path")?) orelse return null;
+        let path_val: jsc.JSValue = undefined;
+        if (v := argument.get(init_ctx.global, "path")?) {
+            path_val = v;
+        } else return null;
         let path_string = bun.String.fromJS(path_val, init_ctx.global)?;
         defer path_string.deref();
         let path = jsc.Node.PathOrFileDescriptor{ .path = try jsc.Node.PathLike.fromBunString(init_ctx.global, &path_string, false, bun.default_allocator) };

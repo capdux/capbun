@@ -491,7 +491,7 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
         task.proxy_url = (if ((proxy.len > 0)) handleOom(default_allocator.dupe(u8, proxy)) else "");
         task.http = bun.http.AsyncHTTP.init(default_allocator, .GET, url, task.headers.entries, task.headers.buf.items, (&task.response_buffer), "", bun.http.HTTPClientResult.Callback.New(*S3HttpSimpleTask, S3HttpSimpleTask.httpCallback).init(task), .follow, .{ .http_proxy = (if ((task.proxy_url.len > 0)) URL.parse(task.proxy_url) else null), .verbose = task.vm.getVerboseFetch(), .reject_unauthorized = task.vm.getTLSRejectUnauthorized() });
         _ = bun.http.HTTPThread.init((&.{}));
-        var batch = ThreadPool.Batch;
+        var batch: ThreadPool.Batch = .{};
         _ = &batch;
         _ = task.http.schedule(default_allocator, (&batch));
         _ = bun.http.http_thread.schedule(batch);
@@ -639,7 +639,7 @@ pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         task.http = bun.http.AsyncHTTP.init(default_allocator, .GET, url, task.headers.entries, task.headers.buf.items, (&task.response_buffer), "", bun.http.HTTPClientResult.Callback.New(*S3HttpDownloadStreamingTask, S3HttpDownloadStreamingTask.httpCallback).init(task), .follow, .{ .http_proxy = (if ((owned_proxy.len > 0)) URL.parse(owned_proxy) else null), .verbose = task.vm.getVerboseFetch(), .signals = task.signals, .reject_unauthorized = task.vm.getTLSRejectUnauthorized() });
         _ = task.http.enableResponseBodyStreaming();
         _ = bun.http.HTTPThread.init((&.{}));
-        var batch = ThreadPool.Batch;
+        var batch: ThreadPool.Batch = .{};
         _ = &batch;
         _ = task.http.schedule(default_allocator, (&batch));
         _ = bun.http.http_thread.schedule(batch);

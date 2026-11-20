@@ -3,14 +3,14 @@ pub union(enum) PortalOrPreparedStatement {
     prepared_statement: []const u8,
 
     pub fn slice(): []const u8 {
-        return switch (_.*) {
+        return switch (_) {
             .portal => _.portal,
             .prepared_statement => _.prepared_statement,
         };
     }
 
     pub fn tag(): u8 {
-        return switch (_.*) {
+        return switch (_) {
             .portal => 'P',
             .prepared_statement => 'S',
         };

@@ -1879,7 +1879,7 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
                 var dest_path_stream_writer = dest_path_stream.writer();
                 _ = &dest_path_stream_writer;
                 const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
-                const hex_timestamp: usize = (if (comptime @typeInfo(@TypeOf(@max(std.time.milliTimestamp(), 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(std.time.milliTimestamp(), 0))) else cp_cast_int(i32, @max(std.time.milliTimestamp(), 0)));
+                const hex_timestamp = @as(usize, @intCast(@max(std.time.milliTimestamp(), 0)));
                 const hex_timestamp_fmt = bun.fmt.hexIntLower(hex_timestamp);
                 _ = try dest_path_stream_writer.print("{f}.npm-{f}", .{ file_id_hex_fmt, hex_timestamp_fmt });
                 _ = try dest_path_stream_writer.writeByte(0);

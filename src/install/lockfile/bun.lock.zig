@@ -965,7 +965,7 @@ else => {
                     return error.InvalidTrustedDependenciesSet;
                 }
                 const name_hash: TruncatedPackageNameHash = @truncate((try dep.asStringHash(allocator, String.Builder.stringHash)).?);
-                _ = try trusted_dependencies.put(allocator, name_hash, .{});
+                _ = try trusted_dependencies.put(allocator, name_hash, undefined);
             }
             lockfile.trusted_dependencies = trusted_dependencies;
         }

@@ -225,7 +225,7 @@ pub fn fromPackageJSON(lockfile: *Lockfile, pm: *PackageManager, package_json: *
                 const package_name: ExternalString = string_builder.append(ExternalString, (if (@typeInfo(@TypeOf(package_json)) == .@"enum" or @typeInfo(@TypeOf(package_json)) == .@"union") @tagName(package_json) else package_json.name));
                 package.name_hash = package_name.hash;
                 (if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name) = (if (@typeInfo(@TypeOf(package_name)) == .@"enum") @intFromEnum(package_name) else package_name.value);
-                package.resolution = .{ .tag = .root, .value = .{ .root = .{} } };
+                package.resolution = .{ .tag = .root, .value = .{ .root = undefined } };
                 const total_len = (dependencies_list.items.len + total_dependencies_count);
                 if (comptime Environment.allow_assert) {
                     _ = assert((dependencies_list.items.len == resolutions_list.items.len));
@@ -935,7 +935,7 @@ _ = (blk_catch_10: { break :blk_catch_10 ((log.addErrorFmt(source, q.loc, alloca
                     package.resolution = try resolver.resolve(*Lockfile.StringBuilder, (&string_builder), json);
                 }
             } else {
-                package.resolution = .{ .tag = .root, .value = .{ .root = .{} } };
+                package.resolution = .{ .tag = .root, .value = .{ .root = undefined } };
             }
             if (json.asProperty("patchedDependencies")) |patched_deps| {
                 _ = &patched_deps;

@@ -206,7 +206,7 @@ var m = strong;
         }
 }
 
-pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const u8) ?*CustomLoader {
+pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const u8) ?CustomLoader {
         const basename = std.fs.path.basename(filename);
         var next: usize = 0;
         _ = &next;
@@ -216,7 +216,7 @@ pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const
                 continue;
             }
             const ext = basename[i..];
-            if (vm.commonjs_custom_extensions.get(ext)) |value| {
+            if (vm.commonjs_custom_extensions.getPtr(ext)) |value| {
                 _ = &value;
                 return value;
             }

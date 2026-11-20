@@ -655,7 +655,7 @@ export class FetchTasklet {
                         _.tracker.didCancel(_.global_this);
 
                         if (http_ := _.http) {
-                            http_.http_thread.scheduleShutdown(http_);
+                            bun.http.http_thread.scheduleShutdown(http_);
                         }
                         _.result.fail = error.ERR_TLS_CERT_ALTNAME_INVALID;
                         return false;

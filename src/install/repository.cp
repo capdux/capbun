@@ -198,7 +198,7 @@ pub struct TopFormatter {
         } else if (!_.repository.committish.isEmpty()) {
             writer.writeAll("#")?;
             const committish_slice_fn = String.slice;
-            writer.writeAll(committish_slice_fn(_.repository.committish, _.buf))?;
+            writer.writeAll(committish_slice_fn(&_.repository.committish, _.buf))?;
         }
     }
 }
@@ -588,8 +588,7 @@ pub struct TopFormatter {
         committish: string,
         task_id: Install.Task.Id,
     ): string! {
-        const fmt_args = .{ bun.fmt.hexIntLower(task_id.get()) };
-        const printed = std.fmt.bufPrint(&tl_bufs.get().folder_name_buf, "{f}.git", fmt_args)?;
+        const printed = std.fmt.bufPrint(&tl_bufs.get().folder_name_buf, "{f}.git", .{ bun.fmt.hexIntLower(task_id.get()) })?;
         const path_parts: [1]string = [ printed ];
         const path = Path.joinAbsString(PackageManager.get().cache_directory_path, &path_parts, .auto);
 

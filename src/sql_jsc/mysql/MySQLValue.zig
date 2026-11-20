@@ -390,7 +390,7 @@ pub fn toData(self: *const Value, field_type: FieldType) AnyMySQLError.Error!Dat
 
 })) {
 .@"null" => {
-return Data{ .empty = .{} };
+return Data{ .empty = undefined };
 },
 .@"bool" => |b| {
 _ = (blk_catch_4: { break :blk_catch_4 ((writer.writeByte((if (b) 1 else 0))) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 undefined; }); });
@@ -426,10 +426,10 @@ stream.pos = d.toBinary(field_type, (&buffer));
 return data;
 },
 .@"string" => |slice| {
-return (if ((slice.len > 0)) Data{ .temporary = slice.slice() } else Data{ .empty = .{} });
+return (if ((slice.len > 0)) Data{ .temporary = slice.slice() } else Data{ .empty = undefined });
 },
 .bytes => |b| {
-return (if ((b.slice.len > 0)) Data{ .temporary = b.slice.slice() } else Data{ .empty = .{} });
+return (if ((b.slice.len > 0)) Data{ .temporary = b.slice.slice() } else Data{ .empty = undefined });
 },
 }
             return try Data.create(buffer[0..stream.pos], bun.default_allocator);

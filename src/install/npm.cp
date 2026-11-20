@@ -1260,7 +1260,7 @@ pub struct PackageManifest {
             let dest_path_stream = std.io.fixedBufferStream(&dest_path_buf);
             let dest_path_stream_writer = dest_path_stream.writer();
             const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
-            const hex_timestamp: usize = i32(@max(std.time.milliTimestamp(), 0));
+            const hex_timestamp = @as(usize, @intCast(@max(std.time.milliTimestamp(), 0)));
             const hex_timestamp_fmt = bun.fmt.hexIntLower(hex_timestamp);
             dest_path_stream_writer.print("{f}.npm-{f}", .{ file_id_hex_fmt, hex_timestamp_fmt })?;
             dest_path_stream_writer.writeByte(0)?;

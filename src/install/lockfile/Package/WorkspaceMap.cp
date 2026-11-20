@@ -255,30 +255,31 @@ pub fn processNamesArray(
     }
 
     if (workspace_globs.items.len > 0) {
-        const cwd = bun.toFD(bun.openDirAt(bun.FD.cwd(), source.path.name.dir) catch |e| {
-            log.addErrorFmt(
-                source,
-                loc,
-                allocator,
-                "Failed to open directory {s} for workspace pattern: {s}",
-                [ source.path.name.dir, @errorName(e) ],
-            ) catch {};
-            return error.GlobError;
-        });
-        defer * = bun.sys.close(cwd);
-
+        let arena_alloc = std.heap.ArenaAllocator.init(allocator);
+        defer arena_alloc.deinit();
         for (user_pattern of workspace_globs.items) {
-            let glob_pattern: string = user_pattern;
-            if (strings.hasPrefix(glob_pattern, "./")) {
-                glob_pattern = glob_pattern[2..];
-            } else if (strings.hasPrefix(glob_pattern, ".\\\\")) {
-                glob_pattern = glob_pattern[2..];
-            }
+            defer * = arena_alloc.reset(.retain_capacity);
+
+            const glob_pattern = if (user_pattern.len == 0) "package.json" else brk: {
+                const parts: [2][]const u8 = [ user_pattern, "package.json" ];
+                break :brk bun.handleOom(arena_alloc.allocator().dupe(u8, bun.path.join(&parts, .auto)));
+            };
 
             let walker: GlobWalker = {};
-            defer walker.deinit();
-            let arena_alloc = std.heap.ArenaAllocator.init(allocator);
-            defer arena_alloc.deinit();
+            let cwd = bun.path.dirname(source.path.text, .auto);
+            cwd = if (bun.strings.eql(cwd, "")) bun.fs.FileSystem.instance.top_level_dir else cwd;
+            if (err_opt := (walker.initWithCwd(&arena_alloc, glob_pattern, cwd, false, false, false, false, true)?).asErr()) {
+                const e = err_opt;
+                log.addErrorFmt(
+                    source,
+                    loc,
+                    allocator,
+                    "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>",
+                    [ user_pattern, @tagName(e.getErrno()) ],
+                ) catch {};
+                return error.GlobError;
+            }
+            defer walker.deinit(false);
 
             let iter = GlobWalker.Iterator{
                 walker: &walker,

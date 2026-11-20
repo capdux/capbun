@@ -256,9 +256,9 @@ pub fn release(self: *S3HttpSimpleTask) void {
             if ((self.proxy_url.len > 0)) {
                 _ = bun.default_allocator.free(self.proxy_url);
             }
-            if (self.result.metadata) |metadata| {
+            if (self.result.metadata) |*metadata| {
                 _ = &metadata;
-                _ = metadata.deinit(bun.default_allocator);
+                _ = (metadata.*).deinit(bun.default_allocator);
             }
     }
 
@@ -537,7 +537,7 @@ pub fn executeSimpleS3Request(self: *const S3Credentials, options: S3SimpleReque
             const _headers = result.mixWithHeader((&header_buffer), .{ .name = "range", .value = range_ });
             var ___headers_moved = false; _ = &___headers_moved;
             defer if (!___headers_moved) { const __T = @TypeOf(_headers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = _headers.release() catch {}; } else { _headers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = _headers; _drop_val.release(); } };
-            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(_headers, bun.default_allocator));
+            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
         } else {
             if (options.content_type) |content_type| {
                 _ = &content_type;
@@ -545,10 +545,10 @@ pub fn executeSimpleS3Request(self: *const S3Credentials, options: S3SimpleReque
                     const _headers = result.mixWithHeader((&header_buffer), .{ .name = "Content-Type", .value = content_type });
                     var ___headers_moved = false; _ = &___headers_moved;
                     defer if (!___headers_moved) { const __T = @TypeOf(_headers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = _headers.release() catch {}; } else { _headers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = _headers; _drop_val.release(); } };
-                    break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(_headers, bun.default_allocator));
+                    break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
                 }
             }
-            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), bun.default_allocator));
+            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), bun.default_allocator));
         }
 };
         var __headers_moved = false; _ = &__headers_moved;

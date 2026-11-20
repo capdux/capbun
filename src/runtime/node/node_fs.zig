@@ -671,9 +671,10 @@ pub fn runFromJSThread(self: *AsyncReaddirRecursiveTask) bun.JSTerminated!void {
             _ = &promise;
             var result: jsc.JSValue = undefined;
             _ = &result;
-            if ((&self.pending_err)) |e| {
+            if ((self.pending_err != null)) {
+                var e = (&self.pending_err.?);
                 _ = &e;
-                result = (blk_catch_1: { break :blk_catch_1 (((e).?.toJSWithAsyncStack(globalObject, promise)) catch |err_val| { _ = &err_val; return promise.reject(globalObject, globalObject.takeException(err_val)); }); });
+                result = (blk_catch_1: { break :blk_catch_1 ((e.toJSWithAsyncStack(globalObject, promise)) catch |err_val| { _ = &err_val; return promise.reject(globalObject, globalObject.takeException(err_val)); }); });
             } else {
                 const res = (switch (self.result_list) {
 .with_file_types => |*res| Return.Readdir{ .with_file_types = res.moveToUnmanaged().items },

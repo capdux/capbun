@@ -109,8 +109,8 @@ export class CopyFile {
             system_error.message = BunString.static("Failed to copy file");
         }
         let instance = system_error.toErrorInstanceWithAsyncStack(this.globalThis, promise);
-        if (store := this.store) {
-            store.deref();
+        if (this.store != null) {
+            this.store.?.deref();
         }
         try promise.reject(globalThis, instance);
     }

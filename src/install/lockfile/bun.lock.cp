@@ -1160,7 +1160,7 @@ pub fn parseIntoBinaryLockfile(
                 return error.InvalidTrustedDependenciesSet;
             }
             const name_hash: TruncatedPackageNameHash = @truncate((try dep.asStringHash(allocator, String.Builder.stringHash)).?);
-            trusted_dependencies.put(allocator, name_hash, {})?;
+            trusted_dependencies.put(allocator, name_hash, undefined)?;
         }
 
         lockfile.trusted_dependencies = trusted_dependencies;

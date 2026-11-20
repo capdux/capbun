@@ -217,7 +217,7 @@ export class S3HttpSimpleTask {
         if (this.proxy_url.len > 0) {
             bun.default_allocator.free(this.proxy_url);
         }
-        if (metadata := this.result.metadata) {
+        if (*metadata := this.result.metadata) {
             metadata.deinit(bun.default_allocator);
         }
     }
@@ -479,15 +479,15 @@ pub fn executeSimpleS3Request(
         let header_buffer: [12]picohttp.Header = undefined;
         if (range_ := options.range) {
             const _headers = result.mixWithHeader(&header_buffer, .{ .name = "range", .value = range_ });
-            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(_headers, bun.default_allocator));
+            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
         } else {
             if (content_type := options.content_type) {
                 if (content_type.len > 0) {
                     const _headers = result.mixWithHeader(&header_buffer, .{ .name = "Content-Type", .value = content_type });
-                    break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(_headers, bun.default_allocator));
+                    break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
                 }
             }
-            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(result.headers(), bun.default_allocator));
+            break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), bun.default_allocator));
         }
     };
 

@@ -279,9 +279,9 @@ done_count = (done_count + 1);
                     }
                     const package = pm.lockfile.packages.get(package_id);
                     _ = bun.assert((package.resolution.tag != .root));
-                    var name_and_version_hash: u64 = 0;
+                    var name_and_version_hash: ?u64 = null;
                     _ = &name_and_version_hash;
-                    var patchfile_hash: u64 = 0;
+                    var patchfile_hash: ?u64 = null;
                     _ = &patchfile_hash;
                     switch (pm.determinePreinstallState(package, pm.lockfile, (&name_and_version_hash), (&patchfile_hash))) {
 .done => {

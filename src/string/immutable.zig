@@ -1921,10 +1921,9 @@ else => continue,
             current_line = (current_line + 1);
         }
         if (((ranges.len == line_range_count) and (current_line <= target_line))) {
-            var new_ranges = bun.BoundedArray(LineRange, line_range_count);
+            var new_ranges: bun.BoundedArray(LineRange,line_range_count) = .{};
             _ = &new_ranges;
-            {
-            }
+            _ = new_ranges.appendSliceAssumeCapacity(ranges.slice()[1..]);
             ranges = new_ranges;
         }
         return ranges;
