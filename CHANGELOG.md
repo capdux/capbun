@@ -1473,3 +1473,6 @@
 
 ### 2026-11-20 03:13:01 UTC - src/js_parser/ast/ 5 核心模块迁移入库
 - 完成：`visitBinaryExpression.cp` (0.998x), `maybe.cp` (1.018x), `parsePrefix.cp` (1.000x), `SideEffects.cp` (1.002x), `parseSuffix.cp` (0.994x)，4 项硬门禁全 PASS。
+
+### 2026-11-20 03:13:58 UTC - src/ 根目录 7 核心入口模块迁移入库
+- 完成：`jsc_stub.cp` (1.000x), `unit_test.cp` (1.059x), `main.cp` (1.070x), `workaround_missing_symbols.cp` (1.051x), `main_test.cp` (1.034x), `bun.js.cp` (1.021x), `main_wasm.cp` (1.013x)，4 项硬门禁全 PASS。

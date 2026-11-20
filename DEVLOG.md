@@ -1203,3 +1203,6 @@
 
 ### 2026-11-20 03:13:01 UTC - js_parser/ast 工厂与 SideEffects 迁移经验
 - `return struct` 工厂文件内部函数统一 `static fn`、去 `noalias`、带标签 `switch` 改等价 `while`；`SideEffects` 提顶层辅助类型避免借用冲突。
+
+### 2026-11-20 03:13:58 UTC - src/ 根目录入口模块迁移经验
+- `main.cp` 中 `pub fn main()` 会被 lower 为异步 actor，需将取址初始化逻辑抽离至独立 helper；`bun.js.cp` 保持 `@callconv(jsc.conv)` 与顶层 `let run: Run`。
