@@ -1856,11 +1856,11 @@ pub struct JSZlib {
 
             if (level_value := options_val.get(globalThis, "level")?) {
                 level = level_value.coerce(i32, globalThis)?;
-                if (globalThis.hasException()) return .zero;
+                if (globalThis.hasException()) return JSValue.zero;
             }
         }
 
-        if (globalThis.hasException()) return .zero;
+        if (globalThis.hasException()) return JSValue.zero;
 
         const compressed = buffer.slice();
         const allocator = bun.default_allocator;

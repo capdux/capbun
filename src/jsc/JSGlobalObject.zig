@@ -453,7 +453,7 @@ pub fn createInvalidArgs(self: *JSGlobalObject, comptime fmt: [:0]const u8, args
     }
 
 pub fn throwSysError(self: *JSGlobalObject, opts: SysErrOptions, comptime message: [:0]const u8, args: anytype) JSError {
-            const e = self.createErrorInstance(self, message, args);
+            const e = self.createErrorInstance(message, args);
             if ((e == .zero)) {
                 _ = bun.assert(self.hasException());
                 return error.JSError;
@@ -582,14 +582,14 @@ pub fn clearExceptionExceptTermination(self: *JSGlobalObject) bool {
 
 pub fn takeException(self: *JSGlobalObject, proof: bun.JSError) JSValue {
             if ((proof == error.OutOfMemory)) {
-                _ = (blk_catch_9: { break :blk_catch_9 ((self.throwOutOfMemory()) catch |__ce_9| { _ = &__ce_9;  }); });
+                _ = self.throwOutOfMemory();
             }
             return ((self.tryTakeException()) orelse (@panic("A JavaScript exception was thrown, but it was cleared before it could be read.")));
     }
 
 pub fn takeError(self: *JSGlobalObject, proof: bun.JSError) JSValue {
             if ((proof == error.OutOfMemory)) {
-                _ = (blk_catch_10: { break :blk_catch_10 ((self.throwOutOfMemory()) catch |__ce_10| { _ = &__ce_10;  }); });
+                _ = self.throwOutOfMemory();
             }
             const exc = ((self.tryTakeException()) orelse (@panic("A JavaScript exception was thrown, but it was cleared before it could be read.")));
             return ((exc.toError()) orelse (@panic("Couldn't convert a JavaScript exception to an Error instance.")));
@@ -667,7 +667,7 @@ pub fn bunVMConcurrently(self: *JSGlobalObject) *jsc.VirtualMachine {
     }
 
 pub fn handleRejectedPromises(self: *JSGlobalObject) void {
-            return (blk_catch_11: { break :blk_catch_11 ((bun.jsc.fromJSHostCallGeneric(self, @src(), JSC__JSGlobalObject__handleRejectedPromises, .{ self })) catch |__ce_11| { _ = &__ce_11; return; }); });
+            return (blk_catch_9: { break :blk_catch_9 ((bun.jsc.fromJSHostCallGeneric(self, @src(), JSC__JSGlobalObject__handleRejectedPromises, .{ self })) catch |__ce_9| { _ = &__ce_9; return; }); });
     }
 
 pub fn readableStreamToArrayBuffer(self: *JSGlobalObject, value: JSValue) JSValue {
@@ -836,7 +836,7 @@ pub fn resetModuleRegistryMap(self: *JSGlobalObject, map: *anyopaque) bool {
 
 pub fn resolve(res: *ErrorableString, global: *JSGlobalObject, specifier: *bun.String, source: *bun.String, query: *bun.String) callconv(.c) void {
             _ = jsc.markBinding(@src());
-            _ = (blk_catch_12: { break :blk_catch_12 ((jsc.VirtualMachine.resolve(res, global, specifier.*, source.*, query, true)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 bun.debugAssert((res.success == false)); }); });
+            _ = (blk_catch_10: { break :blk_catch_10 ((jsc.VirtualMachine.resolve(res, global, specifier.*, source.*, query, true)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 bun.debugAssert((res.success == false)); }); });
     }
 
 pub fn reportUncaughtException(global: *JSGlobalObject, exception: *jsc.Exception) callconv(.c) JSValue {
@@ -864,7 +864,7 @@ pub fn getBodyStreamOrBytesForWasmStreaming(this_global: *JSGlobalObject, respon
             const response = maybe_response.?;
             var content_type = (ZigString.static("null")).*;
             _ = &content_type;
-            if ((blk_catch_13: { break :blk_catch_13 ((response.getContentType()) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 null; }); })) |ct| {
+            if ((blk_catch_11: { break :blk_catch_11 ((response.getContentType()) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); })) |ct| {
                 _ = &ct;
                 content_type = ct.toZigString();
             }

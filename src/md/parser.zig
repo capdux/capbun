@@ -101,7 +101,7 @@ pub const Parser = struct {
     n_containers: u32 = 0,
     current_block: ?usize = null,
     current_block_lines: std.ArrayListUnmanaged(VerbatimLine) = .{},
-    opener_stacks: [NUM_OPENER_STACKS]OpenerStack = [OpenerStack{}]*NUM_OPENER_STACKS,
+    opener_stacks: [NUM_OPENER_STACKS]OpenerStack = @splat(OpenerStack{  }),
     unresolved_link_head: i32 = -1,
     unresolved_link_tail: i32 = -1,
     table_cell_boundaries_head: i32 = -1,
@@ -182,7 +182,7 @@ pub fn buildMarkCharMap(self: *Parser) void {
     pub const EmphDelim = inlines_mod.EmphDelim;
     pub const MAX_EMPH_MATCHES = inlines_mod.MAX_EMPH_MATCHES;
     pub const RefDef = ref_defs_mod.RefDef;
-    pub const Error = (bun.JSError or bun.StackOverflow);
+    pub const Error = error{ JSError, JSTerminated, OutOfMemory, StackOverflow };
     pub const enterBlock = render_blocks_mod.enterBlock;
     pub const leaveBlock = render_blocks_mod.leaveBlock;
     pub const processCodeBlock = render_blocks_mod.processCodeBlock;

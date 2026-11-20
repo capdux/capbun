@@ -381,7 +381,7 @@ pub fn close(self: *StatWatcher) void {
 
 pub fn doClose(self: *StatWatcher, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = self.close();
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn finalize(self: *StatWatcher) void {

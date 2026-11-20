@@ -25,10 +25,27 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
+pub const OpaquePtr = ?*anyopaque;
+pub const ares_sock_state_cb = ?ares_sock_state_cb_fn;
+pub const HostentPtr = ?*struct_hostent;
+pub const AddrInfoPtr = ?*AddrInfo;
+pub const ares_callback = ?ares_callback_fn;
+pub const ares_host_callback = ?ares_host_callback_fn;
+pub const ares_nameinfo_callback = ?ares_nameinfo_callback_fn;
+pub const ares_sock_create_callback = ?ares_sock_create_callback_fn;
+pub const ares_sock_config_callback = ?ares_sock_config_callback_fn;
+pub const ares_malloc_callback = ?ares_malloc_callback_fn;
+pub const ares_free_callback = ?ares_free_callback_fn;
+pub const ares_realloc_callback = ?ares_realloc_callback_fn;
 pub const socklen_t = c.socklen_t;
 pub const ares_ssize_t = isize;
 pub const ares_socket_t = (if (bun.Environment.isWindows) std.os.windows.ws2_32.SOCKET else c_int);
-pub const ares_sock_state_cb = ?*const *const fn(?*anyopaque, ares_socket_t, c_int, c_int) callconv(.c) void;
+const _ares_sock_state_sig = struct {
+
+pub fn f(_: OpaquePtr, _: ares_socket_t, _: c_int, _: c_int) callconv(.c) void {
+    }
+};
+pub const ares_sock_state_cb_fn = *const @TypeOf(_ares_sock_state_sig.f);
 pub const struct_apattern = opaque {};
 pub const AF = std.posix.AF;
 pub const NSClass = enum(c_int) {
@@ -610,15 +627,48 @@ pub const Channel = opaque {
     }
 };
 var ares_has_loaded = std.atomic.Value(bool).init(false);
-pub const ares_callback = ?*const *const fn(?*anyopaque, c_int, c_int, [*c]u8, c_int) callconv(.c) void;
-pub const ares_host_callback = ?*const *const fn(?*anyopaque, c_int, c_int, ?*struct_hostent) callconv(.c) void;
-pub const ares_nameinfo_callback = ?*const *const fn(?*anyopaque, c_int, c_int, [*c]u8, [*c]u8) callconv(.c) void;
-pub const ares_sock_create_callback = ?*const *const fn(ares_socket_t, c_int, ?*anyopaque) callconv(.c) c_int;
-pub const ares_sock_config_callback = ?*const *const fn(ares_socket_t, c_int, ?*anyopaque) callconv(.c) c_int;
-pub const ares_addrinfo_callback = *const *const fn(?*anyopaque, c_int, c_int, ?*AddrInfo) callconv(.c) void;
-pub const ares_malloc_callback = ?*const *const fn(usize) callconv(.c) ?*anyopaque;
-pub const ares_free_callback = ?*const *const fn(?*anyopaque) callconv(.c) void;
-pub const ares_realloc_callback = ?*const *const fn(?*anyopaque, usize) callconv(.c) ?*anyopaque;
+const _ares_cb_sigs = struct {
+
+pub fn cb(_: OpaquePtr, _: c_int, _: c_int, _: [*c]u8, _: c_int) callconv(.c) void {
+    }
+
+pub fn host(_: OpaquePtr, _: c_int, _: c_int, _: HostentPtr) callconv(.c) void {
+    }
+
+pub fn nameinfo(_: OpaquePtr, _: c_int, _: c_int, _: [*c]u8, _: [*c]u8) callconv(.c) void {
+    }
+
+pub fn sock_create(_: ares_socket_t, _: c_int, _: OpaquePtr) callconv(.c) c_int {
+            return 0;
+    }
+
+pub fn sock_config(_: ares_socket_t, _: c_int, _: OpaquePtr) callconv(.c) c_int {
+            return 0;
+    }
+
+pub fn addrinfo(_: OpaquePtr, _: c_int, _: c_int, _: AddrInfoPtr) callconv(.c) void {
+    }
+
+pub fn malloc(_: usize) callconv(.c) OpaquePtr {
+            _ = unreachable;
+    }
+
+pub fn free(_: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn realloc(_: OpaquePtr, _: usize) callconv(.c) OpaquePtr {
+            _ = unreachable;
+    }
+};
+pub const ares_callback_fn = *const @TypeOf(_ares_cb_sigs.cb);
+pub const ares_host_callback_fn = *const @TypeOf(_ares_cb_sigs.host);
+pub const ares_nameinfo_callback_fn = *const @TypeOf(_ares_cb_sigs.nameinfo);
+pub const ares_sock_create_callback_fn = *const @TypeOf(_ares_cb_sigs.sock_create);
+pub const ares_sock_config_callback_fn = *const @TypeOf(_ares_cb_sigs.sock_config);
+pub const ares_addrinfo_callback = *const @TypeOf(_ares_cb_sigs.addrinfo);
+pub const ares_malloc_callback_fn = *const @TypeOf(_ares_cb_sigs.malloc);
+pub const ares_free_callback_fn = *const @TypeOf(_ares_cb_sigs.free);
+pub const ares_realloc_callback_fn = *const @TypeOf(_ares_cb_sigs.realloc);
 pub const ares_socket_functions = extern struct {
     socket: ?*const *const fn(c_int, c_int, c_int, ?*anyopaque) callconv(.c) ares_socket_t = null,
     close: ?*const *const fn(ares_socket_t, ?*anyopaque) callconv(.c) c_int = null,
@@ -1476,7 +1526,7 @@ pub extern "c" fn ares_get_servers(channel: *Channel, servers: *?*struct_ares_ad
 
 pub extern "c" fn ares_get_servers_ports(channel: *Channel, servers: *?*struct_ares_addr_port_node) callconv(.c) c_int;
 
-pub extern "c" fn ares_inet_ntop(af: c_int, src: ?*anyopaque, dst: [*]u8, size: ares_socklen_t) callconv(.c) ?[*:0]u8;
+pub extern "c" fn ares_inet_ntop(af: c_int, src: ?*const void, dst: [*]u8, size: ares_socklen_t) callconv(.c) ?[*:0]u8;
 
 pub extern "c" fn ares_inet_pton(af: c_int, src: [*c]const u8, dst: ?*anyopaque) callconv(.c) c_int;
 

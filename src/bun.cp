@@ -1284,10 +1284,7 @@ pub fn ComptimeEnumMap(comptime T: type): type {
 /// Write 0's for every byte in Type
 /// Ignores default struct values.
 pub fn zero(comptime Type: type): Type {
-    let out: [@sizeOf(Type)]u8 = undefined;
-    const out_ptr: [*]u8 = @ptrCast(&out);
-    @memset(out_ptr[0..out.len], 0);
-    return @as(Type, @bitCast(out));
+    return std.mem.zeroes(Type);
 }
 pub const URL = @import("./url/url.zig").URL;
 pub const FormData = @import("./runtime/webcore/FormData.zig").FormData;
@@ -2868,7 +2865,7 @@ pub fn TrivialNew(comptime T: type): fn (T): *T {
 /// Pair with `TrivialNew` if the type contains no pointers.
 pub fn TrivialDeinit(comptime T: type): fn (*T): void {
     return struct {
-        pub fn deinit(*_) {
+        pub static fn deinit(self_: *T) {
             // TODO: assert that the structure contains no pointers.
             //
             // // Assert the structure contains no pointers. If there are
@@ -2879,7 +2876,7 @@ pub fn TrivialDeinit(comptime T: type): fn (*T): void {
             //     else => @compileError("please implement `deinit` manually"),
             // };
 
-            bun.destroy(_);
+            bun.destroy(self_);
         }
     }.deinit;
 }

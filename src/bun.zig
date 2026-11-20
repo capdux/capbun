@@ -2130,12 +2130,7 @@ pub fn ComptimeEnumMap(comptime T: type) type {
 }
 
 pub fn zero(comptime Type: type) Type {
-        var out: struct { @sizeOf(Type) } = undefined;
-        _ = &out;
-        u8 = undefined;
-        const out_ptr: [*]u8 = @ptrCast((&out));
-        _ = @memset(out_ptr[0..out.len], 0);
-        return @as(Type, @bitCast(out));
+        return std.mem.zeroes(Type);
 }
 
 pub fn getFdPathViaCWD(fd: std.posix.fd_t, buf: *bun.PathBuffer) ![]u8 {
@@ -2982,8 +2977,8 @@ pub fn new(t: T) *T {
 pub fn TrivialDeinit(comptime T: type) *const fn (*T) void {
         return struct {
 
-pub fn deinit(self: *@This()) void {
-            _ = bun.destroy(self);
+pub fn deinit(self_: *T) void {
+            _ = bun.destroy(self_);
     }
 }.deinit;
 }

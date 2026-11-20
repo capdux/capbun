@@ -301,7 +301,7 @@ struct State {
         }
         // Empty slice usually means invalid pointer
         if (raw_len == 0) return;
-        const locked = this.lock();
+        let locked = this.lock();
         defer this.unlock();
         unsafe {
             return locked.trackFree(raw_ptr[0..raw_len], ret_addr ?? @returnAddress());
@@ -569,7 +569,7 @@ pub const free_trace_limits = bun.crash_handler.WriteStackTraceLimits{
 fn vtable_alloc(ctx: *!, len: usize, alignment: std.mem.Alignment, ret_addr: usize): [*]u8?! {
     unsafe {
         const raw_state = ctx as *State!;
-        const state = raw_state.lock();
+        let state = raw_state.lock();
         defer raw_state.unlock();
         return state.alloc(len, alignment, ret_addr) catch { return null; };
     }
@@ -578,7 +578,7 @@ fn vtable_alloc(ctx: *!, len: usize, alignment: std.mem.Alignment, ret_addr: usi
 fn vtable_free(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize) {
     unsafe {
         const raw_state = ctx as *State!;
-        const state = raw_state.lock();
+        let state = raw_state.lock();
         defer raw_state.unlock();
         state.free(buf, alignment, ret_addr);
     }

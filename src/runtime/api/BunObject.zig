@@ -601,12 +601,12 @@ pub fn gzipOrDeflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringOrB
                     _ = &level_value;
                     level = try level_value.coerce(i32, globalThis);
                     if (globalThis.hasException()) {
-                        return error.zero;
+                        return JSValue.zero;
                     }
                 }
             }
             if (globalThis.hasException()) {
-                return error.zero;
+                return JSValue.zero;
             }
             const compressed = buffer.slice();
             const allocator = bun.default_allocator;

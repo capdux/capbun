@@ -1391,3 +1391,5 @@
 - **[2026-11-20] Wave 7 Batch B 典型修复**：`color.cp` 29 处多重元组解构改下标访问；`TimeoutObject`/`ImmediateObject`/`Listener` 修正跨模块类型路径；`BlockList.cp` 提取数组长度常量与拆分 `try` 优先级；`uws_sys/Response.cp` 补全 `AnyResponse` 全部转发方法并消除 `NodeHTTPResponse` 6 错；`cron_parser.cp` 消除 `?? return` 错误 lowering。
 
 - **[2026-11-20] Wave 8 Batch A 典型修复**：`Blob` 用 `_BlobCloneSigs` 消除双层 `*const`、`JSSourceMap.memoryCost` 改为 `*_`，彻底清零 `ZigGeneratedClasses.zig` 剩余 2 处错误；`Sink` 升级 `@root struct`、`Store` 取消多余 `export class`；`uws_sys/Response` `_ResHandlerSigs` 补 `static fn`；`html_rewriter` 24 处 `jsUndefined()` 修正为 `js_undefined`。
+
+- **[2026-11-20] Wave 8 里程碑：`codegen/ZigGeneratedClasses.zig` 清零**：全仓所有 JSC 生成类绑定（`ZigGeneratedClasses.zig`）从最初 91 处错误降至 **0**；`c_ares.cp`/`WebSocket.cp` 全部 C 回调 typedef 统一改用 `*const @TypeOf(_sigs.*)` 彻底消除双层 `*const *const fn`。

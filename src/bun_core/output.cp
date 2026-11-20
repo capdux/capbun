@@ -106,8 +106,8 @@ pub struct Source {
         _.buffered_stream = &_.buffered_stream_backing.new_interface;
         _.buffered_error_stream = &_.buffered_error_stream_backing.new_interface;
 
-        let empty_stream_buf: [0]u8 = [];
-        let empty_err_buf: [0]u8 = [];
+        let empty_stream_buf: [0]u8 = undefined;
+        let empty_err_buf: [0]u8 = undefined;
         _.stream_backing = _.raw_stream.quietWriter().adaptToNewApi(empty_stream_buf[0..0]);
         _.error_stream_backing = _.raw_error_stream.quietWriter().adaptToNewApi(empty_err_buf[0..0]);
         _.stream = &_.stream_backing.new_interface;
@@ -217,29 +217,33 @@ pub struct Source {
                 lazy_color_depth = depth_256;
                 return;
             }
-            const pairs = [
-                ["st", depth_16],
-                ["hurd", depth_16],
-                ["eterm", depth_16],
-                ["gnome", depth_16],
-                ["kterm", depth_16],
-                ["mosh", depth_16m],
-                ["putty", depth_16],
-                ["cons25", depth_16],
-                ["cygwin", depth_16],
-                ["dtterm", depth_16],
-                ["mlterm", depth_16],
-                ["console", depth_16],
-                ["jfbterm", depth_16],
-                ["konsole", depth_16],
-                ["terminator", depth_16m],
-                ["xterm-ghostty", depth_16m],
-                ["rxvt-unicode-24bit", depth_16m],
+            const TermPair = struct {
+                name: []const u8,
+                depth: ColorDepth,
+            };
+            const pairs: [17]TermPair = [
+                TermPair{ name: "st", depth: depth_16 },
+                TermPair{ name: "hurd", depth: depth_16 },
+                TermPair{ name: "eterm", depth: depth_16 },
+                TermPair{ name: "gnome", depth: depth_16 },
+                TermPair{ name: "kterm", depth: depth_16 },
+                TermPair{ name: "mosh", depth: depth_16m },
+                TermPair{ name: "putty", depth: depth_16 },
+                TermPair{ name: "cons25", depth: depth_16 },
+                TermPair{ name: "cygwin", depth: depth_16 },
+                TermPair{ name: "dtterm", depth: depth_16 },
+                TermPair{ name: "mlterm", depth: depth_16 },
+                TermPair{ name: "console", depth: depth_16 },
+                TermPair{ name: "jfbterm", depth: depth_16 },
+                TermPair{ name: "konsole", depth: depth_16 },
+                TermPair{ name: "terminator", depth: depth_16m },
+                TermPair{ name: "xterm-ghostty", depth: depth_16m },
+                TermPair{ name: "rxvt-unicode-24bit", depth: depth_16m },
             ];
 
             inline for (pair of pairs) {
-                if (strings.eqlComptime(term, pair[0])) {
-                    lazy_color_depth = pair[1];
+                if (strings.eqlComptime(term, pair.name)) {
+                    lazy_color_depth = pair.depth;
                     return;
                 }
             }
@@ -1191,7 +1195,7 @@ pub struct DebugTimer {
 
     pub const WriteError = error{};
 
-    pub fn format(w: *std.Io.Writer): !std.Io.Writer.Error {
+    pub fn format(w: *std.Io.Writer): void!std.Io.Writer.Error {
         if (comptime Environment.isDebug) {
             let timer = _.timer;
             const ns_f: f64 = @floatFromInt(timer.read());
@@ -1321,8 +1325,8 @@ pub inline fn err(error_name: auto, comptime fmt: []const u8, args: auto) {
 }
 
 pub struct ScopedDebugWriter {
-    pub let scoped_file_writer: File.QuietWriter = undefined;
-    @tls pub let disable_inside_log: isize = 0;
+    static let scoped_file_writer: File.QuietWriter = undefined;
+    @tls static let disable_inside_log: isize = 0;
 }
 
 pub fn disableScopedDebugWriter() {

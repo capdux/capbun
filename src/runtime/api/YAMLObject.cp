@@ -27,7 +27,10 @@ pub fn create(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
 }
 
 pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
-    const value, const replacer, const space_value = callFrame.argumentsAsArray(3);
+    const args = callFrame.argumentsAsArray(3);
+    const value = args[0];
+    const replacer = args[1];
+    const space_value = args[2];
 
     value.ensureStillAlive();
 
@@ -924,11 +927,15 @@ pub struct Stringifier {
 
     const input_value = callFrame.argumentsAsArray(1)[0];
 
-    const input: jsc.Node.BlobOrStringOrBuffer = jsc.Node.BlobOrStringOrBuffer.fromJS(global, arena_allocator.allocator(), input_value) catch input: {
+    const maybe_input = jsc.Node.BlobOrStringOrBuffer.fromJS(global, arena_allocator.allocator(), input_value)?;
+    let input: jsc.Node.BlobOrStringOrBuffer = undefined;
+    if (v := maybe_input) {
+        input = v;
+    } else {
         let str = input_value.toBunString(global)?;
         defer str.deref();
-        break :input jsc.Node.BlobOrStringOrBuffer{ string_or_buffer: .{ .string = str.toSlice(arena_allocator.allocator()) } };
-    };
+        input = jsc.Node.BlobOrStringOrBuffer{ string_or_buffer: .{ .string = str.toSlice(arena_allocator.allocator()) } };
+    }
     defer input.deinit();
 
     let log = logger.Log.init(bun.default_allocator);

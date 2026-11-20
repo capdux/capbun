@@ -140,38 +140,37 @@ const Codepoint = struct {
     pub const Token = JSON5Token;
     pub const Error = JSON5Error;
 
-    pub static fn toError(err: ParseError, parser: *const JSON5Parser): JSON5Error {
+    pub static fn toError(e: ParseError, parser: *const JSON5Parser): JSON5Error {
         const token_pos = parser.token.loc.toUsize();
         const scan_pos = parser.pos;
-        return switch (err) {
-            error.OutOfMemory => .oom,
-            error.StackOverflow => .stack_overflow,
-            // Scanner errors use scan position
-            error.UnexpectedCharacter => .{ .unexpected_character = .{ .pos = scan_pos } },
-            error.UnterminatedString => .{ .unterminated_string = .{ .pos = scan_pos } },
-            error.UnterminatedComment => .{ .unterminated_comment = .{ .pos = scan_pos } },
-            error.UnterminatedEscape => .{ .unterminated_escape = .{ .pos = scan_pos } },
-            error.InvalidNumber => .{ .invalid_number = .{ .pos = scan_pos } },
-            error.LeadingZeros => .{ .leading_zeros = .{ .pos = scan_pos } },
-            error.InvalidHexNumber => .{ .invalid_hex_number = .{ .pos = scan_pos } },
-            error.InvalidHexEscape => .{ .invalid_hex_escape = .{ .pos = scan_pos } },
-            error.InvalidUnicodeEscape => .{ .invalid_unicode_escape = .{ .pos = scan_pos } },
-            error.OctalEscape => .{ .octal_escape = .{ .pos = scan_pos } },
-            error.InvalidIdentifier => .{ .invalid_identifier = .{ .pos = scan_pos } },
-            // Parser errors use token position
-            error.UnexpectedToken => .{ .unexpected_token = .{ .pos = token_pos } },
-            error.UnexpectedEof => if (parser.token.data == .eof)
-                .{ .unexpected_eof = .{ .pos = token_pos } }
-            else
-                .{ .unexpected_token = .{ .pos = token_pos } },
-            error.TrailingData => .{ .trailing_data = .{ .pos = token_pos } },
-            error.ExpectedColon => .{ .expected_colon = .{ .pos = token_pos } },
-            error.UnterminatedObject => .{ .unterminated_object = .{ .pos = token_pos } },
-            error.ExpectedComma => .{ .expected_comma = .{ .pos = token_pos } },
-            error.ExpectedClosingBrace => .{ .expected_closing_brace = .{ .pos = token_pos } },
-            error.UnterminatedArray => .{ .unterminated_array = .{ .pos = token_pos } },
-            error.ExpectedClosingBracket => .{ .expected_closing_bracket = .{ .pos = token_pos } },
-        };
+        if (e == error.OutOfMemory) return JSON5Error.oom;
+        if (e == error.StackOverflow) return JSON5Error.stack_overflow;
+        // Scanner errors use scan position
+        if (e == error.UnexpectedCharacter) return JSON5Error{ unexpected_character: { pos: scan_pos } };
+        if (e == error.UnterminatedString) return JSON5Error{ unterminated_string: { pos: scan_pos } };
+        if (e == error.UnterminatedComment) return JSON5Error{ unterminated_comment: { pos: scan_pos } };
+        if (e == error.UnterminatedEscape) return JSON5Error{ unterminated_escape: { pos: scan_pos } };
+        if (e == error.InvalidNumber) return JSON5Error{ invalid_number: { pos: scan_pos } };
+        if (e == error.LeadingZeros) return JSON5Error{ leading_zeros: { pos: scan_pos } };
+        if (e == error.InvalidHexNumber) return JSON5Error{ invalid_hex_number: { pos: scan_pos } };
+        if (e == error.InvalidHexEscape) return JSON5Error{ invalid_hex_escape: { pos: scan_pos } };
+        if (e == error.InvalidUnicodeEscape) return JSON5Error{ invalid_unicode_escape: { pos: scan_pos } };
+        if (e == error.OctalEscape) return JSON5Error{ octal_escape: { pos: scan_pos } };
+        if (e == error.InvalidIdentifier) return JSON5Error{ invalid_identifier: { pos: scan_pos } };
+        // Parser errors use token position
+        if (e == error.UnexpectedToken) return JSON5Error{ unexpected_token: { pos: token_pos } };
+        if (e == error.UnexpectedEof) {
+            if (parser.token.data == .eof) return JSON5Error{ unexpected_eof: { pos: token_pos } };
+            return JSON5Error{ unexpected_token: { pos: token_pos } };
+        }
+        if (e == error.TrailingData) return JSON5Error{ trailing_data: { pos: token_pos } };
+        if (e == error.ExpectedColon) return JSON5Error{ expected_colon: { pos: token_pos } };
+        if (e == error.UnterminatedObject) return JSON5Error{ unterminated_object: { pos: token_pos } };
+        if (e == error.ExpectedComma) return JSON5Error{ expected_comma: { pos: token_pos } };
+        if (e == error.ExpectedClosingBrace) return JSON5Error{ expected_closing_brace: { pos: token_pos } };
+        if (e == error.UnterminatedArray) return JSON5Error{ unterminated_array: { pos: token_pos } };
+        if (e == error.ExpectedClosingBracket) return JSON5Error{ expected_closing_bracket: { pos: token_pos } };
+        unreachable;
     }
 
     pub static fn parse(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator): ExternalError!Expr {
@@ -349,7 +348,8 @@ const Codepoint = struct {
             },
             'I' => {
                 if (this.scanKeyword("Infinity")) {
-                    return if (is_negative) -std.math.inf(f64) else std.math.inf(f64);
+                    const inf_val = std.math.inf(f64);
+                    return if (is_negative) -inf_val else inf_val;
                 }
                 return error.UnexpectedCharacter;
             },

@@ -147,7 +147,10 @@ pub fn NewStore(comptime types: []const type, comptime count: usize): type {
         }
 
         fn supportsType(T: type): bool {
-            return std.mem.indexOfScalar(type, types, T) != null;
+            inline for (ty of types) {
+                if (ty == T) return true;
+            }
+            return false;
         }
     };
 }

@@ -60,7 +60,9 @@ pub fn handleOom(error_union_or_set: auto): HandleOomReturn(@TypeOf(error_union_
         else => unreachable,
     };
     if (comptime (@typeInfo(ArgType) == .error_union)) {
-        if (val := (error_union_or_set catch null)) {
+        const Payload = @typeInfo(ArgType).error_union.payload;
+        const maybe_val: Payload? = error_union_or_set catch null;
+        if (val := maybe_val) {
             return val;
         }
     }

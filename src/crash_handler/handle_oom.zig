@@ -134,7 +134,10 @@ pub fn handleOom(error_union_or_set: anytype) HandleOomReturn(@TypeOf(error_unio
 else => unreachable,
 });
         if (comptime (@typeInfo(ArgType) == .error_union)) {
-            if ((blk_catch_1: { break :blk_catch_1 ((error_union_or_set) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |val| {
+            const Payload = @typeInfo(ArgType).error_union.payload;
+            _ = &Payload;
+            const maybe_val: ?Payload = (blk_catch_1: { break :blk_catch_1 ((error_union_or_set) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
+            if (maybe_val) |val| {
                 _ = &val;
                 return val;
             }

@@ -1,7 +1,12 @@
 pub const socklen_t = c.socklen_t;
 pub const ares_ssize_t = isize;
 pub const ares_socket_t = if (bun.Environment.isWindows) std.os.windows.ws2_32.SOCKET else c_int;
-pub const ares_sock_state_cb = ?*const fn (*!?, ares_socket_t, c_int, c_int) callconv(.c) void;
+pub type OpaquePtr = *!?;
+const _ares_sock_state_sig = struct {
+    @callconv("c") static fn f(_: OpaquePtr, _: ares_socket_t, _: c_int, _: c_int) {}
+};
+pub const ares_sock_state_cb_fn = *const @TypeOf(_ares_sock_state_sig.f);
+pub type ares_sock_state_cb = ares_sock_state_cb_fn?;
 pub const struct_apattern = opaque {};
 
 pub const AF = std.posix.AF;
@@ -610,15 +615,36 @@ fn libraryInit()  {
     }
 }
 
-pub const ares_callback = ?*const fn (*!?, c_int, c_int, [*c]u8, c_int) callconv(.c) void;
-pub const ares_host_callback = ?*const fn (*!?, c_int, c_int, ?*struct_hostent) callconv(.c) void;
-pub const ares_nameinfo_callback = ?*const fn (*!?, c_int, c_int, [*c]u8, [*c]u8) callconv(.c) void;
-pub const ares_sock_create_callback = ?*const fn (ares_socket_t, c_int, *!?) callconv(.c) c_int;
-pub const ares_sock_config_callback = ?*const fn (ares_socket_t, c_int, *!?) callconv(.c) c_int;
-pub const ares_addrinfo_callback = *const fn (*!?, c_int, c_int, ?*AddrInfo) callconv(.c) void;
-pub const ares_malloc_callback = ?*const fn (usize) callconv(.c) *!?;
-pub const ares_free_callback = ?*const fn (*!?) callconv(.c) void;
-pub const ares_realloc_callback = ?*const fn (*!?, usize) callconv(.c) *!?;
+pub type HostentPtr = (*struct_hostent)?;
+pub type AddrInfoPtr = (*AddrInfo)?;
+const _ares_cb_sigs = struct {
+    @callconv("c") static fn cb(_: OpaquePtr, _: c_int, _: c_int, _: [*c]u8, _: c_int) {}
+    @callconv("c") static fn host(_: OpaquePtr, _: c_int, _: c_int, _: HostentPtr) {}
+    @callconv("c") static fn nameinfo(_: OpaquePtr, _: c_int, _: c_int, _: [*c]u8, _: [*c]u8) {}
+    @callconv("c") static fn sock_create(_: ares_socket_t, _: c_int, _: OpaquePtr): c_int { return 0; }
+    @callconv("c") static fn sock_config(_: ares_socket_t, _: c_int, _: OpaquePtr): c_int { return 0; }
+    @callconv("c") static fn addrinfo(_: OpaquePtr, _: c_int, _: c_int, _: AddrInfoPtr) {}
+    @callconv("c") static fn malloc(_: usize): OpaquePtr { unreachable; }
+    @callconv("c") static fn free(_: OpaquePtr) {}
+    @callconv("c") static fn realloc(_: OpaquePtr, _: usize): OpaquePtr { unreachable; }
+};
+pub const ares_callback_fn = *const @TypeOf(_ares_cb_sigs.cb);
+pub type ares_callback = ares_callback_fn?;
+pub const ares_host_callback_fn = *const @TypeOf(_ares_cb_sigs.host);
+pub type ares_host_callback = ares_host_callback_fn?;
+pub const ares_nameinfo_callback_fn = *const @TypeOf(_ares_cb_sigs.nameinfo);
+pub type ares_nameinfo_callback = ares_nameinfo_callback_fn?;
+pub const ares_sock_create_callback_fn = *const @TypeOf(_ares_cb_sigs.sock_create);
+pub type ares_sock_create_callback = ares_sock_create_callback_fn?;
+pub const ares_sock_config_callback_fn = *const @TypeOf(_ares_cb_sigs.sock_config);
+pub type ares_sock_config_callback = ares_sock_config_callback_fn?;
+pub const ares_addrinfo_callback = *const @TypeOf(_ares_cb_sigs.addrinfo);
+pub const ares_malloc_callback_fn = *const @TypeOf(_ares_cb_sigs.malloc);
+pub type ares_malloc_callback = ares_malloc_callback_fn?;
+pub const ares_free_callback_fn = *const @TypeOf(_ares_cb_sigs.free);
+pub type ares_free_callback = ares_free_callback_fn?;
+pub const ares_realloc_callback_fn = *const @TypeOf(_ares_cb_sigs.realloc);
+pub type ares_realloc_callback = ares_realloc_callback_fn?;
 pub extern fn ares_library_init(flags: c_int): c_int;
 pub extern fn ares_library_init_mem(flags: c_int, amalloc: ares_malloc_callback, afree: ares_free_callback, arealloc: ares_realloc_callback): c_int;
 pub extern fn ares_library_initialized(): c_int;
@@ -1127,7 +1153,7 @@ pub extern fn ares_set_servers_csv(channel: *Channel, servers: [*c]const u8): c_
 pub extern fn ares_set_servers_ports_csv(channel: *Channel, servers: [*c]const u8): c_int;
 pub extern fn ares_get_servers(channel: *Channel, servers: **struct_ares_addr_port_node?): c_int;
 pub extern fn ares_get_servers_ports(channel: *Channel, servers: **struct_ares_addr_port_node?): c_int;
-pub extern fn ares_inet_ntop(af: c_int, src: *!?, dst: [*]u8, size: ares_socklen_t): [*:0]const u8?;
+pub extern fn ares_inet_ntop(af: c_int, src: (*const void)?, dst: [*]u8, size: ares_socklen_t): [*:0]const u8?;
 pub extern fn ares_inet_pton(af: c_int, src: [*c]const u8, dst: *!?): c_int;
 pub const ARES_SUCCESS = 0;
 pub const ARES_ENODATA = 1;

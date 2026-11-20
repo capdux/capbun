@@ -101,13 +101,13 @@ pub const URL = struct {
     port: []const u8 = "",
     protocol: []const u8 = "",
     search: []const u8 = "",
-    searchParams: ?*QueryStringMap = null,
+    searchParams: ?QueryStringMap = null,
     username: []const u8 = "",
     port_was_automatically_set: bool = false,
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.hash = ""; self_ptr.host = ""; self_ptr.hostname = ""; self_ptr.href = ""; self_ptr.origin = ""; self_ptr.password = ""; self_ptr.pathname = "/"; self_ptr.path = "/"; self_ptr.port = ""; self_ptr.protocol = ""; self_ptr.search = ""; self_ptr.searchParams = null; self_ptr.username = ""; self_ptr.port_was_automatically_set = false; return self_ptr; }
 
-pub fn init(self: *URL, hash: []const u8, host: []const u8, hostname: []const u8, href: []const u8, origin: []const u8, password: []const u8, pathname: []const u8, path: []const u8, port: []const u8, protocol: []const u8, search: []const u8, searchParams: ?*QueryStringMap, username: []const u8, port_was_automatically_set: bool) void {
+pub fn init(self: *URL, hash: []const u8, host: []const u8, hostname: []const u8, href: []const u8, origin: []const u8, password: []const u8, pathname: []const u8, path: []const u8, port: []const u8, protocol: []const u8, search: []const u8, searchParams: ?QueryStringMap, username: []const u8, port_was_automatically_set: bool) void {
             self.hash = hash;
             self.host = host;
             self.hostname = hostname;
@@ -432,26 +432,23 @@ pub fn parseProtocol(url: *URL, str: []const u8) ?u31 {
             if ((str.len < "://".len)) {
                 return null;
             }
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_1 = str.len;
-                while (i < __end_1) : (i += 1) {
-                    switch (str[@as(usize, @intCast(i))]) {
+            var i: usize = 0;
+            _ = &i;
+            while ((i < str.len)) : (i = (i + 1)) {
+                switch (str[@as(usize, @intCast(i))]) {
 '/', '?', '%' => {
 return null;
 },
 ':' => {
 if (((((i + 3) <= str.len) and (str[@as(usize, @intCast((i + 1)))] == 47)) and (str[@as(usize, @intCast((i + 2)))] == 47))) {
-                        url.protocol = str[0..i];
-                        return @intCast((i + 3));
-                    }
+                    url.protocol = str[0..i];
+                    return @intCast((i + 3));
+                }
 },
 else => {
 
 },
 }
-                }
             }
             return null;
     }
@@ -461,15 +458,13 @@ pub fn parseUsername(url: *URL, str: []const u8) ?u31 {
             if ((str.len < "@".len)) {
                 return null;
             }
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_2 = str.len;
-                while (i < __end_2) : (i += 1) {
-                    switch (str[@as(usize, @intCast(i))]) {
+            var i: usize = 0;
+            _ = &i;
+            while ((i < str.len)) : (i = (i + 1)) {
+                switch (str[@as(usize, @intCast(i))]) {
 ':', '@' => {
 url.username = str[0..i];
-                    return @intCast((i + 1));
+                return @intCast((i + 1));
 },
 '?', '/' => {
 return null;
@@ -478,7 +473,6 @@ else => {
 
 },
 }
-                }
             }
             return null;
     }
@@ -488,18 +482,16 @@ pub fn parsePassword(url: *URL, str: []const u8) ?u31 {
             if ((str.len < "@".len)) {
                 return null;
             }
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_3 = str.len;
-                while (i < __end_3) : (i += 1) {
-                    switch (str[@as(usize, @intCast(i))]) {
+            var i: usize = 0;
+            _ = &i;
+            while ((i < str.len)) : (i = (i + 1)) {
+                switch (str[@as(usize, @intCast(i))]) {
 '@' => {
 url.password = str[0..i];
-                    if (Environment.allow_assert) {
-                        _ = bun.assert(((str[i..].len < 2) or (std.mem.readInt(u16, str[i..][0..2], .little) != std.mem.readInt(u16, "//", .little))));
-                    }
-                    return @intCast((i + 1));
+                if (Environment.allow_assert) {
+                    _ = bun.assert(((str[i..].len < 2) or (std.mem.readInt(u16, str[i..][0..2], .little) != std.mem.readInt(u16, "//", .little))));
+                }
+                return @intCast((i + 1));
 },
 '?', '/' => {
 return null;
@@ -508,7 +500,6 @@ else => {
 
 },
 }
-                }
             }
             return null;
     }
@@ -660,8 +651,6 @@ pub const QueryStringMap = struct {
     buffer: []u8,
     list: Param.List,
     name_count: ?usize = null,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.name_count = null; return self_ptr; }
 
 pub fn getNameCount(self: *QueryStringMap) usize {
             return self.list.len;
@@ -728,7 +717,7 @@ pub fn getAllWithHashFromOffset(self: *const QueryStringMap, target: [][]const u
             return target_i;
     }
 
-pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: CombinedScanner) !?*QueryStringMap {
+pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: CombinedScanner) bun.OOM!?QueryStringMap {
             var list: Param.List = .{};
             _ = &list;
             var scanner = CombinedScanner{ .pathname = _scanner.pathname, .query = _scanner.query };
@@ -833,7 +822,7 @@ pub fn initWithScanner(allocator: std.mem.Allocator, _scanner: CombinedScanner) 
             return QueryStringMap{ .list = list, .buffer = buf.items, .slice = buf.items[0..buf_writer_pos], .allocator = allocator };
     }
 
-pub fn init(allocator: std.mem.Allocator, query_string: []const u8) !?*QueryStringMap {
+pub fn init(allocator: std.mem.Allocator, query_string: []const u8) bun.OOM!?QueryStringMap {
             var list: Param.List = .{};
             _ = &list;
             var scanner = Scanner.init(query_string);

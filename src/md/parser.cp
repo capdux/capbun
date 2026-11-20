@@ -43,7 +43,7 @@ pub struct Parser {
 
     // Opener stacks
     opener_stacks: [NUM_OPENER_STACKS]OpenerStack =
-        [OpenerStack{}] ** NUM_OPENER_STACKS,
+        @splat(OpenerStack{}),
 
     // Linked lists through marks
     unresolved_link_head: i32 = -1,
@@ -77,7 +77,7 @@ pub struct Parser {
     pub const MAX_EMPH_MATCHES = inlines_mod.MAX_EMPH_MATCHES;
     pub const RefDef = ref_defs_mod.RefDef;
 
-    pub const Error = bun.JSError || bun.StackOverflow;
+    pub const Error = error{ JSError, JSTerminated, OutOfMemory, StackOverflow };
 
     static fn init(allocator: Allocator, text: []const u8, flags: Flags, rend: Renderer): Parser {
         const size: OFF = @intCast(text.len);

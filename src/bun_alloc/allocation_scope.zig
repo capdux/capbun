@@ -310,7 +310,8 @@ _ = invalidTrackExternalFreeType(@TypeOf(slice));
             if ((raw_len == 0)) {
                 return;
             }
-            const locked = self.lock();
+            var locked = self.lock();
+            _ = &locked;
             defer {
             _ = self.unlock();
             }
@@ -536,7 +537,8 @@ pub fn invalidTrackExternalFreeType(comptime T: type) noreturn {
 pub fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
         {
             const raw_state = @as(*State, @ptrCast(@alignCast(ctx)));
-            const state = raw_state.lock();
+            var state = raw_state.lock();
+            _ = &state;
             defer {
             _ = raw_state.unlock();
             }
@@ -547,7 +549,8 @@ pub fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, r
 pub fn vtable_free(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
         {
             const raw_state = @as(*State, @ptrCast(@alignCast(ctx)));
-            const state = raw_state.lock();
+            var state = raw_state.lock();
+            _ = &state;
             defer {
             _ = raw_state.unlock();
             }

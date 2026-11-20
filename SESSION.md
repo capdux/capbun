@@ -3058,3 +3058,5 @@ Options:
 - **[2026-11-20 18:18] Wave 7 Batch B 验收提交（13 模块全绿）+ Wave 8 `zig:check` 体检**：完成 `color`/`css_parser`/`Sink`/`TimeoutObject`/`ImmediateObject`/`multi_array_list`/`Listener`/`Archive`/`BlockList`/`Response`/`cron_parser`/`NativeZlib`/`PostgresSQLQuery` 13 模块独立验收（13/13 PASS，ratio 0.955x~1.160x）；Wave 8 `bun run zig:check` 总错误由 **638 暴跌至 280**（`ZigGeneratedClasses.zig` 62→2，`host_fn.zig` 33→0，`ref_count.zig` 16→0，`output.zig` 265→4）。
 
 - **[2026-11-20 18:31] Wave 8 Batch A 验收提交（Top 高频 18 模块全绿，含 `ZigGeneratedClasses.zig` 最后 2 错）**：完成 `uws_sys/Response`/`html_rewriter`/`dns`/`css_parser`/`color`/`Blob`/`Store`/`multi_array_list`/`baby_list`/`ReadableStream`/`node_zlib_binding`/`NativeZstd`/`NativeBrotli`/`ArrayBufferSink`/`Sink`/`streams`/`ByteStream`/`JSSourceMap` 18 模块独立验收（18/18 PASS，ratio 0.092x~1.147x）并原子提交；静待专家 B 组（`05b0e08c`，24 文件）完成后跑 Wave 9 `zig:check`。
+
+- **[2026-11-20 18:41] Wave 8 Batch B 验收提交（24 模块全绿）+ Wave 9 `zig:check` 体检**：完成中频 2~4 错 24 模块独立验收（24/24 PASS，ratio 0.747x~1.152x）；Wave 9 `bun run zig:check` 总错误降至 **196**（**`codegen/ZigGeneratedClasses.zig` 彻底归 0**，`std/fmt.zig` 彻底归 0，剩余 75% 文件仅为 1 处错误）。

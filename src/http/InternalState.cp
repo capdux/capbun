@@ -57,7 +57,7 @@ export @root @value struct InternalState {
     content_length: usize? = null,
     total_body_received: usize = 0,
     request_body: string = "",
-    original_request_body: HTTPRequestBody = .bytes(""),
+    original_request_body: HTTPRequestBody = HTTPRequestBody{ bytes: "" },
     request_sent_len: usize = 0,
     fail: anyerror? = null,
     request_stage: HTTPStage = .pending,
@@ -89,7 +89,10 @@ export @root @value struct InternalState {
         this.response_message_buffer.deinit();
 
         const body_msg = this.body_out_str;
-        if (body := body_msg) body.reset();
+        if (body_msg != null) {
+            const b = body_msg.?;
+            b.reset();
+        }
         this.decompressor.deinit();
 
         if (*cloned_meta := this.cloned_metadata) {

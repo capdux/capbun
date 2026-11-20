@@ -112,8 +112,7 @@ pub const TablePrinterFirstPassContext = struct {
     idx: u32 = 0,
     e: bool = false,
 
-pub fn callback(self: *TablePrinterFirstPassContext, _: *jsc.VM, _: *JSGlobalObject, ctx: *TablePrinterFirstPassContext, value: JSValue) callconv(.c) void {
-        _ = self;
+pub fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *TablePrinterFirstPassContext, value: JSValue) callconv(.c) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((ctx.printer.updateColumnsForRow(ctx.columns, .{ .num = ctx.idx }, value)) catch |__ce_0| { _ = &__ce_0; ctx.e = true;
             break :blk_catch_0 {}; }); });
             ctx.idx = (ctx.idx + 1);
@@ -186,10 +185,11 @@ pub fn updateColumnsForRow(self: *TablePrinter, columns: *std.array_list.Managed
                         const value = (if (@typeInfo(@TypeOf(cols_iter)) == .@"enum") @intFromEnum(cols_iter) else cols_iter.value);
                         const column: *Column = brk: {
                         const col_str = String.init(col_key);
-                        for (cp_mut_slice(&columns.items[1..])) |*col| {
-                            _ = &col;
-                            if ((if (@typeInfo(@TypeOf((col.*))) == .@"enum" or @typeInfo(@TypeOf((col.*))) == .@"union") @tagName((col.*)) else (col.*).name).eql(col_str)) {
-                                break :brk (col.*);
+                        var ci: usize = 1;
+                        _ = &ci;
+                        while ((ci < columns.items.len)) : (ci = (ci + 1)) {
+                            if ((if (@typeInfo(@TypeOf(columns.items[@as(usize, @intCast(ci))])) == .@"enum" or @typeInfo(@TypeOf(columns.items[@as(usize, @intCast(ci))])) == .@"union") @tagName(columns.items[@as(usize, @intCast(ci))]) else columns.items[@as(usize, @intCast(ci))].name).eql(col_str)) {
+                                break :brk (&columns.items[@as(usize, @intCast(ci))]);
                             }
                         }
                         _ = col_str.ref();
@@ -240,8 +240,8 @@ _ = try writer.print("{d}", .{ value });
             {
                 var col_idx: i32 = 1;
                 _ = &col_idx;
-                const __end_3 = columns.items.len;
-                while (col_idx < __end_3) : (col_idx += 1) {
+                const __end_2 = columns.items.len;
+                while (col_idx < __end_2) : (col_idx += 1) {
                     const col = columns.items[@as(usize, @intCast(col_idx))];
                     _ = try writer.writeAll("│");
                     var value = JSValue.zero;
@@ -2891,7 +2891,7 @@ pub fn format2(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVa
             }
         }
         }
-        var this_value: JSValue = (vals[0]).*;
+        var this_value = vals[0];
         _ = &this_value;
         var fmt = ConsoleObject.Formatter{ .remaining_values = vals[0..len][1..], .globalThis = global, .ordered_properties = options.ordered_properties, .quote_strings = options.quote_strings, .max_depth = options.max_depth, .single_line = options.single_line, .indent = options.default_indent, .stack_check = bun.StackCheck.init(), .can_throw_stack_overflow = true, .error_display_level = options.error_display_level };
         _ = &fmt;

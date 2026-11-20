@@ -373,11 +373,11 @@ pub fn deinit(self: *FilesContext) void {
         mtime: i64,
     };
     const FileEntryList = std.ArrayList(FileEntry);
-    const Err = error{ OutOfMemory, ReadError };
+    const FilesErr = error{ OutOfMemory, ReadError };
     const Result = union(enum) {
         success: FileEntryList,
         libarchive_err: [*:0]u8,
-        @"err": Error,
+        @"err": FilesErr,
     
     pub fn deinit(self: *@This()) void {
                 switch (self.*) {
@@ -975,7 +975,7 @@ pub fn parseCompressionOptions(globalThis: *jsc.JSGlobalObject, options_arg: jsc
                 if (((level_num < 1) or (level_num > 12))) {
                     return globalThis.throwInvalidArguments("Archive: level must be between 1 and 12", .{});
                 }
-                level = @as(u8, @truncate(level_num));
+                level = @as(u8, @intCast(level_num));
             }
             return .{ .gzip = .{ .level = level } };
         }

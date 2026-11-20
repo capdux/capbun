@@ -1106,7 +1106,7 @@ pub struct CronJob {
     }
 
     fn getCron(*_, _: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        return .js_undefined; // unreachable — register() pre-populates the cache via cronSetCached
+        return jsc.JSValue.js_undefined; // unreachable — register() pre-populates the cache via cronSetCached
     }
 
     static fn register(globalObject: *jsc.JSGlobalObject, schedule_arg: jsc.JSValue, callback_arg: jsc.JSValue): bun.JSError!jsc.JSValue {
@@ -1197,7 +1197,7 @@ pub fn cronParse(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
         return globalObject.throwInvalidArguments("Invalid date value", .{});
 
     const next_ms_opt = parsed.next(globalObject, from_ms)?;
-    if (next_ms_opt == null) return .@"null";
+    if (next_ms_opt == null) return jsc.JSValue.@"null";
     const next_ms = next_ms_opt.?;
     return jsc.JSValue.fromDateNumber(globalObject, next_ms);
 }

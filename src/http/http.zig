@@ -544,7 +544,7 @@ pub fn completeConnectingProcess(self: *HTTPClient) void {
 }
 
 pub fn toResult(self: *HTTPClient) HTTPClientResult {
-        const body_size: HTTPClientResult.BodySize = (if (self.state.isChunkedEncoding()) .{ .total_received = self.state.total_body_received } else (if ((self.state.content_length != null)) .{ .content_length = self.state.content_length.? } else .{ .unknown = .{} }));
+        const body_size: HTTPClientResult.BodySize = (if (self.state.isChunkedEncoding()) .{ .total_received = self.state.total_body_received } else (if ((self.state.content_length != null)) .{ .content_length = self.state.content_length.? } else .unknown));
         var certificate_info: ?CertificateInfo = null;
         _ = &certificate_info;
         if (self.state.certificate_info) |info| {
@@ -2087,7 +2087,7 @@ pub fn isAbort(self: HTTPClientResult) bool {
             ctx: HttpCallbackCtx,
             function: Function,
     
-            pub const Function = *const *const fn(ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
+            pub const Function = *const fn(ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
     
             pub fn run(self: Callback, async_http: *AsyncHTTP, result: HTTPClientResult) void {
                 self.function(self.ctx, async_http, result);

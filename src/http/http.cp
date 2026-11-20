@@ -991,7 +991,7 @@ export @root @value struct HTTPClient {
         else if (this.state.content_length != null)
             .{ .content_length = this.state.content_length.? }
         else
-            .{ .unknown = {} };
+            .unknown;
 
         let certificate_info: CertificateInfo? = null;
         if (info := this.state.certificate_info) {
@@ -2835,7 +2835,7 @@ export @value struct HTTPClientResult {
         ctx: HttpCallbackCtx,
         function: Function,
 
-        pub const Function = *const fn (ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
+        pub const Function = fn (ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
 
         pub fn run(self: Callback, async_http: *AsyncHTTP, result: HTTPClientResult) void {
             self.function(self.ctx, async_http, result);

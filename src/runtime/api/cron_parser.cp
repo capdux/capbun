@@ -243,7 +243,7 @@ fn parseField(comptime T: type, field: []const u8, min: u7, max: u7, kind: NameK
         // Set bits
         let i: u7 = range_min;
         while (i <= range_max) : (i += step) {
-            result |= @as(T, 1) << @intCast(i);
+            result |= @as(T, 1) << @as(T, @intCast(i));
             if (@as(u8, i) + @as(u8, step) > range_max) break;
         }
     }

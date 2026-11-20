@@ -149,9 +149,9 @@ pub fn init(self: *Source, stream: Source.StreamType, err_stream: Source.StreamT
             self.buffered_error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi((&self.stderr_buffer));
             self.buffered_stream = (&self.buffered_stream_backing.new_interface);
             self.buffered_error_stream = (&self.buffered_error_stream_backing.new_interface);
-            var empty_stream_buf: [0]u8 = &.{};
+            var empty_stream_buf: [0]u8 = undefined;
             _ = &empty_stream_buf;
-            var empty_err_buf: [0]u8 = &.{};
+            var empty_err_buf: [0]u8 = undefined;
             _ = &empty_err_buf;
             self.stream_backing = self.raw_stream.quietWriter().adaptToNewApi(empty_stream_buf[0..0]);
             self.error_stream_backing = self.raw_error_stream.quietWriter().adaptToNewApi(empty_err_buf[0..0]);
@@ -244,10 +244,14 @@ pub fn getColorDepthOnce() void {
                     lazy_color_depth = depth_256;
                     return;
                 }
-                const pairs: [][][]const u8 = .{ .{ "st", depth_16 }, .{ "hurd", depth_16 }, .{ "eterm", depth_16 }, .{ "gnome", depth_16 }, .{ "kterm", depth_16 }, .{ "mosh", depth_16m }, .{ "putty", depth_16 }, .{ "cons25", depth_16 }, .{ "cygwin", depth_16 }, .{ "dtterm", depth_16 }, .{ "mlterm", depth_16 }, .{ "console", depth_16 }, .{ "jfbterm", depth_16 }, .{ "konsole", depth_16 }, .{ "terminator", depth_16m }, .{ "xterm-ghostty", depth_16m }, .{ "rxvt-unicode-24bit", depth_16m } };
+                const TermPair = struct {
+    name: []const u8,
+    depth: ColorDepth,
+};
+                const pairs: [17]TermPair = .{ TermPair{ .name = "st", .depth = depth_16 }, TermPair{ .name = "hurd", .depth = depth_16 }, TermPair{ .name = "eterm", .depth = depth_16 }, TermPair{ .name = "gnome", .depth = depth_16 }, TermPair{ .name = "kterm", .depth = depth_16 }, TermPair{ .name = "mosh", .depth = depth_16m }, TermPair{ .name = "putty", .depth = depth_16 }, TermPair{ .name = "cons25", .depth = depth_16 }, TermPair{ .name = "cygwin", .depth = depth_16 }, TermPair{ .name = "dtterm", .depth = depth_16 }, TermPair{ .name = "mlterm", .depth = depth_16 }, TermPair{ .name = "console", .depth = depth_16 }, TermPair{ .name = "jfbterm", .depth = depth_16 }, TermPair{ .name = "konsole", .depth = depth_16 }, TermPair{ .name = "terminator", .depth = depth_16m }, TermPair{ .name = "xterm-ghostty", .depth = depth_16m }, TermPair{ .name = "rxvt-unicode-24bit", .depth = depth_16m } };
                 inline for (pairs) |pair| {
-                    if (strings.eqlComptime(term, pair[0])) {
-                        lazy_color_depth = pair[1];
+                    if (strings.eqlComptime(term, (if (@typeInfo(@TypeOf(pair)) == .@"enum" or @typeInfo(@TypeOf(pair)) == .@"union") @tagName(pair) else pair.name))) {
+                        lazy_color_depth = pair.depth;
                         return;
                     }
                 }
@@ -505,7 +509,7 @@ pub inline fn start() DebugTimer {
             }
     }
 
-pub fn format(self: DebugTimer, w: *std.Io.Writer) !std.Io.Writer.Error {
+pub fn format(self: DebugTimer, w: *std.Io.Writer) std.Io.Writer.Error!void {
             if (comptime Environment.isDebug) {
                 var timer = self.timer;
                 _ = &timer;
@@ -517,7 +521,7 @@ pub fn format(self: DebugTimer, w: *std.Io.Writer) !std.Io.Writer.Error {
 };
 
 pub const ScopedDebugWriter = struct {
-    scoped_file_writer: File.QuietWriter = undefined,
+    pub var scoped_file_writer: File.QuietWriter = undefined;
     pub threadlocal var disable_inside_log: isize = 0;
 };
 

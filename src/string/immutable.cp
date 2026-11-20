@@ -471,7 +471,7 @@ pub fn lastIndexOfChar(self: []const u8, char: u8): usize? {
         }
         const start = bun.c.memrchr(self.ptr, char, self.len) orelse return null;
         const i = @intFromPtr(start) - @intFromPtr(self.ptr);
-        return i32(i);
+        return i;
     }
     return lastIndexOfCharT(u8, self, char);
 }
@@ -1828,7 +1828,7 @@ pub fn trimSpaces(slice: auto): @TypeOf(slice) {
 
 pub fn isAllWhitespace(slice: []const u8): bool {
     let begin: usize = 0;
-    while (begin < slice.len && std.mem.indexOfScalar(u8, &whitespace_chars, slice[begin]) != null) : (begin += 1) {}
+    while (begin < slice.len && std.mem.indexOfScalar(u8, whitespace_chars, slice[begin]) != null) : (begin += 1) {}
     return begin == slice.len;
 }
 
@@ -1836,7 +1836,7 @@ pub const whitespace_chars = " \t\n\r\x0B\x0C";
 
 pub fn lengthOfLeadingWhitespaceASCII(slice: string): usize {
     let begin: usize = 0;
-    while (begin < slice.len && std.mem.indexOfScalar(u8, &whitespace_chars, slice[begin]) != null) : (begin += 1) {}
+    while (begin < slice.len && std.mem.indexOfScalar(u8, whitespace_chars, slice[begin]) != null) : (begin += 1) {}
     return begin;
 }
 
@@ -1899,10 +1899,10 @@ pub fn isASCIIHexDigit(c: u8): bool {
 
 pub fn toASCIIHexValue(character: u8): u8 {
     if (comptime Environment.isDebug) assert(isASCIIHexDigit(character));
-    return switch (character) {
-        0..('A' - 1) => character - '0',
-        else => (character - 'A' + 10) & 0xF,
-    };
+    if (character < 'A') {
+        return character - '0';
+    }
+    return (character - 'A' + 10) & 0xF;
 }
 
 pub fn NewLengthSorter(comptime Type: type, comptime field: string): type {

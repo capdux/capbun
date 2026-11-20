@@ -846,7 +846,8 @@ _ = log("{s}() dropped ({d} bytes)", .{ name, buffer.len });
 }
                 } else {
                     if (value.isString()) {
-                        var string_value = try value.toJSString(globalThis).toSlice(globalThis, bun.default_allocator);
+                        const js_str = try value.toJSString(globalThis);
+                        var string_value = js_str.toSlice(globalThis, bun.default_allocator);
                         _ = &string_value;
                         defer {
                         _ = string_value.deinit();

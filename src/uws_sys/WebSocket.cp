@@ -1,12 +1,28 @@
 
-pub const CorkCallback = ?*const fn (*!?) callconv(.c) void;
-pub const TopicCallback = ?*const fn ([*c]const u8, usize, *!?) callconv(.c) void;
-
-pub const uws_websocket_handler = ?*const fn (*RawWebSocket) callconv(.c) void;
-pub const uws_websocket_message_handler = ?*const fn (*RawWebSocket, [*c]const u8, usize, bun.uws.Opcode) callconv(.c) void;
-pub const uws_websocket_close_handler = ?*const fn (*RawWebSocket, i32, [*c]const u8, usize) callconv(.c) void;
-pub const uws_websocket_upgrade_handler = ?*const fn (*!?, *uws_res, *Request, *bun.uws.WebSocketUpgradeContext, usize) callconv(.c) void;
-pub const uws_websocket_ping_pong_handler = ?*const fn (*RawWebSocket, [*c]const u8, usize) callconv(.c) void;
+pub type OpaquePtr = *!?;
+const _ws_cb_sigs = struct {
+    @callconv("c") static fn cork(_: OpaquePtr) {}
+    @callconv("c") static fn topic(_: [*c]const u8, _: usize, _: OpaquePtr) {}
+    @callconv("c") static fn handler(_: *RawWebSocket) {}
+    @callconv("c") static fn message(_: *RawWebSocket, _: [*c]const u8, _: usize, _: bun.uws.Opcode) {}
+    @callconv("c") static fn close(_: *RawWebSocket, _: i32, _: [*c]const u8, _: usize) {}
+    @callconv("c") static fn upgrade(_: OpaquePtr, _: *uws_res, _: *Request, _: *bun.uws.WebSocketUpgradeContext, _: usize) {}
+    @callconv("c") static fn ping_pong(_: *RawWebSocket, _: [*c]const u8, _: usize) {}
+};
+pub const CorkCallbackFn = *const @TypeOf(_ws_cb_sigs.cork);
+pub type CorkCallback = CorkCallbackFn?;
+pub const TopicCallbackFn = *const @TypeOf(_ws_cb_sigs.topic);
+pub type TopicCallback = TopicCallbackFn?;
+pub const uws_websocket_handler_fn = *const @TypeOf(_ws_cb_sigs.handler);
+pub type uws_websocket_handler = uws_websocket_handler_fn?;
+pub const uws_websocket_message_handler_fn = *const @TypeOf(_ws_cb_sigs.message);
+pub type uws_websocket_message_handler = uws_websocket_message_handler_fn?;
+pub const uws_websocket_close_handler_fn = *const @TypeOf(_ws_cb_sigs.close);
+pub type uws_websocket_close_handler = uws_websocket_close_handler_fn?;
+pub const uws_websocket_upgrade_handler_fn = *const @TypeOf(_ws_cb_sigs.upgrade);
+pub type uws_websocket_upgrade_handler = uws_websocket_upgrade_handler_fn?;
+pub const uws_websocket_ping_pong_handler_fn = *const @TypeOf(_ws_cb_sigs.ping_pong);
+pub type uws_websocket_ping_pong_handler = uws_websocket_ping_pong_handler_fn?;
 // src/uws_sys/WebSocket.cp
 // WebSocket wrapper and behavior dispatcher in CP language
 
@@ -86,7 +102,7 @@ pub fn WebSocket(comptime ssl_flag: i32): type { return struct {
     pub fn cork(this: *@This(), ctx: anytype, comptime callback: anytype): void {
         const Wrapper = struct {
             pub fn wrap(user_data: *!?) callconv(.c) void {
-                callback(@ptrCast(user_data));
+                callback(@ptrCast(@alignCast(user_data)));
             }
         };
         uws_ws_cork(ssl_flag, this.raw(), Wrapper.wrap, @ptrCast(ctx));

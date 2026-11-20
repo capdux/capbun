@@ -352,7 +352,8 @@ export class URL {
 
     pub static fn parseProtocol(url: *URL, str: string): u31? {
         if (str.len < "://".len) return null;
-        for (const i of 0..str.len) {
+        let i: usize = 0;
+        while (i < str.len) : (i += 1) {
             switch (str[i]) {
                 '/', '?', '%' => {
                     return null;
@@ -375,7 +376,8 @@ export class URL {
         url.username = "";
 
         if (str.len < "@".len) return null;
-        for (const i of 0..str.len) {
+        let i: usize = 0;
+        while (i < str.len) : (i += 1) {
             switch (str[i]) {
                 ':', '@' => {
                     // we found a username, everything before this point in the slice is a username
@@ -397,7 +399,8 @@ export class URL {
         url.password = "";
 
         if (str.len < "@".len) return null;
-        for (const i of 0..str.len) {
+        let i: usize = 0;
+        while (i < str.len) : (i += 1) {
             switch (str[i]) {
                 '@' => {
                     // we found a password, everything before this point in the slice is a password
@@ -554,7 +557,7 @@ pub @value class QueryStringMapIterator {
     }
 }
 
-export class QueryStringMap {
+export @value class QueryStringMap {
     allocator: std.mem.Allocator;
     slice: string;
     buffer: []u8;
@@ -622,7 +625,7 @@ export class QueryStringMap {
     pub static fn initWithScanner(
         allocator: std.mem.Allocator,
         _scanner: CombinedScanner,
-    ): !QueryStringMap? {
+    ): (QueryStringMap?)!bun.OOM {
         let list: Param.List = .{};
         let scanner = CombinedScanner{ .pathname = _scanner.pathname, .query = _scanner.query };
 
@@ -726,7 +729,7 @@ export class QueryStringMap {
     pub static fn init(
         allocator: std.mem.Allocator,
         query_string: string,
-    ): !QueryStringMap? {
+    ): (QueryStringMap?)!bun.OOM {
         let list: Param.List = .{};
 
         let scanner = Scanner.init(query_string);

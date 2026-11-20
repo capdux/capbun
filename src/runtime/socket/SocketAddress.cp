@@ -100,7 +100,9 @@ pub struct SocketAddressOptions {
         };
         defer url_str.deref();
 
-        const url = jsc.URL.fromString(url_str) orelse return .js_undefined;
+        const url_opt = jsc.URL.fromString(url_str);
+        if (url_opt == null) return jsc.JSValue.js_undefined;
+        const url = url_opt.?;
         defer url.deinit();
         const host = url.host();
         const port32 = url.port();

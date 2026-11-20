@@ -391,7 +391,7 @@ pub struct StatWatcher {
 
     fn doClose(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         _.close();
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     /// If the scheduler is not using this, free instantly, otherwise mark for being freed.

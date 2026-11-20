@@ -282,7 +282,7 @@ pub fn parseField(comptime T: type, field: []const u8, min: u7, max: u7, kind: N
             var i: u7 = range_min;
             _ = &i;
             while ((i <= range_max)) : (i = (i + step)) {
-                result = (result | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(1)) else @as(T, 1)), @intCast(i)));
+                result = (result | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(1)) else @as(T, 1)), @as(T, @intCast(i))));
                 if ((((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(u8, @intFromEnum(i)) else cp_cast_int(u8, i)) + (if (comptime @typeInfo(@TypeOf(step)) == .@"enum") cp_cast_int(u8, @intFromEnum(step)) else cp_cast_int(u8, step))) > range_max)) {
                     break;
                 }

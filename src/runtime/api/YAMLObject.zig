@@ -847,9 +847,10 @@ pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
 }
 
 pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {
-        const value = undefined;
-        const replacer = undefined;
-        const space_value = callFrame.argumentsAsArray(3);
+        const args = callFrame.argumentsAsArray(3);
+        const value = args[0];
+        const replacer = args[1];
+        const space_value = args[2];
         _ = value.ensureStillAlive();
         if (((value.isUndefined() or value.isSymbol()) or value.isFunction())) {
             return error.js_undefined;
@@ -1019,14 +1020,20 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         _ = ast_scope.exit();
         }
         const input_value = callFrame.argumentsAsArray(1)[0];
-        const input: jsc.Node.BlobOrStringOrBuffer = (blk_catch_4: { break :blk_catch_4 ((jsc.Node.BlobOrStringOrBuffer.fromJS(global, arena_allocator.allocator(), input_value)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 input: {
-        var str = try input_value.toBunString(global);
-        _ = &str;
-        defer {
-        _ = str.deref();
+        const maybe_input = try jsc.Node.BlobOrStringOrBuffer.fromJS(global, arena_allocator.allocator(), input_value);
+        var input: jsc.Node.BlobOrStringOrBuffer = undefined;
+        _ = &input;
+        if (maybe_input) |v| {
+            _ = &v;
+            input = v;
+        } else {
+            var str = try input_value.toBunString(global);
+            _ = &str;
+            defer {
+            _ = str.deref();
+            }
+            input = jsc.Node.BlobOrStringOrBuffer{ .string_or_buffer = .{ .string = str.toSlice(arena_allocator.allocator()) } };
         }
-        break :input jsc.Node.BlobOrStringOrBuffer{ .string_or_buffer = .{ .string = str.toSlice(arena_allocator.allocator()) } };
-}; }); });
         defer {
         _ = input.deinit();
         }
@@ -1036,7 +1043,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         _ = log.deinit();
         }
         const source = (&logger.Source.initPathString("input.yaml", input.slice()));
-        const root = (blk_catch_5: { break :blk_catch_5 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        const root = (blk_catch_4: { break :blk_catch_4 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         if ((e == error.StackOverflow)) {

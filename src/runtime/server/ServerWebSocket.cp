@@ -1011,7 +1011,8 @@ inline fn sendPing(
                     },
                 }
             } else if (value.isString()) {
-                let string_value = (try value.toJSString(globalThis)).toSlice(globalThis, bun.default_allocator);
+                const js_str = value.toJSString(globalThis)?;
+                let string_value = js_str.toSlice(globalThis, bun.default_allocator);
                 defer string_value.deinit();
                 const buffer = string_value.slice();
 

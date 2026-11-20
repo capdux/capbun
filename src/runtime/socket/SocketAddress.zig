@@ -175,7 +175,13 @@ inline else => |is_8_bit| blk: {
         defer {
         _ = url_str.deref();
         }
-        const url = ((jsc.URL.fromString(url_str)) orelse { return .{ .ok = .js_undefined }; });
+        const url_opt = jsc.URL.fromString(url_str);
+        var __url_opt_moved = false; _ = &__url_opt_moved;
+        defer if (!__url_opt_moved) { const __T = @TypeOf(url_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = url_opt.release() catch {}; } else { url_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = url_opt; _drop_val.release(); } };
+        if ((url_opt == null)) {
+            return jsc.JSValue.js_undefined;
+        }
+        const url = url_opt.?;
         var __url_moved = false; _ = &__url_moved;
         defer if (!__url_moved) { const __T = @TypeOf(url); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = url.release() catch {}; } else { url.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = url; _drop_val.release(); } };
         defer {

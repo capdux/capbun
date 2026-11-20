@@ -275,13 +275,44 @@ pub fn onUpgrade(ptr: ?*anyopaque, res: *uws_res, req: *Request, context: *bun.u
     }
 };
 
-pub const CorkCallback = ?*const *const fn(?*anyopaque) callconv(.c) void;
-pub const TopicCallback = ?*const *const fn([*c]const u8, usize, ?*anyopaque) callconv(.c) void;
-pub const uws_websocket_handler = ?*const *const fn(*RawWebSocket) callconv(.c) void;
-pub const uws_websocket_message_handler = ?*const *const fn(*RawWebSocket, [*c]const u8, usize, bun.uws.Opcode) callconv(.c) void;
-pub const uws_websocket_close_handler = ?*const *const fn(*RawWebSocket, i32, [*c]const u8, usize) callconv(.c) void;
-pub const uws_websocket_upgrade_handler = ?*const *const fn(?*anyopaque, *uws_res, *Request, *bun.uws.WebSocketUpgradeContext, usize) callconv(.c) void;
-pub const uws_websocket_ping_pong_handler = ?*const *const fn(*RawWebSocket, [*c]const u8, usize) callconv(.c) void;
+pub const OpaquePtr = ?*anyopaque;
+pub const CorkCallback = ?CorkCallbackFn;
+pub const TopicCallback = ?TopicCallbackFn;
+pub const uws_websocket_handler = ?uws_websocket_handler_fn;
+pub const uws_websocket_message_handler = ?uws_websocket_message_handler_fn;
+pub const uws_websocket_close_handler = ?uws_websocket_close_handler_fn;
+pub const uws_websocket_upgrade_handler = ?uws_websocket_upgrade_handler_fn;
+pub const uws_websocket_ping_pong_handler = ?uws_websocket_ping_pong_handler_fn;
+const _ws_cb_sigs = struct {
+
+pub fn cork(_: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn topic(_: [*c]const u8, _: usize, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn handler(_: *RawWebSocket) callconv(.c) void {
+    }
+
+pub fn message(_: *RawWebSocket, _: [*c]const u8, _: usize, _: bun.uws.Opcode) callconv(.c) void {
+    }
+
+pub fn close(_: *RawWebSocket, _: i32, _: [*c]const u8, _: usize) callconv(.c) void {
+    }
+
+pub fn upgrade(_: OpaquePtr, _: *uws_res, _: *Request, _: *bun.uws.WebSocketUpgradeContext, _: usize) callconv(.c) void {
+    }
+
+pub fn ping_pong(_: *RawWebSocket, _: [*c]const u8, _: usize) callconv(.c) void {
+    }
+};
+pub const CorkCallbackFn = *const @TypeOf(_ws_cb_sigs.cork);
+pub const TopicCallbackFn = *const @TypeOf(_ws_cb_sigs.topic);
+pub const uws_websocket_handler_fn = *const @TypeOf(_ws_cb_sigs.handler);
+pub const uws_websocket_message_handler_fn = *const @TypeOf(_ws_cb_sigs.message);
+pub const uws_websocket_close_handler_fn = *const @TypeOf(_ws_cb_sigs.close);
+pub const uws_websocket_upgrade_handler_fn = *const @TypeOf(_ws_cb_sigs.upgrade);
+pub const uws_websocket_ping_pong_handler_fn = *const @TypeOf(_ws_cb_sigs.ping_pong);
 
 extern "c" fn uws_ws_memory_cost(ssl: i32, ws: *RawWebSocket) callconv(.c) usize;
 
@@ -364,7 +395,7 @@ pub fn cork(self: *@This(), ctx: anytype, comptime callback: anytype) void {
             const Wrapper = struct {
 
 pub fn wrap(user_data: ?*anyopaque) callconv(.c) void {
-            _ = callback(@ptrCast(user_data));
+            _ = callback(@ptrCast(@alignCast(user_data)));
     }
 };
             _ = uws_ws_cork(ssl_flag, self.raw(), Wrapper.wrap, @ptrCast(ctx));

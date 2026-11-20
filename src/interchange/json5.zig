@@ -122,10 +122,79 @@ pub const JSON5Parser = struct {
     stack_check: bun.StackCheck,
     token: JSON5Token,
 
-pub fn toError(err: ParseError, parser: *const JSON5Parser) JSON5Error {
+pub fn toError(e: ParseError, parser: *const JSON5Parser) JSON5Error {
             const token_pos = parser.token.loc.toUsize();
             const scan_pos = parser.pos;
-            return (__sw_blk_0: { const __disc_0 = err; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  break :__sw_blk_0 cp_val(.oom); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .StackOverflow)) {  break :__sw_blk_0 cp_val(.stack_overflow); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnexpectedCharacter)) {  break :__sw_blk_0 cp_val(.{ .unexpected_character = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnterminatedString)) {  break :__sw_blk_0 cp_val(.{ .unterminated_string = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnterminatedComment)) {  break :__sw_blk_0 cp_val(.{ .unterminated_comment = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnterminatedEscape)) {  break :__sw_blk_0 cp_val(.{ .unterminated_escape = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidNumber)) {  break :__sw_blk_0 cp_val(.{ .invalid_number = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .LeadingZeros)) {  break :__sw_blk_0 cp_val(.{ .leading_zeros = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidHexNumber)) {  break :__sw_blk_0 cp_val(.{ .invalid_hex_number = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidHexEscape)) {  break :__sw_blk_0 cp_val(.{ .invalid_hex_escape = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidUnicodeEscape)) {  break :__sw_blk_0 cp_val(.{ .invalid_unicode_escape = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OctalEscape)) {  break :__sw_blk_0 cp_val(.{ .octal_escape = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidIdentifier)) {  break :__sw_blk_0 cp_val(.{ .invalid_identifier = .{ .pos = scan_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnexpectedToken)) {  break :__sw_blk_0 cp_val(.{ .unexpected_token = .{ .pos = token_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnexpectedEof)) {  break :__sw_blk_0 cp_val((if ((parser.token.data == .eof)) .{ .unexpected_eof = .{ .pos = token_pos } } else .{ .unexpected_token = .{ .pos = token_pos } })); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .TrailingData)) {  break :__sw_blk_0 cp_val(.{ .trailing_data = .{ .pos = token_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .ExpectedColon)) {  break :__sw_blk_0 cp_val(.{ .expected_colon = .{ .pos = token_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnterminatedObject)) {  break :__sw_blk_0 cp_val(.{ .unterminated_object = .{ .pos = token_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .ExpectedComma)) {  break :__sw_blk_0 cp_val(.{ .expected_comma = .{ .pos = token_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .ExpectedClosingBrace)) {  break :__sw_blk_0 cp_val(.{ .expected_closing_brace = .{ .pos = token_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnterminatedArray)) {  break :__sw_blk_0 cp_val(.{ .unterminated_array = .{ .pos = token_pos } }); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .ExpectedClosingBracket)) {  break :__sw_blk_0 cp_val(.{ .expected_closing_bracket = .{ .pos = token_pos } }); } }  unreachable; });
+            if ((e == error.OutOfMemory)) {
+                return JSON5Error.oom;
+            }
+            if ((e == error.StackOverflow)) {
+                return JSON5Error.stack_overflow;
+            }
+            if ((e == error.UnexpectedCharacter)) {
+                return JSON5Error{ .unexpected_character = .{ .pos = scan_pos } };
+            }
+            if ((e == error.UnterminatedString)) {
+                return JSON5Error{ .unterminated_string = .{ .pos = scan_pos } };
+            }
+            if ((e == error.UnterminatedComment)) {
+                return JSON5Error{ .unterminated_comment = .{ .pos = scan_pos } };
+            }
+            if ((e == error.UnterminatedEscape)) {
+                return JSON5Error{ .unterminated_escape = .{ .pos = scan_pos } };
+            }
+            if ((e == error.InvalidNumber)) {
+                return JSON5Error{ .invalid_number = .{ .pos = scan_pos } };
+            }
+            if ((e == error.LeadingZeros)) {
+                return JSON5Error{ .leading_zeros = .{ .pos = scan_pos } };
+            }
+            if ((e == error.InvalidHexNumber)) {
+                return JSON5Error{ .invalid_hex_number = .{ .pos = scan_pos } };
+            }
+            if ((e == error.InvalidHexEscape)) {
+                return JSON5Error{ .invalid_hex_escape = .{ .pos = scan_pos } };
+            }
+            if ((e == error.InvalidUnicodeEscape)) {
+                return JSON5Error{ .invalid_unicode_escape = .{ .pos = scan_pos } };
+            }
+            if ((e == error.OctalEscape)) {
+                return JSON5Error{ .octal_escape = .{ .pos = scan_pos } };
+            }
+            if ((e == error.InvalidIdentifier)) {
+                return JSON5Error{ .invalid_identifier = .{ .pos = scan_pos } };
+            }
+            if ((e == error.UnexpectedToken)) {
+                return JSON5Error{ .unexpected_token = .{ .pos = token_pos } };
+            }
+            if ((e == error.UnexpectedEof)) {
+                if ((parser.token.data == .eof)) {
+                    return JSON5Error{ .unexpected_eof = .{ .pos = token_pos } };
+                }
+                return JSON5Error{ .unexpected_token = .{ .pos = token_pos } };
+            }
+            if ((e == error.TrailingData)) {
+                return JSON5Error{ .trailing_data = .{ .pos = token_pos } };
+            }
+            if ((e == error.ExpectedColon)) {
+                return JSON5Error{ .expected_colon = .{ .pos = token_pos } };
+            }
+            if ((e == error.UnterminatedObject)) {
+                return JSON5Error{ .unterminated_object = .{ .pos = token_pos } };
+            }
+            if ((e == error.ExpectedComma)) {
+                return JSON5Error{ .expected_comma = .{ .pos = token_pos } };
+            }
+            if ((e == error.ExpectedClosingBrace)) {
+                return JSON5Error{ .expected_closing_brace = .{ .pos = token_pos } };
+            }
+            if ((e == error.UnterminatedArray)) {
+                return JSON5Error{ .unterminated_array = .{ .pos = token_pos } };
+            }
+            if ((e == error.ExpectedClosingBracket)) {
+                return JSON5Error{ .expected_closing_bracket = .{ .pos = token_pos } };
+            }
+            _ = unreachable;
     }
 
 pub fn parse(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator) ExternalError!Expr {
@@ -257,9 +326,9 @@ if ((c == 116)) {
                                         continue;
                                     }
                                     self.token.loc = .{ .start = @intCast(self.pos) };
-                                    const cp = ((self.readCodepoint()) orelse (({
+                                    const cp = ((self.readCodepoint()) orelse {
                                     return error.UnexpectedCharacter;
-})));
+});
                                     if (identifier.isIdentifierStart(cp.cp)) {
                                         self.token.data = .{ .identifier = try self.scanIdentifier() };
                                         return;
@@ -303,7 +372,8 @@ const n = try self.scanNumber();
 },
 'I' => {
 if (self.scanKeyword("Infinity")) {
-                return (if (is_negative) (0 - std).math.inf(f64) else std.math.inf(f64));
+                const inf_val = std.math.inf(f64);
+                return (if (is_negative) (0 - inf_val) else inf_val);
             }
             return error.UnexpectedCharacter;
 },
@@ -551,12 +621,12 @@ if ((self.pos < self.source.len)) {
             _ = try buf.append(0);
 },
 'x' => {
-const hi = ((self.readHexDigit()) orelse (({
+const hi = ((self.readHexDigit()) orelse {
             return error.InvalidHexEscape;
-})));
-            const lo = ((self.readHexDigit()) orelse (({
+});
+            const lo = ((self.readHexDigit()) orelse {
             return error.InvalidHexEscape;
-})));
+});
             const value = (cp_shl((if (comptime @typeInfo(@TypeOf(hi)) == .@"enum") cp_cast_int(u8, @intFromEnum(hi)) else cp_cast_int(u8, hi)), 4) | (if (comptime @typeInfo(@TypeOf(lo)) == .@"enum") cp_cast_int(u8, @intFromEnum(lo)) else cp_cast_int(u8, lo)));
             _ = try appendCodepointToUtf8(buf, @intCast(value));
 },
@@ -717,9 +787,9 @@ break;
 pub fn scanIdentifier(self: *JSON5Parser) ParseError![]u8 {
             var buf = std.array_list.Managed(u8).init(self.allocator);
             _ = &buf;
-            const start_cp = ((self.readCodepoint()) orelse (({
+            const start_cp = ((self.readCodepoint()) orelse {
             return error.InvalidIdentifier;
-})));
+});
             if ((start_cp.cp == 92)) {
                 const escaped_cp = try self.parseIdentifierUnicodeEscape();
                 if ((!identifier.isIdentifierStart(escaped_cp))) {
@@ -845,9 +915,9 @@ pub fn readHex4(self: *JSON5Parser) ParseError!i32 {
             var value: i32 = 0;
             _ = &value;
             inline for (0..4) |_| {
-                const digit = ((self.readHexDigit()) orelse (({
+                const digit = ((self.readHexDigit()) orelse {
                 return error.InvalidUnicodeEscape;
-})));
+});
                 value = (cp_shl(value, 4) | (if (comptime @typeInfo(@TypeOf(digit)) == .@"enum") cp_cast_int(i32, @intFromEnum(digit)) else cp_cast_int(i32, digit)));
             }
             return value;

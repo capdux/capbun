@@ -260,7 +260,7 @@ pub struct TablePrinterFirstPassContext {
     e: bool = false,
 
     @callconv("c")
-    fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *TablePrinterFirstPassContext, value: JSValue) {
+    static fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *TablePrinterFirstPassContext, value: JSValue) {
         ctx.printer.updateColumnsForRow(ctx.columns, { num: ctx.idx }, value) catch {
             ctx.e = true;
         };
@@ -436,9 +436,10 @@ pub struct TablePrinter {
                     const column: *Column = brk: {
                         const col_str = String.init(col_key);
 
-                        for (*col of columns.items[1..]) {
-                            if (col.name.eql(col_str)) {
-                                break :brk col;
+                        let ci: usize = 1;
+                        while (ci < columns.items.len) : (ci += 1) {
+                            if (columns.items[ci].name.eql(col_str)) {
+                                break :brk &columns.items[ci];
                             }
                         }
 
@@ -952,7 +953,7 @@ pub fn format2(
         if (options.flush) writer.flush() catch {};
     }
 
-    let this_value: JSValue = vals[0].*;
+    let this_value = vals[0];
     let fmt = ConsoleObject.Formatter{
         remaining_values: vals[0..len][1..],
         globalThis: global,

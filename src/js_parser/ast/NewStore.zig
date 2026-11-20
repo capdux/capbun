@@ -161,7 +161,12 @@ pub fn unlock(store: *Store) void {
     }
 
 pub fn supportsType(T: type) bool {
-        _ = T;
+            inline for (types) |ty| {
+                if ((ty == T)) {
+                    return true;
+                }
+            }
+            return false;
     }
     const Store = @This();
     pub const Block = struct {

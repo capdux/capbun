@@ -971,7 +971,7 @@ pub fn lastIndexOfChar(self: []const u8, char: u8) ?usize {
             }
             const start = ((bun.c.memrchr(self.ptr, char, self.len)) orelse { return null; });
             const i = (@intFromPtr(start) - @intFromPtr(self.ptr));
-            return (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i));
+            return i;
         }
         return lastIndexOfCharT(u8, self, char);
 }
@@ -2027,7 +2027,7 @@ pub fn trimSpaces(slice: anytype) @TypeOf(slice) {
 pub fn isAllWhitespace(slice: []const u8) bool {
         var begin: usize = 0;
         _ = &begin;
-        while (((begin < slice.len) and (std.mem.indexOfScalar(u8, (&whitespace_chars), slice[@as(usize, @intCast(begin))]) != null))) : (begin = (begin + 1)) {
+        while (((begin < slice.len) and (std.mem.indexOfScalar(u8, whitespace_chars, slice[@as(usize, @intCast(begin))]) != null))) : (begin = (begin + 1)) {
         }
         return (begin == slice.len);
 }
@@ -2035,7 +2035,7 @@ pub fn isAllWhitespace(slice: []const u8) bool {
 pub fn lengthOfLeadingWhitespaceASCII(slice: []const u8) usize {
         var begin: usize = 0;
         _ = &begin;
-        while (((begin < slice.len) and (std.mem.indexOfScalar(u8, (&whitespace_chars), slice[@as(usize, @intCast(begin))]) != null))) : (begin = (begin + 1)) {
+        while (((begin < slice.len) and (std.mem.indexOfScalar(u8, whitespace_chars, slice[@as(usize, @intCast(begin))]) != null))) : (begin = (begin + 1)) {
         }
         return begin;
 }
@@ -2078,6 +2078,10 @@ pub fn toASCIIHexValue(character: u8) u8 {
         if (comptime Environment.isDebug) {
             _ = assert(isASCIIHexDigit(character));
         }
+        if ((character < 65)) {
+            return (character - 48);
+        }
+        return (((character - 65) + 10) & 15);
 }
 
 pub fn NewLengthSorter(comptime Type: type, comptime field: []const u8) type {
