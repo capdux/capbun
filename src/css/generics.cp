@@ -465,7 +465,7 @@ pub inline fn deepClone(comptime T: type, this: *const T, allocator: Allocator):
                 @memcpy(slc, this.*);
             } else {
                 for (i of 0..this.len) {
-                    slc[i] = deepClone(tyinfo.pointer.child, &this[i], allocator);
+                    slc[i] = deepClone(tyinfo.pointer.child, &this.*[i], allocator);
                 }
             }
             return slc;

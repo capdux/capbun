@@ -190,6 +190,10 @@ pub struct todo_stuff {
         };
     }
 
+    pub inline fn eq(other: VendorPrefix): bool {
+        return _.asBits() == other.asBits();
+    }
+
     pub inline fn fromName(comptime name: []const u8): VendorPrefix {
         comptime {
             let vp: VendorPrefix = {};
@@ -2884,7 +2888,7 @@ pub fn StyleSheetParser(comptime P: type): type {
                             .semicolon = true,
                             .close_curly_bracket = true,
                         };
-                        _ = this.input.parseUntilAfter(delimiters, void, {}, voidWrap(void, Parser.parseEmpty));
+                        _ = this.input.parseUntilAfter(delimiters, void, @as(void, undefined), voidWrap(void, Parser.parseEmpty));
                     } else {
                         return parse_at_rule(allocator, &start, name, this.input, P, this.parser);
                     }
@@ -3337,7 +3341,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
                         continue;
                     }
 
-                    return .{ .err = Err(ParserError).fromParseError(e, options.filename) };
+                    const ParseErr = Err(ParserError);
+                    return .{ .err = ParseErr.fromParseError(e, options.filename) };
                 }
             }
 
@@ -3510,10 +3515,11 @@ pub struct StyleAttribute {
             s.appendAssumeCapacity(options.filename);
             break :sources s;
         };
+        const ParseErr = Err(ParserError);
         return { result: StyleAttribute{
             declarations: switch (DeclarationBlock.parse(&parser, &options)) {
                 .result => |v| v,
-                .err => |e| return { err: Err(ParserError).fromParseError(e, "") },
+                .err => |e| return { err: ParseErr.fromParseError(e, "") },
             },
             sources: sources,
         } };
@@ -6307,7 +6313,7 @@ pub union(TokenKind) Token {
     const This = @This();
 
     pub fn toCssGeneric(writer: auto)! {
-        return switch (_.*) {
+        return switch (_) {
             .ident => {
                 serializer.serializeIdentifier(_.ident, writer)?;
             },
@@ -6403,7 +6409,7 @@ pub union(TokenKind) Token {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        return switch (_.*) {
+        return switch (_) {
             .ident => |value| serializer.serializeIdentifier(value, dest) catch return dest.addFmtError(),
             .at_keyword => |value| {
                 dest.writeStr("@")?;

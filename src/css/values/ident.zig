@@ -151,11 +151,11 @@ pub fn toCss(self: DashedIdent, dest: *Printer) PrintErr!void {
     }
 
 pub fn deepClone(self: DashedIdent, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn hash(self: DashedIdent, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
     const This = @This();
 };
@@ -178,11 +178,11 @@ pub fn toCss(self: Ident, dest: *Printer) PrintErr!void {
     }
 
 pub fn deepClone(self: Ident, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn hash(self: Ident, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
 };
 
@@ -335,11 +335,11 @@ pub fn toCssWithOptions(self: CustomIdent, dest: *Printer, enabled_css_modules: 
     }
 
 pub fn deepClone(self: CustomIdent, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn hash(self: CustomIdent, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
     const This = @This();
 };

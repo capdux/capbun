@@ -625,7 +625,7 @@ pub inline fn deepClone(comptime T: type, self: *const T, allocator: Allocator) 
                         _ = &i;
                         const __end_7 = self.len;
                         while (i < __end_7) : (i += 1) {
-                            slc[cp_cast_int(usize, i)] = deepClone(tyinfo.pointer.child, (&self[@as(usize, @intCast(i))]), allocator);
+                            slc[cp_cast_int(usize, i)] = deepClone(tyinfo.pointer.child, (&self.*[@as(usize, @intCast(i))]), allocator);
                         }
                     }
                 }

@@ -347,7 +347,7 @@ pub enum MediaType {
         return { custom: ident };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -377,7 +377,7 @@ pub struct MediaConditionOperation {
     operator: Operator,
     conditions: ArrayList(MediaCondition),
 
-    fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -437,7 +437,7 @@ pub enum MediaCondition {
 
     /// QueryCondition.needsParens
     pub fn needsParens(parent_operator: Operator?, targets: *const css.targets.Targets): bool {
-        return switch (_.*) {
+        return switch (_) {
             .not => true,
             .operation => |operation| operation.operator != parent_operator,
             .feature => |f| f.needsParens(parent_operator, targets),
@@ -449,7 +449,7 @@ pub enum MediaCondition {
     }
 
     pub fn deepClone(allocator: std.mem.Allocator): MediaCondition {
-        return switch (_.*) {
+        return switch (_) {
             .feature => |*f| MediaCondition{ .feature = f.deepClone(allocator) },
             .not => |c| MediaCondition{ .not = bun.create(allocator, MediaCondition, c.deepClone(allocator)) },
             .operation => |op| MediaCondition{
@@ -461,7 +461,7 @@ pub enum MediaCondition {
         };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -1221,7 +1221,7 @@ pub enum MediaFeatureValue {
     /// An environment variable reference.
     env: EnvironmentVariable,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 

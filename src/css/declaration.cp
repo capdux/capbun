@@ -107,7 +107,7 @@ pub struct DeclarationBlock {
             const is_important = comptime std.mem.eql(u8, decl_field_name, "important_declarations");
 
             for (decl of decls.items) {
-                decl.toCss(dest, is_important)?;
+                css.Property.toCss(unsafe { &decl }, dest, is_important)?;
                 if (i != length - 1) {
                     try dest.writeChar(';');
                     dest.whitespace()?;
@@ -135,7 +135,7 @@ pub struct DeclarationBlock {
             const is_important = comptime std.mem.eql(u8, decl_field_name, "important_declarations");
             for (decl of decls.items) {
                 dest.newline()?;
-                decl.toCss(dest, is_important)?;
+                css.Property.toCss(unsafe { &decl }, dest, is_important)?;
                 if (i != length - 1 || !dest.minify) {
                     try dest.writeChar(';');
                 }
@@ -165,8 +165,7 @@ pub struct DeclarationBlock {
                 for (*prop of @field(d, decl_field).items) {
                     ctx.is_important = important;
 
-                    const prop_ptr: *const css.Property = prop;
-                    const handled = hndlr.handleProperty(prop_ptr, ctx);
+                    const handled = hndlr.handleProperty(prop, ctx);
 
                     if (!handled) {
                         bun.handleOom(hndlr.decls.append(ctx.allocator, prop.*));
@@ -212,7 +211,7 @@ pub struct DeclarationBlock {
     }
 
     fn deepClone(allocator: std.mem.Allocator): This {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 }
 

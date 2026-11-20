@@ -211,12 +211,13 @@ pub fn serializeSelector(selector: *const parser.Selector, dest: *css.Printer, c
                 const has_leading_nesting = (first and (compound[0] == .nesting));
                 const first_index: usize = (if (has_leading_nesting) 1 else 0);
                 first = false;
-                const can_elide_namespace = undefined;
-                const first_non_namespace = (if ((first_index >= compound.len)) .{ true, first_index } else (switch (compound[0]) {
+                const ns_pair = (if ((first_index >= compound.len)) .{ true, first_index } else (switch (compound[0]) {
 .explicit_any_namespace, .explicit_no_namespace, .namespace => .{ false, (first_index + 1) },
 .default_namespace => .{ true, (first_index + 1) },
 else => .{ true, first_index },
 }));
+                const can_elide_namespace = @field(ns_pair, "0");
+                const first_non_namespace = @field(ns_pair, "1");
                 var perform_step_2 = true;
                 _ = &perform_step_2;
                 const next_combinator = combinators.next();
@@ -810,12 +811,13 @@ pub fn toCss_Selector(selector: *const parser.Selector, dest: *css.Printer) Prin
                 if ((compound.len == 0)) {
                     continue;
                 }
-                const can_elide_namespace = undefined;
-                const first_non_namespace: usize = (if ((0 >= compound.len)) .{ true, 0 } else (switch (compound[0]) {
+                const ns_pair = (if ((0 >= compound.len)) .{ true, 0 } else (switch (compound[0]) {
 .explicit_any_namespace, .explicit_no_namespace, .namespace => .{ false, 1 },
 .default_namespace => .{ true, 1 },
 else => .{ true, 0 },
 }));
+                const can_elide_namespace = @field(ns_pair, "0");
+                const first_non_namespace: usize = @field(ns_pair, "1");
                 var perform_step_2 = true;
                 _ = &perform_step_2;
                 const next_combinator = combinators.next();

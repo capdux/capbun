@@ -282,7 +282,7 @@ pub fn PositionComponentSide(comptime S: type): type {
         }
 
         pub fn eql(other: *const @This()): bool {
-            return css.implementEql(@This(), _, other);
+            return css.implementEql(@This(), &_, other);
         }
     };
 }

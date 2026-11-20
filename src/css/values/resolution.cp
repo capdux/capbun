@@ -21,7 +21,7 @@ pub const Resolution = union(enum) {
     }
 
     pub fn eql(other: *const Resolution): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), &_, other);
     }
 
     pub fn parse(input: *css.Parser): Result(Resolution) {

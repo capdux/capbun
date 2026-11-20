@@ -27,7 +27,7 @@ pub fn StyleRule(comptime R: type): type {
         /// Includes the selectors and properties.
         pub fn hashKey(): u64 {
             let hasher = std.hash.Wyhash.init(0);
-            _.selectors.hash(&hasher);
+            _.selectors.hash(unsafe { &hasher });
             _.declarations.hashPropertyIds(&hasher);
             return hasher.final();
         }
@@ -228,13 +228,13 @@ pub fn StyleRule(comptime R: type): type {
                     let len = @min(_.declarations.declarations.items.len, other.declarations.declarations.items.len);
                     let i: usize = 0;
                     while (i < len) {
-                        if (!_.declarations.declarations.items[i].propertyId().eql(&other.declarations.declarations.items[i].propertyId())) break :brk false;
+                        if (!_.declarations.declarations.items[i].propertyId().eql(other.declarations.declarations.items[i].propertyId())) break :brk false;
                         i += 1;
                     }
                     len = @min(_.declarations.important_declarations.items.len, other.declarations.important_declarations.items.len);
                     i = 0;
                     while (i < len) {
-                        if (!_.declarations.important_declarations.items[i].propertyId().eql(&other.declarations.important_declarations.items[i].propertyId())) break :brk false;
+                        if (!_.declarations.important_declarations.items[i].propertyId().eql(other.declarations.important_declarations.items[i].propertyId())) break :brk false;
                         i += 1;
                     }
                     break :brk true;

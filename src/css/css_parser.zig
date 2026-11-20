@@ -254,6 +254,10 @@ pub fn toCss(self: VendorPrefix, dest: *Printer) PrintErr!void {
             return (__sw_blk_0: { const __disc_0 = self.asBits(); _ = &__disc_0; { if ((cp_match_tag(__disc_0, .asBits) and (cp_eq(@field(__disc_0, "asBits").webkit, true)))) {  break :__sw_blk_0 cp_val(dest.writeStr("-webkit-")); } } { if ((cp_match_tag(__disc_0, .asBits) and (cp_eq(@field(__disc_0, "asBits").moz, true)))) {  break :__sw_blk_0 cp_val(dest.writeStr("-moz-")); } } { if ((cp_match_tag(__disc_0, .asBits) and (cp_eq(@field(__disc_0, "asBits").ms, true)))) {  break :__sw_blk_0 cp_val(dest.writeStr("-ms-")); } } { if ((cp_match_tag(__disc_0, .asBits) and (cp_eq(@field(__disc_0, "asBits").o, true)))) {  break :__sw_blk_0 cp_val(dest.writeStr("-o-")); } } {   }  unreachable; });
     }
 
+pub inline fn eq(self: VendorPrefix, other: VendorPrefix) bool {
+            return (self.asBits() == other.asBits());
+    }
+
 pub inline fn fromName(comptime name: []const u8) VendorPrefix {
             comptime {
             var vp: VendorPrefix = .{};
@@ -670,10 +674,11 @@ pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, imp
             _ = s.appendAssumeCapacity(options.filename);
             break :sources s;
 };
+            const ParseErr = .ParserError;
             return .{ .result = StyleAttribute{ .declarations = (switch (DeclarationBlock.parse((&parser), (&options))) {
 .result => |v| v,
 .err => |e| {
-return .{ .err = .ParserError.fromParseError(e, "") };
+return .{ .err = ParseErr.fromParseError(e, "") };
 },
 }), .sources = sources } };
     }
@@ -2959,7 +2964,7 @@ pub inline fn kindString(self: Token) []const u8 {
     }
 
 pub fn toCssGeneric(self: Token, writer: anytype) !void {
-            return (switch (self.*) {
+            return (switch (self) {
 .ident => try serializer.serializeIdentifier(self.ident, writer),
 .at_keyword => {
 {
@@ -3050,7 +3055,7 @@ pub fn toCssGeneric(self: Token, writer: anytype) !void {
     }
 
 pub fn toCss(self: Token, dest: *Printer) PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .ident => |value| (blk_catch_7: { break :blk_catch_7 ((serializer.serializeIdentifier(value, dest)) catch |__ce_7| { _ = &__ce_7; return dest.addFmtError(); }); }),
 .at_keyword => |value| {
 {
@@ -5797,7 +5802,7 @@ else => null,
                     self.any_rule_so_far = true;
                     if ((first_stylesheet_rule and bun.strings.eqlCaseInsensitiveASCII(name, "charset", true))) {
                         const delimiters = Delimiters{ .semicolon = true, .close_curly_bracket = true };
-                        _ = self.input.parseUntilAfter(delimiters, void, .{}, voidWrap(void, Parser.parseEmpty));
+                        _ = self.input.parseUntilAfter(delimiters, void, @as(void, undefined), voidWrap(void, Parser.parseEmpty));
                     } else {
                         return parse_at_rule(allocator, (&start), name, self.input, P, self.parser);
                     }
@@ -6009,7 +6014,8 @@ break;
                     if (result_options.error_recovery) {
                         continue;
                     }
-                    return .{ .err = .ParserError.fromParseError(e, options.filename) };
+                    const ParseErr = .ParserError;
+                    return .{ .err = ParseErr.fromParseError(e, options.filename) };
                 }
             }
             var sources: ArrayList(string) = .{};

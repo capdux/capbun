@@ -658,13 +658,15 @@ pub const serialize = struct {
             //
             // If we are in this case, after we have serialized the universal
             // selector, we skip Step 2 && continue with the algorithm.
-            const can_elide_namespace, const first_non_namespace = if (first_index >= compound.len)
+            const ns_pair = if (first_index >= compound.len)
                 .{ true, first_index }
             else switch (compound[0]) {
                 .explicit_any_namespace, .explicit_no_namespace, .namespace => .{ false, first_index + 1 },
                 .default_namespace => .{ true, first_index + 1 },
                 else => .{ true, first_index },
             };
+            const can_elide_namespace = @field(ns_pair, "0");
+            const first_non_namespace = @field(ns_pair, "1");
             let perform_step_2 = true;
             const next_combinator = combinators.next();
             if (first_non_namespace == compound.len - 1) {
@@ -1269,13 +1271,15 @@ pub const tocss_servo = struct {
             //
             // If we are in this case, after we have serialized the universal
             // selector, we skip Step 2 && continue with the algorithm.
-            const can_elide_namespace, const first_non_namespace: usize = if (0 >= compound.len)
+            const ns_pair = if (0 >= compound.len)
                 .{ true, 0 }
             else switch (compound[0]) {
                 .explicit_any_namespace, .explicit_no_namespace, .namespace => .{ false, 1 },
                 .default_namespace => .{ true, 1 },
                 else => .{ true, 0 },
             };
+            const can_elide_namespace = @field(ns_pair, "0");
+            const first_non_namespace: usize = @field(ns_pair, "1");
             let perform_step_2 = true;
             const next_combinator = combinators.next();
             if (first_non_namespace == compound.len - 1) {

@@ -236,7 +236,7 @@ pub const Gradient = union(enum) {
     }
 
     pub fn eql(other: *const Gradient): bool {
-        return css.implementEql(Gradient, _, other);
+        return css.implementEql(Gradient, &_, other);
         // if (this.* == .linear and other.* == .linear) {
         //     return this.linear.eql(&other.linear);
         // } else if (this.* == .repeating_linear and other.* == .repeating_linear) {
@@ -453,7 +453,7 @@ pub struct LinearGradient {
     }
 
     fn eql(other: *const LinearGradient): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), &_, other);
     }
 
     fn getFallback(allocator: Allocator, kind: css.ColorFallbackKind): LinearGradient {
@@ -565,7 +565,7 @@ pub struct RadialGradient {
     }
 
     fn eql(other: *const RadialGradient): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), &_, other);
     }
 }
 

@@ -114,7 +114,10 @@ pub fn toCss(self: DeclarationBlock, dest: *Printer) PrintErr!void {
                 const is_important = (comptime std.mem.eql(u8, decl_field_name, "important_declarations"));
                 for (decls.items) |decl| {
                     _ = &decl;
-                    _ = try decl.toCss(dest, is_important);
+                    _ = try css.Property.toCss((blk: {
+                    break :blk (&decl);
+
+}), dest, is_important);
                     if ((i != (length - 1))) {
                         _ = try dest.writeChar(59);
                         _ = try dest.whitespace();
@@ -139,7 +142,10 @@ pub fn toCssBlock(self: DeclarationBlock, dest: *Printer) PrintErr!void {
                 for (decls.items) |decl| {
                     _ = &decl;
                     _ = try dest.newline();
-                    _ = try decl.toCss(dest, is_important);
+                    _ = try css.Property.toCss((blk: {
+                    break :blk (&decl);
+
+}), dest, is_important);
                     if (((i != (length - 1)) or (!dest.minify))) {
                         _ = try dest.writeChar(59);
                     }
@@ -158,8 +164,7 @@ pub inline fn handle(d: *DeclarationBlock, ctx: *css.PropertyHandlerContext, hnd
             for (@field(d, decl_field).items) |*prop| {
                 _ = &prop;
                 ctx.is_important = important;
-                const prop_ptr: *const css.Property = (prop.*);
-                const handled = hndlr.handleProperty(prop_ptr, ctx);
+                const handled = hndlr.handleProperty((prop.*), ctx);
                 if ((!handled)) {
                     _ = bun.handleOom(hndlr.decls.append(ctx.allocator, (prop.*).*));
                     (prop.*).* = css.Property{ .all = .@"revert-layer" };
@@ -208,7 +213,7 @@ pub fn eql(self: DeclarationBlock, other: *const This) bool {
     }
 
 pub fn deepClone(self: DeclarationBlock, allocator: std.mem.Allocator) This {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
     const This = @This();
     const DebugFmt = struct {

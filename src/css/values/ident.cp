@@ -103,11 +103,11 @@ pub struct DashedIdent {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), _, hasher);
+        return css.implementHash(@This(), &_, hasher);
     }
 }
 
@@ -129,11 +129,11 @@ pub struct Ident {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), _, hasher);
+        return css.implementHash(@This(), &_, hasher);
     }
 }
 
@@ -309,11 +309,11 @@ pub struct CustomIdent {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), _, allocator);
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), _, hasher);
+        return css.implementHash(@This(), &_, hasher);
     }
 }
 

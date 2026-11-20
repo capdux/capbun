@@ -476,10 +476,7 @@ pub fn updateLoadCommandOffsets(self: *MachoFile, previous_fileoff: u64, size_di
             const shifter = Shifter{ .start = aligned_previous, .amount = size_diff, .linkedit_fileoff = aligned_linkedit, .linkedit_filesize = new_linkedit_filesize };
             while (iter.next()) |entry| {
                 const cmd = entry.hdr;
-                const cmd_off = (blk: {
-                break :blk ((if (comptime @typeInfo(@TypeOf(entry.data.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(entry.data.ptr)) else cp_cast_int(usize, entry.data.ptr)) - (if (comptime @typeInfo(@TypeOf(self.data.items.ptr)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.data.items.ptr)) else cp_cast_int(usize, self.data.items.ptr)));
-
-});
+                const cmd_off = (@intFromPtr(entry.data.ptr) - @intFromPtr(self.data.items.ptr));
                 switch (cmd.cmd) {
 .SYMTAB => {
 const sz: usize = @sizeOf(macho.symtab_command);

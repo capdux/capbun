@@ -272,7 +272,7 @@ pub struct ImageSet {
     }
 
     fn eql(other: *const ImageSet): bool {
-        return css.implementEql(@This(), _, other);
+        return css.implementEql(@This(), &_, other);
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {

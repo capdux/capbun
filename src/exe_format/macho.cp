@@ -430,7 +430,7 @@ pub struct MachoFile {
 
         while (entry := iter.next()) {
             const cmd = entry.hdr;
-            const cmd_off = unsafe { (entry.data.ptr as usize) - (this.data.items.ptr as usize) };
+            const cmd_off = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
 
             switch (cmd.cmd) {
                 .SYMTAB => {

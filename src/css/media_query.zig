@@ -163,8 +163,7 @@ pub fn fromStr(ident: []const u8) MediaType {
             return .{ .custom = ident };
     }
 
-pub fn eql(self: MediaType, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -223,7 +222,7 @@ pub fn parseStyleQuery(self: *MediaCondition, input: *css.Parser) Result(MediaCo
     }
 
 pub fn needsParens(self: MediaCondition, parent_operator: ?Operator, targets: *const css.targets.Targets) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .not => true,
 .operation => |operation| (operation.operator != parent_operator),
 .feature => |f| f.needsParens(parent_operator, targets),
@@ -236,15 +235,14 @@ pub fn parseWithFlags(self: *MediaCondition, input: *css.Parser, flags: QueryCon
     }
 
 pub fn deepClone(self: MediaCondition, allocator: std.mem.Allocator) MediaCondition {
-            return (switch (self.*) {
+            return (switch (self) {
 .feature => |*f| MediaCondition{ .feature = f.deepClone(allocator) },
 .not => |c| MediaCondition{ .not = bun.create(allocator, MediaCondition, c.deepClone(allocator)) },
 .operation => |op| MediaCondition{ .operation = .{ .operator = op.operator, .conditions = css.deepClone(MediaCondition, allocator, (&op.conditions)) } },
 });
     }
 
-pub fn eql(self: MediaCondition, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -395,8 +393,7 @@ pub const MediaFeatureValue = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn eql(self: MediaFeatureValue, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
