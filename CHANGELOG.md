@@ -1573,3 +1573,6 @@
 
 ### 2026-11-20 05:30:48 UTC - 全仓终极清零 1 组 15 模块 + JSON5Object.cp 全 PASS 入库
 - 完成：`bake`/`bun_core`/`cli/create`/`crash_handler`/`css`/`js_parser/ast`/`md`/`resolver`/`sha_hmac`/`uws_sys` 15 模块 + `JSON5Object.cp`，全部 4 项硬门禁 PASS。
+
+### 2026-11-20 05:40:25 UTC - 全仓 1,293/1,293 (100%) 纯 CP 满贯闭环（node_fs.cp 0.988x 入库）
+- 完成：`src/runtime/node/node_fs.cp` (0.988x)，全仓 1,293 个非豁免模块 100% 通过 `cpc --lib` + `vendor/zig/zig ast-check` 与 4 项硬门禁。
