@@ -1,6 +1,9 @@
 // JavaScriptCore Scheduler and deferred work bindings in CP
-import { jsc, ConcurrentTask, Task, VirtualMachine } from "bun";
 import bun from "bun";
+const jsc = bun.jsc;
+const ConcurrentTask = jsc.ConcurrentTask;
+const Task = jsc.Task;
+const VirtualMachine = jsc.VirtualMachine;
 
 @opaque
 pub struct JSCDeferredWorkTask {

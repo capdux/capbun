@@ -110,7 +110,7 @@ pub struct js_fns {
                                 "Cannot call {s}() here. It cannot be called inside a concurrent test. Call it inside describe() instead.";
                             return globalThis.throw(message, .{ @tagName(tag) });
                         }
-                        const sequence = seq_opt.?[0];
+                        const sequence = seq_opt.?.sequence;
 
                         const append_point = switch (tag) {
                             .afterAll, .afterEach => blk: {
@@ -307,7 +307,7 @@ pub union(enum) BunTestRefDataValue {
         if (buntest.phase != .execution) return null;
         const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(_.*);
         if (seq_opt == null) return null;
-        const the_sequence = seq_opt.?[0];
+        const the_sequence = seq_opt.?.sequence;
         return the_sequence.active_entry;
     }
 

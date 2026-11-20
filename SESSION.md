@@ -3074,3 +3074,5 @@ Options:
 - **[2026-11-20 19:28] Wave 10 Batch B 验收提交（23 模块全绿）+ Wave 11 `zig:check` 体检**：完成 Expect/CSS/DNS/Node/Valkey/SQL/MD/BunObject 23 模块独立验收（23/23 PASS，ratio 0.869x~1.124x）；Wave 11 `bun run zig:check` 总错误由 **493 暴跌至 257**（Socket/HTTP2/uws_sys/Valkey/SQL 全链路清零，剩余仅 19 个多错文件 + 100 个单错文件）。
 
 - **[2026-11-20 19:38] Wave 11 Batch A+C 验收提交（101 模块全绿）**：完成专家 C 组 23 模块（4 `std` 根因 `output`/`Mutex`/`SSLConfig`/`BufferFallbackAllocator` + 19 高频模块 132 处错误联合清扫，23/23 PASS，ratio 0.735x~1.105x）与专家 A 组 78 模块（57 `expect/to*.cp` + 21 多错模块，78/78 PASS）的独立验收并原子提交；静待 B 组（`73686747`）完成后执行 Wave 12 `zig:check`。
+
+- **[2026-11-20 19:40] Wave 11 Batch B 验收提交（34 模块全绿）+ Wave 12 `zig:check` 里程碑**：完成 34 模块独立验收（34/34 PASS，ratio 0.823x~1.123x）；Wave 12 `bun run zig:check` 报错文件数由 **119 骤降至 43**（**1,250 / 1,293 = 96.7% 模块已 0 错误**），剩余 422 处报错中 88.6% 高度集中于前 8 个泛型/CSS/Expect 文件。

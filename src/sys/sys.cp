@@ -717,7 +717,9 @@ fn statxFallback(fd: bun.FD, path: [*:0]const u8?, flags: u32): Maybe(PosixStat)
     }
 }
 
-fn statxImpl(fd: bun.FD, path: [*:0]const u8?, flags: u32, mask: u32): Maybe(PosixStat) {
+type CStr = [*:0]const u8;
+
+fn statxImpl(fd: bun.FD, path: CStr?, flags: u32, mask: u32): Maybe(PosixStat) {
     if (comptime !Environment.isLinux) {
         @compileError("statx is only supported on Linux");
     }
@@ -725,7 +727,7 @@ fn statxImpl(fd: bun.FD, path: [*:0]const u8?, flags: u32, mask: u32): Maybe(Pos
     let buf: linux.Statx = undefined;
 
     while (true) {
-        let statx_path: [*:0]const u8 = @ptrCast("");
+        let statx_path: CStr = @ptrCast("");
         if (p := path) { statx_path = p; }
         const rc = linux.statx(i32(fd.cast()), statx_path, flags, mask, &buf);
 
@@ -794,7 +796,7 @@ pub fn fstatx(fd: bun.FD, comptime fields: []const StatxField): Maybe(PosixStat)
     return statxImpl(fd, null, linux.AT.EMPTY_PATH, mask);
 }
 
-pub fn statx(path: [*:0]const u8, comptime fields: []const StatxField): Maybe(PosixStat) {
+pub fn statx(path: CStr, comptime fields: []const StatxField): Maybe(PosixStat) {
     const mask: u32 = comptime brk: {
         let i: u32 = 0;
         for (field of fields) {
@@ -805,7 +807,7 @@ pub fn statx(path: [*:0]const u8, comptime fields: []const StatxField): Maybe(Po
     return statxImpl(bun.FD.fromNative(std.posix.AT.FDCWD), path, 0, mask);
 }
 
-pub fn lstatx(path: [*:0]const u8, comptime fields: []const StatxField): Maybe(PosixStat) {
+pub fn lstatx(path: CStr, comptime fields: []const StatxField): Maybe(PosixStat) {
     const mask: u32 = comptime brk: {
         let i: u32 = 0;
         for (field of fields) {

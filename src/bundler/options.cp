@@ -1856,7 +1856,7 @@ pub struct BundleOptions {
     /// This is not normally a safe transformation.
     ///
     /// So we have a list of packages which we know are safe to do this with.
-    unwrap_commonjs_packages: []const string = &default_unwrap_commonjs_packages,
+    unwrap_commonjs_packages: []const string = default_unwrap_commonjs_packages[0..],
 
     supports_multiple_outputs: bool = true,
 

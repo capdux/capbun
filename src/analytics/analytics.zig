@@ -359,7 +359,7 @@ pub const packed_features_list = brk: {
     }
     break :brk (names[0..i]).*;
 };
-const empty_decls: [0]std.builtin.Type.Declaration = &.{};
+const empty_decls: []const std.builtin.Type.Declaration = &.{};
 const false_val: bool = false;
 pub const PackedFeatures = @Type(std.builtin.Type{ .@"struct" = .{ .layout = .@"packed", .backing_integer = u64, .fields = brk: {
     var fields: [64]std.builtin.Type.StructField = undefined;
@@ -375,7 +375,7 @@ pub const PackedFeatures = @Type(std.builtin.Type{ .@"struct" = .{ .layout = .@"
         fields[cp_cast_int(usize, i)] = .{ .name = std.fmt.comptimePrint("_{d}", .{ i }), .type = bool, .default_value_ptr = (&false_val), .is_comptime = false, .alignment = 0 };
     }
     break :brk (&fields);
-}, .decls = (&empty_decls), .is_tuple = false } });
+}, .decls = empty_decls, .is_tuple = false } });
 var random: std.rand.DefaultPrng = undefined;
 const platform_arch = (if (Environment.isAarch64) analytics.Architecture.arm else analytics.Architecture.x64);
 

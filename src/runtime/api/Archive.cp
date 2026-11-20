@@ -411,7 +411,7 @@ fn startExtractTask(
         store: store,
         path: path_copy,
         glob_patterns: glob_patterns,
-    });
+    })?;
 
     const promise_js = task.promise.value();
     task.schedule();
@@ -480,7 +480,7 @@ fn startBlobTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Store
         store: store,
         compress: compress,
         output_type: output_type,
-    });
+    })?;
 
     const promise_js = task.promise.value();
     task.schedule();
@@ -570,7 +570,7 @@ fn startWriteTask(
         data: data,
         path: path_z,
         compress: compress,
-    });
+    })?;
 
     const promise_js = task.promise.value();
     task.schedule();
@@ -722,7 +722,7 @@ fn startFilesTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Stor
     const task = FilesTask.create(globalThis, .{
         store: store,
         glob_patterns: glob_patterns,
-    });
+    })?;
 
     const promise_js = task.promise.value();
     task.schedule();

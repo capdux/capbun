@@ -2899,7 +2899,8 @@ pub fn free(ext_free_function: *anyopaque, _: []u8, _: std.mem.Alignment, _: usi
             break :blk @ptrCast(@alignCast(ext_free_function));
 
 });
-            _ = @call(.auto, info.free_callback, .{ info.context });
+            const cb = (if (comptime (@typeInfo(@typeInfo(@TypeOf(info.free_callback)).pointer.child) == .pointer)) info.free_callback.* else info.free_callback);
+            _ = @call(.auto, cb, .{ info.context });
             _ = bun.default_allocator.destroy(info);
     }
     const vtable: std.mem.Allocator.VTable = .{ .alloc = (&alloc), .free = (&free), .resize = (&std.mem.Allocator.noResize), .remap = (&std.mem.Allocator.noRemap) };

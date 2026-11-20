@@ -513,7 +513,7 @@ export class SocketHandler<const is_ssl: bool> {
         const Owner = @typeInfo(@TypeOf(owner)).pointer.child;
         const OwnerPtr = ?*Owner;
         const opts: c_int = if (allow_half_open) bun.uws.LIBUS_SOCKET_ALLOW_HALF_OPEN else 0;
-        const s = g.connectUnix(kind, ssl_ctx, path.ptr, path.len, opts, @sizeOf(OwnerPtr)) orelse
+        const s = g.connectUnix(kind, ssl_ctx, path, opts, @sizeOf(OwnerPtr)) orelse
             return error.FailedToOpenSocket;
         s.ext(OwnerPtr).* = owner;
         return Self { socket = InternalSocket.connected(s) };

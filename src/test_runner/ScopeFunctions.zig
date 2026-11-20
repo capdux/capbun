@@ -224,10 +224,7 @@ pub fn callAsFunction(globalThis: *JSGlobalObject, callFrame: *CallFrame) bun.JS
         _ = buntest_strong.deinit();
         }
         const bunTest = buntest_strong.get();
-        const args = try parseArguments(globalThis, callFrame, (switch (client.mode) {
-.describe => .describe,
-.@"test" => .@"test",
-}), bunTest.gpa, .{ .callback = (if ((client.cfg.self_mode == .todo)) .allow else .require), .kind = .test_or_describe });
+        const args = try parseArguments(globalThis, callFrame, .{ .scope_functions = client }, bunTest.gpa, .{ .callback = (if ((client.cfg.self_mode == .todo)) .allow else .require), .kind = .test_or_describe });
         defer {
         _ = args.deinit(bunTest.gpa);
         }

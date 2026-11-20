@@ -1407,3 +1407,5 @@
 - **[2026-11-20] Wave 10 收官：Socket/HTTP2/uws_sys/Valkey/SQL 全链路清零**：`uws_handlers`(132→0)、`h2_frame_parser`(32→0)、`socket`(30→0)、`tls_socket_functions`(22→0)、`uws_sys/socket`(22→0)、`cares_jsc`(13→0)、`uws_sys/h3`(10→0) 全部通过语义检查。
 
 - **[2026-11-20] Wave 11 Batch A+C 典型修复**：`output.cp` `panic` 自动解包指针 `args` 彻底根治 `Io/Writer.zig:597`；`Mutex.cp` 改原生 `if` 解决误选 `DarwinImpl`；`SSLConfig.cp` 建 `CStringSlice` 避免 `.len` 误走 `std.mem.span`；`BufferFallbackAllocator`/`MiniEventLoop` 升级 `@root struct`；57 个 `expect/to*.cp` 批量消除 `error.js_undefined`；19 高频模块预防性清扫 132 处错误联合返回。
+
+- **[2026-11-20] Wave 11 收官里程碑**：全仓 1,293 模块中已有 **1,250 个（96.7%）** 通过 `bun run zig:check` 零错误，仅剩 43 个文件（高度集中于 CSS `generics`/`calc`/`angle`/`time`/`length`、`meta` 与 `expect`）。

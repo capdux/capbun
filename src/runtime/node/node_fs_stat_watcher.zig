@@ -359,7 +359,7 @@ pub fn doRef(self: *StatWatcher, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.
                 self.persistent = true;
                 _ = self.poll_ref.ref(self.ctx);
             }
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn doUnref(self: *StatWatcher, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -367,7 +367,7 @@ pub fn doUnref(self: *StatWatcher, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bu
                 self.persistent = false;
                 _ = self.poll_ref.unref(self.ctx);
             }
-            return error.js_undefined;
+            return jsc.JSValue.js_undefined;
     }
 
 pub fn close(self: *StatWatcher) void {

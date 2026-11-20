@@ -893,8 +893,8 @@ pub fn startExtractTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blo
         errdefer {
         _ = store.deref();
         }
-        const task = ExtractTask.create(globalThis, .{ .store = store, .path = path_copy, .glob_patterns = glob_patterns });
-        const promise_js = (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+        const task = try ExtractTask.create(globalThis, .{ .store = store, .path = path_copy, .glob_patterns = glob_patterns });
+        const promise_js = task.promise.value();
         _ = task.schedule();
         return promise_js;
 }
@@ -904,8 +904,8 @@ pub fn startBlobTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.S
         errdefer {
         _ = store.deref();
         }
-        const task = BlobTask.create(globalThis, .{ .store = store, .compress = compress, .output_type = output_type });
-        const promise_js = (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+        const task = try BlobTask.create(globalThis, .{ .store = store, .compress = compress, .output_type = output_type });
+        const promise_js = task.promise.value();
         _ = task.schedule();
         return promise_js;
 }
@@ -928,8 +928,8 @@ pub fn startWriteTask(globalThis: *jsc.JSGlobalObject, data: WriteContext.Data, 
             _ = bun.default_allocator.free(data.owned);
         }
         }
-        const task = WriteTask.create(globalThis, .{ .data = data, .path = path_z, .compress = compress });
-        const promise_js = (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+        const task = try WriteTask.create(globalThis, .{ .data = data, .path = path_z, .compress = compress });
+        const promise_js = task.promise.value();
         _ = task.schedule();
         return promise_js;
 }
@@ -939,8 +939,8 @@ pub fn startFilesTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.
         errdefer {
         _ = store.deref();
         }
-        const task = FilesTask.create(globalThis, .{ .store = store, .glob_patterns = glob_patterns });
-        const promise_js = (if (@typeInfo(@TypeOf(task.promise)) == .@"enum") @intFromEnum(task.promise) else task.promise.value)();
+        const task = try FilesTask.create(globalThis, .{ .store = store, .glob_patterns = glob_patterns });
+        const promise_js = task.promise.value();
         _ = task.schedule();
         return promise_js;
 }

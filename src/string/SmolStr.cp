@@ -6,7 +6,7 @@ const ByteBabyList = BabyList(u8);
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const inlined_max_len = 15;
-const SmolStrTag: usize = 0x8000000000000000;
+const SmolStrTag: usize = @as(usize, 1) << 63;
 const SmolStrNegatedTag: usize = ~SmolStrTag;
 
 @packed(u128) pub struct SmolStrInlined {

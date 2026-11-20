@@ -146,8 +146,8 @@ pub enum Action {
 
 fn captureLibcBacktrace(begin_addr: usize, stack_trace: *std.builtin.StackTrace): void {
     const addrs = stack_trace.instruction_addresses;
-    const count = unsafe { backtrace(addrs.ptr as [*]*!, addrs.len as c_int) };
-    stack_trace.index = count as usize;
+    const count = unsafe { backtrace(addrs.ptr as [*]*!, @intCast(addrs.len)) };
+    stack_trace.index = @intCast(count);
 
     const tolerance: usize = 128;
     let skip: usize = 0;

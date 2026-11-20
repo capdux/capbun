@@ -320,6 +320,6 @@ const ByteBabyList = BabyList(u8);
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const inlined_max_len = 15;
-const SmolStrTag: usize = -9223372036854775808;
+const SmolStrTag: usize = cp_shl((if (@typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)), 63);
 const SmolStrNegatedTag: usize = (~SmolStrTag);
 const smol_inlined_empty = SmolStrInlined{ .data = 0, .__len = 0, ._tag = 1 };

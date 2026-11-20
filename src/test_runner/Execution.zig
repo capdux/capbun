@@ -227,8 +227,8 @@ pub const AdvanceSequenceStatus = union(enum) {
 };
 
 pub const CurrentExecutionSequenceAndGroup = struct {
-    @"0": *ExecutionSequence,
-    @"1": *ConcurrentGroup,
+    sequence: *ExecutionSequence,
+    group: *ConcurrentGroup,
 };
 
 pub const Execution = @This();
@@ -320,12 +320,15 @@ pub fn getCurrentAndValidExecutionSequence(self: *Execution, data: bun_test.BunT
             _ = groupLog.log("runOneCompleted: the data is for a previous repeat count (outdated)", .{});
             return null;
         }
-        if ((@as(?*void, sequence.active_entry) != data.execution.entry_data.?.entry)) {
+        if (((blk: {
+        break :blk @as(?*anyopaque, @ptrCast(sequence.active_entry));
+
+}) != data.execution.entry_data.?.entry)) {
             _ = groupLog.log("runOneCompleted: the data is for a different sequence index (outdated)", .{});
             return null;
         }
         _ = groupLog.log("runOneCompleted: the data is valid and current", .{});
-        return CurrentExecutionSequenceAndGroup{ .@"0" = sequence, .@"1" = group };
+        return CurrentExecutionSequenceAndGroup{ .sequence = sequence, .group = group };
 }
 
 pub fn advanceSequence(self: *Execution, sequence: *ExecutionSequence, group: *ConcurrentGroup) void {
@@ -538,8 +541,8 @@ pub fn handleUncaughtException(self: *Execution, user_data: bun_test.BunTest.Ref
             return .show_unhandled_error_between_tests;
         }
         const cur = cur_opt.?;
-        const sequence = cur[0];
-        const group = cur[1];
+        const sequence = cur.sequence;
+        const group = cur.group;
         _ = &group;
         sequence.maybe_skip = true;
         if ((sequence.active_entry != sequence.test_entry)) {
@@ -610,8 +613,8 @@ const cur_opt = exec.getCurrentAndValidExecutionSequence(data);
             return bun_test.StepResult{ .waiting = .{} };
         }
         const cur = cur_opt.?;
-        const sequence = cur[0];
-        const group = cur[1];
+        const sequence = cur.sequence;
+        const group = cur.group;
         const sequence_index = data.execution.entry_data.?.sequence_index;
         if (bun.Environment.ci_assert) {
             _ = bun.assert((sequence.active_entry != null));

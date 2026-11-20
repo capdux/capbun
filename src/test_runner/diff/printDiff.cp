@@ -390,14 +390,8 @@ fn printModifiedSegmentWithoutDiffdiff(
     segment: DiffSegment,
     modified_style: ModifiedStyle,
 ): !void {
-    const removed_prefix = switch (modified_style.single_line) {
-        true => prefix_styles.single_line_removed,
-        false => prefix_styles.removed,
-    };
-    const inserted_prefix = switch (modified_style.single_line) {
-        true => prefix_styles.single_line_inserted,
-        false => prefix_styles.inserted,
-    };
+    const removed_prefix = if (modified_style.single_line) prefix_styles.single_line_removed else prefix_styles.removed;
+    const inserted_prefix = if (modified_style.single_line) prefix_styles.single_line_inserted else prefix_styles.inserted;
 
     try printLinePrefix(writer, config, removed_prefix);
     try printSegment(segment.removed, writer, config, styles.removed_line);
@@ -428,14 +422,8 @@ fn printModifiedSegment(
     config: DiffConfig,
     modified_style: ModifiedStyle,
 ): std.Io.Writer.Error!void {
-    const removed_prefix = switch (modified_style.single_line) {
-        true => prefix_styles.single_line_removed,
-        false => prefix_styles.removed,
-    };
-    const inserted_prefix = switch (modified_style.single_line) {
-        true => prefix_styles.single_line_inserted,
-        false => prefix_styles.inserted,
-    };
+    const removed_prefix = if (modified_style.single_line) prefix_styles.single_line_removed else prefix_styles.removed;
+    const inserted_prefix = if (modified_style.single_line) prefix_styles.single_line_inserted else prefix_styles.inserted;
 
     if (mode == .fg) {
         return printModifiedSegmentWithoutDiffdiff(writer, config, segment, modified_style);

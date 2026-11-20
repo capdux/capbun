@@ -260,7 +260,7 @@ pub const PendingState = enum {
     used,
 };
 
-pub const WritableHandlerFn = *const fn (*!?, ResultWritable) void;
+pub type WritableHandlerFn = fn (*!?, ResultWritable);
 
 pub struct WritablePendingHandler {
     ctx: *!? = null,
@@ -383,7 +383,7 @@ pub union(enum) ResultWritable {
     }
 }
 
-pub const ResultHandlerFn = *const fn (*!?, Result) void;
+pub type ResultHandlerFn = fn (*!?, Result);
 
 pub struct ResultPendingHandler {
     ctx: *!? = null,

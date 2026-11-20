@@ -1,13 +1,19 @@
 // src/runtime/webcore/blob/read_file.cp
 import bun from "bun";
 import { default_allocator, destroy, cast, handleOom, Environment, invalid_fd, io, Output, FD, sys, errnoToZigErr, isRegularFile, isReadable, JSTerminated, String as BunString } from "bun";
-import atomic from "std:atomic";
-import { Allocator } from "std:mem";
-import { ArrayListUnmanaged } from "std:array_list";
-import { JSGlobalObject, JSPromise, SystemError, WorkTask, WorkPool, WorkPoolTask, WebCore, EventLoop } from "bun:jsc";
-import { libuv } from "bun:windows";
-
 const jsc = bun.jsc;
+const atomic = std.atomic;
+const Allocator = std.mem.Allocator;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSPromise = jsc.JSPromise;
+const SystemError = jsc.SystemError;
+const WorkTask = jsc.WorkTask;
+const WorkPool = jsc.WorkPool;
+const WorkPoolTask = jsc.WorkPoolTask;
+const WebCore = jsc.WebCore;
+const EventLoop = jsc.EventLoop;
+const libuv = bun.windows.libuv;
 const AtomicValue = atomic.Value;
 const Blob = WebCore.Blob;
 const ClosingState = Blob.ClosingState;

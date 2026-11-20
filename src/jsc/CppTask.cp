@@ -1,6 +1,7 @@
 // C++ Task bridging for JavaScriptCore in CP
-import { jsc, VirtualMachine } from "bun";
 import bun from "bun";
+const jsc = bun.jsc;
+const VirtualMachine = jsc.VirtualMachine;
 
 /// A task created from C++ code, usually via ScriptExecutionContext.
 @opaque

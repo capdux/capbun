@@ -346,7 +346,7 @@ pub fn @"match"(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject, callfr
 pub fn getOrigin(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject) JSValue {
             if (self.origin) |origin| {
                 _ = &origin;
-                return origin.toJS(globalThis);
+                return jsc.ZigString.init(origin.slice()).withEncoding().toJS(globalThis);
             }
             return JSValue.jsNull();
     }

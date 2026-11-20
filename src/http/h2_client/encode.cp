@@ -187,7 +187,7 @@ export fn drainSendBody(session: *ClientSession, stream: *Stream, cap: usize) {
                     client.state.request_stage = .done;
                 }
             },
-            .stream(body) => {
+            .stream(*body) => {
                 if (sb := body.buffer) {
                     let buffer = sb.acquire();
                     const data = buffer.slice();

@@ -146,7 +146,8 @@ pub fn parseKey(self: *TOML, allocator: std.mem.Allocator) !*Rope {
 pub fn parse(source_: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator, redact_logs: bool) !Expr {
             switch (source_.contents.len) {
 0 => {
-return Expr{ .loc = logger.Loc{ .start = 0 }, .data = Expr.init(E.Object, E.Object, logger.Loc.Empty).data };
+const empty_obj: E.Object = .{};
+            return Expr{ .loc = logger.Loc{ .start = 0 }, .data = Expr.init(E.Object, empty_obj, logger.Loc.Empty).data };
 },
 else => {
 

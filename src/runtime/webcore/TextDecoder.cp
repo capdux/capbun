@@ -10,8 +10,9 @@ import {
     jsc,
 } from "bun";
 import { meta } from "std";
-import { ArrayListUnmanaged } from "std:array_list";
 import { TextCodec } from "../../jsc/TextCodec";
+
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;

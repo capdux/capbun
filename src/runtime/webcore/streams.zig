@@ -950,6 +950,8 @@ const owned = (slice.ptr != buf.ptr);
     }
 };
 
+pub const WritableHandlerFn = *const fn (?*anyopaque, ResultWritable) void;
+pub const ResultHandlerFn = *const fn (?*anyopaque, Result) void;
 pub const OnFirstWriteFn = *const fn (?*anyopaque) void;
 const FeatureFlags = bun.FeatureFlags;
 const Output = bun.Output;
@@ -1012,7 +1014,6 @@ pub const PendingState = enum {
     pending,
     used,
 };
-pub const WritableHandlerFn = *const *const fn(?*anyopaque, ResultWritable) void;
 pub const WritablePromiseInfo = struct {
     strong: JSPromise.Strong,
     global: *JSGlobalObject,
@@ -1029,7 +1030,6 @@ pub fn deinit(self: *@This()) void {
             }
     }
 };
-pub const ResultHandlerFn = *const *const fn(?*anyopaque, Result) void;
 pub const ResultPromiseInfo = struct {
     promise: *JSPromise,
     globalThis: *JSGlobalObject,

@@ -423,6 +423,7 @@ const ConstByteSliceZ = [:0]const u8;
 const ConstU16SliceZ = [:0]const u16;
 const U16SliceZ = [:0]u16;
 const U16PtrZ = [*:0]u16;
+const CStr = [*:0]u8;
 pub const OptAndroidSigactionHandlerFn = ?AndroidSigactionHandlerFn;
 pub const OptAndroidSigactionFn = ?AndroidSigactionFn;
 pub const OptAndroidSigactionRestorerFn = ?AndroidSigactionRestorerFn;
@@ -1002,14 +1003,14 @@ return .{ .err = e };
         }
 }
 
-pub fn statxImpl(fd: bun.FD, path: ?[*:0]u8, flags: u32, mask: u32) Maybe(PosixStat) {
+pub fn statxImpl(fd: bun.FD, path: ?CStr, flags: u32, mask: u32) Maybe(PosixStat) {
         if (comptime (!Environment.isLinux)) {
             _ = @compileError("statx is only supported on Linux");
         }
         var buf: linux.Statx = undefined;
         _ = &buf;
         while (true) {
-            var statx_path: [*:0]u8 = @ptrCast("");
+            var statx_path: CStr = @ptrCast("");
             _ = &statx_path;
             if (path) |p| {
                 _ = &p;
@@ -1053,7 +1054,7 @@ pub fn fstatx(fd: bun.FD, comptime fields: []const StatxField) Maybe(PosixStat) 
         return statxImpl(fd, null, linux.AT.EMPTY_PATH, mask);
 }
 
-pub fn statx(path: [*:0]u8, comptime fields: []const StatxField) Maybe(PosixStat) {
+pub fn statx(path: CStr, comptime fields: []const StatxField) Maybe(PosixStat) {
         const mask: u32 = (comptime brk: {
         var i: u32 = 0;
         _ = &i;
@@ -1066,7 +1067,7 @@ pub fn statx(path: [*:0]u8, comptime fields: []const StatxField) Maybe(PosixStat
         return statxImpl(bun.FD.fromNative(std.posix.AT.FDCWD), path, 0, mask);
 }
 
-pub fn lstatx(path: [*:0]u8, comptime fields: []const StatxField) Maybe(PosixStat) {
+pub fn lstatx(path: CStr, comptime fields: []const StatxField) Maybe(PosixStat) {
         const mask: u32 = (comptime brk: {
         var i: u32 = 0;
         _ = &i;

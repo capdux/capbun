@@ -541,10 +541,10 @@ extern "c" fn backtrace(buffer: [*]*anyopaque, size: c_int) callconv(.c) c_int;
 pub fn captureLibcBacktrace(begin_addr: usize, stack_trace: *std.builtin.StackTrace) void {
         const addrs = stack_trace.instruction_addresses;
         const count = (blk: {
-        break :blk backtrace(@as([*]*anyopaque, @ptrCast(@alignCast(addrs.ptr))), (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(addrs.len)) else @as(c_int, addrs.len)));
+        break :blk backtrace(@as([*]*anyopaque, @ptrCast(@alignCast(addrs.ptr))), @intCast(addrs.len));
 
 });
-        stack_trace.index = (if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(usize, @intFromEnum(count)) else cp_cast_int(usize, count));
+        stack_trace.index = @intCast(count);
         const tolerance: usize = 128;
         var skip: usize = 0;
         _ = &skip;

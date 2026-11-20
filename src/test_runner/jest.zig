@@ -129,7 +129,7 @@ pub fn printIfNeeded(self: *CurrentFile) void {
     }
 };
 
-pub const Summary = struct {
+pub const JestSummary = struct {
     pass: u32 = 0,
     expectations: u32 = 0,
     skip: u32 = 0,
@@ -138,7 +138,7 @@ pub const Summary = struct {
     files: u32 = 0,
     skipped_because_label: u32 = 0,
 
-pub fn didLabelFilterOutAllTests(self: Summary) bool {
+pub fn didLabelFilterOutAllTests(self: JestSummary) bool {
             return ((self.skipped_because_label > 0) and (((((self.pass + self.skip) + self.todo) + self.fail) + self.expectations) == 0));
     }
 };
@@ -158,7 +158,7 @@ pub const FileIdResult = struct {
 pub const TestRunner = struct {
     current_file: CurrentFile = CurrentFile{  },
     files: TestRunnerFile.List = .{},
-    index: TestRunnerFile.Map = TestRunnerFile.Map,
+    index: TestRunnerFile.Map = .{},
     only: bool = false,
     run_todo: bool = false,
     concurrent: bool = false,
@@ -177,7 +177,7 @@ pub const TestRunner = struct {
     test_options: *const bun.cli.Command.TestOptions = undefined,
     filter_regex: ?*RegularExpression,
     unhandled_errors_between_tests: u32 = 0,
-    summary: Summary = Summary{  },
+    summary: JestSummary = JestSummary{  },
     bun_test_root: bun_test.BunTestRoot,
 
 pub fn getActiveTimeout(self: TestRunner) bun.timespec {
@@ -233,6 +233,7 @@ pub fn getOrPutFile(self: *TestRunner, file_path: []const u8) FileIdResult {
             entry.value_ptr.* = file_id;
             return .{ .file_id = file_id };
     }
+    pub const Summary = JestSummary;
     pub const File = TestRunnerFile;
 };
 

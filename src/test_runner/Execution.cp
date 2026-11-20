@@ -209,8 +209,8 @@ pub union(enum) AdvanceSequenceStatus {
 }
 
 pub struct CurrentExecutionSequenceAndGroup {
-    @"0": *ExecutionSequence,
-    @"1": *ConcurrentGroup,
+    sequence: *ExecutionSequence,
+    group: *ConcurrentGroup,
 }
 
 pub fn init(_: std.mem.Allocator): Execution {
@@ -308,12 +308,12 @@ pub fn init(_: std.mem.Allocator): Execution {
             groupLog.log("runOneCompleted: the data is for a previous repeat count (outdated)", .{});
             return null;
         }
-        if (@as((*void)?, sequence.active_entry) != data.execution.entry_data.?.entry) {
+        if (unsafe { @as(*!?, @ptrCast(sequence.active_entry)) } != data.execution.entry_data.?.entry) {
             groupLog.log("runOneCompleted: the data is for a different sequence index (outdated)", .{});
             return null;
         }
         groupLog.log("runOneCompleted: the data is valid and current", .{});
-        return CurrentExecutionSequenceAndGroup{ @"0": sequence, @"1": group };
+        return CurrentExecutionSequenceAndGroup{ sequence: sequence, group: group };
     }
 
     fn advanceSequence(*_, sequence: *ExecutionSequence, group: *ConcurrentGroup) {
@@ -520,8 +520,8 @@ pub fn init(_: std.mem.Allocator): Execution {
         const cur_opt = _.getCurrentAndValidExecutionSequence(user_data);
         if (cur_opt == null) return .show_unhandled_error_between_tests;
         const cur = cur_opt.?;
-        const sequence = cur[0];
-        const group = cur[1];
+        const sequence = cur.sequence;
+        const group = cur.group;
         * = group;
 
         sequence.maybe_skip = true;
@@ -566,8 +566,8 @@ pub fn step(buntest_strong: bun_test.BunTestPtr, globalThis: *jsc.JSGlobalObject
                 return bun_test.StepResult{ .waiting = .{} };
             }
             const cur = cur_opt.?;
-            const sequence = cur[0];
-            const group = cur[1];
+            const sequence = cur.sequence;
+            const group = cur.group;
             const sequence_index = data.execution.entry_data.?.sequence_index;
 
             if (bun.Environment.ci_assert) bun.assert(sequence.active_entry != null);

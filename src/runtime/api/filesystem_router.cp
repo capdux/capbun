@@ -339,7 +339,7 @@ pub struct FileSystemRouter {
 
     fn getOrigin(*_, globalThis: *jsc.JSGlobalObject): JSValue {
         if (origin := _.origin) {
-            return origin.toJS(globalThis);
+            return jsc.ZigString.init(origin.slice()).withEncoding().toJS(globalThis);
         }
 
         return JSValue.jsNull();

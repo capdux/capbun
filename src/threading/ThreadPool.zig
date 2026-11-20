@@ -601,14 +601,19 @@ pub noinline fn wait(self: *@This()) void {
                     return;
                 }
                 if ((state == NOTIFIED)) {
-                    if (state == null) { state = return; }
-                    continue;
+                    if (self.state.cmpxchgWeak(state, acquire_with, .acquire, .monotonic)) |next| {
+                        _ = &next;
+                        state = next;
+                        continue;
+                    }
+                    return;
                 }
                 if ((state != WAITING)) {
-                    _ = blk: {
-                    if (state == null) { state = break :blk; }
-                    continue;
-};
+                    if (self.state.cmpxchgWeak(state, WAITING, .monotonic, .monotonic)) |next| {
+                        _ = &next;
+                        state = next;
+                        continue;
+                    }
                 }
                 _ = (blk_catch_0: { break :blk_catch_0 ((Futex.wait((&self.state), WAITING, (if ((!has_shrunk_memory)) (std.time.ns_per_s * 10) else null))) catch |__ce_0| { _ = &__ce_0; has_shrunk_memory = true;
                 _ = bun.Global.mimalloc_cleanup(false);

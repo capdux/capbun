@@ -171,7 +171,10 @@ pub fn error_for_message(self: *Context, default_msg: CStr) Error {
 .BufError => "Z_BUF_ERROR",
 .VersionError => "Z_VERSION_ERROR",
 });
-            return Error{ .msg = message, .e = @intFromEnum(self.e), .code = (blk: {
+            return Error{ .msg = (blk: {
+            break :blk @constCast(message);
+
+}), .e = @intFromEnum(self.e), .code = (blk: {
             break :blk @constCast(code_str);
 
 }) };

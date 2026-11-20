@@ -392,16 +392,8 @@ pub fn printSegment(text: []const u8, writer: anytype, config: DiffConfig, style
 }
 
 pub fn printModifiedSegmentWithoutDiffdiff(writer: anytype, config: DiffConfig, segment: DiffSegment, modified_style: ModifiedStyle) !void {
-        const removed_prefix = (switch (modified_style.single_line) {
-true => prefix_styles.single_line_removed,
-false => prefix_styles.removed,
-else => unreachable,
-});
-        const inserted_prefix = (switch (modified_style.single_line) {
-true => prefix_styles.single_line_inserted,
-false => prefix_styles.inserted,
-else => unreachable,
-});
+        const removed_prefix = (if (modified_style.single_line) prefix_styles.single_line_removed else prefix_styles.removed);
+        const inserted_prefix = (if (modified_style.single_line) prefix_styles.single_line_inserted else prefix_styles.inserted);
         _ = try printLinePrefix(writer, config, removed_prefix);
         _ = try printSegment(segment.removed, writer, config, styles.removed_line);
         _ = try writer.writeAll("\n");
@@ -423,16 +415,8 @@ pub fn shouldHighlightChar(char: u8) bool {
 }
 
 pub fn printModifiedSegment(segment: DiffSegment, allocator: std.mem.Allocator, writer: anytype, config: DiffConfig, modified_style: ModifiedStyle) std.Io.Writer.Error!void {
-        const removed_prefix = (switch (modified_style.single_line) {
-true => prefix_styles.single_line_removed,
-false => prefix_styles.removed,
-else => unreachable,
-});
-        const inserted_prefix = (switch (modified_style.single_line) {
-true => prefix_styles.single_line_inserted,
-false => prefix_styles.inserted,
-else => unreachable,
-});
+        const removed_prefix = (if (modified_style.single_line) prefix_styles.single_line_removed else prefix_styles.removed);
+        const inserted_prefix = (if (modified_style.single_line) prefix_styles.single_line_inserted else prefix_styles.inserted);
         if ((mode == .fg)) {
             return printModifiedSegmentWithoutDiffdiff(writer, config, segment, modified_style);
         }

@@ -368,7 +368,7 @@ pub struct StatWatcher {
             _.persistent = true;
             _.poll_ref.ref(_.ctx);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     fn doUnref(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -376,7 +376,7 @@ pub struct StatWatcher {
             _.persistent = false;
             _.poll_ref.unref(_.ctx);
         }
-        return .js_undefined;
+        return jsc.JSValue.js_undefined;
     }
 
     /// Stops file watching but does not free the instance.

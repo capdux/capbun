@@ -7,7 +7,7 @@ const createMySQLError = ErrorPacketJsc.createMySQLError;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 
-pub fn mysqlErrorToJS(globalObject: *jsc.JSGlobalObject, message: []const u8?, e: Error): JSValue {
+pub fn mysqlErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8)?, e: Error): JSValue {
     const msg = message orelse @errorName(e);
     const code = switch (e) {
         error.ConnectionClosed => "ERR_MYSQL_CONNECTION_CLOSED",

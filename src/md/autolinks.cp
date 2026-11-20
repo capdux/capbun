@@ -154,7 +154,7 @@ pub fn findPermissiveAutolink(content: []const u8, pos: usize, allow_emph: bool)
 
     if (c == ':') {
         // URL autolink: check for http://, https://, ftp://
-        const schemes = [
+        const schemes: [3]Scheme = [
             Scheme{ name: "http", suffix: "//" },
             Scheme{ name: "https", suffix: "//" },
             Scheme{ name: "ftp", suffix: "//" },

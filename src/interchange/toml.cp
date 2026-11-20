@@ -134,7 +134,8 @@ const Rope = js_ast.E.Object.Rope;
         switch (source_.contents.len) {
             // This is to be consistent with how disabled JS files are handled
             0 => {
-                return Expr{ .loc = logger.Loc{ .start = 0 }, .data = Expr.init(E.Object, E.Object{}, logger.Loc.Empty).data };
+                const empty_obj: E.Object = .{};
+                return Expr{ .loc = logger.Loc{ .start = 0 }, .data = Expr.init(E.Object, empty_obj, logger.Loc.Empty).data };
             },
             else => {},
         }

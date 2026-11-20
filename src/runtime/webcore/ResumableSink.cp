@@ -184,7 +184,8 @@ pub fn ResumableSink(
             }
 
             const buffer = args[0];
-            const sb = try jsc.Node.StringOrBuffer.fromJS(globalThis, default_allocator, buffer) orelse {
+            const sb_opt = jsc.Node.StringOrBuffer.fromJS(globalThis, default_allocator, buffer)?;
+            const sb = sb_opt orelse {
                 return globalThis.throwInvalidArguments("ResumableSink.write requires a string or buffer", .{});
             };
 

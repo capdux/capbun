@@ -80,18 +80,6 @@ const JSTerminated = @import("bun").JSTerminated;
 const String = @import("bun").String;
 const as = @import("bun").as;
 const BunString = @import("bun").BunString;
-pub const atomic = @import("std:atomic");
-const Allocator = @import("std:mem").Allocator;
-const ArrayListUnmanaged = @import("std:array_list").ArrayListUnmanaged;
-const JSGlobalObject = @import("bun:jsc").JSGlobalObject;
-const JSPromise = @import("bun:jsc").JSPromise;
-const SystemError = @import("bun:jsc").SystemError;
-const WorkTask = @import("bun:jsc").WorkTask;
-const WorkPool = @import("bun:jsc").WorkPool;
-const WorkPoolTask = @import("bun:jsc").WorkPoolTask;
-const WebCore = @import("bun:jsc").WebCore;
-const EventLoop = @import("bun:jsc").EventLoop;
-const libuv = @import("bun:windows").libuv;
 pub const ReadFileRead = struct {
     buf: []u8,
     is_temporary: bool = false,
@@ -809,6 +797,18 @@ pub fn onRead(req: *libuv.fs_t) callconv(.c) void {
 
 pub const ReadFileOnReadFileCallback = *const fn (*anyopaque, ReadFileResultType) void;
 const jsc = bun.jsc;
+const atomic = std.atomic;
+const Allocator = std.mem.Allocator;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSPromise = jsc.JSPromise;
+const SystemError = jsc.SystemError;
+const WorkTask = jsc.WorkTask;
+const WorkPool = jsc.WorkPool;
+const WorkPoolTask = jsc.WorkPoolTask;
+const WebCore = jsc.WebCore;
+const EventLoop = jsc.EventLoop;
+const libuv = bun.windows.libuv;
 const AtomicValue = atomic.Value;
 const Blob = WebCore.Blob;
 const ClosingState = Blob.ClosingState;

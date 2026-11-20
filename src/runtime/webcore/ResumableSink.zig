@@ -216,7 +216,8 @@ pub fn jsWrite(self: *@This(), globalThis: *JSGlobalObject, callframe: *jsc.Call
                 return globalThis.throwInvalidArguments("ResumableSink.write requires at least 1 argument", .{});
             }
             const buffer = args[0];
-            const sb = try ((jsc.Node.StringOrBuffer.fromJS(globalThis, default_allocator, buffer)) orelse {
+            const sb_opt = try jsc.Node.StringOrBuffer.fromJS(globalThis, default_allocator, buffer);
+            const sb = ((sb_opt) orelse {
             return globalThis.throwInvalidArguments("ResumableSink.write requires a string or buffer", .{});
 });
             defer {

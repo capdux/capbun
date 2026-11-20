@@ -307,10 +307,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         defer buntest_strong.deinit();
         const bunTest = buntest_strong.get();
 
-        const args = parseArguments(globalThis, callFrame, switch (client.mode) {
-            .describe => .describe,
-            .@"test" => .@"test",
-        }, bunTest.gpa, {
+        const args = parseArguments(globalThis, callFrame, .{ scope_functions: client }, bunTest.gpa, {
             callback: if (client.cfg.self_mode == .todo) .allow else .require,
             kind: .test_or_describe,
         })?;

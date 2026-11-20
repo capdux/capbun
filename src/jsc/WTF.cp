@@ -7,7 +7,7 @@ pub struct WTF {
     /// Result is cached after the first call.
     static fn numberOfProcessorCores(): u32 {
         jsc.markBinding(@src());
-        return i32(@max(1, WTF__numberOfProcessorCores()));
+        return @intCast(@max(1, WTF__numberOfProcessorCores()));
     }
 
     extern fn WTF__releaseFastMallocFreeMemoryForThisThread() ;

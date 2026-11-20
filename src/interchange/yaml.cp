@@ -4,8 +4,10 @@ err MultipleTagsError { MultipleTags }
 err UnexpectedCharacterError { UnexpectedCharacter }
 err StackOverflowOrOOMError { OutOfMemory, StackOverflow }
 
+err YamlParseError { OutOfMemory, SyntaxError, StackOverflow }
+
 pub struct YAML {
-    const ParseError = OOM || error{ SyntaxError, StackOverflow };
+    const ParseError = YamlParseError;
 
     static fn parse(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator): ParseError!Expr {
         bun.analytics.Features.yaml_parse += 1;

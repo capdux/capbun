@@ -215,13 +215,13 @@ pub fn findPermissiveAutolink(content: []const u8, pos: usize, allow_emph: bool)
         }
         const c = content[@as(usize, @intCast(pos))];
         if ((c == 58)) {
-            const schemes: []Scheme = .{ Scheme{ .name = "http", .suffix = "//" }, Scheme{ .name = "https", .suffix = "//" }, Scheme{ .name = "ftp", .suffix = "//" } };
+            const schemes: [3]Scheme = .{ Scheme{ .name = "http", .suffix = "//" }, Scheme{ .name = "https", .suffix = "//" }, Scheme{ .name = "ftp", .suffix = "//" } };
             for (cp_iter_slice(schemes)) |scheme| {
                 _ = &scheme;
-                const slen = scheme.name.len;
+                const slen = (if (@typeInfo(@TypeOf(scheme)) == .@"enum" or @typeInfo(@TypeOf(scheme)) == .@"union") @tagName(scheme) else scheme.name).len;
                 const suflen = scheme.suffix.len;
                 if (((pos >= slen) and (((pos + 1) + suflen) < content.len))) {
-                    if ((helpers.asciiCaseEql(content[(pos - slen)..pos], scheme.name) and std.mem.eql(u8, content[(pos + 1)..((pos + 1) + suflen)], scheme.suffix))) {
+                    if ((helpers.asciiCaseEql(content[(pos - slen)..pos], (if (@typeInfo(@TypeOf(scheme)) == .@"enum" or @typeInfo(@TypeOf(scheme)) == .@"union") @tagName(scheme) else scheme.name)) and std.mem.eql(u8, content[(pos + 1)..((pos + 1) + suflen)], scheme.suffix))) {
                         const beg = (pos - slen);
                         if ((!checkLeftBoundary(content, beg, allow_emph))) {
                             continue;

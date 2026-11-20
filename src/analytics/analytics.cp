@@ -204,7 +204,7 @@ pub const packed_features_list = brk: {
     break :brk names[0..i].*;
 };
 
-const empty_decls: [std.builtin.Type.Declaration; 0] = [];
+const empty_decls: []const std.builtin.Type.Declaration = [];
 const false_val: bool = false;
 
 pub const PackedFeatures = @Type(std.builtin.Type{
@@ -235,7 +235,7 @@ pub const PackedFeatures = @Type(std.builtin.Type{
             }
             break :brk &fields;
         },
-        decls: &empty_decls,
+        decls: empty_decls,
         is_tuple: false,
     },
 });

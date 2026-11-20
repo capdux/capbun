@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -59,6 +60,8 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const expect = @import("./expect.zig");
@@ -390,345 +393,1800 @@ pub fn printAsymmetricMatcher(fmt: anytype, comptime Format: anytype, writer: an
         flush: bool,
         quote_strings: bool = false,
     };
-    pub const Formatter = struct {
-        remaining_values: []const JSValue = empty_jsvalues[0..0],
-        map: Visited.Map = undefined,
-        map_node: ?*Visited.Pool.Node = null,
-        hide_native: bool = false,
-        globalThis: *JSGlobalObject,
-        indent: u32 = 0,
-        quote_strings: bool = false,
-        failed: bool = false,
-        estimated_line_length: usize = 0,
-        always_newline_scope: bool = false,
-    
-    pub fn goodTimeForANewLine(self: *@This()) bool {
-                if ((self.estimated_line_length > 80)) {
-                    _ = self.resetLine();
-                    return true;
-                }
-                return false;
-        }
-    
-    pub fn resetLine(self: *@This()) void {
-                self.estimated_line_length = (self.indent * 2);
-        }
-    
-    pub fn addForNewLine(self: *@This(), len: usize) void {
-            _ = self;
-            _ = len;
-        }
-    
-    pub fn WrappedWriter(comptime Writer: type) type {
-                return struct {
-        ctx: Writer,
-        failed: bool = false,
-        estimated_line_length: *usize = undefined,
-    
-    pub fn print(self: *@This(), comptime fmt: []const u8, args: anytype) void {
-                _ = (blk_catch_0: { break :blk_catch_0 ((self.ctx.print(fmt, args)) catch |__ce_0| { _ = &__ce_0; self.failed = true;
-                break :blk_catch_0 {}; }); });
-        }
-    
-    pub fn writeLatin1(self: *@This(), buf: []const u8) void {
-                var remain = buf;
-                _ = &remain;
-                while ((remain.len > 0)) {
-                    if (strings.firstNonASCII(remain)) |i| {
-                        _ = &i;
-                        if ((i > 0)) {
-                            _ = (blk_catch_1: { break :blk_catch_1 ((self.ctx.writeAll(remain[0..i])) catch |__ce_1| { _ = &__ce_1; self.failed = true;
-                            return; }); });
-                        }
-                        _ = (blk_catch_2: { break :blk_catch_2 ((self.ctx.writeAll((&strings.latin1ToCodepointBytesAssumeNotASCII(remain[@as(usize, @intCast(i))])))) catch |__ce_2| { _ = &__ce_2; self.failed = true;
-                        break :blk_catch_2 {}; }); });
-                        remain = remain[(i + 1)..];
-                    } else {
-                        break;
+    pub const Formatter = PrettyFormatter;
+};
+
+pub const PrettyFormatter = struct {
+    remaining_values: []const JSValue = empty_jsvalues[0..0],
+    map: Visited.Map = undefined,
+    map_node: ?*Visited.Pool.Node = null,
+    hide_native: bool = false,
+    globalThis: *JSGlobalObject,
+    indent: u32 = 0,
+    quote_strings: bool = false,
+    failed: bool = false,
+    estimated_line_length: usize = 0,
+    always_newline_scope: bool = false,
+
+pub fn goodTimeForANewLine(self: *PrettyFormatter) bool {
+            if ((self.estimated_line_length > 80)) {
+                _ = self.resetLine();
+                return true;
+            }
+            return false;
+    }
+
+pub fn resetLine(self: *PrettyFormatter) void {
+            self.estimated_line_length = (self.indent * 2);
+    }
+
+pub fn addForNewLine(self: *PrettyFormatter, len: usize) void {
+            self.estimated_line_length = (blk_catch_13: { break :blk_catch_13 ((std.math.add(usize, self.estimated_line_length, len)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 std.math.maxInt(usize); }); });
+    }
+
+pub fn WrappedWriter(comptime Writer: type) type {
+            return struct {
+    ctx: Writer,
+    failed: bool = false,
+    estimated_line_length: *usize = undefined,
+
+pub fn print(self: *@This(), comptime fmt: []const u8, args: anytype) void {
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.ctx.print(fmt, args)) catch |__ce_0| { _ = &__ce_0; self.failed = true;
+            break :blk_catch_0 {}; }); });
+    }
+
+pub fn writeLatin1(self: *@This(), buf: []const u8) void {
+            var remain = buf;
+            _ = &remain;
+            while ((remain.len > 0)) {
+                if (strings.firstNonASCII(remain)) |i| {
+                    _ = &i;
+                    if ((i > 0)) {
+                        _ = (blk_catch_1: { break :blk_catch_1 ((self.ctx.writeAll(remain[0..i])) catch |__ce_1| { _ = &__ce_1; self.failed = true;
+                        return; }); });
                     }
-                }
-                _ = (blk_catch_3: { break :blk_catch_3 ((self.ctx.writeAll(remain)) catch |__ce_3| { _ = &__ce_3; return; }); });
-        }
-    
-    pub inline fn writeAll(self: *@This(), buf: []const u8) void {
-                _ = (blk_catch_4: { break :blk_catch_4 ((self.ctx.writeAll(buf)) catch |__ce_4| { _ = &__ce_4; self.failed = true;
-                break :blk_catch_4 {}; }); });
-        }
-    
-    pub inline fn writeString(self: *@This(), str: ZigString) void {
-                _ = self.print("{f}", .{ str });
-        }
-    
-    pub inline fn write16Bit(self: *@This(), input: []const u16) void {
-                _ = (blk_catch_5: { break :blk_catch_5 ((bun.fmt.formatUTF16Type(input, self.ctx)) catch |__ce_5| { _ = &__ce_5; self.failed = true;
-                break :blk_catch_5 {}; }); });
-        }
-    };
-        }
-    
-    pub fn writeWithFormatting(self: *@This(), comptime Writer: type, writer_: Writer, comptime Slice: type, slice_: Slice, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool) void {
-            _ = globalThis;
-            _ = enable_ansi_colors;
-                const self_ptr = self;
-                _ = &self_ptr;
-                const WW = WrappedWriter(Writer);
-                _ = &WW;
-                var writer = WW{ .ctx = writer_ };
-                _ = &writer;
-                var slice = slice_;
-                _ = &slice;
-                var i: u32 = 0;
-                _ = &i;
-                var len: u32 = @as(u32, @truncate(slice.len));
-                _ = &len;
-                var any_non_ascii = false;
-                _ = &any_non_ascii;
-                while ((i < len)) : (i = (i + 1)) {
+                    _ = (blk_catch_2: { break :blk_catch_2 ((self.ctx.writeAll((&strings.latin1ToCodepointBytesAssumeNotASCII(remain[@as(usize, @intCast(i))])))) catch |__ce_2| { _ = &__ce_2; self.failed = true;
+                    break :blk_catch_2 {}; }); });
+                    remain = remain[(i + 1)..];
+                } else {
                     break;
                 }
-        }
-        pub const Visited = struct {
-            const ObjectPool = pool.ObjectPool;
-            pub const Map = std.AutoHashMap(JSValue, void);
-            pub const Pool = ObjectPool(Map, VisitedInit.init, true, 16);
-        };
-        pub const ZigFormatter = struct {
-            formatter: *JestPrettyFormat.Formatter,
-            global: *JSGlobalObject,
-            value: JSValue,
-        
-        pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                    self.formatter.remaining_values = (&.{ self.value });
-                    defer {
-                    {
-                        self.formatter.remaining_values = &.{};
-                    }
-                    }
-                    self.formatter.globalThis = self.global;
-                    _ = self.formatter.format(Tag.get(self.value, self.global), @TypeOf(writer), writer, self.value, self.formatter.globalThis, false);
             }
-            pub const WriteError = error{UhOh};
-        };
-        pub const Tag = enum {
-                    StringPossiblyFormatted,
-                    String,
-                    Undefined,
-                    Double,
-                    Integer,
-                    Null,
-                    Boolean,
-                    Array,
-                    Object,
-                    Function,
-                    Class,
-                    Error,
-                    TypedArray,
-                    Map,
-                    Set,
-                    Symbol,
-                    BigInt,
-        
-                    GlobalObject,
-                    Private,
-                    Promise,
-        
-                    JSON,
-                    NativeCode,
-                    ArrayBuffer,
-        
-                    JSX,
-                    Event,
-        
-                    pub fn isPrimitive(this: Tag) bool {
-                        return switch (this) {
-                            .String,
-                            .StringPossiblyFormatted,
-                            .Undefined,
-                            .Double,
-                            .Integer,
-                            .Null,
-                            .Boolean,
-                            .Symbol,
-                            .BigInt,
-                            => true,
-                            else => false,
-                        };
+            _ = (blk_catch_3: { break :blk_catch_3 ((self.ctx.writeAll(remain)) catch |__ce_3| { _ = &__ce_3; return; }); });
+    }
+
+pub inline fn writeAll(self: *@This(), buf: []const u8) void {
+            _ = (blk_catch_4: { break :blk_catch_4 ((self.ctx.writeAll(buf)) catch |__ce_4| { _ = &__ce_4; self.failed = true;
+            break :blk_catch_4 {}; }); });
+    }
+
+pub inline fn writeString(self: *@This(), str: ZigString) void {
+            _ = self.print("{f}", .{ str });
+    }
+
+pub inline fn write16Bit(self: *@This(), input: []const u16) void {
+            _ = (blk_catch_5: { break :blk_catch_5 ((bun.fmt.formatUTF16Type(input, self.ctx)) catch |__ce_5| { _ = &__ce_5; self.failed = true;
+            break :blk_catch_5 {}; }); });
+    }
+};
+    }
+
+pub fn writeWithFormatting(self: *PrettyFormatter, comptime Writer: type, writer_: *std.Io.Writer, comptime Slice: type, slice_: Slice, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool) void {
+        _ = globalThis;
+            const self_ptr = self;
+            _ = &self_ptr;
+            const WW = PrettyFormatter.WrappedWriter(Writer);
+            _ = &WW;
+            var writer = WW{ .ctx = writer_ };
+            _ = &writer;
+            var slice = slice_;
+            _ = &slice;
+            var i: u32 = 0;
+            _ = &i;
+            var len: u32 = @as(u32, @truncate(slice.len));
+            _ = &len;
+            var any_non_ascii = false;
+            _ = &any_non_ascii;
+            while ((i < len)) : (i = (i + 1)) {
+                switch (slice[@as(usize, @intCast(i))]) {
+'%' => {
+i = (i + 1);
+                if ((i >= len)) {
+                    break;
+                }
+                const token = (switch (slice[@as(usize, @intCast(i))]) {
+'s' => Tag.String,
+'f' => Tag.Double,
+'o' => Tag.Undefined,
+'O' => Tag.Object,
+'d', 'i' => Tag.Integer,
+else => continue,
+});
+                const end = slice[0..(i - 1)];
+                if ((!any_non_ascii)) {
+                    _ = writer.writeAll(end);
+                } else {
+                    _ = writer.writeAll(end);
+                }
+                any_non_ascii = false;
+                slice = (if (comptime @typeInfo(Slice) == .@"enum") @as(Slice, @enumFromInt(slice[@min(slice.len, (i + 1))..])) else @as(Slice, slice[@min(slice.len, (i + 1))..]));
+                i = 0;
+                len = @as(u32, @truncate(slice.len));
+                const next_value = self.remaining_values[0];
+                self.remaining_values = self.remaining_values[1..];
+                switch (token) {
+Tag.String => {
+_ = (blk_catch_14: { break :blk_catch_14 ((self.printAs(Tag.String, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_14| { _ = &__ce_14; return; }); });
+},
+Tag.Double => {
+_ = (blk_catch_15: { break :blk_catch_15 ((self.printAs(Tag.Double, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_15| { _ = &__ce_15; return; }); });
+},
+Tag.Object => {
+_ = (blk_catch_16: { break :blk_catch_16 ((self.printAs(Tag.Object, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_16| { _ = &__ce_16; return; }); });
+},
+Tag.Integer => {
+_ = (blk_catch_17: { break :blk_catch_17 ((self.printAs(Tag.Integer, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_17| { _ = &__ce_17; return; }); });
+},
+Tag.Undefined => {
+return;
+},
+else => {
+_ = unreachable;
+},
+}
+                if ((self.remaining_values.len == 0)) {
+                    break;
+                }
+},
+'\\' => {
+i = (i + 1);
+                if ((i >= len)) {
+                    break;
+                }
+                if ((slice[@as(usize, @intCast(i))] == 37)) {
+                    i = (i + 2);
+                }
+},
+128...255 => {
+any_non_ascii = true;
+},
+else => {
+
+},
+}
+            }
+            if ((slice.len > 0)) {
+                _ = writer.writeAll(slice);
+            }
+    }
+
+pub fn writeIndent(self: *PrettyFormatter, comptime Writer: type, writer: Writer) !void {
+            const indent = @min(self.indent, 32);
+            const buf: [64]u8 = @splat(32);
+            var total_remain: usize = indent;
+            _ = &total_remain;
+            while ((total_remain > 0)) {
+                const written: usize = @min(32, total_remain);
+                _ = try writer.writeAll(buf[0..(written * 2)]);
+                total_remain = (total_remain - written);
+            }
+    }
+
+pub fn printComma(self: *PrettyFormatter, comptime Writer: type, writer: Writer, comptime enable_ansi_colors: bool) !void {
+            _ = try writer.writeAll((comptime Output.prettyFmt("<r><d>,<r>", enable_ansi_colors)));
+            self.estimated_line_length = (self.estimated_line_length + 1);
+    }
+
+pub fn MapIterator(comptime Writer: type, comptime enable_ansi_colors: bool) type {
+            return struct {
+    formatter: *JestPrettyFormat.Formatter,
+    writer: Writer,
+
+pub fn forEach(self: *@This(), _: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+            if ((ctx == null)) {
+                return;
+            }
+            var this: *@This() = bun.cast((&@This()), ctx.?);
+            _ = &this;
+            if (self.formatter.failed) {
+                return;
+            }
+            const key = (blk_catch_0: { break :blk_catch_0 ((jsc.JSObject.getIndex(nextValue, globalObject, 0)) catch |__ce_0| { _ = &__ce_0; return; }); });
+            const value = (blk_catch_1: { break :blk_catch_1 ((jsc.JSObject.getIndex(nextValue, globalObject, 1)) catch |__ce_1| { _ = &__ce_1; return; }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((self.formatter.writeIndent(Writer, self.writer)) catch |__ce_2| { _ = &__ce_2; return; }); });
+            const key_tag = (blk_catch_3: { break :blk_catch_3 ((Tag.get(key, globalObject)) catch |__ce_3| { _ = &__ce_3; return; }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((self.formatter.format(key_tag, Writer, self.writer, key, self.formatter.globalThis, enable_ansi_colors)) catch |__ce_4| { _ = &__ce_4; return; }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((self.writer.writeAll(" => ")) catch |__ce_5| { _ = &__ce_5; return; }); });
+            const value_tag = (blk_catch_6: { break :blk_catch_6 ((Tag.get(value, globalObject)) catch |__ce_6| { _ = &__ce_6; return; }); });
+            _ = (blk_catch_7: { break :blk_catch_7 ((self.formatter.format(value_tag, Writer, self.writer, value, self.formatter.globalThis, enable_ansi_colors)) catch |__ce_7| { _ = &__ce_7; return; }); });
+            _ = (blk_catch_8: { break :blk_catch_8 ((self.formatter.printComma(Writer, self.writer, enable_ansi_colors)) catch |__ce_8| { _ = &__ce_8; return; }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((self.writer.writeAll("\n")) catch |__ce_9| { _ = &__ce_9; return; }); });
+    }
+};
+    }
+
+pub fn SetIterator(comptime Writer: type, comptime enable_ansi_colors: bool) type {
+            return struct {
+    formatter: *JestPrettyFormat.Formatter,
+    writer: Writer,
+
+pub fn forEach(self: *@This(), _: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+            if ((ctx == null)) {
+                return;
+            }
+            var this: *@This() = bun.cast((&@This()), ctx.?);
+            _ = &this;
+            if (self.formatter.failed) {
+                return;
+            }
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.formatter.writeIndent(Writer, self.writer)) catch |__ce_0| { _ = &__ce_0; return; }); });
+            const key_tag = (blk_catch_1: { break :blk_catch_1 ((Tag.get(nextValue, globalObject)) catch |__ce_1| { _ = &__ce_1; return; }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((self.formatter.format(key_tag, Writer, self.writer, nextValue, self.formatter.globalThis, enable_ansi_colors)) catch |__ce_2| { _ = &__ce_2; return; }); });
+            _ = (blk_catch_3: { break :blk_catch_3 ((self.formatter.printComma(Writer, self.writer, enable_ansi_colors)) catch |__ce_3| { _ = &__ce_3; return; }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((self.writer.writeAll("\n")) catch |__ce_4| { _ = &__ce_4; return; }); });
+    }
+};
+    }
+
+pub fn PropertyIterator(comptime Writer: type, comptime enable_ansi_colors_: bool) type {
+            return struct {
+    formatter: *JestPrettyFormat.Formatter,
+    writer: Writer,
+    i: usize = 0,
+    always_newline: bool = false,
+    parent: JSValue,
+
+pub fn handleFirstProperty(self: *@This(), globalThis: *jsc.JSGlobalObject, value: JSValue) !void {
+            if ((!value.jsType().isFunction())) {
+                const WW = PrettyFormatter.WrappedWriter(Writer);
+                _ = &WW;
+                var writer = WW{ .ctx = self.writer, .failed = false };
+                _ = &writer;
+                var name_str = ZigString.init("");
+                _ = &name_str;
+                _ = try value.getNameProperty(globalThis, (&name_str));
+                if (((name_str.len > 0) and (!name_str.eqlComptime("Object")))) {
+                    _ = writer.print("{f} ", .{ name_str });
+                } else {
+                    _ = try value.getPrototype(globalThis).getNameProperty(globalThis, (&name_str));
+                    if (((name_str.len > 0) and (!name_str.eqlComptime("Object")))) {
+                        _ = writer.print("{f} ", .{ name_str });
                     }
-        
-                    pub inline fn canHaveCircularReferences(tag: Tag) bool {
-                        return tag == .Array or tag == .Object or tag == .Map or tag == .Set;
-                    }
-        
-                    const Result = struct {
-                        tag: Tag,
-                        cell: JSValue.JSType = .Cell,
-                    };
-        
-                    pub fn get(value: JSValue, globalThis: *JSGlobalObject) bun.JSError!Result {
-                        switch (value) {
-                            .zero, .js_undefined => return Result{
-                                .tag = .Undefined,
-                            },
-                            .null => return Result{
-                                .tag = .Null,
-                            },
-                            else => {},
-                        }
-        
-                        if (value.isInt32()) {
-                            return .{
-                                .tag = .Integer,
-                            };
-                        } else if (value.isNumber()) {
-                            return .{
-                                .tag = .Double,
-                            };
-                        } else if (value.isBoolean()) {
-                            return .{
-                                .tag = .Boolean,
-                            };
-                        }
-        
-                        if (!value.isCell())
-                            return .{
-                                .tag = .NativeCode,
-                            };
-        
-                        const js_type = value.jsType();
-        
-                        if (js_type.isHidden()) return .{
-                            .tag = .NativeCode,
-                            .cell = js_type,
-                        };
-        
-                        // Cell is the "unknown" type
-                        if (js_type == .Cell) {
-                            return .{
-                                .tag = .NativeCode,
-                                .cell = js_type,
-                            };
-                        }
-        
-                        if (js_type == .DOMWrapper) {
-                            return .{
-                                .tag = .Private,
-                                .cell = js_type,
-                            };
-                        }
-        
-                        // If we check an Object has a method table and it does not
-                        // it will crash
-                        if (js_type != .Object and value.isCallable()) {
-                            if (value.isClass(globalThis)) {
-                                return .{
-                                    .tag = .Class,
-                                    .cell = js_type,
-                                };
+                }
+            }
+            self.always_newline = true;
+            self.formatter.estimated_line_length = ((self.formatter.indent * 2) + 1);
+            if ((self.formatter.indent == 0)) {
+                _ = (blk_catch_0: { break :blk_catch_0 ((self.writer.writeAll("\n")) catch |__ce_0| { _ = &__ce_0;  }); });
+            }
+            var classname = ZigString.Empty;
+            _ = &classname;
+            _ = try value.getClassName(globalThis, (&classname));
+            if (((!classname.isEmpty()) and (!classname.eqlComptime("Object")))) {
+                _ = (blk_catch_1: { break :blk_catch_1 ((self.writer.print("{f} ", .{ classname })) catch |__ce_1| { _ = &__ce_1;  }); });
+            }
+            _ = (blk_catch_2: { break :blk_catch_2 ((self.writer.writeAll("{\n")) catch |__ce_2| { _ = &__ce_2;  }); });
+            self.formatter.indent = (self.formatter.indent + 1);
+            _ = (blk_catch_3: { break :blk_catch_3 ((self.formatter.writeIndent(Writer, self.writer)) catch |__ce_3| { _ = &__ce_3;  }); });
+    }
+
+pub fn forEach(globalThis: *JSGlobalObject, ctx_ptr: ?*anyopaque, key_: [*c]ZigString, value: JSValue, is_symbol: bool, is_private_symbol: bool) callconv(.c) void {
+            if (is_private_symbol) {
+                return;
+            }
+            const key = key_.?[0];
+            if (key.eqlComptime("constructor")) {
+                return;
+            }
+            if ((ctx_ptr == null)) {
+                return;
+            }
+            var ctx: *@This() = bun.cast((&@This()), ctx_ptr.?);
+            _ = &ctx;
+            var fmt_self = ctx.formatter;
+            _ = &fmt_self;
+            const writer_ = ctx.writer;
+            if (fmt_self.failed) {
+                return;
+            }
+            const WW = PrettyFormatter.WrappedWriter(Writer);
+            _ = &WW;
+            var writer = WW{ .ctx = writer_, .failed = false };
+            _ = &writer;
+            const tag = (blk_catch_4: { break :blk_catch_4 ((Tag.get(value, globalThis)) catch |__ce_4| { _ = &__ce_4; return; }); });
+            if (tag.cell.isHidden()) {
+                return;
+            }
+            if ((ctx.i == 0)) {
+                _ = (blk_catch_5: { break :blk_catch_5 ((ctx.handleFirstProperty(globalThis, ctx.parent)) catch |__ce_5| { _ = &__ce_5; return; }); });
+            } else {
+                _ = (blk_catch_6: { break :blk_catch_6 ((fmt_self.printComma(Writer, writer_, enable_ansi_colors)) catch |__ce_6| { _ = &__ce_6; return; }); });
+            }
+            defer {
+            ctx.i = (ctx.i + 1);
+            }
+            if ((ctx.i > 0)) {
+                if (((ctx.always_newline or fmt_self.always_newline_scope) or fmt_self.goodTimeForANewLine())) {
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_7: { break :blk_catch_7 ((fmt_self.writeIndent(Writer, writer_)) catch |__ce_7| { _ = &__ce_7; return; }); });
+                    _ = fmt_self.resetLine();
+                } else {
+                    fmt_self.estimated_line_length = (fmt_self.estimated_line_length + 1);
+                    _ = writer.writeAll(" ");
+                }
+            }
+            if ((!is_symbol)) {
+                if (((!key.is16Bit()) and JSLexer.isLatin1Identifier(@TypeOf(key.slice()), key.slice()))) {
+                    _ = fmt_self.addForNewLine((key.len + 2));
+                    _ = writer.print((comptime Output.prettyFmt("<r>\"{f}\"<d>:<r> ", enable_ansi_colors)), .{ .key = key });
+                } else {
+                    if ((key.is16Bit() and JSLexer.isLatin1Identifier(@TypeOf(key.utf16SliceAligned()), key.utf16SliceAligned()))) {
+                        _ = fmt_self.addForNewLine((key.len + 2));
+                        _ = writer.print((comptime Output.prettyFmt("<r>\"{f}\"<d>:<r> ", enable_ansi_colors)), .{ .key = key });
+                    } else {
+                        if (key.is16Bit()) {
+                            const utf16Slice = key.utf16SliceAligned();
+                            _ = fmt_self.addForNewLine((utf16Slice.len + 2));
+                            if (comptime enable_ansi_colors) {
+                                _ = writer.writeAll((comptime Output.prettyFmt("<r><green>", true)));
                             }
-        
-                            return .{
-                                // TODO: we print InternalFunction as Object because we have a lot of
-                                // callable namespaces and printing the contents of it is better than [Function: namespace]
-                                // ideally, we would print [Function: namespace] { ... } on all functions, internal and js.
-                                // what we'll do later is rid of .Function and .Class and handle the prefix in the .Object formatter
-                                .tag = if (js_type == .InternalFunction) .Object else .Function,
-                                .cell = js_type,
-                            };
+                            _ = writer.writeAll("\"");
+                            _ = writer.write16Bit(utf16Slice);
+                            _ = writer.print((comptime Output.prettyFmt("\"<r><d>:<r> ", enable_ansi_colors)), .{});
+                        } else {
+                            _ = fmt_self.addForNewLine((key.len + 2));
+                            _ = writer.print((comptime Output.prettyFmt("<r><green>{f}<r><d>:<r> ", enable_ansi_colors)), .{ bun.fmt.formatJSONStringLatin1(key.slice()) });
                         }
-        
-                        if (js_type == .GlobalProxy) {
-                            return Tag.get(
-                                jsc.JSValue.c(jsc.C.JSObjectGetProxyTarget(value.asObjectRef())),
-                                globalThis,
-                            );
+                    }
+                }
+            } else {
+                _ = fmt_self.addForNewLine(((1 + "[Symbol()]:".len) + key.len));
+                _ = writer.print((comptime Output.prettyFmt("<r><d>[<r><blue>Symbol({f})<r><d>]:<r> ", enable_ansi_colors)), .{ .key = key });
+            }
+            if (tag.cell.isStringLike()) {
+                if (comptime enable_ansi_colors) {
+                    _ = writer.writeAll((comptime Output.prettyFmt("<r><green>", true)));
+                }
+            }
+            _ = (blk_catch_8: { break :blk_catch_8 ((fmt_self.format(tag, Writer, ctx.writer, value, globalThis, enable_ansi_colors)) catch |__ce_8| { _ = &__ce_8; return; }); });
+            if (tag.cell.isStringLike()) {
+                if (comptime enable_ansi_colors) {
+                    _ = writer.writeAll((comptime Output.prettyFmt("<r>", true)));
+                }
+            }
+    }
+    const enable_ansi_colors = enable_ansi_colors_;
+};
+    }
+
+pub fn printAs(self: *PrettyFormatter, comptime Format: JestPrettyFormat.Formatter.Tag, comptime Writer: type, writer_: *std.Io.Writer, value: JSValue, jsType: JSValue.JSType, comptime enable_ansi_colors: bool) !void {
+            if (self.failed) {
+                return;
+            }
+            const WW = PrettyFormatter.WrappedWriter(Writer);
+            _ = &WW;
+            var writer = WW{ .ctx = writer_, .estimated_line_length = (&self.estimated_line_length) };
+            _ = &writer;
+            defer {
+            {
+                if (writer.failed) {
+                    self.failed = true;
+                }
+            }
+            }
+            if (comptime Format.canHaveCircularReferences()) {
+                if ((self.map_node == null)) {
+                    self.map_node = Visited.Pool.get(default_allocator);
+                    _ = (self.map_node.?).?.data.clearRetainingCapacity();
+                    self.map = (self.map_node.?).?.data;
+                }
+                const entry = ((self.map.getOrPut(value)) catch unreachable);
+                if (entry.found_existing) {
+                    _ = writer.writeAll((comptime Output.prettyFmt("<r><cyan>[Circular]<r>", enable_ansi_colors)));
+                    return;
+                }
+            }
+            defer {
+            {
+                if (comptime Format.canHaveCircularReferences()) {
+                    _ = self.map.remove(value);
+                }
+            }
+            }
+            switch ((comptime Format)) {
+.StringPossiblyFormatted => {
+var str = try value.toSlice(self.globalThis, bun.default_allocator);
+            _ = &str;
+            defer {
+            _ = str.deinit();
+            }
+            _ = self.addForNewLine(str.len);
+            const slice = str.slice();
+            _ = self.writeWithFormatting(Writer, writer_, @TypeOf(slice), slice, self.globalThis, enable_ansi_colors);
+},
+.String => {
+var str = ZigString.init("");
+            _ = &str;
+            _ = try value.toZigString((&str), self.globalThis);
+            _ = self.addForNewLine(str.len);
+            if (((value.jsType() == .StringObject) or (value.jsType() == .DerivedStringObject))) {
+                if ((str.len == 0)) {
+                    _ = writer.writeAll("String {}");
+                    return;
+                }
+                if (((self.indent == 0) and (str.len > 0))) {
+                    _ = writer.writeAll("\n");
+                }
+                _ = writer.writeAll("String {\n");
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                _ = self.resetLine();
+                _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                const length = str.len;
+                var idx: usize = 0;
+                _ = &idx;
+                for (cp_iter_slice(str.slice())) |c| {
+                    _ = &c;
+                    _ = writer.print("\"{d}\": \"{c}\",\n", .{ idx, c });
+                    if ((idx != (length - 1))) {
+                        _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                    }
+                    idx = (idx + 1);
+                }
+                _ = self.resetLine();
+                _ = writer.writeAll("}\n");
+                return;
+            }
+            if ((self.quote_strings and (jsType != .RegExpObject))) {
+                if ((str.len == 0)) {
+                    _ = writer.writeAll("\"\"");
+                    return;
+                }
+                if (comptime enable_ansi_colors) {
+                    _ = writer.writeAll(Output.prettyFmt("<r><green>", true));
+                }
+                defer {
+                if (comptime enable_ansi_colors) {
+                    _ = writer.writeAll(Output.prettyFmt("<r>", true));
+                }
+                }
+                var has_newline = false;
+                _ = &has_newline;
+                if (str.indexOfAny("\n\r")) |_| {
+                    has_newline = true;
+                    _ = writer.writeAll("\n");
+                }
+                _ = writer.writeAll("\"");
+                var remaining = str;
+                _ = &remaining;
+                while (remaining.indexOfAny("\\\r")) |i| {
+                    switch (remaining.charAt(i)) {
+'\\' => {
+_ = writer.print("{f}\\", .{ remaining.substringWithLen(0, i) });
+                    remaining = remaining.substring((i + 1));
+},
+13 => {
+if ((((i + 1) < remaining.len) and (remaining.charAt((i + 1)) == 10))) {
+                        _ = writer.print("{f}", .{ remaining.substringWithLen(0, i) });
+                    } else {
+                        _ = writer.print("{f}\n", .{ remaining.substringWithLen(0, i) });
+                    }
+                    remaining = remaining.substring((i + 1));
+},
+else => {
+_ = unreachable;
+},
+}
+                }
+                _ = writer.writeString(remaining);
+                _ = writer.writeAll("\"");
+                if (has_newline) {
+                    _ = writer.writeAll("\n");
+                }
+                return;
+            }
+            if (((jsType == .RegExpObject) and enable_ansi_colors)) {
+                _ = writer.print((comptime Output.prettyFmt("<r><red>", enable_ansi_colors)), .{});
+            }
+            if (str.is16Bit()) {
+                _ = writer.print("{f}", .{ str });
+            } else {
+                if (strings.isAllASCII(str.slice())) {
+                    _ = writer.writeAll(str.slice());
+                } else {
+                    if ((str.len > 0)) {
+                        const buf = (blk_catch_21: { break :blk_catch_21 ((strings.allocateLatin1IntoUTF8(bun.default_allocator, str.slice())) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 ""; }); });
+                        if ((buf.len > 0)) {
+                            defer {
+                            _ = bun.default_allocator.free(buf);
+                            }
+                            _ = writer.writeAll(buf);
                         }
-        
-                        // Is this a react element?
-                        if (js_type.isObject() and js_type != .ProxyObject) {
-                            if (try value.getOwnTruthy(globalThis, "$$typeof")) |typeof_symbol| {
-                                var reactElement = ZigString.init("react.element");
-                                var react_fragment = ZigString.init("react.fragment");
-        
-                                if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) or (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
-                                    return .{ .tag = .JSX, .cell = js_type };
+                    }
+                }
+            }
+            if (((jsType == .RegExpObject) and enable_ansi_colors)) {
+                _ = writer.print((comptime Output.prettyFmt("<r>", enable_ansi_colors)), .{});
+            }
+},
+.Integer => {
+const int = value.toInt64();
+            if ((int < std.math.maxInt(u32))) {
+                var i = int;
+                _ = &i;
+                const is_negative = (i < 0);
+                if (is_negative) {
+                    i = (0 - i);
+                }
+                const digits = (if ((i != 0)) (bun.fmt.fastDigitCount((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(is_negative))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(is_negative))) else cp_cast_int(usize, @intFromBool(is_negative)))) else 1);
+                _ = self.addForNewLine(digits);
+            } else {
+                _ = self.addForNewLine(std.fmt.count("{d}", .{ .int = int }));
+            }
+            _ = writer.print((comptime Output.prettyFmt("<r><yellow>{d}<r>", enable_ansi_colors)), .{ .int = int });
+},
+.BigInt => {
+const out_str = try value.getZigString(self.globalThis).slice();
+            _ = self.addForNewLine(out_str.len);
+            _ = writer.print((comptime Output.prettyFmt("<r><yellow>{s}n<r>", enable_ansi_colors)), .{ .out_str = out_str });
+},
+.Double => {
+if (value.isCell()) {
+                _ = try self.printAs(.Object, Writer, writer_, value, .Object, enable_ansi_colors);
+                return;
+            }
+            const num = value.asNumber();
+            if (std.math.isPositiveInf(num)) {
+                _ = self.addForNewLine("Infinity".len);
+                _ = writer.print((comptime Output.prettyFmt("<r><yellow>Infinity<r>", enable_ansi_colors)), .{});
+            } else {
+                if (std.math.isNegativeInf(num)) {
+                    _ = self.addForNewLine("-Infinity".len);
+                    _ = writer.print((comptime Output.prettyFmt("<r><yellow>-Infinity<r>", enable_ansi_colors)), .{});
+                } else {
+                    if (std.math.isNan(num)) {
+                        _ = self.addForNewLine("NaN".len);
+                        _ = writer.print((comptime Output.prettyFmt("<r><yellow>NaN<r>", enable_ansi_colors)), .{});
+                    } else {
+                        _ = self.addForNewLine(std.fmt.count("{d}", .{ .num = num }));
+                        _ = writer.print((comptime Output.prettyFmt("<r><yellow>{d}<r>", enable_ansi_colors)), .{ .num = num });
+                    }
+                }
+            }
+},
+.Undefined => {
+_ = self.addForNewLine(9);
+            _ = writer.print((comptime Output.prettyFmt("<r><d>undefined<r>", enable_ansi_colors)), .{});
+},
+.Null => {
+_ = self.addForNewLine(4);
+            _ = writer.print((comptime Output.prettyFmt("<r><yellow>null<r>", enable_ansi_colors)), .{});
+},
+.Symbol => {
+const description = value.getDescription(self.globalThis);
+            _ = self.addForNewLine("Symbol".len);
+            if ((description.len > 0)) {
+                _ = self.addForNewLine((description.len + "()".len));
+                _ = writer.print((comptime Output.prettyFmt("<r><blue>Symbol({f})<r>", enable_ansi_colors)), .{ .description = description });
+            } else {
+                _ = writer.print((comptime Output.prettyFmt("<r><blue>Symbol<r>", enable_ansi_colors)), .{});
+            }
+},
+.Error => {
+var classname = ZigString.Empty;
+            _ = &classname;
+            _ = try value.getClassName(self.globalThis, (&classname));
+            var message_string = bun.String.empty;
+            _ = &message_string;
+            defer {
+            _ = message_string.deref();
+            }
+            if (try value.fastGet(self.globalThis, .message)) |message_prop| {
+                _ = &message_prop;
+                message_string = try message_prop.toBunString(self.globalThis);
+            }
+            if (message_string.isEmpty()) {
+                _ = writer.print("[{f}]", .{ classname });
+                return;
+            }
+            _ = writer.print("[{f}: {f}]", .{ classname, message_string });
+            return;
+},
+.Class => {
+var printable = ZigString.init((&formatter_name_buf));
+            _ = &printable;
+            _ = try value.getClassName(self.globalThis, (&printable));
+            _ = self.addForNewLine(printable.len);
+            if ((printable.len == 0)) {
+                _ = writer.print((comptime Output.prettyFmt("<cyan>[class]<r>", enable_ansi_colors)), .{});
+            } else {
+                _ = writer.print((comptime Output.prettyFmt("<cyan>[class {f}]<r>", enable_ansi_colors)), .{ .printable = printable });
+            }
+},
+.Function => {
+var printable = ZigString.init((&formatter_name_buf));
+            _ = &printable;
+            _ = try value.getNameProperty(self.globalThis, (&printable));
+            if ((printable.len == 0)) {
+                _ = writer.print((comptime Output.prettyFmt("<cyan>[Function]<r>", enable_ansi_colors)), .{});
+            } else {
+                _ = writer.print((comptime Output.prettyFmt("<cyan>[Function: {f}]<r>", enable_ansi_colors)), .{ .printable = printable });
+            }
+},
+.Array => {
+const len: u32 = @truncate(try value.getLength(self.globalThis));
+            if ((len == 0)) {
+                _ = writer.writeAll("[]");
+                _ = self.addForNewLine(2);
+                return;
+            }
+            if ((self.indent == 0)) {
+                _ = writer.writeAll("\n");
+            }
+            var was_good_time = self.always_newline_scope;
+            _ = &was_good_time;
+            {
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                _ = self.addForNewLine(2);
+                const obj_ref = value.asObjectRef();
+                const prev_quote_strings = self.quote_strings;
+                self.quote_strings = true;
+                defer {
+                self.quote_strings = prev_quote_strings;
+                }
+                {
+                    const element = JSValue.fromRef(CAPI.JSObjectGetPropertyAtIndex(self.globalThis, obj_ref, 0, null));
+                    const tag = try Tag.get(element, self.globalThis);
+                    was_good_time = ((was_good_time or (!tag.tag.isPrimitive())) or self.goodTimeForANewLine());
+                    _ = self.resetLine();
+                    _ = writer.writeAll("[");
+                    _ = writer.writeAll("\n");
+                    _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                    _ = self.addForNewLine(1);
+                    _ = try self.format(tag, Writer, writer_, element, self.globalThis, enable_ansi_colors);
+                    if (tag.cell.isStringLike()) {
+                        if (comptime enable_ansi_colors) {
+                            _ = writer.writeAll((comptime Output.prettyFmt("<r>", true)));
+                        }
+                    }
+                    if ((len == 1)) {
+                        _ = ((self.printComma(Writer, writer_, enable_ansi_colors)) catch unreachable);
+                    }
+                }
+                var i: u32 = 1;
+                _ = &i;
+                while ((i < len)) : (i = (i + 1)) {
+                    _ = ((self.printComma(Writer, writer_, enable_ansi_colors)) catch unreachable);
+                    _ = writer.writeAll("\n");
+                    _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                    const element = JSValue.fromRef(CAPI.JSObjectGetPropertyAtIndex(self.globalThis, obj_ref, i, null));
+                    const tag = try Tag.get(element, self.globalThis);
+                    _ = try self.format(tag, Writer, writer_, element, self.globalThis, enable_ansi_colors);
+                    if (tag.cell.isStringLike()) {
+                        if (comptime enable_ansi_colors) {
+                            _ = writer.writeAll((comptime Output.prettyFmt("<r>", true)));
+                        }
+                    }
+                    if ((i == (len - 1))) {
+                        _ = ((self.printComma(Writer, writer_, enable_ansi_colors)) catch unreachable);
+                    }
+                }
+            }
+            _ = self.resetLine();
+            _ = writer.writeAll("\n");
+            _ = (blk_catch_27: { break :blk_catch_27 ((self.writeIndent(Writer, writer_)) catch |__ce_27| { _ = &__ce_27;  }); });
+            _ = writer.writeAll("]");
+            if ((self.indent == 0)) {
+                _ = writer.writeAll("\n");
+            }
+            _ = self.resetLine();
+            _ = self.addForNewLine(1);
+},
+.Private => {
+if (value.@"as"(jsc.WebCore.Response)) |response| {
+                _ = &response;
+                _ = (blk_catch_28: { break :blk_catch_28 ((response.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                if ((!self.globalThis.hasException())) {
+                    return self.globalThis.throwError(e, "failed to print Response");
+                }
+                return error.JSError; }); });
+            } else {
+                if (value.@"as"(jsc.WebCore.Request)) |request| {
+                    _ = &request;
+                    _ = (blk_catch_29: { break :blk_catch_29 ((request.writeFormat(value, Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                    if ((!self.globalThis.hasException())) {
+                        return self.globalThis.throwError(e, "failed to print Request");
+                    }
+                    return error.JSError; }); });
+                    return;
+                } else {
+                    if (value.@"as"(jsc.API.BuildArtifact)) |build| {
+                        _ = &build;
+                        _ = (blk_catch_30: { break :blk_catch_30 ((build.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                        if ((!self.globalThis.hasException())) {
+                            return self.globalThis.throwError(e, "failed to print BuildArtifact");
+                        }
+                        return error.JSError; }); });
+                    } else {
+                        if (value.@"as"(jsc.WebCore.Blob)) |blob| {
+                            _ = &blob;
+                            _ = (blk_catch_31: { break :blk_catch_31 ((blob.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                            if ((!self.globalThis.hasException())) {
+                                return self.globalThis.throwError(e, "failed to print Blob");
+                            }
+                            return error.JSError; }); });
+                            return;
+                        } else {
+                            if ((value.@"as"(jsc.DOMFormData) != null)) {
+                                const toJSONFunction = (try value.get(self.globalThis, "toJSON")).?;
+                                _ = self.addForNewLine("FormData (entries) ".len);
+                                _ = writer.writeAll((comptime Output.prettyFmt("<r><blue>FormData<r> <d>(entries)<r> ", enable_ansi_colors)));
+                                const res_val = try toJSONFunction.call(self.globalThis, value, &.{});
+                                return try self.printAs(.Object, Writer, writer_, res_val, .Object, enable_ansi_colors);
+                            } else {
+                                if (value.@"as"(bun.api.Timer.TimeoutObject)) |timer| {
+                                    _ = &timer;
+                                    _ = self.addForNewLine(("Timeout(# ) ".len + bun.fmt.fastDigitCount(@as(u64, @intCast(@max(timer.internals.id, 0))))));
+                                    if ((timer.internals.flags.kind == .setInterval)) {
+                                        _ = self.addForNewLine(("repeats ".len + bun.fmt.fastDigitCount(@as(u64, @intCast(@max(timer.internals.id, 0))))));
+                                        _ = writer.print((comptime Output.prettyFmt("<r><blue>Timeout<r> <d>(#<yellow>{d}<r><d>, repeats)<r>", enable_ansi_colors)), .{ timer.internals.id });
+                                    } else {
+                                        _ = writer.print((comptime Output.prettyFmt("<r><blue>Timeout<r> <d>(#<yellow>{d}<r><d>)<r>", enable_ansi_colors)), .{ timer.internals.id });
+                                    }
+                                    return;
+                                } else {
+                                    if (value.@"as"(bun.api.Timer.ImmediateObject)) |immediate| {
+                                        _ = &immediate;
+                                        _ = self.addForNewLine(("Immediate(# ) ".len + bun.fmt.fastDigitCount(@as(u64, @intCast(@max(immediate.internals.id, 0))))));
+                                        _ = writer.print((comptime Output.prettyFmt("<r><blue>Immediate<r> <d>(#<yellow>{d}<r><d>)<r>", enable_ansi_colors)), .{ immediate.internals.id });
+                                        return;
+                                    } else {
+                                        if (value.@"as"(bun.api.BuildMessage)) |build_log| {
+                                            _ = &build_log;
+                                            _ = (blk_catch_32: { break :blk_catch_32 ((build_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_32| { _ = &__ce_32;  }); });
+                                            return;
+                                        } else {
+                                            if (value.@"as"(bun.api.ResolveMessage)) |resolve_log| {
+                                                _ = &resolve_log;
+                                                _ = (blk_catch_33: { break :blk_catch_33 ((resolve_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_33| { _ = &__ce_33;  }); });
+                                                return;
+                                            } else {
+                                                if ((blk_catch_34: { break :blk_catch_34 ((JestPrettyFormat.printAsymmetricMatcher(self, Format, (&writer), writer_, formatter_name_buf, value, enable_ansi_colors)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 @as(bool, false); }); })) {
+                                                    return;
+                                                } else {
+                                                    if ((jsType != .DOMWrapper)) {
+                                                        if (value.isCallable()) {
+                                                            return try self.printAs(.Function, Writer, writer_, value, jsType, enable_ansi_colors);
+                                                        }
+                                                        return try self.printAs(.Object, Writer, writer_, value, jsType, enable_ansi_colors);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-        
+                    }
+                }
+            }
+            return try self.printAs(.Object, Writer, writer_, value, .Event, enable_ansi_colors);
+},
+.Promise => {
+if (self.goodTimeForANewLine()) {
+                _ = writer.writeAll("\n");
+                _ = (blk_catch_35: { break :blk_catch_35 ((self.writeIndent(Writer, writer_)) catch |__ce_35| { _ = &__ce_35;  }); });
+            }
+            _ = writer.writeAll("Promise {}");
+},
+.Boolean => {
+if (value.isCell()) {
+                _ = try self.printAs(.Object, Writer, writer_, value, .Object, enable_ansi_colors);
+                return;
+            }
+            if (value.toBoolean()) {
+                _ = self.addForNewLine(4);
+                _ = writer.writeAll((comptime Output.prettyFmt("<r><yellow>true<r>", enable_ansi_colors)));
+            } else {
+                _ = self.addForNewLine(5);
+                _ = writer.writeAll((comptime Output.prettyFmt("<r><yellow>false<r>", enable_ansi_colors)));
+            }
+},
+.GlobalObject => {
+const fmt: []const u8 = "[this.globalThis]";
+            _ = self.addForNewLine(fmt.len);
+            _ = writer.writeAll((comptime Output.prettyFmt((("<cyan>" ++ fmt) ++ "<r>"), enable_ansi_colors)));
+},
+.Map => {
+const length_value = ((value.get(self.globalThis, "size")) orelse (try jsc.JSValue.jsNumberFromInt32(0)));
+            const length = length_value.toInt32();
+            const prev_quote_strings = self.quote_strings;
+            self.quote_strings = true;
+            defer {
+            self.quote_strings = prev_quote_strings;
+            }
+            const map_name = (if ((value.jsType() == .WeakMap)) "WeakMap" else "Map");
+            if ((length == 0)) {
+                return writer.print("{s} {{}}", .{ map_name });
+            }
+            _ = writer.print("\n{s} {{\n", .{ map_name });
+            {
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                const IterT = PrettyFormatter.MapIterator(Writer, enable_ansi_colors);
+                _ = &IterT;
+                var iter = IterT{ .formatter = self, .writer = writer_ };
+                _ = &iter;
+                _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
+            }
+            _ = (blk_catch_36: { break :blk_catch_36 ((self.writeIndent(Writer, writer_)) catch |__ce_36| { _ = &__ce_36;  }); });
+            _ = writer.writeAll("}");
+            _ = writer.writeAll("\n");
+},
+.Set => {
+const length_value = ((value.get(self.globalThis, "size")) orelse (try jsc.JSValue.jsNumberFromInt32(0)));
+            const length = length_value.toInt32();
+            const prev_quote_strings = self.quote_strings;
+            self.quote_strings = true;
+            defer {
+            self.quote_strings = prev_quote_strings;
+            }
+            _ = (blk_catch_37: { break :blk_catch_37 ((self.writeIndent(Writer, writer_)) catch |__ce_37| { _ = &__ce_37;  }); });
+            const set_name = (if ((value.jsType() == .WeakSet)) "WeakSet" else "Set");
+            if ((length == 0)) {
+                return writer.print("{s} {{}}", .{ set_name });
+            }
+            _ = writer.print("\n{s} {{\n", .{ set_name });
+            {
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                const IterT = PrettyFormatter.SetIterator(Writer, enable_ansi_colors);
+                _ = &IterT;
+                var iter = IterT{ .formatter = self, .writer = writer_ };
+                _ = &iter;
+                _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
+            }
+            _ = (blk_catch_38: { break :blk_catch_38 ((self.writeIndent(Writer, writer_)) catch |__ce_38| { _ = &__ce_38;  }); });
+            _ = writer.writeAll("}");
+            _ = writer.writeAll("\n");
+},
+.JSON => {
+var str = bun.String.empty;
+            _ = &str;
+            defer {
+            _ = str.deref();
+            }
+            _ = try value.jsonStringify(self.globalThis, self.indent, (&str));
+            _ = self.addForNewLine(str.length());
+            if ((jsType == .JSDate)) {
+                var iso_string_buf: [36]u8 = undefined;
+                _ = &iso_string_buf;
+                var out_buf: []const u8 = (blk_catch_39: { break :blk_catch_39 ((std.fmt.bufPrint((&iso_string_buf), "{f}", .{ str })) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 ""; }); });
+                _ = &out_buf;
+                if ((out_buf.len > 2)) {
+                    out_buf = out_buf[1..(out_buf.len - 1)];
+                }
+                _ = writer.print((comptime Output.prettyFmt("<r><magenta>{s}<r>", enable_ansi_colors)), .{ .out_buf = out_buf });
+                return;
+            }
+            _ = writer.print("{f}", .{ str });
+},
+.Event => {
+const event_type_value: JSValue = brk: {
+            const val_opt = value.get(self.globalThis, "type");
+            if ((val_opt == null)) {
+                break :brk .js_undefined;
+            }
+            const value_ = val_opt.?;
+            if (value_.isString()) {
+                break :brk value_;
+            }
+            break :brk .js_undefined;
+};
+            const mapped_event = (((blk_catch_40: { break :blk_catch_40 ((EventType.map.fromJS(self.globalThis, event_type_value)) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 null; }); })) orelse (.unknown));
+            const event_type = (switch (mapped_event) {
+.MessageEvent => EventType.MessageEvent,
+.ErrorEvent => EventType.ErrorEvent,
+else => {
+return try self.printAs(.Object, Writer, writer_, value, .Event, enable_ansi_colors);
+},
+});
+            _ = writer.print((comptime Output.prettyFmt("<r><cyan>{s}<r> {{\n", enable_ansi_colors)), .{ @tagName(event_type) });
+            {
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                const old_quote_strings = self.quote_strings;
+                self.quote_strings = true;
+                defer {
+                self.quote_strings = old_quote_strings;
+                }
+                _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                _ = writer.print((comptime Output.prettyFmt("<r>type: <green>\"{s}\"<r><d>,<r>\n", enable_ansi_colors)), .{ event_type.label() });
+                if (try value.fastGet(self.globalThis, .message)) |message_value| {
+                    _ = &message_value;
+                    if (message_value.isString()) {
+                        _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                        _ = writer.print((comptime Output.prettyFmt("<r><blue>message<d>:<r> ", enable_ansi_colors)), .{});
+                        const tag = try Tag.get(message_value, self.globalThis);
+                        _ = try self.format(tag, Writer, writer_, message_value, self.globalThis, enable_ansi_colors);
+                        _ = writer.writeAll(", \n");
+                    }
+                }
+                switch (event_type) {
+.MessageEvent => {
+_ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                _ = writer.print((comptime Output.prettyFmt("<r><blue>data<d>:<r> ", enable_ansi_colors)), .{});
+                const data: JSValue = ((try value.fastGet(self.globalThis, .data)) orelse (.js_undefined));
+                const tag = try Tag.get(data, self.globalThis);
+                if (tag.cell.isStringLike()) {
+                    _ = try self.format(tag, Writer, writer_, data, self.globalThis, enable_ansi_colors);
+                } else {
+                    _ = try self.format(tag, Writer, writer_, data, self.globalThis, enable_ansi_colors);
+                }
+                _ = writer.writeAll(", \n");
+},
+.ErrorEvent => {
+if (try value.fastGet(self.globalThis, .@"error")) |data| {
+                    _ = &data;
+                    _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                    _ = writer.print((comptime Output.prettyFmt("<r><blue>error<d>:<r> ", enable_ansi_colors)), .{});
+                    const tag = try Tag.get(data, self.globalThis);
+                    _ = try self.format(tag, Writer, writer_, data, self.globalThis, enable_ansi_colors);
+                    _ = writer.writeAll("\n");
+                }
+},
+else => {
+_ = unreachable;
+},
+}
+            }
+            _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+            _ = writer.writeAll("}");
+},
+.JSX => {
+_ = writer.writeAll((comptime Output.prettyFmt("<r>", enable_ansi_colors)));
+            _ = writer.writeAll("<");
+            var needs_space = false;
+            _ = &needs_space;
+            var tag_name_str = ZigString.init("");
+            _ = &tag_name_str;
+            var tag_name_slice: ZigString.Slice = ZigString.Slice.empty;
+            _ = &tag_name_slice;
+            var is_tag_kind_primitive = false;
+            _ = &is_tag_kind_primitive;
+            defer {
+            if (tag_name_slice.isAllocated()) {
+                _ = tag_name_slice.deinit();
+            }
+            }
+            if (try value.get(self.globalThis, "type")) |type_value| {
+                _ = &type_value;
+                const _tag = try Tag.get(type_value, self.globalThis);
+                if ((_tag.cell == .Symbol)) {
+                } else {
+                    if (_tag.cell.isStringLike()) {
+                        _ = try type_value.toZigString((&tag_name_str), self.globalThis);
+                        is_tag_kind_primitive = true;
+                    } else {
+                        if ((_tag.cell.isObject() or type_value.isCallable())) {
+                            _ = try type_value.getNameProperty(self.globalThis, (&tag_name_str));
+                            if ((tag_name_str.len == 0)) {
+                                tag_name_str = ZigString.init("NoName");
+                            }
+                        } else {
+                            _ = try type_value.toZigString((&tag_name_str), self.globalThis);
+                        }
+                    }
+                }
+                tag_name_slice = tag_name_str.toSlice(default_allocator);
+                needs_space = true;
+            } else {
+                tag_name_slice = ZigString.init("unknown").toSlice(default_allocator);
+                needs_space = true;
+            }
+            if ((!is_tag_kind_primitive)) {
+                _ = writer.writeAll((comptime Output.prettyFmt("<cyan>", enable_ansi_colors)));
+            } else {
+                _ = writer.writeAll((comptime Output.prettyFmt("<green>", enable_ansi_colors)));
+            }
+            _ = writer.writeAll(tag_name_slice.slice());
+            if (enable_ansi_colors) {
+                _ = writer.writeAll((comptime Output.prettyFmt("<r>", enable_ansi_colors)));
+            }
+            if (try value.get(self.globalThis, "key")) |key_value| {
+                _ = &key_value;
+                if ((!key_value.isUndefinedOrNull())) {
+                    if (needs_space) {
+                        _ = writer.writeAll(" key=");
+                    } else {
+                        _ = writer.writeAll("key=");
+                    }
+                    const old_quote_strings = self.quote_strings;
+                    self.quote_strings = true;
+                    defer {
+                    self.quote_strings = old_quote_strings;
+                    }
+                    _ = try self.format(try Tag.get(key_value, self.globalThis), Writer, writer_, key_value, self.globalThis, enable_ansi_colors);
+                    needs_space = true;
+                }
+            }
+            if (try value.get(self.globalThis, "props")) |props| {
+                _ = &props;
+                const prev_quote_strings = self.quote_strings;
+                defer {
+                self.quote_strings = prev_quote_strings;
+                }
+                self.quote_strings = true;
+                const props_obj = (props.getObject()).?;
+                var props_iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = true, .include_value = true }).init(self.globalThis, props_obj);
+                _ = &props_iter;
+                defer {
+                _ = props_iter.deinit();
+                }
+                const children_prop = try props.get(self.globalThis, "children");
+                if ((props_iter.len > 0)) {
+                    {
+                        self.indent = (self.indent + 1);
+                        defer {
+                        {
+                            if ((self.indent > 0)) {
+                                self.indent = (self.indent - 1);
+                            }
+                        }
+                        }
+                        const count_without_children = (props_iter.len - (if (comptime @typeInfo(@TypeOf(@intFromBool((children_prop != null)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((children_prop != null)))) else cp_cast_int(usize, @intFromBool((children_prop != null)))));
+                        while (try props_iter.next()) |prop| {
+                            if (prop.eqlComptime("children")) {
+                                continue;
+                            }
+                            const property_value = (if (@typeInfo(@TypeOf(props_iter)) == .@"enum") @intFromEnum(props_iter) else props_iter.value);
+                            const tag = try Tag.get(property_value, self.globalThis);
+                            if (tag.cell.isHidden()) {
+                                continue;
+                            }
+                            if (needs_space) {
+                                _ = writer.writeAll(" ");
+                            }
+                            needs_space = false;
+                            _ = writer.print((comptime Output.prettyFmt("<r><blue>{f}<d>=<r>", enable_ansi_colors)), .{ prop.trunc(128) });
+                            if (tag.cell.isStringLike()) {
+                                if (comptime enable_ansi_colors) {
+                                    _ = writer.writeAll((comptime Output.prettyFmt("<r><green>", true)));
+                                }
+                            }
+                            _ = try self.format(tag, Writer, writer_, property_value, self.globalThis, enable_ansi_colors);
+                            if (tag.cell.isStringLike()) {
+                                if (comptime enable_ansi_colors) {
+                                    _ = writer.writeAll((comptime Output.prettyFmt("<r>", true)));
+                                }
+                            }
+                            if ((((props_iter.i + 1) < count_without_children) and (props_iter.i > 3))) {
+                                _ = writer.writeAll("\n");
+                                _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                            } else {
+                                if (((props_iter.i + 1) < count_without_children)) {
+                                    _ = writer.writeAll(" ");
+                                }
+                            }
+                        }
+                    }
+                    if (children_prop) |children| {
+                        _ = &children;
+                        const tag = try Tag.get(children, self.globalThis);
+                        const print_children = (switch (tag.tag) {
+.String, .JSX, .Array => true,
+else => false,
+});
+                        if (print_children) {
+                            _ = print_children: {
+                            switch (tag.tag) {
+.String => {
+const children_string = try children.getZigString(self.globalThis);
+                            if ((children_string.len == 0)) {
+                                break :print_children;
+                            }
+                            if (comptime enable_ansi_colors) {
+                                _ = writer.writeAll((comptime Output.prettyFmt("<r>", true)));
+                            }
+                            _ = writer.writeAll(">");
+                            if ((children_string.len < 128)) {
+                                _ = writer.writeString(children_string);
+                            } else {
+                                self.indent = (self.indent + 1);
+                                _ = writer.writeAll("\n");
+                                _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                                if ((self.indent > 0)) {
+                                    self.indent = (self.indent - 1);
+                                }
+                                _ = writer.writeString(children_string);
+                                _ = writer.writeAll("\n");
+                                _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                            }
+},
+.JSX => {
+_ = writer.writeAll(">\n");
+                            {
+                                self.indent = (self.indent + 1);
+                                _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                                defer {
+                                {
+                                    if ((self.indent > 0)) {
+                                        self.indent = (self.indent - 1);
+                                    }
+                                }
+                                }
+                                _ = try self.format(try Tag.get(children, self.globalThis), Writer, writer_, children, self.globalThis, enable_ansi_colors);
+                            }
+                            _ = writer.writeAll("\n");
+                            _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+},
+.Array => {
+const length = try children.getLength(self.globalThis);
+                            if ((length == 0)) {
+                                break :print_children;
+                            }
+                            _ = writer.writeAll(">\n");
+                            {
+                                self.indent = (self.indent + 1);
+                                _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                                const _prev_quote_strings = self.quote_strings;
+                                self.quote_strings = false;
+                                defer {
+                                self.quote_strings = _prev_quote_strings;
+                                }
+                                defer {
+                                {
+                                    if ((self.indent > 0)) {
+                                        self.indent = (self.indent - 1);
+                                    }
+                                }
+                                }
+                                var j: usize = 0;
+                                _ = &j;
+                                while ((j < length)) : (j = (j + 1)) {
+                                    const child = try jsc.JSObject.getIndex(children, self.globalThis, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(j)) == .@"enum") cp_cast_int(i32, @intFromEnum(j)) else cp_cast_int(i32, j)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(j)) == .@"enum") cp_cast_int(i32, @intFromEnum(j)) else cp_cast_int(i32, j)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(j)) == .@"enum") cp_cast_int(i32, @intFromEnum(j)) else cp_cast_int(i32, j)))));
+                                    _ = try self.format(try Tag.get(child, self.globalThis), Writer, writer_, child, self.globalThis, enable_ansi_colors);
+                                    if (((j + 1) < length)) {
+                                        _ = writer.writeAll("\n");
+                                        _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                                    }
+                                }
+                            }
+                            _ = writer.writeAll("\n");
+                            _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+},
+else => {
+_ = unreachable;
+},
+}
+                            _ = writer.writeAll("</");
+                            if ((!is_tag_kind_primitive)) {
+                                _ = writer.writeAll((comptime Output.prettyFmt("<r><cyan>", enable_ansi_colors)));
+                            } else {
+                                _ = writer.writeAll((comptime Output.prettyFmt("<r><green>", enable_ansi_colors)));
+                            }
+                            _ = writer.writeAll(tag_name_slice.slice());
+                            if (enable_ansi_colors) {
+                                _ = writer.writeAll((comptime Output.prettyFmt("<r>", enable_ansi_colors)));
+                            }
+                            break :print_children writer.writeAll(">");
+
+};
+                            return;
+                        }
+                    }
+                }
+            }
+            _ = writer.writeAll(" />");
+},
+.Object => {
+const prev_quote_strings = self.quote_strings;
+            self.quote_strings = true;
+            defer {
+            self.quote_strings = prev_quote_strings;
+            }
+            const Iterator = PrettyFormatter.PropertyIterator(Writer, enable_ansi_colors);
+            const prev_always_newline_scope = self.always_newline_scope;
+            defer {
+            self.always_newline_scope = prev_always_newline_scope;
+            }
+            var iter = Iterator{ .formatter = self, .writer = writer_, .always_newline = (self.always_newline_scope or self.goodTimeForANewLine()), .parent = value };
+            _ = &iter;
+            _ = try value.forEachPropertyOrdered(self.globalThis, (&iter), Iterator.forEach);
+            if ((iter.i == 0)) {
+                var object_name = ZigString.Empty;
+                _ = &object_name;
+                _ = try value.getClassName(self.globalThis, (&object_name));
+                if ((!object_name.eqlComptime("Object"))) {
+                    _ = writer.print("{f} {{}}", .{ object_name });
+                } else {
+                    _ = writer.writeAll("{}");
+                }
+            } else {
+                _ = ((self.printComma(Writer, writer_, enable_ansi_colors)) catch unreachable);
+                if (iter.always_newline) {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_55: { break :blk_catch_55 ((self.writeIndent(Writer, writer_)) catch |__ce_55| { _ = &__ce_55;  }); });
+                    _ = writer.writeAll("}");
+                    self.estimated_line_length = (self.estimated_line_length + 1);
+                } else {
+                    self.estimated_line_length = (self.estimated_line_length + 2);
+                    _ = writer.writeAll(" }");
+                }
+                if ((self.indent == 0)) {
+                    _ = writer.writeAll("\n");
+                }
+            }
+},
+.TypedArray => {
+const arrayBuffer = (value.asArrayBuffer(self.globalThis)).?;
+            const slice = arrayBuffer.byteSlice();
+            if (((self.indent == 0) and (slice.len > 0))) {
+                _ = writer.writeAll("\n");
+            }
+            if ((jsType == .Uint8Array)) {
+                var buffer_name = ZigString.Empty;
+                _ = &buffer_name;
+                _ = try value.getClassName(self.globalThis, (&buffer_name));
+                if (strings.eqlComptime(buffer_name.slice(), "Buffer")) {
+                    if (((slice.len == 0) and (self.indent == 0))) {
+                        _ = writer.writeAll("\n");
+                    }
+                    _ = writer.writeAll("{\n");
+                    self.indent = (self.indent + 1);
+                    _ = (blk_catch_56: { break :blk_catch_56 ((self.writeIndent(Writer, writer_)) catch |__ce_56| { _ = &__ce_56;  }); });
+                    _ = writer.writeAll("\"data\": [");
+                    self.indent = (self.indent + 1);
+                    for (cp_iter_slice(slice)) |el| {
+                        _ = &el;
+                        _ = writer.writeAll("\n");
+                        _ = (blk_catch_57: { break :blk_catch_57 ((self.writeIndent(Writer, writer_)) catch |__ce_57| { _ = &__ce_57;  }); });
+                        _ = writer.print("{d},", .{ .el = el });
+                    }
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                    if ((slice.len > 0)) {
+                        _ = writer.writeAll("\n");
+                        _ = (blk_catch_58: { break :blk_catch_58 ((self.writeIndent(Writer, writer_)) catch |__ce_58| { _ = &__ce_58;  }); });
+                        _ = writer.writeAll("],\n");
+                    } else {
+                        _ = writer.writeAll("],\n");
+                    }
+                    _ = (blk_catch_59: { break :blk_catch_59 ((self.writeIndent(Writer, writer_)) catch |__ce_59| { _ = &__ce_59;  }); });
+                    _ = writer.writeAll("\"type\": \"Buffer\",\n");
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                    _ = (blk_catch_60: { break :blk_catch_60 ((self.writeIndent(Writer, writer_)) catch |__ce_60| { _ = &__ce_60;  }); });
+                    _ = writer.writeAll("}");
+                    if ((self.indent == 0)) {
+                        _ = writer.writeAll("\n");
+                    }
+                    return;
+                }
+                _ = writer.writeAll(bun.asByteSlice(@tagName(arrayBuffer.typed_array_type)));
+            } else {
+                _ = writer.writeAll(bun.asByteSlice(@tagName(arrayBuffer.typed_array_type)));
+            }
+            _ = writer.writeAll(" [");
+            if ((slice.len > 0)) {
+                switch (jsType) {
+.Int8Array => {
+const slice_with_type: []align(std.@"meta".alignment([]i8)) i8 = @alignCast(std.mem.bytesAsSlice(i8, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_61: { break :blk_catch_61 ((self.writeIndent(Writer, writer_)) catch |__ce_61| { _ = &__ce_61;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.Int16Array => {
+const slice_with_type: []align(std.@"meta".alignment([]i16)) i16 = @alignCast(std.mem.bytesAsSlice(i16, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_62: { break :blk_catch_62 ((self.writeIndent(Writer, writer_)) catch |__ce_62| { _ = &__ce_62;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.Uint16Array => {
+const slice_with_type: []align(std.@"meta".alignment([]u16)) u16 = @alignCast(std.mem.bytesAsSlice(u16, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_63: { break :blk_catch_63 ((self.writeIndent(Writer, writer_)) catch |__ce_63| { _ = &__ce_63;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.Int32Array => {
+const slice_with_type: []align(std.@"meta".alignment([]i32)) i32 = @alignCast(std.mem.bytesAsSlice(i32, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_64: { break :blk_catch_64 ((self.writeIndent(Writer, writer_)) catch |__ce_64| { _ = &__ce_64;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.Uint32Array => {
+const slice_with_type: []align(std.@"meta".alignment([]u32)) u32 = @alignCast(std.mem.bytesAsSlice(u32, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_65: { break :blk_catch_65 ((self.writeIndent(Writer, writer_)) catch |__ce_65| { _ = &__ce_65;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.Float16Array => {
+const slice_with_type: []align(std.@"meta".alignment([]f16)) f16 = @alignCast(std.mem.bytesAsSlice(f16, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_66: { break :blk_catch_66 ((self.writeIndent(Writer, writer_)) catch |__ce_66| { _ = &__ce_66;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.Float32Array => {
+const slice_with_type: []align(std.@"meta".alignment([]f32)) f32 = @alignCast(std.mem.bytesAsSlice(f32, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_67: { break :blk_catch_67 ((self.writeIndent(Writer, writer_)) catch |__ce_67| { _ = &__ce_67;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.Float64Array => {
+const slice_with_type: []align(std.@"meta".alignment([]f64)) f64 = @alignCast(std.mem.bytesAsSlice(f64, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_68: { break :blk_catch_68 ((self.writeIndent(Writer, writer_)) catch |__ce_68| { _ = &__ce_68;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.BigInt64Array => {
+const slice_with_type: []align(std.@"meta".alignment([]i64)) i64 = @alignCast(std.mem.bytesAsSlice(i64, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_69: { break :blk_catch_69 ((self.writeIndent(Writer, writer_)) catch |__ce_69| { _ = &__ce_69;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+.BigUint64Array => {
+const slice_with_type: []align(std.@"meta".alignment([]u64)) u64 = @alignCast(std.mem.bytesAsSlice(u64, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_70: { break :blk_catch_70 ((self.writeIndent(Writer, writer_)) catch |__ce_70| { _ = &__ce_70;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+else => {
+const slice_with_type: []align(std.@"meta".alignment([]u8)) u8 = @alignCast(std.mem.bytesAsSlice(u8, slice));
+                self.indent = (self.indent + 1);
+                defer {
+                {
+                    if ((self.indent > 0)) {
+                        self.indent = (self.indent - 1);
+                    }
+                }
+                }
+                for (cp_iter_slice(slice_with_type)) |el| {
+                    _ = &el;
+                    _ = writer.writeAll("\n");
+                    _ = (blk_catch_71: { break :blk_catch_71 ((self.writeIndent(Writer, writer_)) catch |__ce_71| { _ = &__ce_71;  }); });
+                    _ = writer.print("{d},", .{ .el = el });
+                }
+},
+}
+            }
+            if ((slice.len > 0)) {
+                _ = writer.writeAll("\n");
+                _ = (blk_catch_72: { break :blk_catch_72 ((self.writeIndent(Writer, writer_)) catch |__ce_72| { _ = &__ce_72;  }); });
+                _ = writer.writeAll("]");
+                if ((self.indent == 0)) {
+                    _ = writer.writeAll("\n");
+                }
+            } else {
+                _ = writer.writeAll("]");
+            }
+},
+else => {
+
+},
+}
+    }
+
+pub fn format(self: *PrettyFormatter, result: Tag.Result, comptime Writer: type, writer: *std.Io.Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool) !void {
+            const prevGlobalThis = self.globalThis;
+            defer {
+            self.globalThis = prevGlobalThis;
+            }
+            self.globalThis = globalThis;
+            return (switch (result.tag) {
+.StringPossiblyFormatted => self.printAs(.StringPossiblyFormatted, Writer, writer, value, result.cell, enable_ansi_colors),
+.String => self.printAs(.String, Writer, writer, value, result.cell, enable_ansi_colors),
+.Undefined => self.printAs(.Undefined, Writer, writer, value, result.cell, enable_ansi_colors),
+.Double => self.printAs(.Double, Writer, writer, value, result.cell, enable_ansi_colors),
+.Integer => self.printAs(.Integer, Writer, writer, value, result.cell, enable_ansi_colors),
+.Null => self.printAs(.Null, Writer, writer, value, result.cell, enable_ansi_colors),
+.Boolean => self.printAs(.Boolean, Writer, writer, value, result.cell, enable_ansi_colors),
+.Array => self.printAs(.Array, Writer, writer, value, result.cell, enable_ansi_colors),
+.Object => self.printAs(.Object, Writer, writer, value, result.cell, enable_ansi_colors),
+.Function => self.printAs(.Function, Writer, writer, value, result.cell, enable_ansi_colors),
+.Class => self.printAs(.Class, Writer, writer, value, result.cell, enable_ansi_colors),
+.Error => self.printAs(.Error, Writer, writer, value, result.cell, enable_ansi_colors),
+.ArrayBuffer, .TypedArray => self.printAs(.TypedArray, Writer, writer, value, result.cell, enable_ansi_colors),
+.Map => self.printAs(.Map, Writer, writer, value, result.cell, enable_ansi_colors),
+.Set => self.printAs(.Set, Writer, writer, value, result.cell, enable_ansi_colors),
+.Symbol => self.printAs(.Symbol, Writer, writer, value, result.cell, enable_ansi_colors),
+.BigInt => self.printAs(.BigInt, Writer, writer, value, result.cell, enable_ansi_colors),
+.GlobalObject => self.printAs(.GlobalObject, Writer, writer, value, result.cell, enable_ansi_colors),
+.Private => self.printAs(.Private, Writer, writer, value, result.cell, enable_ansi_colors),
+.Promise => self.printAs(.Promise, Writer, writer, value, result.cell, enable_ansi_colors),
+.JSON => self.printAs(.JSON, Writer, writer, value, result.cell, enable_ansi_colors),
+.NativeCode => self.printAs(.NativeCode, Writer, writer, value, result.cell, enable_ansi_colors),
+.JSX => self.printAs(.JSX, Writer, writer, value, result.cell, enable_ansi_colors),
+.Event => self.printAs(.Event, Writer, writer, value, result.cell, enable_ansi_colors),
+});
+    }
+    const Formatter = PrettyFormatter;
+    pub const Visited = struct {
+        const ObjectPool = pool.ObjectPool;
+        pub const Map = std.AutoHashMap(JSValue, void);
+        pub const Pool = ObjectPool(Map, VisitedInit.init, true, 16);
+    };
+    pub const ZigFormatter = struct {
+        formatter: *JestPrettyFormat.Formatter,
+        global: *JSGlobalObject,
+        value: JSValue,
+    
+    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+                self.formatter.remaining_values = (&.{ self.value });
+                defer {
+                {
+                    self.formatter.remaining_values = &.{};
+                }
+                }
+                self.formatter.globalThis = self.global;
+                _ = self.formatter.format(Tag.get(self.value, self.global), @TypeOf(writer), writer, self.value, self.formatter.globalThis, false);
+        }
+        pub const WriteError = error{UhOh};
+    };
+    pub const Tag = enum {
+            StringPossiblyFormatted,
+            String,
+            Undefined,
+            Double,
+            Integer,
+            Null,
+            Boolean,
+            Array,
+            Object,
+            Function,
+            Class,
+            Error,
+            TypedArray,
+            Map,
+            Set,
+            Symbol,
+            BigInt,
+    
+            GlobalObject,
+            Private,
+            Promise,
+    
+            JSON,
+            NativeCode,
+            ArrayBuffer,
+    
+            JSX,
+            Event,
+    
+            pub fn isPrimitive(this: Tag) bool {
+                return switch (this) {
+                    .String,
+                    .StringPossiblyFormatted,
+                    .Undefined,
+                    .Double,
+                    .Integer,
+                    .Null,
+                    .Boolean,
+                    .Symbol,
+                    .BigInt,
+                    => true,
+                    else => false,
+                };
+            }
+    
+            pub inline fn canHaveCircularReferences(tag: Tag) bool {
+                return tag == .Array or tag == .Object or tag == .Map or tag == .Set;
+            }
+    
+            const Result = struct {
+                tag: Tag,
+                cell: JSValue.JSType = .Cell,
+            };
+    
+            pub fn get(value: JSValue, globalThis: *JSGlobalObject) bun.JSError!Result {
+                switch (value) {
+                    .zero, .js_undefined => return Result{
+                        .tag = .Undefined,
+                    },
+                    .null => return Result{
+                        .tag = .Null,
+                    },
+                    else => {},
+                }
+    
+                if (value.isInt32()) {
+                    return .{
+                        .tag = .Integer,
+                    };
+                } else if (value.isNumber()) {
+                    return .{
+                        .tag = .Double,
+                    };
+                } else if (value.isBoolean()) {
+                    return .{
+                        .tag = .Boolean,
+                    };
+                }
+    
+                if (!value.isCell())
+                    return .{
+                        .tag = .NativeCode,
+                    };
+    
+                const js_type = value.jsType();
+    
+                if (js_type.isHidden()) return .{
+                    .tag = .NativeCode,
+                    .cell = js_type,
+                };
+    
+                // Cell is the "unknown" type
+                if (js_type == .Cell) {
+                    return .{
+                        .tag = .NativeCode,
+                        .cell = js_type,
+                    };
+                }
+    
+                if (js_type == .DOMWrapper) {
+                    return .{
+                        .tag = .Private,
+                        .cell = js_type,
+                    };
+                }
+    
+                // If we check an Object has a method table and it does not
+                // it will crash
+                if (js_type != .Object and value.isCallable()) {
+                    if (value.isClass(globalThis)) {
                         return .{
-                            .tag = switch (js_type) {
-                                .ErrorInstance => .Error,
-                                .NumberObject => .Double,
-                                .DerivedArray, .Array => .Array,
-                                .DerivedStringObject, .String, .StringObject => .String,
-                                .RegExpObject => .String,
-                                .Symbol => .Symbol,
-                                .BooleanObject => .Boolean,
-                                .JSFunction => .Function,
-                                .WeakMap, .Map => .Map,
-                                .WeakSet, .Set => .Set,
-                                .JSDate => .JSON,
-                                .JSPromise => .Promise,
-                                .Object,
-                                .FinalObject,
-                                .ModuleNamespaceObject,
-                                .GlobalObject,
-                                => .Object,
-        
-                                .ArrayBuffer,
-                                .Int8Array,
-                                .Uint8Array,
-                                .Uint8ClampedArray,
-                                .Int16Array,
-                                .Uint16Array,
-                                .Int32Array,
-                                .Uint32Array,
-                                .Float16Array,
-                                .Float32Array,
-                                .Float64Array,
-                                .BigInt64Array,
-                                .BigUint64Array,
-                                .DataView,
-                                => .TypedArray,
-        
-                                .HeapBigInt => .BigInt,
-        
-                                // None of these should ever exist here
-                                // But we're going to check anyway
-                                .GetterSetter,
-                                .CustomGetterSetter,
-                                .APIValueWrapper,
-                                .NativeExecutable,
-                                .ProgramExecutable,
-                                .ModuleProgramExecutable,
-                                .EvalExecutable,
-                                .FunctionExecutable,
-                                .UnlinkedFunctionExecutable,
-                                .UnlinkedProgramCodeBlock,
-                                .UnlinkedModuleProgramCodeBlock,
-                                .UnlinkedEvalCodeBlock,
-                                .UnlinkedFunctionCodeBlock,
-                                .CodeBlock,
-                                .JSCellButterfly,
-                                .JSSourceCode,
-                                .JSCallee,
-                                .GlobalLexicalEnvironment,
-                                .LexicalEnvironment,
-                                .ModuleEnvironment,
-                                .StrictEvalActivation,
-                                .WithScope,
-                                => .NativeCode,
-        
-                                .Event => .Event,
-        
-                                else => .JSON,
-                            },
+                            .tag = .Class,
                             .cell = js_type,
                         };
                     }
+    
+                    return .{
+                        // TODO: we print InternalFunction as Object because we have a lot of
+                        // callable namespaces and printing the contents of it is better than [Function: namespace]
+                        // ideally, we would print [Function: namespace] { ... } on all functions, internal and js.
+                        // what we'll do later is rid of .Function and .Class and handle the prefix in the .Object formatter
+                        .tag = if (js_type == .InternalFunction) .Object else .Function,
+                        .cell = js_type,
+                    };
+                }
+    
+                if (js_type == .GlobalProxy) {
+                    return Tag.get(
+                        jsc.JSValue.c(jsc.C.JSObjectGetProxyTarget(value.asObjectRef())),
+                        globalThis,
+                    );
+                }
+    
+                // Is this a react element?
+                if (js_type.isObject() and js_type != .ProxyObject) {
+                    if (try value.getOwnTruthy(globalThis, "$$typeof")) |typeof_symbol| {
+                        var reactElement = ZigString.init("react.element");
+                        var react_fragment = ZigString.init("react.fragment");
+    
+                        if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) or (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
+                            return .{ .tag = .JSX, .cell = js_type };
+                        }
+                    }
+                }
+    
+                return .{
+                    .tag = switch (js_type) {
+                        .ErrorInstance => .Error,
+                        .NumberObject => .Double,
+                        .DerivedArray, .Array => .Array,
+                        .DerivedStringObject, .String, .StringObject => .String,
+                        .RegExpObject => .String,
+                        .Symbol => .Symbol,
+                        .BooleanObject => .Boolean,
+                        .JSFunction => .Function,
+                        .WeakMap, .Map => .Map,
+                        .WeakSet, .Set => .Set,
+                        .JSDate => .JSON,
+                        .JSPromise => .Promise,
+                        .Object,
+                        .FinalObject,
+                        .ModuleNamespaceObject,
+                        .GlobalObject,
+                        => .Object,
+    
+                        .ArrayBuffer,
+                        .Int8Array,
+                        .Uint8Array,
+                        .Uint8ClampedArray,
+                        .Int16Array,
+                        .Uint16Array,
+                        .Int32Array,
+                        .Uint32Array,
+                        .Float16Array,
+                        .Float32Array,
+                        .Float64Array,
+                        .BigInt64Array,
+                        .BigUint64Array,
+                        .DataView,
+                        => .TypedArray,
+    
+                        .HeapBigInt => .BigInt,
+    
+                        // None of these should ever exist here
+                        // But we're going to check anyway
+                        .GetterSetter,
+                        .CustomGetterSetter,
+                        .APIValueWrapper,
+                        .NativeExecutable,
+                        .ProgramExecutable,
+                        .ModuleProgramExecutable,
+                        .EvalExecutable,
+                        .FunctionExecutable,
+                        .UnlinkedFunctionExecutable,
+                        .UnlinkedProgramCodeBlock,
+                        .UnlinkedModuleProgramCodeBlock,
+                        .UnlinkedEvalCodeBlock,
+                        .UnlinkedFunctionCodeBlock,
+                        .CodeBlock,
+                        .JSCellButterfly,
+                        .JSSourceCode,
+                        .JSCallee,
+                        .GlobalLexicalEnvironment,
+                        .LexicalEnvironment,
+                        .ModuleEnvironment,
+                        .StrictEvalActivation,
+                        .WithScope,
+                        => .NativeCode,
+    
+                        .Event => .Event,
+    
+                        else => .JSON,
+                    },
+                    .cell = js_type,
                 };
-        const CellType = CAPI.CellType;
-    };
+            }
+        };
+    const CellType = CAPI.CellType;
 };
 
 const JSLexer = bun.js_lexer;

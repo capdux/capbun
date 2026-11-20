@@ -1,7 +1,10 @@
 // Generic WorkTask for JavaScriptCore in CP
-import { Async, jsc, ConcurrentTask, WorkPool, WorkPoolTask } from "bun";
-import std from "std";
 import bun from "bun";
+const Async = bun.Async;
+const jsc = bun.jsc;
+const ConcurrentTask = jsc.ConcurrentTask;
+const WorkPool = jsc.WorkPool;
+const WorkPoolTask = jsc.WorkPoolTask;
 
 /// A generic task that runs work on a thread pool and executes a callback on the main JavaScript thread.
 /// Unlike ConcurrentPromiseTask which automatically resolves a Promise, WorkTask provides more flexibility

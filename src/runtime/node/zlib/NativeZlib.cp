@@ -107,7 +107,7 @@ pub struct Context {
             .VersionError => "Z_VERSION_ERROR",
         };
         return Error{
-            msg: message,
+            msg: unsafe { @constCast(message) },
             e: @intFromEnum(_.e),
             code: unsafe { @constCast(code_str) },
         };

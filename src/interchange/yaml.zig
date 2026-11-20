@@ -120,6 +120,12 @@ pub const StackOverflowOrOOMError = error{
     StackOverflow,
 };
 
+pub const YamlParseError = error{
+    OutOfMemory,
+    SyntaxError,
+    StackOverflow,
+};
+
 pub const Context = enum {
     block_out,
     block_in,
@@ -452,7 +458,7 @@ else => {
 },
 });
     }
-    const ParseError = (OOM or error{ SyntaxError, StackOverflow });
+    const ParseError = YamlParseError;
 };
 
 pub const ContextStack = struct {

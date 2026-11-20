@@ -698,24 +698,29 @@ const Event = struct {
             // Consume a notification when it pops up.
             // Acquire barrier to ensure operations before the notify() appear after the wait().
             if (state == NOTIFIED) {
-                state = self.state.cmpxchgWeak(
+                if (next := self.state.cmpxchgWeak(
                     state,
                     acquire_with,
                     .acquire,
                     .monotonic,
-                ) orelse return;
-                continue;
+                )) {
+                    state = next;
+                    continue;
+                }
+                return;
             }
 
             // There is no notification to consume, we should wait on the event by ensuring its WAITING.
-            if (state != WAITING) blk: {
-                state = self.state.cmpxchgWeak(
+            if (state != WAITING) {
+                if (next := self.state.cmpxchgWeak(
                     state,
                     WAITING,
                     .monotonic,
                     .monotonic,
-                ) orelse break :blk;
-                continue;
+                )) {
+                    state = next;
+                    continue;
+                }
             }
 
             // Wait on the event until a notify() or shutdown().

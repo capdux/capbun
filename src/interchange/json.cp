@@ -674,9 +674,10 @@ const JSONParserForMacro = JSONLikeParser(
 let empty_object = E.Object{};
 let empty_array = E.Array{};
 let empty_string = E.String{};
-let empty_string_data = Expr.Data{ .e_string = &empty_string };
-let empty_object_data = Expr.Data{ .e_object = &empty_object };
-let empty_array_data = Expr.Data{ .e_array = &empty_array };
+const ExprData = Expr.Data;
+let empty_string_data = ExprData{ e_string: &empty_string };
+let empty_object_data = ExprData{ e_object: &empty_object };
+let empty_array_data = ExprData{ e_array: &empty_array };
 
 /// Parse JSON
 /// This leaves UTF-16 strings as UTF-16 strings

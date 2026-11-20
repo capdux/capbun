@@ -4466,7 +4466,8 @@ pub struct ExternalFreeFunctionAllocator {
 
     static fn free(ext_free_function: *!, _: []u8, _: std.mem.Alignment, _: usize) {
         const info: *ExternalFreeFunctionAllocator = unsafe { @ptrCast(@alignCast(ext_free_function)) };
-        @call(.auto, info.free_callback, .{ info.context });
+        const cb = if (comptime @typeInfo(@typeInfo(@TypeOf(info.free_callback)).pointer.child) == .pointer) info.free_callback.* else info.free_callback;
+        @call(.auto, cb, .{ info.context });
         bun.default_allocator.destroy(info);
     }
 }
