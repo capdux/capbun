@@ -38,10 +38,10 @@ pub fn MaybeOwned(comptime Allocator: type): type {
             return .initRaw(null);
         }
 
-        pub fn deinit(self: *Self): void {
-            let maybe_parent = self.intoParent();
-            if (maybe_parent) |*parent_alloc| {
-                bun.memory.deinit(parent_alloc);
+        pub fn deinit(*_) {
+            let maybe_parent = _.intoParent();
+            if (maybe_parent != null) {
+                bun.memory.deinit(unsafe { &maybe_parent.? });
             }
         }
 

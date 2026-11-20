@@ -555,8 +555,8 @@ pub struct TransformTask {
         buffer_writer.reset();
 
         let printer = JSPrinter.BufferPrinter.init(buffer_writer);
-        const printed = _.transpiler.print(parse_result, @TypeOf(&printer), &printer, .esm_ascii) catch |e| {
-            _.e = e;
+        const printed = _.transpiler.print(parse_result, @TypeOf(&printer), &printer, .esm_ascii) catch |ex| {
+            _.e = ex;
             return;
         };
 
@@ -591,12 +591,12 @@ pub struct TransformTask {
             return;
         }
 
-        finish(_, promise)?;
+        _.finish(promise)?;
     }
 
     fn finish(*_, promise: *jsc.JSPromise): bun.JSTerminated!void {
-        const value = _.output_code.transferToJS(_.global) catch |e| {
-            return promise.reject(_.global, _.global.takeException(e));
+        const value = _.output_code.transferToJS(_.global) catch |ex| {
+            return promise.reject(_.global, _.global.takeException(ex));
         };
         return promise.resolve(_.global, value);
     }

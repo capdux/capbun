@@ -32,9 +32,11 @@ pub fn initBorrowed() Self {
 pub fn deinit(self: *@This()) void {
             var maybe_parent = self.intoParent();
             _ = &maybe_parent;
-            if (maybe_parent) |*parent_alloc| {
-                _ = &parent_alloc;
-                _ = bun.memory.deinit((parent_alloc.*));
+            if ((maybe_parent != null)) {
+                _ = bun.memory.deinit((blk: {
+                break :blk (&maybe_parent.?);
+
+}));
             }
     }
 

@@ -539,7 +539,7 @@ pub fn run(self: *TransformTask) void {
             _ = buffer_writer.reset();
             var printer = JSPrinter.BufferPrinter.init(buffer_writer);
             _ = &printer;
-            const printed = (blk_catch_12: { break :blk_catch_12 ((self.transpiler.print(parse_result, @TypeOf((&printer)), (&printer), .esm_ascii)) catch |e| { _ = &e; self.e = self.e;
+            const printed = (blk_catch_12: { break :blk_catch_12 ((self.transpiler.print(parse_result, @TypeOf((&printer)), (&printer), .esm_ascii)) catch |ex| { _ = &ex; self.e = ex;
             return; }); });
             if ((printed > 0)) {
                 buffer_writer = printer.ctx;
@@ -567,11 +567,11 @@ pub fn then(self: *TransformTask, promise: *jsc.JSPromise) bun.JSTerminated!void
                 _ = try promise.rejectWithAsyncStack(self.global, err_val);
                 return;
             }
-            _ = try self.finish(self, promise);
+            _ = try self.finish(promise);
     }
 
 pub fn finish(self: *TransformTask, promise: *jsc.JSPromise) bun.JSTerminated!void {
-            const value = (blk_catch_13: { break :blk_catch_13 ((self.output_code.transferToJS(self.global)) catch |e| { _ = &e; return promise.reject(self.global, self.global.takeException(self.e)); }); });
+            const value = (blk_catch_13: { break :blk_catch_13 ((self.output_code.transferToJS(self.global)) catch |ex| { _ = &ex; return promise.reject(self.global, self.global.takeException(ex)); }); });
             return promise.resolve(self.global, value);
     }
 

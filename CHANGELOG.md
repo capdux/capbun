@@ -1802,3 +1802,5 @@
 - **[2026-11-20] Wave 27 B 组 (16 模块)**：更新 `install/{resolvers/folder_resolver,PackageManager/PackageManagerEnqueue,NetworkTask,TarballStream,dependency,extract_tarball,lockfile/{CatalogMap,Package/WorkspaceMap,bun.lock},npm}`, `jsc/{ModuleLoader,RuntimeTranspilerStore,VirtualMachine}`, `sql/postgres/protocol/DataRow`, `sql_jsc/postgres/{DataCell,PostgresSQLConnection}`。
 
 - **[2026-11-20] Wave 27 A 组 (15 模块)**：更新 `options_types/CompileTarget`, `interchange/toml`, `js_printer/js_printer`, `js_parser/ast/{CharFreq,ConvertESMExportsForHmr,P,Parser,visit}`, `bake/DevServer`, `bundler/{HTMLScanner,analyze_transpiled_module,bundle_v2}`, `cli/test_command`, `sourcemap_jsc/CodeCoverage`, `router/router`。
+
+- **[2026-11-20] Wave 27 D 组 (2 跨模块根因)**：更新 `bun_alloc/maybe_owned`, `runtime/api/JSTranspiler`。
