@@ -115,7 +115,7 @@ return .{ .err = e };
     }
 
 pub fn toCss(self: ContainerName, dest: *Printer) PrintErr!void {
-            return try CustomIdentFns.toCss((&self.v), dest);
+            return try CustomIdentFns.toCss(self.v, dest);
     }
 
 pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
@@ -231,7 +231,7 @@ pub fn parse(input: *css.Parser) Result(ContainerCondition) {
     }
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            switch (self.*) {
+            switch (self) {
 .feature => |f| {
 _ = try f.toCss(dest);
 },

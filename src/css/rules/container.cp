@@ -30,7 +30,7 @@ pub struct ContainerName {
     const This = @This();
 
     fn toCss(dest: *Printer): PrintErr!void {
-        return CustomIdentFns.toCss(&_.v, dest)?;
+        return CustomIdentFns.toCss(_.v, dest)?;
     }
 
     static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
@@ -212,7 +212,7 @@ pub const ContainerCondition = union(enum) {
     }
 
     pub fn toCss(dest: *Printer): PrintErr!void {
-        switch (_.*) {
+        switch (_) {
             .feature => |f| try f.toCss(dest),
             .not => |c| {
                 dest.writeStr("not ")?;

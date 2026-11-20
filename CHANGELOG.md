@@ -1860,3 +1860,4 @@
 - **[2026-11-21] Wave 45 A 组 (6 模块)**：更新 `css/{values/{gradient,syntax},rules/{property,rules,layer},selectors/parser}`。
 - **[2026-11-21] Wave 46 A 组 (2 跨模块根因)**：更新 `css/{values/syntax,rules/container}`。
 - **[2026-11-21] Wave 46 B 组 (8 模块)**：更新 `bundler/{Chunk,linker_context/writeOutputFilesToDisk}`, `bake/DevServer/IncrementalGraph`, `install/{PackageManager/PopulateManifestCache,lockfile/{Tree,bun.lock,bun.lockb},pnpm}`。
+- **[2026-11-21] Wave 47 A 组 (3 模块)**：更新 `css/{rules/{container,scope},values/syntax}`。

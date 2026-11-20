@@ -492,7 +492,7 @@ pub enum ParsedComponent {
             .resolution => |*v| try v.toCss(dest),
             .transform_function => |*v| try v.toCss(dest),
             .transform_list => |*v| try v.toCss(dest),
-            .custom_ident => |*v| try CustomIdentFns.toCss(v, dest),
+            .custom_ident v => CustomIdentFns.toCss(v, dest)?,
             .literal => |*v| css.serializer.serializeIdentifier(v.v, dest) catch return dest.addFmtError(),
             .repeated => |*r| {
                 let first = true;
