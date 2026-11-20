@@ -93,7 +93,7 @@ export @opaque class uws_res {}
     fn uws_res_prepare_for_sendfile(ssl: i32, res: *uws_res);
     fn uws_res_get_native_handle(ssl: i32, res: *uws_res): *bun.uws.Socket;
     fn uws_res_on_data(ssl: i32, res: *uws_res, handler: ResDataHandler, optional_data: *!?);
-    fn uws_res_upgrade(ssl: i32, res: *uws_res, data: *!?, key: [*c]const u8, kl: usize, proto: [*c]const u8, pl: usize, ext: [*c]const u8, el: usize, ws: *bun.uws.WebSocketUpgradeContext): *bun.uws.Socket;
+    fn uws_res_upgrade(ssl: i32, res: *uws_res, data: *!?, key: [*c]const u8, kl: usize, proto: [*c]const u8, pl: usize, ext: [*c]const u8, el: usize, ws: *bun.uws.WebSocketUpgradeContext?): *bun.uws.Socket;
     fn uws_res_cork(ssl: i32, res: *uws_res, ctx: *!?, corker: ResCorkHandler);
 }
 
@@ -319,6 +319,10 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
             }
         };
         uws_res_cork(ssl_flag, this.downcast(), @ptrCast(ud), wrapper.onCork);
+    }
+
+    pub fn upgrade(this: *@This(), comptime Data: type, data: Data, sec_web_socket_key: string, sec_web_socket_protocol: string, sec_web_socket_extensions: string, ctx: *bun.uws.WebSocketUpgradeContext?): *bun.uws.Socket {
+        return uws_res_upgrade(ssl_flag, this.downcast(), data, sec_web_socket_key.ptr, sec_web_socket_key.len, sec_web_socket_protocol.ptr, sec_web_socket_protocol.len, sec_web_socket_extensions.ptr, sec_web_socket_extensions.len, ctx);
     }
 
     pub fn endStream(this: *@This(), close_connection: bool): void {

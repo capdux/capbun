@@ -1543,7 +1543,7 @@ fn onFrameworkRequestWithBundle(
     resp: AnyResponse,
 ): bun.JSError!void {
     const route_bundle = dev.routeBundlePtr(route_bundle_index);
-    assert(route_bundle.data.* == .framework);
+    assert(route_bundle.data == .framework);
 
     const framework_bundle = &route_bundle.data.framework;
 
@@ -2223,7 +2223,7 @@ fn generateClientBundle(dev: *DevServer, route_bundle: *RouteBundle): bun.OOM![]
 }
 
 fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle): bun.JSError!jsc.JSValue {
-    assert(route_bundle.data.* == .framework); // a jsc.JSValue has no purpose, and therefore isn't implemented.
+    assert(route_bundle.data == .framework); // a jsc.JSValue has no purpose, and therefore isn't implemented.
     if (Environment.allow_assert) assert(!route_bundle.data.framework.cached_css_file_array.has());
     assert(route_bundle.server_state == .loaded); // page is unfit to load
 

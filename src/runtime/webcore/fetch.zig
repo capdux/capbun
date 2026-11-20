@@ -94,6 +94,7 @@ pub fn fromJS(self: *const StringOrURL, value: JSValue, globalThis: *JSGlobalObj
     }
 };
 
+const JSTypeErrorEnum = std.enums.EnumArray(JSType,string);
 pub const FetchTasklet = FetchTaskletMod.FetchTasklet;
 const s3 = bun.S3;
 const ZigURL = bun.URL;
@@ -101,6 +102,19 @@ pub const fetch_error_no_args = "fetch() expects a string but received no argume
 pub const fetch_error_blank_url = "fetch() URL must not be a blank string.";
 pub const fetch_error_unexpected_body = "fetch() request with GET/HEAD/OPTIONS method cannot have body.";
 pub const fetch_error_proxy_unix = "fetch() cannot use a proxy with a unix socket.";
+pub const fetch_type_error_strings: JSTypeErrorEnum = brk: {
+    var errors = JSTypeErrorEnum.initUndefined();
+    _ = &errors;
+    _ = errors.set(JSType.kJSTypeUndefined, "fetch() expects a string, but received Undefined");
+    _ = errors.set(JSType.kJSTypeNull, "fetch() expects a string, but received Null");
+    _ = errors.set(JSType.kJSTypeBoolean, "fetch() expects a string, but received Boolean");
+    _ = errors.set(JSType.kJSTypeNumber, "fetch() expects a string, but received Number");
+    _ = errors.set(JSType.kJSTypeString, "fetch() expects a string, but received String");
+    _ = errors.set(JSType.kJSTypeObject, "fetch() expects a string, but received Object");
+    _ = errors.set(JSType.kJSTypeSymbol, "fetch() expects a string, but received Symbol");
+    _ = errors.set(JSType.kJSTypeBigInt, "fetch() expects a string, but received BigInt");
+    break :brk errors;
+};
 
 pub fn dataURLResponse(_data_url: DataURL, globalThis: *JSGlobalObject, allocator: sys.Allocator) JSValue {
         var data_url = _data_url;
@@ -451,7 +465,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         }
         var promise = JSPromise.Strong.init(globalThis);
         _ = &promise;
-        var promise_val = (if (@typeInfo(@TypeOf(promise)) == .@"enum") @intFromEnum(promise) else promise.value)();
+        var promise_val = promise.value();
         _ = &promise_val;
         _ = (blk_catch_6: { break :blk_catch_6 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = null, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_6 sys.handleOom(e); }); });
         url = .{};

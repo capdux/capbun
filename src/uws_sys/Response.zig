@@ -804,7 +804,7 @@ extern "c" fn uws_res_get_native_handle(ssl: i32, res: *uws_res) callconv(.c) *b
 
 extern "c" fn uws_res_on_data(ssl: i32, res: *uws_res, handler: ResDataHandler, optional_data: ?*anyopaque) callconv(.c) void;
 
-extern "c" fn uws_res_upgrade(ssl: i32, res: *uws_res, data: ?*anyopaque, key: [*c]const u8, kl: usize, proto: [*c]const u8, pl: usize, ext: [*c]const u8, el: usize, ws: *bun.uws.WebSocketUpgradeContext) callconv(.c) *bun.uws.Socket;
+extern "c" fn uws_res_upgrade(ssl: i32, res: *uws_res, data: ?*anyopaque, key: [*c]const u8, kl: usize, proto: [*c]const u8, pl: usize, ext: [*c]const u8, el: usize, ws: ?*bun.uws.WebSocketUpgradeContext) callconv(.c) *bun.uws.Socket;
 
 extern "c" fn uws_res_cork(ssl: i32, res: *uws_res, ctx: ?*anyopaque, corker: ResCorkHandler) callconv(.c) void;
 
@@ -1035,6 +1035,10 @@ pub fn onCork(user_data: ?*anyopaque) callconv(.c) void {
     }
 };
             _ = uws_res_cork(ssl_flag, self.downcast(), @ptrCast(ud), wrapper.onCork);
+    }
+
+pub fn upgrade(self: *@This(), comptime Data: type, data: Data, sec_web_socket_key: []const u8, sec_web_socket_protocol: []const u8, sec_web_socket_extensions: []const u8, ctx: ?*bun.uws.WebSocketUpgradeContext) *bun.uws.Socket {
+            return uws_res_upgrade(ssl_flag, self.downcast(), data, sec_web_socket_key.ptr, sec_web_socket_key.len, sec_web_socket_protocol.ptr, sec_web_socket_protocol.len, sec_web_socket_extensions.ptr, sec_web_socket_extensions.len, ctx);
     }
 
 pub fn endStream(self: *@This(), close_connection: bool) void {

@@ -1895,7 +1895,7 @@ pub fn computeArgumentsForFrameworkRequest(dev: *DevServer, route_bundle_index: 
 
 pub fn onFrameworkRequestWithBundle(dev: *DevServer, route_bundle_index: RouteBundle.Index, req: bun.jsc.API.SavedRequest.Union, resp: AnyResponse) bun.JSError!void {
         const route_bundle = dev.routeBundlePtr(route_bundle_index);
-        _ = assert((route_bundle.data.* == .framework));
+        _ = assert((route_bundle.data == .framework));
         const framework_bundle = (&route_bundle.data.framework);
         var params: FrameworkRouter.MatchedParams = undefined;
         _ = &params;
@@ -2333,7 +2333,7 @@ errdefer {
 }
 
 pub fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle) bun.JSError!jsc.JSValue {
-        _ = assert((route_bundle.data.* == .framework));
+        _ = assert((route_bundle.data == .framework));
         if (Environment.allow_assert) {
             _ = assert((!route_bundle.data.framework.cached_css_file_array.has()));
         }

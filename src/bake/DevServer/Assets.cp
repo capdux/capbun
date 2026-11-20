@@ -29,7 +29,7 @@
     /// When an asset is overwritten, it receives a new URL to get around browser caching.
     /// The old URL is immediately revoked.
     pub fn replacePath(
-        assets: *Assets,
+        *_,
         /// not allocated
         abs_path: []const u8,
         /// Ownership is transferred to this function
@@ -38,9 +38,9 @@
         /// content hash of the asset
         content_hash: u64,
     ): !EntryIndex {
-        assert(assets.owner().magic == .valid);
-        defer assert(assets.files.count() == assets.refs.items.len);
-        const alloc = assets.owner().allocator();
+        assert(_.owner().magic == .valid);
+        defer assert(_.files.count() == _.refs.items.len);
+        const alloc = _.owner().allocator();
         debug.log("replacePath {f} {} - {s}/{s} ({s})", [
             bun.fmt.quote(abs_path),
             content_hash,
@@ -49,17 +49,17 @@
             mime_type.value,
         ]);
 
-        let gop = assets.path_map.getOrPut(alloc, abs_path)?;
+        let gop = _.path_map.getOrPut(alloc, abs_path)?;
         if (!gop.found_existing) {
             // Locate a stable pointer for the file path
-            const stable_abs_path = (assets.owner().client_graph.insertEmpty(abs_path, .unknown)?).key;
+            const stable_abs_path = (_.owner().client_graph.insertEmpty(abs_path, .unknown)?).key;
             gop.key_ptr.* = stable_abs_path;
         } else {
             let entry_index = gop.value_ptr.*;
             // When there is one reference to the asset, the entry can be
             // replaced in-place with the new asset.
-            if (assets.refs.items[entry_index.get()] == 1) {
-                const slice = assets.files.entries.slice();
+            if (_.refs.items[entry_index.get()] == 1) {
+                const slice = _.files.entries.slice();
 
                 const prev = slice.items(.value)[entry_index.get()];
                 prev.deref();
@@ -67,27 +67,27 @@
                 slice.items(.key)[entry_index.get()] = content_hash;
                 slice.items(.value)[entry_index.get()] = StaticRoute.initFromAnyBlob(contents, StaticRoute.InitFromBytesOptions{
                     mime_type: mime_type,
-                    server: assets.owner().server ?? unreachable,
+                    server: _.owner().server ?? unreachable,
                 });
                 comptime assert(@TypeOf(slice.items(.hash)[0]) == void);
-                assets.needs_reindex = true;
+                _.needs_reindex = true;
                 return entry_index;
             } else {
-                assets.refs.items[entry_index.get()] -= 1;
-                assert(assets.refs.items[entry_index.get()] > 0);
+                _.refs.items[entry_index.get()] -= 1;
+                assert(_.refs.items[entry_index.get()] > 0);
             }
         }
 
-        assets.reindexIfNeeded(alloc)?;
-        let file_index_gop = assets.files.getOrPut(alloc, content_hash)?;
+        _.reindexIfNeeded(alloc)?;
+        let file_index_gop = _.files.getOrPut(alloc, content_hash)?;
         if (!file_index_gop.found_existing) {
-            assets.refs.append(alloc, 1)?;
+            _.refs.append(alloc, 1)?;
             file_index_gop.value_ptr.* = StaticRoute.initFromAnyBlob(contents, StaticRoute.InitFromBytesOptions{
                 mime_type: mime_type,
-                server: assets.owner().server ?? unreachable,
+                server: _.owner().server ?? unreachable,
             });
         } else {
-            assets.refs.items[file_index_gop.index] += 1;
+            _.refs.items[file_index_gop.index] += 1;
             let contents_mut = contents.*;
             contents_mut.detach();
         }

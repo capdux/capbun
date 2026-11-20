@@ -16,6 +16,20 @@ export const fetch_error_blank_url = "fetch() URL must not be a blank string.";
 export const fetch_error_unexpected_body = "fetch() request with GET/HEAD/OPTIONS method cannot have body.";
 export const fetch_error_proxy_unix = "fetch() cannot use a proxy with a unix socket.";
 
+type JSTypeErrorEnum = std.enums.EnumArray(JSType, string);
+pub const fetch_type_error_strings: JSTypeErrorEnum = brk: {
+    let errors = JSTypeErrorEnum.initUndefined();
+    errors.set(JSType.kJSTypeUndefined, "fetch() expects a string, but received Undefined");
+    errors.set(JSType.kJSTypeNull, "fetch() expects a string, but received Null");
+    errors.set(JSType.kJSTypeBoolean, "fetch() expects a string, but received Boolean");
+    errors.set(JSType.kJSTypeNumber, "fetch() expects a string, but received Number");
+    errors.set(JSType.kJSTypeString, "fetch() expects a string, but received String");
+    errors.set(JSType.kJSTypeObject, "fetch() expects a string, but received Object");
+    errors.set(JSType.kJSTypeSymbol, "fetch() expects a string, but received Symbol");
+    errors.set(JSType.kJSTypeBigInt, "fetch() expects a string, but received BigInt");
+    break :brk errors;
+};
+
 fn dataURLResponse(
     _data_url: DataURL,
     globalThis: **JSGlobalObject,

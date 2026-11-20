@@ -1,4 +1,4 @@
-pub union(enum) RouteBundleData {
+pub const RouteBundleData = union(enum) {
     /// FrameworkRouter provided route
     framework: RouteBundleFramework,
     /// HTMLBundle provided route

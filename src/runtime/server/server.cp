@@ -1326,8 +1326,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     false,
                 );
             } else {
-                // TODO: Fetch.fetch_type_error_strings is not ported in fetch.cp
-                const fetch_error = "fetch() expects a string, but received an invalid type";
+                const fetch_error = jsc.WebCore.Fetch.fetch_type_error_strings.get(bun.jsc.C.JSValueGetType(ctx, first_arg.asRef()));
                 const err = ctx.toTypeError(.INVALID_ARG_TYPE, "{s}", .{fetch_error});
 
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, err);

@@ -1714,3 +1714,5 @@
 - **[2026-11-20] Wave 16 D 组 (7 模块)**：更新 `src/jsc/{jsc,GarbageCollectionController,PosixSignalHandle}`, `src/runtime/timer/WTFTimer`, `src/runtime/webcore/ObjectURLRegistry`, `src/bundler/options`, `src/runtime/webcore/blob/Store`（.cp/.zig）。
 
 - **[2026-11-20] errset-merge-or 重编 + Wave 17 A 组**：重编 `src/{bun,bundler/linker_context/scanImportsAndExports,cli/{pack,publish}_command,runtime/crypto/PasswordObject,runtime/image/backend_{wic,coregraphics},install/{resolution,PnpmMatcher,lockfile/bun.lock,npm,NetworkTask,PackageManager/PopulateManifestCache}}.zig`；Wave 17 A 组更新 `runtime/{webcore/{Blob,Body,s3/client},webcore,server/{RequestContext,server,ServerWebSocket}}`、`uws_sys/App`、`bake/DevServer{,/IncrementalGraph}`、`http/HTTPContext`、`http_jsc/websocket_client/WebSocketUpgradeClient`。
+
+- **[2026-11-20] Wave 17 C 组 (6 模块)**：更新 `src/uws_sys/Response`、`src/bake/DevServer{,/Assets,/RouteBundle}`、`src/runtime/webcore/fetch`、`src/runtime/server/server`（.cp/.zig）。
