@@ -429,14 +429,14 @@ pub enum Encoding: u8 {
     static fn encodeWithSize(enc_val: Encoding, globalObject: *jsc.JSGlobalObject, comptime size: usize, input: *const [size]u8): bun.JSError!jsc.JSValue {
         switch (enc_val) {
             .base64 => {
-                const b64_size = std.base64.standard.Encoder.calcSize(size);
-                let buf: [b64_size]u8 = undefined;
+                const buf_len = comptime std.base64.standard.Encoder.calcSize(size);
+                let buf: [buf_len]u8 = undefined;
                 const len = bun.base64.encode(&buf, input);
                 return jsc.ZigString.init(buf[0..len]).toJS(globalObject);
             },
             .base64url => {
-                const b64url_size = std.base64.url_safe_no_pad.Encoder.calcSize(size);
-                let buf: [b64url_size]u8 = undefined;
+                const buf_len = comptime std.base64.url_safe_no_pad.Encoder.calcSize(size);
+                let buf: [buf_len]u8 = undefined;
                 const encoded = std.base64.url_safe_no_pad.Encoder.encode(&buf, input);
 
                 return jsc.ZigString.init(buf[0..encoded.len]).toJS(globalObject);
@@ -469,16 +469,18 @@ pub enum Encoding: u8 {
         );
         switch (enc_val) {
             .base64 => {
-                const b64_max_size = std.base64.standard.Encoder.calcSize(max_size * 4);
-                let base64_buf: [b64_max_size]u8 = undefined;
+                const base64_buf_len = comptime std.base64.standard.Encoder.calcSize(max_size * 4);
+                let base64_buf: [base64_buf_len]u8 = undefined;
                 const encoded_len = bun.base64.encode(&base64_buf, input);
-                let [encoded, bytes] = bun.String.createUninitialized(.latin1, encoded_len);
+                const created = bun.String.createUninitialized(.latin1, encoded_len);
+                let encoded = created[0];
+                let bytes = created[1];
                 @memcpy(@constCast(bytes), base64_buf[0..encoded_len]);
                 return encoded.transferToJS(globalObject)?;
             },
             .base64url => {
-                const b64url_max_size = std.base64.url_safe_no_pad.Encoder.calcSize(max_size * 4);
-                let buf: [b64url_max_size]u8 = undefined;
+                const buf_len = comptime std.base64.url_safe_no_pad.Encoder.calcSize(max_size * 4);
+                let buf: [buf_len]u8 = undefined;
                 const encoded = std.base64.url_safe_no_pad.Encoder.encode(&buf, input);
 
                 return jsc.ZigString.init(buf[0..encoded.len]).toJS(globalObject);

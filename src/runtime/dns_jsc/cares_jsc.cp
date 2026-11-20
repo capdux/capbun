@@ -120,10 +120,10 @@ pub fn addrInfoToJSArray(addr_info: *c_ares.AddrInfo, globalThis: *jsc.JSGlobalO
         const this_node = current.?;
         current = this_node.next;
         const addr_val: std.net.Address = if (this_node.family == c_ares.AF.INET) blk: {
-            const in_ptr: *const std.posix.sockaddr.in = @ptrCast(this_node.addr.?);
+            const in_ptr: *const std.posix.sockaddr.in = @ptrCast(@alignCast(this_node.addr.?));
             break :blk std.net.Address{ .in = .{ .sa = in_ptr.* } };
         } else if (this_node.family == c_ares.AF.INET6) blk: {
-            const in6_ptr: *const std.posix.sockaddr.in6 = @ptrCast(this_node.addr.?);
+            const in6_ptr: *const std.posix.sockaddr.in6 = @ptrCast(@alignCast(this_node.addr.?));
             break :blk std.net.Address{ .in6 = .{ .sa = in6_ptr.* } };
         } else unreachable;
         const res = GetAddrInfo.Result{
@@ -472,7 +472,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
     const array = jsc.JSValue.createEmptyArray(globalThis, blk: {
         let len: usize = 0;
         @for (field of @typeInfo(c_ares.struct_any_reply).@"struct".fields) {
-            if (bun.strings.hasSuffix(field.name, "_reply")) {
+            if (comptime std.mem.endsWith(u8, field.name, "_reply")) {
                 if (@field(reply, field.name) != null) {
                     len += 1;
                 }
@@ -484,7 +484,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
     let i: u32 = 0;
 
     @for (field of @typeInfo(c_ares.struct_any_reply).@"struct".fields) {
-        if (bun.strings.hasSuffix(field.name, "_reply")) {
+        if (comptime std.mem.endsWith(u8, field.name, "_reply")) {
             if (rep := @field(reply, field.name)) {
                 const lookup_name = field.name[0 .. field.name.len - "_reply".len];
                 anyReplyAppendAll(globalThis, allocator, array, &i, rep, lookup_name) catch |e| return e;
@@ -566,7 +566,7 @@ export struct ErrorDeferred {
     }
 }
 
-pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: []const u8?, promise: *jsc.JSPromise.Strong): *ErrorDeferred {
+pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: ([]const u8)?, promise: *jsc.JSPromise.Strong): *ErrorDeferred {
     const host_string: bun.String? = if (hostname != null)
         bun.String.cloneUTF8(hostname.?)
     else

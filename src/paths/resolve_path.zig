@@ -1340,32 +1340,60 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
         }
         var count: usize = 0;
         _ = &count;
-        inline for (parts) |part| {
-            if ((part.len == 0)) {
-                continue;
+        const parts_is_tuple = ((comptime (@typeInfo(@TypeOf(parts)) == .@"struct")) or ((@typeInfo(@TypeOf(parts)) == .pointer) and (@typeInfo(@typeInfo(@TypeOf(parts)).pointer.child) == .@"struct")));
+        if (comptime parts_is_tuple) {
+            inline for (parts) |part| {
+                if ((part.len != 0)) {
+                    count = (count + (part.len + 1));
+                }
             }
-            count = (count + (part.len + 1));
+        } else {
+            for (cp_iter_slice(parts)) |part| {
+                _ = &part;
+                if ((part.len != 0)) {
+                    count = (count + (part.len + 1));
+                }
+            }
         }
         if (((count * 2) > temp_buf.len)) {
             temp_buf = bun.handleOom(bun.default_allocator.alloc(T, (count * 2)));
             free_temp_buf = true;
         }
         temp_buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(0)) else @as(T, 0));
-        inline for (parts) |part| {
-            if ((part.len == 0)) {
-                continue;
+        if (comptime parts_is_tuple) {
+            inline for (parts) |part| {
+                if ((part.len != 0)) {
+                    if ((written > 0)) {
+                        temp_buf[cp_cast_int(usize, written)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
+                        written = (written + 1);
+                    }
+                    const Element = std.meta.Elem(@TypeOf(part));
+                    if (comptime ((T == u16) and (Element == u8))) {
+                        const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
+                        written = (written + wrote.len);
+                    } else {
+                        _ = bun.copy(T, temp_buf[written..], part);
+                        written = (written + part.len);
+                    }
+                }
             }
-            if ((written > 0)) {
-                temp_buf[cp_cast_int(usize, written)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
-                written = (written + 1);
-            }
-            const Element = std.meta.Elem(@TypeOf(part));
-            if (comptime ((T == u16) and (Element == u8))) {
-                const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
-                written = (written + wrote.len);
-            } else {
-                _ = bun.copy(T, temp_buf[written..], part);
-                written = (written + part.len);
+        } else {
+            for (cp_iter_slice(parts)) |part| {
+                _ = &part;
+                if ((part.len != 0)) {
+                    if ((written > 0)) {
+                        temp_buf[cp_cast_int(usize, written)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
+                        written = (written + 1);
+                    }
+                    const Element = std.meta.Elem(@TypeOf(part));
+                    if (comptime ((T == u16) and (Element == u8))) {
+                        const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
+                        written = (written + wrote.len);
+                    } else {
+                        _ = bun.copy(T, temp_buf[written..], part);
+                        written = (written + part.len);
+                    }
+                }
             }
         }
         if ((written == 0)) {

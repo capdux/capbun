@@ -57,21 +57,21 @@ buffer: []const u8 = "",
 offset: *usize,
 message_start: *usize,
 
-pub fn markMessageStart(self: *StackReader) void {
+pub fn markMessageStart(r: StackReader) void {
         {
-            self.message_start.* = self.offset.*;
+            r.message_start.* = r.offset.*;
         }
 }
 
-pub fn setOffsetFromStart(self: *StackReader, offset: usize) void {
+pub fn setOffsetFromStart(r: StackReader, offset: usize) void {
         {
-            self.offset.* = (self.message_start.* + offset);
+            r.offset.* = (r.message_start.* + offset);
         }
 }
 
-pub fn ensureCapacity(self: StackReader, length: usize) bool {
-        return (self.buffer.len >= ((blk: {
-        break :blk self.offset.*;
+pub fn ensureCapacity(r: StackReader, length: usize) bool {
+        return (r.buffer.len >= ((blk: {
+        break :blk r.offset.*;
 
 }) + length));
 }
@@ -82,53 +82,53 @@ pub fn init(buffer: []const u8, offset: *usize, message_start: *usize) NewReader
         return Wrapped{ .wrapped = StackReader{ .buffer = buffer, .offset = offset, .message_start = message_start } };
 }
 
-pub fn peek(self: StackReader) []const u8 {
-        return self.buffer[(blk: {
-        break :blk self.offset.*;
+pub fn peek(r: StackReader) []const u8 {
+        return r.buffer[(blk: {
+        break :blk r.offset.*;
 
 })..];
 }
 
-pub fn skip(self: *StackReader, count: isize) void {
+pub fn skip(r: StackReader, count: isize) void {
         {
             if ((count < 0)) {
                 const abs_count = @abs(count);
-                if ((abs_count > self.offset.*)) {
-                    self.offset.* = 0;
+                if ((abs_count > r.offset.*)) {
+                    r.offset.* = 0;
                     return;
                 }
-                self.offset.* = (self.offset.* - @as(usize, @intCast(abs_count)));
+                r.offset.* = (r.offset.* - @as(usize, @intCast(abs_count)));
                 return;
             }
             const ucount: usize = @intCast(count);
-            if (((self.offset.* + ucount) > self.buffer.len)) {
-                self.offset.* = self.buffer.len;
+            if (((r.offset.* + ucount) > r.buffer.len)) {
+                r.offset.* = r.buffer.len;
                 return;
             }
-            self.offset.* = (self.offset.* + ucount);
+            r.offset.* = (r.offset.* + ucount);
         }
 }
 
-pub fn read(self: *StackReader, count: usize) AnyMySQLError.Error!Data {
+pub fn read(r: StackReader, count: usize) AnyMySQLError.Error!Data {
         const offset = (blk: {
-        break :blk self.offset.*;
+        break :blk r.offset.*;
 
 });
-        if ((!self.ensureCapacity(count))) {
+        if ((!StackReader.ensureCapacity(r, count))) {
             return AnyMySQLError.Error.ShortRead;
         }
-        _ = self.skip(@intCast(count));
-        return Data{ .temporary = self.buffer[offset..(blk: {
-        break :blk self.offset.*;
+        _ = StackReader.skip(r, @intCast(count));
+        return Data{ .temporary = r.buffer[offset..(blk: {
+        break :blk r.offset.*;
 
 })] };
 }
 
-pub fn readZ(self: *StackReader) AnyMySQLError.Error!Data {
-        const remaining = self.peek();
+pub fn readZ(r: StackReader) AnyMySQLError.Error!Data {
+        const remaining = StackReader.peek(r);
         if (bun.strings.indexOfChar(remaining, 0)) |zero| {
             _ = &zero;
-            _ = self.skip(@intCast((zero + 1)));
+            _ = StackReader.skip(r, @intCast((zero + 1)));
             return Data{ .temporary = remaining[0..zero] };
         }
         return error.ShortRead;

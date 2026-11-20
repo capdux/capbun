@@ -30,33 +30,27 @@ pub fn NewReaderWrap(
         pub const is_wrapped = true;
 
         pub fn markMessageStart(this) void {
-            let w = this.wrapped;
-            markMessageStartFn(if (comptime @typeInfo(Context) == .pointer) w else &w);
+            markMessageStartFn(this.wrapped);
         }
 
         pub fn setOffsetFromStart(this, offset: usize) void {
-            let w = this.wrapped;
-            return setOffsetFromStartFn(if (comptime @typeInfo(Context) == .pointer) w else &w, offset);
+            return setOffsetFromStartFn(this.wrapped, offset);
         }
 
         pub fn read(this, count: usize) AnyMySQLError.Error!Data {
-            let w = this.wrapped;
-            return readFn(if (comptime @typeInfo(Context) == .pointer) w else &w, count);
+            return readFn(this.wrapped, count);
         }
 
         pub fn skip(this, count: anytype) void {
-            let w = this.wrapped;
-            skipFn(if (comptime @typeInfo(Context) == .pointer) w else &w, @as(isize, @intCast(count)));
+            skipFn(this.wrapped, @as(isize, @intCast(count)));
         }
 
         pub fn peek(this) []const u8 {
-            let w = this.wrapped;
-            return peekFn(if (comptime @typeInfo(Context) == .pointer) w else &w);
+            return peekFn(this.wrapped);
         }
 
         pub fn readZ(this) AnyMySQLError.Error!Data {
-            let w = this.wrapped;
-            return readZFn(if (comptime @typeInfo(Context) == .pointer) w else &w);
+            return readZFn(this.wrapped);
         }
 
         pub fn byte(this) AnyMySQLError.Error!u8 {
@@ -65,8 +59,7 @@ pub fn NewReaderWrap(
         }
 
         pub fn ensureCapacity(this, count: usize) AnyMySQLError.Error!void {
-            let w = this.wrapped;
-            if (!ensureCapacityFn(if (comptime @typeInfo(Context) == .pointer) w else &w, count)) {
+            if (!ensureCapacityFn(this.wrapped, count)) {
                 return AnyMySQLError.Error.ShortRead;
             }
         }

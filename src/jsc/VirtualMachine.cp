@@ -1785,7 +1785,7 @@ fn _resolve(
 
     const is_special_source = strings.eqlComptime(source, main_file_name) || js_ast.Macro.isMacroPath(source);
     let query_string: []const u8 = "";
-    const normalized_specifier = normalizeSpecifierForResolution(specifier, &query_string);
+    const normalized_specifier = normalizeSpecifierForResolution(specifier, @as(*[]const u8, &query_string));
     const source_to_use = if (!is_special_source)
         if (is_a_file_path)
             Fs.PathName.init(source).dirWithTrailingSlash()

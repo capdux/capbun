@@ -11,20 +11,20 @@ const NewReader = NewReaderMod.NewReader;
     offset: *usize,
     message_start: *usize,
 
-    pub fn markMessageStart(*_)  {
+    pub static fn markMessageStart(r: StackReader) {
         unsafe {
-            _.message_start.* = _.offset.*;
+            r.message_start.* = r.offset.*;
         }
     }
 
-    pub fn setOffsetFromStart(*_, offset: usize)  {
+    pub static fn setOffsetFromStart(r: StackReader, offset: usize) {
         unsafe {
-            _.offset.* = _.message_start.* + offset;
+            r.offset.* = r.message_start.* + offset;
         }
     }
 
-    pub fn ensureCapacity(length: usize): bool {
-        return _.buffer.len >= (unsafe { _.offset.* } + length);
+    pub static fn ensureCapacity(r: StackReader, length: usize): bool {
+        return r.buffer.len >= (unsafe { r.offset.* } + length);
     }
 
     pub static fn init(buffer: []const u8, offset: *usize, message_start: *usize): NewReader(StackReader) {
@@ -38,48 +38,48 @@ const NewReader = NewReaderMod.NewReader;
         };
     }
 
-    pub fn peek(): []const u8 {
-        return _.buffer[unsafe { _.offset.* }..];
+    pub static fn peek(r: StackReader): []const u8 {
+        return r.buffer[unsafe { r.offset.* }..];
     }
 
-    pub fn skip(*_, count: isize)  {
+    pub static fn skip(r: StackReader, count: isize) {
         unsafe {
             if (count < 0) {
                 const abs_count = @abs(count);
-                if (abs_count > _.offset.*) {
-                    _.offset.* = 0;
+                if (abs_count > r.offset.*) {
+                    r.offset.* = 0;
                     return;
                 }
-                _.offset.* -= @as(usize, @intCast(abs_count));
+                r.offset.* -= @as(usize, @intCast(abs_count));
                 return;
             }
 
             const ucount: usize = @intCast(count);
-            if (_.offset.* + ucount > _.buffer.len) {
-                _.offset.* = _.buffer.len;
+            if (r.offset.* + ucount > r.buffer.len) {
+                r.offset.* = r.buffer.len;
                 return;
             }
 
-            _.offset.* += ucount;
+            r.offset.* += ucount;
         }
     }
 
-    pub fn read(*_, count: usize): AnyMySQLError.Error!Data {
-        const offset = unsafe { _.offset.* };
-        if (!_.ensureCapacity(count)) {
+    pub static fn read(r: StackReader, count: usize): AnyMySQLError.Error!Data {
+        const offset = unsafe { r.offset.* };
+        if (!StackReader.ensureCapacity(r, count)) {
             return AnyMySQLError.Error.ShortRead;
         }
 
-        _.skip(@intCast(count));
+        StackReader.skip(r, @intCast(count));
         return Data{
-            temporary: _.buffer[offset..unsafe { _.offset.* }],
+            temporary: r.buffer[offset..unsafe { r.offset.* }],
         };
     }
 
-    pub fn readZ(*_): AnyMySQLError.Error!Data {
-        const remaining = _.peek();
+    pub static fn readZ(r: StackReader): AnyMySQLError.Error!Data {
+        const remaining = StackReader.peek(r);
         if (zero := bun.strings.indexOfChar(remaining, 0)) {
-            _.skip(@intCast(zero + 1));
+            StackReader.skip(r, @intCast(zero + 1));
             return Data{
                 temporary: remaining[0..zero],
             };

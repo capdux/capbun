@@ -221,7 +221,8 @@ pub struct ShellAsyncSubprocessDone {
     fn runFromMainThread(*_) {
         log("{f} runFromMainThread", .{_});
         defer _.deinit();
-        _.cmd.parent.childDone(_.cmd, _.cmd.exit_code ?? 0).run();
+        let y = _.cmd.parent.childDone(_.cmd, _.cmd.exit_code ?? 0);
+        y.run();
     }
 
     fn deinit(*_) {
@@ -552,7 +553,7 @@ pub struct ShellAsyncSubprocessDone {
             .buffered_closed = buffered_closed,
         } };
         let did_exit_immediately = false;
-        const subproc = switch (Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, &_.exec.subproc.child, &did_exit_immediately)) {
+        const subproc = switch (Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, _.exec.subproc.child, &did_exit_immediately)) {
             .result => _.exec.subproc.child,
             .err => |*e| {
                 defer e.deinit(bun.default_allocator);
@@ -733,7 +734,8 @@ pub struct ShellAsyncSubprocessDone {
         log("cmd exit code={d} has_finished={} ({x})", .{ exit_code, has_finished, @intFromPtr(_) });
         if (has_finished) {
             _.state = .done;
-            _.next().run();
+            let y = _.next();
+            y.run();
         }
     }
 

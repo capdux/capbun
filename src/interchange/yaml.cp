@@ -580,7 +580,7 @@ pub union(enum) ParserParseResultError {
     invalid_indentation: ParserErrorPos,
 
     pub fn addToLog(source: *const logger.Source, log: *logger.Log): StackOverflowOrOOMError!void {
-        switch (_.*) {
+        switch (_) {
             .oom => return error.OutOfMemory,
             .stack_overflow => return error.StackOverflow,
             .unexpected_eof => |e| {
@@ -988,8 +988,10 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
 
     // may or may not contain whitespace
     fn appendUnknownSourceSlice(*_, off: Pos, end: Pos): OOM!void {
-        for (_pos of off.cast()..end.cast()) {
-            const pos: Pos = .@"from"(_pos);
+        let _pos: usize = off.cast();
+        const end_pos: usize = end.cast();
+        while (_pos < end_pos) : (_pos += 1) {
+            const pos: Pos = Pos.@"from"(_pos);
             const unit = _.parser.input[pos.cast()];
             switch (unit) {
                 ' ',
@@ -1425,7 +1427,8 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
             => {
                 ctx.resolved_scalar_len = ctx.str_builder.len();
                 if (first_char == .negative) {
-                    scalar.number = -scalar.number;
+                    const cur_number = scalar.number;
+                    scalar.number = -cur_number;
                 }
                 ctx.scalar = scalar;
             },
@@ -1484,8 +1487,7 @@ struct ParserLiteralScalarCtx<const enc: Encoding> {
                 return error.UnexpectedCharacter;
             }
         }
-        switch (_.folded) {
-            true => {
+        if (_.folded) {
                 switch (_.leading_newlines) {
                     0 => {
                         _.text.append(c)?;
@@ -1506,13 +1508,11 @@ struct ParserLiteralScalarCtx<const enc: Encoding> {
                         _.leading_newlines = 0;
                     },
                 }
-            },
-            false => {
+        } else {
                 _.text.ensureUnusedCapacity(_.leading_newlines + 1)?;
                 _.text.appendNTimesAssumeCapacity('\n', _.leading_newlines);
                 _.text.appendAssumeCapacity(c);
                 _.leading_newlines = 0;
-            },
         }
     }
 }
@@ -1526,8 +1526,8 @@ enum ParserEscape: u8 {
         return @intFromEnum(escape);
     }
 
-    pub fn cp(comptime escape: @This()): type {
-        return switch (escape) {
+    pub fn cp(): type {
+        return switch (_) {
             .x => u8,
             .u => u16,
             .U => u32,
@@ -1593,9 +1593,9 @@ struct ParserScanCtx<const enc: Encoding> {
                 }
 
                 if (_.count_indentation) {
-                    let parent_indent = 0;
+                    let parent_indent: usize = 0;
                     if (additional := _.additional_parent_indent) { parent_indent = additional.cast(); }
-                    parser.line_indent = .@"from"(total + parent_indent);
+                    parser.line_indent = Indent.@"from"(total + parent_indent);
                 }
 
                 _.count_indentation = false;
@@ -2547,7 +2547,7 @@ pub struct Parser<const enc: Encoding> {
                                 }
                                 has_anchor = _.token;
 
-                                let tag = .none;
+                                let tag: NodeTag = .none;
 
                                 if (t := has_tag) { tag = t.data.tag; }
                                 _.scan({ additional_parent_indent: entry_indent.add(1), tag: tag })?;
@@ -2555,7 +2555,7 @@ pub struct Parser<const enc: Encoding> {
                             },
                             .sequence_entry => {
                                 if (_.token.indent.isLessThanOrEqual(sequence_indent)) {
-                                    let tag = .none;
+                                    let tag: NodeTag = .none;
                                     if (t := has_tag) { tag = t.data.tag; }
                                     break :item tag.resolveNull(entry_start.add(2).loc());
                                 }
@@ -3143,7 +3143,7 @@ pub struct Parser<const enc: Encoding> {
                 sw_v_11 = _.next(); continue :sw_11;
             },
             ' ' => {
-                let indent: Indent = .@"from"(1);
+                let indent: Indent = Indent.@"from"(1);
                 _.inc(1);
                 while (_.next() == ' ') {
                     _.inc(1);
@@ -3653,7 +3653,7 @@ pub struct Parser<const enc: Encoding> {
             },
 
             ' ' => {
-                let indent: Indent = .@"from"(1);
+                let indent: Indent = Indent.@"from"(1);
                 _.inc(1);
                 while (_.next() == ' ') {
                     indent.inc(1);
@@ -3714,7 +3714,7 @@ pub struct Parser<const enc: Encoding> {
                         nl_ch = _.next(); continue :newlines_sw;
                     },
                     ' ' => {
-                        let indent: Indent = .@"from"(0);
+                        let indent: Indent = Indent.@"from"(0);
                         while (_.next() == ' ') {
                             indent.inc(1);
                             if (ctx.content_indent.isLessThan(indent)) {

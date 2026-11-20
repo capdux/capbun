@@ -365,9 +365,8 @@ pub fn characters(self: ParserEscape, comptime escape: @This()) u8 {
             return @intFromEnum(escape);
     }
 
-pub fn cp(self: ParserEscape, comptime escape: @This()) type {
-        _ = self;
-            return (switch (escape) {
+pub fn cp(self: ParserEscape) type {
+            return (switch (self) {
 .x => u8,
 .u => u16,
 .U => u32,
@@ -740,8 +739,8 @@ pub const ParserParseResultError = union(enum) {
     multiple_yaml_directives: ParserErrorPos,
     invalid_indentation: ParserErrorPos,
 
-pub fn addToLog(self: *const ParserParseResultError, source: *const logger.Source, log: *logger.Log) StackOverflowOrOOMError!void {
-            switch (self.*) {
+pub fn addToLog(self: ParserParseResultError, source: *const logger.Source, log: *logger.Log) StackOverflowOrOOMError!void {
+            switch (self) {
 .oom => {
 return error.OutOfMemory;
 },
@@ -1118,23 +1117,21 @@ pub fn appendSourceSlice(self: *@This(), off: Pos, end: Pos) OOM!void {
         }
 
 pub fn appendUnknownSourceSlice(self: *@This(), off: Pos, end: Pos) OOM!void {
-                {
-                    var _pos: i32 = off.cast();
-                    _ = &_pos;
-                    const __end_4 = end.cast();
-                    while (_pos < __end_4) : (_pos += 1) {
-                        const pos: Pos = .{ .@"from" = _pos };
-                        const unit = self.parser.input[@as(usize, @intCast(pos.cast()))];
-                        switch (unit) {
+                var _pos: usize = off.cast();
+                _ = &_pos;
+                const end_pos: usize = end.cast();
+                while ((_pos < end_pos)) : (_pos = (_pos + 1)) {
+                    const pos: Pos = Pos.@"from"(_pos);
+                    const unit = self.parser.input[@as(usize, @intCast(pos.cast()))];
+                    switch (unit) {
 ' ', 9, 13, 10 => {
 _ = try self.str_builder.appendSourceWhitespace(unit, pos);
 },
 else => {
 _ = self.checkAppend();
-                        _ = try self.str_builder.appendSource(unit, pos);
+                    _ = try self.str_builder.appendSource(unit, pos);
 },
 }
-                    }
                 }
         }
 
@@ -1498,7 +1495,8 @@ first = false;
 .none, .float, .int => {
 ctx.resolved_scalar_len = ctx.str_builder.len();
                 if ((first_char == .negative)) {
-                    scalar.number = (0 - scalar).number;
+                    const cur_number = scalar.number;
+                    scalar.number = (0 - cur_number);
                 }
                 ctx.scalar = scalar;
 },
@@ -1560,39 +1558,35 @@ pub fn append(self: *@This(), c: enc.unit()) AppendError!void {
                         return error.UnexpectedCharacter;
                     }
                 }
-                switch (self.folded) {
-true => {
-switch (self.leading_newlines) {
+                if (self.folded) {
+                    switch (self.leading_newlines) {
 0 => {
 _ = try self.text.append(c);
 },
 1 => {
 if ((self.previous_indent == self.content_indent)) {
-                    _ = try self.text.appendSlice((&.{ 32, c }));
-                } else {
-                    _ = try self.text.appendSlice((&.{ 10, c }));
-                }
-                self.leading_newlines = 0;
+                        _ = try self.text.appendSlice((&.{ 32, c }));
+                    } else {
+                        _ = try self.text.appendSlice((&.{ 10, c }));
+                    }
+                    self.leading_newlines = 0;
 },
 else => {
 _ = try self.text.ensureUnusedCapacity(self.leading_newlines);
-                _ = self.text.appendNTimesAssumeCapacity(10, (self.leading_newlines - 1));
-                _ = self.text.appendAssumeCapacity(c);
-                self.leading_newlines = 0;
+                    _ = self.text.appendNTimesAssumeCapacity(10, (self.leading_newlines - 1));
+                    _ = self.text.appendAssumeCapacity(c);
+                    self.leading_newlines = 0;
 },
 }
-},
-false => {
-_ = try self.text.ensureUnusedCapacity((self.leading_newlines + 1));
-                _ = self.text.appendNTimesAssumeCapacity(10, self.leading_newlines);
-                _ = self.text.appendAssumeCapacity(c);
-                self.leading_newlines = 0;
-},
-else => unreachable,
-}
+                } else {
+                    _ = try self.text.ensureUnusedCapacity((self.leading_newlines + 1));
+                    _ = self.text.appendNTimesAssumeCapacity(10, self.leading_newlines);
+                    _ = self.text.appendAssumeCapacity(c);
+                    self.leading_newlines = 0;
+                }
         }
         const String = ParserString(enc);
-        const AppendError = (OOM or error{UnexpectedCharacter});
+        const AppendError = (OOM || error{UnexpectedCharacter});
     };
 }
 
@@ -1637,13 +1631,13 @@ var total: usize = 1;
                     total = (total + 1);
                 }
                 if (self.count_indentation) {
-                    var parent_indent: i32 = 0;
+                    var parent_indent: usize = 0;
                     _ = &parent_indent;
                     if (self.additional_parent_indent) |additional| {
                         _ = &additional;
                         parent_indent = additional.cast();
                     }
-                    parser.line_indent = .{ .@"from" = (total + parent_indent) };
+                    parser.line_indent = Indent.@"from"((total + parent_indent));
                 }
                 self.count_indentation = false;
                 return parser.next();
@@ -1936,8 +1930,7 @@ pub fn isEmpty(self: @This()) bool {
 });
         }
 
-pub fn eql(self: @This(), l: *const @This(), r: []const u8, input: []const enc.unit()) bool {
-            _ = self;
+pub fn eql(l: *const @This(), r: []const u8, input: []const enc.unit()) bool {
                 const l_slice = l.slice(input);
                 return std.mem.eql(enc.unit(), l_slice, r);
         }
@@ -2417,7 +2410,7 @@ _ = &anchor;
                                 return error.UnexpectedToken;
                             }
                             has_anchor = self.token;
-                            var tag = .none;
+                            var tag: NodeTag = .none;
                             _ = &tag;
                             if (has_tag) |t| {
                                 _ = &t;
@@ -2429,7 +2422,7 @@ _ = &anchor;
 },
 .sequence_entry => {
 if (self.token.indent.isLessThanOrEqual(sequence_indent)) {
-                                var tag = .none;
+                                var tag: NodeTag = .none;
                                 _ = &tag;
                                 if (has_tag) |t| {
                                     _ = &t;
@@ -2890,7 +2883,7 @@ total = (total + 1);
                     continue :sw_11;
 },
 ' ' => {
-var indent: Indent = .{ .@"from" = 1 };
+var indent: Indent = Indent.@"from"(1);
                     _ = &indent;
                     _ = self.inc(1);
                     while ((self.next() == 32)) {
@@ -3315,7 +3308,7 @@ _ = self.newline();
                     continue :first_sw;
 },
 ' ' => {
-var indent: Indent = .{ .@"from" = 1 };
+var indent: Indent = Indent.@"from"(1);
                     _ = &indent;
                     _ = self.inc(1);
                     while ((self.next() == 32)) {
@@ -3377,7 +3370,7 @@ ctx.leading_newlines = (ctx.leading_newlines + 1);
                         continue :newlines_sw;
 },
 ' ' => {
-var indent: Indent = .{ .@"from" = 0 };
+var indent: Indent = Indent.@"from"(0);
                         _ = &indent;
                         while ((self.next() == 32)) {
                             _ = indent.inc(1);
@@ -4626,18 +4619,18 @@ pub fn stringBuilder(self: *@This()) String.Builder {
                 InvalidIndentation,
             };
         const LiteralScalarCtx = ParserLiteralScalarCtx(enc);
-        const ScanSingleQuotedScalarError = (OOM or error{
+        const ScanSingleQuotedScalarError = (OOM || error{
                 UnexpectedCharacter,
                 UnexpectedDocumentStart,
                 UnexpectedDocumentEnd,
             });
-        const ScanDoubleQuotedScalarError = (OOM or error{
+        const ScanDoubleQuotedScalarError = (OOM || error{
                 UnexpectedCharacter,
                 UnexpectedDocumentStart,
                 UnexpectedDocumentEnd,
             });
         const Escape = ParserEscape;
-        const DecodeHexCodePointError = (OOM or error{UnexpectedCharacter});
+        const DecodeHexCodePointError = (OOM || error{UnexpectedCharacter});
         const ScanTagPropertyError = error{ UnresolvedTagHandle, UnexpectedCharacter };
         const ScanError = error{
                 OutOfMemory,

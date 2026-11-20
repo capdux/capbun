@@ -124,3 +124,12 @@
 - **元组按索引访问/赋值 comptime 失败**：`t[i] = v` / `t[0]` 会被插入 `cp_cast_int(usize, ...)` 导致 comptime 失败；改用 `@field(t, "0")` 或 `@field(t, std.fmt.comptimePrint("{d}", .{ i }))`。
 - **局部对象取址 `&local` 防剥离**：实参或字段赋值中的 `&local` 若被剥离 `&`，包裹 `unsafe { &local }` 可稳定保留取址。
 - **纯错误集返回值（非错误联合）丢弃**：如 `throwOutOfMemory()` / `throwError()` 返回 `bun.JSError` 时不可用 `catch {}` 或 `* =`，应写 `if (call() == error.JSError) {}`。
+- **同名标识符类型串扰**：同函数内同名局部/字段（如 `channel`、第二个 `.err |e|`、`resolver` 捕获遮蔽形参）会让 `cpc` 误推导类型，改名规避。
+- **`switch(bool)`**：会被追加 `else => unreachable` 导致 Zig 报错，改 `if/else`。
+- **`x = y ?? .z`**（x 为字段）：会被降成 `if (x == null)`，用中间 const。
+- **`if (*v := opt) return v`**：会被降成 `v.*`。
+- **一元负号作用于 `a.b`**：优先级错成 `(0 - a).b`，先取局部变量再取负。
+- **`let x: [N]u8` 中含调用表达式**：会降成 `struct {…}`，ast-check 仍过，需检查生成的 `.zig`；改 `const n = comptime f(); [n]u8`。
+- **向 `void` 值参数传 `{}`**：会降成 `.{}`，用 `undefined`。
+- **单参方法调用 `x.isLocked(a)`**：会丢实参，改 `const f = T.isLocked; f(x, a)`。
+- **`err` 作枚举/联合成员名**：会被改写成 `e`，需写 `@"err"`。

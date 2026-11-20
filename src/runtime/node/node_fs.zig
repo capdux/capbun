@@ -282,15 +282,11 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             defer {
             _ = tracker.didDispatch(globalObject);
             }
-            switch (success) {
-false => {
-_ = try promise.reject(globalObject, result);
-},
-true => {
-_ = try promise.resolve(globalObject, result);
-},
-else => unreachable,
-}
+            if (success) {
+                _ = try promise.resolve(globalObject, result);
+            } else {
+                _ = try promise.reject(globalObject, result);
+            }
     }
 
 pub fn deinit(self: *@This()) void {
@@ -376,15 +372,11 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
                     }
                 }
             }
-            switch (success) {
-false => {
-_ = try promise.reject(globalObject, result);
-},
-true => {
-_ = try promise.resolve(globalObject, result);
-},
-else => unreachable,
-}
+            if (success) {
+                _ = try promise.resolve(globalObject, result);
+            } else {
+                _ = try promise.reject(globalObject, result);
+            }
     }
 
 pub fn deinit(self: *@This()) void {
@@ -697,15 +689,11 @@ pub fn runFromJSThread(self: *AsyncReaddirRecursiveTask) bun.JSTerminated!void {
             _ = tracker.didDispatch(globalObject);
             }
             _ = self.deinit();
-            switch (success) {
-false => {
-_ = try promise.reject(globalObject, result);
-},
-true => {
-_ = try promise.resolve(globalObject, result);
-},
-else => unreachable,
-}
+            if (success) {
+                _ = try promise.resolve(globalObject, result);
+            } else {
+                _ = try promise.reject(globalObject, result);
+            }
     }
 
 pub fn deinit(self: *AsyncReaddirRecursiveTask) void {
@@ -2672,7 +2660,8 @@ pub const Return = struct {
                 return jsc.JSValue.fromAny(globalObject, BufferSlice, self.buffers);
     },
     .files => {
-    
+    const StringSlice = @TypeOf(self.files);
+                return jsc.JSValue.fromAny(globalObject, StringSlice, self.files);
     },
     }
         }
@@ -3385,7 +3374,7 @@ pub fn _isSep(char: bun.OSPathChar) bool {
     }
 
 pub fn mkdirRecursiveOSPath(self: *NodeFS, path: bun.OSPathSliceZ, mode: Mode, comptime return_path: bool) Maybe(Return.Mkdir) {
-            return self.mkdirRecursiveOSPathImpl(void, .{}, path, mode, return_path);
+            return self.mkdirRecursiveOSPathImpl(void, undefined, path, mode, return_path);
     }
 
 pub fn mkdirRecursiveOSPathImpl(self: *NodeFS, comptime Ctx: type, ctx: Ctx, path: bun.OSPathSliceZ, mode: Mode, comptime return_path: bool) Maybe(Return.Mkdir) {
@@ -4835,7 +4824,8 @@ pub fn watchFile(self: *NodeFS, args: Arguments.WatchFile, comptime flavor: Flav
             _ = bun.default_allocator.free(buf);
             }
             const sys_err = jsc.SystemError{ .message = bun.String.init(buf), .code = bun.String.init(@errorName(e)), .path = bun.String.init(args.path.slice()) };
-            _ = (blk_catch_33: { break :blk_catch_33 ((args.global_this.throwValue(sys_err.toErrorInstance(args.global_this))) catch |__ce_33| { _ = &__ce_33;  }); });
+            if ((args.global_this.throwValue(sys_err.toErrorInstance(args.global_this)) == error.JSError)) {
+            }
             const WatchRes = Maybe(Return.Watch);
             _ = &WatchRes;
             return WatchRes{ .result = .js_undefined }; }); });
@@ -5105,7 +5095,7 @@ pub fn _cpSymlink(self: *NodeFS, src: [:0]const u8, dest: [:0]const u8) Maybe(Re
             var resolved_buf: bun.PathBuffer = undefined;
             _ = &resolved_buf;
             const src_dir = bun.path.dirname(src, .posix);
-            const cwd = (blk_catch_34: { break :blk_catch_34 ((bun.getcwd((&cwd_buf))) catch |__ce_34| { _ = &__ce_34; return Syscall.symlink(link_target, dest); }); });
+            const cwd = (blk_catch_33: { break :blk_catch_33 ((bun.getcwd((&cwd_buf))) catch |__ce_33| { _ = &__ce_33; return Syscall.symlink(link_target, dest); }); });
             const resolved_opt = bun.path.joinAbsStringBufChecked(cwd, resolved_buf[0..(resolved_buf.len - 1)], (&.{ src_dir, link_target }), .posix);
             if ((resolved_opt == null)) {
                 _ = @memcpy(self.sync_error_buf[0..src.len], src);
@@ -5221,7 +5211,7 @@ break :dest_fd result;
                 }
                 const first_try = ((ret.errnoSysP(c.copyfile(src, dest, null, mode_), .copyfile, src)) orelse { return ret.success; });
                 if (((first_try == .err) and (first_try.err.errno == @intFromEnum(Syscall.E.NOENT)))) {
-                    _ = (blk_catch_35: { break :blk_catch_35 ((bun.makePath(std.fs.cwd(), bun.path.dirname(dest, .auto))) catch |__ce_35| { _ = &__ce_35;  }); });
+                    _ = (blk_catch_34: { break :blk_catch_34 ((bun.makePath(std.fs.cwd(), bun.path.dirname(dest, .auto))) catch |__ce_34| { _ = &__ce_34;  }); });
                     return ((ret.errnoSysP(c.copyfile(src, dest, null, mode_), .copyfile, src)) orelse (ret.success));
                 }
                 return first_try;
@@ -5497,7 +5487,7 @@ else => |result| result,
 errpath = dest;
 },
 .PATH_NOT_FOUND => {
-_ = (blk_catch_36: { break :blk_catch_36 ((bun.makePathW(std.fs.cwd(), bun.path.dirnameW(dest))) catch |__ce_36| { _ = &__ce_36;  }); });
+_ = (blk_catch_35: { break :blk_catch_35 ((bun.makePathW(std.fs.cwd(), bun.path.dirnameW(dest))) catch |__ce_35| { _ = &__ce_35;  }); });
                         const second_try = windows.CopyFileW(src, dest, @intFromBool(mode.shouldntOverwrite()));
                         if ((second_try > 0)) {
                             return ret.success;
@@ -5770,15 +5760,11 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             _ = tracker.didDispatch(globalObject);
             }
             _ = self.deinit();
-            switch (success) {
-false => {
-_ = try promise.reject(globalObject, result);
-},
-true => {
-_ = try promise.resolve(globalObject, result);
-},
-else => unreachable,
-}
+            if (success) {
+                _ = try promise.resolve(globalObject, result);
+            } else {
+                _ = try promise.reject(globalObject, result);
+            }
     }
 
 pub fn deinit(self: *@This()) void {
@@ -6035,7 +6021,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                 handle_entry: while (true) {
                     if (treat_as_dir) {
                         if ((stack.unusedCapacitySlice().len >= 1)) {
-                            var iterable_dir = (blk_catch_37: { break :blk_catch_37 ((top.iter.dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_37 (__sw_blk_8: { const __disc_8 = e; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .NotDir)) {  treat_as_dir = false;
+                            var iterable_dir = (blk_catch_36: { break :blk_catch_36 ((top.iter.dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_36 (__sw_blk_8: { const __disc_8 = e; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .NotDir)) {  treat_as_dir = false;
                             break :__sw_blk_8 cp_val(continue :handle_entry); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if ((cp_match_tag(__err_v_8, .FileNotFound) or cp_match_tag(__err_v_8, .AccessDenied) or cp_match_tag(__err_v_8, .PermissionDenied) or cp_match_tag(__err_v_8, .ProcessNotFound) or cp_match_tag(__err_v_8, .SymLinkLoop) or cp_match_tag(__err_v_8, .ProcessFdQuotaExceeded) or cp_match_tag(__err_v_8, .NameTooLong) or cp_match_tag(__err_v_8, .SystemFdQuotaExceeded) or cp_match_tag(__err_v_8, .NoDevice) or cp_match_tag(__err_v_8, .SystemResources) or cp_match_tag(__err_v_8, .Unexpected) or cp_match_tag(__err_v_8, .InvalidUtf8) or cp_match_tag(__err_v_8, .InvalidWtf8) or cp_match_tag(__err_v_8, .BadPathName) or cp_match_tag(__err_v_8, .NetworkNotFound) or cp_match_tag(__err_v_8, .DeviceBusy))) {  return e; } }  unreachable; }); }); });
                             _ = &iterable_dir;
                             _ = stack.appendAssumeCapacity(.{ .name = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .parent_dir = top.iter.dir, .iter = iterable_dir.iterateAssumeFirstIteration() });
@@ -6045,7 +6031,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                             break :handle_entry;
                         }
                     } else {
-                        _ = (blk_catch_38: { break :blk_catch_38 ((top.iter.dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.IsDir)) {
+                        _ = (blk_catch_37: { break :blk_catch_37 ((top.iter.dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.IsDir)) {
                             treat_as_dir = true;
                             continue :handle_entry;
                         }
@@ -6060,7 +6046,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
             stack.items.len = (stack.items.len - 1);
             var need_to_retry: bool = false;
             _ = &need_to_retry;
-            _ = (blk_catch_39: { break :blk_catch_39 ((parent_dir.deleteDir(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+            _ = (blk_catch_38: { break :blk_catch_38 ((parent_dir.deleteDir(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
             } else {
                 if ((e == error.DirNotEmpty)) {
                     need_to_retry = true;
@@ -6074,7 +6060,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                 _ = &treat_as_dir;
                 handle_entry: while (true) {
                     if (treat_as_dir) {
-                        break :iterable_dir (blk_catch_40: { break :blk_catch_40 ((parent_dir.openDir(name, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
+                        break :iterable_dir (blk_catch_39: { break :blk_catch_39 ((parent_dir.openDir(name, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
                             treat_as_dir = false;
                             continue :handle_entry;
                         } else {
@@ -6084,7 +6070,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                         }
                         return e; }); });
                     } else {
-                        _ = (blk_catch_41: { break :blk_catch_41 ((parent_dir.deleteFile(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                        _ = (blk_catch_40: { break :blk_catch_40 ((parent_dir.deleteFile(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                             continue :process_stack;
                         }
                         if ((e == error.NotDir)) {
@@ -6116,13 +6102,13 @@ pub fn zigDeleteTreeOpenInitialSubpath(client: std.fs.Dir, sub_path: []const u8,
         _ = &treat_as_dir;
         handle_entry: while (true) {
             if (treat_as_dir) {
-                break :iterable_dir (blk_catch_42: { break :blk_catch_42 ((client.openDir(sub_path, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_42 (switch (e) {
+                break :iterable_dir (blk_catch_41: { break :blk_catch_41 ((client.openDir(sub_path, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_41 (switch (e) {
 error.NotDir, error.FileNotFound, error.AccessDenied, error.PermissionDenied, error.ProcessNotFound, error.SymLinkLoop, error.ProcessFdQuotaExceeded, error.NameTooLong, error.SystemFdQuotaExceeded, error.NoDevice, error.SystemResources, error.Unexpected, error.InvalidUtf8, error.InvalidWtf8, error.BadPathName, error.DeviceBusy, error.NetworkNotFound => {
 return e;
 },
 }); }); });
             } else {
-                _ = (blk_catch_43: { break :blk_catch_43 ((client.deleteFile(sub_path)) catch |e| { _ = &e; if ((e == error.IsDir)) {
+                _ = (blk_catch_42: { break :blk_catch_42 ((client.deleteFile(sub_path)) catch |e| { _ = &e; if ((e == error.IsDir)) {
                     treat_as_dir = true;
                     continue :handle_entry;
                 }
@@ -6166,7 +6152,7 @@ pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []con
                     _ = &treat_as_dir;
                     handle_entry: while (true) {
                         if (treat_as_dir) {
-                            const new_dir = (blk_catch_44: { break :blk_catch_44 ((dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
+                            const new_dir = (blk_catch_43: { break :blk_catch_43 ((dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
                                 treat_as_dir = false;
                                 continue :handle_entry;
                             } else {
@@ -6186,7 +6172,7 @@ pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []con
                             dir_name = result;
                             continue :scan_dir;
                         } else {
-                            _ = (blk_catch_45: { break :blk_catch_45 ((dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                            _ = (blk_catch_44: { break :blk_catch_44 ((dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                                 continue :dir_it;
                             }
                             if ((e == error.NotDir)) {
@@ -6209,13 +6195,13 @@ pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []con
                 cleanup_dir = false;
                 if (cleanup_dir_parent) |d| {
                     _ = &d;
-                    _ = (blk_catch_46: { break :blk_catch_46 ((d.deleteDir(dir_name)) catch |e| { _ = &e; if (((e == error.FileNotFound) or (e == error.DirNotEmpty))) {
+                    _ = (blk_catch_45: { break :blk_catch_45 ((d.deleteDir(dir_name)) catch |e| { _ = &e; if (((e == error.FileNotFound) or (e == error.DirNotEmpty))) {
                         continue :start_over;
                     }
                     return e; }); });
                     continue :start_over;
                 } else {
-                    _ = (blk_catch_47: { break :blk_catch_47 ((client.deleteDir(sub_path)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                    _ = (blk_catch_46: { break :blk_catch_46 ((client.deleteDir(sub_path)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                         return;
                     }
                     if ((e == error.DirNotEmpty)) {

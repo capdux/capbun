@@ -1716,3 +1716,5 @@
 - **[2026-11-20] errset-merge-or 重编 + Wave 17 A 组**：重编 `src/{bun,bundler/linker_context/scanImportsAndExports,cli/{pack,publish}_command,runtime/crypto/PasswordObject,runtime/image/backend_{wic,coregraphics},install/{resolution,PnpmMatcher,lockfile/bun.lock,npm,NetworkTask,PackageManager/PopulateManifestCache}}.zig`；Wave 17 A 组更新 `runtime/{webcore/{Blob,Body,s3/client},webcore,server/{RequestContext,server,ServerWebSocket}}`、`uws_sys/App`、`bake/DevServer{,/IncrementalGraph}`、`http/HTTPContext`、`http_jsc/websocket_client/WebSocketUpgradeClient`。
 
 - **[2026-11-20] Wave 17 C 组 (6 模块)**：更新 `src/uws_sys/Response`、`src/bake/DevServer{,/Assets,/RouteBundle}`、`src/runtime/webcore/fetch`、`src/runtime/server/server`（.cp/.zig）。
+
+- **[2026-11-20] Wave 17 B 组 (18 模块)**：更新 `src/runtime/dns_jsc/{dns,cares_jsc}`, `src/cares_sys/c_ares`, `src/sql/mysql/protocol/{NewReader,StackReader}`, `src/shell/{shell,Builtin,Yield,states/Cmd,builtin/rm}`, `src/runtime/node/{types,node_fs}`, `src/interchange/yaml`, `src/paths/resolve_path`, `src/resolver/{resolver,fs}`, `src/test_runner/pretty_format`, `src/jsc/VirtualMachine`。

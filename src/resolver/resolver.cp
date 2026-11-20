@@ -83,7 +83,8 @@ struct Bufs {
     win32_normalized_dir_info_cache: if (Environment.isWindows) [WIN32_CACHE_LEN]u8 else void = undefined,
 }
 
-let bufs_storage = bun.ThreadlocalBuffers(Bufs);
+const bufs_storage = bun.ThreadlocalBuffers(Bufs);
+const css_extension_order: [1]string = [".css"];
 
 inline fn bufs(comptime field: std.@"meta".FieldEnum(Bufs)): *@FieldType(Bufs, @tagName(field)) {
     return &@field(bufs_storage.get(), @tagName(field));
@@ -109,7 +110,7 @@ pub struct PathPairIter {
         switch (ind) {
             0 => return &_.ctx.primary,
             1 => {
-                if (*sec := _.ctx.secondary) return sec;
+                if (_.ctx.secondary != null) return &_.ctx.secondary.?;
                 return null;
             },
             else => return null,
@@ -243,8 +244,8 @@ pub struct Result {
         if (!_.path_pair.primary.is_disabled)
             return &_.path_pair.primary;
 
-        if (*second := _.path_pair.secondary) {
-            if (!second.is_disabled) return second;
+        if (_.path_pair.secondary != null) {
+            if (!_.path_pair.secondary.?.is_disabled) return &_.path_pair.secondary.?;
         }
 
         return null;
@@ -254,8 +255,8 @@ pub struct Result {
         if (!_.path_pair.primary.is_disabled)
             return &_.path_pair.primary;
 
-        if (*second := _.path_pair.secondary) {
-            if (!second.is_disabled) return second;
+        if (_.path_pair.secondary != null) {
+            if (!_.path_pair.secondary.?.is_disabled) return &_.path_pair.secondary.?;
         }
 
         return null;
@@ -799,7 +800,7 @@ pub struct Resolver {
         const original_order = r.extension_order;
         defer r.extension_order = original_order;
         r.extension_order = switch (kind) {
-            .url, .at_conditional, .at => options.BundleOptions.Defaults.CSSExtensionOrder[0..],
+            .url, .at_conditional, .at => css_extension_order[0..],
             .entry_point_build, .entry_point_run, .stmt, .dynamic => r.opts.extension_order.default.esm,
             else => r.opts.extension_order.default.default,
         };
@@ -821,7 +822,7 @@ pub struct Resolver {
             r.debug_logs = DebugLogs.init(r.allocator) catch unreachable;
         }
 
-        if (import_path.len == 0) return { not_found: {} };
+        if (import_path.len == 0) return .not_found;
 
         if (r.opts.mark_builtins_as_external) {
             if (strings.hasPrefixComptime(import_path, "node:") ||
@@ -957,7 +958,7 @@ pub struct Resolver {
                         };
                     }
 
-                    return { not_found: {} };
+                    return .not_found;
                 } else if (bun.StandaloneModuleGraph.isBunStandaloneFilePath(source_dir)) {
                     if (import_path.len > 2 && isDotSlash(import_path[0..2])) {
                         let buf = bufs(.import_path_for_standalone_module_graph);
@@ -1022,7 +1023,7 @@ pub struct Resolver {
         // anyways would cause assertion failures.
         if (bun.strings.containsChar(import_path, 0)) {
             r.flushDebugLogs(.fail) catch {};
-            return { not_found: {} };
+            return .not_found;
         }
 
         let tmp = r.resolveWithoutSymlinks(source_dir_normalized, import_path, kind, global_cache);
@@ -1090,7 +1091,7 @@ pub struct Resolver {
             },
             .not_found => {
                 r.flushDebugLogs(.fail) catch {};
-                return { not_found: {} };
+                return .not_found;
             },
         }
     }
@@ -1286,7 +1287,9 @@ pub struct Resolver {
                         import_path[import_path.len - 2] == '.' &&
                         import_path[import_path.len - 1] == '.');
                 let buf = bufs(.relative_abs_path);
-                import_path = r.fs.absBufChecked(&.{import_path}, buf) ?? return { not_found: {} };
+                const checked_import = r.fs.absBufChecked(&.{import_path}, buf);
+                if (checked_import == null) return .not_found;
+                import_path = checked_import.?;
                 if (ends_with_dir) {
                     buf[import_path.len] = platform.separator();
                     import_path.len += 1;
@@ -1352,7 +1355,7 @@ pub struct Resolver {
                 };
             }
 
-            return { not_found: {} };
+            return .not_found;
         }
 
         // Check both relative and package paths for CSS URL tokens, with relative
@@ -1374,7 +1377,7 @@ pub struct Resolver {
                     }
                 }
                 bun.debugAssert(!check_package); // always from JavaScript
-                return { not_found: {} }; // bail out now since there isn't anywhere else to check
+                return .not_found; // bail out now since there isn't anywhere else to check
             } else {
                 switch (r.checkRelativePath(source_dir, import_path, kind, global_cache)) {
                     .success => |res| return { success: res },
@@ -1401,7 +1404,7 @@ pub struct Resolver {
                 if (had_node_prefix) {
                     // Module resolution fails automatically for unknown node builtins
                     if (!bun.jsc.ModuleLoader.HardcodedModule.Alias.has(import_path_without_node_prefix, .node, {})) {
-                        return { not_found: {} };
+                        return .not_found;
                     }
 
                     // Valid node:* modules becomes {} in the output
@@ -1478,11 +1481,13 @@ pub struct Resolver {
             }
         }
 
-        return { not_found: {} };
+        return .not_found;
     }
 
     static fn checkRelativePath(r: *ThisResolver, source_dir: string, import_path: string, kind: ast.ImportKind, global_cache: GlobalCache): Result.Union {
-        const abs_path = r.fs.absBufChecked(&.{ source_dir, import_path }, bufs(.relative_abs_path)) ?? return { not_found: {} };
+        const abs_path_checked = r.fs.absBufChecked(&.{ source_dir, import_path }, bufs(.relative_abs_path));
+        if (abs_path_checked == null) return .not_found;
+        const abs_path = abs_path_checked.?;
 
         if (r.opts.external.abs_paths.count() > 0 && r.opts.external.abs_paths.contains(abs_path)) {
             // If the string literal in the source text is an absolute path and has
@@ -1558,25 +1563,25 @@ pub struct Resolver {
                 jsx: r.opts.jsx,
             } };
         } else {
-            return { not_found: {} };
+            return .not_found;
         }
     }
 
     static fn checkPackagePath(r: *ThisResolver, source_dir: string, unremapped_import_path: string, kind: ast.ImportKind, global_cache: GlobalCache): Result.Union {
         let import_path = unremapped_import_path;
         let source_dir_info: *DirInfo = brk: {
-            if (cached := r.dirInfoCached(source_dir) catch return { not_found: {} }) {
+            if (cached := r.dirInfoCached(source_dir) catch return .not_found) {
                 break :brk cached;
             }
             if (Environment.allow_assert)
                 bun.assert(isPackagePath(import_path));
             let closest_dir = source_dir;
             while (current := std.fs.path.dirname(closest_dir)) : (closest_dir = current) {
-                if (dir := r.dirInfoCached(current) catch return { not_found: {} }) {
+                if (dir := r.dirInfoCached(current) catch return .not_found) {
                     break :brk dir;
                 }
             }
-            return { not_found: {} };
+            return .not_found;
         };
 
         if (r.care_about_browser_field) {
@@ -1703,7 +1708,7 @@ pub struct Resolver {
             },
             .pending => |p| return { pending: p },
             .failure => |p| return { failure: p },
-            else => return { not_found: {} },
+            else => return .not_found,
         }
     }
 
@@ -1956,7 +1961,7 @@ pub struct Resolver {
 
                     if (pkg_dir_info := r.dirInfoCached(abs_package_path) catch null) {
                         r.extension_order = switch (kind) {
-                            .url, .at_conditional, .at => options.BundleOptions.Defaults.CSSExtensionOrder[0..],
+                            .url, .at_conditional, .at => css_extension_order[0..],
                             else => r.opts.extension_order.kind(kind, true),
                         };
 
@@ -2034,7 +2039,7 @@ pub struct Resolver {
                                     };
                                 }
 
-                                return { not_found: {} };
+                                return .not_found;
                             }
                         }
                     }
@@ -2189,7 +2194,7 @@ pub struct Resolver {
                         .pending => |pending| return { pending: pending },
                         .failure => |e| return { failure: e },
                         // this means we looked it up in the registry and the package doesn't exist or the version doesn't exist
-                        .not_found => return { not_found: {} },
+                        .not_found => return .not_found,
                     }
                 };
 
@@ -2211,7 +2216,7 @@ pub struct Resolver {
                             },
                             .extract, .extracting => |st| {
                                 if (!global_cache.canInstall()) {
-                                    return { not_found: {} };
+                                    return .not_found;
                                 }
                                 let builder = Semver.String.Builder{};
                                 esm.count(&builder);
@@ -2324,12 +2329,12 @@ pub struct Resolver {
                                     };
                                 }
 
-                                return { not_found: {} };
+                                return .not_found;
                             }
                         }
 
                         const abs_path_opt = r.fs.absBufChecked(&[pkg_dir_info.abs_path, esm.subpath], bufs(.node_modules_check));
-                        if (abs_path_opt == null) return { not_found: {} };
+                        if (abs_path_opt == null) return .not_found;
                         const abs_path = abs_path_opt.?;
                         if (*debug := r.debug_logs) {
                             debug.addNoteFmt("Checking for a package in the directory \"{s}\"", .{abs_path});
@@ -2344,7 +2349,7 @@ pub struct Resolver {
             }
         }
 
-        return { not_found: {} };
+        return .not_found;
     }
     static fn dirInfoForResolution(
         r: *ThisResolver,
@@ -2393,7 +2398,7 @@ pub struct Resolver {
         if (needs_iter) {
             const allocator = bun.default_allocator;
             let dir_name_str: string = "";
-            let existing_data_ptr: (*Fs.FileSystem.DirEntry.Data)? = null;
+            let existing_data_ptr: (*@FieldType(Fs.FileSystem.DirEntry, "data"))? = null;
             if (existing := in_place) {
                 dir_name_str = existing.dir;
                 existing_data_ptr = &existing.data;
@@ -2413,7 +2418,7 @@ pub struct Resolver {
                     &_value,
                     allocator,
                     void,
-                    {},
+                    undefined,
                 ) catch unreachable;
             }
             if (existing := in_place) {
@@ -2560,7 +2565,7 @@ pub struct Resolver {
                     };
                 },
                 .not_found => {
-                    return { not_found: {} };
+                    return .not_found;
                 },
                 .failure => |e| {
                     return { failure: e };
@@ -2721,12 +2726,12 @@ pub struct Resolver {
             return r.loadNodeModules(import_path, kind, source_dir_info, global_cache, false);
         } else {
             const resolved_opt = r.fs.absBufChecked(&[source_dir_info.abs_path, import_path], bufs(.resolve_without_remapping));
-            if (resolved_opt == null) return { not_found: {} };
+            if (resolved_opt == null) return .not_found;
             const resolved = resolved_opt.?;
             if (result := r.loadAsFileOrDirectory(resolved, kind)) {
                 return { success: result };
             }
-            return { not_found: {} };
+            return .not_found;
         }
     }
 
@@ -3133,7 +3138,7 @@ pub struct Resolver {
             if (needs_iter) {
                 const allocator = bun.default_allocator;
                 let dir_name_str: string = "";
-                let existing_data_ptr: (*Fs.FileSystem.DirEntry.Data)? = null;
+                let existing_data_ptr: (*@FieldType(Fs.FileSystem.DirEntry, "data"))? = null;
                 if (existing := in_place) {
                     dir_name_str = existing.dir;
                     existing_data_ptr = &existing.data;
@@ -3153,7 +3158,7 @@ pub struct Resolver {
                         &_value,
                         allocator,
                         void,
-                        {},
+                        undefined,
                     ) catch unreachable;
                 }
                 if (existing := in_place) {
@@ -3343,7 +3348,7 @@ pub struct Resolver {
             if (*debug := r.debug_logs) {
                 debug.addNoteFmt("The path \"{s}\" must not equal \"#\" and must not start with \"#/\"", .{import_path});
             }
-            return { not_found: {} };
+            return .not_found;
         }
         let module_type = options.ModuleType.unknown;
 
@@ -3397,7 +3402,7 @@ pub struct Resolver {
             return { success: result };
         }
 
-        return { not_found: {} };
+        return .not_found;
     }
 
     static fn checkBrowserMap(

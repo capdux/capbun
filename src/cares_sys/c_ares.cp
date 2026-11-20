@@ -531,7 +531,7 @@ pub const Channel = opaque {
             hints_buf[i] = hint;
         }
         const hints_: [*c]const AddrInfo_hints = if (hints.len > 0) &hints_buf else null;
-        ares_getaddrinfo(this, host_ptr, port_ptr, hints_, AddrInfo.callbackWrapper(Type, callback), ctx);
+        ares_getaddrinfo(this, @constCast(host_ptr), @constCast(port_ptr), hints_, AddrInfo.callbackWrapper(Type, callback), ctx);
     }
 
     pub fn resolve(this: *Channel, name: []const u8, comptime lookup_name: []const u8, comptime Type: type, ctx: *Type, comptime cares_type: type, comptime callback: cares_type.Callback(Type)) void {
@@ -664,7 +664,7 @@ pub extern fn ares_set_local_dev(channel: *Channel, local_dev_name: [*c]const u8
 pub extern fn ares_set_socket_callback(channel: *Channel, callback: ares_sock_create_callback, user_data: *!?) ;
 pub extern fn ares_set_socket_configure_callback(channel: *Channel, callback: ares_sock_config_callback, user_data: *!?) ;
 pub extern fn ares_set_sortlist(channel: *Channel, sortstr: [*c]const u8): c_int;
-pub extern fn ares_getaddrinfo(channel: *Channel, node: [*:0]const u8?, service: [*:0]const u8?, hints: [*c]const AddrInfo_hints, callback: ares_addrinfo_callback, arg: *!?) ;
+pub extern fn ares_getaddrinfo(channel: *Channel, node: ([*:0]const u8)?, service: ([*:0]const u8)?, hints: [*c]const AddrInfo_hints, callback: ares_addrinfo_callback, arg: *!?) ;
 pub extern fn ares_freeaddrinfo(ai: *AddrInfo) ;
 pub const ares_socket_functions = extern struct {
     socket: ?*const fn (c_int, c_int, c_int, *!?) callconv(.c) ares_socket_t = null,
@@ -1112,11 +1112,11 @@ pub const struct_any_reply = struct {
         bun.default_allocator.destroy(this);
     }
 };
-pub extern fn ares_parse_a_reply(abuf: [*c]const u8, alen: c_int, host: [*c]*struct_hostent?, addrttls: [*c]struct_ares_addrttl, naddrttls: [*c]c_int): c_int;
-pub extern fn ares_parse_aaaa_reply(abuf: [*c]const u8, alen: c_int, host: [*c]*struct_hostent?, addrttls: [*c]struct_ares_addr6ttl, naddrttls: [*c]c_int): c_int;
+pub extern fn ares_parse_a_reply(abuf: [*c]const u8, alen: c_int, host: *(*struct_hostent)?, addrttls: [*c]struct_ares_addrttl, naddrttls: [*c]c_int): c_int;
+pub extern fn ares_parse_aaaa_reply(abuf: [*c]const u8, alen: c_int, host: *(*struct_hostent)?, addrttls: [*c]struct_ares_addr6ttl, naddrttls: [*c]c_int): c_int;
 pub extern fn ares_parse_caa_reply(abuf: [*c]const u8, alen: c_int, caa_out: [*c][*c]struct_ares_caa_reply): c_int;
-pub extern fn ares_parse_ptr_reply(abuf: [*c]const u8, alen: c_int, addr: *!?, addrlen: c_int, family: c_int, host: [*c]*struct_hostent?): c_int;
-pub extern fn ares_parse_ns_reply(abuf: [*c]const u8, alen: c_int, host: [*c]*struct_hostent?): c_int;
+pub extern fn ares_parse_ptr_reply(abuf: [*c]const u8, alen: c_int, addr: *!?, addrlen: c_int, family: c_int, host: *(*struct_hostent)?): c_int;
+pub extern fn ares_parse_ns_reply(abuf: [*c]const u8, alen: c_int, host: *(*struct_hostent)?): c_int;
 pub extern fn ares_parse_srv_reply(abuf: [*c]const u8, alen: c_int, srv_out: [*c][*c]struct_ares_srv_reply): c_int;
 pub extern fn ares_parse_mx_reply(abuf: [*c]const u8, alen: c_int, mx_out: [*c][*c]struct_ares_mx_reply): c_int;
 pub extern fn ares_parse_txt_reply(abuf: [*c]const u8, alen: c_int, txt_out: [*c][*c]struct_ares_txt_reply): c_int;

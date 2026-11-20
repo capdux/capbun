@@ -1209,9 +1209,19 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
     }
 
     let count: usize = 0;
-    inline for (part of parts) {
-        if (part.len == 0) continue;
-        count += part.len + 1;
+    const parts_is_tuple = comptime @typeInfo(@TypeOf(parts)) == .@"struct" || (@typeInfo(@TypeOf(parts)) == .pointer && @typeInfo(@typeInfo(@TypeOf(parts)).pointer.child) == .@"struct");
+    if (comptime parts_is_tuple) {
+        inline for (part of parts) {
+            if (part.len != 0) {
+                count += part.len + 1;
+            }
+        }
+    } else {
+        for (part of parts) {
+            if (part.len != 0) {
+                count += part.len + 1;
+            }
+        }
     }
 
     if (count * 2 > temp_buf.len) {
@@ -1221,21 +1231,41 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
 
     temp_buf[0] = @as(T, 0);
 
-    inline for (part of parts) {
-        if (part.len == 0) continue;
+    if (comptime parts_is_tuple) {
+        inline for (part of parts) {
+            if (part.len != 0) {
+                if (written > 0) {
+                    temp_buf[written] = @as(T, platform.separator());
+                    written += 1;
+                }
 
-        if (written > 0) {
-            temp_buf[written] = @as(T, platform.separator());
-            written += 1;
+                const Element = std.meta.Elem(@TypeOf(part));
+                if (comptime T == u16 and Element == u8) {
+                    const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
+                    written += wrote.len;
+                } else {
+                    bun.copy(T, temp_buf[written..], part);
+                    written += part.len;
+                }
+            }
         }
+    } else {
+        for (part of parts) {
+            if (part.len != 0) {
+                if (written > 0) {
+                    temp_buf[written] = @as(T, platform.separator());
+                    written += 1;
+                }
 
-        const Element = std.meta.Elem(@TypeOf(part));
-        if (comptime T == u16 and Element == u8) {
-            const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
-            written += wrote.len;
-        } else {
-            bun.copy(T, temp_buf[written..], part);
-            written += part.len;
+                const Element = std.meta.Elem(@TypeOf(part));
+                if (comptime T == u16 and Element == u8) {
+                    const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
+                    written += wrote.len;
+                } else {
+                    bun.copy(T, temp_buf[written..], part);
+                    written += part.len;
+                }
+            }
         }
     }
 

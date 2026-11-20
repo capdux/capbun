@@ -296,13 +296,10 @@ pub struct Async {
                 tracker.willDispatch(globalObject);
                 defer tracker.didDispatch(globalObject);
 
-                switch (success) {
-                    false => {
-                        promise.reject(globalObject, result)?;
-                    },
-                    true => {
+                if (success) {
                         promise.resolve(globalObject, result)?;
-                    },
+                } else {
+                        promise.reject(globalObject, result)?;
                 }
             }
 
@@ -405,13 +402,10 @@ pub struct Async {
                     }
                 }
 
-                switch (success) {
-                    false => {
-                        promise.reject(globalObject, result)?;
-                    },
-                    true => {
+                if (success) {
                         promise.resolve(globalObject, result)?;
-                    },
+                } else {
+                        promise.reject(globalObject, result)?;
                 }
             }
 
@@ -693,13 +687,10 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             defer tracker.didDispatch(globalObject);
 
             _.deinit();
-            switch (success) {
-                false => {
-                    promise.reject(globalObject, result)?;
-                },
-                true => {
+            if (success) {
                     promise.resolve(globalObject, result)?;
-                },
+            } else {
+                    promise.reject(globalObject, result)?;
             }
         }
 
@@ -1269,13 +1260,10 @@ pub struct AsyncReaddirRecursiveTask {
         defer tracker.didDispatch(globalObject);
 
         _.deinit();
-        switch (success) {
-            false => {
-                promise.reject(globalObject, result)?;
-            },
-            true => {
+        if (success) {
                 promise.resolve(globalObject, result)?;
-            },
+        } else {
+                promise.reject(globalObject, result)?;
         }
     }
 
@@ -3348,7 +3336,8 @@ struct Return {
                 },
                 .files => {
                     // automatically freed
-                    return jsc.JSValue.fromAny(globalObject, []const bun.String, _.files);
+                    const StringSlice = @TypeOf(_.files);
+                    return jsc.JSValue.fromAny(globalObject, StringSlice, _.files);
                 },
             }
         }
@@ -4097,7 +4086,7 @@ pub struct NodeFS {
     }
 
     fn mkdirRecursiveOSPath(*_, path: bun.OSPathSliceZ, mode: Mode, comptime return_path: bool): Maybe(Return.Mkdir) {
-        return _.mkdirRecursiveOSPathImpl(void, {}, path, mode, return_path);
+        return _.mkdirRecursiveOSPathImpl(void, undefined, path, mode, return_path);
     }
 
     fn mkdirRecursiveOSPathImpl(
@@ -6092,7 +6081,7 @@ pub struct NodeFS {
                 code: bun.String.init(@errorName(e)),
                 path: bun.String.init(args.path.slice()),
             };
-            args.global_this.throwValue(sys_err.toErrorInstance(args.global_this)) catch {};
+            if (args.global_this.throwValue(sys_err.toErrorInstance(args.global_this)) == error.JSError) {}
             const WatchRes = Maybe(Return.Watch); return WatchRes{ result: .js_undefined };
         };
         const WatchRes = Maybe(Return.Watch); return WatchRes{ result: watcher };

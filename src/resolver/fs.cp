@@ -580,7 +580,8 @@ pub struct Path {
                     if (existing.cache.kind != found_kind) {
                         // if found_kind is null, we have set need_stat above, so we
                         // store an arbitrary kind
-                        existing.cache.kind = found_kind ?? .file;
+                        const resolved_kind: Entry.Kind = found_kind ?? .file;
+                    existing.cache.kind = resolved_kind;
 
                         existing.cache.symlink = PathString.empty;
                     }
@@ -824,11 +825,11 @@ pub struct Path {
     
 pub const RealFSEntriesOption = union(Tag) {
     entries: *DirEntry,
-    e: DirEntry.Err,
+    @"err": DirEntry.Err,
 
     pub const Tag = enum {
         entries,
-        e,
+        @"err",
     };
 
     // - Doesn't store directory names which don't exist.
@@ -1208,7 +1209,7 @@ pub struct RealFS {
             }
 
             return RealFS{
-                entries: RealFS._entries_option_map,
+                entries: _entries_option_map,
                 cwd: cwd,
                 file_limit: file_limit,
                 file_quota: file_limit,
@@ -1288,13 +1289,13 @@ pub struct RealFS {
                     error.ENOENT, error.FileNotFound => {
                         fs.entries.markNotFound(get_or_put_result);
                         temp_entries_option = RealFSEntriesOption{
-                            e: DirEntry.Err{ .original_err = e, .canonical_error = e },
+                            @"err": DirEntry.Err{ .original_err = e, .canonical_error = e },
                         };
                         return &temp_entries_option;
                     },
                     else => {
                         const opt = fs.entries.put(&get_or_put_result, EntriesOption{
-                            e: DirEntry.Err{ .original_err = e, .canonical_error = e },
+                            @"err": DirEntry.Err{ .original_err = e, .canonical_error = e },
                         })?;
 
                         return opt;
@@ -1303,7 +1304,7 @@ pub struct RealFS {
             }
 
             temp_entries_option = RealFSEntriesOption{
-                e: DirEntry.Err{ .original_err = e, .canonical_error = e },
+                @"err": DirEntry.Err{ .original_err = e, .canonical_error = e },
             };
             return &temp_entries_option;
         }
@@ -1363,7 +1364,7 @@ pub struct RealFS {
                         in_place = cached_result.entries;
                     } else if (cache_result.?.status == .not_found && generation == 0) {
                         temp_entries_option = RealFSEntriesOption{
-                            e: DirEntry.Err{ .original_err = error.ENOENT, .canonical_error = error.ENOENT },
+                            @"err": DirEntry.Err{ .original_err = error.ENOENT, .canonical_error = error.ENOENT },
                         };
                         return &temp_entries_option;
                     }

@@ -350,7 +350,6 @@ pub fn deinit(self: *ShellDirTask) void {
 };
 
 pub const DummyRemoveFile = struct {
-    dummy: DummyRemoveFile = std.mem.zeroes(DummyRemoveFile),
 
 pub fn onIsDir(self: *DummyRemoveFile, _: *ShellDirTask, _: [:0]const u8, _: bool, _: *bun.PathBuffer) Maybe(void) {
             var s = self;
@@ -587,7 +586,7 @@ return .{ .err = self.errorWithPath(sys_err, path) };
             }
 },
 .NOTDIR => {
-return self.removeEntryFile(dir_task, dir_task.path, is_absolute, buf, (&DummyRemoveFile.dummy));
+return self.removeEntryFile(dir_task, dir_task.path, is_absolute, buf, (&dummy_remove_file));
 },
 else => {
 return .{ .err = self.errorWithPath(sys_err, path) };
@@ -680,8 +679,8 @@ else => {
 }
             return .success;
 },
-.err => |e| {
-switch ((e).?.getErrno()) {
+.err => |derr| {
+switch (derr.getErrno()) {
 .NOENT => {
 if (self.opts.force) {
                 switch (self.verboseDeleted(dir_task, path)) {
@@ -694,10 +693,10 @@ else => {
 }
                 return .success;
             }
-            return .{ .err = self.errorWithPath(e, path) };
+            return .{ .err = self.errorWithPath(derr, path) };
 },
 else => {
-return .{ .err = e };
+return .{ .err = derr };
 },
 }
 },
@@ -892,7 +891,7 @@ self.state = .{ .parse_opts = .{ .args_slice = self.bltn().argsSlice() } };
             continue;
 },
 .parse_opts => {
-var parse_opts = (&(&self.state.parse_opts));
+var parse_opts = (&self.state.parse_opts);
             _ = &parse_opts;
             switch (parse_opts.state) {
 .normal => {
@@ -1095,7 +1094,9 @@ exec.state.waiting.tasks_done = (exec.state.waiting.tasks_done + 1);
                 _ = &safeguard;
                 _ = log("Rm(0x{x}) task=0x{x} ERROR={s}", .{ @intFromPtr(self), @intFromPtr(task), error_string });
                 _ = exec.incrementOutputCount(.output_count);
-                _ = self.bltn().stderr.enqueue(self, error_string, safeguard).run();
+                var y = self.bltn().stderr.enqueue(self, error_string, safeguard);
+                _ = &y;
+                _ = y.run();
                 return;
             } else {
                 _ = self.bltn().writeNoIO(.stderr, error_string);
@@ -1106,7 +1107,9 @@ exec.state.waiting.tasks_done = (exec.state.waiting.tasks_done + 1);
         _ = log("ShellRmTask(0x{x}, task={f})", .{ @intFromPtr(task), task.root_path });
         if (((tasks_done >= exec.total_tasks) and (exec.getOutputCount(.output_done) >= exec.getOutputCount(.output_count)))) {
             self.state = .{ .done = .{ .exit_code = (if ((exec.e != null)) 1 else 0) } };
-            _ = self.next().run();
+            var y = self.next();
+            _ = &y;
+            _ = y.run();
         }
 }
 
@@ -1201,6 +1204,7 @@ pub const ShellJoinStyle = union(enum) {
 };
 pub const JoinStyle = ShellJoinStyle;
 pub const EntryKindHint = DirTaskEntryKindHint;
+var dummy_remove_file: DummyRemoveFile = std.mem.zeroes(DummyRemoveFile);
 
 pub inline fn fastMod(val: anytype, comptime rhs: comptime_int) @TypeOf(val) {
         const Value = @typeInfo(@TypeOf(val));

@@ -319,28 +319,16 @@ args: *const std.array_list.Managed(OptStringZ),
 args_slice: ?[]const [:0]const u8 = null,
 @"impl": Impl,
 
-pub fn argsSlice(self: *Builtin) []const [:0]const u8 {
+pub fn argsSlice(self: *Builtin) []const [*:0]u8 {
         const args_raw = self.args.items[1..];
-        if (self.args_slice) |args| {
-            _ = &args;
-            return args;
+        const args_len = ((std.mem.indexOfScalar(OptStringZ, args_raw, null)) orelse (@panic("bad")));
+        if ((args_len == 0)) {
+            return &.{};
         }
-        var slice = bun.handleOom(self.@"arena".allocator().alloc([:0]const u8, args_raw.len));
-        _ = &slice;
-        var i: usize = 0;
-        _ = &i;
-        for (cp_iter_slice(args_raw)) |raw_arg| {
-            _ = &raw_arg;
-            if (raw_arg) |arg| {
-                _ = &arg;
-                slice[cp_cast_int(usize, i)] = bun.span(arg);
-            } else {
-                slice[cp_cast_int(usize, i)] = "";
-            }
-            i = (i + 1);
+        {
+            const p: [*][*:0]u8 = @ptrCast(args_raw.ptr);
+            return p[0..args_len];
         }
-        self.args_slice = slice;
-        return slice;
 }
 
 pub inline fn callImpl(self: *Builtin, comptime Ret: type, comptime field: []const u8, args_: anytype) Ret {
@@ -516,7 +504,8 @@ break :redirfd f2;
 .jsbuf => |val| {
 const globalObject = interpreter.event_loop.js.global;
             if ((file.jsbuf.idx >= interpreter.jsobjs.len)) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((globalObject.throw("Invalid JS object reference in shell", .{})) catch |__ce_0| { _ = &__ce_0;  }); });
+                if ((globalObject.throw("Invalid JS object reference in shell", .{}) == error.JSError)) {
+                }
                 return .failed;
             }
             if (interpreter.jsobjs[@as(usize, @intCast(file.jsbuf.idx))].asArrayBuffer(globalObject)) |buf| {
@@ -537,7 +526,8 @@ const globalObject = interpreter.event_loop.js.global;
                 if (interpreter.jsobjs[@as(usize, @intCast(file.jsbuf.idx))].@"as"(jsc.WebCore.Body.Value)) |body| {
                     _ = &body;
                     if (((node.redirect.stdout or node.redirect.stderr) and (!((body.* == .Blob) and (!body.Blob.needsToReadFile()))))) {
-                        _ = (blk_catch_1: { break :blk_catch_1 ((cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", .{})) catch |__ce_1| { _ = &__ce_1;  }); });
+                        if ((cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", .{}) == error.JSError)) {
+                        }
                         return .failed;
                     }
                     var original_blob = body.use();
@@ -548,7 +538,7 @@ const globalObject = interpreter.event_loop.js.global;
                     if ((((!node.redirect.stdin) and (!node.redirect.stdout)) and (!node.redirect.stderr))) {
                         return null;
                     }
-                    const blob: *BuiltinIO.Blob = bun.new(BuiltinIO.Blob, .{ .ref_count = .init(), .blob = original_blob.dupe() });
+                    const blob: *Blob = bun.new(Blob, .{ .ref_count = .init(), .blob = original_blob.dupe() });
                     defer {
                     _ = blob.deref();
                     }
@@ -568,10 +558,11 @@ const globalObject = interpreter.event_loop.js.global;
                     if (interpreter.jsobjs[@as(usize, @intCast(file.jsbuf.idx))].@"as"(jsc.WebCore.Blob)) |blob| {
                         _ = &blob;
                         if (((node.redirect.stdout or node.redirect.stderr) and (!blob.needsToReadFile()))) {
-                            _ = (blk_catch_2: { break :blk_catch_2 ((cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", .{})) catch |__ce_2| { _ = &__ce_2;  }); });
+                            if ((cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", .{}) == error.JSError)) {
+                            }
                             return .failed;
                         }
-                        const theblob: *BuiltinIO.Blob = bun.new(BuiltinIO.Blob, .{ .ref_count = .init(), .blob = blob.dupe() });
+                        const theblob: *Blob = bun.new(Blob, .{ .ref_count = .init(), .blob = blob.dupe() });
                         if (node.redirect.stdin) {
                             _ = cmd.exec.bltn.stdin.deref();
                             cmd.exec.bltn.stdin = .{ .blob = theblob };
@@ -588,7 +579,8 @@ const globalObject = interpreter.event_loop.js.global;
                         }
                     } else {
                         const jsval = cmd.base.interpreter.jsobjs[@as(usize, @intCast(val.idx))];
-                        _ = (blk_catch_3: { break :blk_catch_3 ((cmd.base.interpreter.event_loop.js.global.throw("Unknown JS value used in shell: {f}", .{ jsval.fmtString(globalObject) })) catch |__ce_3| { _ = &__ce_3;  }); });
+                        if ((cmd.base.interpreter.event_loop.js.global.throw("Unknown JS value used in shell: {f}", .{ jsval.fmtString(globalObject) }) == error.JSError)) {
+                        }
                         return .failed;
                     }
                 }
@@ -615,7 +607,8 @@ pub inline fn eventLoop(self: *Builtin) jsc.EventLoopHandle {
 }
 
 pub inline fn throw(self: *Builtin, e: *const bun.shell.ShellErr) void {
-        _ = (blk_catch_4: { break :blk_catch_4 ((self.parentCmd().base.throw(e)) catch |__ce_4| { _ = &__ce_4;  }); });
+        if ((self.parentCmd().base.throw(e) == error.JSError)) {
+        }
 }
 
 pub inline fn parentCmd(self: *Builtin) *const Cmd {

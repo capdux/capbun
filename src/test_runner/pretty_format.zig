@@ -582,26 +582,28 @@ pub fn MapIterator(comptime Writer: type, comptime enable_ansi_colors: bool) typ
     formatter: *JestPrettyFormat.Formatter,
     writer: Writer,
 
-pub fn forEach(self: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+pub fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+        _ = vm;
             if ((ctx == null)) {
                 return;
             }
-            var this = bun.cast((&@This()), ctx.?);
-            _ = &this;
-            if (self.formatter.failed) {
+            var iter = bun.cast(*Self, ctx.?);
+            _ = &iter;
+            if (iter.formatter.failed) {
                 return;
             }
             const key = (blk_catch_0: { break :blk_catch_0 ((jsc.JSObject.getIndex(nextValue, globalObject, 0)) catch |__ce_0| { _ = &__ce_0; return; }); });
             const value = (blk_catch_1: { break :blk_catch_1 ((jsc.JSObject.getIndex(nextValue, globalObject, 1)) catch |__ce_1| { _ = &__ce_1; return; }); });
-            _ = (blk_catch_2: { break :blk_catch_2 ((self.formatter.writeIndent(Writer, self.writer)) catch |__ce_2| { _ = &__ce_2; return; }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((iter.formatter.writeIndent(Writer, iter.writer)) catch |__ce_2| { _ = &__ce_2; return; }); });
             const key_tag = (blk_catch_3: { break :blk_catch_3 ((Tag.get(key, globalObject)) catch |__ce_3| { _ = &__ce_3; return; }); });
-            _ = (blk_catch_4: { break :blk_catch_4 ((self.formatter.format(key_tag, Writer, self.writer, key, self.formatter.globalThis, enable_ansi_colors)) catch |__ce_4| { _ = &__ce_4; return; }); });
-            _ = (blk_catch_5: { break :blk_catch_5 ((self.writer.writeAll(" => ")) catch |__ce_5| { _ = &__ce_5; return; }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((iter.formatter.format(key_tag, Writer, iter.writer, key, iter.formatter.globalThis, enable_ansi_colors)) catch |__ce_4| { _ = &__ce_4; return; }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((iter.writer.writeAll(" => ")) catch |__ce_5| { _ = &__ce_5; return; }); });
             const value_tag = (blk_catch_6: { break :blk_catch_6 ((Tag.get(value, globalObject)) catch |__ce_6| { _ = &__ce_6; return; }); });
-            _ = (blk_catch_7: { break :blk_catch_7 ((self.formatter.format(value_tag, Writer, self.writer, value, self.formatter.globalThis, enable_ansi_colors)) catch |__ce_7| { _ = &__ce_7; return; }); });
-            _ = (blk_catch_8: { break :blk_catch_8 ((self.formatter.printComma(Writer, self.writer, enable_ansi_colors)) catch |__ce_8| { _ = &__ce_8; return; }); });
-            _ = (blk_catch_9: { break :blk_catch_9 ((self.writer.writeAll("\n")) catch |__ce_9| { _ = &__ce_9; return; }); });
+            _ = (blk_catch_7: { break :blk_catch_7 ((iter.formatter.format(value_tag, Writer, iter.writer, value, iter.formatter.globalThis, enable_ansi_colors)) catch |__ce_7| { _ = &__ce_7; return; }); });
+            _ = (blk_catch_8: { break :blk_catch_8 ((iter.formatter.printComma(Writer, iter.writer, enable_ansi_colors)) catch |__ce_8| { _ = &__ce_8; return; }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((iter.writer.writeAll("\n")) catch |__ce_9| { _ = &__ce_9; return; }); });
     }
+    const Self = @This();
 };
     }
 
@@ -610,21 +612,23 @@ pub fn SetIterator(comptime Writer: type, comptime enable_ansi_colors: bool) typ
     formatter: *JestPrettyFormat.Formatter,
     writer: Writer,
 
-pub fn forEach(self: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+pub fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nextValue: JSValue) callconv(.c) void {
+        _ = vm;
             if ((ctx == null)) {
                 return;
             }
-            var this = bun.cast((&@This()), ctx.?);
-            _ = &this;
-            if (self.formatter.failed) {
+            var iter = bun.cast(*Self, ctx.?);
+            _ = &iter;
+            if (iter.formatter.failed) {
                 return;
             }
-            _ = (blk_catch_0: { break :blk_catch_0 ((self.formatter.writeIndent(Writer, self.writer)) catch |__ce_0| { _ = &__ce_0; return; }); });
+            _ = (blk_catch_0: { break :blk_catch_0 ((iter.formatter.writeIndent(Writer, iter.writer)) catch |__ce_0| { _ = &__ce_0; return; }); });
             const key_tag = (blk_catch_1: { break :blk_catch_1 ((Tag.get(nextValue, globalObject)) catch |__ce_1| { _ = &__ce_1; return; }); });
-            _ = (blk_catch_2: { break :blk_catch_2 ((self.formatter.format(key_tag, Writer, self.writer, nextValue, self.formatter.globalThis, enable_ansi_colors)) catch |__ce_2| { _ = &__ce_2; return; }); });
-            _ = (blk_catch_3: { break :blk_catch_3 ((self.formatter.printComma(Writer, self.writer, enable_ansi_colors)) catch |__ce_3| { _ = &__ce_3; return; }); });
-            _ = (blk_catch_4: { break :blk_catch_4 ((self.writer.writeAll("\n")) catch |__ce_4| { _ = &__ce_4; return; }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((iter.formatter.format(key_tag, Writer, iter.writer, nextValue, iter.formatter.globalThis, enable_ansi_colors)) catch |__ce_2| { _ = &__ce_2; return; }); });
+            _ = (blk_catch_3: { break :blk_catch_3 ((iter.formatter.printComma(Writer, iter.writer, enable_ansi_colors)) catch |__ce_3| { _ = &__ce_3; return; }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((iter.writer.writeAll("\n")) catch |__ce_4| { _ = &__ce_4; return; }); });
     }
+    const Self = @This();
 };
     }
 

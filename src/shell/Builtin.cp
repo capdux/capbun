@@ -297,21 +297,14 @@ pub const Tag = Kind;
 
     @"impl": Impl,
 
-pub fn argsSlice(*_): []const [:0]const u8 {
+pub fn argsSlice(*_): []const [*:0]const u8 {
     const args_raw = _.args.items[1..];
-    if (args := _.args_slice) return args;
-    let slice = bun.handleOom(_.@"arena".allocator().alloc([:0]const u8, args_raw.len));
-    let i: usize = 0;
-    for (raw_arg of args_raw) {
-        if (arg := raw_arg) {
-            slice[i] = bun.span(arg);
-        } else {
-            slice[i] = "";
-        }
-        i += 1;
+    const args_len = std.mem.indexOfScalar(OptStringZ, args_raw, null) ?? @panic("bad");
+    if (args_len == 0) return [];
+    unsafe {
+        const p: [*][*:0]const u8 = @ptrCast(args_raw.ptr);
+        return p[0..args_len];
     }
-    _.args_slice = slice;
-    return slice;
 }
 
 pub inline fn callImpl(*_, comptime Ret: type, comptime field: []const u8, args_: auto): Ret {
@@ -546,7 +539,7 @@ static fn initRedirections(
                 const globalObject = interpreter.event_loop.js.global;
 
                 if (file.jsbuf.idx >= interpreter.jsobjs.len) {
-                    globalObject.throw("Invalid JS object reference in shell", {}) catch {};
+                    if (globalObject.throw("Invalid JS object reference in shell", {}) == error.JSError) {}
                     return .failed;
                 }
 
@@ -579,7 +572,7 @@ static fn initRedirections(
                 } else if (body := interpreter.jsobjs[file.jsbuf.idx].@"as"(jsc.WebCore.Body.Value)) {
                     if ((node.redirect.stdout || node.redirect.stderr) && !(body.* == .Blob && !body.Blob.needsToReadFile())) {
                         // TODO: Locked->stream -> file -> blob conversion via .toBlobIfPossible() except we want to avoid modifying the Response/Request if unnecessary.
-                        cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", {}) catch {};
+                        if (cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", {}) == error.JSError) {}
                         return .failed;
                     }
 
@@ -590,7 +583,7 @@ static fn initRedirections(
                         return null;
                     }
 
-                    const blob: *BuiltinIO.Blob = bun.new(BuiltinIO.Blob, {
+                    const blob: *Blob = bun.new(Blob, {
                         ref_count: .init(),
                         blob: original_blob.dupe(),
                     });
@@ -613,11 +606,11 @@ static fn initRedirections(
                 } else if (blob := interpreter.jsobjs[file.jsbuf.idx].@"as"(jsc.WebCore.Blob)) {
                     if ((node.redirect.stdout || node.redirect.stderr) && !blob.needsToReadFile()) {
                         // TODO: Locked->stream -> file -> blob conversion via .toBlobIfPossible() except we want to avoid modifying the Response/Request if unnecessary.
-                        cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", {}) catch {};
+                        if (cmd.base.interpreter.event_loop.js.global.throw("Cannot redirect stdout/stderr to an immutable blob. Expected a file", {}) == error.JSError) {}
                         return .failed;
                     }
 
-                    const theblob: *BuiltinIO.Blob = bun.new(BuiltinIO.Blob, {
+                    const theblob: *Blob = bun.new(Blob, {
                         ref_count: .init(),
                         blob: blob.dupe(),
                     });
@@ -634,7 +627,7 @@ static fn initRedirections(
                     }
                 } else {
                     const jsval = cmd.base.interpreter.jsobjs[val.idx];
-                    cmd.base.interpreter.event_loop.js.global.throw("Unknown JS value used in shell: {f}", .{jsval.fmtString(globalObject)}) catch {};
+                    if (cmd.base.interpreter.event_loop.js.global.throw("Unknown JS value used in shell: {f}", .{jsval.fmtString(globalObject)}) == error.JSError) {}
                     return .failed;
                 }
             },
@@ -659,7 +652,7 @@ pub inline fn eventLoop(*_): jsc.EventLoopHandle {
 }
 
 pub inline fn throw(*_, e: *const bun.shell.ShellErr) {
-    _.parentCmd().base.throw(e) catch {};
+    if (_.parentCmd().base.throw(e) == error.JSError) {}
 }
 
 /// The `Cmd` state node associated with this builtin

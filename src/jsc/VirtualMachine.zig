@@ -1621,7 +1621,7 @@ pub fn _resolve(jsc_vm: *VirtualMachine, ret: *ResolveFunctionResult, specifier:
         const is_special_source = (strings.eqlComptime(source, main_file_name) or js_ast.Macro.isMacroPath(source));
         var query_string: []const u8 = "";
         _ = &query_string;
-        const normalized_specifier = normalizeSpecifierForResolution(specifier, query_string);
+        const normalized_specifier = normalizeSpecifierForResolution(specifier, @as(*[]const u8, @ptrCast(@alignCast(&(query_string)))));
         const source_to_use = (if ((!is_special_source)) (if (is_a_file_path) Fs.PathName.init(source).dirWithTrailingSlash() else source) else jsc_vm.transpiler.fs.top_level_dir);
         var result: Resolver.Result = undefined;
         _ = &result;

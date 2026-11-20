@@ -561,7 +561,7 @@ pub const Channel = opaque {
             hints_buf[i] = hint;
         }
         const hints_: [*c]const AddrInfo_hints = if (hints.len > 0) &hints_buf else null;
-        ares_getaddrinfo(this, host_ptr, port_ptr, hints_, AddrInfo.callbackWrapper(Type, callback), ctx);
+        ares_getaddrinfo(this, @constCast(host_ptr), @constCast(port_ptr), hints_, AddrInfo.callbackWrapper(Type, callback), ctx);
     }
 
     pub fn resolve(this: *Channel, name: []const u8, comptime lookup_name: []const u8, comptime Type: type, ctx: *Type, comptime cares_type: type, comptime callback: cares_type.Callback(Type)) void {
@@ -671,11 +671,11 @@ pub const ares_malloc_callback_fn = *const @TypeOf(_ares_cb_sigs.malloc);
 pub const ares_free_callback_fn = *const @TypeOf(_ares_cb_sigs.free);
 pub const ares_realloc_callback_fn = *const @TypeOf(_ares_cb_sigs.realloc);
 pub const ares_socket_functions = extern struct {
-    socket: ?*const *const fn(c_int, c_int, c_int, ?*anyopaque) callconv(.c) ares_socket_t = null,
-    close: ?*const *const fn(ares_socket_t, ?*anyopaque) callconv(.c) c_int = null,
-    connect: ?*const *const fn(ares_socket_t, [*c]const struct_sockaddr, ares_socklen_t, ?*anyopaque) callconv(.c) c_int = null,
-    recvfrom: ?*const *const fn(ares_socket_t, ?*anyopaque, usize, c_int, [*c]struct_sockaddr, [*c]ares_socklen_t, ?*anyopaque) callconv(.c) ares_ssize_t = null,
-    sendv: ?*const *const fn(ares_socket_t, [*c]const iovec, c_int, ?*anyopaque) callconv(.c) ares_ssize_t = null,
+    socket: ?*const fn(c_int, c_int, c_int, ?*anyopaque) callconv(.c) ares_socket_t = null,
+    close: ?*const fn(ares_socket_t, ?*anyopaque) callconv(.c) c_int = null,
+    connect: ?*const fn(ares_socket_t, [*c]const struct_sockaddr, ares_socklen_t, ?*anyopaque) callconv(.c) c_int = null,
+    recvfrom: ?*const fn(ares_socket_t, ?*anyopaque, usize, c_int, [*c]struct_sockaddr, [*c]ares_socklen_t, ?*anyopaque) callconv(.c) ares_ssize_t = null,
+    sendv: ?*const fn(ares_socket_t, [*c]const iovec, c_int, ?*anyopaque) callconv(.c) ares_ssize_t = null,
 };
 const union_unnamed_2 = extern union {
     _S6_u8: [16]u8,
@@ -1483,15 +1483,15 @@ pub extern "c" fn ares_expand_string(encoded: [*c]const u8, abuf: [*c]const u8, 
 
 pub extern "c" fn ares_queue_active_queries(channel: *const Channel) callconv(.c) usize;
 
-pub extern "c" fn ares_parse_a_reply(abuf: [*c]const u8, alen: c_int, host: [*c]?struct_hostent, addrttls: [*c]struct_ares_addrttl, naddrttls: [*c]c_int) callconv(.c) c_int;
+pub extern "c" fn ares_parse_a_reply(abuf: [*c]const u8, alen: c_int, host: *?*struct_hostent, addrttls: [*c]struct_ares_addrttl, naddrttls: [*c]c_int) callconv(.c) c_int;
 
-pub extern "c" fn ares_parse_aaaa_reply(abuf: [*c]const u8, alen: c_int, host: [*c]?struct_hostent, addrttls: [*c]struct_ares_addr6ttl, naddrttls: [*c]c_int) callconv(.c) c_int;
+pub extern "c" fn ares_parse_aaaa_reply(abuf: [*c]const u8, alen: c_int, host: *?*struct_hostent, addrttls: [*c]struct_ares_addr6ttl, naddrttls: [*c]c_int) callconv(.c) c_int;
 
 pub extern "c" fn ares_parse_caa_reply(abuf: [*c]const u8, alen: c_int, caa_out: [*c][*c]struct_ares_caa_reply) callconv(.c) c_int;
 
-pub extern "c" fn ares_parse_ptr_reply(abuf: [*c]const u8, alen: c_int, addr: ?*anyopaque, addrlen: c_int, family: c_int, host: [*c]?struct_hostent) callconv(.c) c_int;
+pub extern "c" fn ares_parse_ptr_reply(abuf: [*c]const u8, alen: c_int, addr: ?*anyopaque, addrlen: c_int, family: c_int, host: *?*struct_hostent) callconv(.c) c_int;
 
-pub extern "c" fn ares_parse_ns_reply(abuf: [*c]const u8, alen: c_int, host: [*c]?struct_hostent) callconv(.c) c_int;
+pub extern "c" fn ares_parse_ns_reply(abuf: [*c]const u8, alen: c_int, host: *?*struct_hostent) callconv(.c) c_int;
 
 pub extern "c" fn ares_parse_srv_reply(abuf: [*c]const u8, alen: c_int, srv_out: [*c][*c]struct_ares_srv_reply) callconv(.c) c_int;
 

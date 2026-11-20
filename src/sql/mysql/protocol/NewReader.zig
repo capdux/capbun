@@ -58,39 +58,27 @@ pub fn NewReaderWrap(comptime Context: type, comptime markMessageStartFn_: anyty
     wrapped: Context,
 
 pub fn markMessageStart(self: @This()) void {
-            var w = self.wrapped;
-            _ = &w;
-            _ = markMessageStartFn((if (comptime (@typeInfo(Context) == .pointer)) w else (&w)));
+            _ = markMessageStartFn(self.wrapped);
     }
 
 pub fn setOffsetFromStart(self: @This(), offset: usize) void {
-            var w = self.wrapped;
-            _ = &w;
-            return setOffsetFromStartFn((if (comptime (@typeInfo(Context) == .pointer)) w else (&w)), offset);
+            return setOffsetFromStartFn(self.wrapped, offset);
     }
 
 pub fn read(self: @This(), count: usize) AnyMySQLError.Error!Data {
-            var w = self.wrapped;
-            _ = &w;
-            return readFn((if (comptime (@typeInfo(Context) == .pointer)) w else (&w)), count);
+            return readFn(self.wrapped, count);
     }
 
 pub fn skip(self: @This(), count: anytype) void {
-            var w = self.wrapped;
-            _ = &w;
-            _ = skipFn((if (comptime (@typeInfo(Context) == .pointer)) w else (&w)), @as(isize, @intCast(count)));
+            _ = skipFn(self.wrapped, @as(isize, @intCast(count)));
     }
 
 pub fn peek(self: @This()) []const u8 {
-            var w = self.wrapped;
-            _ = &w;
-            return peekFn((if (comptime (@typeInfo(Context) == .pointer)) w else (&w)));
+            return peekFn(self.wrapped);
     }
 
 pub fn readZ(self: @This()) AnyMySQLError.Error!Data {
-            var w = self.wrapped;
-            _ = &w;
-            return readZFn((if (comptime (@typeInfo(Context) == .pointer)) w else (&w)));
+            return readZFn(self.wrapped);
     }
 
 pub fn byte(self: @This()) AnyMySQLError.Error!u8 {
@@ -99,9 +87,7 @@ pub fn byte(self: @This()) AnyMySQLError.Error!u8 {
     }
 
 pub fn ensureCapacity(self: @This(), count: usize) AnyMySQLError.Error!void {
-            var w = self.wrapped;
-            _ = &w;
-            if ((!ensureCapacityFn((if (comptime (@typeInfo(Context) == .pointer)) w else (&w)), count))) {
+            if ((!ensureCapacityFn(self.wrapped, count))) {
                 return AnyMySQLError.Error.ShortRead;
             }
     }

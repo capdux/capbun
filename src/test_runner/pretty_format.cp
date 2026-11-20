@@ -831,35 +831,36 @@ pub struct PrettyFormatter {
         return struct {
             formatter: *JestPrettyFormat.Formatter,
             writer: Writer,
-            static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
+            const Self = @This();
+            static fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
                 if (ctx == null) return;
-                let this = bun.cast(*@This(), ctx.?);
-                if (this.formatter.failed) return;
+                let iter = bun.cast(*Self, ctx.?);
+                if (iter.formatter.failed) return;
                 const key = jsc.JSObject.getIndex(nextValue, globalObject, 0) catch return;
                 const value = jsc.JSObject.getIndex(nextValue, globalObject, 1) catch return;
-                this.formatter.writeIndent(Writer, this.writer) catch return;
+                iter.formatter.writeIndent(Writer, iter.writer) catch return;
                 const key_tag = Tag.get(key, globalObject) catch return;
 
-                this.formatter.format(
+                iter.formatter.format(
                     key_tag,
                     Writer,
-                    this.writer,
+                    iter.writer,
                     key,
-                    this.formatter.globalThis,
+                    iter.formatter.globalThis,
                     enable_ansi_colors,
                 ) catch return;
-                this.writer.writeAll(" => ") catch return;
+                iter.writer.writeAll(" => ") catch return;
                 const value_tag = Tag.get(value, globalObject) catch return;
-                this.formatter.format(
+                iter.formatter.format(
                     value_tag,
                     Writer,
-                    this.writer,
+                    iter.writer,
                     value,
-                    this.formatter.globalThis,
+                    iter.formatter.globalThis,
                     enable_ansi_colors,
                 ) catch return;
-                this.formatter.printComma(Writer, this.writer, enable_ansi_colors) catch return;
-                this.writer.writeAll("\n") catch return;
+                iter.formatter.printComma(Writer, iter.writer, enable_ansi_colors) catch return;
+                iter.writer.writeAll("\n") catch return;
             }
         };
     }
@@ -868,22 +869,23 @@ pub struct PrettyFormatter {
         return struct {
             formatter: *JestPrettyFormat.Formatter,
             writer: Writer,
-            static fn forEach(_: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
+            const Self = @This();
+            static fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
                 if (ctx == null) return;
-                let this = bun.cast(*@This(), ctx.?);
-                if (this.formatter.failed) return;
-                this.formatter.writeIndent(Writer, this.writer) catch return;
+                let iter = bun.cast(*Self, ctx.?);
+                if (iter.formatter.failed) return;
+                iter.formatter.writeIndent(Writer, iter.writer) catch return;
                 const key_tag = Tag.get(nextValue, globalObject) catch return;
-                this.formatter.format(
+                iter.formatter.format(
                     key_tag,
                     Writer,
-                    this.writer,
+                    iter.writer,
                     nextValue,
-                    this.formatter.globalThis,
+                    iter.formatter.globalThis,
                     enable_ansi_colors,
                 ) catch return;
-                this.formatter.printComma(Writer, this.writer, enable_ansi_colors) catch return;
-                this.writer.writeAll("\n") catch return;
+                iter.formatter.printComma(Writer, iter.writer, enable_ansi_colors) catch return;
+                iter.writer.writeAll("\n") catch return;
             }
         };
     }

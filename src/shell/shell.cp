@@ -121,7 +121,7 @@ pub const ShellErr = union(enum) {
 pub fn Result(comptime T: auto): type {
     return union(enum) {
         result: T,
-        e: ShellErr,
+        @"err": ShellErr,
 
         pub const success: @This() = .{ .result = std.mem.zeroes(T) };
 
@@ -859,7 +859,7 @@ pub struct AST {
             return @as(u8, @bitCast(this)) == 0;
         }
 
-        fn redirectsElsewhere(this: @This(), io_kind: enum { stdin, stdout, stderr }): bool {
+        pub fn redirectsElsewhere(this: @This(), io_kind: enum { stdin, stdout, stderr }): bool {
             return switch (io_kind) {
                 .stdin => this.stdin,
                 .stdout => if (this.duplicate_out) !this.stdout else this.stdout,
@@ -875,7 +875,7 @@ pub struct AST {
             return .{ .stdout = true, .duplicate = true };
         }
 
-        fn toFlags(this: @This()): i32 {
+        pub fn toFlags(this: @This()): i32 {
             const read_write_flags: i32 = if (this.stdin) bun.O.RDONLY else bun.O.WRONLY | bun.O.CREAT;
             const extra: i32 = if (this.append) bun.O.APPEND else bun.O.TRUNC;
             const final_flags: i32 = if (this.stdin) read_write_flags else extra | read_write_flags;
@@ -3983,7 +3983,8 @@ pub fn handleTemplateValue(
                     return globalThis.ERR(.INVALID_ARG_VALUE, "The shell argument must be a string without null bytes. Received \"{f}\"", .{bunstr.toZigString()}).throw();
                 }
 
-                if (!builder.appendBunStr(bunstr, false)?) {
+                const appended = builder.appendBunStr(bunstr, false)?;
+                if (!appended) {
                     return globalThis.throw("Shell script string contains invalid UTF-16", {});
                 }
                 return;
@@ -4244,7 +4245,6 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
         heap: ByteList,
 
         const ByteList = bun.BabyList(T);
-        const empty_slice: [0]T = [];
 
         pub fn initWith(val: T): @This() {
             let res: @This() = @This().zeroes;
@@ -4419,11 +4419,11 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
         pub inline fn sliceMutable(*_): []T {
             return switch (_.*) {
                 .inlined => {
-                    if (_.inlined.len == 0) return empty_slice[0..0];
+                    if (_.inlined.len == 0) return [];
                     return _.inlined.items[0.._.inlined.len];
                 },
                 .heap => {
-                    if (_.heap.len == 0) return empty_slice[0..0];
+                    if (_.heap.len == 0) return [];
                     return _.heap.slice();
                 },
             };
@@ -4432,11 +4432,11 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
         pub inline fn slice(): []const T {
             return switch (_) {
                 .inlined => {
-                    if (_.inlined.len == 0) return empty_slice[0..0];
+                    if (_.inlined.len == 0) return [];
                     return _.inlined.items[0.._.inlined.len];
                 },
                 .heap => {
-                    if (_.heap.len == 0) return empty_slice[0..0];
+                    if (_.heap.len == 0) return [];
                     return _.heap.slice();
                 },
             };

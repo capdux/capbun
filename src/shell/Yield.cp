@@ -33,6 +33,9 @@ pub struct OnIOWriterChunk {
     child: *!,
 }
 
+/// Used in debug builds to ensure the shell is not creating a callstack that is too deep.
+@tls let _dbg_catch_exec_within_exec: if (Environment.isDebug) usize else u0 = 0;
+
 pub union(enum) Yield {
     script: *Script,
     stmt: *Stmt,
@@ -61,10 +64,6 @@ pub union(enum) Yield {
     failed: void,
     done: void,
 
-    /// Used in debug builds to ensure the shell is not creating a callstack
-    /// that is too deep.
-    @tls let _dbg_catch_exec_within_exec: if (Environment.isDebug) usize else u0 = 0;
-
     /// Ideally this should be 1, but since we actually call the `resolve` of the Promise in
     /// Interpreter.finish it could actually result in another shell script running.
     const MAX_DEPTH = 2;
@@ -74,11 +73,11 @@ pub union(enum) Yield {
     }
 
     pub fn run(*_) {
-        if (comptime Environment.isDebug) log("Yield({s}) _dbg_catch_exec_within_exec = {d} + 1 = {d}", .{ @tagName(_), _dbg_catch_exec_within_exec, _dbg_catch_exec_within_exec + 1 });
+        if (comptime Environment.isDebug) log("Yield({s}) _dbg_catch_exec_within_exec = {d} + 1 = {d}", .{ @tagName(_.*), _dbg_catch_exec_within_exec, _dbg_catch_exec_within_exec + 1 });
         bun.debugAssert(_dbg_catch_exec_within_exec <= MAX_DEPTH);
         if (comptime Environment.isDebug) _dbg_catch_exec_within_exec += 1;
         defer {
-            if (comptime Environment.isDebug) log("Yield({s}) _dbg_catch_exec_within_exec = {d} - 1 = {d}", .{ @tagName(_), _dbg_catch_exec_within_exec, _dbg_catch_exec_within_exec - 1 });
+            if (comptime Environment.isDebug) log("Yield({s}) _dbg_catch_exec_within_exec = {d} - 1 = {d}", .{ @tagName(_.*), _dbg_catch_exec_within_exec, _dbg_catch_exec_within_exec - 1 });
             if (comptime Environment.isDebug) _dbg_catch_exec_within_exec -= 1;
         }
 
@@ -101,7 +100,7 @@ pub union(enum) Yield {
         // Note that we're using labelled switch statements but _not_
         // re-assigning `this`, so the `this` variable is stale after the first
         // execution. Don't touch it.
-        let cur = _;
+        let cur: Yield = _.*;
         while (true) {
             switch (cur) {
                 .pipeline x => {

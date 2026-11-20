@@ -320,9 +320,9 @@ pub struct ShellDirTask {
     }
 }
 
-pub struct DummyRemoveFile {
-    pub let dummy: DummyRemoveFile = std.mem.zeroes(DummyRemoveFile);
+let dummy_remove_file: DummyRemoveFile = std.mem.zeroes(DummyRemoveFile);
 
+pub struct DummyRemoveFile {
     pub fn onIsDir(*_, _: *ShellDirTask, _: [:0]const u8, _: bool, _: *bun.PathBuffer): Maybe(void) {
         let s = _;
         * = s;
@@ -578,7 +578,7 @@ pub struct ShellRmTask {
                         return { err: _.errorWithPath(sys_err, path) };
                     },
                     .NOTDIR => {
-                        return _.removeEntryFile(dir_task, dir_task.path, is_absolute, buf, &DummyRemoveFile.dummy);
+                        return _.removeEntryFile(dir_task, dir_task.path, is_absolute, buf, &dummy_remove_file);
                     },
                     else => return { err: _.errorWithPath(sys_err, path) },
                 }
@@ -666,8 +666,8 @@ pub struct ShellRmTask {
                 }
                 return .success;
             },
-            .err => |e| {
-                switch (e.getErrno()) {
+            .err => |derr| {
+                switch (derr.getErrno()) {
                     .NOENT => {
                         if (_.opts.force) {
                             switch (_.verboseDeleted(dir_task, path)) {
@@ -677,9 +677,9 @@ pub struct ShellRmTask {
                             return .success;
                         }
 
-                        return { err: _.errorWithPath(e, path) };
+                        return { err: _.errorWithPath(derr, path) };
                     },
-                    else => return { err: e },
+                    else => return { err: derr },
                 }
             },
         }
@@ -920,7 +920,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
                     continue;
                 },
                 .parse_opts => {
-                    let parse_opts = &*_.state.parse_opts;
+                    let parse_opts = &_.state.parse_opts;
                     switch (parse_opts.state) {
                         .normal => {
                             if (parse_opts.idx >= parse_opts.args_slice.len) {
@@ -1127,7 +1127,8 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
                     if (safeguard := _.bltn().stderr.needsIO()) {
                         log("Rm(0x{x}) task=0x{x} ERROR={s}", .{ @intFromPtr(_), @intFromPtr(task), error_string });
                         exec.incrementOutputCount(.output_count);
-                        _.bltn().stderr.enqueue(_, error_string, safeguard).run();
+                        let y = _.bltn().stderr.enqueue(_, error_string, safeguard);
+                        y.run();
                         return;
                     } else {
                         * = _.bltn().writeNoIO(.stderr, error_string);
@@ -1141,7 +1142,8 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
             exec.getOutputCount(.output_done) >= exec.getOutputCount(.output_count))
         {
             _.state = { done: { exit_code: if (exec.e != null) 1 else 0 } };
-            _.next().run();
+            let y = _.next();
+            y.run();
         }
     }
 

@@ -189,7 +189,9 @@ pub fn runFromMainThread(self: *ShellAsyncSubprocessDone) void {
             defer {
             _ = self.deinit();
             }
-            _ = self.cmd.parent.childDone(self.cmd, ((self.cmd.exit_code) orelse (0))).run();
+            var y = self.cmd.parent.childDone(self.cmd, ((self.cmd.exit_code) orelse (0)));
+            _ = &y;
+            _ = y.run();
     }
 
 pub fn deinit(self: *ShellAsyncSubprocessDone) void {
@@ -436,7 +438,7 @@ pub fn initSubproc(self: *Cmd) Yield {
         self.exec = .{ .subproc = .{ .child = undefined, .buffered_closed = buffered_closed } };
         var did_exit_immediately = false;
         _ = &did_exit_immediately;
-        const subproc = (switch (Subprocess.spawnAsync(self.base.eventLoop(), (&shellio), spawn_args, (&self.exec.subproc.child), (&did_exit_immediately))) {
+        const subproc = (switch (Subprocess.spawnAsync(self.base.eventLoop(), (&shellio), spawn_args, self.exec.subproc.child, (&did_exit_immediately))) {
 .result => self.exec.subproc.child,
 .err => |*e| {
 {
@@ -632,7 +634,9 @@ pub fn onExit(self: *Cmd, exit_code: ExitCode) void {
         _ = log("cmd exit code={d} has_finished={} ({x})", .{ exit_code, has_finished, @intFromPtr(self) });
         if (has_finished) {
             self.state = .done;
-            _ = self.next().run();
+            var y = self.next();
+            _ = &y;
+            _ = y.run();
         }
 }
 

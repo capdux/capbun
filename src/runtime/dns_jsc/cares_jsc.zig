@@ -230,10 +230,10 @@ pub fn addrInfoToJSArray(addr_info: *c_ares.AddrInfo, globalThis: *jsc.JSGlobalO
             const this_node = current.?;
             current = this_node.next;
             const addr_val: std.net.Address = (if ((this_node.family == c_ares.AF.INET)) blk: {
-            const in_ptr: *const std.posix.sockaddr.in = @ptrCast(this_node.addr.?);
+            const in_ptr: *const std.posix.sockaddr.in = @ptrCast(@alignCast(this_node.addr.?));
             break :blk std.net.Address{ .in = .{ .sa = in_ptr.* } };
 } else (if ((this_node.family == c_ares.AF.INET6)) blk: {
-            const in6_ptr: *const std.posix.sockaddr.in6 = @ptrCast(this_node.addr.?);
+            const in6_ptr: *const std.posix.sockaddr.in6 = @ptrCast(@alignCast(this_node.addr.?));
             break :blk std.net.Address{ .in6 = .{ .sa = in6_ptr.* } };
 } else unreachable));
             const res = GetAddrInfo.Result{ .address = addr_val, .ttl = this_node.ttl };
@@ -567,7 +567,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
         var len: usize = 0;
         _ = &len;
         inline for (@typeInfo(c_ares.struct_any_reply).@"struct".fields) |field| {
-            if (bun.strings.hasSuffix((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "_reply")) {
+            if (comptime std.mem.endsWith(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "_reply")) {
                 if ((@field(reply, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)) != null)) {
                     len = (len + 1);
                 }
@@ -578,7 +578,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
         var i: u32 = 0;
         _ = &i;
         inline for (@typeInfo(c_ares.struct_any_reply).@"struct".fields) |field| {
-            if (bun.strings.hasSuffix((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "_reply")) {
+            if (comptime std.mem.endsWith(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "_reply")) {
                 if (@field(reply, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))) |rep| {
                     _ = &rep;
                     const lookup_name = (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)[0..((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name).len - "_reply".len)];
@@ -589,7 +589,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
         return array;
 }
 
-pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: []const ?u8, promise: *jsc.JSPromise.Strong) *ErrorDeferred {
+pub fn errorToDeferred(err: c_ares.Error, syscall: []const u8, hostname: ?[]const u8, promise: *jsc.JSPromise.Strong) *ErrorDeferred {
         const host_string: ?bun.String = (if ((hostname != null)) bun.String.cloneUTF8(hostname.?) else null);
         defer {
         promise.* = .{};

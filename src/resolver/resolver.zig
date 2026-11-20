@@ -348,9 +348,8 @@ pub fn next_(self: *PathPairIter) ?*Path {
 return (&self.ctx.primary);
 },
 1 => {
-if (self.ctx.secondary) |*sec| {
-                _ = &sec;
-                return (sec.*);
+if ((self.ctx.secondary != null)) {
+                return (&self.ctx.secondary.?);
             }
             return null;
 },
@@ -432,10 +431,9 @@ pub fn path(self: *Result) ?*Path {
             if ((!self.path_pair.primary.is_disabled)) {
                 return (&self.path_pair.primary);
             }
-            if (self.path_pair.secondary) |*second| {
-                _ = &second;
-                if ((!(second.*).is_disabled)) {
-                    return (second.*);
+            if ((self.path_pair.secondary != null)) {
+                if ((!self.path_pair.secondary.?.is_disabled)) {
+                    return (&self.path_pair.secondary.?);
                 }
             }
             return null;
@@ -445,10 +443,9 @@ pub fn pathConst(self: Result) ?*const Path {
             if ((!self.path_pair.primary.is_disabled)) {
                 return (&self.path_pair.primary);
             }
-            if (self.path_pair.secondary) |*second| {
-                _ = &second;
-                if ((!(second.*).is_disabled)) {
-                    return (second.*);
+            if ((self.path_pair.secondary != null)) {
+                if ((!self.path_pair.secondary.?.is_disabled)) {
+                    return (&self.path_pair.secondary.?);
                 }
             }
             return null;
@@ -831,7 +828,7 @@ pub fn resolveAndAutoInstall(r: *ThisResolver, source_dir: []const u8, import_pa
             r.extension_order = original_order;
             }
             r.extension_order = (switch (kind) {
-.url, .at_conditional, .at => options.BundleOptions.Defaults.CSSExtensionOrder[0..],
+.url, .at_conditional, .at => css_extension_order[0..],
 .entry_point_build, .entry_point_run, .stmt, .dynamic => r.opts.extension_order.default.esm,
 else => r.opts.extension_order.default.default,
 });
@@ -852,7 +849,7 @@ else => r.opts.extension_order.default.default,
                 r.debug_logs = ((DebugLogs.init(r.allocator)) catch unreachable);
             }
             if ((import_path.len == 0)) {
-                return .{ .not_found = .{} };
+                return .not_found;
             }
             if (r.opts.mark_builtins_as_external) {
                 if (((strings.hasPrefixComptime(import_path, "node:") or strings.hasPrefixComptime(import_path, "bun:")) or bun.jsc.ModuleLoader.HardcodedModule.Alias.has(import_path, r.opts.target, .{ .rewrite_jest_for_tests = r.opts.rewrite_jest_for_tests }))) {
@@ -905,7 +902,7 @@ else => r.opts.extension_order.default.default,
                     if ((graph.findAssumeStandalonePath(import_path) != null)) {
                         return .{ .success = Result{ .import_kind = kind, .path_pair = PathPair{ .primary = Path.init(import_path) }, .module_type = .esm, .flags = .{ .is_standalone_module = true } } };
                     }
-                    return .{ .not_found = .{} };
+                    return .not_found;
                 } else {
                     if (bun.StandaloneModuleGraph.isBunStandaloneFilePath(source_dir)) {
                         if (((import_path.len > 2) and isDotSlash(import_path[0..2]))) {
@@ -934,7 +931,7 @@ else => r.opts.extension_order.default.default,
             }
             if (bun.strings.containsChar(import_path, 0)) {
                 _ = (blk_catch_14: { break :blk_catch_14 ((r.flushDebugLogs(.fail)) catch |__ce_14| { _ = &__ce_14;  }); });
-                return .{ .not_found = .{} };
+                return .not_found;
             }
             var tmp = r.resolveWithoutSymlinks(source_dir_normalized, import_path, kind, global_cache);
             _ = &tmp;
@@ -985,7 +982,7 @@ _ = (blk_catch_18: { break :blk_catch_18 ((r.flushDebugLogs(.fail)) catch |__ce_
 },
 .not_found => {
 _ = (blk_catch_19: { break :blk_catch_19 ((r.flushDebugLogs(.fail)) catch |__ce_19| { _ = &__ce_19;  }); });
-            return .{ .not_found = .{} };
+            return .not_found;
 },
 }
     }
@@ -1150,7 +1147,11 @@ pub fn resolveWithoutSymlinks(r: *ThisResolver, source_dir: []const u8, input_im
                     const ends_with_dir = (platform.isSeparator(import_path[@as(usize, @intCast((import_path.len - 1)))]) or ((((import_path.len > 3) and platform.isSeparator(import_path[@as(usize, @intCast((import_path.len - 3)))])) and (import_path[@as(usize, @intCast((import_path.len - 2)))] == 46)) and (import_path[@as(usize, @intCast((import_path.len - 1)))] == 46)));
                     var buf = bufs(.relative_abs_path);
                     _ = &buf;
-                    if (import_path == null) { import_path = return .{ .not_found = .{} }; }
+                    const checked_import = r.fs.absBufChecked((&.{ import_path }), buf);
+                    if ((checked_import == null)) {
+                        return .not_found;
+                    }
+                    import_path = checked_import.?;
                     if (ends_with_dir) {
                         buf[cp_cast_int(usize, import_path.len)] = platform.separator();
                         import_path.len = (import_path.len + 1);
@@ -1186,7 +1187,7 @@ pub fn resolveWithoutSymlinks(r: *ThisResolver, source_dir: []const u8, input_im
                     _ = &entry;
                     return .{ .success = Result{ .dirname_fd = entry.dirname_fd, .path_pair = entry.path_pair, .diff_case = entry.diff_case, .package_json = entry.package_json, .file_fd = entry.file_fd, .jsx = r.opts.jsx } };
                 }
-                return .{ .not_found = .{} };
+                return .not_found;
             }
             const is_package_path = ((kind != .entry_point_run) and isPackagePathNotAbsolute(import_path));
             const check_relative = ((!is_package_path) or kind.isFromCSS());
@@ -1216,7 +1217,7 @@ return .{ .failure = p };
 }
                     }
                     _ = bun.debugAssert((!check_package));
-                    return .{ .not_found = .{} };
+                    return .not_found;
                 } else {
                     switch (r.checkRelativePath(source_dir, import_path, kind, global_cache)) {
 .success => |res| {
@@ -1248,7 +1249,7 @@ return .{ .failure = p };
                     }
                     if (had_node_prefix) {
                         if ((!bun.jsc.ModuleLoader.HardcodedModule.Alias.has(import_path_without_node_prefix, .node, .{}))) {
-                            return .{ .not_found = .{} };
+                            return .not_found;
                         }
                         result.path_pair.primary.namespace = "node";
                         result.path_pair.primary.text = import_path_without_node_prefix;
@@ -1325,11 +1326,15 @@ return .{ .failure = p };
 }
                 }
             }
-            return .{ .not_found = .{} };
+            return .not_found;
     }
 
 pub fn checkRelativePath(r: *ThisResolver, source_dir: []const u8, import_path: []const u8, kind: ast.ImportKind, global_cache: GlobalCache) Result.Union {
-            const abs_path = ((r.fs.absBufChecked((&.{ source_dir, import_path }), bufs(.relative_abs_path))) orelse { return .{ .not_found = .{} }; });
+            const abs_path_checked = r.fs.absBufChecked((&.{ source_dir, import_path }), bufs(.relative_abs_path));
+            if ((abs_path_checked == null)) {
+                return .not_found;
+            }
+            const abs_path = abs_path_checked.?;
             if (((r.opts.external.abs_paths.count() > 0) and r.opts.external.abs_paths.contains(abs_path))) {
                 if (r.debug_logs) |*debug| {
                     _ = &debug;
@@ -1374,7 +1379,7 @@ else => {
                 _ = &res;
                 return .{ .success = .{ .path_pair = res.path_pair, .diff_case = res.diff_case, .dirname_fd = res.dirname_fd, .package_json = res.package_json, .jsx = r.opts.jsx } };
             } else {
-                return .{ .not_found = .{} };
+                return .not_found;
             }
     }
 
@@ -1382,7 +1387,7 @@ pub fn checkPackagePath(r: *ThisResolver, source_dir: []const u8, unremapped_imp
             var import_path = unremapped_import_path;
             _ = &import_path;
             var source_dir_info: *DirInfo = brk: {
-            if ((blk_catch_24: { break :blk_catch_24 ((r.dirInfoCached(source_dir)) catch |__ce_24| { _ = &__ce_24; return .{ .not_found = .{} }; }); })) |cached| {
+            if ((blk_catch_24: { break :blk_catch_24 ((r.dirInfoCached(source_dir)) catch |__ce_24| { _ = &__ce_24; return .not_found; }); })) |cached| {
                 _ = &cached;
                 break :brk cached;
             }
@@ -1392,12 +1397,12 @@ pub fn checkPackagePath(r: *ThisResolver, source_dir: []const u8, unremapped_imp
             var closest_dir = source_dir;
             _ = &closest_dir;
             while (std.fs.path.dirname(closest_dir)) |current| : (closest_dir = current) {
-                if ((blk_catch_25: { break :blk_catch_25 ((r.dirInfoCached(current)) catch |__ce_25| { _ = &__ce_25; return .{ .not_found = .{} }; }); })) |dir| {
+                if ((blk_catch_25: { break :blk_catch_25 ((r.dirInfoCached(current)) catch |__ce_25| { _ = &__ce_25; return .not_found; }); })) |dir| {
                     _ = &dir;
                     break :brk dir;
                 }
             }
-            return .{ .not_found = .{} };
+            return .not_found;
 };
             _ = &source_dir_info;
             if (r.care_about_browser_field) {
@@ -1496,7 +1501,7 @@ return .{ .pending = p };
 return .{ .failure = p };
 },
 else => {
-return .{ .not_found = .{} };
+return .not_found;
 },
 }
     }
@@ -1686,7 +1691,7 @@ pub fn loadNodeModules(r: *ThisResolver, import_path: []const u8, kind: ast.Impo
                         if ((blk_catch_29: { break :blk_catch_29 ((r.dirInfoCached(abs_package_path)) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); })) |pkg_dir_info| {
                             _ = &pkg_dir_info;
                             r.extension_order = (switch (kind) {
-.url, .at_conditional, .at => options.BundleOptions.Defaults.CSSExtensionOrder[0..],
+.url, .at_conditional, .at => css_extension_order[0..],
 else => r.opts.extension_order.kind(kind, true),
 });
                             if (pkg_dir_info.package_json) |package_json| {
@@ -1726,7 +1731,7 @@ else => r.opts.conditions.@"import",
                                     if (strings.eqlComptime(esm.subpath, "./package.json")) {
                                         return .{ .success = .{ .path_pair = .{ .primary = package_json.source.path }, .dirname_fd = pkg_dir_info.getFileDescriptor(), .file_fd = .invalid, .is_node_module = package_json.source.path.isNodeModule(), .package_json = package_json, .dir_info = dir_info } };
                                     }
-                                    return .{ .not_found = .{} };
+                                    return .not_found;
                                 }
                             }
                         }
@@ -1849,7 +1854,7 @@ return .{ .pending = pending };
 return .{ .failure = e };
 },
 .not_found => {
-return .{ .not_found = .{} };
+return .not_found;
 },
 });
 
@@ -1864,7 +1869,7 @@ var path = Fs.Path.init(import_path);
 },
 .extract, .extracting => |st| {
 if ((!global_cache.canInstall())) {
-                        return .{ .not_found = .{} };
+                        return .not_found;
                     }
                     var builder = Semver.String.Builder{  };
                     _ = &builder;
@@ -1920,12 +1925,12 @@ else => r.opts.conditions.@"import",
                             if (strings.eqlComptime(esm.subpath, "./package.json")) {
                                 return .{ .success = .{ .path_pair = .{ .primary = package_json.source.path }, .dirname_fd = pkg_dir_info.getFileDescriptor(), .file_fd = .invalid, .is_node_module = package_json.source.path.isNodeModule(), .package_json = package_json, .dir_info = dir_info } };
                             }
-                            return .{ .not_found = .{} };
+                            return .not_found;
                         }
                     }
                     const abs_path_opt = r.fs.absBufChecked((&.{ pkg_dir_info.abs_path, esm.subpath }), bufs(.node_modules_check));
                     if ((abs_path_opt == null)) {
-                        return .{ .not_found = .{} };
+                        return .not_found;
                     }
                     const abs_path = abs_path_opt.?;
                     if (r.debug_logs) |*debug| {
@@ -1942,7 +1947,7 @@ else => r.opts.conditions.@"import",
                 }
 };
             }
-            return .{ .not_found = .{} };
+            return .not_found;
     }
 
 pub fn dirInfoForResolution(r: *ThisResolver, dir_path_maybe_trail_slash: []const u8, package_id: Install.PackageID) !?*DirInfo {
@@ -1981,7 +1986,7 @@ pub fn dirInfoForResolution(r: *ThisResolver, dir_path_maybe_trail_slash: []cons
                 const allocator = bun.default_allocator;
                 var dir_name_str: []const u8 = "";
                 _ = &dir_name_str;
-                var existing_data_ptr: ?*Fs.FileSystem.DirEntry.Data = null;
+                var existing_data_ptr: ?*@FieldType(Fs.FileSystem.DirEntry,"data") = null;
                 _ = &existing_data_ptr;
                 if (in_place) |existing| {
                     _ = &existing;
@@ -1995,7 +2000,7 @@ pub fn dirInfoForResolution(r: *ThisResolver, dir_path_maybe_trail_slash: []cons
                 var dir_iterator = bun.iterateDir(open_dir);
                 _ = &dir_iterator;
                 while ((blk_catch_38: { break :blk_catch_38 ((dir_iterator.next().unwrap()) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 null; }); })) |_value| {
-                    _ = ((new_entry.addEntry(existing_data_ptr, (&_value), allocator, void, .{})) catch unreachable);
+                    _ = ((new_entry.addEntry(existing_data_ptr, (&_value), allocator, void, undefined)) catch unreachable);
                 }
                 if (in_place) |existing| {
                     _ = &existing;
@@ -2064,7 +2069,7 @@ var builder = Semver.String.Builder{  };
                 return .{ .pending = .{ .esm = cloned, .dependency = version, .root_dependency_id = id, .string_buf = builder.allocatedSlice(), .tag = .resolve } };
 },
 .not_found => {
-return .{ .not_found = .{} };
+return .not_found;
 },
 .failure => |e| {
 return .{ .failure = e };
@@ -2202,14 +2207,14 @@ pub fn resolveWithoutRemapping(r: *ThisResolver, source_dir_info: *DirInfo, impo
             } else {
                 const resolved_opt = r.fs.absBufChecked((&.{ source_dir_info.abs_path, import_path }), bufs(.resolve_without_remapping));
                 if ((resolved_opt == null)) {
-                    return .{ .not_found = .{} };
+                    return .not_found;
                 }
                 const resolved = resolved_opt.?;
                 if (r.loadAsFileOrDirectory(resolved, kind)) |result| {
                     _ = &result;
                     return .{ .success = result };
                 }
-                return .{ .not_found = .{} };
+                return .not_found;
             }
     }
 
@@ -2503,7 +2508,7 @@ if (comptime enable_logging) {
                     const allocator = bun.default_allocator;
                     var dir_name_str: []const u8 = "";
                     _ = &dir_name_str;
-                    var existing_data_ptr: ?*Fs.FileSystem.DirEntry.Data = null;
+                    var existing_data_ptr: ?*@FieldType(Fs.FileSystem.DirEntry,"data") = null;
                     _ = &existing_data_ptr;
                     if (in_place) |existing| {
                         _ = &existing;
@@ -2517,7 +2522,7 @@ if (comptime enable_logging) {
                     var dir_iterator = bun.iterateDir(open_dir);
                     _ = &dir_iterator;
                     while ((blk_catch_62: { break :blk_catch_62 ((dir_iterator.next().unwrap()) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 null; }); })) |_value| {
-                        _ = ((new_entry.addEntry(existing_data_ptr, (&_value), allocator, void, .{})) catch unreachable);
+                        _ = ((new_entry.addEntry(existing_data_ptr, (&_value), allocator, void, undefined)) catch unreachable);
                     }
                     if (in_place) |existing| {
                         _ = &existing;
@@ -2661,7 +2666,7 @@ pub fn loadPackageImports(r: *ThisResolver, import_path: []const u8, dir_info: *
                     _ = &debug;
                     _ = (debug.*).addNoteFmt("The path \"{s}\" must not equal \"#\" and must not start with \"#/\"", .{ import_path });
                 }
-                return .{ .not_found = .{} };
+                return .not_found;
             }
             var module_type = options.ModuleType.unknown;
             _ = &module_type;
@@ -2683,7 +2688,7 @@ else => r.opts.conditions.@"import",
                 _ = &result;
                 return .{ .success = result };
             }
-            return .{ .not_found = .{} };
+            return .not_found;
     }
 
 pub fn checkBrowserMap(r: *ThisResolver, dir_info: *const DirInfo, input_path_: []const u8, comptime kind: BrowserMapPath.Kind) ?[]const u8 {
@@ -3477,7 +3482,8 @@ pub const RootPathPair = struct {
 pub const DataURL = @import("./data_url.zig").DataURL;
 const debuglog = Output.scoped(.Resolver, .hidden);
 const WIN32_CACHE_LEN = (bun.MAX_PATH_BYTES * 2);
-var bufs_storage = bun.ThreadlocalBuffers(Bufs);
+const bufs_storage = bun.ThreadlocalBuffers(Bufs);
+const css_extension_order: [1][]const u8 = .{ ".css" };
 var resolver_Mutex: CpBareMutex = undefined;
 var resolver_Mutex_loaded: bool = false;
 const BinFolderArray = bun.BoundedArray(string, 128);

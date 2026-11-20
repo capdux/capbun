@@ -730,7 +730,8 @@ else => null,
                     existing.dir = self.dir;
                     existing.need_stat = ((existing.need_stat or (found_kind == null)) or (existing.cache.kind != found_kind));
                     if ((existing.cache.kind != found_kind)) {
-                        if (existing.cache.kind == null) { existing.cache.kind = .file; }
+                        const resolved_kind: Entry.Kind = ((found_kind) orelse (.file));
+                        existing.cache.kind = resolved_kind;
                         existing.cache.symlink = PathString.empty;
                     }
                     existing_entry = existing;
@@ -1124,7 +1125,7 @@ pub fn init(cwd: []const u8) RealFS {
                 _entries_option_map = EntriesOption.Map.init(bun.default_allocator);
                 _entries_option_map_loaded = true;
             }
-            return RealFS{ .entries = RealFS._entries_option_map, .cwd = cwd, .file_limit = file_limit, .file_quota = file_limit };
+            return RealFS{ .entries = _entries_option_map, .cwd = cwd, .file_limit = file_limit, .file_quota = file_limit };
     }
 
 pub fn modKeyWithFile(fs: *RealFS, path: []const u8, file: anytype) anyerror!ModKey {
@@ -1180,16 +1181,16 @@ pub fn readDirectoryError(fs: *RealFS, dir: []const u8, e: anyerror) OOM!*Entrie
                 switch (e) {
 error.ENOENT, error.FileNotFound => {
 _ = fs.entries.markNotFound(get_or_put_result);
-                temp_entries_option = RealFSEntriesOption{ .e = DirEntry.Err{ .original_err = e, .canonical_error = e } };
+                temp_entries_option = RealFSEntriesOption{ .@"err" = DirEntry.Err{ .original_err = e, .canonical_error = e } };
                 return (&temp_entries_option);
 },
 else => {
-const opt = try fs.entries.put((&get_or_put_result), EntriesOption{ .e = DirEntry.Err{ .original_err = e, .canonical_error = e } });
+const opt = try fs.entries.put((&get_or_put_result), EntriesOption{ .@"err" = DirEntry.Err{ .original_err = e, .canonical_error = e } });
                 return opt;
 },
 }
             }
-            temp_entries_option = RealFSEntriesOption{ .e = DirEntry.Err{ .original_err = e, .canonical_error = e } };
+            temp_entries_option = RealFSEntriesOption{ .@"err" = DirEntry.Err{ .original_err = e, .canonical_error = e } };
             return (&temp_entries_option);
     }
 
@@ -1226,7 +1227,7 @@ pub fn readDirectoryWithIterator(fs: *RealFS, dir_maybe_trail_slash: []const u8,
                         in_place = cached_result.entries;
                     } else {
                         if (((cache_result.?.status == .not_found) and (generation == 0))) {
-                            temp_entries_option = RealFSEntriesOption{ .e = DirEntry.Err{ .original_err = error.ENOENT, .canonical_error = error.ENOENT } };
+                            temp_entries_option = RealFSEntriesOption{ .@"err" = DirEntry.Err{ .original_err = error.ENOENT, .canonical_error = error.ENOENT } };
                             return (&temp_entries_option);
                         }
                     }
@@ -1709,10 +1710,10 @@ threadlocal var normalize_buf: [1024]u8 = undefined;
 threadlocal var join_buf: [1024]u8 = undefined;
 pub const RealFSEntriesOption = union(Tag) {
     entries: *DirEntry,
-    e: DirEntry.Err,
+    @"err": DirEntry.Err,
     pub const Tag = enum {
             entries,
-            e,
+            @"err",
         };
     pub const Map = allocators.BSSMap(RealFSEntriesOption, Preallocate.Counts.dir_entry, false, 256, true);
 };

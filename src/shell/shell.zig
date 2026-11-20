@@ -860,7 +860,7 @@ pub const AST = struct {
                 return @as(u8, @bitCast(this)) == 0;
             }
     
-            fn redirectsElsewhere(this: @This(), io_kind: enum { stdin, stdout, stderr }) bool {
+            pub fn redirectsElsewhere(this: @This(), io_kind: enum { stdin, stdout, stderr }) bool {
                 return switch (io_kind) {
                     .stdin => this.stdin,
                     .stdout => if (this.duplicate_out) !this.stdout else this.stdout,
@@ -876,7 +876,7 @@ pub const AST = struct {
                 return .{ .stdout = true, .duplicate = true };
             }
     
-            fn toFlags(this: @This()) i32 {
+            pub fn toFlags(this: @This()) i32 {
                 const read_write_flags: i32 = if (this.stdin) bun.O.RDONLY else bun.O.WRONLY | bun.O.CREAT;
                 const extra: i32 = if (this.append) bun.O.APPEND else bun.O.TRUNC;
                 const final_flags: i32 = if (this.stdin) read_write_flags else extra | read_write_flags;
@@ -2779,7 +2779,7 @@ const isAllAscii = bun.strings.isAllASCII;
 pub fn Result(comptime T: anytype) type {
         return union(enum) {
     result: T,
-    e: ShellErr,
+    @"err": ShellErr,
 
 pub fn asErr(self: @This()) ?ShellErr {
             if ((self == .err)) {
@@ -4162,7 +4162,8 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                     if ((bunstr.indexOfAsciiChar(0) != null)) {
                         return globalThis.ERR(.INVALID_ARG_VALUE, "The shell argument must be a string without null bytes. Received \"{f}\"", .{ bunstr.toZigString() }).throw();
                     }
-                    if (try (!builder.appendBunStr(bunstr, false))) {
+                    const appended = try builder.appendBunStr(bunstr, false);
+                    if ((!appended)) {
                         return globalThis.throw("Shell script string contains invalid UTF-16", .{});
                     }
                     return;
@@ -4445,7 +4446,7 @@ pub inline fn sliceMutable(self: *@This()) []T {
 .inlined => {
 {
                 if ((self.inlined.len == 0)) {
-                    return empty_slice[0..0];
+                    return &.{};
                 }
                 return self.inlined.items[0..self.inlined.len];
             }
@@ -4453,7 +4454,7 @@ pub inline fn sliceMutable(self: *@This()) []T {
 .heap => {
 {
                 if ((self.heap.len == 0)) {
-                    return empty_slice[0..0];
+                    return &.{};
                 }
                 return self.heap.slice();
             }
@@ -4466,7 +4467,7 @@ pub inline fn slice(self: @This()) []const T {
 .inlined => {
 {
                 if ((self.inlined.len == 0)) {
-                    return empty_slice[0..0];
+                    return &.{};
                 }
                 return self.inlined.items[0..self.inlined.len];
             }
@@ -4474,7 +4475,7 @@ pub inline fn slice(self: @This()) []const T {
 .heap => {
 {
                 if ((self.heap.len == 0)) {
-                    return empty_slice[0..0];
+                    return &.{};
                 }
                 return self.heap.slice();
             }
@@ -4557,7 +4558,6 @@ pub fn lastUncheckedConst(self: *const @This()) *const T {
             return self.getConst((self.len() - 1));
     }
     const ByteList = bun.BabyList(T);
-    const empty_slice: [0]T = &.{};
     pub const zeroes: @This() = .{ .inlined = .{} };
     pub const Inlined = struct {
         items: [INLINED_MAX]T = undefined,
