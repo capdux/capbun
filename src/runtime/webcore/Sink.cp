@@ -245,6 +245,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             cpp: JSValue,
 
             pub fn init(cpp: JSValue): streams.Signal {
+                @setRuntimeSafety(false);
                 return streams.Signal.initWithType(SinkSignal, @as(*SinkSignal, @ptrFromInt(@as(usize, @bitCast(@intFromEnum(cpp))))));
             }
 
