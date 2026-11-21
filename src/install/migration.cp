@@ -29,6 +29,35 @@ type ResolvedURLsMap = bun.StringHashMapUnmanaged(string);
 type IdMap = bun.StringHashMapUnmanaged(IdMapValue);
 type VoidStringArrayHashMap = bun.StringArrayHashMapUnmanaged(void);
 
+struct CloseGuard<T> {
+    val: T?,
+
+    ~init() {
+        if (v := _.val) {
+            v.close();
+            _.val = null;
+        }
+    }
+}
+
+struct ResolvedURLsGuard {
+    map: *ResolvedURLsMap!?,
+    allocator: Allocator,
+
+    ~init() {
+        if (m := _.map) {
+            unsafe {
+                let itr = m.iterator();
+                while (entry := itr.next()) {
+                    _.allocator.free(entry.value_ptr.*);
+                }
+                m.deinit(_.allocator);
+            }
+            _.map = null;
+        }
+    }
+}
+
 pub struct IdMapValue {
     /// index into the old package-lock.json package entries.
     old_json_index: u32,
@@ -66,7 +95,7 @@ pub fn detectAndLoadOtherLockfile(
     npm: {
         let timer = std.time.Timer.start() catch unreachable;
         const lockfile_file = File.openat(dir, "package-lock.json", bun.O.RDONLY, 0).unwrap() catch break :npm;
-        defer lockfile_file.close();
+        const lockfile_file_guard = CloseGuard<File>{ val: lockfile_file };
         let lockfile_path_buf: bun.PathBuffer = undefined;
         const lockfile_path = bun.getFdPathZ(lockfile_file.handle, &lockfile_path_buf) catch break :npm;
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :npm;
@@ -99,7 +128,7 @@ pub fn detectAndLoadOtherLockfile(
     yarn: {
         let timer = std.time.Timer.start() catch unreachable;
         const lockfile_file = File.openat(dir, "yarn.lock", bun.O.RDONLY, 0).unwrap() catch break :yarn;
-        defer lockfile_file.close();
+        const lockfile_file_guard = CloseGuard<File>{ val: lockfile_file };
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :yarn;
         const migrate_result = @import("./yarn.zig").migrateYarnLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
             return LoadResult{ err: .{
@@ -123,7 +152,7 @@ pub fn detectAndLoadOtherLockfile(
     pnpm: {
         let timer = std.time.Timer.start() catch unreachable;
         const lockfile_file = File.openat(dir, "pnpm-lock.yaml", bun.O.RDONLY, 0).unwrap() catch break :pnpm;
-        defer lockfile_file.close();
+        const lockfile_file_guard = CloseGuard<File>{ val: lockfile_file };
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :pnpm;
         const migrate_result = @import("./pnpm.zig").migratePnpmLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
             if (e == error.PnpmLockfileTooOld) {
@@ -281,13 +310,7 @@ pub fn migrateNPMLockfile(
 
     // constructed "resolved" urls
     let resolved_urls = ResolvedURLsMap{};
-    defer {
-        let itr = resolved_urls.iterator();
-        while (entry := itr.next()) {
-            allocator.free(entry.value_ptr.*);
-        }
-        resolved_urls.deinit(allocator);
-    }
+    const resolved_urls_guard = ResolvedURLsGuard{ map: unsafe { &resolved_urls }, allocator: allocator };
 
     // Counting Phase
     // This "IdMap" is used to make object key lookups faster for the `packages` object
@@ -737,20 +760,22 @@ pub fn migrateNPMLockfile(
                 dependencies_list[package_idx] = .{ len: 0 };
                 resolution_list[package_idx] = .{ len: 0 };
             } else {
-                // Calculate the offset + length by pointer arithmetic
-                const len: u32 = @truncate((@intFromPtr(resolutions_buf.ptr) - @intFromPtr(resolutions_start)) / @sizeOf(Install.PackageID));
-                if (Environment.allow_assert) {
-                    bun.assert(len > 0);
-                    bun.assert(len == ((@intFromPtr(dependencies_buf.ptr) - @intFromPtr(dependencies_start)) / @sizeOf(Dependency)));
+                unsafe {
+                    // Calculate the offset + length by pointer arithmetic
+                    const len: u32 = @truncate((@intFromPtr(resolutions_buf.ptr) - @intFromPtr(resolutions_start)) / @sizeOf(Install.PackageID));
+                    if (Environment.allow_assert) {
+                        bun.assert(len > 0);
+                        bun.assert(len == ((@intFromPtr(dependencies_buf.ptr) - @intFromPtr(dependencies_start)) / @sizeOf(Dependency)));
+                    }
+                    dependencies_list[package_idx] = .{
+                        off: @truncate((@intFromPtr(dependencies_start) - @intFromPtr(lockfile.buffers.dependencies.items.ptr)) / @sizeOf(Dependency)),
+                        len: len,
+                    };
+                    resolution_list[package_idx] = .{
+                        off: @truncate((@intFromPtr(resolutions_start) - @intFromPtr(lockfile.buffers.resolutions.items.ptr)) / @sizeOf(Install.PackageID)),
+                        len: len,
+                    };
                 }
-                dependencies_list[package_idx] = .{
-                    off: @truncate((@intFromPtr(dependencies_start) - @intFromPtr(lockfile.buffers.dependencies.items.ptr)) / @sizeOf(Dependency)),
-                    len: len,
-                };
-                resolution_list[package_idx] = .{
-                    off: @truncate((@intFromPtr(resolutions_start) - @intFromPtr(lockfile.buffers.resolutions.items.ptr)) / @sizeOf(Install.PackageID)),
-                    len: len,
-                };
             }
 
             package_idx += 1;
@@ -1133,13 +1158,17 @@ pub fn migrateNPMLockfile(
         }
     }
 
-    lockfile.buffers.resolutions.items.len = (@intFromPtr(resolutions_buf.ptr) - @intFromPtr(lockfile.buffers.resolutions.items.ptr)) / @sizeOf(Install.PackageID);
+    unsafe {
+        lockfile.buffers.resolutions.items.len = (@intFromPtr(resolutions_buf.ptr) - @intFromPtr(lockfile.buffers.resolutions.items.ptr)) / @sizeOf(Install.PackageID);
+    }
     lockfile.buffers.dependencies.items.len = lockfile.buffers.resolutions.items.len;
 
     // In allow_assert, we prefill this buffer with uninitialized values that we can detect later
     // It is our fault if we hit an error here, making it safe to disable in release.
     if (Environment.allow_assert) {
-        bun.assert(lockfile.buffers.dependencies.items.len == (@intFromPtr(dependencies_buf.ptr) - @intFromPtr(lockfile.buffers.dependencies.items.ptr)) / @sizeOf(Dependency));
+        unsafe {
+            bun.assert(lockfile.buffers.dependencies.items.len == (@intFromPtr(dependencies_buf.ptr) - @intFromPtr(lockfile.buffers.dependencies.items.ptr)) / @sizeOf(Dependency));
+        }
         bun.assert(lockfile.buffers.dependencies.items.len <= num_deps);
         let crash = false;
         for (i of 0..lockfile.buffers.dependencies.items.len) {

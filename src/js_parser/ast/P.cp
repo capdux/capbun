@@ -6,6 +6,42 @@ import maybe_mod from "./maybe.zig";
 import symbols_mod from "./symbols.zig";
 import lowerDecorators_mod from "./lowerDecorators.zig";
 import defines_mod from "../../bundler/defines.zig";
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct FreeGuard {
+    allocator: std.mem.Allocator,
+    slice: ([]const u8)?,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!?,
+    fba: *std.heap.FixedBufferAllocator!?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) {
+            if (f := _.fba) {
+                if (f.end_index >= 1023) {
+                    p.deinit(_.allocator);
+                }
+            } else {
+                p.deinit(_.allocator);
+            }
+        }
+    }
+}
+
 const RecentlyVisitedTSNamespace = struct {
     expr: Expr.Data = Expr.empty.data,
     map: (*js_ast.TSNamespaceMemberMap)? = null,
@@ -845,14 +881,14 @@ pub fn NewParser_(
             if (!p.options.bundle || p.options.allow_unresolved.* == .all) return;
 
             let shape_buf = std.array_list.Managed(u8).init(p.allocator);
-            defer shape_buf.deinit();
+            const _shape_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &shape_buf };
             const shape = p.extractDynamicSpecifierShape(arg, &shape_buf)?;
             if (!p.options.allow_unresolved.allows(shape)) {
                 const r = js_lexer.rangeOfIdentifier(p.source, loc);
                 if (shape.len > 0) {
                     // Print a human-readable shape: replace \x00 with *
                     const display = p.allocator.dupe(u8, shape)?;
-                    defer p.allocator.free(display);
+                    const _display_guard = FreeGuard{ allocator: p.allocator, slice: display };
                     for (*c of display) if (c == 0) {
                         c = '*';
                     };
@@ -2032,7 +2068,7 @@ pub fn NewParser_(
                         }
 
                         if (replacement_can_be_removed) {
-                            for (*arg of new.args.slice()) {
+                            for (*arg of new_expr.args.slice()) {
                                 switch (p.substituteSingleUseSymbolInExpr(arg, sym_ref, replacement, replacement_can_be_removed)) {
                                     .continue_ => {},
                                     .success => |result| {
@@ -3997,7 +4033,11 @@ pub fn NewParser_(
                 let already_declared = RefMap{};
                 let already_declared_allocator_stack = std.heap.stackFallback(1024, allocator);
                 const already_declared_allocator = already_declared_allocator_stack.get();
-                defer if (already_declared_allocator_stack.fixed_buffer_allocator.end_index >= 1023) already_declared.deinit(already_declared_allocator);
+                const _already_declared_guard = DeinitWithAllocGuard<RefMap>{
+                    ptr: &already_declared,
+                    fba: &already_declared_allocator_stack.fixed_buffer_allocator,
+                    allocator: already_declared_allocator,
+                };
 
                 for (*local of p.relocated_top_level_vars.items) {
                     // Follow links because "var" declarations may be merged due to hoisting
@@ -5718,7 +5758,11 @@ pub fn NewParser_(
                 .m_dot => |_refs| {
                     let refs = _refs;
                     bun.assert(refs.items.len >= 2);
-                    defer refs.deinit(p.allocator);
+                    const _refs_guard = DeinitWithAllocGuard<@TypeOf(refs)>{
+                        ptr: &refs,
+                        fba: null,
+                        allocator: p.allocator,
+                    };
 
                     let dots = p.newExpr(
                         E.Dot{

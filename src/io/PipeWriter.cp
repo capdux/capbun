@@ -11,6 +11,16 @@ const jsc = bun.jsc;
 const uv = bun.windows.libuv;
 const log = bun.Output.scoped(.PipeWriter, .hidden);
 
+pub struct DerefGuard<T> {
+    ptr: *T?! = null,
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+            _.ptr = null;
+        }
+    }
+}
+
 pub const WriteResult = union(enum) {
     done: usize,
     wrote: usize,
@@ -36,14 +46,14 @@ pub fn PosixPipeWriter(
 ): type {
     * = _unused;
     return struct {
-        fn tryWrite(this: *This, force_sync: bool, buf_: []const u8) WriteResult {
-            return switch (if (!force_sync) getFileType(this) else .file) {
-                inline else => |ft| return tryWriteWithWriteFn(this, buf_, comptime writeToFileType(ft)),
+        static fn tryWrite(parent: *This, force_sync: bool, buf_: []const u8): WriteResult {
+            return switch (if (!force_sync) getFileType(parent) else .file) {
+                inline else => |ft| return tryWriteWithWriteFn(parent, buf_, comptime writeToFileType(ft)),
             };
         }
 
-        fn tryWriteWithWriteFn(this: *This, buf: []const u8, comptime write_fn: fn (bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
-            const fd = getFd(this);
+        static fn tryWriteWithWriteFn(parent: *This, buf: []const u8, comptime write_fn: fn (bun.FD, []const u8) bun.sys.Maybe(usize)): WriteResult {
+            const fd = getFd(parent);
 
             let offset: usize = 0;
 
@@ -94,9 +104,9 @@ pub fn PosixPipeWriter(
             const buffer = getBuffer(parent);
             log("onPoll({})", .{buffer.len});
             if (buffer.len == 0 and !received_hup) {
-                log("PosixPipeWriter(0x{x}) handle={s}", .{ @intFromPtr(parent), @tagName(parent.handle) });
+                log("PosixPipeWriter(0x{x}) handle={s}", .{ unsafe { @intFromPtr(parent) }, @tagName(parent.handle) });
                 if (parent.handle == .poll) {
-                    log("PosixPipeWriter(0x{x}) got 0, registered state = {}", .{ @intFromPtr(parent), parent.handle.poll.isRegistered() });
+                    log("PosixPipeWriter(0x{x}) got 0, registered state = {}", .{ unsafe { @intFromPtr(parent) }, parent.handle.poll.isRegistered() });
                 }
                 return;
             }
@@ -111,8 +121,8 @@ pub fn PosixPipeWriter(
                     if (wrote > 0)
                         onWrite(parent, wrote, .pending);
 
-                    if (comptime registerPoll) |register| {
-                        register(parent);
+                    if (comptime registerPoll != null) {
+                        registerPoll.?(parent);
                     }
                 },
                 .wrote => |amt| {
@@ -433,7 +443,7 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
             this.is_done = true;
             this.outgoing.reset();
 
-            onError(@ptrCast(@alignCast(this.parent)), err);
+            unsafe { onError(@ptrCast(@alignCast(this.parent)), err); }
             this.close();
         }
 
@@ -472,7 +482,7 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
             this.outgoing.reset();
 
             if (onReady) |cb| {
-                cb(@ptrCast(this.parent));
+                unsafe { cb(@ptrCast(this.parent)); }
             }
         }
 
@@ -1027,7 +1037,7 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
                     file.prepare();
                     this.write_buffer = uv.uv_buf_t.init(buffer);
 
-                    if (uv.uv_fs_write(this.parent.loop(), &file.fs, file.file, @ptrCast(&this.write_buffer), 1, -1, onFsWriteComplete).toError(.write)) |err| {
+                    if (uv.uv_fs_write(this.parent.loop(), &file.fs, file.file, unsafe { @ptrCast(&this.write_buffer) }, 1, -1, onFsWriteComplete).toError(.write)) |err| {
                         file.complete(false);
                         this.close();
                         onError(this.parent, err);
@@ -1244,7 +1254,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
         }
 
         fn onWriteComplete(this: *WindowsWriter, status: uv.ReturnCode) void {
-            defer this.parent.deref();
+            const _parent_guard = DerefGuard<Parent>{ ptr: this.parent };
 
             if (status.toError(.write)) |err| {
                 this.last_write_result = .{ .err = err };
@@ -1300,7 +1310,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
             }
 
             if (result.toError(.write)) |err| {
-                defer writer.parent.deref();
+                const _parent_guard = DerefGuard<Parent>{ ptr: writer.parent };
                 writer.close();
                 onError(writer.parent, err);
                 return;
@@ -1344,7 +1354,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
                     file.prepare();
                     this.write_buffer = uv.uv_buf_t.init(bytes);
 
-                    if (uv.uv_fs_write(this.parent.loop(), &file.fs, file.file, @ptrCast(&this.write_buffer), 1, -1, onFsWriteComplete).toError(.write)) |err| {
+                    if (uv.uv_fs_write(this.parent.loop(), &file.fs, file.file, unsafe { @ptrCast(&this.write_buffer) }, 1, -1, onFsWriteComplete).toError(.write)) |err| {
                         file.complete(false);
                         this.last_write_result = .{ .err = err };
                         onError(this.parent, err);

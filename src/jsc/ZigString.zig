@@ -79,9 +79,25 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit();
+                }
+        }
+    };
+}
+
 pub const ZigString = extern struct {
     _unsafe_ptr_do_not_use: [*]const u8,
     len: usize,
@@ -97,11 +113,11 @@ pub inline fn @"as"(self: ZigString) ByteString {
             return (if (self.is16Bit()) ByteString{ .utf16 = self.utf16SliceAligned() } else ByteString{ .latin1 = self.slice() });
     }
 
-pub fn encode(self: ZigString, encoding: jsc.Node.Encoding) []u8 {
+pub fn encode(self: *const ZigString, encoding: jsc.Node.Encoding) []u8 {
             return self.encodeWithAllocator(bun.default_allocator, encoding);
     }
 
-pub fn encodeWithAllocator(self: ZigString, allocator: std.mem.Allocator, encoding: jsc.Node.Encoding) []u8 {
+pub fn encodeWithAllocator(self: *const ZigString, allocator: std.mem.Allocator, encoding: jsc.Node.Encoding) []u8 {
             return (switch (self.@"as"()) {
 inline else => |repr| (switch (encoding) {
 inline else => |enc| jsc.WebCore.encoding.constructFrom(std.@"meta".Child(@TypeOf(repr)), repr, allocator, enc),
@@ -140,14 +156,16 @@ pub fn eqlCaseInsensitive(self: ZigString, other: ZigString) bool {
             const fallback_allocator = fallback.get();
             var utf16_slice = self.toSliceLowercase(fallback_allocator);
             _ = &utf16_slice;
+            var _utf16_guard = DeinitGuard(Slice){ .ptr = (&utf16_slice) };
+            _ = &_utf16_guard;
+            var ___utf16_guard_moved = false; _ = &___utf16_guard_moved;
+            defer if (!___utf16_guard_moved) { ___utf16_guard_moved = true; const __T = @TypeOf(_utf16_guard); if (@typeInfo(__T) == .optional) { if (_utf16_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _utf16_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _utf16_guard; _drop_val.__cp_deinit(); } };
             var latin1_slice = other.toSliceLowercase(fallback_allocator);
             _ = &latin1_slice;
-            defer {
-            _ = utf16_slice.deinit();
-            }
-            defer {
-            _ = latin1_slice.deinit();
-            }
+            var _latin1_guard = DeinitGuard(Slice){ .ptr = (&latin1_slice) };
+            _ = &_latin1_guard;
+            var ___latin1_guard_moved = false; _ = &___latin1_guard_moved;
+            defer if (!___latin1_guard_moved) { ___latin1_guard_moved = true; const __T = @TypeOf(_latin1_guard); if (@typeInfo(__T) == .optional) { if (_latin1_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _latin1_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _latin1_guard; _drop_val.__cp_deinit(); } };
             return strings.eqlLong(utf16_slice.slice(), latin1_slice.slice(), true);
     }
 
@@ -200,14 +218,16 @@ pub fn eql(self: ZigString, other: ZigString) bool {
             }
             var utf16_slice = utf16.toSlice(bun.default_allocator);
             _ = &utf16_slice;
+            var _utf16_guard = DeinitGuard(Slice){ .ptr = (&utf16_slice) };
+            _ = &_utf16_guard;
+            var ___utf16_guard_moved = false; _ = &___utf16_guard_moved;
+            defer if (!___utf16_guard_moved) { ___utf16_guard_moved = true; const __T = @TypeOf(_utf16_guard); if (@typeInfo(__T) == .optional) { if (_utf16_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _utf16_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _utf16_guard; _drop_val.__cp_deinit(); } };
             var latin1_slice = latin1.toSlice(bun.default_allocator);
             _ = &latin1_slice;
-            defer {
-            _ = utf16_slice.deinit();
-            }
-            defer {
-            _ = latin1_slice.deinit();
-            }
+            var _latin1_guard = DeinitGuard(Slice){ .ptr = (&latin1_slice) };
+            _ = &_latin1_guard;
+            var ___latin1_guard_moved = false; _ = &___latin1_guard_moved;
+            defer if (!___latin1_guard_moved) { ___latin1_guard_moved = true; const __T = @TypeOf(_latin1_guard); if (@typeInfo(__T) == .optional) { if (_latin1_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _latin1_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _latin1_guard; _drop_val.__cp_deinit(); } };
             return strings.eqlLong(utf16_slice.slice(), latin1_slice.slice(), true);
     }
 
@@ -298,7 +318,7 @@ pub fn utf8ByteLength(self: ZigString) usize {
             return bun.webcore.encoding.byteLengthU8(self.slice().ptr, self.slice().len, .utf8);
     }
 
-pub fn toOwnedSlice(self: ZigString, allocator: std.mem.Allocator) OOM![]u8 {
+pub fn toOwnedSlice(self: *const ZigString, allocator: std.mem.Allocator) OOM![]u8 {
             if (self.isUTF8()) {
                 return try allocator.dupeZ(u8, self.slice());
             }
@@ -315,7 +335,7 @@ pub fn toOwnedSlice(self: ZigString, allocator: std.mem.Allocator) OOM![]u8 {
             return list.items;
     }
 
-pub fn toOwnedSliceZ(self: ZigString, allocator: std.mem.Allocator) OOM![:0]u8 {
+pub fn toOwnedSliceZ(self: *const ZigString, allocator: std.mem.Allocator) OOM![:0]u8 {
             if (self.isUTF8()) {
                 return allocator.dupeZ(u8, self.slice());
             }
@@ -346,7 +366,7 @@ pub inline fn length(self: ZigString) usize {
             return self.len;
     }
 
-pub fn byteSlice(self: ZigString) []const u8 {
+pub fn byteSlice(self: *const ZigString) []const u8 {
             if (self.is16Bit()) {
                 return std.mem.sliceAsBytes(self.utf16SliceAligned());
             }
@@ -354,35 +374,50 @@ pub fn byteSlice(self: ZigString) []const u8 {
     }
 
 pub fn markStatic(self: *ZigString) void {
-            self._unsafe_ptr_do_not_use = @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 60)));
+            self._unsafe_ptr_do_not_use = (blk: {
+            break :blk @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 60)));
+
+});
     }
 
 pub fn isStatic(self: ZigString) bool {
-            return (@intFromPtr(self._unsafe_ptr_do_not_use) & (cp_shl(1, 60) != 0));
+            return (blk: {
+            break :blk (@intFromPtr(self._unsafe_ptr_do_not_use) & (cp_shl(1, 60) != 0));
+
+});
     }
 
 pub inline fn is16Bit(self: ZigString) bool {
-            return ((@intFromPtr(self._unsafe_ptr_do_not_use) & cp_shl(1, 63)) != 0);
+            return (blk: {
+            break :blk ((@intFromPtr(self._unsafe_ptr_do_not_use) & cp_shl(1, 63)) != 0);
+
+});
     }
 
-pub inline fn utf16Slice(self: ZigString) []align(1) const u16 {
+pub inline fn utf16Slice(self: *const ZigString) []align(1) const u16 {
             if (comptime bun.Environment.allow_assert) {
                 if (((self.len > 0) and (!self.is16Bit()))) {
                     _ = @panic("ZigString.utf16Slice() called on a latin1 string.\nPlease use .toSlice() instead or carefully check that .is16Bit() is false first.");
                 }
             }
+            return (blk: {
             const ptr: [*]align(1) const u16 = @ptrCast(ZigString.untagged(self._unsafe_ptr_do_not_use));
-            return ptr[0..self.len];
+            break :blk ptr[0..self.len];
+
+});
     }
 
-pub inline fn utf16SliceAligned(self: ZigString) []const u16 {
+pub inline fn utf16SliceAligned(self: *const ZigString) []const u16 {
             if (comptime bun.Environment.allow_assert) {
                 if (((self.len > 0) and (!self.is16Bit()))) {
                     _ = @panic("ZigString.utf16SliceAligned() called on a latin1 string.\nPlease use .toSlice() instead or carefully check that .is16Bit() is false first.");
                 }
             }
+            return (blk: {
             const ptr: [*]const u16 = @ptrCast(@alignCast(ZigString.untagged(self._unsafe_ptr_do_not_use)));
-            return ptr[0..self.len];
+            break :blk ptr[0..self.len];
+
+});
     }
 
 pub inline fn isEmpty(self: ZigString) bool {
@@ -461,8 +496,11 @@ pub fn from16Slice(slice_: []const u16) ZigString {
     }
 
 pub fn from16SliceMaybeGlobal(slice_: []const u16, global: bool) ZigString {
+            var str = (blk: {
             const ptr: [*]const u8 = @ptrCast(@alignCast(slice_.ptr));
-            var str = init(ptr[0..slice_.len]);
+            break :blk init(ptr[0..slice_.len]);
+
+});
             _ = &str;
             _ = str.markUTF16();
             if (global) {
@@ -472,8 +510,11 @@ pub fn from16SliceMaybeGlobal(slice_: []const u16, global: bool) ZigString {
     }
 
 pub fn from16(slice_: [*]const u16, len: usize) ZigString {
+            var str = (blk: {
             const ptr: [*]const u8 = @ptrCast(slice_);
-            var str = init(ptr[0..len]);
+            break :blk init(ptr[0..len]);
+
+});
             _ = &str;
             _ = str.markUTF16();
             _ = str.markGlobal();
@@ -481,7 +522,7 @@ pub fn from16(slice_: [*]const u16, len: usize) ZigString {
             return str;
     }
 
-pub fn toBase64DataURL(self: ZigString, allocator: std.mem.Allocator) ![]const u8 {
+pub fn toBase64DataURL(self: *const ZigString, allocator: std.mem.Allocator) ![]const u8 {
             const slice_ = self.slice();
             const size = std.base64.standard.Encoder.calcSize(slice_.len);
             var buf = try allocator.alloc(u8, (size + "data:;base64,".len));
@@ -501,7 +542,10 @@ pub extern "c" fn ZigString__toExternalU16(ptr: [*]const u16, len: usize, global
 
 pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject) JSValue {
             if ((len > String.max_length())) {
-                _ = bun.default_allocator.free(ptr[0..len]);
+                _ = bun.default_allocator.free((blk: {
+                break :blk ptr[0..len];
+
+}));
                 const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
                 _ = (&_err);
                 return .zero;
@@ -510,15 +554,24 @@ pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject) JSV
     }
 
 pub fn isUTF8(self: ZigString) bool {
-            return ((@intFromPtr(self._unsafe_ptr_do_not_use) & cp_shl(1, 61)) != 0);
+            return (blk: {
+            break :blk ((@intFromPtr(self._unsafe_ptr_do_not_use) & cp_shl(1, 61)) != 0);
+
+});
     }
 
 pub fn markUTF8(self: *ZigString) void {
-            self._unsafe_ptr_do_not_use = @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 61)));
+            self._unsafe_ptr_do_not_use = (blk: {
+            break :blk @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 61)));
+
+});
     }
 
 pub fn markUTF16(self: *ZigString) void {
-            self._unsafe_ptr_do_not_use = @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 63)));
+            self._unsafe_ptr_do_not_use = (blk: {
+            break :blk @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 63)));
+
+});
     }
 
 pub fn setOutputEncoding(self: *ZigString) void {
@@ -531,7 +584,10 @@ pub fn setOutputEncoding(self: *ZigString) void {
     }
 
 pub inline fn isGloballyAllocated(self: ZigString) bool {
-            return ((@intFromPtr(self._unsafe_ptr_do_not_use) & cp_shl(1, 62)) != 0);
+            return (blk: {
+            break :blk ((@intFromPtr(self._unsafe_ptr_do_not_use) & cp_shl(1, 62)) != 0);
+
+});
     }
 
 pub inline fn deinitGlobal(self: ZigString) void {
@@ -539,7 +595,10 @@ pub inline fn deinitGlobal(self: ZigString) void {
     }
 
 pub inline fn markGlobal(self: *ZigString) void {
-            self._unsafe_ptr_do_not_use = @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 62)));
+            self._unsafe_ptr_do_not_use = (blk: {
+            break :blk @ptrFromInt((@intFromPtr(self._unsafe_ptr_do_not_use) | cp_shl(1, 62)));
+
+});
     }
 
 pub fn format(self: ZigString, writer: *std.Io.Writer) !void {
@@ -560,16 +619,22 @@ pub inline fn toRef(slice_: []const u8, global: *JSGlobalObject) C_API.JSValueRe
 
 pub inline fn untagged(ptr: [*]const u8) [*]const u8 {
             _ = @setRuntimeSafety(false);
-            return @ptrFromInt(@as(u53, @truncate(@intFromPtr(ptr))));
+            return (blk: {
+            break :blk @ptrFromInt(@as(u53, @truncate(@intFromPtr(ptr))));
+
+});
     }
 
-pub fn slice(self: ZigString) []const u8 {
+pub fn slice(self: *const ZigString) []const u8 {
             if (comptime bun.Environment.allow_assert) {
                 if (((self.len > 0) and self.is16Bit())) {
                     _ = @panic("ZigString.slice() called on a UTF-16 string.\nPlease use .toSlice() instead or carefully check that .is16Bit() is false first.");
                 }
             }
-            return ZigString.untagged(self._unsafe_ptr_do_not_use)[0..@min(self.len, std.math.maxInt(u32))];
+            return (blk: {
+            break :blk ZigString.untagged(self._unsafe_ptr_do_not_use)[0..@min(self.len, std.math.maxInt(u32))];
+
+});
     }
 
 pub fn toSliceFast(self: ZigString, allocator: std.mem.Allocator) Slice {
@@ -591,7 +656,10 @@ pub fn toSlice(self: ZigString, allocator: std.mem.Allocator) Slice {
                 const buffer = bun.handleOom(self.toOwnedSlice(allocator));
                 return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = buffer.ptr, .len = @as(u32, @truncate(buffer.len)) };
             }
-            if (((!self.isUTF8()) and (!strings.isAllASCII(ZigString.untagged(self._unsafe_ptr_do_not_use)[0..self.len])))) {
+            if (((!self.isUTF8()) and (!strings.isAllASCII((blk: {
+            break :blk ZigString.untagged(self._unsafe_ptr_do_not_use)[0..self.len];
+
+}))))) {
                 const buffer = bun.handleOom(self.toOwnedSlice(allocator));
                 return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = buffer.ptr, .len = @as(u32, @truncate(buffer.len)) };
             }
@@ -606,15 +674,18 @@ pub fn toSliceClone(self: ZigString, allocator: std.mem.Allocator) OOM!Slice {
             return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = buffer.ptr, .len = @as(u32, @truncate(buffer.len)) };
     }
 
-pub fn sliceZBuf(self: ZigString, buf: *bun.PathBuffer) ![:0]const u8 {
+pub fn sliceZBuf(self: *const ZigString, buf: *bun.PathBuffer) ![:0]const u8 {
             return try std.fmt.bufPrintZ(buf, "{f}", .{ ._ = self });
     }
 
-pub inline fn full(self: ZigString) []const u8 {
-            return ZigString.untagged(self._unsafe_ptr_do_not_use)[0..self.len];
+pub inline fn full(self: *const ZigString) []const u8 {
+            return (blk: {
+            break :blk ZigString.untagged(self._unsafe_ptr_do_not_use)[0..self.len];
+
+});
     }
 
-pub fn trimmedSlice(self: ZigString) []const u8 {
+pub fn trimmedSlice(self: *const ZigString) []const u8 {
             return strings.trim(self.full(), " \r\n");
     }
 
@@ -635,7 +706,10 @@ pub inline fn assertGlobal(self: ZigString) void {
 pub fn toExternalValue(self: ZigString, global: *JSGlobalObject) JSValue {
             _ = self.assertGlobal();
             if ((self.len > String.max_length())) {
-                _ = bun.default_allocator.free(@constCast(self.byteSlice()));
+                _ = bun.default_allocator.free((blk: {
+                break :blk @constCast(self.byteSlice());
+
+}));
                 const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
                 _ = (&_err);
                 return .zero;
@@ -653,7 +727,10 @@ pub extern "c" fn ZigString__external(this_str: *const ZigString, global: *JSGlo
 
 pub fn external(self: ZigString, global: *JSGlobalObject, ctx: ?*anyopaque, callback: *const fn (?*anyopaque, ?*anyopaque, usize) callconv(.c) void) JSValue {
             if ((self.len > String.max_length())) {
-                _ = callback(ctx, @ptrCast(@constCast(self.byteSlice().ptr)), self.len);
+                _ = callback(ctx, (blk: {
+                break :blk @ptrCast(@constCast(self.byteSlice().ptr));
+
+}), self.len);
                 const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
                 _ = (&_err);
                 return .zero;
@@ -679,7 +756,10 @@ pub fn toJSStringRef(self: ZigString) C_API.JSStringRef {
             if (comptime @hasDecl(@import("bun"), "bindgen")) {
                 return undefined;
             }
-            const ptr: [*]const u16 = @ptrCast(@alignCast(ZigString.untagged(self._unsafe_ptr_do_not_use)));
+            const ptr: [*]const u16 = (blk: {
+            break :blk @ptrCast(@alignCast(ZigString.untagged(self._unsafe_ptr_do_not_use)));
+
+});
             return (if (self.is16Bit()) C_API.JSStringCreateWithCharactersNoCopy(ptr, self.len) else C_API.JSStringCreateStatic(ZigString.untagged(self._unsafe_ptr_do_not_use), self.len));
     }
 
@@ -785,20 +865,22 @@ pub fn toRangeErrorInstance(self: ZigString, global: *JSGlobalObject) JSValue {
                     }
     };
                 }
-                defer {
-                _ = self.deinit();
-                }
+                var _slice_guard = DeinitGuard(Slice){ .ptr = self };
+                _ = &_slice_guard;
+                var ___slice_guard_moved = false; _ = &___slice_guard_moved;
+                defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
                 const owned = try self.toOwned(allocator);
                 return owned.slice();
         }
     
     pub fn intoOwnedSliceZ(self: *@This(), allocator: std.mem.Allocator) OOM![:0]const u8 {
                 defer {
-                {
-                    _ = self.deinit();
-                    self.* = .{};
+                self.* = .{};
                 }
-                }
+                var _slice_guard = DeinitGuard(Slice){ .ptr = self };
+                _ = &_slice_guard;
+                var ___slice_guard_moved = false; _ = &___slice_guard_moved;
+                defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
                 return allocator.dupeZ(u8, self.slice());
         }
     
@@ -815,11 +897,11 @@ pub fn toRangeErrorInstance(self: ZigString, global: *JSGlobalObject) JSValue {
                 return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = buf.ptr, .len = @as(u32, @truncate(buf.len)) };
         }
     
-    pub fn slice(self: @This()) []const u8 {
+    pub fn slice(self: *const @This()) []const u8 {
                 return self.ptr[0..self.len];
         }
     
-    pub fn mut(self: @This()) []u8 {
+    pub fn mut(self: *const @This()) []u8 {
                 _ = bun.assertf((!self.allocator.isNull()), "cannot mutate a borrowed ZigString.Slice", .{});
                 return @constCast(self.ptr)[0..self.len];
         }
@@ -836,9 +918,10 @@ pub fn toRangeErrorInstance(self: ZigString, global: *JSGlobalObject) JSValue {
     pub fn format(self: @This(), writer: *std.Io.Writer) !void {
                 var bytes = self.text.toSlice(bun.default_allocator);
                 _ = &bytes;
-                defer {
-                _ = bytes.deinit();
-                }
+                var _bytes_guard = DeinitGuard(Slice){ .ptr = (&bytes) };
+                _ = &_bytes_guard;
+                var ___bytes_guard_moved = false; _ = &___bytes_guard_moved;
+                defer if (!___bytes_guard_moved) { ___bytes_guard_moved = true; const __T = @TypeOf(_bytes_guard); if (@typeInfo(__T) == .optional) { if (_bytes_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _bytes_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _bytes_guard; _drop_val.__cp_deinit(); } };
                 _ = try bun.fmt.githubActionWriter(writer, bytes.slice());
         }
     };

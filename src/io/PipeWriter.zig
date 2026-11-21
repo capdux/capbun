@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const WriteStatus = enum {
@@ -72,6 +72,23 @@ pub const WriteStatus = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deref();
+                    self.ptr = null;
+                }
+        }
+    };
+}
 
 const Source = @import("./source.zig").Source;
 const FileType = @import("./pipes.zig").FileType;
@@ -225,132 +242,131 @@ pub const StreamingWriter = (if (bun.Environment.isPosix) PosixStreamingWriter e
 pub fn PosixPipeWriter(comptime This: type, comptime getFd: *const fn (*This) bun.FD, comptime getBuffer: *const fn (*This) []const u8, comptime onWrite: *const fn (*This, usize, WriteStatus) void, comptime registerPoll: ?*const fn (*This) void, comptime onError: *const fn (*This, bun.sys.Error) void, comptime _unused: *const fn (*This) void, comptime getFileType: *const fn (*This) FileType) type {
         _ = &_unused;
         return struct {
-        fn tryWrite(this: *This, force_sync: bool, buf_: []const u8) WriteResult {
-            return switch (if (!force_sync) getFileType(this) else .file) {
-                inline else => |ft| return tryWriteWithWriteFn(this, buf_, comptime writeToFileType(ft)),
-            };
-        }
 
-        fn tryWriteWithWriteFn(this: *This, buf: []const u8, comptime write_fn: *const fn(bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
-            const fd = getFd(this);
+pub fn tryWrite(parent: *This, force_sync: bool, buf_: []const u8) WriteResult {
+            return (switch ((if ((!force_sync)) getFileType(parent) else .file)) {
+inline else => |ft| {
+return tryWriteWithWriteFn(parent, buf_, (comptime writeToFileType(ft)));
+},
+});
+    }
 
+pub fn tryWriteWithWriteFn(parent: *This, buf: []const u8, comptime write_fn: *const fn (bun.FD, []const u8) bun.sys.Maybe(usize)) WriteResult {
+            const fd = getFd(parent);
             var offset: usize = 0;
-
-            while (offset < buf.len) {
+            _ = &offset;
+            while ((offset < buf.len)) {
                 switch (write_fn(fd, buf[offset..])) {
-                    .err => |err| {
-                        if (err.isRetry()) {
-                            return .{ .pending = offset };
-                        }
-
-                        return .{ .err = err };
-                    },
-
-                    .result => |wrote| {
-                        offset += wrote;
-                        if (wrote == 0) {
-                            return .{ .done = offset };
-                        }
-                    },
+.err => |err| {
+if (err.isRetry()) {
+                    return .{ .pending = offset };
                 }
+                return .{ .err = err };
+},
+.result => |wrote| {
+offset = (offset + wrote);
+                if ((wrote == 0)) {
+                    return .{ .done = offset };
+                }
+},
+}
             }
-
             return .{ .wrote = offset };
-        }
+    }
 
-        fn writeToFileType(comptime file_type: FileType) *const fn(bun.FD, []const u8) bun.sys.Maybe(usize) {
-            comptime return switch (file_type) {
-                .nonblocking_pipe, .file => &bun.sys.write,
-                .pipe => &writeToBlockingPipe,
-                .socket => &bun.sys.sendNonBlock,
-            };
-        }
+pub fn writeToFileType(comptime file_type: FileType) *const fn (bun.FD, []const u8) bun.sys.Maybe(usize) {
+            _ = (comptime return (switch (file_type) {
+.nonblocking_pipe, .file => (&bun.sys.write),
+.pipe => (&writeToBlockingPipe),
+.socket => (&bun.sys.sendNonBlock),
+}));
+    }
 
-        fn writeToBlockingPipe(fd: bun.FD, buf: []const u8) bun.sys.Maybe(usize) {
+pub fn writeToBlockingPipe(fd: bun.FD, buf: []const u8) bun.sys.Maybe(usize) {
             if (comptime bun.Environment.isLinux) {
                 if (bun.linux.RWFFlagSupport.isMaybeSupported()) {
                     return bun.sys.writeNonblocking(fd, buf);
                 }
             }
-
             switch (bun.isWritable(fd)) {
-                .ready, .hup => return bun.sys.write(fd, buf),
-                .not_ready => return bun.sys.Maybe(usize){ .err = bun.sys.Error.retry },
-            }
-        }
+.ready, .hup => {
+return bun.sys.write(fd, buf);
+},
+.not_ready => {
+return bun.sys.Maybe(usize){ .err = bun.sys.Error.retry };
+},
+}
+    }
 
-        pub fn onPoll(parent: *This, size_hint: isize, received_hup: bool) void {
+pub fn onPoll(parent: *This, size_hint: isize, received_hup: bool) void {
             const buffer = getBuffer(parent);
-            log("onPoll({})", .{buffer.len});
-            if (buffer.len == 0 and !received_hup) {
-                log("PosixPipeWriter(0x{x}) handle={s}", .{ @intFromPtr(parent), @tagName(parent.handle) });
-                if (parent.handle == .poll) {
-                    log("PosixPipeWriter(0x{x}) got 0, registered state = {}", .{ @intFromPtr(parent), parent.handle.poll.isRegistered() });
+            _ = log("onPoll({})", .{ buffer.len });
+            if (((buffer.len == 0) and (!received_hup))) {
+                _ = log("PosixPipeWriter(0x{x}) handle={s}", .{ (blk: {
+                break :blk @intFromPtr(parent);
+
+}), @tagName(parent.handle) });
+                if ((parent.handle == .poll)) {
+                    _ = log("PosixPipeWriter(0x{x}) got 0, registered state = {}", .{ (blk: {
+                    break :blk @intFromPtr(parent);
+
+}), parent.handle.poll.isRegistered() });
                 }
                 return;
             }
-
-            switch (drainBufferedData(
-                parent,
-                buffer,
-                if (size_hint > 0 and getFileType(parent).isBlocking()) @intCast(size_hint) else std.math.maxInt(usize),
-                received_hup,
-            )) {
-                .pending => |wrote| {
-                    if (wrote > 0)
-                        onWrite(parent, wrote, .pending);
-
-                    if (comptime registerPoll) |register| {
-                        register(parent);
-                    }
-                },
-                .wrote => |amt| {
-                    onWrite(parent, amt, .drained);
-                },
-                .err => |err| {
-                    onError(parent, err);
-                },
-                .done => |amt| {
-                    onWrite(parent, amt, .end_of_file);
-                },
+            switch (drainBufferedData(parent, buffer, (if (((size_hint > 0) and getFileType(parent).isBlocking())) @intCast(size_hint) else std.math.maxInt(usize)), received_hup)) {
+.pending => |wrote| {
+if ((wrote > 0)) {
+                _ = onWrite(parent, wrote, .pending);
             }
-        }
+            if (comptime (registerPoll != null)) {
+                _ = registerPoll.?(parent);
+            }
+},
+.wrote => |amt| {
+_ = onWrite(parent, amt, .drained);
+},
+.err => |err| {
+_ = onError(parent, err);
+},
+.done => |amt| {
+_ = onWrite(parent, amt, .end_of_file);
+},
+}
+    }
 
-        pub fn drainBufferedData(parent: *This, buf: []const u8, max_write_size: usize, received_hup: bool) WriteResult {
-            _ = received_hup;
-
-            const trimmed = if (max_write_size < buf.len and max_write_size > 0) buf[0..max_write_size] else buf;
-
+pub fn drainBufferedData(parent: *This, buf: []const u8, max_write_size: usize, received_hup: bool) WriteResult {
+            _ = &received_hup;
+            const trimmed = (if (((max_write_size < buf.len) and (max_write_size > 0))) buf[0..max_write_size] else buf);
             var drained: usize = 0;
-
-            while (drained < trimmed.len) {
+            _ = &drained;
+            while ((drained < trimmed.len)) {
                 const attempt = tryWrite(parent, parent.getForceSync(), trimmed[drained..]);
                 switch (attempt) {
-                    .pending => |pending| {
-                        drained += pending;
-                        return .{ .pending = drained };
-                    },
-                    .wrote => |amt| {
-                        drained += amt;
-                    },
-                    .err => |err| {
-                        if (drained > 0) {
-                            onError(parent, err);
-                            return .{ .wrote = drained };
-                        } else {
-                            return .{ .err = err };
-                        }
-                    },
-                    .done => |amt| {
-                        drained += amt;
-                        return .{ .done = drained };
-                    },
+.pending => |pending| {
+drained = (drained + pending);
+                return .{ .pending = drained };
+},
+.wrote => |amt| {
+drained = (drained + amt);
+},
+.err => |err| {
+if ((drained > 0)) {
+                    _ = onError(parent, err);
+                    return .{ .wrote = drained };
+                } else {
+                    return .{ .err = err };
                 }
+},
+.done => |amt| {
+drained = (drained + amt);
+                return .{ .done = drained };
+},
+}
             }
-
             return .{ .wrote = drained };
-        }
-    };
+    }
+};
 }
 
 pub fn PosixBufferedWriter(comptime Parent: type, comptime function_table: anytype) type {
@@ -589,7 +605,9 @@ pub fn _onError(self: *@This(), err: bun.sys.Error) void {
             _ = self.closeWithoutReporting();
             self.is_done = true;
             _ = self.outgoing.reset();
-            _ = onError(@ptrCast(@alignCast(self.parent)), err);
+            {
+                _ = onError(@ptrCast(@alignCast(self.parent)), err);
+            }
             _ = self.close();
     }
 
@@ -620,7 +638,9 @@ pub fn _onWritable(self: *@This()) void {
             _ = self.outgoing.reset();
             if (onReady) |cb| {
                 _ = &cb;
-                _ = cb(@ptrCast(self.parent));
+                {
+                    _ = cb(@ptrCast(self.parent));
+                }
             }
     }
 
@@ -965,8 +985,7 @@ pub fn setParent(self: *@This(), parent: *Parent) void {
             }
     }
 
-pub fn watch(self: *@This(), _: *WindowsPipeWriter) void {
-        _ = self;
+pub fn watch(_: *WindowsPipeWriter) void {
     }
 
 pub fn startWithPipe(self: *@This(), pipe: *uv.Pipe) bun.sys.Maybe(void) {
@@ -1121,7 +1140,10 @@ _ = bun.assert(file.canStart());
             _ = file.fs.setData(self);
             _ = file.prepare();
             self.write_buffer = uv.uv_buf_t.init(buffer);
-            if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, @ptrCast((&self.write_buffer)), 1, -1, onFsWriteComplete).toError(.write)) |err| {
+            if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, (blk: {
+            break :blk @ptrCast((&self.write_buffer));
+
+}), 1, -1, onFsWriteComplete).toError(.write)) |err| {
                 _ = &err;
                 _ = file.complete(false);
                 _ = self.close();
@@ -1219,9 +1241,10 @@ pub fn isDone(self: *@This()) bool {
     }
 
 pub fn onWriteComplete(self: *@This(), status: uv.ReturnCode) void {
-            defer {
-            _ = self.parent.deref();
-            }
+            var _parent_guard = DerefGuard(Parent){ .ptr = self.parent };
+            _ = &_parent_guard;
+            var ___parent_guard_moved = false; _ = &___parent_guard_moved;
+            defer if (!___parent_guard_moved) { ___parent_guard_moved = true; const __T = @TypeOf(_parent_guard); if (@typeInfo(__T) == .optional) { if (_parent_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _parent_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _parent_guard; _drop_val.__cp_deinit(); } };
             if (status.toError(.write)) |err| {
                 _ = &err;
                 self.last_write_result = .{ .err = err };
@@ -1266,9 +1289,10 @@ pub fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
             }
             if (result.toError(.write)) |err| {
                 _ = &err;
-                defer {
-                _ = writer.parent.deref();
-                }
+                var _parent_guard = DerefGuard(Parent){ .ptr = writer.parent };
+                _ = &_parent_guard;
+                var ___parent_guard_moved = false; _ = &___parent_guard_moved;
+                defer if (!___parent_guard_moved) { ___parent_guard_moved = true; const __T = @TypeOf(_parent_guard); if (@typeInfo(__T) == .optional) { if (_parent_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _parent_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _parent_guard; _drop_val.__cp_deinit(); } };
                 _ = writer.close();
                 _ = onError(writer.parent, err);
                 return;
@@ -1307,7 +1331,10 @@ _ = bun.assert(file.canStart());
             _ = file.fs.setData(self);
             _ = file.prepare();
             self.write_buffer = uv.uv_buf_t.init(bytes);
-            if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, @ptrCast((&self.write_buffer)), 1, -1, onFsWriteComplete).toError(.write)) |err| {
+            if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, (blk: {
+            break :blk @ptrCast((&self.write_buffer));
+
+}), 1, -1, onFsWriteComplete).toError(.write)) |err| {
                 _ = &err;
                 _ = file.complete(false);
                 self.last_write_result = .{ .err = err };

@@ -1571,3 +1571,7 @@
 ## [2026-11-22 Wave #19] RAII 改造与 `unsafe {}` 经验
 - `fs_events.cp` / `libarchive.cp`：`MutexGuard.lock(&m)` 与 `PathBufferPoolGuard` / `CloseGuard` 全量替换手动 `defer`，`libarchive` 句柄移交前显式置空 Guard 避免双重关闭。
 - `Request.cp` / `SocketAddress.cp`：`errdefer`（`body_`、`url`、`headers`、`req`）全部转为 Guard 并在成功路径置空撤防。
+
+## [2026-11-22 Wave #20] RAII 改造与 `unsafe {}` 经验
+- `PipeWriter.cp`：CRTP mixin `PosixPipeWriter` 中的 `tryWrite` / `tryWriteWithWriteFn` 显式标记 `static fn` 且首参命名为 `parent: *This`，避免 `this: *This` 被降级为 `*@This()`。
+- `ZigString.cp` / `options.cp`：`ZigString.cp` 集中补齐 33 处 E0209 `unsafe {}`；`options.cp` 全部 `errdefer` 转为 `DeinitGuard<T>` 并在返回前显式置空撤防。

@@ -17,6 +17,33 @@ const Npm = @import("./npm.zig");
 
 type string = []const u8;
 
+pub struct CloseGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.close(); }
+        }
+    }
+}
+
+pub struct DeinitPtrGuard<T> {
+    ptr: T?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+pub struct BodyPoolReleaseGuard<T> {
+    ptr: T?,
+    ~init() {
+        if (p := _.ptr) {
+            Npm.Registry.BodyPool.release(p);
+        }
+    }
+}
+
 const tl_bufs = bun.ThreadlocalBuffers(struct {
     final_path_buf: bun.PathBuffer = undefined,
     folder_name_buf: bun.PathBuffer = undefined,
@@ -214,14 +241,13 @@ const DirnameReader = struct {
             return error.InstallFailed;
         };
 
-        defer extract_destination.close();
+        let _extract_dest_guard = CloseGuard<@TypeOf(extract_destination)>{ ptr: unsafe { &extract_destination } };
 
         const Archiver = bun.libarchive.Archiver;
         const Zlib = @import("../zlib/zlib.zig");
         let zlib_pool = Npm.Registry.BodyPool.get(default_allocator);
         zlib_pool.data.reset();
-        const release_pool = Npm.Registry.BodyPool.release;
-        defer release_pool(zlib_pool);
+        let _zlib_pool_guard = BodyPoolReleaseGuard<@TypeOf(zlib_pool)>{ ptr: zlib_pool };
 
         let esimated_output_size: usize = 0;
 
@@ -243,7 +269,7 @@ const DirnameReader = struct {
         let needs_to_decompress = true;
         if (bun.FeatureFlags.isLibdeflateEnabled() && zlib_pool.data.list.capacity > 16 && esimated_output_size > 0) use_libdeflate: {
             if (decompressor := bun.libdeflate.Decompressor.alloc()) {
-                defer decompressor.deinit();
+                let _decompressor_guard = DeinitPtrGuard<@TypeOf(decompressor)>{ ptr: decompressor };
 
                 const result = decompressor.gzip(tgz_bytes, zlib_pool.data.list.allocatedSlice());
 
@@ -310,7 +336,7 @@ const DirnameReader = struct {
                 if (resolved.len > 0) {
                     if (gh_tag_res := extract_destination.createFileZ(".bun-tag", .{ .truncate = true }) catch null) {
                         let gh_tag = gh_tag_res;
-                        defer gh_tag.close();
+                        let _gh_tag_guard = CloseGuard<@TypeOf(gh_tag)>{ ptr: unsafe { &gh_tag } };
                         gh_tag.writeAll(resolved) catch {
                             extract_destination.deleteFileZ(".bun-tag") catch {};
                         };
@@ -484,7 +510,7 @@ const DirnameReader = struct {
             ) catch unreachable;
             return error.InstallFailed;
         };
-        defer final_dir.close();
+        let _final_dir_guard = CloseGuard<@TypeOf(final_dir)>{ ptr: unsafe { &final_dir } };
 
         const final_path = bun.getFdPathZ(
             .fromStdDir(final_dir),
@@ -530,9 +556,9 @@ const DirnameReader = struct {
                 ) catch unreachable;
                 return error.InstallFailed;
             };
-            const json_file = @field(json_pair, "0");
+            let json_file = @field(json_pair, "0");
             const json_buf_read = @field(json_pair, "1");
-            defer json_file.close();
+            let _json_file_guard = CloseGuard<@TypeOf(json_file)>{ ptr: unsafe { &json_file } };
             json_buf = json_buf_read;
             json_path = json_file.getPath(
                 &bufs.json_path_buf,
@@ -570,7 +596,7 @@ const DirnameReader = struct {
                     bun.sys.sys_uv.symlinkUV(final_path, dest_path, bun.windows.libuv.UV_FS_SYMLINK_JUNCTION).unwrap() catch break :create_index;
                 } else {
                     let index_dir = bun.FD.fromStdDir(bun.MakePath.makeOpenPath(cache_dir, name, .{}) catch break :create_index);
-                    defer index_dir.close();
+                    let _index_dir_guard = CloseGuard<@TypeOf(index_dir)>{ ptr: unsafe { &index_dir } };
 
                     bun.sys.symlinkat(final_path, index_dir, dest_name).unwrap() catch break :create_index;
                 }

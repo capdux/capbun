@@ -37,6 +37,41 @@ const Options = PackageManager.Options;
 const PackageInstaller = PackageManager.PackageInstaller;
 const ProgressStrings = PackageManager.ProgressStrings;
 
+pub struct DeinitGuard<T> {
+    ptr: *T?! = null,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+            _.ptr = null;
+        }
+    }
+};
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T?! = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.alloc);
+            _.ptr = null;
+        }
+    }
+};
+
+pub struct PutBackGuard<Pool, Item> {
+    pool: *Pool?! = null,
+    item: *Item?! = null,
+    ~init() {
+        if (pool := _.pool) {
+            if (item := _.item) {
+                pool.put(item);
+            }
+            _.pool = null;
+            _.item = null;
+        }
+    }
+};
+
 /// Called from isolated_install.zig on the main thread.
 pub fn runTasks(
     manager: *PackageManager,
@@ -74,7 +109,7 @@ pub fn runTasks(
     while (ptask := patch_tasks_iter.next()) {
         if (comptime Environment.allow_assert) bun.assert(manager.pendingTaskCount() > 0);
         manager.decrementPendingTasks();
-        defer ptask.deinit();
+        const _ptask_guard = DeinitGuard<@TypeOf(ptask.*)>{ ptr: ptask };
         ptask.runFromMainThread(manager, log_level)?;
         if (ptask.callback == .apply) {
             if (ptask.callback.apply.logger.errors == 0) {
@@ -629,7 +664,7 @@ pub fn runTasks(
     let resolve_tasks_iter = resolve_tasks_batch.iterator();
     while (task := resolve_tasks_iter.next()) {
         if (comptime Environment.allow_assert) bun.assert(manager.pendingTaskCount() > 0);
-        defer manager.preallocated_resolve_tasks.put(task);
+        const _resolve_guard = PutBackGuard<@TypeOf(manager.preallocated_resolve_tasks), @TypeOf(task.*)>{ pool: &manager.preallocated_resolve_tasks, item: task };
         manager.decrementPendingTasks();
 
         if (task.log.msgs.items.len > 0) {
@@ -642,7 +677,10 @@ pub fn runTasks(
 
         switch (task.tag) {
             .package_manifest => {
-                defer manager.preallocated_network_tasks.put(task.request.package_manifest.network);
+                const _net_guard = PutBackGuard<@TypeOf(manager.preallocated_network_tasks), @TypeOf(task.request.package_manifest.network.*)>{
+                    pool: &manager.preallocated_network_tasks,
+                    item: task.request.package_manifest.network,
+                };
                 if (task.status == .fail) {
                     const name = task.request.package_manifest.name;
                     const e = task.err ?? error.Failed;
@@ -691,12 +729,10 @@ pub fn runTasks(
                 }
             },
             .extract, .local_tarball => {
-                defer {
-                    switch (task.tag) {
-                        .extract => manager.preallocated_network_tasks.put(task.request.extract.network),
-                        else => {},
-                    }
-                }
+                const _net_guard = PutBackGuard<@TypeOf(manager.preallocated_network_tasks), @TypeOf(task.request.extract.network.*)>{
+                    pool: if (task.tag == .extract) &manager.preallocated_network_tasks else null,
+                    item: if (task.tag == .extract) task.request.extract.network else null,
+                };
 
                 const tarball = switch (task.tag) {
                     .extract => &task.request.extract.tarball,
@@ -804,13 +840,13 @@ pub fn runTasks(
                         dependency_list_entry.value_ptr.* = {};
 
                         defer {
-                            dependency_list.deinit(manager.allocator);
                             if (comptime @TypeOf(callbacks) != void && (@TypeOf(callbacks.onResolve) != void && @TypeOf(callbacks.onResolve) != @TypeOf(.{}))) {
                                 if (any_root) {
                                     callbacks.onResolve(extract_ctx);
                                 }
                             }
                         }
+                        const _dep_guard = DeinitWithAllocGuard<@TypeOf(dependency_list)>{ ptr: &dependency_list, alloc: manager.allocator };
 
                         for (dep of dependency_list.items) {
                             switch (dep) {
@@ -887,7 +923,7 @@ pub fn runTasks(
                         let drained_any = false;
                         if (removed := manager.task_queue.fetchRemove(task.id)) {
                             let waiters = removed.value;
-                            defer waiters.deinit(manager.allocator);
+                            const _waiters_guard = DeinitWithAllocGuard<@TypeOf(waiters)>{ ptr: &waiters, alloc: manager.allocator };
                             const pkg_resolutions = manager.lockfile.packages.items(.resolution);
                             for (waiter of waiters.items) {
                                 const dep_id = switch (waiter) {
@@ -1070,13 +1106,13 @@ pub fn runTasks(
                         dependency_list_entry.value_ptr.* = {};
 
                         defer {
-                            dependency_list.deinit(manager.allocator);
                             if (comptime @TypeOf(callbacks) != void && (@TypeOf(callbacks.onResolve) != void && @TypeOf(callbacks.onResolve) != @TypeOf(.{}))) {
                                 if (any_root) {
                                     callbacks.onResolve(extract_ctx);
                                 }
                             }
                         }
+                        const _dep_guard = DeinitWithAllocGuard<@TypeOf(dependency_list)>{ ptr: &dependency_list, alloc: manager.allocator };
 
                         for (dep of dependency_list.items) {
                             switch (dep) {

@@ -2,6 +2,25 @@ type string = []const u8;
 type OptSource = logger.Source?;
 type OptBlob = jsc.WebCore.Blob?;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T?,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
 import bun from "bun";
 const Environment = bun.Environment;
 const Global = bun.Global;
@@ -1183,13 +1202,18 @@ pub struct ESMConditions {
 
     fn clone(): !ESMConditions {
         let default = _.default.clone()?;
-        errdefer default.deinit();
+        let _default_guard = DeinitGuard<@TypeOf(default)>{ ptr: unsafe { &default } };
         let import_cond = _.@"import".clone()?;
-        errdefer import_cond.deinit();
+        let _import_guard = DeinitGuard<@TypeOf(import_cond)>{ ptr: unsafe { &import_cond } };
         let require = _.require.clone()?;
-        errdefer require.deinit();
+        let _require_guard = DeinitGuard<@TypeOf(require)>{ ptr: unsafe { &require } };
         let style = _.style.clone()?;
-        errdefer style.deinit();
+        let _style_guard = DeinitGuard<@TypeOf(style)>{ ptr: unsafe { &style } };
+
+        _default_guard.ptr = null;
+        _import_guard.ptr = null;
+        _require_guard.ptr = null;
+        _style_guard.ptr = null;
 
         return {
             default: default,
@@ -1438,10 +1462,10 @@ pub fn definesFromTransformOptions(
         input_user_define.keys,
         input_user_define.values,
     )?;
-    defer user_defines.deinit();
+    let _user_defines_guard = DeinitGuard<@TypeOf(user_defines)>{ ptr: unsafe { &user_defines } };
 
     let environment_defines = defines.UserDefinesArray.init(allocator);
-    defer environment_defines.deinit();
+    let _env_defines_guard = DeinitGuard<@TypeOf(environment_defines)>{ ptr: unsafe { &environment_defines } };
 
     let behavior: api.DotEnvBehavior = .disable;
 
@@ -1624,7 +1648,7 @@ pub struct ResolveFileExtensions {
 pub fn loadersFromTransformOptions(allocator: std.mem.Allocator, _loaders: api.LoaderMap?, target: Target): std.mem.Allocator.Error!bun.StringArrayHashMap(Loader) {
     const input_loaders = _loaders ?? std.mem.zeroes(api.LoaderMap);
     let loader_values = allocator.alloc(Loader, input_loaders.loaders.len)?;
-    defer allocator.free(loader_values);
+    let _loader_values_guard = FreeGuard<@TypeOf(loader_values)>{ allocator: allocator, slice: loader_values };
 
     for (i of 0..loader_values.len) {
         loader_values[i] = Loader.fromAPI(input_loaders.loaders[i]);
@@ -1640,7 +1664,7 @@ pub fn loadersFromTransformOptions(allocator: std.mem.Allocator, _loaders: api.L
         input_loaders.extensions,
         loader_values,
     )?;
-    errdefer loaders.deinit();
+    let _loaders_guard = DeinitGuard<@TypeOf(loaders)>{ ptr: unsafe { &loaders } };
 
     inline for (ext of default_loader_ext) {
         * = loaders.getOrPutValue(ext, defaultLoaders.get(ext).?)?;
@@ -1658,6 +1682,7 @@ pub fn loadersFromTransformOptions(allocator: std.mem.Allocator, _loaders: api.L
         }
     }
 
+    _loaders_guard.ptr = null;
     return loaders;
 }
 
@@ -1949,8 +1974,10 @@ pub struct BundleOptions {
         _.define.deinit();
         // Free bundler_feature_flags if it was allocated (not the static empty set)
         if (_.bundler_feature_flags != &Runtime.Features.empty_bundler_feature_flags) {
-            @constCast(_.bundler_feature_flags).deinit();
-            allocator.destroy(@constCast(_.bundler_feature_flags));
+            unsafe {
+                @constCast(_.bundler_feature_flags).deinit();
+                allocator.destroy(@constCast(_.bundler_feature_flags));
+            }
         }
     }
 

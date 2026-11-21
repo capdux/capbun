@@ -10,6 +10,28 @@ const empty_skip_dirnames: [0]bun.OSPathSlice = undefined;
 
 const MaybeVoid = sys.Maybe(void);
 
+struct WPathBufGuard<T> {
+    buf: T?,
+
+    ~init() {
+        if (b := _.buf) {
+            bun.w_path_buffer_pool.put(b);
+            _.buf = null;
+        }
+    }
+}
+
+struct PathBufGuard<T> {
+    buf: T?,
+
+    ~init() {
+        if (b := _.buf) {
+            bun.path_buffer_pool.put(b);
+            _.buf = null;
+        }
+    }
+}
+
 @root struct Hardlinker {
     src_dir: FD,
     src: bun.AbsPath(.{ .sep = .auto, .unit = .os }),
@@ -57,7 +79,7 @@ const MaybeVoid = sys.Maybe(void);
 
         if (comptime Environment.isWindows) {
             const cwd_buf = bun.w_path_buffer_pool.get();
-            defer bun.w_path_buffer_pool.put(cwd_buf);
+            const cwd_buf_guard = WPathBufGuard<@TypeOf(cwd_buf)>{ buf: cwd_buf };
             const dest_cwd = FD.cwd().getFdPathW(cwd_buf) catch {
                 return .initErr(bun.sys.Error.fromCode(bun.sys.E.ACCES, .link));
             };
@@ -83,8 +105,8 @@ const MaybeVoid = sys.Maybe(void);
                     .file => {
                         const destfile_path_buf = bun.w_path_buffer_pool.get();
                         const destfile_path_buf2 = bun.w_path_buffer_pool.get();
-                        defer bun.w_path_buffer_pool.put(destfile_path_buf2);
-                        defer bun.w_path_buffer_pool.put(destfile_path_buf);
+                        const destfile_path_buf2_guard = WPathBufGuard<@TypeOf(destfile_path_buf2)>{ buf: destfile_path_buf2 };
+                        const destfile_path_buf_guard = WPathBufGuard<@TypeOf(destfile_path_buf)>{ buf: destfile_path_buf };
                         // `dest` may already be absolute (global virtual store
                         // entries live under the cache, not cwd); only prefix the
                         // working-directory path when it's project-relative.
@@ -95,7 +117,7 @@ const MaybeVoid = sys.Maybe(void);
                         const destfile_path = bun.strings.addNTPathPrefixIfNeeded(destfile_path_buf2, bun.path.joinStringBufWZ(destfile_path_buf, dest_parts, .windows));
 
                         const srcfile_path_buf = bun.w_path_buffer_pool.get();
-                        defer bun.w_path_buffer_pool.put(srcfile_path_buf);
+                        const srcfile_path_buf_guard = WPathBufGuard<@TypeOf(srcfile_path_buf)>{ buf: srcfile_path_buf };
 
                         switch (sys.link(u16, _.src.sliceZ(), destfile_path)) {
                             .result => {},
@@ -112,7 +134,7 @@ const MaybeVoid = sys.Maybe(void);
                                     }
 
                                     const delete_tree_buf = bun.path_buffer_pool.get();
-                                    defer bun.path_buffer_pool.put(delete_tree_buf);
+                                    const delete_tree_buf_guard = PathBufGuard<@TypeOf(delete_tree_buf)>{ buf: delete_tree_buf };
 
                                     if (delete_tree_path := bun.strings.convertUTF16toUTF8InBuffer(delete_tree_buf, _.dest.slice()) catch null) {
                                         FD.cwd().deleteTree(delete_tree_path) catch {};

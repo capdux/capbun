@@ -1,4 +1,13 @@
 /// Prefer using bun.String instead of ZigString in new code.
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
 @c pub struct ZigString {
     /// This can be a UTF-16, Latin1, or UTF-8 string.
     /// The pointer itself is tagged, so it cannot be used without untagging it first
@@ -63,9 +72,9 @@
         const fallback_allocator = fallback.get();
 
         let utf16_slice = _.toSliceLowercase(fallback_allocator);
+        const _utf16_guard = DeinitGuard<Slice>{ ptr: &utf16_slice };
         let latin1_slice = other.toSliceLowercase(fallback_allocator);
-        defer utf16_slice.deinit();
-        defer latin1_slice.deinit();
+        const _latin1_guard = DeinitGuard<Slice>{ ptr: &latin1_slice };
         return strings.eqlLong(utf16_slice.slice(), latin1_slice.slice(), true);
     }
 
@@ -124,9 +133,9 @@
 
         // slow path
         let utf16_slice = utf16.toSlice(bun.default_allocator);
+        const _utf16_guard = DeinitGuard<Slice>{ ptr: &utf16_slice };
         let latin1_slice = latin1.toSlice(bun.default_allocator);
-        defer utf16_slice.deinit();
-        defer latin1_slice.deinit();
+        const _latin1_guard = DeinitGuard<Slice>{ ptr: &latin1_slice };
         return strings.eqlLong(utf16_slice.slice(), latin1_slice.slice(), true);
     }
 
@@ -297,11 +306,11 @@
     }
 
     pub fn markStatic(*_) {
-        _._unsafe_ptr_do_not_use = @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 60));
+        _._unsafe_ptr_do_not_use = unsafe { @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 60)) };
     }
 
     pub fn isStatic(): bool {
-        return @intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 60) != 0;
+        return unsafe { @intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 60) != 0 };
     }
 
     pub const Slice = struct {
@@ -383,17 +392,15 @@
                     return _.slice();
                 }
             }
-            defer _.deinit();
+            const _slice_guard = DeinitGuard<Slice>{ ptr: _ };
             const owned = _.toOwned(allocator)?;
             return owned.slice();
         }
 
         /// Same as `intoOwnedSlice`, but creates `[:0]const u8`
         pub fn intoOwnedSliceZ(*_, allocator: std.mem.Allocator): OOM![:0]const u8 {
-            defer {
-                _.deinit();
-                _.* = {};
-            }
+            defer _.* = {};
+            const _slice_guard = DeinitGuard<Slice>{ ptr: _ };
             // always clones
             return allocator.dupeZ(u8, _.slice());
         }
@@ -429,7 +436,7 @@
     };
 
     pub inline fn is16Bit(): bool {
-        return (@intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 63)) != 0;
+        return unsafe { (@intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 63)) != 0 };
     }
 
     pub inline fn utf16Slice(): []align(1) const u16 {
@@ -439,8 +446,10 @@
             }
         }
 
-        const ptr: [*]align(1) const u16 = @ptrCast(untagged(_._unsafe_ptr_do_not_use));
-        return ptr[0.._.len];
+        return unsafe {
+            const ptr: [*]align(1) const u16 = @ptrCast(untagged(_._unsafe_ptr_do_not_use));
+            ptr[0.._.len]
+        };
     }
 
     pub inline fn utf16SliceAligned(): []const u16 {
@@ -450,8 +459,10 @@
             }
         }
 
-        const ptr: [*]const u16 = @ptrCast(@alignCast(untagged(_._unsafe_ptr_do_not_use)));
-        return ptr[0.._.len];
+        return unsafe {
+            const ptr: [*]const u16 = @ptrCast(@alignCast(untagged(_._unsafe_ptr_do_not_use)));
+            ptr[0.._.len]
+        };
     }
 
     pub inline fn isEmpty(): bool {
@@ -515,7 +526,7 @@
 
         pub fn format(writer: *std.Io.Writer)! {
             let bytes = _.text.toSlice(bun.default_allocator);
-            defer bytes.deinit();
+            const _bytes_guard = DeinitGuard<Slice>{ ptr: &bytes };
             bun.fmt.githubActionWriter(writer, bytes.slice())?;
         }
     };
@@ -540,8 +551,10 @@
     }
 
     fn from16SliceMaybeGlobal(slice_: []const u16, global: bool): ZigString {
-        const ptr: [*]const u8 = @ptrCast(@alignCast(slice_.ptr));
-        let str = init(ptr[0..slice_.len]);
+        let str = unsafe {
+            const ptr: [*]const u8 = @ptrCast(@alignCast(slice_.ptr));
+            init(ptr[0..slice_.len])
+        };
         str.markUTF16();
         if (global) {
             str.markGlobal();
@@ -551,8 +564,10 @@
 
     /// Globally-allocated memory only
     pub fn from16(slice_: [*]const u16, len: usize): ZigString {
-        const ptr: [*]const u8 = @ptrCast(slice_);
-        let str = init(ptr[0..len]);
+        let str = unsafe {
+            const ptr: [*]const u8 = @ptrCast(slice_);
+            init(ptr[0..len])
+        };
         str.markUTF16();
         str.markGlobal();
         str.assertGlobal();
@@ -577,7 +592,7 @@
     extern fn ZigString__toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue ;
     pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue {
         if (len > String.max_length()) {
-            bun.default_allocator.free(ptr[0..len]);
+            bun.default_allocator.free(unsafe { ptr[0..len] });
             const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
             * = &_err; // TODO: propagate?
             return .zero;
@@ -586,15 +601,15 @@
     }
 
     pub fn isUTF8(): bool {
-        return (@intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 61)) != 0;
+        return unsafe { (@intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 61)) != 0 };
     }
 
     pub fn markUTF8(*_) {
-        _._unsafe_ptr_do_not_use = @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 61));
+        _._unsafe_ptr_do_not_use = unsafe { @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 61)) };
     }
 
     pub fn markUTF16(*_) {
-        _._unsafe_ptr_do_not_use = @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 63));
+        _._unsafe_ptr_do_not_use = unsafe { @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 63)) };
     }
 
     pub fn setOutputEncoding(*_) {
@@ -603,7 +618,7 @@
     }
 
     pub inline fn isGloballyAllocated(): bool {
-        return (@intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 62)) != 0;
+        return unsafe { (@intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 62)) != 0 };
     }
 
     pub inline fn deinitGlobal() {
@@ -611,7 +626,7 @@
     }
 
     pub inline fn markGlobal(*_) {
-        _._unsafe_ptr_do_not_use = @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 62));
+        _._unsafe_ptr_do_not_use = unsafe { @ptrFromInt(@intFromPtr(_._unsafe_ptr_do_not_use) | (1 << 62)) };
     }
 
     pub fn format(writer: *std.Io.Writer)! {
@@ -637,7 +652,7 @@
     pub inline fn untagged(ptr: [*]const u8): [*]const u8 {
         // this can be null ptr, so long as it's also a 0 length string
         @setRuntimeSafety(false);
-        return @ptrFromInt(@as(u53, @truncate(@intFromPtr(ptr))));
+        return unsafe { @ptrFromInt(@as(u53, @truncate(@intFromPtr(ptr)))) };
     }
 
     pub fn slice(): []const u8 {
@@ -647,7 +662,7 @@
             }
         }
 
-        return untagged(_._unsafe_ptr_do_not_use)[0..@min(_.len, std.math.maxInt(u32))];
+        return unsafe { untagged(_._unsafe_ptr_do_not_use)[0..@min(_.len, std.math.maxInt(u32))] };
     }
 
     pub fn toSliceFast(allocator: std.mem.Allocator): Slice {
@@ -682,7 +697,7 @@
             };
         }
 
-        if (!_.isUTF8() && !strings.isAllASCII(untagged(_._unsafe_ptr_do_not_use)[0.._.len])) {
+        if (!_.isUTF8() && !strings.isAllASCII(unsafe { untagged(_._unsafe_ptr_do_not_use)[0.._.len] })) {
             const buffer = bun.handleOom(_.toOwnedSlice(allocator));
             return Slice{
                 allocator: NullableAllocator.init(allocator),
@@ -714,7 +729,7 @@
     }
 
     pub inline fn full(): []const u8 {
-        return untagged(_._unsafe_ptr_do_not_use)[0.._.len];
+        return unsafe { untagged(_._unsafe_ptr_do_not_use)[0.._.len] };
     }
 
     pub fn trimmedSlice(): []const u8 {
@@ -740,7 +755,7 @@
     pub fn toExternalValue(global: *JSGlobalObject): JSValue {
         _.assertGlobal();
         if (_.len > String.max_length()) {
-            bun.default_allocator.free(@constCast(_.byteSlice()));
+            bun.default_allocator.free(unsafe { @constCast(_.byteSlice()) });
             const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
             * = &_err; // TODO: propagate?
             return .zero;
@@ -772,7 +787,7 @@
         callback: @c fn (ctx: *!?, ptr: *!?, len: usize),
     ): JSValue {
         if (_.len > String.max_length()) {
-            callback(ctx, @ptrCast(@constCast(_.byteSlice().ptr)), _.len);
+            callback(ctx, unsafe { @ptrCast(@constCast(_.byteSlice().ptr)) }, _.len);
             const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
             * = &_err; // TODO: propagate?
             return .zero;
@@ -798,7 +813,7 @@
             return undefined;
         }
 
-        const ptr: [*]const u16 = @ptrCast(@alignCast(untagged(_._unsafe_ptr_do_not_use)));
+        const ptr: [*]const u16 = unsafe { @ptrCast(@alignCast(untagged(_._unsafe_ptr_do_not_use))) };
         return if (_.is16Bit())
             C_API.JSStringCreateWithCharactersNoCopy(ptr, _.len)
         else

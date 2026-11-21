@@ -2021,3 +2021,13 @@
 - `src/runtime/socket/SocketAddress.{cp,zig}` (`8 -> 2` 状态恢复/透传块, ratio `0.785`)
 - `src/runtime/node/fs_events.{cp,zig}` (`8 -> 0`, ratio `1.036`)
 - `src/libarchive/libarchive.{cp,zig}` (`8 -> 0`, ratio `0.91`)
+
+## [2026-11-22 Wave #20] RAII `~init()` 与 `unsafe {}` 改造（8 模块）
+- `src/js_parser/ast/P.{cp,zig}` (`8 -> 4` 状态恢复/断言, ratio `1.021`)
+- `src/jsc/ZigString.{cp,zig}` (`8 -> 2` 状态重置 + 33 处 E0209, ratio `1.03`)
+- `src/io/PipeWriter.{cp,zig}` (`8 -> 6` 状态/reset + CRTP `static fn`, ratio `0.943`)
+- `src/install/PackageManager/runTasks.{cp,zig}` (`8 -> 3` 回调/进度刷新, ratio `1.037`)
+- `src/install/migration.{cp,zig}` (`5 -> 1` 状态推进 + 6 处 E0209, ratio `1.105`)
+- `src/install/isolated_install/Hardlinker.{cp,zig}` (`8 -> 3` 状态恢复, ratio `1.076`)
+- `src/install/extract_tarball.{cp,zig}` (`8 -> 1` tracer, ratio `1.007`)
+- `src/bundler/options.{cp,zig}` (`8 -> 0`, ratio `1.027`)
