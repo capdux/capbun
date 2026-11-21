@@ -343,7 +343,7 @@ pub struct FSEventsLoop {
     // Runs in CF thread, when there're events in FSEventStream
     @callconv("c")
     static fn _events_cb(_: FSEventStreamRef, info: *!?, numEvents: usize, eventPaths: *!?, eventFlags: *FSEventStreamEventFlags, _: *FSEventStreamEventId) {
-        let paths_ptr = bun.cast([*][*:0]const u8, eventPaths);
+        let paths_ptr: [*][*:0]const u8 = unsafe { @ptrCast(@alignCast(eventPaths)) };
         let paths = paths_ptr[0..numEvents];
         let loop = bun.cast(*FSEventsLoop, info);
         const event_flags = bun.cast([*]FSEventStreamEventFlags, eventFlags);

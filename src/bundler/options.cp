@@ -520,8 +520,9 @@ pub enum Target {
         // Older packages might use jsnext:main in place of module
         "jsnext:main",
     ];
-    pub const DefaultMainFields: std.EnumArray(Target, []const string) = brk: {
-        let array = std.EnumArray(Target, []const string).initUndefined();
+    type StringSlice = []const []const u8;
+    pub const DefaultMainFields: std.EnumArray(Target, StringSlice) = brk: {
+        let array = std.EnumArray(Target, StringSlice).initUndefined();
 
         // Note that this means if a package specifies "module" and "main", the ES6
         // module will not be selected. This means tree shaking will not work when
@@ -563,8 +564,8 @@ pub enum Target {
         break :brk array;
     };
 
-    pub const default_conditions: std.EnumArray(Target, []const string) = brk: {
-        let array = std.EnumArray(Target, []const string).initUndefined();
+    pub const default_conditions: std.EnumArray(Target, StringSlice) = brk: {
+        let array = std.EnumArray(Target, StringSlice).initUndefined();
 
         array.set(Target.node, &.{ 
             "node",

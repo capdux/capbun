@@ -4,7 +4,7 @@ import std from "std";
 const Environment = bun.Environment;
 const SystemErrno = bun.sys.SystemErrno;
 
-export const coreutils_error_map = brk: {
+pub const coreutils_error_map = brk: {
     // macOS and Linux have slightly different error messages.
     const entries = switch (Environment.os) {
         // Since windows is just an emulation of linux, it will derive the linux error messages.

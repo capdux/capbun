@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 const Message = anyopaque;
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
@@ -200,75 +200,35 @@ pub fn defaultConditions(t: Target) []const []const u8 {
     
     pub const MAIN_FIELD_NAMES = .{ "browser", "module", "main", "jsnext:main" };
     
-    pub const DefaultMainFields: std.EnumArray(Target, []const string) = brk: {
-            var array = std.EnumArray(Target, []const string).initUndefined();
+    pub const StringSlice = []const []const u8;
     
-            // Note that this means if a package specifies "module" and "main", the ES6
-            // module will not be selected. This means tree shaking will not work when
-            // targeting node environments.
-            //
-            // Some packages incorrectly treat the "module" field as "code for the browser". It
-            // actually means "code for ES6 environments" which includes both node and the browser.
-            //
-            // For example, the package "@firebase/app" prints a warning on startup about
-            // the bundler incorrectly using code meant for the browser if the bundler
-            // selects the "module" field instead of the "main" field.
-            //
-            // This is unfortunate but it's a problem on the side of those packages.
-            // They won't work correctly with other popular bundlers (with node as a target) anyway.
-            const list: [2]string = .{ MAIN_FIELD_NAMES[2], MAIN_FIELD_NAMES[1] };
-            array.set(Target.node, &list);
-    
-            // Note that this means if a package specifies "main", "module", and
-            // "browser" then "browser" will win out over "module". This is the
-            // same behavior as webpack: https://github.com/webpack/webpack/issues/4674.
-            //
-            // This is deliberate because the presence of the "browser" field is a
-            // good signal that this should be preferred. Some older packages might only use CJS in their "browser"
-            // but in such a case they probably don't have any ESM files anyway.
-            const listc: [4]string = .{ MAIN_FIELD_NAMES[0], MAIN_FIELD_NAMES[1], MAIN_FIELD_NAMES[3], MAIN_FIELD_NAMES[2] };
-            const listd: [3]string = .{ MAIN_FIELD_NAMES[1], MAIN_FIELD_NAMES[2], MAIN_FIELD_NAMES[3] };
-    
-            array.set(Target.browser, &listc);
-            array.set(Target.bun, &listd);
-            array.set(Target.bun_macro, &listd);
-            array.set(Target.bake_server_components_ssr, &listd);
-    
-            // Original comment:
-            // The neutral target is for people that don't want esbuild to try to
-            // pick good defaults for their platform. In that case, the list of main
-            // fields is empty by default. You must explicitly configure it yourself.
-            // array.set(Target.neutral, &listc);
-    
+    pub const DefaultMainFields: std.EnumArray(Target,StringSlice) = brk: {
+            var array = std.EnumArray(Target, StringSlice).initUndefined();
+            _ = &array;
+            const list: [2][]const u8 = .{ MAIN_FIELD_NAMES[2], MAIN_FIELD_NAMES[1] };
+            _ = &list;
+            _ = array.set(Target.node, (&list));
+            const listc: [4][]const u8 = .{ MAIN_FIELD_NAMES[0], MAIN_FIELD_NAMES[1], MAIN_FIELD_NAMES[3], MAIN_FIELD_NAMES[2] };
+            _ = &listc;
+            const listd: [3][]const u8 = .{ MAIN_FIELD_NAMES[1], MAIN_FIELD_NAMES[2], MAIN_FIELD_NAMES[3] };
+            _ = &listd;
+            _ = array.set(Target.browser, (&listc));
+            _ = array.set(Target.bun, (&listd));
+            _ = array.set(Target.bun_macro, (&listd));
+            _ = array.set(Target.bake_server_components_ssr, (&listd));
             break :brk array;
-        };
+    };
     
-    pub const default_conditions: std.EnumArray(Target, []const string) = brk: {
-            var array = std.EnumArray(Target, []const string).initUndefined();
-    
-            array.set(Target.node, &.{ 
-                "node",
-            });
-            array.set(Target.browser, &.{ 
-                "browser",
-                "module",
-            });
-            array.set(Target.bun, &.{ 
-                "bun",
-                "node",
-            });
-            array.set(Target.bake_server_components_ssr, &.{ 
-                "bun",
-                "node",
-            });
-            array.set(Target.bun_macro, &.{ 
-                "macro",
-                "bun",
-                "node",
-            });
-    
+    pub const default_conditions: std.EnumArray(Target,StringSlice) = brk: {
+            var array = std.EnumArray(Target, StringSlice).initUndefined();
+            _ = &array;
+            _ = array.set(Target.node, (&.{ "node" }));
+            _ = array.set(Target.browser, (&.{ "browser", "module" }));
+            _ = array.set(Target.bun, (&.{ "bun", "node" }));
+            _ = array.set(Target.bake_server_components_ssr, (&.{ "bun", "node" }));
+            _ = array.set(Target.bun_macro, (&.{ "macro", "bun", "node" }));
             break :brk array;
-        };
+    };
 };
 
 pub const LoaderOptional = enum(u8) {

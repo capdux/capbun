@@ -44,7 +44,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -65,7 +65,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
@@ -1034,6 +1034,19 @@ else => {
                     }
                     if ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asProperty("peerDependenciesMeta")) |@"meta"| {
                         _ = &@"meta";
+                        if ((@"meta".expr.data == .e_object)) {
+                            for (cp_iter_slice(@"meta".expr.data.e_object.properties.slice())) |meta_prop| {
+                                _ = &meta_prop;
+                                const optional = (((if (@typeInfo(@TypeOf(meta_prop)) == .@"enum") @intFromEnum(meta_prop) else meta_prop.value).?.asProperty("optional")) orelse continue);
+                                if (((optional.expr.data != .e_boolean) or (!(if (@typeInfo(@TypeOf(optional.expr.data.e_boolean)) == .@"enum") @intFromEnum(optional.expr.data.e_boolean) else optional.expr.data.e_boolean.value)))) {
+                                    continue;
+                                }
+                                const key = ((meta_prop.key.?.asString(allocator)) orelse continue);
+                                dependency_sum = (dependency_sum + 1);
+                                _ = string_builder.count(key);
+                                _ = string_builder.count("*");
+                            }
+                        }
                     }
                 }
             }
@@ -1383,6 +1396,24 @@ else => {
                                     _ = optional_peer_dep_names.clearRetainingCapacity();
                                     if ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asProperty("peerDependenciesMeta")) |@"meta"| {
                                         _ = &@"meta";
+                                        if ((@"meta".expr.data == .e_object)) {
+                                            const meta_props = @"meta".expr.data.e_object.properties.slice();
+                                            _ = try optional_peer_dep_names.ensureUnusedCapacity(meta_props.len);
+                                            for (cp_iter_slice(meta_props)) |meta_prop| {
+                                                _ = &meta_prop;
+                                                if ((if (@typeInfo(@TypeOf(meta_prop)) == .@"enum") @intFromEnum(meta_prop) else meta_prop.value).?.asProperty("optional")) |optional| {
+                                                    _ = &optional;
+                                                    if (((optional.expr.data != .e_boolean) or (!(if (@typeInfo(@TypeOf(optional.expr.data.e_boolean)) == .@"enum") @intFromEnum(optional.expr.data.e_boolean) else optional.expr.data.e_boolean.value)))) {
+                                                        continue;
+                                                    }
+                                                    const meta_key = ((meta_prop.key.?.asString(allocator)) orelse (unreachable));
+                                                    _ = optional_peer_dep_names.appendAssumeCapacity(String.Builder.stringHash(meta_key));
+                                                    count = (count + 1);
+                                                }
+                                            }
+                                            this_names = dependency_names[0..count];
+                                            this_versions = dependency_values[0..count];
+                                        }
                                     }
                                 }
                                 const bundled_deps_begin = bundled_deps_offset;
@@ -1427,6 +1458,31 @@ else => {
                                 if (comptime is_peer) {
                                     if ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asProperty("peerDependenciesMeta")) |@"meta"| {
                                         _ = &@"meta";
+                                        if ((@"meta".expr.data == .e_object)) {
+                                            outer: for (@"meta".expr.data.e_object.properties.slice()) |meta_prop| {
+                                                _ = &meta_prop;
+                                                const optional = (((if (@typeInfo(@TypeOf(meta_prop)) == .@"enum") @intFromEnum(meta_prop) else meta_prop.value).?.asProperty("optional")) orelse continue);
+                                                if (((optional.expr.data != .e_boolean) or (!(if (@typeInfo(@TypeOf(optional.expr.data.e_boolean)) == .@"enum") @intFromEnum(optional.expr.data.e_boolean) else optional.expr.data.e_boolean.value)))) {
+                                                    continue;
+                                                }
+                                                const meta_key = ((meta_prop.key.?.asString(allocator)) orelse continue);
+                                                const meta_hash = String.Builder.stringHash(meta_key);
+                                                for (cp_iter_slice(this_names[0..i])) |existing| {
+                                                    _ = &existing;
+                                                    if ((existing.hash == meta_hash)) {
+                                                        continue :outer;
+                                                    }
+                                                }
+                                                this_names[cp_cast_int(usize, i)] = string_builder.append(ExternalString, meta_key);
+                                                this_versions[cp_cast_int(usize, i)] = string_builder.append(ExternalString, "*");
+                                                if ((non_optional_peer_dependency_offset != i)) {
+                                                    _ = std.mem.swap(ExternalString, (&this_names[@as(usize, @intCast(i))]), (&this_names[@as(usize, @intCast(non_optional_peer_dependency_offset))]));
+                                                    _ = std.mem.swap(ExternalString, (&this_versions[@as(usize, @intCast(i))]), (&this_versions[@as(usize, @intCast(non_optional_peer_dependency_offset))]));
+                                                }
+                                                non_optional_peer_dependency_offset = (non_optional_peer_dependency_offset + 1);
+                                                i = (i + 1);
+                                            }
+                                        }
                                     }
                                 }
                                 count = i;

@@ -8,7 +8,7 @@ import { ClientSession } from "./ClientSession.cp";
 import { Stream } from "./Stream.cp";
 import { HTTPClient } from "../http.cp";
 
-export fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Stream): ! {
+pub fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Stream): ! {
     if (client := stream.client) {
         const request = client.buildRequest(client.state.original_request_body.len());
         if (client.verbose != .none) {
@@ -96,7 +96,7 @@ export fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Strea
     }
 }
 
-export fn drainSendBody(stream: *Stream, qs: *quic.Stream) {
+pub fn drainSendBody(stream: *Stream, qs: *quic.Stream) {
     if (stream.request_body_done) return;
     if (client := stream.client) {
         if (stream.is_streaming_body) {

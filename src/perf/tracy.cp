@@ -54,7 +54,7 @@ export @c struct SourceLocationData {
     color: u32 = 0,
 }
 
-export inline fn trace(@comptime src: std.builtin.SourceLocation): Ctx {
+pub inline fn trace(comptime src: std.builtin.SourceLocation): Ctx {
     if (!enable) return Ctx{};
 
     const srcloc = SourceLocationData{
@@ -72,7 +72,7 @@ export inline fn trace(@comptime src: std.builtin.SourceLocation): Ctx {
     }
 }
 
-export inline fn traceNamed(@comptime src: std.builtin.SourceLocation, @comptime name: cstr): Ctx {
+pub inline fn traceNamed(comptime src: std.builtin.SourceLocation, comptime name: cstr): Ctx {
     if (!enable) return Ctx{};
 
     const srcloc = SourceLocationData{
@@ -170,38 +170,38 @@ export fn TracyAllocator(@comptime name: cstring?): type {
 }
 
 // This function only accepts comptime-known strings, see `messageCopy` for runtime strings
-export inline fn message(@comptime msg: cstring) {
+pub inline fn message(comptime msg: cstring) {
     if (!enable) return;
     ___tracy_emit_messageL(msg.ptr, @if (enable_callstack) callstack_depth else 0);
 }
 
 // This function only accepts comptime-known strings, see `messageColorCopy` for runtime strings
-export inline fn messageColor(@comptime msg: cstring, color: u32) {
+pub inline fn messageColor(comptime msg: cstring, color: u32) {
     if (!enable) return;
     ___tracy_emit_messageLC(msg.ptr, color, @if (enable_callstack) callstack_depth else 0);
 }
 
-export inline fn messageCopy(msg: string) {
+pub inline fn messageCopy(msg: string) {
     if (!enable) return;
     ___tracy_emit_message(msg.ptr, msg.len, @if (enable_callstack) callstack_depth else 0);
 }
 
-export inline fn messageColorCopy(msg: cstring, color: u32) {
+pub inline fn messageColorCopy(msg: cstring, color: u32) {
     if (!enable) return;
     ___tracy_emit_messageC(msg.ptr, msg.len, color, @if (enable_callstack) callstack_depth else 0);
 }
 
-export inline fn frameMark() {
+pub inline fn frameMark() {
     if (!enable) return;
     ___tracy_emit_frame_mark(null);
 }
 
-export inline fn frameMarkNamed(@comptime name: cstring) {
+pub inline fn frameMarkNamed(comptime name: cstring) {
     if (!enable) return;
     ___tracy_emit_frame_mark(name.ptr);
 }
 
-export inline fn namedFrame(@comptime name: cstring): Frame(name) {
+pub inline fn namedFrame(comptime name: cstring): Frame(name) {
     frameMarkStart(name);
     const FrameT = Frame(name);
     return FrameT{};

@@ -33,7 +33,7 @@ fn classifyHeader(name: string): RequestHeader? {
     return null;
 }
 
-export fn writePreface(session: *ClientSession) {
+pub fn writePreface(session: *ClientSession) {
     session.queue(H2FrameParser.client_preface);
 
     let settings: [u8; 18] = [0; 18];
@@ -46,7 +46,7 @@ export fn writePreface(session: *ClientSession) {
     session.preface_sent = true;
 }
 
-export fn writeRequest(session: *ClientSession, client: *bun.http.HTTPClient, stream: *Stream, request: bun.picohttp.Request): ! {
+pub fn writeRequest(session: *ClientSession, client: *bun.http.HTTPClient, stream: *Stream, request: bun.picohttp.Request): ! {
     session.encode_scratch.clearRetainingCapacity();
 
     if (cap := session.pending_hpack_enc_capacity) {
@@ -130,7 +130,7 @@ export fn writeRequest(session: *ClientSession, client: *bun.http.HTTPClient, st
     }
 }
 
-export fn writeHeaderBlock(session: *ClientSession, stream_id: u31, block: string, end_stream: bool) {
+pub fn writeHeaderBlock(session: *ClientSession, stream_id: u31, block: string, end_stream: bool) {
     const max: usize = session.remote_max_frame_size;
     let remaining = block;
     let first = true;
@@ -151,7 +151,7 @@ export fn writeHeaderBlock(session: *ClientSession, stream_id: u31, block: strin
     }
 }
 
-export fn writeDataWindowed(session: *ClientSession, stream: *Stream, data: string, end_stream: bool, cap: usize): usize {
+pub fn writeDataWindowed(session: *ClientSession, stream: *Stream, data: string, end_stream: bool, cap: usize): usize {
     let remaining = data;
     let consumed: usize = 0;
     while (true) {
@@ -175,7 +175,7 @@ export fn writeDataWindowed(session: *ClientSession, stream: *Stream, data: stri
     return consumed;
 }
 
-export fn drainSendBody(session: *ClientSession, stream: *Stream, cap: usize) {
+pub fn drainSendBody(session: *ClientSession, stream: *Stream, cap: usize) {
     if (stream.localClosed() || stream.awaiting_continue || stream.fatal_error != null) return;
     if (client := stream.client) {
         switch (client.state.original_request_body) {
@@ -219,7 +219,7 @@ export fn drainSendBody(session: *ClientSession, stream: *Stream, cap: usize) {
     }
 }
 
-export fn drainSendBodies(session: *ClientSession) {
+pub fn drainSendBodies(session: *ClientSession) {
     const slice: usize = session.remote_max_frame_size;
     while (session.conn_send_window > 0 && session.write_buffer.size() < bun.http.H2.write_buffer_high_water) {
         let progressed = false;
@@ -233,14 +233,14 @@ export fn drainSendBodies(session: *ClientSession) {
     }
 }
 
-export fn encodeHeader(hpack: *HPACK, encoded: *std.ArrayListUnmanaged(u8), name: string, value: string, never_index: bool): ! {
+pub fn encodeHeader(hpack: *HPACK, encoded: *std.ArrayListUnmanaged(u8), name: string, value: string, never_index: bool): ! {
     const required = encoded.items.len + name.len + value.len + 32;
     encoded.ensureTotalCapacity(bun.default_allocator, required)?;
     const written = hpack.encode(name, value, never_index, encoded.allocatedSlice(), encoded.items.len)?;
     encoded.items.len += written;
 }
 
-export fn encodeHpackTableSizeUpdate(encoded: *std.ArrayListUnmanaged(u8), value: u32) {
+pub fn encodeHpackTableSizeUpdate(encoded: *std.ArrayListUnmanaged(u8), value: u32) {
     if (value < 31) {
         encoded.appendAssumeCapacity(0x20 | (value as u8));
         return;

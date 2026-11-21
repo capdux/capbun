@@ -172,9 +172,15 @@ pub fn inMapCaseInsensitive(self: []const u8, comptime ComptimeStringMap: auto):
 
 pub fn containsAny(@"in": auto, target: auto): bool {
     for (str of @"in") {
-        const item = if (@TypeOf(str) == u8) &[1]u8{str} else bun.span(str);
-        if (contains(item, target)) {
-            return true;
+        if (@TypeOf(str) == u8) {
+            const buf: [1]u8 = [ str ];
+            if (contains(&buf, target)) {
+                return true;
+            }
+        } else {
+            if (contains(bun.span(str), target)) {
+                return true;
+            }
         }
     }
     return false;

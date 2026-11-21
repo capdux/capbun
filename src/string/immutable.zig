@@ -42,7 +42,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -575,8 +575,19 @@ pub fn inMapCaseInsensitive(self: []const u8, comptime ComptimeStringMap: anytyp
 }
 
 pub fn containsAny(@"in": anytype, target: anytype) bool {
-    _ = @"in";
-    _ = target;
+        for (cp_iter_slice(@"in")) |str| {
+            _ = &str;
+            if ((@TypeOf(str) == u8)) {
+                const buf: [1]u8 = .{ str };
+                if (contains((&buf), target)) {
+                    return true;
+                }
+            } else {
+                if (contains(bun.span(str), target)) {
+                    return true;
+                }
+            }
+        }
         return false;
 }
 
@@ -638,8 +649,8 @@ pub fn isUUID(str: []const u8) bool {
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_2 = 8;
-            while (i < __end_2) : (i += 1) {
+            const __end_3 = 8;
+            while (i < __end_3) : (i += 1) {
                 switch (str[@as(usize, @intCast(i))]) {
 48...57, 97...102, 65...70 => {
 
@@ -656,8 +667,8 @@ return false;
         {
             var i: i32 = 9;
             _ = &i;
-            const __end_3 = 13;
-            while (i < __end_3) : (i += 1) {
+            const __end_4 = 13;
+            while (i < __end_4) : (i += 1) {
                 switch (str[@as(usize, @intCast(i))]) {
 48...57, 97...102, 65...70 => {
 
@@ -674,8 +685,8 @@ return false;
         {
             var i: i32 = 14;
             _ = &i;
-            const __end_4 = 18;
-            while (i < __end_4) : (i += 1) {
+            const __end_5 = 18;
+            while (i < __end_5) : (i += 1) {
                 switch (str[@as(usize, @intCast(i))]) {
 48...57, 97...102, 65...70 => {
 
@@ -692,8 +703,8 @@ return false;
         {
             var i: i32 = 19;
             _ = &i;
-            const __end_5 = 23;
-            while (i < __end_5) : (i += 1) {
+            const __end_6 = 23;
+            while (i < __end_6) : (i += 1) {
                 switch (str[@as(usize, @intCast(i))]) {
 48...57, 97...102, 65...70 => {
 
@@ -710,8 +721,8 @@ return false;
         {
             var i: i32 = 24;
             _ = &i;
-            const __end_6 = 36;
-            while (i < __end_6) : (i += 1) {
+            const __end_7 = 36;
+            while (i < __end_7) : (i += 1) {
                 switch (str[@as(usize, @intCast(i))]) {
 48...57, 97...102, 65...70 => {
 
@@ -919,10 +930,15 @@ pub fn indexAnyComptimeT(comptime T: type, target: []const T, comptime chars: []
 }
 
 pub fn indexEqualAny(@"in": anytype, target: []const u8) ?usize {
-    _ = @"in";
-    _ = target;
         var i: usize = 0;
         _ = &i;
+        for (cp_iter_slice(@"in")) |str| {
+            _ = &str;
+            if (eqlLong(str, target, true)) {
+                return i;
+            }
+            i = (i + 1);
+        }
         return null;
 }
 
@@ -1971,8 +1987,8 @@ pub fn firstNonASCII16(slice: []const u16) ?u32 {
                             {
                                 var i: i32 = 0;
                                 _ = &i;
-                                const __end_14 = index_of_first_nonascii_in_vector;
-                                while (i < __end_14) : (i += 1) {
+                                const __end_16 = index_of_first_nonascii_in_vector;
+                                while (i < __end_16) : (i += 1) {
                                     if ((vec[@as(usize, @intCast(i))] > 127)) {
                                         _ = bun.Output.panic("firstNonASCII16: found non-ASCII character in ASCII vector before the first non-ASCII character", .{});
                                     }
@@ -2057,15 +2073,13 @@ pub fn cmpStringsDesc(_: void, a: []const u8, b: []const u8) bool {
 }
 
 pub fn sortAsc(@"in": [][]const u8) void {
-    _ = @"in";
         const empty_sort_ctx: void = undefined;
-        _ = &empty_sort_ctx;
+        _ = std.sort.pdq(@TypeOf(@"in"[0]), @"in", empty_sort_ctx, cmpStringsAsc);
 }
 
 pub fn sortDesc(@"in": [][]const u8) void {
-    _ = @"in";
         const empty_sort_ctx: void = undefined;
-        _ = &empty_sort_ctx;
+        _ = std.sort.pdq(@TypeOf(@"in"[0]), @"in", empty_sort_ctx, cmpStringsDesc);
 }
 
 pub fn isASCIIHexDigit(c: u8) bool {

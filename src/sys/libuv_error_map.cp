@@ -4,7 +4,7 @@ import std from "std";
 const SystemErrno = bun.sys.SystemErrno;
 
 /// This map is derived off of uv.h's definitions, and is what Node.js uses in printing errors.
-export const libuv_error_map = brk: {
+pub const libuv_error_map = brk: {
     const entries = &.{
         .{ "E2BIG", "argument list too long" },
         .{ "EACCES", "permission denied" },

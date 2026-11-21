@@ -18,7 +18,7 @@ fn isValid(buf: *bun.PathBuffer, segment: string, bin: string): u16? {
     return @intCast(filepath.len);
 }
 
-export fn which(buf: *bun.PathBuffer, path: string, cwd: string, bin: string): [:0]const u8? {
+pub fn which(buf: *bun.PathBuffer, path: string, cwd: string, bin: string): [:0]const u8? {
     if (bin.len > bun.MAX_PATH_BYTES) return null;
     bun.Output.scoped(.which, .hidden)("path={s} cwd={s} bin={s}", .{ path, cwd, bin });
 
@@ -77,7 +77,7 @@ const win_extensions = [
     "bat",
 ];
 
-export fn endsWithExtension(str: string): bool {
+pub fn endsWithExtension(str: string): bool {
     if (str.len < 4) return false;
     if (str[str.len - 4] != '.') return false;
     let file_ext = str[str.len - 3..];
@@ -122,7 +122,7 @@ fn searchBinInPath(buf: *bun.WPathBuffer, path_buf: *bun.PathBuffer, path: strin
     return searchBin(buf, path_size, check_windows_extensions);
 }
 
-export fn whichWin(buf: *bun.WPathBuffer, path: string, cwd: string, bin: string): [:0]const u16? {
+pub fn whichWin(buf: *bun.WPathBuffer, path: string, cwd: string, bin: string): [:0]const u16? {
     if (bin.len == 0) return null;
     let path_buf = bun.path_buffer_pool.get();
     defer bun.path_buffer_pool.put(path_buf);
