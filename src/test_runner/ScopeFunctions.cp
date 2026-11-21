@@ -13,6 +13,36 @@ const BunTest = bun_test.BunTest;
 const Signature = bun_test.js_fns.Signature;
 const groupLog = bun_test.debug.group;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { _.ptr.deinit(); }
+}
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() { _.ptr.deref(); }
+}
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    gpa: std.mem.Allocator,
+    active: bool = true,
+    ~init() { if (_.active) _.ptr.deinit(_.gpa); }
+}
+pub struct FreeOptGuard {
+    ptr: *(([]const u8)?)!,
+    gpa: std.mem.Allocator,
+    ~init() {
+        const opt = unsafe { _.ptr.* };
+        if (label := opt) _.gpa.free(label);
+    }
+}
+pub struct StrongListGuard {
+    ptr: *std.array_list.Managed(jsc.Strong.Deprecated)!,
+    ~init() {
+        for (*arg of _.ptr.items) arg.deinit();
+        _.ptr.deinit();
+    }
+}
+
 pub const Mode = enum { describe, @"test" };
 
 pub struct strings {
@@ -107,7 +137,7 @@ fn getDescription(gpa: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, descr
         }
 
         let description_name = description.getName(globalThis)?;
-        defer description_name.deref();
+        const _guard_desc_name = DerefGuard<@TypeOf(description_name)>{ ptr: &description_name };
         return description_name.toOwnedSlice(gpa);
     }
 
@@ -167,7 +197,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         callback: result_callback,
         options: {},
     };
-    errdefer result.deinit(gpa);
+    let _guard_result = DeinitWithAllocGuard<ParseArgumentsResult>{ ptr: &result, gpa: gpa };
 
     let timeout_option: f64? = null;
 
@@ -234,6 +264,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         result.options.timeout = 0;
     }
 
+    _guard_result.active = false;
     return result;
 }
 
@@ -292,7 +323,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         const array = callFrame.argumentsAsArray(1)[0];
         if (array.isUndefinedOrNull() || !array.isArray()) {
             let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-            defer formatter.deinit();
+            const _guard_formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: &formatter };
             return globalThis.throw("Expected array, got {f}", .{ array.toFmt(&formatter) });
         }
 
@@ -312,14 +343,14 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         const line_no = jsc.Jest.captureTestLineNumber(callFrame, globalThis);
 
         let buntest_strong = bun_test.js_fns.cloneActiveStrong(globalThis, .{ .signature = .{ .scope_functions = client }, .allow_in_preload = false })?;
-        defer buntest_strong.deinit();
+        const _guard_buntest = DeinitGuard<@TypeOf(buntest_strong)>{ ptr: &buntest_strong };
         const bunTest = buntest_strong.get();
 
         let args = parseArguments(globalThis, callFrame, .{ scope_functions: client }, bunTest.gpa, {
             callback: if (client.cfg.self_mode == .todo) .allow else .require,
             kind: .test_or_describe,
         })?;
-        defer args.deinit(bunTest.gpa);
+        const _guard_args = DeinitWithAllocGuard<ParseArgumentsResult>{ ptr: &args, gpa: bunTest.gpa };
 
         let callback_length: usize = 0;
         if (cb := args.callback) {
@@ -332,10 +363,7 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             let test_idx: usize = 0;
             while (item := iterator.next()?) : (test_idx += 1) {
                 let args_list = std.array_list.Managed(jsc.Strong.Deprecated).init(bunTest.gpa);
-                defer {
-                    for (*arg of args_list.items) arg.deinit();
-                    args_list.deinit();
-                }
+                const _guard_args_list = StrongListGuard{ ptr: &args_list };
 
                 if (item.isArray()) {
                     let item_iterator = item.arrayIterator(globalThis)?;
@@ -347,14 +375,14 @@ pub fn parseArguments(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
                 }
 
                 let args_list_raw = bun.handleOom(std.array_list.Managed(jsc.JSValue).initCapacity(bunTest.gpa, args_list.items.len));
-                defer args_list_raw.deinit();
+                const _guard_args_raw = DeinitGuard<@TypeOf(args_list_raw)>{ ptr: &args_list_raw };
                 for (arg of args_list.items) bun.handleOom(args_list_raw.append(arg.get()));
 
                 let formatted_label: ([]const u8)? = null;
+                const _guard_label = FreeOptGuard{ ptr: &formatted_label, gpa: bunTest.gpa };
                 if (desc := args.description) {
                     formatted_label = jsc.Jest.formatLabel(globalThis, desc, args_list_raw.items, test_idx, bunTest.gpa)?;
                 }
-                defer if (label := formatted_label) bunTest.gpa.free(label);
 
                 let bound: jsc.JSValue? = null;
                 if (cb := args.callback) {

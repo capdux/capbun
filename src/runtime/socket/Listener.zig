@@ -62,9 +62,199 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.ptr.deinit();
+        }
+    };
+}
+
+pub fn ErrDeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        armed: bool = true,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.armed) {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.allocator.free(self.slice);
+        }
+    };
+}
+
+pub fn ErrFreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: T,
+        armed: bool = true,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.armed) {
+                    _ = self.allocator.free(self.slice);
+                }
+        }
+    };
+}
+
+pub const ListenerCloseGuard = struct {
+    listener: ListenerType,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ListenerCloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            switch (self.listener) {
+.uws => |socket| {
+_ = socket.close();
+},
+.namedPipe => |namedPipe| {
+_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
+},
+.none => {
+
+},
+}
+    }
+};
+
+pub const PathBufferPoolGuard = struct {
+    buf: *bun.PathBuffer,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *PathBufferPoolGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = bun.path_buffer_pool.put(self.buf);
+    }
+};
+
+pub const SocketConfigGuard = struct {
+    ptr: *SocketConfig,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SocketConfigGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.ptr.deinitExcludingHandlers();
+    }
+};
+
+pub const NamedPipeListenerErrGuard = struct {
+    this_ptr: *Listener,
+    vm_allocator: std.mem.Allocator,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *NamedPipeListenerErrGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                _ = self.this_ptr.strong_data.deinit();
+                _ = self.this_ptr.connection.deinit();
+                if (self.this_ptr.protos) |protos| {
+                    _ = &protos;
+                    _ = bun.default_allocator.free(protos);
+                }
+                _ = self.vm_allocator.destroy(self.this_ptr);
+            }
+    }
+};
+
+pub const ListenerAllocErrGuard = struct {
+    this_ptr: *Listener,
+    vm_allocator: std.mem.Allocator,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ListenerAllocErrGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                if (self.this_ptr.secure_ctx) |c| {
+                    _ = &c;
+                    _ = BoringSSL.SSL_CTX_free(c);
+                }
+                if (self.this_ptr.protos) |p| {
+                    _ = &p;
+                    _ = bun.default_allocator.free(p);
+                }
+                _ = bun.asan.unregisterRootRegion((&self.this_ptr.group), @sizeOf(uws.SocketGroup));
+                _ = self.this_ptr.group.deinit();
+                _ = self.vm_allocator.destroy(self.this_ptr);
+            }
+    }
+};
+
+pub const ErrSslCtxGuard = struct {
+    ctx_ptr: *?*BoringSSL.SSL_CTX,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ErrSslCtxGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                if ((blk: {
+                break :blk self.ctx_ptr.*;
+
+})) |c| {
+                    _ = &c;
+                    _ = BoringSSL.SSL_CTX_free(c);
+                }
+            }
+    }
+};
+
+pub const NamedPipeCtxErrGuard = struct {
+    ctx: *WindowsNamedPipeListeningContext,
+    pipe_initialized: bool = false,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *NamedPipeCtxErrGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (Environment.isWindows) {
+                if (self.armed) {
+                    if (self.pipe_initialized) {
+                        _ = self.ctx.closePipeAndDeinit();
+                    } else {
+                        _ = self.ctx.release();
+                    }
+                }
+            }
+    }
+};
+
 pub const Listener = @This();
 
 handlers: Handlers,
@@ -116,14 +306,17 @@ pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSV
         if ((!hostname.isString())) {
             return global.throwInvalidArguments("hostname pattern expects a string", .{});
         }
-        const host_str = try hostname.toSlice(global, bun.default_allocator);
-        defer {
-        _ = host_str.deinit();
-        }
+        var host_str = try hostname.toSlice(global, bun.default_allocator);
+        _ = &host_str;
+        var _guard_host_str = DeinitGuard(@TypeOf(host_str)){ .ptr = (&host_str) };
+        _ = &_guard_host_str;
+        var ___guard_host_str_moved = false; _ = &___guard_host_str_moved;
+        defer if (!___guard_host_str_moved) { ___guard_host_str_moved = true; const __T = @TypeOf(_guard_host_str); if (@typeInfo(__T) == .optional) { if (_guard_host_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_host_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_host_str; _drop_val.__cp_deinit(); } };
         const server_name = bun.handleOom(bun.default_allocator.dupeZ(u8, host_str.slice()));
-        defer {
-        _ = bun.default_allocator.free(server_name);
-        }
+        var _guard_server_name = FreeGuard(@TypeOf(server_name)){ .allocator = bun.default_allocator, .slice = server_name };
+        _ = &_guard_server_name;
+        var ___guard_server_name_moved = false; _ = &___guard_server_name_moved;
+        defer if (!___guard_server_name_moved) { ___guard_server_name_moved = true; const __T = @TypeOf(_guard_server_name); if (@typeInfo(__T) == .optional) { if (_guard_server_name) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_server_name.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_server_name; _drop_val.__cp_deinit(); } };
         if ((server_name.len == 0)) {
             return global.throwInvalidArguments("hostname pattern cannot be empty", .{});
         }
@@ -141,9 +334,10 @@ pub fn addServerName(self: *Listener, global: *jsc.JSGlobalObject, hostname: JSV
                 _ = &ssl_config;
                 var cfg = ssl_config;
                 _ = &cfg;
-                defer {
-                _ = cfg.deinit();
-                }
+                var _guard_cfg = DeinitGuard(SSLConfig){ .ptr = (&cfg) };
+                _ = &_guard_cfg;
+                var ___guard_cfg_moved = false; _ = &___guard_cfg_moved;
+                defer if (!___guard_cfg_moved) { ___guard_cfg_moved = true; const __T = @TypeOf(_guard_cfg); if (@typeInfo(__T) == .optional) { if (_guard_cfg) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cfg.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cfg; _drop_val.__cp_deinit(); } };
                 var create_err: uws.create_bun_socket_error_t = .none;
                 _ = &create_err;
                 const cached_ctx = jsc.VirtualMachine.get().rareData().sslCtxCache().getOrCreate((&cfg), (&create_err));
@@ -195,19 +389,10 @@ pub fn doStop(self: *Listener, force_close: bool) void {
         if ((listener == .uws)) {
             _ = self.unlinkUnixSocketPath();
         }
-        defer {
-        switch (listener) {
-.uws => |socket| {
-_ = socket.close();
-},
-.namedPipe => |namedPipe| {
-_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
-},
-.none => {
-
-},
-}
-        }
+        var _guard_listener_close = ListenerCloseGuard{ .listener = listener };
+        _ = &_guard_listener_close;
+        var ___guard_listener_close_moved = false; _ = &___guard_listener_close_moved;
+        defer if (!___guard_listener_close_moved) { ___guard_listener_close_moved = true; const __T = @TypeOf(_guard_listener_close); if (@typeInfo(__T) == .optional) { if (_guard_listener_close) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_listener_close.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_listener_close; _drop_val.__cp_deinit(); } };
         self.listener = .none;
         if ((self.handlers.active_connections == 0)) {
             _ = self.poll_ref.unref(self.handlers.vm);
@@ -248,9 +433,10 @@ pub fn unlinkUnixSocketPath(self: Listener) void {
             return;
         }
         const buf = bun.path_buffer_pool.get();
-        defer {
-        _ = bun.path_buffer_pool.put(buf);
-        }
+        var _guard_buf = PathBufferPoolGuard{ .buf = buf };
+        _ = &_guard_buf;
+        var ___guard_buf_moved = false; _ = &___guard_buf_moved;
+        defer if (!___guard_buf_moved) { ___guard_buf_moved = true; const __T = @TypeOf(_guard_buf); if (@typeInfo(__T) == .optional) { if (_guard_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf; _drop_val.__cp_deinit(); } };
         _ = bun.sys.unlink(bun.path.z(path, buf));
 }
 
@@ -418,39 +604,38 @@ pub const UnixOrHost = union(enum) {
     },
     fd: bun.FD,
 
-    pub fn clone(this: UnixOrHost) UnixOrHost {
-        switch (this) {
-            .unix => |u| {
-                return .{
-                    .unix = bun.handleOom(bun.default_allocator.dupe(u8, u)),
-                };
-            },
-            .host => |h| {
-                return .{
-                    .host = .{
-                        .host = bun.handleOom(bun.default_allocator.dupe(u8, h.host)),
-                        .port = h.port,
-                    },
-                };
-            },
-            .fd => |f| return .{ .fd = f },
-        }
+pub fn clone(self: @This()) UnixOrHost {
+            switch (self) {
+.unix => |u| {
+return .{ .unix = bun.handleOom(bun.default_allocator.dupe(u8, u)) };
+},
+.host => |h| {
+return .{ .host = .{ .host = bun.handleOom(bun.default_allocator.dupe(u8, h.host)), .port = h.port } };
+},
+.fd => |f| {
+return .{ .fd = f };
+},
+}
     }
 
-    pub fn release(this: UnixOrHost) void {
-        switch (this) {
-            .unix => |u| {
-                bun.default_allocator.free(u);
-            },
-            .host => |h| {
-                bun.default_allocator.free(h.host);
-            },
-            .fd => {},
-        }
+pub fn release(self: *@This()) void {
+            switch (self.*) {
+.unix => |u| {
+_ = bun.default_allocator.free(u);
+},
+.host => |h| {
+_ = bun.default_allocator.free(h.host);
+},
+.fd => {
+
+},
+}
     }
 
-    pub fn deinit(this: UnixOrHost) void {
-        this.release();
+pub fn deinit(self: @This()) void {
+            var copy = self;
+            _ = &copy;
+            _ = copy.release();
     }
 };
 pub const WindowsNamedPipeListeningContext = (if (Environment.isWindows) struct {
@@ -474,7 +659,10 @@ pub fn onClientConnect(self: *@This(), status: uv.ReturnCode) void {
     }
 
 pub fn onPipeClosed(pipe: *uv.Pipe) callconv(.c) void {
-            const this_ctx: *WindowsNamedPipeListeningContext = @ptrCast(@alignCast(pipe.data));
+            const this_ctx: *WindowsNamedPipeListeningContext = (blk: {
+            break :blk @ptrCast(@alignCast(pipe.data));
+
+});
             _ = this_ctx.release();
     }
 
@@ -486,17 +674,10 @@ pub fn closePipeAndDeinit(self: *@This()) void {
 
 pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, ssl_config: ?*const SSLConfig, listener: *Listener) !*WindowsNamedPipeListeningContext {
             const this_ctx = WindowsNamedPipeListeningContext.new(.{ .globalThis = globalThis, .vm = globalThis.bunVM(), .listener = listener });
-            var pipe_initialized = false;
-            _ = &pipe_initialized;
-            errdefer {
-            {
-                if (pipe_initialized) {
-                    _ = this_ctx.closePipeAndDeinit();
-                } else {
-                    _ = this_ctx.release();
-                }
-            }
-            }
+            var _guard_ctx = NamedPipeCtxErrGuard{ .ctx = this_ctx };
+            _ = &_guard_ctx;
+            var ___guard_ctx_moved = false; _ = &___guard_ctx_moved;
+            defer if (!___guard_ctx_moved) { ___guard_ctx_moved = true; const __T = @TypeOf(_guard_ctx); if (@typeInfo(__T) == .optional) { if (_guard_ctx) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ctx.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ctx; _drop_val.__cp_deinit(); } };
             if (ssl_config) |ssl_options| {
                 _ = &ssl_options;
                 _ = bun.BoringSSL.load();
@@ -514,7 +695,7 @@ pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, s
             if ((initResult == .err)) {
                 return error.FailedToInitPipe;
             }
-            pipe_initialized = true;
+            _guard_ctx.pipe_initialized = true;
             if ((path[@as(usize, @intCast((path.len - 1)))] == 0)) {
                 const slice_z = path[0..(path.len - 1) :0];
                 _ = (blk_catch_0: { break :blk_catch_0 ((this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap()) catch |__ce_0| { _ = &__ce_0; return error.FailedToBindPipe; }); });
@@ -527,6 +708,7 @@ pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, s
                 const slice_z = path_buf[0..len :0];
                 _ = (blk_catch_1: { break :blk_catch_1 ((this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap()) catch |__ce_1| { _ = &__ce_1; return error.FailedToBindPipe; }); });
             }
+            _guard_ctx.armed = false;
             return this_ctx;
     }
 
@@ -540,8 +722,10 @@ pub fn release(self: *@This()) void {
             _ = bun.destroy(self);
     }
 
-pub fn deinit(self: *@This()) void {
-            _ = self.release();
+pub fn deinit(self: @This()) void {
+            var copy = self;
+            _ = &copy;
+            _ = copy.release();
     }
     pub const new = bun.TrivialNew(WindowsNamedPipeListeningContext);
 } else struct {
@@ -555,13 +739,15 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
         const vm = jsc.VirtualMachine.get();
         var socket_config = try SocketConfig.fromJS(vm, opts, globalObject, true);
         _ = &socket_config;
-        defer {
-        _ = socket_config.deinitExcludingHandlers();
-        }
+        var _guard_socket_config = SocketConfigGuard{ .ptr = (&socket_config) };
+        _ = &_guard_socket_config;
+        var ___guard_socket_config_moved = false; _ = &___guard_socket_config_moved;
+        defer if (!___guard_socket_config_moved) { ___guard_socket_config_moved = true; const __T = @TypeOf(_guard_socket_config); if (@typeInfo(__T) == .optional) { if (_guard_socket_config) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_socket_config.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_socket_config; _drop_val.__cp_deinit(); } };
         const handlers = (&socket_config.handlers);
-        errdefer {
-        _ = handlers.deinit();
-        }
+        var _guard_handlers = ErrDeinitGuard(Handlers){ .ptr = handlers };
+        _ = &_guard_handlers;
+        var ___guard_handlers_moved = false; _ = &___guard_handlers_moved;
+        defer if (!___guard_handlers_moved) { ___guard_handlers_moved = true; const __T = @TypeOf(_guard_handlers); if (@typeInfo(__T) == .optional) { if (_guard_handlers) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_handlers.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_handlers; _drop_val.__cp_deinit(); } };
         const hostname_or_unix = (&socket_config.hostname_or_unix);
         const port = socket_config.port;
         const ssl = (if ((socket_config.ssl != null)) (&socket_config.ssl.?) else null);
@@ -582,19 +768,14 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
                 var this_ptr: *Listener = bun.handleOom(handlers.vm.allocator.create(Listener));
                 _ = &this_ptr;
                 this_ptr.* = socket;
-                errdefer {
-                {
-                    _ = this_ptr.strong_data.deinit();
-                    _ = this_ptr.connection.deinit();
-                    if (this_ptr.protos) |protos| {
-                        _ = &protos;
-                        _ = bun.default_allocator.free(protos);
-                    }
-                    _ = handlers.vm.allocator.destroy(this_ptr);
-                }
-                }
+                var _guard_named_pipe = NamedPipeListenerErrGuard{ .this_ptr = this_ptr, .vm_allocator = handlers.vm.allocator };
+                _ = &_guard_named_pipe;
+                var ___guard_named_pipe_moved = false; _ = &___guard_named_pipe_moved;
+                defer if (!___guard_named_pipe_moved) { ___guard_named_pipe_moved = true; const __T = @TypeOf(_guard_named_pipe); if (@typeInfo(__T) == .optional) { if (_guard_named_pipe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_named_pipe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_named_pipe; _drop_val.__cp_deinit(); } };
                 const named_pipe = (blk_catch_3: { break :blk_catch_3 ((WindowsNamedPipeListeningContext.listen(globalObject, pipe_name, 511, ssl, this_ptr)) catch |__ce_3| { _ = &__ce_3; return globalObject.throwInvalidArguments("Failed to listen at {s}", .{ pipe_name }); }); });
                 this_ptr.listener = .{ .namedPipe = named_pipe };
+                _guard_named_pipe.armed = false;
+                _guard_handlers.armed = false;
                 const this_value = this_ptr.toJS(globalObject);
                 _ = this_ptr.strong_self.set(globalObject, this_value);
                 _ = this_ptr.poll_ref.ref(handlers.vm);
@@ -607,23 +788,10 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
         this_ptr.* = .{ .handlers = handlers.*, .connection = undefined, .ssl = ssl_enabled, .protos = (if ((ssl != null)) ssl.?.takeProtos() else null) };
         _ = this_ptr.group.init(uws.Loop.get(), null, this_ptr);
         _ = bun.asan.registerRootRegion((&this_ptr.group), @sizeOf(uws.SocketGroup));
-        var listener_allocated = true;
-        _ = &listener_allocated;
-        errdefer {
-        if (listener_allocated) {
-            if (this_ptr.secure_ctx) |c| {
-                _ = &c;
-                _ = BoringSSL.SSL_CTX_free(c);
-            }
-            if (this_ptr.protos) |p| {
-                _ = &p;
-                _ = bun.default_allocator.free(p);
-            }
-            _ = bun.asan.unregisterRootRegion((&this_ptr.group), @sizeOf(uws.SocketGroup));
-            _ = this_ptr.group.deinit();
-            _ = handlers.vm.allocator.destroy(this_ptr);
-        }
-        }
+        var _guard_listener = ListenerAllocErrGuard{ .this_ptr = this_ptr, .vm_allocator = handlers.vm.allocator };
+        _ = &_guard_listener;
+        var ___guard_listener_moved = false; _ = &___guard_listener_moved;
+        defer if (!___guard_listener_moved) { ___guard_listener_moved = true; const __T = @TypeOf(_guard_listener); if (@typeInfo(__T) == .optional) { if (_guard_listener) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_listener.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_listener; _drop_val.__cp_deinit(); } };
         if (ssl) |ssl_cfg| {
             _ = &ssl_cfg;
             var create_err: uws.create_bun_socket_error_t = .none;
@@ -636,9 +804,10 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
         }
         const kind: uws.SocketKind = (if (ssl_enabled) .bun_listener_tls else .bun_listener_tcp);
         const hostname = bun.handleOom(hostname_or_unix.intoOwnedSlice(bun.default_allocator));
-        errdefer {
-        _ = bun.default_allocator.free(hostname);
-        }
+        var _guard_hostname = ErrFreeGuard(@TypeOf(hostname)){ .allocator = bun.default_allocator, .slice = hostname };
+        _ = &_guard_hostname;
+        var ___guard_hostname_moved = false; _ = &___guard_hostname_moved;
+        defer if (!___guard_hostname_moved) { ___guard_hostname_moved = true; const __T = @TypeOf(_guard_hostname); if (@typeInfo(__T) == .optional) { if (_guard_hostname) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_hostname.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_hostname; _drop_val.__cp_deinit(); } };
         var connection: UnixOrHost = (if ((port != null)) .{ .host = .{ .host = hostname, .port = port.? } } else (if ((socket_config.fd != null)) .{ .fd = socket_config.fd.? } else .{ .unix = hostname }));
         _ = &connection;
         var errno: c_int = 0;
@@ -648,9 +817,10 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
         switch (connection) {
 .host => |host| {
 const hostz = bun.handleOom(bun.default_allocator.dupeZ(u8, host.host));
-        defer {
-        _ = bun.default_allocator.free(hostz);
-        }
+        var _guard_hostz = FreeGuard(@TypeOf(hostz)){ .allocator = bun.default_allocator, .slice = hostz };
+        _ = &_guard_hostz;
+        var ___guard_hostz_moved = false; _ = &___guard_hostz_moved;
+        defer if (!___guard_hostz_moved) { ___guard_hostz_moved = true; const __T = @TypeOf(_guard_hostz); if (@typeInfo(__T) == .optional) { if (_guard_hostz) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_hostz.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_hostz; _drop_val.__cp_deinit(); } };
         maybe_ls = this_ptr.group.listen(kind, this_ptr.secure_ctx, hostz.ptr, host.port, socket_flags, @sizeOf(usize), (&errno));
         if ((maybe_ls != null)) {
             connection.host.port = @intCast(maybe_ls.?.getLocalPort());
@@ -658,9 +828,10 @@ const hostz = bun.handleOom(bun.default_allocator.dupeZ(u8, host.host));
 },
 .unix => |u| {
 const pathz = bun.handleOom(bun.default_allocator.dupeZ(u8, u));
-        defer {
-        _ = bun.default_allocator.free(pathz);
-        }
+        var _guard_pathz = FreeGuard(@TypeOf(pathz)){ .allocator = bun.default_allocator, .slice = pathz };
+        _ = &_guard_pathz;
+        var ___guard_pathz_moved = false; _ = &___guard_pathz_moved;
+        defer if (!___guard_pathz_moved) { ___guard_pathz_moved = true; const __T = @TypeOf(_guard_pathz); if (@typeInfo(__T) == .optional) { if (_guard_pathz) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pathz.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pathz; _drop_val.__cp_deinit(); } };
         maybe_ls = this_ptr.group.listenUnix(kind, this_ptr.secure_ctx, pathz, socket_flags, @sizeOf(usize), (&errno));
 },
 .fd => |fd| {
@@ -701,7 +872,9 @@ const err: bun.jsc.SystemError = .{ .errno = @intFromEnum(bun.sys.SystemErrno.EI
                 }
             }
         }
-        listener_allocated = false;
+        _guard_listener.armed = false;
+        _guard_hostname.armed = false;
+        _guard_handlers.armed = false;
         const this_value = this_ptr.toJS(globalObject);
         _ = this_ptr.strong_self.set(globalObject, this_value);
         _ = this_ptr.poll_ref.ref(handlers.vm);
@@ -758,13 +931,15 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: ?*TCPSock
         const vm = globalObject.bunVM();
         var socket_config = try SocketConfig.fromJS(vm, opts, globalObject, false);
         _ = &socket_config;
-        defer {
-        _ = socket_config.deinitExcludingHandlers();
-        }
+        var _guard_socket_config = SocketConfigGuard{ .ptr = (&socket_config) };
+        _ = &_guard_socket_config;
+        var ___guard_socket_config_moved = false; _ = &___guard_socket_config_moved;
+        defer if (!___guard_socket_config_moved) { ___guard_socket_config_moved = true; const __T = @TypeOf(_guard_socket_config); if (@typeInfo(__T) == .optional) { if (_guard_socket_config) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_socket_config.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_socket_config; _drop_val.__cp_deinit(); } };
         const handlers = (&socket_config.handlers);
-        errdefer {
-        _ = handlers.deinit();
-        }
+        var _guard_handlers = ErrDeinitGuard(Handlers){ .ptr = handlers };
+        _ = &_guard_handlers;
+        var ___guard_handlers_moved = false; _ = &___guard_handlers_moved;
+        defer if (!___guard_handlers_moved) { ___guard_handlers_moved = true; const __T = @TypeOf(_guard_handlers); if (@typeInfo(__T) == .optional) { if (_guard_handlers) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_handlers.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_handlers; _drop_val.__cp_deinit(); } };
         const hostname_or_unix = (&socket_config.hostname_or_unix);
         const port = socket_config.port;
         const ssl = (if ((socket_config.ssl != null)) (&socket_config.ssl.?) else null);
@@ -790,9 +965,10 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: ?*TCPSock
                 connection = .{ .unix = host };
             }
         }
-        errdefer {
-        _ = connection.deinit();
-        }
+        var _guard_connection = ErrDeinitGuard(UnixOrHost){ .ptr = (&connection) };
+        _ = &_guard_connection;
+        var ___guard_connection_moved = false; _ = &___guard_connection_moved;
+        defer if (!___guard_connection_moved) { ___guard_connection_moved = true; const __T = @TypeOf(_guard_connection); if (@typeInfo(__T) == .optional) { if (_guard_connection) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_connection.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_connection; _drop_val.__cp_deinit(); } };
         var owned_ssl_ctx: ?*BoringSSL.SSL_CTX = null;
         _ = &owned_ssl_ctx;
         if (ssl_enabled) {
@@ -812,39 +988,44 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: ?*TCPSock
                 owned_ssl_ctx = sc.borrow();
             }
         }
-        errdefer {
-        if (owned_ssl_ctx) |c| {
-            _ = &c;
-            _ = BoringSSL.SSL_CTX_free(c);
-        }
-        }
+        var _guard_ssl_ctx = ErrSslCtxGuard{ .ctx_ptr = (&owned_ssl_ctx) };
+        _ = &_guard_ssl_ctx;
+        var ___guard_ssl_ctx_moved = false; _ = &___guard_ssl_ctx_moved;
+        defer if (!___guard_ssl_ctx_moved) { ___guard_ssl_ctx_moved = true; const __T = @TypeOf(_guard_ssl_ctx); if (@typeInfo(__T) == .optional) { if (_guard_ssl_ctx) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ssl_ctx.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ssl_ctx; _drop_val.__cp_deinit(); } };
         if (Environment.isWindows) {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
             var pipe_name: ?[]const u8 = null;
             _ = &pipe_name;
-            const isNamedPipe = (switch (connection) {
-.unix => |slice| blk: {
-            pipe_name = normalizePipeName(slice, buf[0..]);
-            break :blk (pipe_name != null);
+            var isNamedPipe = false;
+            _ = &isNamedPipe;
+            switch (connection) {
+.unix => |slice| {
+pipe_name = normalizePipeName(slice, buf[0..]);
+            isNamedPipe = (pipe_name != null);
 },
-.fd => |fd| blk: {
-            const uvfd = fd.uv();
+.fd => |fd| {
+const uvfd = fd.uv();
             const fd_type = uv.uv_guess_handle(uvfd);
             if ((fd_type == uv.Handle.Type.named_pipe)) {
-                break :blk true;
-            }
-            if ((fd_type == uv.Handle.Type.unknown)) {
-                const osfd: uv.uv_os_fd_t = @ptrFromInt(@as(usize, @intCast(uvfd)));
-                if ((bun.windows.GetFileType(osfd) == bun.windows.FILE_TYPE_PIPE)) {
-                    connection.fd = (blk_catch_4: { break :blk_catch_4 ((bun.FD.fromNative(osfd).makeLibUVOwned()) catch |__ce_4| { _ = &__ce_4; @panic("failed to allocate file descriptor"); }); });
-                    break :blk true;
+                isNamedPipe = true;
+            } else {
+                if ((fd_type == uv.Handle.Type.unknown)) {
+                    const osfd: uv.uv_os_fd_t = (blk: {
+                    break :blk @ptrFromInt(@as(usize, @intCast(uvfd)));
+
+});
+                    if ((bun.windows.GetFileType(osfd) == bun.windows.FILE_TYPE_PIPE)) {
+                        connection.fd = (blk_catch_4: { break :blk_catch_4 ((bun.FD.fromNative(osfd).makeLibUVOwned()) catch |__ce_4| { _ = &__ce_4; @panic("failed to allocate file descriptor"); }); });
+                        isNamedPipe = true;
+                    }
                 }
             }
-            break :blk false;
 },
-else => false,
-});
+else => {
+
+},
+}
             if (isNamedPipe) {
                 _ = default_data.ensureStillAlive();
                 var handlers_ptr = bun.handleOom(handlers.vm.allocator.create(Handlers));
@@ -894,6 +1075,9 @@ else => false,
                     _ = tls.ref();
                     const ctx_for_pipe = owned_ssl_ctx;
                     owned_ssl_ctx = null;
+                    _guard_handlers.armed = false;
+                    _guard_connection.armed = false;
+                    _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
 .unix => (blk_catch_5: { break :blk_catch_5 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_5| { _ = &__ce_5; return promise_value; }); }),
 .fd => |fd| (blk_catch_6: { break :blk_catch_6 ((WindowsNamedPipeContext.open(globalObject, fd, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_6| { _ = &__ce_6; return promise_value; }); }),
@@ -927,6 +1111,9 @@ else => unreachable,
                     _ = tcp.ref();
                     _ = TCPSocket.js.dataSetCached(tcp.getThisValue(globalObject), globalObject, default_data);
                     _ = tcp.poll_ref.ref(handlers.vm);
+                    _guard_handlers.armed = false;
+                    _guard_connection.armed = false;
+                    _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
 .unix => (blk_catch_7: { break :blk_catch_7 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, null, null, .{ .tcp = tcp })) catch |__ce_7| { _ = &__ce_7; return promise_value; }); }),
 .fd => |fd| (blk_catch_8: { break :blk_catch_8 ((WindowsNamedPipeContext.open(globalObject, fd, null, null, .{ .tcp = tcp })) catch |__ce_8| { _ = &__ce_8; return promise_value; }); }),
@@ -1001,6 +1188,9 @@ else => unreachable,
                     socket = bun.new(SocketType, .{ .ref_count = .init(), .handlers = handlers_ptr, .socket = SocketType.Socket.detached, .connection = connection, .protos = (if ((ssl != null)) ssl.?.takeProtos() else null), .server_name = (if ((ssl != null)) ssl.?.takeServerName() else null), .owned_ssl_ctx = owned_ssl_ctx });
                 }
                 owned_ssl_ctx = null;
+                _guard_handlers.armed = false;
+                _guard_connection.armed = false;
+                _guard_ssl_ctx.armed = false;
                 _ = socket.ref();
                 _ = SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
                 socket.flags.allow_half_open = socket_config.allowHalfOpen;
@@ -1013,6 +1203,9 @@ else => unreachable,
                 return promise_value;
             }
         }
+        _guard_handlers.armed = false;
+        _guard_connection.armed = false;
+        _guard_ssl_ctx.armed = false;
         return promise_value;
 }
 

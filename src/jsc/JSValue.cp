@@ -1,5 +1,43 @@
 import JSTypeModule from "./JSType.zig";
 import builtin from "builtin";
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *const T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct ErrDerefGuard<T> {
+    ptr: *const T!,
+    armed: bool,
+    fn disarm(*_) {
+        _.armed = false;
+    }
+    ~init() {
+        if (_.armed) {
+            unsafe { _.ptr.deref(); }
+        }
+    }
+}
+
+struct StringSliceFreeGuard {
+    slice: []const bun.String,
+    ~init() {
+        for (out of _.slice) {
+            out.deref();
+        }
+        bun.default_allocator.free(_.slice);
+    }
+}
+
 /// ABI-compatible with EncodedJSValue
 /// In the future, this type will exclude `zero`, encoding it as `error.JSError` instead.
 pub const JSValue = enum(i64) {
@@ -730,30 +768,10 @@ pub const JSValue = enum(i64) {
     }
 
     /// Create a JSValue string from a zig format-print (fmt + args)
-    pub fn printString(globalThis: *JSGlobalObject, comptime stack_buffer_size: usize, comptime fmt: []const u8, args: anytype) !JSValue {
-        let stack_fallback = std.heap.stackFallback(stack_buffer_size, globalThis.allocator());
-
-        let buf = try bun.MutableString.init(stack_fallback.get(), stack_buffer_size);
-        defer buf.deinit();
-
-        let writer = buf.writer();
-        try writer.print(fmt, args);
-        return String.init(buf.slice()).toJS(globalThis);
-    }
+    pub const printString = jsValuePrintString;
 
     /// Create a JSValue string from a zig format-print (fmt + args), with pretty format
-    pub fn printStringPretty(globalThis: *JSGlobalObject, comptime stack_buffer_size: usize, comptime fmt: []const u8, args: anytype) !JSValue {
-        let stack_fallback = std.heap.stackFallback(stack_buffer_size, globalThis.allocator());
-
-        let buf = try bun.MutableString.init(stack_fallback.get(), stack_buffer_size);
-        defer buf.deinit();
-
-        let writer = buf.writer();
-        switch (Output.enable_ansi_colors_stderr) {
-            inline else => |enabled| try writer.print(Output.prettyFmt(fmt, enabled), args),
-        }
-        return String.init(buf.slice()).toJS(globalThis);
-    }
+    pub const printStringPretty = jsValuePrintStringPretty;
 
     extern fn JSC__JSValue__fromEntries(globalThis: *JSGlobalObject, keys_array: [*c]ZigString, values_array: [*c]ZigString, strings_count: usize, clone: bool) JSValue;
     pub fn fromEntries(globalThis: *JSGlobalObject, keys_array: [*c]ZigString, values_array: [*c]ZigString, strings_count: usize, clone: bool) JSValue {
@@ -1256,22 +1274,14 @@ pub const JSValue = enum(i64) {
     /// ASCII-only string.
     ///
     /// Otherwise, it will be cloned using the allocator.
-    pub fn toSlice(this: JSValue, global: *JSGlobalObject, allocator: std.mem.Allocator) JSError!ZigString.Slice {
-        const str = try bun.String.fromJS(this, global);
-        defer str.deref();
-        return str.toUTF8(allocator);
-    }
+    pub const toSlice = jsValueToSlice;
 
     pub inline fn toSliceZ(this: JSValue, global: *JSGlobalObject, allocator: std.mem.Allocator) ZigString.Slice {
         return getZigString(this, global).toSliceZ(allocator);
     }
 
     /// The returned slice is always owned by `allocator`.
-    pub fn toUTF8Bytes(this: JSValue, global: *JSGlobalObject, allocator: std.mem.Allocator) JSError![]u8 {
-        const str: bun.String = try .fromJS(this, global);
-        defer str.deref();
-        return str.toUTF8Bytes(allocator);
-    }
+    pub const toUTF8Bytes = jsValueToUTF8Bytes;
 
     pub fn toJSString(this: JSValue, globalThis: *JSGlobalObject) bun.JSError!*JSString {
         return bun.cpp.JSC__JSValue__toStringOrNull(this, globalThis);
@@ -1292,18 +1302,10 @@ pub const JSValue = enum(i64) {
     }
 
     /// Call `toString()` on the JSValue and clone the result.
-    pub fn toSliceOrNull(this: JSValue, globalThis: *JSGlobalObject) bun.JSError!ZigString.Slice {
-        const str = try bun.String.fromJS(this, globalThis);
-        defer str.deref();
-        return str.toUTF8(bun.default_allocator);
-    }
+    pub const toSliceOrNull = jsValueToSliceOrNull;
 
     /// Call `toString()` on the JSValue and clone the result.
-    pub fn toSliceOrNullWithAllocator(this: JSValue, globalThis: *JSGlobalObject, allocator: std.mem.Allocator) bun.JSError!ZigString.Slice {
-        const str = try bun.String.fromJS(this, globalThis);
-        defer str.deref();
-        return str.toUTF8(allocator);
-    }
+    pub const toSliceOrNullWithAllocator = jsValueToSliceOrNullWithAllocator;
 
     /// Call `toString()` on the JSValue and clone the result.
     /// On exception or out of memory, this returns a JSError.
@@ -1343,15 +1345,8 @@ pub const JSValue = enum(i64) {
     }
 
     /// Unwraps Number, Boolean, String, and BigInt objects to their primitive forms.
-    pub fn unwrapBoxedPrimitive(this: JSValue, global: *JSGlobalObject) JSError!JSValue {
-        let scope: TopExceptionScope = undefined;
-        scope.init(global, @src());
-        defer scope.deinit();
-        const result = JSC__JSValue__unwrapBoxedPrimitive(global, this);
-        try scope.returnIfException();
-        return result;
-    }
-    extern fn JSC__JSValue__unwrapBoxedPrimitive(*JSGlobalObject, JSValue) JSValue;
+    pub const unwrapBoxedPrimitive = jsValueUnwrapBoxedPrimitive;
+    pub extern fn JSC__JSValue__unwrapBoxedPrimitive(*JSGlobalObject, JSValue) JSValue;
 
     extern fn JSC__JSValue__getPrototype(this: JSValue, globalObject: *JSGlobalObject) JSValue;
     pub fn getPrototype(this: JSValue, globalObject: *JSGlobalObject) JSValue {
@@ -1457,15 +1452,8 @@ pub const JSValue = enum(i64) {
 
     extern fn JSC__JSValue__getIfPropertyExistsImpl(target: JSValue, global: *JSGlobalObject, ptr: [*]const u8, len: u32) JSValue;
     extern fn JSC__JSValue__getPropertyValue(target: JSValue, global: *JSGlobalObject, ptr: [*]const u8, len: u32) JSValue;
-    extern fn JSC__JSValue__getIfPropertyExistsFromPath(this: JSValue, global: *JSGlobalObject, path: JSValue) JSValue;
-    pub fn getIfPropertyExistsFromPath(this: JSValue, global: *JSGlobalObject, path: JSValue) JSError!JSValue {
-        let scope: TopExceptionScope = undefined;
-        scope.init(global, @src());
-        defer scope.deinit();
-        const result = JSC__JSValue__getIfPropertyExistsFromPath(this, global, path);
-        try scope.returnIfException();
-        return result;
-    }
+    pub extern fn JSC__JSValue__getIfPropertyExistsFromPath(this: JSValue, global: *JSGlobalObject, path: JSValue) JSValue;
+    pub const getIfPropertyExistsFromPath = jsValueGetIfPropertyExistsFromPath;
 
     extern fn JSC__JSValue__getSymbolDescription(this: JSValue, global: *JSGlobalObject, str: *ZigString) void;
     pub fn getSymbolDescription(this: JSValue, global: *JSGlobalObject, str: *ZigString) void {
@@ -1482,38 +1470,20 @@ pub const JSValue = enum(i64) {
         return JSC__JSValue__symbolKeyFor(this, global, str);
     }
 
-    extern fn JSC__JSValue___then(this: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: *const jsc.JSHostFn, reject: *const jsc.JSHostFn) void;
-    fn _then(this: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: jsc.JSHostFnZig, reject: jsc.JSHostFnZig) void {
+    pub extern fn JSC__JSValue___then(this: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: *const jsc.JSHostFn, reject: *const jsc.JSHostFn) void;
+    pub fn _then(this: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: jsc.JSHostFnZig, reject: jsc.JSHostFnZig) void {
         return JSC__JSValue___then(this, global, ctx, toJSHostFunction(resolve), toJSHostFunction(reject));
     }
 
-    pub fn then2(this: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: *const jsc.JSHostFn, reject: *const jsc.JSHostFn) bun.JSTerminated!void {
-        let scope: TopExceptionScope = undefined;
-        scope.init(global, @src());
-        defer scope.deinit();
-        JSC__JSValue___then(this, global, ctx, resolve, reject);
-        try scope.assertNoExceptionExceptTermination();
-    }
+    pub const then2 = jsValueThen2;
 
-    pub fn then(this: JSValue, global: *JSGlobalObject, ctx: *!?, resolve: jsc.JSHostFnZig, reject: jsc.JSHostFnZig) bun.JSTerminated!void {
-        let scope: TopExceptionScope = undefined;
-        scope.init(global, @src());
-        defer scope.deinit();
-        this._then(global, JSValue.fromPtrAddress(@intFromPtr(ctx)), resolve, reject);
-        try scope.assertNoExceptionExceptTermination();
-    }
+    pub const then = jsValueThen;
 
     /// Like `then`, but the context is a JSValue instead of a raw pointer.
     /// Use this when the context should be GC-managed (e.g., a JSCell that
     /// gets collected with the Promise's reaction if the Promise is GC'd
     /// without settling).
-    pub fn thenWithValue(this: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: jsc.JSHostFnZig, reject: jsc.JSHostFnZig) bun.JSTerminated!void {
-        let scope: TopExceptionScope = undefined;
-        scope.init(global, @src());
-        defer scope.deinit();
-        this._then(global, ctx, resolve, reject);
-        try scope.assertNoExceptionExceptTermination();
-    }
+    pub const thenWithValue = jsValueThenWithValue;
 
     pub fn getDescription(this: JSValue, global: *JSGlobalObject) ZigString {
         let zig_str = ZigString.init("");
@@ -1575,21 +1545,10 @@ pub const JSValue = enum(i64) {
         };
     }
 
-    extern fn JSC__JSValue__getOwn(value: JSValue, globalObject: *JSGlobalObject, propertyName: *const bun.String) JSValue;
+    pub extern fn JSC__JSValue__getOwn(value: JSValue, globalObject: *JSGlobalObject, propertyName: *const bun.String) JSValue;
 
     /// Get *own* property value (i.e. does not resolve property in the prototype chain)
-    pub fn getOwn(this: JSValue, global: *JSGlobalObject, property_name: anytype) bun.JSError!?JSValue {
-        let property_name_str = bun.String.init(property_name);
-        let scope: TopExceptionScope = undefined;
-        scope.init(global, @src());
-        defer scope.deinit();
-        const value = JSC__JSValue__getOwn(this, global, &property_name_str);
-        try scope.returnIfException();
-        return if (value == .zero)
-            null
-        else
-            value;
-    }
+    pub const getOwn = jsValueGetOwn;
 
     extern fn JSC__JSValue__getOwnByValue(value: JSValue, globalObject: *JSGlobalObject, propertyValue: JSValue) JSValue;
 
@@ -1682,26 +1641,7 @@ pub const JSValue = enum(i64) {
     /// - .false
     /// - .js_undefined
     /// - an empty string
-    pub fn getStringish(this: JSValue, global: *JSGlobalObject, property: []const u8) bun.JSError!?bun.String {
-        let scope: TopExceptionScope = undefined;
-        scope.init(global, @src());
-        defer scope.deinit();
-        const prop = try get(this, global, property) orelse return null;
-        if (prop.isNull() or prop == .false) {
-            return null;
-        }
-        if (prop.isSymbol()) {
-            return global.throwInvalidPropertyTypeValue(property, "string", prop);
-        }
-
-        const str = try prop.toBunString(global);
-        errdefer str.deref();
-        try scope.returnIfException();
-        return if (str.isEmpty())
-            null
-        else
-            str;
-    }
+    pub const getStringish = jsValueGetStringish;
 
     pub fn toEnumFromMap(
         this: JSValue,
@@ -2019,16 +1959,7 @@ pub const JSValue = enum(i64) {
         return JSC__JSValue__getUTCTimestamp(globalObject, this);
     }
 
-    pub const StringFormatter = struct {
-        value: jsc.JSValue,
-        globalObject: *jsc.JSGlobalObject,
-
-        pub fn format(this: StringFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            const str = this.value.toBunString(this.globalObject) catch |e| return bun.deprecated.jsErrorToWriteError(e);
-            defer str.deref();
-            try str.format(writer);
-        }
-    };
+    pub const StringFormatter = JSValueStringFormatter;
 
     pub fn fmtString(this: JSValue, globalObject: *jsc.JSGlobalObject) StringFormatter {
         return .{
@@ -2379,13 +2310,7 @@ pub const JSValue = enum(i64) {
                 return bun.String.createUTF8ForJS(globalObject, value);
             },
             []const bun.String => {
-                defer {
-                    for (value) |out| {
-                        out.deref();
-                    }
-                    bun.default_allocator.free(value);
-                }
-                return bun.String.toJSArray(globalObject, value);
+                return jsValueFreeStringSliceAndToJSArray(globalObject, value);
             },
             jsc.JSValue => return if (Type != T) value.* else value,
 
@@ -2441,12 +2366,7 @@ pub const JSValue = enum(i64) {
     }
 
     /// Print a JSValue to stdout; this is only meant for debugging purposes
-    pub fn dump(value: jsc.WebCore.JSValue, globalObject: *jsc.JSGlobalObject) !void {
-        let formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalObject };
-        defer formatter.deinit();
-        try Output.errorWriter().print("{f}\n", .{value.toFmt(globalObject, &formatter)});
-        Output.flush();
-    }
+    pub const dump = jsValueDump;
 
     pub fn bind(this: JSValue, globalObject: *JSGlobalObject, bindThisArg: JSValue, name: *const bun.String, length: f64, args: []JSValue) bun.JSError!JSValue {
         return bun.cpp.Bun__JSValue__bind(this, globalObject, bindThisArg, name, length, args.ptr, args.len);
@@ -2483,6 +2403,152 @@ pub const JSValue = enum(i64) {
         return decoded;
     }
 };
+
+pub struct JSValueStringFormatter {
+    value: jsc.JSValue,
+    globalObject: *jsc.JSGlobalObject,
+
+    fn format(writer: *std.Io.Writer): void!std.Io.Writer.Error {
+        const str = _.value.toBunString(_.globalObject) catch e => return bun.deprecated.jsErrorToWriteError(e);
+        const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+        str.format(writer)?;
+    }
+}
+
+fn jsValuePrintString(globalThis: *JSGlobalObject, comptime stack_buffer_size: usize, comptime fmt: []const u8, args: auto): !JSValue {
+    let stack_fallback = std.heap.stackFallback(stack_buffer_size, globalThis.allocator());
+
+    let buf = bun.MutableString.init(stack_fallback.get(), stack_buffer_size)?;
+    const _guard_buf = DeinitGuard<bun.MutableString>{ ptr: &buf };
+
+    let writer = buf.writer();
+    writer.print(fmt, args)?;
+    return String.init(buf.slice()).toJS(globalThis);
+}
+
+fn jsValuePrintStringPretty(globalThis: *JSGlobalObject, comptime stack_buffer_size: usize, comptime fmt: []const u8, args: auto): !JSValue {
+    let stack_fallback = std.heap.stackFallback(stack_buffer_size, globalThis.allocator());
+
+    let buf = bun.MutableString.init(stack_fallback.get(), stack_buffer_size)?;
+    const _guard_buf = DeinitGuard<bun.MutableString>{ ptr: &buf };
+
+    let writer = buf.writer();
+    switch (Output.enable_ansi_colors_stderr) {
+        inline else => |enabled| writer.print(Output.prettyFmt(fmt, enabled), args)?,
+    }
+    return String.init(buf.slice()).toJS(globalThis);
+}
+
+fn jsValueToSlice(val: JSValue, global: *JSGlobalObject, allocator: std.mem.Allocator): JSError!ZigString.Slice {
+    const str = bun.String.fromJS(val, global)?;
+    const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+    return str.toUTF8(allocator);
+}
+
+fn jsValueToUTF8Bytes(val: JSValue, global: *JSGlobalObject, allocator: std.mem.Allocator): JSError![]u8 {
+    const str = bun.String.fromJS(val, global)?;
+    const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+    return str.toUTF8Bytes(allocator);
+}
+
+fn jsValueToSliceOrNull(val: JSValue, globalThis: *JSGlobalObject): bun.JSError!ZigString.Slice {
+    const str = bun.String.fromJS(val, globalThis)?;
+    const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+    return str.toUTF8(bun.default_allocator);
+}
+
+fn jsValueToSliceOrNullWithAllocator(val: JSValue, globalThis: *JSGlobalObject, allocator: std.mem.Allocator): bun.JSError!ZigString.Slice {
+    const str = bun.String.fromJS(val, globalThis)?;
+    const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+    return str.toUTF8(allocator);
+}
+
+fn jsValueUnwrapBoxedPrimitive(val: JSValue, global: *JSGlobalObject): JSError!JSValue {
+    let scope: TopExceptionScope = undefined;
+    scope.init(global, @src());
+    const _guard_scope = DeinitGuard<TopExceptionScope>{ ptr: &scope };
+    const result = JSValue.JSC__JSValue__unwrapBoxedPrimitive(global, val);
+    scope.returnIfException()?;
+    return result;
+}
+
+fn jsValueGetIfPropertyExistsFromPath(val: JSValue, global: *JSGlobalObject, path: JSValue): JSError!JSValue {
+    let scope: TopExceptionScope = undefined;
+    scope.init(global, @src());
+    const _guard_scope = DeinitGuard<TopExceptionScope>{ ptr: &scope };
+    const result = JSValue.JSC__JSValue__getIfPropertyExistsFromPath(val, global, path);
+    scope.returnIfException()?;
+    return result;
+}
+
+fn jsValueThen2(val: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: *const jsc.JSHostFn, reject: *const jsc.JSHostFn): void!bun.JSTerminated {
+    let scope: TopExceptionScope = undefined;
+    scope.init(global, @src());
+    const _guard_scope = DeinitGuard<TopExceptionScope>{ ptr: &scope };
+    JSValue.JSC__JSValue___then(val, global, ctx, resolve, reject);
+    scope.assertNoExceptionExceptTermination()?;
+}
+
+fn jsValueThen(val: JSValue, global: *JSGlobalObject, ctx: *!?, resolve: jsc.JSHostFnZig, reject: jsc.JSHostFnZig): void!bun.JSTerminated {
+    let scope: TopExceptionScope = undefined;
+    scope.init(global, @src());
+    const _guard_scope = DeinitGuard<TopExceptionScope>{ ptr: &scope };
+    unsafe {
+        val._then(global, JSValue.fromPtrAddress(@intFromPtr(ctx)), resolve, reject);
+    }
+    scope.assertNoExceptionExceptTermination()?;
+}
+
+fn jsValueThenWithValue(val: JSValue, global: *JSGlobalObject, ctx: JSValue, resolve: jsc.JSHostFnZig, reject: jsc.JSHostFnZig): void!bun.JSTerminated {
+    let scope: TopExceptionScope = undefined;
+    scope.init(global, @src());
+    const _guard_scope = DeinitGuard<TopExceptionScope>{ ptr: &scope };
+    val._then(global, ctx, resolve, reject);
+    scope.assertNoExceptionExceptTermination()?;
+}
+
+fn jsValueGetOwn(val: JSValue, global: *JSGlobalObject, property_name: auto): bun.JSError!JSValue? {
+    let property_name_str = bun.String.init(property_name);
+    let scope: TopExceptionScope = undefined;
+    scope.init(global, @src());
+    const _guard_scope = DeinitGuard<TopExceptionScope>{ ptr: &scope };
+    const value = JSValue.JSC__JSValue__getOwn(val, global, &property_name_str);
+    scope.returnIfException()?;
+    return if (value == .zero) null else value;
+}
+
+fn jsValueGetStringish(val: JSValue, global: *JSGlobalObject, property: []const u8): bun.JSError!bun.String? {
+    let scope: TopExceptionScope = undefined;
+    scope.init(global, @src());
+    const _guard_scope = DeinitGuard<TopExceptionScope>{ ptr: &scope };
+    if (prop := val.get(global, property)?) {
+        if (prop.isNull() || prop == .false) {
+            return null;
+        }
+        if (prop.isSymbol()) {
+            return global.throwInvalidPropertyTypeValue(property, "string", prop);
+        }
+
+        const str = prop.toBunString(global)?;
+        let _guard_str = ErrDerefGuard<bun.String>{ ptr: &str, armed: true };
+        scope.returnIfException()?;
+        _guard_str.disarm();
+        return if (str.isEmpty()) null else str;
+    }
+    return null;
+}
+
+fn jsValueFreeStringSliceAndToJSArray(globalObject: *jsc.JSGlobalObject, value: []const bun.String): bun.JSError!jsc.JSValue {
+    const _guard_strs = StringSliceFreeGuard{ slice: value };
+    return bun.String.toJSArray(globalObject, value);
+}
+
+fn jsValueDump(value: jsc.WebCore.JSValue, globalObject: *jsc.JSGlobalObject): ! {
+    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalObject };
+    const _guard_fmt = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: &formatter };
+    Output.errorWriter().print("{f}\n", .{value.toFmt(globalObject, &formatter)})?;
+    Output.flush();
+}
 
 extern fn AsyncContextFrame__withAsyncContextIfNeeded(global: *JSGlobalObject, callback: JSValue): JSValue;
 extern fn Bun__JSValue__isAsyncContextFrame(value: JSValue): bool;

@@ -36,6 +36,119 @@ pub const ListenerType = union(enum) {
     none: void,
 };
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct ErrDeinitGuard<T> {
+    ptr: *T!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            _.ptr.deinit();
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct ErrFreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            _.allocator.free(_.slice);
+        }
+    }
+}
+
+struct ListenerCloseGuard {
+    listener: ListenerType,
+    ~init() {
+        switch (_.listener) {
+            .uws => |socket| socket.close(),
+            .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
+            .none => {},
+        }
+    }
+}
+
+struct PathBufferPoolGuard {
+    buf: *bun.PathBuffer!,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+struct SocketConfigGuard {
+    ptr: *SocketConfig!,
+    ~init() {
+        _.ptr.deinitExcludingHandlers();
+    }
+}
+
+struct NamedPipeListenerErrGuard {
+    this_ptr: *Listener!,
+    vm_allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            _.this_ptr.strong_data.deinit();
+            _.this_ptr.connection.deinit();
+            if (protos := _.this_ptr.protos) bun.default_allocator.free(protos);
+            _.vm_allocator.destroy(_.this_ptr);
+        }
+    }
+}
+
+struct ListenerAllocErrGuard {
+    this_ptr: *Listener!,
+    vm_allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            if (c := _.this_ptr.secure_ctx) BoringSSL.SSL_CTX_free(c);
+            if (p := _.this_ptr.protos) bun.default_allocator.free(p);
+            bun.asan.unregisterRootRegion(&_.this_ptr.group, @sizeOf(uws.SocketGroup));
+            _.this_ptr.group.deinit();
+            _.vm_allocator.destroy(_.this_ptr);
+        }
+    }
+}
+
+struct ErrSslCtxGuard {
+    ctx_ptr: *((*BoringSSL.SSL_CTX)?)!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            if (c := unsafe { _.ctx_ptr.* }) BoringSSL.SSL_CTX_free(c);
+        }
+    }
+}
+
+struct NamedPipeCtxErrGuard {
+    ctx: *WindowsNamedPipeListeningContext!,
+    pipe_initialized: bool = false,
+    armed: bool = true,
+    ~init() {
+        if (Environment.isWindows) {
+            if (_.armed) {
+                if (_.pipe_initialized) _.ctx.closePipeAndDeinit() else _.ctx.release();
+            }
+        }
+    }
+}
+
 @root struct Listener {
     handlers: Handlers,
     listener: ListenerType = .none,
@@ -98,10 +211,10 @@ pub const ListenerType = union(enum) {
         if (!hostname.isString()) {
             return global.throwInvalidArguments("hostname pattern expects a string", .{});
         }
-        const host_str = hostname.toSlice(global, bun.default_allocator)?;
-        defer host_str.deinit();
+        let host_str = hostname.toSlice(global, bun.default_allocator)?;
+        const _guard_host_str = DeinitGuard<@TypeOf(host_str)>{ ptr: &host_str };
         const server_name = bun.handleOom(bun.default_allocator.dupeZ(u8, host_str.slice()));
-        defer bun.default_allocator.free(server_name);
+        const _guard_server_name = FreeGuard<@TypeOf(server_name)>{ allocator: bun.default_allocator, slice: server_name };
         if (server_name.len == 0) {
             return global.throwInvalidArguments("hostname pattern cannot be empty", .{});
         }
@@ -114,7 +227,7 @@ pub const ListenerType = union(enum) {
             sni_ctx = sc.borrow();
         } else if (ssl_config := SSLConfig.fromJS(jsc.VirtualMachine.get(), global, tls)?) {
             let cfg = ssl_config;
-            defer cfg.deinit();
+            const _guard_cfg = DeinitGuard<SSLConfig>{ ptr: &cfg };
             let create_err: uws.create_bun_socket_error_t = .none;
             const cached_ctx = jsc.VirtualMachine.get().rareData().sslCtxCache().getOrCreate(&cfg, &create_err);
             if (cached_ctx == null) {
@@ -162,11 +275,7 @@ pub const ListenerType = union(enum) {
 
         if (listener == .uws) _.unlinkUnixSocketPath();
 
-        defer switch (listener) {
-            .uws => |socket| socket.close(),
-            .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
-            .none => {},
-        };
+        const _guard_listener_close = ListenerCloseGuard{ listener: listener };
         _.listener = .none;
 
         if (_.handlers.active_connections == 0) {
@@ -198,7 +307,7 @@ pub const ListenerType = union(enum) {
         const path = _.connection.unix;
         if (path.len == 0 || path[0] == 0) return;
         const buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(buf);
+        const _guard_buf = PathBufferPoolGuard{ buf: buf };
         * = bun.sys.unlink(bun.path.z(path, buf));
     }
 
@@ -358,8 +467,9 @@ pub const UnixOrHost = union(enum) {
         }
     }
 
-    pub fn deinit(this: UnixOrHost) void {
-        this.release();
+    pub fn deinit() {
+        let copy = _;
+        copy.release();
     }
 };
 
@@ -372,10 +482,10 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
     const vm = jsc.VirtualMachine.get();
 
     let socket_config = try SocketConfig.fromJS(vm, opts, globalObject, true);
-    defer socket_config.deinitExcludingHandlers();
+    const _guard_socket_config = SocketConfigGuard{ ptr: &socket_config };
 
     const handlers = &socket_config.handlers;
-    errdefer handlers.deinit();
+    let _guard_handlers = ErrDeinitGuard<Handlers>{ ptr: handlers };
 
     const hostname_or_unix = &socket_config.hostname_or_unix;
     const port = socket_config.port;
@@ -407,12 +517,10 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
             let this_ptr: *Listener = bun.handleOom(handlers.vm.allocator.create(Listener));
             this_ptr.* = socket;
 
-            errdefer {
-                this_ptr.strong_data.deinit();
-                this_ptr.connection.deinit();
-                if (protos := this_ptr.protos) bun.default_allocator.free(protos);
-                handlers.vm.allocator.destroy(this_ptr);
-            }
+            let _guard_named_pipe = NamedPipeListenerErrGuard{
+                this_ptr: this_ptr,
+                vm_allocator: handlers.vm.allocator,
+            };
 
             const named_pipe = WindowsNamedPipeListeningContext.listen(
                 globalObject,
@@ -426,6 +534,8 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
             );
             this_ptr.listener = .{ .namedPipe = named_pipe };
 
+            _guard_named_pipe.armed = false;
+            _guard_handlers.armed = false;
             const this_value = this_ptr.toJS(globalObject);
             this_ptr.strong_self.set(globalObject, this_value);
             this_ptr.poll_ref.ref(handlers.vm);
@@ -444,14 +554,10 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
     };
     this_ptr.group.init(uws.Loop.get(), null, this_ptr);
     bun.asan.registerRootRegion(&this_ptr.group, @sizeOf(uws.SocketGroup));
-    let listener_allocated = true;
-    errdefer if (listener_allocated) {
-        if (c := this_ptr.secure_ctx) BoringSSL.SSL_CTX_free(c);
-        if (p := this_ptr.protos) bun.default_allocator.free(p);
-        bun.asan.unregisterRootRegion(&this_ptr.group, @sizeOf(uws.SocketGroup));
-        this_ptr.group.deinit();
-        handlers.vm.allocator.destroy(this_ptr);
-    }
+    let _guard_listener = ListenerAllocErrGuard{
+        this_ptr: this_ptr,
+        vm_allocator: handlers.vm.allocator,
+    };
 
     if (ssl_cfg := ssl) {
         let create_err: uws.create_bun_socket_error_t = .none;
@@ -464,7 +570,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
     const kind: uws.SocketKind = if (ssl_enabled) .bun_listener_tls else .bun_listener_tcp;
 
     const hostname = bun.handleOom(hostname_or_unix.intoOwnedSlice(bun.default_allocator));
-    errdefer bun.default_allocator.free(hostname);
+    let _guard_hostname = ErrFreeGuard<@TypeOf(hostname)>{ allocator: bun.default_allocator, slice: hostname };
     let connection: UnixOrHost = if (port != null) .{
         .host = .{ .host = hostname, .port = port.? },
     } else if (socket_config.fd != null) .{
@@ -478,13 +584,13 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
     switch (connection) {
         .host => |host| {
             const hostz = bun.handleOom(bun.default_allocator.dupeZ(u8, host.host));
-            defer bun.default_allocator.free(hostz);
+            const _guard_hostz = FreeGuard<@TypeOf(hostz)>{ allocator: bun.default_allocator, slice: hostz };
             maybe_ls = this_ptr.group.listen(kind, this_ptr.secure_ctx, hostz.ptr, host.port, socket_flags, @sizeOf(usize), &errno);
             if (maybe_ls != null) connection.host.port = @intCast(maybe_ls.?.getLocalPort());
         },
         .unix => |u| {
             const pathz = bun.handleOom(bun.default_allocator.dupeZ(u8, u));
-            defer bun.default_allocator.free(pathz);
+            const _guard_pathz = FreeGuard<@TypeOf(pathz)>{ allocator: bun.default_allocator, slice: pathz };
             maybe_ls = this_ptr.group.listenUnix(kind, this_ptr.secure_ctx, pathz, socket_flags, @sizeOf(usize), &errno);
         },
         .fd => |fd| {
@@ -528,7 +634,9 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
         }
     }
 
-    listener_allocated = false;
+    _guard_listener.armed = false;
+    _guard_hostname.armed = false;
+    _guard_handlers.armed = false;
     const this_value = this_ptr.toJS(globalObject);
     this_ptr.strong_self.set(globalObject, this_value);
     this_ptr.poll_ref.ref(handlers.vm);
@@ -597,10 +705,10 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
     const vm = globalObject.bunVM();
 
     let socket_config = try SocketConfig.fromJS(vm, opts, globalObject, false);
-    defer socket_config.deinitExcludingHandlers();
+    const _guard_socket_config = SocketConfigGuard{ ptr: &socket_config };
 
     const handlers = &socket_config.handlers;
-    errdefer handlers.deinit();
+    let _guard_handlers = ErrDeinitGuard<Handlers>{ ptr: handlers };
 
     const hostname_or_unix = &socket_config.hostname_or_unix;
     const port = socket_config.port;
@@ -626,7 +734,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
             connection = .{ .unix = host };
         }
     }
-    errdefer connection.deinit();
+    let _guard_connection = ErrDeinitGuard<UnixOrHost>{ ptr: &connection };
 
     let owned_ssl_ctx: (*BoringSSL.SSL_CTX)? = null;
     if (ssl_enabled) {
@@ -640,34 +748,33 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
         }
         if (sc := native_sc) owned_ssl_ctx = sc.borrow();
     }
-    errdefer if (c := owned_ssl_ctx) BoringSSL.SSL_CTX_free(c);
+    let _guard_ssl_ctx = ErrSslCtxGuard{ ctx_ptr: &owned_ssl_ctx };
 
     if (Environment.isWindows) {
         let buf: bun.PathBuffer = undefined;
         let pipe_name: ([]const u8)? = null;
-        const isNamedPipe = switch (connection) {
-            .unix => |slice| ({
+        let isNamedPipe = false;
+        switch (connection) {
+            .unix => |slice| {
                 pipe_name = normalizePipeName(slice, buf[0..]);
-                break (pipe_name != null);
-            }),
-            .fd => |fd| ({
+                isNamedPipe = (pipe_name != null);
+            },
+            .fd => |fd| {
                 const uvfd = fd.uv();
                 const fd_type = uv.uv_guess_handle(uvfd);
                 if (fd_type == uv.Handle.Type.named_pipe) {
-                    break true;
-                }
-                if (fd_type == uv.Handle.Type.unknown) {
-                    const osfd: uv.uv_os_fd_t = @ptrFromInt(@as(usize, @intCast(uvfd)));
+                    isNamedPipe = true;
+                } else if (fd_type == uv.Handle.Type.unknown) {
+                    const osfd: uv.uv_os_fd_t = unsafe { @ptrFromInt(@as(usize, @intCast(uvfd))) };
                     if (bun.windows.GetFileType(osfd) == bun.windows.FILE_TYPE_PIPE) {
                         connection.fd = bun.FD.fromNative(osfd).makeLibUVOwned() catch
                             @panic("failed to allocate file descriptor");
-                        break true;
+                        isNamedPipe = true;
                     }
                 }
-                break false;
-            }),
-            else => false,
-        };
+            },
+            else => {},
+        }
         if (isNamedPipe) {
             default_data.ensureStillAlive();
 
@@ -721,6 +828,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
 
                 const ctx_for_pipe = owned_ssl_ctx;
                 owned_ssl_ctx = null;
+                _guard_handlers.armed = false;
+                _guard_connection.armed = false;
+                _guard_ssl_ctx.armed = false;
                 const named_pipe = switch (connection) {
                     .unix => WindowsNamedPipeContext.connect(
                         globalObject,
@@ -770,6 +880,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                 TCPSocket.js.dataSetCached(tcp.getThisValue(globalObject), globalObject, default_data);
                 tcp.poll_ref.ref(handlers.vm);
 
+                _guard_handlers.armed = false;
+                _guard_connection.armed = false;
+                _guard_ssl_ctx.armed = false;
                 const named_pipe = switch (connection) {
                     .unix => WindowsNamedPipeContext.connect(
                         globalObject,
@@ -860,6 +973,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                 });
             }
             owned_ssl_ctx = null;
+            _guard_handlers.armed = false;
+            _guard_connection.armed = false;
+            _guard_ssl_ctx.armed = false;
             socket.ref();
             SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
             socket.flags.allow_half_open = socket_config.allowHalfOpen;
@@ -874,6 +990,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
             return promise_value;
         }
     }
+    _guard_handlers.armed = false;
+    _guard_connection.armed = false;
+    _guard_ssl_ctx.armed = false;
     return promise_value;
 }
 
@@ -946,7 +1065,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
     }
 
     fn onPipeClosed(pipe: *uv.Pipe) callconv(.c) void {
-        const this_ctx: *WindowsNamedPipeListeningContext = @ptrCast(@alignCast(pipe.data));
+        const this_ctx: *WindowsNamedPipeListeningContext = unsafe { @ptrCast(@alignCast(pipe.data)) };
         this_ctx.release();
     }
 
@@ -968,10 +1087,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
             .vm = globalThis.bunVM(),
             .listener = listener,
         });
-        let pipe_initialized = false;
-        errdefer {
-            if (pipe_initialized) this_ctx.closePipeAndDeinit() else this_ctx.release();
-        }
+        let _guard_ctx = NamedPipeCtxErrGuard{ ctx: this_ctx };
 
         if (ssl_config) |ssl_options| {
             bun.BoringSSL.load();
@@ -989,7 +1105,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
         if (initResult == .err) {
             return error.FailedToInitPipe;
         }
-        pipe_initialized = true;
+        _guard_ctx.pipe_initialized = true;
         if (path[path.len - 1] == 0) {
             const slice_z = path[0 .. path.len - 1 :0];
             this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap() catch return error.FailedToBindPipe;
@@ -1003,6 +1119,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
             this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap() catch return error.FailedToBindPipe;
         }
 
+        _guard_ctx.armed = false;
         return this_ctx;
     }
 
@@ -1015,7 +1132,8 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
         bun.destroy(_);
     }
 
-    pub fn deinit(*_) {
-        _.release();
+    pub fn deinit() {
+        let copy = _;
+        copy.release();
     }
 } else struct {};

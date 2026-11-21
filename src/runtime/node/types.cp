@@ -1,3 +1,62 @@
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+};
+
+struct ErrDeinitGuard<T> {
+    ptr: *T!,
+    armed: bool,
+    fn disarm(*_) {
+        _.armed = false;
+    }
+    ~init() {
+        if (_.armed) {
+            unsafe { _.ptr.deinit(); }
+        }
+    }
+};
+
+struct DerefGuard<T> {
+    ptr: *const T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+};
+
+struct DetachGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.detach(); }
+    }
+};
+
+struct ReportExtraMemoryGuard<T> {
+    vm: T,
+    len: usize,
+    ~init() {
+        _.vm.reportExtraMemory(_.len);
+    }
+};
+
+struct EncodedSliceResetGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+            _.ptr.* = .{};
+        }
+    }
+};
+
+struct PathBufferPoolGuard<T> {
+    buf: T,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+};
+
 pub const BlobOrStringOrBuffer = union(enum) {
     blob: jsc.WebCore.Blob,
     string_or_buffer: StringOrBuffer,
@@ -111,7 +170,7 @@ pub const BlobOrStringOrBuffer = union(enum) {
 
                         if (any_blob_ := bodyValue.tryUseAsAnyBlob()) {
                             let any_blob = any_blob_;
-                            defer any_blob.detach();
+                            const _guard_blob = DetachGuard<@TypeOf(any_blob)>{ ptr: &any_blob };
                             return .{ blob: any_blob.toBlob(global) };
                         }
 
@@ -124,7 +183,7 @@ pub const BlobOrStringOrBuffer = union(enum) {
 
                         if (any_blob_ := bodyValue.tryUseAsAnyBlob()) {
                             let any_blob = any_blob_;
-                            defer any_blob.detach();
+                            const _guard_blob = DetachGuard<@TypeOf(any_blob)>{ ptr: &any_blob };
                             return .{ blob: any_blob.toBlob(global) };
                         }
 
@@ -170,16 +229,18 @@ pub const StringOrBuffer = union(enum) {
 
     static fn fromJSToOwnedSlice(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue, allocator: std.mem.Allocator): bun.JSError![]u8 {
         if (array_buffer := value.asArrayBuffer(globalObject)) {
-            defer globalObject.vm().reportExtraMemory(array_buffer.len);
+            const vm = globalObject.vm();
+            const _guard_mem = ReportExtraMemoryGuard<@TypeOf(vm)>{ vm: vm, len: array_buffer.len };
 
             return allocator.dupe(u8, array_buffer.byteSlice())?;
         }
 
         const str = bun.String.fromJS(value, globalObject)?;
-        defer str.deref();
+        const _guard_str = DerefGuard<bun.String>{ ptr: &str };
 
         const result = str.toOwnedSlice(allocator)?;
-        defer globalObject.vm().reportExtraMemory(result.len);
+        const vm = globalObject.vm();
+        const _guard_mem = ReportExtraMemoryGuard<@TypeOf(vm)>{ vm: vm, len: result.len };
         return result;
     }
 
@@ -189,10 +250,7 @@ pub const StringOrBuffer = union(enum) {
                 return str.transferToJS(ctx);
             },
             .encoded_slice => {
-                defer {
-                    _.encoded_slice.deinit();
-                    _.encoded_slice = .{};
-                }
+                const _guard_slice = EncodedSliceResetGuard<jsc.ZigString.Slice>{ ptr: &_.encoded_slice };
 
                 return bun.String.createUTF8ForJS(ctx, _.encoded_slice.slice());
             },
@@ -248,7 +306,7 @@ pub const StringOrBuffer = union(enum) {
                     return null;
                 }
                 let str = bun.String.fromJS(value, global)?;
-                defer str.deref();
+                const _guard_str = DerefGuard<bun.String>{ ptr: &str };
                 if (is_async) {
                     let possible_clone = str;
                     let sliced = possible_clone.toThreadSafeSlice(allocator)?;
@@ -314,13 +372,14 @@ pub const StringOrBuffer = union(enum) {
 
         if (value.isString()) {
             let str = bun.String.fromJS(value, global)?;
-            defer str.deref();
+            const _guard_str = DerefGuard<bun.String>{ ptr: &str };
             if (str.isEmpty()) {
                 return StringOrBuffer.fromJSMaybeAsync(global, allocator, value, is_async, allow_string_object);
             }
 
             const out = str.encode(encoding);
-            defer global.vm().reportExtraMemory(out.len);
+            const vm = global.vm();
+            const _guard_mem = ReportExtraMemoryGuard<@TypeOf(vm)>{ vm: vm, len: out.len };
 
             return .{ encoded_slice: jsc.ZigString.Slice.init(bun.default_allocator, out) };
         }
@@ -415,7 +474,7 @@ pub enum Encoding: u8 {
 
     static fn fromJSWithDefaultOnEmpty(value: jsc.JSValue, globalObject: *jsc.JSGlobalObject, default: Encoding): bun.JSError!Encoding? {
         const str = bun.String.fromJS(value, globalObject)?;
-        defer str.deref();
+        const _guard_str = DerefGuard<bun.String>{ ptr: &str };
         if (str.isEmpty()) {
             return default;
         }
@@ -475,7 +534,9 @@ pub enum Encoding: u8 {
                 const created = bun.String.createUninitialized(.latin1, encoded_len);
                 let encoded = created[0];
                 let bytes = created[1];
-                @memcpy(@constCast(bytes), base64_buf[0..encoded_len]);
+                unsafe {
+                    @memcpy(@constCast(bytes), base64_buf[0..encoded_len]);
+                }
                 return encoded.transferToJS(globalObject)?;
             },
             .base64url => {
@@ -664,7 +725,7 @@ pub const PathLike = union(enum) {
         if (comptime Environment.isWindows) {
             const s = _.slice();
             const b = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(b);
+            const _guard_pool = PathBufferPoolGuard<@TypeOf(b)>{ buf: b };
             // Device paths (\\.\, \\?\) and NT object paths (\??\) should not be normalized
             // because the "." in \\.\pipe\name would be incorrectly stripped as a "current directory" component.
             if (s.len >= 4 && bun.path.isSepAny(s[0]) && bun.path.isSepAny(s[1]) && (s[2] == '.' || s[2] == '?') && bun.path.isSepAny(s[3])) {
@@ -720,7 +781,7 @@ pub const PathLike = union(enum) {
             .DerivedStringObject
             => {
                 let str = arg.toBunString(ctx)?;
-                defer str.deref();
+                const _guard_str = DerefGuard<bun.String>{ ptr: &str };
 
                 arguments.eat();
 
@@ -739,7 +800,7 @@ pub const PathLike = union(enum) {
                             return ctx.ERR(.INVALID_URL_SCHEME, "URL must be a non-empty \"file:\" path", .{}).throw();
                         }
                     };
-                    defer str.deref();
+                    const _guard_str = DerefGuard<bun.String>{ ptr: &str };
                     if (str.isEmpty()) {
                         return ctx.ERR(.INVALID_ARG_VALUE, "URL must be a non-empty \"file:\" path", .{}).throw();
                     }
@@ -756,13 +817,14 @@ pub const PathLike = union(enum) {
     static fn fromBunString(global: *jsc.JSGlobalObject, str: *bun.String, will_be_async: bool, allocator: std.mem.Allocator): !PathLike {
         if (will_be_async) {
             let sliced = str.toThreadSafeSlice(allocator)?;
-            errdefer sliced.deinit();
+            let _guard_sliced = ErrDeinitGuard<@TypeOf(sliced)>{ ptr: &sliced, armed: true };
 
             // Validate the UTF-8 byte length after conversion, since the path
             // will be stored in a fixed-size PathBuffer.
             Valid.pathStringLength(sliced.slice().len, global)?;
             Valid.pathNullBytes(sliced.slice(), global)?;
 
+            _guard_sliced.disarm();
             sliced.reportExtraMemory(global.vm());
 
             if (sliced.underlying.isEmpty()) {
@@ -771,13 +833,14 @@ pub const PathLike = union(enum) {
             return .{ threadsafe_string: sliced };
         } else {
             let sliced = str.toSlice(allocator);
-            errdefer sliced.deinit();
+            let _guard_sliced = ErrDeinitGuard<@TypeOf(sliced)>{ ptr: &sliced, armed: true };
 
             // Validate the UTF-8 byte length after conversion, since the path
             // will be stored in a fixed-size PathBuffer.
             Valid.pathStringLength(sliced.slice().len, global)?;
             Valid.pathNullBytes(sliced.slice(), global)?;
 
+            _guard_sliced.disarm();
             // Costs nothing to keep both around.
             if (sliced.isWTFAllocated()) {
                 return .{ slice_with_underlying_string: sliced };
@@ -912,7 +975,7 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!Mod
         const parsed = std.fmt.parseInt(Mode, slice, 8) catch null;
         if (parsed == null) {
             let formatter: bun.jsc.ConsoleObject.Formatter = .{ globalThis: ctx };
-            defer formatter.deinit();
+            const _guard_fmt = DeinitGuard<bun.jsc.ConsoleObject.Formatter>{ ptr: &formatter };
             return ctx.throwValue(ctx.ERR(.INVALID_ARG_VALUE, "The argument 'mode' must be a 32-bit unsigned integer or an octal string. Received {f}", .{ value.toFmt(&formatter) }).toJS());
         }
         mode_int = @intCast(parsed.?);
@@ -1119,8 +1182,8 @@ pub enum FileSystemFlags: c_int {
                         if (std.ascii.isDigit(@as(u8, @truncate(chars[0])))) {
                             // node allows "0o644" as a string :(
                             if (is_16bit) {
-                                const slice = str.toSlice(bun.default_allocator);
-                                defer slice.deinit();
+                                let slice = str.toSlice(bun.default_allocator);
+                                const _guard_slice = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
 
                                 break :brk @as(i32, @intCast(std.fmt.parseInt(Mode, slice.slice(), 10) catch break :brk null));
                             } else {
@@ -1239,7 +1302,7 @@ pub struct Dirent {
 
     fn toJSNewlyCreated(*_, globalObject: *jsc.JSGlobalObject, previous_jsstring: (*(*jsc.JSString)?)?): bun.JSError!jsc.JSValue {
         // Shouldn't techcnically be necessary.
-        defer _.deref();
+        const _guard_dirent = DerefGuard<Dirent>{ ptr: _ };
         return _.toJS(globalObject, previous_jsstring);
     }
 

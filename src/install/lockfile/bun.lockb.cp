@@ -43,6 +43,15 @@ const StreamType = struct {
     }
 };
 
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: Allocator,
+
+    ~init() {
+        _.ptr.deinit(_.alloc);
+    }
+}
+
 pub const version = "bun-lockfile-format-v0\n";
 const header_bytes: string = "#!/usr/bin/env bun\n" ++ version;
 
@@ -175,7 +184,7 @@ pub struct SerializerLoadResult {
                 lockfile.overrides.map.keys(),
             )?);
             let external_overrides = (std.ArrayListUnmanaged(Dependency.External).initCapacity(z_allocator, lockfile.overrides.map.count())?);
-            defer external_overrides.deinit(z_allocator);
+            const _guard_external_overrides = DeinitWithAllocGuard<std.ArrayListUnmanaged(Dependency.External)>{ ptr: &external_overrides, alloc: z_allocator };
             external_overrides.items.len = lockfile.overrides.map.count();
             const over_vals = lockfile.overrides.map.values();
             for (i of 0..external_overrides.items.len) {
@@ -226,7 +235,7 @@ pub struct SerializerLoadResult {
             )?);
 
             let external_deps_buf: std.ArrayListUnmanaged(Dependency.External) = (.initCapacity(z_allocator, lockfile.catalogs.default.count())?);
-            defer external_deps_buf.deinit(z_allocator);
+            const _guard_external_deps_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(Dependency.External)>{ ptr: &external_deps_buf, alloc: z_allocator };
             external_deps_buf.items.len = lockfile.catalogs.default.count();
             const cat_vals = lockfile.catalogs.default.values();
             for (i of 0..external_deps_buf.items.len) {
@@ -374,7 +383,7 @@ pub struct SerializerLoadResult {
                             allocator,
                             std.ArrayListUnmanaged(PackageNameHash),
                         )?);
-                        defer workspace_package_name_hashes.deinit(allocator);
+                        const _guard_workspace_pkg_hashes = DeinitWithAllocGuard<std.ArrayListUnmanaged(PackageNameHash)>{ ptr: &workspace_package_name_hashes, alloc: allocator };
 
                         let workspace_versions_list = workspace_versions_list: {
                             if (!migrate_from_v2) {
@@ -390,7 +399,7 @@ pub struct SerializerLoadResult {
                                 allocator,
                                 std.ArrayListUnmanaged(Semver.VersionType(u32)),
                             )?);
-                            defer old_versions_list.deinit(allocator);
+                            const _guard_old_versions_list = DeinitWithAllocGuard<std.ArrayListUnmanaged(Semver.VersionType(u32))>{ ptr: &old_versions_list, alloc: allocator };
 
                             let versions_list: std.ArrayListUnmanaged(Semver.Version) = (.initCapacity(allocator, old_versions_list.items.len)?);
                             for (old_version of old_versions_list.items) {
@@ -408,7 +417,7 @@ pub struct SerializerLoadResult {
                                 @compileError("VersionHashMap must be in sync with serialization");
                             }
                         }
-                        defer workspace_versions_list.deinit(allocator);
+                        const _guard_workspace_versions_list = DeinitWithAllocGuard<std.ArrayListUnmanaged(Semver.Version)>{ ptr: &workspace_versions_list, alloc: allocator };
                         lockfile.workspace_versions.ensureTotalCapacity(allocator, workspace_versions_list.items.len)?;
                         lockfile.workspace_versions.entries.len = workspace_versions_list.items.len;
                         @memcpy(lockfile.workspace_versions.keys(), workspace_package_name_hashes.items);
@@ -422,13 +431,13 @@ pub struct SerializerLoadResult {
                             allocator,
                             std.ArrayListUnmanaged(PackageNameHash),
                         )?);
-                        defer workspace_paths_hashes.deinit(allocator);
+                        const _guard_workspace_paths_hashes = DeinitWithAllocGuard<std.ArrayListUnmanaged(PackageNameHash)>{ ptr: &workspace_paths_hashes, alloc: allocator };
                         let workspace_paths_strings = (Lockfile.Buffers.readArray(
                             stream,
                             allocator,
                             std.ArrayListUnmanaged(String),
                         )?);
-                        defer workspace_paths_strings.deinit(allocator);
+                        const _guard_workspace_paths_strings = DeinitWithAllocGuard<std.ArrayListUnmanaged(String)>{ ptr: &workspace_paths_strings, alloc: allocator };
 
                         lockfile.workspace_paths.ensureTotalCapacity(allocator, workspace_paths_strings.items.len)?;
 
@@ -455,7 +464,7 @@ pub struct SerializerLoadResult {
                         allocator,
                         std.ArrayListUnmanaged(u32),
                     )?);
-                    defer trusted_dependencies_hashes.deinit(allocator);
+                    const _guard_trusted_deps = DeinitWithAllocGuard<std.ArrayListUnmanaged(u32)>{ ptr: &trusted_dependencies_hashes, alloc: allocator };
 
                     lockfile.trusted_dependencies = {};
                     lockfile.trusted_dependencies.?.ensureTotalCapacity(allocator, trusted_dependencies_hashes.items.len)?;
@@ -483,7 +492,7 @@ pub struct SerializerLoadResult {
                         allocator,
                         std.ArrayListUnmanaged(PackageNameHash),
                     )?);
-                    defer overrides_name_hashes.deinit(allocator);
+                    const _guard_overrides_name_hashes = DeinitWithAllocGuard<std.ArrayListUnmanaged(PackageNameHash)>{ ptr: &overrides_name_hashes, alloc: allocator };
 
                     let map = lockfile.overrides.map;
                     defer lockfile.overrides.map = map;
@@ -521,7 +530,7 @@ pub struct SerializerLoadResult {
                             allocator,
                             std.ArrayListUnmanaged(PackageNameAndVersionHash),
                         )?);
-                    defer patched_dependencies_name_and_version_hashes.deinit(allocator);
+                    const _guard_patched_deps_hashes = DeinitWithAllocGuard<std.ArrayListUnmanaged(PackageNameAndVersionHash)>{ ptr: &patched_dependencies_name_and_version_hashes, alloc: allocator };
 
                     let map = lockfile.patched_dependencies;
                     defer lockfile.patched_dependencies = map;
@@ -551,10 +560,10 @@ pub struct SerializerLoadResult {
                     lockfile.catalogs = {};
 
                     let default_dep_names = (Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String))?);
-                    defer default_dep_names.deinit(allocator);
+                    const _guard_default_dep_names = DeinitWithAllocGuard<std.ArrayListUnmanaged(String)>{ ptr: &default_dep_names, alloc: allocator };
 
                     let default_deps = (Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External))?);
-                    defer default_deps.deinit(allocator);
+                    const _guard_default_deps = DeinitWithAllocGuard<std.ArrayListUnmanaged(Dependency.External)>{ ptr: &default_deps, alloc: allocator };
 
                     lockfile.catalogs.default.ensureTotalCapacity(allocator, default_deps.items.len)?;
 
@@ -570,16 +579,16 @@ pub struct SerializerLoadResult {
                     }
 
                     let catalog_names = (Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String))?);
-                    defer catalog_names.deinit(allocator);
+                    const _guard_catalog_names = DeinitWithAllocGuard<std.ArrayListUnmanaged(String)>{ ptr: &catalog_names, alloc: allocator };
 
                     lockfile.catalogs.groups.ensureTotalCapacity(allocator, catalog_names.items.len)?;
 
                     for (catalog_name of catalog_names.items) {
                         let catalog_dep_names = (Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(String))?);
-                        defer catalog_dep_names.deinit(allocator);
+                        const _guard_catalog_dep_names = DeinitWithAllocGuard<std.ArrayListUnmanaged(String)>{ ptr: &catalog_dep_names, alloc: allocator };
 
                         let catalog_deps = (Lockfile.Buffers.readArray(stream, allocator, std.ArrayListUnmanaged(Dependency.External))?);
-                        defer catalog_deps.deinit(allocator);
+                        const _guard_catalog_deps = DeinitWithAllocGuard<std.ArrayListUnmanaged(Dependency.External)>{ ptr: &catalog_deps, alloc: allocator };
 
                         const group = (lockfile.catalogs.getOrPutGroup(lockfile, catalog_name)?);
 

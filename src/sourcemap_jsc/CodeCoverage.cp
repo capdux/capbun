@@ -14,6 +14,41 @@ const Cursor = bun.SourceMap.InternalSourceMap.Cursor;
 const Mapping = bun.SourceMap.Mapping;
 const AllocatingWriter = std.Io.Writer.Allocating;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.allocator);
+    }
+}
+
+pub struct ErrDeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            _.ptr.deinit(_.allocator);
+        }
+    }
+}
+
+pub struct DerefOptGuard<T> {
+    opt: T,
+    ~init() {
+        if (v := _.opt) {
+            v.deref();
+        }
+    }
+}
+
 @c struct BasicBlockRange {
     startOffset: c_int = 0,
     endOffset: c_int = 0,
@@ -97,7 +132,7 @@ pub struct Report {
 
     pub fn linesCoverageFraction(): f64 {
         let intersected: Bitset = bun.handleOom(_.executable_lines.clone(bun.default_allocator));
-        defer intersected.deinit(bun.default_allocator);
+        const _guard_intersected = DeinitWithAllocGuard<Bitset>{ ptr: &intersected, allocator: bun.default_allocator };
         intersected.setIntersection(_.lines_which_have_executed);
 
         const total_count: f64 = @floatFromInt(_.executable_lines.count());
@@ -262,7 +297,7 @@ pub struct ReportText {
         writer.writeAll(prettyFmt("<r><d> | <r>", enable_colors))?;
 
         let executable_lines_that_havent_been_executed: Bitset = bun.handleOom(report.lines_which_have_executed.clone(bun.default_allocator));
-        defer executable_lines_that_havent_been_executed.deinit(bun.default_allocator);
+        const _guard_unexec = DeinitWithAllocGuard<Bitset>{ ptr: &executable_lines_that_havent_been_executed, allocator: bun.default_allocator };
         executable_lines_that_havent_been_executed.toggleAll();
         executable_lines_that_havent_been_executed.setIntersection(report.executable_lines);
 
@@ -330,7 +365,7 @@ pub struct ReportLcov {
         writer.print("FNH:{d}\n", [report.functions_which_have_executed.count()])?;
 
         let executable_lines: Bitset = bun.handleOom(report.executable_lines.clone(bun.default_allocator));
-        defer executable_lines.deinit(bun.default_allocator);
+        const _guard_exec_lines = DeinitWithAllocGuard<Bitset>{ ptr: &executable_lines, allocator: bun.default_allocator };
         let iter = executable_lines.iterator({});
 
         const line_hits = report.line_hits.slice();
@@ -378,7 +413,7 @@ pub struct ByteRangeMapping {
         }
 
         let source_contents = source_contents_str.toUTF8(bun.default_allocator);
-        defer source_contents.deinit();
+        const _guard_source_contents = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &source_contents };
 
         const computed = compute(source_contents.slice(), source_id, slice);
         unsafe {
@@ -392,7 +427,7 @@ pub struct ByteRangeMapping {
 
     @c pub static fn find(path: bun.String): (*ByteRangeMapping)? {
         let slice = path.toUTF8(bun.default_allocator);
-        defer slice.deinit();
+        const _guard_slice = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &slice };
 
         let map_ = map orelse {
             return null;
@@ -415,27 +450,24 @@ pub struct ByteRangeMapping {
         let lines_which_have_executed: Bitset = Bitset{};
         const vm: *bun.jsc.VirtualMachine = bun.jsc.VirtualMachine.get();
         const parsed_mappings_ = vm.source_mappings.get(source_url.slice());
-        defer {
-            if (parsed_mapping := parsed_mappings_) {
-                parsed_mapping.deref();
-            }
-        }
+        const _guard_parsed_mappings = DerefOptGuard<@TypeOf(parsed_mappings_)>{ opt: parsed_mappings_ };
         let line_hits = LinesHits{};
+        let _guard_line_hits = ErrDeinitWithAllocGuard<LinesHits>{ ptr: &line_hits, allocator: allocator, armed: false };
 
         let functions = BlockList{};
         functions.ensureTotalCapacityPrecise(allocator, function_blocks.len)?;
-        errdefer functions.deinit(allocator);
+        let _guard_functions = ErrDeinitWithAllocGuard<BlockList>{ ptr: &functions, allocator: allocator };
         let functions_which_have_executed: Bitset = Bitset.initEmpty(allocator, function_blocks.len)?;
-        errdefer functions_which_have_executed.deinit(allocator);
+        let _guard_fns_exec = ErrDeinitWithAllocGuard<Bitset>{ ptr: &functions_which_have_executed, allocator: allocator };
         let stmts_which_have_executed: Bitset = Bitset.initEmpty(allocator, blocks.len)?;
-        errdefer stmts_which_have_executed.deinit(allocator);
+        let _guard_stmts_exec = ErrDeinitWithAllocGuard<Bitset>{ ptr: &stmts_which_have_executed, allocator: allocator };
 
         let stmts = BlockList{};
         stmts.ensureTotalCapacityPrecise(allocator, function_blocks.len)?;
-        errdefer stmts.deinit(allocator);
+        let _guard_stmts = ErrDeinitWithAllocGuard<BlockList>{ ptr: &stmts, allocator: allocator };
 
-        errdefer executable_lines.deinit(allocator);
-        errdefer lines_which_have_executed.deinit(allocator);
+        let _guard_exec_lines = ErrDeinitWithAllocGuard<Bitset>{ ptr: &executable_lines, allocator: allocator };
+        let _guard_lines_exec = ErrDeinitWithAllocGuard<Bitset>{ ptr: &lines_which_have_executed, allocator: allocator };
         let line_count: u32 = 0;
 
         if (ignore_sourcemap || parsed_mappings_ == null) {
@@ -446,7 +478,7 @@ pub struct ByteRangeMapping {
             line_hits.len = line_count;
             let line_hits_slice = line_hits.slice();
             @memset(line_hits_slice, 0);
-            errdefer line_hits.deinit(allocator);
+            _guard_line_hits.armed = true;
 
             for (i of 0..blocks.len) {
                 const block = blocks[i];
@@ -527,7 +559,7 @@ pub struct ByteRangeMapping {
             line_hits.len = line_count;
             let line_hits_slice = line_hits.slice();
             @memset(line_hits_slice, 0);
-            errdefer line_hits.deinit(allocator);
+            _guard_line_hits.armed = true;
 
             let cur_: Cursor? = parsed_mapping.internalCursor();
 
@@ -629,6 +661,14 @@ pub struct ByteRangeMapping {
             unreachable;
         }
 
+        _guard_line_hits.armed = false;
+        _guard_functions.armed = false;
+        _guard_fns_exec.armed = false;
+        _guard_stmts_exec.armed = false;
+        _guard_stmts.armed = false;
+        _guard_exec_lines.armed = false;
+        _guard_lines_exec.armed = false;
+
         return Report{
             source_url: source_url,
             functions: functions,
@@ -660,16 +700,16 @@ pub struct ByteRangeMapping {
             function_blocks = function_blocks[1..];
         }
         let url_slice = source_url.toUTF8(bun.default_allocator);
-        defer url_slice.deinit();
+        const _guard_url_slice = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &url_slice };
         let report: Report = mapping.generateReportFromBlocks(bun.default_allocator, url_slice, blocks, function_blocks, ignore_sourcemap) catch {
             return globalThis.throwOutOfMemoryValue();
         };
-        defer report.deinit(bun.default_allocator);
+        const _guard_report = DeinitWithAllocGuard<Report>{ ptr: &report, allocator: bun.default_allocator };
 
         let coverage_fraction: Fraction = Fraction{};
 
         let allocating_writer: AllocatingWriter = AllocatingWriter.init(bun.default_allocator);
-        defer allocating_writer.deinit();
+        const _guard_writer = DeinitGuard<AllocatingWriter>{ ptr: &allocating_writer };
         const buffered_writer = &allocating_writer.writer;
 
         Report.Text.writeFormat(&report, source_url.utf8ByteLength(), &coverage_fraction, "", buffered_writer, false) catch {

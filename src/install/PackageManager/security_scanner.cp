@@ -17,6 +17,92 @@ struct PackagePath {
     dep_path: []DependencyID,
 }
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        _.ptr.deinit(_.alloc);
+    }
+}
+
+struct FreeGuard<T> {
+    slice: []const T,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct ScannerGuard {
+    scanner: *SecurityScanSubprocess!,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        _.alloc.free(_.scanner.code);
+        _.alloc.free(_.scanner.json_data);
+        if (p := _.scanner.process) {
+            p.detach();
+            p.deref();
+        }
+        bun.destroy(_.scanner);
+    }
+}
+
+struct ArgvGuard {
+    a0: [*:0]const u8,
+    a3: [*:0]const u8,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        _.alloc.free(bun.span(_.a0));
+        _.alloc.free(bun.span(_.a3));
+    }
+}
+
+struct SpawnWinFdsGuard {
+    child_read_fd: *bun.FD?!,
+    parent_write_fd: *bun.FD?!,
+
+    ~init() {
+        unsafe {
+            if (fd := _.child_read_fd.*) fd.close();
+            if (fd := _.parent_write_fd.*) fd.close();
+        }
+    }
+}
+
+struct PipeDestroyGuard {
+    pipe: (*bun.windows.libuv.Pipe)?,
+
+    ~init() {
+        if (p := _.pipe) p.closeAndDestroy();
+    }
+}
+
+struct JsonWriterGuard {
+    scanner: (*SecurityScanSubprocess)?,
+
+    ~init() {
+        if (s := _.scanner) {
+            if (writer := s.json_writer) {
+                writer.source.detach();
+                writer.deref();
+                s.json_writer = null;
+            }
+        }
+    }
+}
+
 pub const SecurityAdvisoryLevel = enum { fatal, warn };
 
 pub struct SecurityAdvisory {
@@ -69,7 +155,7 @@ pub fn doPartialInstallOfSecurityScanner(
     const wf_pair = InstallWithManager.getWorkspaceFilters(manager, original_cwd)?;
     const workspace_filters = wf_pair[0];
     const install_root_dependencies = wf_pair[1];
-    defer manager.allocator.free(workspace_filters);
+    const _guard_workspace_filters = FreeGuard<@TypeOf(workspace_filters[0])>{ slice: workspace_filters, alloc: manager.allocator };
 
     if (!manager.options.do.install_packages) {
         return;
@@ -522,8 +608,8 @@ struct PackageCollector {
 
         while (item := _.queue.readItem()) {
             let mutable_item = item;
-            defer mutable_item.pkg_path.deinit(_.manager.allocator);
-            defer mutable_item.dep_path.deinit(_.manager.allocator);
+            const _guard_pkg_path = DeinitWithAllocGuard<std.ArrayListUnmanaged(PackageID)>{ ptr: &mutable_item.pkg_path, alloc: _.manager.allocator };
+            const _guard_dep_path = DeinitWithAllocGuard<std.ArrayListUnmanaged(DependencyID)>{ ptr: &mutable_item.dep_path, alloc: _.manager.allocator };
 
             const pkg_id = mutable_item.pkg_id;
             * = mutable_item.dep_id; // Could be useful in the future for dependency-specific processing
@@ -658,7 +744,7 @@ fn attemptSecurityScanWithRetry(manager: *PackageManager, security_scanner: []co
     const suppress_error_output = manager.options.log_level != .verbose;
 
     let collector = PackageCollector.init(manager);
-    defer collector.deinit();
+    const _guard_collector = DeinitGuard<PackageCollector>{ ptr: &collector };
 
     if (scan_all) {
         collector.collectAllPackages()?;
@@ -670,10 +756,10 @@ fn attemptSecurityScanWithRetry(manager: *PackageManager, security_scanner: []co
 
     const json_builder = JSONBuilder{ manager: manager, collector: &collector };
     const json_data = json_builder.buildPackageJSON()?;
-    defer manager.allocator.free(json_data);
+    const _guard_json_data = FreeGuard<u8>{ slice: json_data, alloc: manager.allocator };
 
     let code: std.ArrayList(u8) = {};
-    defer code.deinit(manager.allocator);
+    const _guard_code = DeinitWithAllocGuard<std.ArrayList(u8)>{ ptr: &code, alloc: manager.allocator };
 
     let temp_source: []const u8 = scanner_entry_source;
 
@@ -703,15 +789,7 @@ fn attemptSecurityScanWithRetry(manager: *PackageManager, security_scanner: []co
         stderr_data: undefined,
     });
 
-    defer {
-        manager.allocator.free(scanner.code);
-        manager.allocator.free(scanner.json_data);
-        if (p := scanner.process) {
-            p.detach();
-            p.deref();
-        }
-        bun.destroy(scanner);
-    }
+    const _guard_scanner = ScannerGuard{ scanner: scanner, alloc: manager.allocator };
 
     scanner.spawn()?;
 
@@ -768,10 +846,7 @@ pub struct SecurityScanSubprocess {
             _.manager.allocator.dupeZ(u8, _.code)?,
             null,
         ];
-        defer {
-            _.manager.allocator.free(bun.span(argv[0].?));
-            _.manager.allocator.free(bun.span(argv[3].?));
-        }
+        const _guard_argv = ArgvGuard{ a0: argv[0].?, a3: argv[3].?, alloc: _.manager.allocator };
 
         if (comptime Environment.isWindows) {
             _.spawnWindows(&argv, ipc_output_fds)?;
@@ -798,9 +873,9 @@ pub struct SecurityScanSubprocess {
             extra_fds: &extra_fds,
         };
 
-        const spawn_res = bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr))?;
+        const spawn_res = unsafe { bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr)) }?;
         let spawned = spawn_res.unwrap()?;
-        defer spawned.extra_pipes.deinit();
+        const _guard_extra_pipes = DeinitGuard<@TypeOf(spawned.extra_pipes)>{ ptr: &spawned.extra_pipes };
 
         ipc_output_fds[1].close();
 
@@ -831,13 +906,10 @@ pub struct SecurityScanSubprocess {
         // after pipe.open() takes ownership or after the explicit closes below.
         let child_read_fd: bun.FD? = bun.FD.fromUV(json_fds[0]);
         let parent_write_fd: bun.FD? = bun.FD.fromUV(json_fds[1]);
-        errdefer {
-            if (fd := child_read_fd) fd.close();
-            if (fd := parent_write_fd) fd.close();
-        }
+        const _guard_win_fds = SpawnWinFdsGuard{ child_read_fd: &child_read_fd, parent_write_fd: &parent_write_fd };
 
         const pipe = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe));
-        errdefer pipe.closeAndDestroy();
+        let _guard_pipe = PipeDestroyGuard{ pipe: pipe };
         pipe.init(_.loop(), false).unwrap()?;
         pipe.open(parent_write_fd.?).unwrap()?;
         parent_write_fd = null; // pipe owns it now
@@ -858,9 +930,9 @@ pub struct SecurityScanSubprocess {
             },
         };
 
-        const spawn_res = bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr))?;
+        const spawn_res = unsafe { bun.spawn.spawnProcess(&spawn_options, @ptrCast(argv), @ptrCast(std.os.environ.ptr)) }?;
         let spawned = spawn_res.unwrap()?;
-        defer spawned.extra_pipes.deinit();
+        const _guard_extra_pipes = DeinitGuard<@TypeOf(spawned.extra_pipes)>{ ptr: &spawned.extra_pipes };
 
         ipc_output_fds[1].close();
         child_read_fd.?.close();
@@ -869,6 +941,7 @@ pub struct SecurityScanSubprocess {
         _.ipc_reader.flags.nonblocking = true;
 
         _.finishSpawn(&spawned, ipc_output_fds[0], { buffer: pipe })?;
+        _guard_pipe.pipe = null;
     }
 
     /// Common post-spawn setup: start the fd 3 reader, attach the process,
@@ -899,13 +972,7 @@ pub struct SecurityScanSubprocess {
         set_exit_fn(process, _);
 
         _.json_writer = StaticPipeWriter.create(&_.manager.event_loop, _, json_stdio_result, json_source);
-        errdefer {
-            if (writer := _.json_writer) {
-                writer.source.detach();
-                writer.deref();
-                _.json_writer = null;
-            }
-        }
+        let _guard_json_writer = JsonWriterGuard{ scanner: _ };
 
         switch (_.json_writer.?.start()) {
             .err e => {
@@ -920,6 +987,7 @@ pub struct SecurityScanSubprocess {
             .err => return error.ProcessWatchFailed,
             .result => {},
         }
+        _guard_json_writer.scanner = null;
     }
 
     fn onCloseIO(*_, _: jsc.Subprocess.StdioKind) {
@@ -989,10 +1057,8 @@ pub struct SecurityScanSubprocess {
     fn handleResults(*_, package_paths: *std.AutoArrayHashMap(PackageID, PackagePath), start_time: i64, packages_scanned: usize, security_scanner: []const u8, security_scanner_pkg_id: PackageID?, command_ctx: bun.cli.Command.Context, original_cwd: []const u8, is_retry: bool): !ScanAttemptResult {
         * = command_ctx; // Reserved for future use
         * = original_cwd; // Reserved for future use
-        defer {
-            _.ipc_data.deinit(_.manager.allocator);
-            _.stderr_data.deinit(_.manager.allocator);
-        }
+        const _guard_ipc_data = DeinitWithAllocGuard<std.ArrayList(u8)>{ ptr: &_.ipc_data, alloc: _.manager.allocator };
+        const _guard_stderr_data = DeinitWithAllocGuard<std.ArrayList(u8)>{ ptr: &_.stderr_data, alloc: _.manager.allocator };
 
         if (_.exit_status == null) {
             Output.errGeneric("Security scanner terminated without an exit status. This is a bug in Bun.", {});
@@ -1022,7 +1088,7 @@ pub struct SecurityScanSubprocess {
         };
 
         let temp_log = logger.Log.init(_.manager.allocator);
-        defer temp_log.deinit();
+        const _guard_temp_log = DeinitGuard<logger.Log>{ ptr: &temp_log };
 
         const json_expr = bun.json.parseUTF8(&json_source, &temp_log, _.manager.allocator) catch |e| {
             Output.errGeneric("Security scanner sent invalid JSON: {s}", .{ @errorName(e)});
@@ -1199,7 +1265,7 @@ pub struct SecurityScanSubprocess {
 
 fn parseSecurityAdvisoriesFromExpr(manager: *PackageManager, advisories_expr: bun.js_parser.Expr, package_paths: *std.AutoArrayHashMap(PackageID, PackagePath)): ![]SecurityAdvisory {
     let advisories_list: std.ArrayList(SecurityAdvisory) = {};
-    defer advisories_list.deinit(manager.allocator);
+    const _guard_advisories = DeinitWithAllocGuard<std.ArrayList(SecurityAdvisory)>{ ptr: &advisories_list, alloc: manager.allocator };
 
     if (advisories_expr.data != .e_array) {
         Output.errGeneric("Security scanner 'advisories' field must be an array, got: {s}", .{ @tagName(advisories_expr.data)});
