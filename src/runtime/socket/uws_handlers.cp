@@ -258,12 +258,17 @@ pub fn HTTPClient(comptime ssl: bool): type {
             const owner = ext.*;
             s.close(.failure);
             if (@hasDecl(H, "onConnectError") and @TypeOf(H.onConnectError) != @TypeOf(null)) {
-                swallow(H.onConnectError(owner orelse return, wrap(s), code));
+                if (owner != null) {
+                    swallow(H.onConnectError(owner.?, wrap(s), code));
+                }
             }
         }
         pub fn onConnectingError(cs: *ConnectingSocket, code: i32) void {
             if (@hasDecl(H, "onConnectError")) {
-                swallow(H.onConnectError(cs.ext(*!?).* orelse return, S.fromConnecting(cs), code));
+                const owner = cs.ext(@TypeOf(@as(*!?, null))).*;
+                if (owner != null) {
+                    swallow(H.onConnectError(owner.?, S.fromConnecting(cs), code));
+                }
             }
         }
         pub fn onHandshake(ext: Ext, s: *us_socket_t, ok: bool, err: uws.us_bun_verify_error_t) void {

@@ -16,12 +16,12 @@ pub type OptionalAnyPtr = *!?;
 const MAX_KEEPALIVE_HOSTNAME: usize = 128;
 const pool_size: usize = 64;
 
-export struct DeadSocket {
+pub struct DeadSocket {
     garbage: u8 = 0,
 }
 
-export let dead_socket_instance: DeadSocket = DeadSocket {};
-export let dead_socket: *DeadSocket = *dead_socket_instance;
+pub let dead_socket_instance: DeadSocket = DeadSocket {};
+pub let dead_socket: *DeadSocket = *dead_socket_instance;
 
 export class HTTPContext<const ssl: bool> {
     pub const is_ssl: bool = ssl;
@@ -113,12 +113,11 @@ export class HTTPContext<const ssl: bool> {
         ) void {
             const active = getTagged(ptr);
             if (active.get(bun.http)) |client| {
-                if (client.onOpen(comptime ssl, socket)) |_| {
-                    return;
-                } else |_| {
+                client.onOpen(comptime ssl, socket) catch {
                     terminateSocket(socket);
                     return;
-                }
+                };
+                return;
             }
 
             terminateSocket(socket);
@@ -730,4 +729,4 @@ export class HTTPContext<const ssl: bool> {
     pending_h2_connects: std.ArrayListUnmanaged(*bun.http.H2.PendingConnect) = .{},
 }
 
-export const NewHTTPContext = HTTPContext;
+pub const NewHTTPContext = HTTPContext;

@@ -154,9 +154,9 @@ pub fn nextInLoop(self: *SocketGroup) ?*SocketGroup {
     }
 };
 
-pub const OnOpenFn = *const fn (*us_socket_t, i32, [*]u8, i32) callconv(.c) ?*us_socket_t;
+pub const OnOpenFn = *const fn (*us_socket_t, i32, [*c]u8, i32) callconv(.c) ?*us_socket_t;
 pub const OptOnOpenFn = ?OnOpenFn;
-pub const OnDataFn = *const fn (*us_socket_t, [*]u8, i32) callconv(.c) ?*us_socket_t;
+pub const OnDataFn = *const fn (*us_socket_t, [*c]u8, i32) callconv(.c) ?*us_socket_t;
 pub const OptOnDataFn = ?OnDataFn;
 pub const OnFdFn = *const fn (*us_socket_t, i32) callconv(.c) ?*us_socket_t;
 pub const OptOnFdFn = ?OnFdFn;

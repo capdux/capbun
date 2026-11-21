@@ -1470,3 +1470,8 @@
   - **静默语句丢弃四类模式**：(1) 实参传 `[]const u8` 切片类型（改 `@TypeOf`）；(2) `if (comptime @"as" == ...)`（改具名形参 `switch (kind)`）；(3) 多变量 `for (a, b of ...)`（改单变量 `for` + 索引）；(4) `extends` 作 `if (extends := ...)` 捕获变量及 `@"from".*` / `_.*` 解引用赋值；
   - **非托管对象禁命名 `release()`**：`Blob`、`GarbageCollectionController` 等结构体定义 `release()` 会触发 `cpc` 自动注入 `defer x.release()` 引发提前释放/UAF，改名 `releaseInternal` 或合并入 `deinit`；
   - **值接收者悬垂栈切片**：省略接收者按值传递，返回 `&_.field` 或 `_.buf[0..]` 必须显式写 `_: *const Self`。
+- **[2026-11-21] HTTP / Weak / Blob 运行时排障核心经验**：
+  - **泛型 `return struct` 内 `if (v := opt)` 静默丢弃**：`Weak(T)` 返回匿名 `struct` 内部 `if (ref := _.ref)` 导致 `get`/`swap`/`has`/`clear`/`deinit` 被 `cpc` 吞掉，改用 `if (_.ref != null) { const r = _.ref.?; ... }` 恢复完整实现；
+  - **`if (...) |_|` 捕获吞掉函数体**：`HTTPContext.cp` 的 `if (client.onOpen(...)) |_|` 被 `cpc` 静默忽略，改用 `catch` 后 `HTTPThread` 104-byte UAF 彻底消失；
+  - **错误联合返回值中的 `.tag` 枚举返回**：`JSError!JSValue` 函数中写 `return .js_undefined;` 会被 `cpc` 误降级为 `error.js_undefined`，必须显式写 `return JSValue.js_undefined;`；
+  - **`[*]u8!` C 回调参数**：`SocketGroup.cp` 中 `OnOpenFn`/`OnDataFn` 必须用 `[*c]u8`（不可用非空 `[*]u8!`）以避免 `us_dispatch_open` 空指针 panic。

@@ -428,7 +428,7 @@ export class Store {
         return null;
     }
 
-    @c pub fn external(ptr: *!?, _: *!?, _: usize) {
+    @c pub static fn external(ptr: *!?, _: *!?, _: usize) {
         if (ptr == null) return;
         let this_store: *Store = bun.cast(*Store, ptr.?);
         this_store.deref();

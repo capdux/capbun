@@ -764,12 +764,12 @@
         this_str: *const ZigString,
         global: *JSGlobalObject,
         ctx: *!?,
-        callback: *const fn (ctx: *!?, ptr: *!?, len: usize) void,
+        callback: @c fn (ctx: *!?, ptr: *!?, len: usize),
     ): JSValue ;
     pub fn external(
         global: *JSGlobalObject,
         ctx: *!?,
-        callback: *const fn (ctx: *!?, ptr: *!?, len: usize) void,
+        callback: @c fn (ctx: *!?, ptr: *!?, len: usize),
     ): JSValue {
         if (_.len > String.max_length()) {
             callback(ctx, @ptrCast(@constCast(_.byteSlice().ptr)), _.len);

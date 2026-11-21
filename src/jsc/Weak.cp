@@ -66,9 +66,10 @@ pub fn Weak(comptime T: type): type {
             return { globalThis: globalThis };
         }
 
-        pub fn get(): jsc.JSValue? {
-            if (ref := _.ref) {
-                const result = ref.get();
+        pub fn get(*_): jsc.JSValue? {
+            if (_.ref != null) {
+                const r = _.ref.?;
+                const result = r.get();
                 if (result == .zero) {
                     return null;
                 }
@@ -78,20 +79,22 @@ pub fn Weak(comptime T: type): type {
         }
 
         pub fn swap(*_): jsc.JSValue {
-            if (ref := _.ref) {
-                const result = ref.get();
+            if (_.ref != null) {
+                const r = _.ref.?;
+                const result = r.get();
                 if (result == .zero) {
                     return .zero;
                 }
-                ref.clear();
+                r.clear();
                 return result;
             }
             return .zero;
         }
 
         pub fn has(*_): bool {
-            if (ref := _.ref) {
-                return ref.get() != .zero;
+            if (_.ref != null) {
+                const r = _.ref.?;
+                return r.get() != .zero;
             }
             return false;
         }
@@ -105,15 +108,17 @@ pub fn Weak(comptime T: type): type {
         }
 
         pub fn clear(*_) {
-            if (ref := _.ref) {
-                ref.clear();
+            if (_.ref != null) {
+                const r = _.ref.?;
+                r.clear();
             }
         }
 
         pub fn deinit(*_) {
-            if (ref := _.ref) {
+            if (_.ref != null) {
+                const r = _.ref.?;
                 _.ref = null;
-                ref.deinit();
+                r.deinit();
             }
         }
     };

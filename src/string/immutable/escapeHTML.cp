@@ -373,7 +373,7 @@ pub fn escapeHTMLForUTF16Input(allocator: std.mem.Allocator, utf16: []const u16)
                 '\'' => toUTF16Literal("&#x27;"),
                 '<' => toUTF16Literal("&lt;"),
                 '>' => toUTF16Literal("&gt;"),
-                else => @as([]const u16, utf16[0..1]),
+                else => utf16[0..1],
             };
 
             const second_16 = switch (utf16[1]) {
@@ -382,7 +382,7 @@ pub fn escapeHTMLForUTF16Input(allocator: std.mem.Allocator, utf16: []const u16)
                 '\'' => toUTF16Literal("&#x27;"),
                 '<' => toUTF16Literal("&lt;"),
                 '>' => toUTF16Literal("&gt;"),
-                else => @as([]const u16, utf16[1..2]),
+                else => utf16[1..2],
             };
 
             unsafe {

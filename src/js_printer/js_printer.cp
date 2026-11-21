@@ -997,25 +997,26 @@ fn NewPrinter(
             }
         }
 
-        static fn printGlobalBunImportStatement(p: *Printer, import: S.Import) {
+        static fn printGlobalBunImportStatement(p: *Printer, imp: S.Import) {
             if (comptime !is_bun_platform) unreachable;
-            printInternalBunImport(p, import, @TypeOf("globalThis.Bun"), "globalThis.Bun");
+            printInternalBunImport(p, imp, @TypeOf("globalThis.Bun"), "globalThis.Bun");
         }
 
-        static fn printInternalBunImport(p: *Printer, import: S.Import, comptime Statement: type, statement: Statement) {
+        static fn printInternalBunImport(p: *Printer, imp: S.Import, comptime Statement: type, statement: Statement) {
             if (comptime !is_bun_platform) unreachable;
 
-            if (import.star_name_loc != null) {
+            if (imp.star_name_loc != null) {
                 p.print("var ");
-                p.printSymbol(import.namespace_ref);
+                p.printSymbol(imp.namespace_ref);
                 p.printSpace();
                 p.print("=");
                 p.printSpaceBeforeIdentifier();
                 if (comptime Statement == void) {
+                    const empty_exprs: [0]Expr = undefined;
                     p.printRequireOrImportExpr(
-                        import.import_record_index,
+                        imp.import_record_index,
                         false,
-                        [],
+                        empty_exprs[0..0],
                         Expr.empty,
                         Level.lowest,
                         ExprFlag.Set.initEmpty(),
@@ -1028,16 +1029,17 @@ fn NewPrinter(
                 p.printIndent();
             }
 
-            if (default := import.default_name) {
+            if (def_item := imp.default_name) {
                 p.printSemicolonIfNeeded();
                 p.print("var ");
-                p.printSymbol(default.ref.?);
+                p.printSymbol(def_item.ref.?);
                 if (comptime Statement == void) {
                     p.@"print = "();
+                    const empty_exprs: [0]Expr = undefined;
                     p.printRequireOrImportExpr(
-                        import.import_record_index,
+                        imp.import_record_index,
                         false,
-                        [],
+                        empty_exprs[0..0],
                         Expr.empty,
                         Level.lowest,
                         ExprFlag.Set.initEmpty(),
@@ -1049,24 +1051,24 @@ fn NewPrinter(
                 p.printSemicolonAfterStatement();
             }
 
-            if (import.items.len > 0) {
+            if (imp.items.len > 0) {
                 p.printSemicolonIfNeeded();
                 p.printWhitespacer(ws("var {"));
 
-                if (!import.is_single_line) {
+                if (!imp.is_single_line) {
                     p.printNewline();
                     p.indent();
                     p.printIndent();
                 }
 
                 let i: usize = 0;
-                for (item of import.items) {
+                for (item of imp.items) {
                     defer i += 1;
                     if (i > 0) {
                         p.print(",");
                         p.printSpace();
 
-                        if (!import.is_single_line) {
+                        if (!imp.is_single_line) {
                             p.printNewline();
                             p.printIndent();
                         }
@@ -1075,7 +1077,7 @@ fn NewPrinter(
                     p.printClauseItemAs(item, .@"var");
                 }
 
-                if (!import.is_single_line) {
+                if (!imp.is_single_line) {
                     p.printNewline();
                     p.unindent();
                 } else {
@@ -1084,16 +1086,17 @@ fn NewPrinter(
 
                 p.printWhitespacer(ws("} = "));
 
-                if (import.star_name_loc == null && import.default_name == null) {
+                if (imp.star_name_loc == null && imp.default_name == null) {
                     if (comptime Statement == void) {
-                        p.printRequireOrImportExpr(import.import_record_index, false, [], Expr.empty, Level.lowest, ExprFlag.Set.initEmpty());
+                        const empty_exprs: [0]Expr = undefined;
+                        p.printRequireOrImportExpr(imp.import_record_index, false, empty_exprs[0..0], Expr.empty, Level.lowest, ExprFlag.Set.initEmpty());
                     } else {
                         p.print(statement);
                     }
-                } else if (name := import.default_name) {
+                } else if (name := imp.default_name) {
                     p.printSymbol(name.ref.?);
                 } else {
-                    p.printSymbol(import.namespace_ref);
+                    p.printSymbol(imp.namespace_ref);
                 }
 
                 p.printSemicolonAfterStatement();
@@ -1103,15 +1106,15 @@ fn NewPrinter(
             // bypasses printDeclStmt/printBinding, so we must record vars explicitly.
             if (may_have_module_info) {
                 if (mi := p.moduleInfo()) {
-                    if (import.star_name_loc != null) {
-                        const name = p.renamer.nameForSymbol(import.namespace_ref);
+                    if (imp.star_name_loc != null) {
+                        const name = p.renamer.nameForSymbol(imp.namespace_ref);
                         bun.handleOom(mi.addVar(bun.handleOom(mi.str(name)), .declared));
                     }
-                    if (default := import.default_name) {
-                        const name = p.renamer.nameForSymbol(default.ref.?);
+                    if (def_item := imp.default_name) {
+                        const name = p.renamer.nameForSymbol(def_item.ref.?);
                         bun.handleOom(mi.addVar(bun.handleOom(mi.str(name)), .declared));
                     }
-                    for (item of import.items) {
+                    for (item of imp.items) {
                         const name = p.renamer.nameForSymbol(item.name.ref.?);
                         bun.handleOom(mi.addVar(bun.handleOom(mi.str(name)), .declared));
                     }

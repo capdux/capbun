@@ -811,8 +811,70 @@ return "";
         return "";
 }
 
+pub fn resolveFileStat(store: *BlobStore) void {
+        if ((store.data.file.pathlike == .path)) {
+            var buffer: bun.PathBuffer = undefined;
+            _ = &buffer;
+            switch (bun.sys.stat(store.data.file.pathlike.path.sliceZ((&buffer)))) {
+.result => |stat| {
+store.data.file.max_size = (if ((bun.isRegularFile(stat.mode) or (stat.size > 0))) @as(SizeType, @truncate(@as(u64, @intCast(@max(stat.size, 0))))) else Blob.max_size);
+            store.data.file.mode = @intCast(stat.mode);
+            store.data.file.seekable = bun.isRegularFile(stat.mode);
+            store.data.file.last_modified = jsc.toJSTime(stat.mtime().sec, stat.mtime().nsec);
+},
+else => {
+
+},
+}
+        } else {
+            if ((store.data.file.pathlike == .fd)) {
+                switch (bun.sys.fstat(store.data.file.pathlike.fd)) {
+.result => |stat| {
+store.data.file.max_size = (if ((bun.isRegularFile(stat.mode) or (stat.size > 0))) @as(SizeType, @truncate(@as(u64, @intCast(@max(stat.size, 0))))) else Blob.max_size);
+                store.data.file.mode = @intCast(stat.mode);
+                store.data.file.seekable = bun.isRegularFile(stat.mode);
+                store.data.file.last_modified = jsc.toJSTime(stat.mtime().sec, stat.mtime().nsec);
+},
+else => {
+
+},
+}
+            }
+        }
+}
+
 pub fn resolveSize(self: *Blob) void {
-    _ = self;
+        if (self.store) |store| {
+            _ = &store;
+            if ((store.data == .bytes)) {
+                const offset = self.offset;
+                const store_size = store.size();
+                if ((store_size != Blob.max_size)) {
+                    self.offset = @min(store_size, offset);
+                    self.size = (store_size - offset);
+                }
+                return;
+            } else {
+                if ((store.data == .file)) {
+                    if ((store.data.file.seekable == null)) {
+                        _ = Blob.resolveFileStat(store);
+                    }
+                    if (((store.data.file.seekable != null) and (store.data.file.max_size != Blob.max_size))) {
+                        const store_size = store.data.file.max_size;
+                        const offset = self.offset;
+                        self.offset = @min(store_size, offset);
+                        self.size = (store_size -| offset);
+                        return;
+                    }
+                    if (((store.data.file.seekable != null) and (store.data.file.seekable.? == false))) {
+                        return;
+                    }
+                }
+            }
+            self.size = 0;
+        } else {
+            self.size = 0;
+        }
 }
 
 pub fn detach(self: *Blob) void {
@@ -879,11 +941,11 @@ pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JS
         const options: ?JSValue = (if ((arguments.len >= 2)) arguments[1] else null);
         if ((path == .path)) {
             if (strings.hasPrefixComptime(path.path.slice(), "s3://")) {
+                defer {
+                _ = path.deinitAndUnprotect();
+                }
                 return jsc.WebCore.S3File.constructInternalJS(globalObject, path.path, options);
             }
-        }
-        defer {
-        _ = path.deinitAndUnprotect();
         }
         var blob = Blob.initWithStore(bun.handleOom(BlobStore.initFile(path, null, default_allocator)), globalObject);
         _ = &blob;
@@ -938,10 +1000,63 @@ pub fn fromURLSearchParams(globalThis: *JSGlobalObject, allocator: std.mem.Alloc
         return Blob.initEmpty(globalThis);
 }
 
-pub fn findOrCreateFileFromPath(pathlike: *jsc.Node.PathOrFileDescriptor, globalThis: *JSGlobalObject, create_if_missing: bool) Blob {
-        _ = &pathlike;
-        _ = &create_if_missing;
-        return Blob.initEmpty(globalThis);
+pub fn findOrCreateFileFromPath(path_or_fd: *jsc.Node.PathOrFileDescriptor, globalThis: *JSGlobalObject, comptime check_s3: bool) Blob {
+        var vm = globalThis.bunVM();
+        _ = &vm;
+        const allocator = default_allocator;
+        if (check_s3) {
+            if ((path_or_fd.* == .path)) {
+                if (strings.startsWith(path_or_fd.path.slice(), "s3://")) {
+                    const credentials = globalThis.bunVM().transpiler.env.getS3Credentials();
+                    const copy = path_or_fd.*;
+                    path_or_fd.* = .{ .path = .{ .string = bun.PathString.empty } };
+                    return Blob.initWithStore(bun.handleOom(BlobStore.initS3(copy.path, null, credentials, allocator)), globalThis);
+                }
+            }
+        }
+        const path: jsc.Node.PathOrFileDescriptor = brk: {
+        if ((path_or_fd.* == .path)) {
+            var s = path_or_fd.path.slice();
+            _ = &s;
+            if ((Environment.isWindows and bun.strings.eqlComptime(s, "/dev/null"))) {
+                _ = path_or_fd.deinit();
+                path_or_fd.* = .{ .path = .{ .string = bun.PathString.init(bun.handleOom(allocator.dupe(u8, "\\\\.\\NUL"))) } };
+                s = path_or_fd.path.slice();
+            }
+            if (vm.standalone_module_graph) |graph| {
+                _ = &graph;
+                if (graph.find(s)) |file| {
+                    _ = &file;
+                    defer {
+                    {
+                        if ((path_or_fd.path != .@"string")) {
+                            _ = path_or_fd.deinit();
+                            path_or_fd.* = .{ .path = .{ .string = bun.PathString.empty } };
+                        }
+                    }
+                    }
+                    return file.blob(globalThis).dupe();
+                }
+            }
+            _ = path_or_fd.toThreadSafe();
+            const copy = path_or_fd.*;
+            path_or_fd.* = .{ .path = .{ .string = bun.PathString.empty } };
+            break :brk copy;
+        } else {
+            if (path_or_fd.fd.stdioTag()) |tag| {
+                _ = &tag;
+                const store: *BlobStore = (switch (tag) {
+.std_in => vm.rareData().stdin(),
+.std_err => vm.rareData().stderr(),
+.std_out => vm.rareData().stdout(),
+});
+                _ = store.ref();
+                return Blob.initWithStore(store, globalThis);
+            }
+            break :brk path_or_fd.*;
+        }
+};
+        return Blob.initWithStore(bun.handleOom(BlobStore.initFile(path, null, allocator)), globalThis);
 }
 
 pub fn toJS(self: *Blob, globalThis: *JSGlobalObject) JSValue {
@@ -962,20 +1077,60 @@ pub fn constructor(globalThis: *JSGlobalObject, _: *CallFrame) JSError!*Blob {
 }
 
 pub fn getArrayBuffer(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        if (self.needsToReadFile()) {
+            return self.doReadFile(toArrayBufferWithBytes, globalThis);
+        }
         return JSPromise.resolvedPromiseValue(globalThis, try jsc.ArrayBuffer.create(globalThis, self.sharedView(), .ArrayBuffer));
 }
 
 pub fn getBytes(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        if (self.needsToReadFile()) {
+            return self.doReadFile(toUint8ArrayWithBytes, globalThis);
+        }
         return JSPromise.resolvedPromiseValue(globalThis, try jsc.ArrayBuffer.create(globalThis, self.sharedView(), .Uint8Array));
 }
 
-pub fn doUnlink(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        _ = self.size;
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.js_undefined);
+pub fn doUnlink(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
+        const arguments = callframe.arguments_old(1).slice();
+        var args = CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
+        _ = &args;
+        defer {
+        _ = args.deinit();
+        }
+        _ = try validateWritableBlob(globalThis, self);
+        const store = self.store.?;
+        if ((store.data == .s3)) {
+            const s3 = (&store.data.s3);
+            return try s3.unlink(store, globalThis, args.nextEat());
+        } else {
+            if ((store.data == .file)) {
+                const file = store.data.file;
+                return file.unlink(globalThis);
+            } else {
+                _ = unreachable;
+            }
+        }
+}
+
+pub fn getExistsSync(self: *Blob) JSValue {
+        if ((self.size == Blob.max_size)) {
+            _ = self.resolveSize();
+        }
+        if ((self.store == null)) {
+            return .true;
+        }
+        const store = self.store.?;
+        if ((store.data == .bytes)) {
+            return .true;
+        }
+        return JSValue.jsBoolean((bun.isRegularFile(store.data.file.mode) or bun.sys.S.ISFIFO(store.data.file.mode)));
 }
 
 pub fn getExists(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsBoolean((self.store != null)));
+        if (self.isS3()) {
+            return jsc.WebCore.S3File.S3BlobStatTask.exists(globalThis, self);
+        }
+        return JSPromise.resolvedPromiseValue(globalThis, self.getExistsSync());
 }
 
 pub fn getFormData(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
@@ -996,47 +1151,259 @@ pub fn create(bytes_: []const u8, allocator_: std.mem.Allocator, globalThis: *JS
         return bun.handleOom(Blob.tryCreate(bytes_, allocator_, globalThis, was_string));
 }
 
+pub fn takeOwnership(self: *Blob) Blob {
+        var result = self.*;
+        _ = &result;
+        self.* = undefined;
+        result.ref_count = .init(0);
+        return result;
+}
+
+pub fn doReadFile(self: *Blob, comptime Function: anytype, global: *JSGlobalObject) JSValue {
+        const Handler = read_file_mod.NewReadFileHandler(Function);
+        var handler = bun.new(Handler, .{ .context = self.dupe(), .globalThis = global });
+        _ = &handler;
+        if (Environment.isWindows) {
+            var promise = JSPromise.create(global);
+            _ = &promise;
+            const promise_value = promise.toJS();
+            _ = promise_value.ensureStillAlive();
+            _ = handler.promise.strong.set(global, promise_value);
+            _ = read_file_mod.ReadFileUV.start(handler.globalThis.bunVM().eventLoop(), self.store.?, self.offset, self.size, Handler, handler);
+            return promise_value;
+        }
+        const file_read = (blk_catch_3: { break :blk_catch_3 ((read_file_mod.ReadFile.create(default_allocator, self.store.?, self.offset, self.size, @TypeOf(handler), handler, Handler.run)) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+        var read_file_task = read_file_mod.ReadFileTask.createOnJSThread(default_allocator, global, file_read);
+        _ = &read_file_task;
+        var promise = JSPromise.create(global);
+        _ = &promise;
+        const promise_value = promise.toJS();
+        _ = promise_value.ensureStillAlive();
+        _ = handler.promise.strong.set(global, promise_value);
+        _ = read_file_task.schedule();
+        return promise_value;
+}
+
+pub fn toStringWithBytes(blob: *Blob, global: *JSGlobalObject, raw_bytes: []const u8, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+        const bom_split = strings.BOM.detectAndSplit(raw_bytes);
+        const bom = bom_split[0];
+        const buf = bom_split[1];
+        if ((buf.len == 0)) {
+            if ((lifetime == .temporary)) {
+                _ = default_allocator.free(raw_bytes);
+            }
+            return ZigString.Empty.toJS(global);
+        }
+        if ((bom == .utf16_le)) {
+            defer {
+            if ((lifetime == .temporary)) {
+                _ = default_allocator.free(raw_bytes);
+            }
+            }
+            var out = String.cloneUTF16(bun.reinterpretSlice(u16, buf));
+            _ = &out;
+            defer {
+            _ = out.deref();
+            }
+            return out.toJS(global);
+        }
+        const blob_ascii: ?bool = (switch (blob.charset) {
+.all_ascii => true,
+.non_ascii => false,
+.unknown => null,
+});
+        const could_be_all_ascii = ((blob_ascii) orelse (blob.store.?.is_all_ascii));
+        if (((could_be_all_ascii == null) or (!could_be_all_ascii.?))) {
+            if ((blk_catch_4: { break :blk_catch_4 ((strings.toUTF16Alloc(default_allocator, buf, false, false)) catch |__ce_4| { _ = &__ce_4; return global.throwOutOfMemory(); }); })) |external| {
+                _ = &external;
+                if ((lifetime != .temporary)) {
+                    blob.charset = .fromBool(false);
+                }
+                if ((lifetime == .transfer)) {
+                    _ = blob.detach();
+                }
+                if ((lifetime == .temporary)) {
+                    _ = default_allocator.free(raw_bytes);
+                }
+                return ZigString.toExternalU16(external.ptr, external.len, global);
+            }
+            if ((lifetime != .temporary)) {
+                blob.charset = .fromBool(true);
+            }
+        }
+        switch ((comptime lifetime)) {
+.clone, .share => {
+_ = blob.store.?.ref();
+        return ZigString.init(buf).external(global, blob.store.?, BlobStore.external);
+},
+.transfer => {
+const store = blob.store.?;
+        _ = bun.assert((store.data == .bytes));
+        _ = blob.transfer();
+        return ZigString.init(buf).external(global, store, BlobStore.external);
+},
+.temporary => {
+if ((buf.len != raw_bytes.len)) {
+            var out = String.cloneLatin1(buf);
+            _ = &out;
+            defer {
+            {
+                _ = default_allocator.free(raw_bytes);
+                _ = out.deref();
+            }
+            }
+            return out.toJS(global);
+        }
+        return ZigString.init(buf).toExternalValue(global);
+},
+}
+}
+
+pub fn toJSONWithBytes(blob: *Blob, global: *JSGlobalObject, raw_bytes: []const u8, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+        const bom_split = strings.BOM.detectAndSplit(raw_bytes);
+        const bom = bom_split[0];
+        const buf = bom_split[1];
+        if ((buf.len == 0)) {
+            if ((lifetime == .temporary)) {
+                _ = default_allocator.free(raw_bytes);
+            }
+            return global.createSyntaxErrorInstance("Unexpected end of JSON input", .{});
+        }
+        if ((bom == .utf16_le)) {
+            var out = String.cloneUTF16(bun.reinterpretSlice(u16, buf));
+            _ = &out;
+            defer {
+            if ((lifetime == .temporary)) {
+                _ = default_allocator.free(raw_bytes);
+            }
+            }
+            defer {
+            if ((lifetime == .transfer)) {
+                _ = blob.detach();
+            }
+            }
+            defer {
+            _ = out.deref();
+            }
+            return out.toJSByParseJSON(global);
+        }
+        const blob_ascii: ?bool = (switch (blob.charset) {
+.all_ascii => true,
+.non_ascii => false,
+.unknown => null,
+});
+        const could_be_all_ascii = ((blob_ascii) orelse (blob.store.?.is_all_ascii));
+        defer {
+        if (comptime (lifetime == .temporary)) {
+            _ = default_allocator.free(raw_bytes);
+        }
+        }
+        if (((could_be_all_ascii == null) or (!could_be_all_ascii.?))) {
+            var stack_fallback = std.heap.stackFallback(4096, default_allocator);
+            _ = &stack_fallback;
+            const allocator = stack_fallback.get();
+            if ((blk_catch_5: { break :blk_catch_5 ((strings.toUTF16Alloc(allocator, buf, false, false)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); })) |external| {
+                _ = &external;
+                if (comptime (lifetime != .temporary)) {
+                    blob.charset = .fromBool(false);
+                }
+                const result = ZigString.initUTF16(external).toJSONObject(global);
+                _ = allocator.free(external);
+                return result;
+            }
+            if (comptime (lifetime != .temporary)) {
+                blob.charset = .fromBool(true);
+            }
+        }
+        return ZigString.init(buf).toJSONObject(global);
+}
+
+pub fn toArrayBufferWithBytes(blob: *Blob, global: *JSGlobalObject, buf: []u8, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+        return toArrayBufferViewWithBytes(blob, global, buf, lifetime, .ArrayBuffer);
+}
+
+pub fn toUint8ArrayWithBytes(blob: *Blob, global: *JSGlobalObject, buf: []u8, comptime lifetime: webcore.Lifetime) JSError!JSValue {
+        return toArrayBufferViewWithBytes(blob, global, buf, lifetime, .Uint8Array);
+}
+
+pub fn toArrayBufferViewWithBytes(blob: *Blob, global: *JSGlobalObject, buf: []u8, comptime lifetime: webcore.Lifetime, comptime TypedArrayView: JSValue.JSType) JSError!JSValue {
+        switch ((comptime lifetime)) {
+.clone => {
+if (((TypedArrayView != .ArrayBuffer) and (buf.len > jsc.VirtualMachine.synthetic_allocation_limit))) {
+            _ = blob.detach();
+            return global.throwOutOfMemory();
+        }
+        return jsc.ArrayBuffer.create(global, buf, TypedArrayView);
+},
+.share => {
+if (((buf.len > jsc.VirtualMachine.synthetic_allocation_limit) and (TypedArrayView != .ArrayBuffer))) {
+            return global.throwOutOfMemory();
+        }
+        _ = blob.store.?.ref();
+        var ab = jsc.ArrayBuffer.fromBytes(buf, TypedArrayView);
+        _ = &ab;
+        return ab.toJSWithContext(global, blob.store.?, jsc.array_buffer.BlobArrayBuffer_deallocator);
+},
+.transfer => {
+if (((buf.len > jsc.VirtualMachine.synthetic_allocation_limit) and (TypedArrayView != .ArrayBuffer))) {
+            _ = blob.detach();
+            return global.throwOutOfMemory();
+        }
+        const store = blob.store.?;
+        _ = blob.transfer();
+        var ab = jsc.ArrayBuffer.fromBytes(buf, TypedArrayView);
+        _ = &ab;
+        return ab.toJSWithContext(global, store, jsc.array_buffer.BlobArrayBuffer_deallocator);
+},
+.temporary => {
+if (((buf.len > jsc.VirtualMachine.synthetic_allocation_limit) and (TypedArrayView != .ArrayBuffer))) {
+            _ = default_allocator.free(buf);
+            return global.throwOutOfMemory();
+        }
+        var ab = jsc.ArrayBuffer.fromBytes(buf, TypedArrayView);
+        _ = &ab;
+        return ab.toJS(global);
+},
+}
+}
+
 pub fn toString(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
-    _ = lifetime;
-        if ((self.needsToReadFile() or self.isS3())) {
-            return global.throwTODO("Blob.toString for file/S3 blobs is not yet ported");
+        if (self.needsToReadFile()) {
+            return self.doReadFile(toStringWithBytes, global);
+        }
+        if (self.isS3()) {
+            return global.throwTODO("Blob.toString for S3 blobs is not yet ported");
         }
         const view = self.sharedView();
         if ((view.len == 0)) {
             return ZigString.Empty.toJS(global);
         }
-        var str = String.cloneUTF8(view);
-        _ = &str;
-        defer {
-        _ = str.deref();
-        }
-        return str.toJS(global);
+        return Blob.toStringWithBytes(self, global, view, lifetime);
 }
 
 pub fn toJSON(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) JSError!JSValue {
-    _ = lifetime;
-        if ((self.needsToReadFile() or self.isS3())) {
-            return global.throwTODO("Blob.toJSON for file/S3 blobs is not yet ported");
+        if (self.needsToReadFile()) {
+            return self.doReadFile(toJSONWithBytes, global);
         }
-        var str = String.cloneUTF8(self.sharedView());
-        _ = &str;
-        defer {
-        _ = str.deref();
+        if (self.isS3()) {
+            return global.throwTODO("Blob.toJSON for S3 blobs is not yet ported");
         }
-        return str.toJSByParseJSON(global);
+        return Blob.toJSONWithBytes(self, global, self.sharedView(), lifetime);
 }
 
 pub fn toArrayBufferView(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime, comptime TypedArrayView: JSValue.JSType) JSError!JSValue {
-    _ = lifetime;
-        if ((self.needsToReadFile() or self.isS3())) {
-            return global.throwTODO("Blob.toArrayBufferView for file/S3 blobs is not yet ported");
+        const WithBytesFn = (comptime (if ((TypedArrayView == .Uint8Array)) toUint8ArrayWithBytes else toArrayBufferWithBytes));
+        if (self.needsToReadFile()) {
+            return self.doReadFile(WithBytesFn, global);
+        }
+        if (self.isS3()) {
+            return global.throwTODO("Blob.toArrayBufferView for S3 blobs is not yet ported");
         }
         const view = self.sharedView();
         if ((view.len == 0)) {
             return jsc.ArrayBuffer.create(global, "", TypedArrayView);
         }
-        const copy = bun.handleOom(bun.default_allocator.dupe(u8, view));
-        return ArrayBuffer.fromDefaultAllocator(global, copy, TypedArrayView);
+        return Blob.toArrayBufferViewWithBytes(self, global, @constCast(view), lifetime, TypedArrayView);
 }
 
 pub fn getFileName(self: Blob) ?[]const u8 {
@@ -1096,6 +1463,9 @@ pub fn needsToReadFile(self: Blob) bool {
 }
 
 pub fn getJSON(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        if (self.needsToReadFile()) {
+            return self.doReadFile(toJSONWithBytes, globalThis);
+        }
         var str = String.cloneUTF8(self.sharedView());
         _ = &str;
         defer {
@@ -1137,21 +1507,124 @@ pub fn getSize(self: *Blob, _: *JSGlobalObject) JSValue {
             if (self.isS3()) {
                 return JSValue.jsNumber(std.math.nan(f64));
             }
-            return JSValue.jsNumber(0);
+            _ = self.resolveSize();
+            if (((self.size == Blob.max_size) and (self.store != null))) {
+                return .jsNumber(std.math.inf(f64));
+            } else {
+                if (((self.size == 0) and (self.store != null))) {
+                    if ((((self.store.?.data == .file) and (((self.store.?.data.file.seekable) orelse (true)) == false)) and (self.store.?.data.file.max_size == Blob.max_size))) {
+                        return .jsNumber(std.math.inf(f64));
+                    }
+                }
+            }
         }
         return JSValue.jsNumber(self.size);
 }
 
-pub fn getSlice(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        var copy = self.dupe();
-        _ = &copy;
-        return Blob.new(copy).toJS(globalThis);
+pub fn getSlice(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
+        const allocator = default_allocator;
+        var arguments_ = callframe.arguments_old(3);
+        _ = &arguments_;
+        var args = arguments_.ptr[0..arguments_.len];
+        _ = &args;
+        if ((self.size == 0)) {
+            const empty = Blob.initEmpty(globalThis);
+            var slice_blob = Blob.new(empty);
+            _ = &slice_blob;
+            return slice_blob.toJS(globalThis);
+        }
+        var relativeStart: i64 = 0;
+        _ = &relativeStart;
+        var relativeEnd: i64 = @as(i64, @intCast(self.size));
+        _ = &relativeEnd;
+        if (args.ptr[0].isString()) {
+            args.ptr[cp_cast_int(usize, 2)] = args.ptr[0];
+            args.ptr[cp_cast_int(usize, 1)] = .zero;
+            args.ptr[cp_cast_int(usize, 0)] = .zero;
+            args.len = 3;
+        } else {
+            if (args.ptr[1].isString()) {
+                args.ptr[cp_cast_int(usize, 2)] = args.ptr[1];
+                args.ptr[cp_cast_int(usize, 1)] = .zero;
+                args.len = 3;
+            }
+        }
+        var args_iter = CallFrame.ArgumentsSlice.init(globalThis.bunVM(), args);
+        _ = &args_iter;
+        if (args_iter.nextEat()) |start_| {
+            _ = &start_;
+            if (start_.isNumber()) {
+                const start = start_.toInt64();
+                if ((start < 0)) {
+                    relativeStart = @as(i64, @intCast(@max((start +% @as(i64, @intCast(self.size))), 0)));
+                } else {
+                    relativeStart = @min(@as(i64, @intCast(start)), @as(i64, @intCast(self.size)));
+                }
+            }
+        }
+        if (args_iter.nextEat()) |end_| {
+            _ = &end_;
+            if (end_.isNumber()) {
+                const end = end_.toInt64();
+                if ((end < 0)) {
+                    relativeEnd = @as(i64, @intCast(@max((end +% @as(i64, @intCast(self.size))), 0)));
+                } else {
+                    relativeEnd = @min(@as(i64, @intCast(end)), @as(i64, @intCast(self.size)));
+                }
+            }
+        }
+        var content_type: []const u8 = "";
+        _ = &content_type;
+        var content_type_was_allocated = false;
+        _ = &content_type_was_allocated;
+        if (args_iter.nextEat()) |content_type_| {
+            _ = &content_type_;
+            if (content_type_.isString()) {
+                var zig_str = try content_type_.getZigString(globalThis);
+                _ = &zig_str;
+                var slicer = zig_str.toSlice(default_allocator);
+                _ = &slicer;
+                defer {
+                _ = slicer.deinit();
+                }
+                const s = slicer.slice();
+                if (strings.isAllASCII(s)) {
+                    if (globalThis.bunVM().mimeType(s)) |mime| {
+                        _ = &mime;
+                        content_type = (if (@typeInfo(@TypeOf(mime)) == .@"enum") @intFromEnum(mime) else mime.value);
+                    } else {
+                        content_type_was_allocated = (s.len > 0);
+                        const content_type_buf = bun.handleOom(allocator.alloc(u8, s.len));
+                        content_type = strings.copyLowercase(s, content_type_buf);
+                    }
+                }
+            }
+        }
+        return self.getSliceFrom(globalThis, relativeStart, relativeEnd, content_type, content_type_was_allocated);
 }
 
-pub fn getStat(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        _ = self.size;
-        _ = &globalThis;
-        return JSValue.js_undefined;
+pub fn getStat(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
+        if ((self.store == null)) {
+            return JSValue.js_undefined;
+        }
+        const store = self.store.?;
+        if ((store.data == .file)) {
+            const file = (&store.data.file);
+            if ((file.pathlike == .path)) {
+                const path_like = file.pathlike.path;
+                const encoded = (if ((path_like == .encoded_slice)) try path_like.encoded_slice.toOwned(default_allocator) else try ZigString.fromUTF8(path_like.slice()).toSliceClone(default_allocator));
+                return bun.api.node.fs.Async.stat.create(globalThis, undefined, .{ .path = .{ .encoded_slice = encoded } }, globalThis.bunVM());
+            } else {
+                const fd = file.pathlike.fd;
+                return bun.api.node.fs.Async.fstat.create(globalThis, undefined, .{ .fd = fd }, globalThis.bunVM());
+            }
+        } else {
+            if ((store.data == .s3)) {
+                return jsc.WebCore.S3File.getStat(self, globalThis, callframe);
+            } else {
+                return JSValue.js_undefined;
+            }
+        }
 }
 
 pub fn getStream(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
@@ -1159,6 +1632,9 @@ pub fn getStream(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSErro
 }
 
 pub fn getText(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
+        if (self.needsToReadFile()) {
+            return self.doReadFile(toStringWithBytes, globalThis);
+        }
         const str = try String.createUTF8ForJS(globalThis, self.sharedView());
         return JSPromise.resolvedPromiseValue(globalThis, str);
 }
@@ -1170,9 +1646,69 @@ pub fn getType(self: *Blob, globalThis: *JSGlobalObject) JSValue {
         return ZigString.Empty.toJS(globalThis);
 }
 
-pub fn doWrite(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        _ = self.size;
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+pub fn doWrite(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
+        const arguments = callframe.arguments_old(3).slice();
+        var args = CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
+        _ = &args;
+        defer {
+        _ = args.deinit();
+        }
+        _ = try validateWritableBlob(globalThis, self);
+        const data = ((args.nextEat()) orelse {
+        return globalThis.throwInvalidArguments("blob.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
+});
+        if (data.isEmptyOrUndefinedOrNull()) {
+            return globalThis.throwInvalidArguments("blob.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
+        }
+        var mkdirp_if_not_exists: ?bool = null;
+        _ = &mkdirp_if_not_exists;
+        const options = args.nextEat();
+        if (options) |options_object| {
+            _ = &options_object;
+            if (options_object.isObject()) {
+                if (try options_object.getTruthy(globalThis, "createPath")) |create_directory| {
+                    _ = &create_directory;
+                    if ((!create_directory.isBoolean())) {
+                        return globalThis.throwInvalidArgumentType("write", "options.createPath", "boolean");
+                    }
+                    mkdirp_if_not_exists = create_directory.toBoolean();
+                }
+                if (try options_object.getTruthy(globalThis, "type")) |content_type| {
+                    _ = &content_type;
+                    if ((!content_type.isString())) {
+                        return globalThis.throwInvalidArgumentType("write", "options.type", "string");
+                    }
+                    var content_type_str = try content_type.toSlice(globalThis, default_allocator);
+                    _ = &content_type_str;
+                    defer {
+                    _ = content_type_str.deinit();
+                    }
+                    const s = content_type_str.slice();
+                    if (strings.isAllASCII(s)) {
+                        if (self.content_type_allocated) {
+                            _ = default_allocator.free(self.content_type);
+                            self.content_type_allocated = false;
+                        }
+                        self.content_type_was_set = true;
+                        if (globalThis.bunVM().mimeType(s)) |mime| {
+                            _ = &mime;
+                            self.content_type = (if (@typeInfo(@TypeOf(mime)) == .@"enum") @intFromEnum(mime) else mime.value);
+                        } else {
+                            const content_type_buf = bun.handleOom(default_allocator.alloc(u8, s.len));
+                            self.content_type = strings.copyLowercase(s, content_type_buf);
+                            self.content_type_allocated = true;
+                        }
+                    }
+                }
+            } else {
+                if ((!options_object.isEmptyOrUndefinedOrNull())) {
+                    return globalThis.throwInvalidArgumentType("write", "options", "object");
+                }
+            }
+        }
+        var blob_internal = PathOrBlob{ .blob = self.* };
+        _ = &blob_internal;
+        return writeFileInternal(globalThis, (&blob_internal), data, .{ .mkdirp_if_not_exists = mkdirp_if_not_exists, .extra_options = options });
 }
 
 pub fn getWriter(self: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
@@ -1660,7 +2196,7 @@ pub fn pipeReadableStreamToBlob(self: *Blob, globalThis: *JSGlobalObject, readab
         _ = &store;
         if (self.isS3()) {
             const s3 = (&self.store.?.data.s3);
-            var aws_options = (blk_catch_3: { break :blk_catch_3 ((s3.getCredentialsWithOptions(extra_options, globalThis)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e)); }); });
+            var aws_options = (blk_catch_6: { break :blk_catch_6 ((s3.getCredentialsWithOptions(extra_options, globalThis)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e)); }); });
             _ = &aws_options;
             defer {
             _ = aws_options.deinit();
@@ -2076,7 +2612,7 @@ _ = fd.close();
         }
 },
 .s3 => |*s3| {
-var aws_options = (blk_catch_4: { break :blk_catch_4 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+var aws_options = (blk_catch_7: { break :blk_catch_7 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
         _ = &aws_options;
         defer {
         _ = aws_options.deinit();
@@ -2151,7 +2687,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                 const promise_value = promise.asValue(ctx);
                 _ = promise_value.ensureStillAlive();
                 _ = write_file_promise.promise.strong.set(ctx, promise_value);
-                _ = (blk_catch_5: { break :blk_catch_5 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
+                _ = (blk_catch_8: { break :blk_catch_8 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
                     return error.JSTerminated;
                 } }); });
                 return promise_value;
@@ -2196,7 +2732,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         } else {
                             if ((destination_type == .s3)) {
                                 const s3 = (&destination_store.data.s3);
-                                var aws_options = (blk_catch_7: { break :blk_catch_7 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+                                var aws_options = (blk_catch_10: { break :blk_catch_10 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
                                 _ = &aws_options;
                                 defer {
                                 _ = aws_options.deinit();
@@ -2285,7 +2821,7 @@ pub fn writeStringToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Pat
                 needs_async.* = true;
                 return .zero;
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_8: { break :blk_catch_8 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_11: { break :blk_catch_11 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_11| { _ = &__ce_11; return .zero; }); }));
         }
 },
 });
@@ -2331,9 +2867,9 @@ truncate = false;
                     return .zero;
                 }
                 if (comptime (!needs_open)) {
-                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_9: { break :blk_catch_9 ((e.toJS(globalThis)) catch |__ce_9| { _ = &__ce_9; return .zero; }); }));
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_12: { break :blk_catch_12 ((e.toJS(globalThis)) catch |__ce_12| { _ = &__ce_12; return .zero; }); }));
                 }
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_10: { break :blk_catch_10 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_10| { _ = &__ce_10; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_13: { break :blk_catch_13 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_13| { _ = &__ce_13; return .zero; }); }));
 },
 }
             }
@@ -2355,7 +2891,7 @@ pub fn writeBytesToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Path
                     return .zero;
                 }
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_11: { break :blk_catch_11 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_11| { _ = &__ce_11; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_14: { break :blk_catch_14 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_14| { _ = &__ce_14; return .zero; }); }));
         }
 },
 });
@@ -2390,9 +2926,9 @@ if ((!Environment.isWindows)) {
                 }
             }
             if (comptime (!needs_open)) {
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_12: { break :blk_catch_12 ((e.toJS(globalThis)) catch |__ce_12| { _ = &__ce_12; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_15: { break :blk_catch_15 ((e.toJS(globalThis)) catch |__ce_15| { _ = &__ce_15; return .zero; }); }));
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_13: { break :blk_catch_13 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_13| { _ = &__ce_13; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_16: { break :blk_catch_16 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_16| { _ = &__ce_16; return .zero; }); }));
 },
 }
         }
@@ -2970,7 +3506,7 @@ blob.name = name_value_str.dupeRef();
 }
 
 pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) ?*Blob {
-        return (blk_catch_14: { break :blk_catch_14 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        return (blk_catch_17: { break :blk_catch_17 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             if ((globalThis.throwOutOfMemory() == error.JSError)) {
             }
         }

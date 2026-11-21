@@ -101,7 +101,7 @@ pub struct LibInfo {
                 dns_res.pending_host_cache_native.buffer[pos] = undefined;
                 dns_res.pending_host_cache_native.used.unset(pos);
             }
-            request.head.release();
+            request.head.releaseInternal();
             dns_res.vm.allocator.destroy(request);
             return promise_value;
         }
@@ -516,12 +516,12 @@ pub struct CAresNameInfo {
     pub fn processResolve(_: *@This(), err_: c_ares.Error?, _: i32, result: c_ares.struct_nameinfo?) {
         if (err := err_) {
             err.toDeferred("getnameinfo", _.name, &_.promise).rejectLater(_.globalThis);
-            _.release();
+            _.releaseInternal();
             return;
         }
         if (result == null) {
             c_ares.Error.ENOTFOUND.toDeferred("getnameinfo", _.name, &_.promise).rejectLater(_.globalThis);
-            _.release();
+            _.releaseInternal();
             return;
         }
         let name_info = result.?;
@@ -534,10 +534,10 @@ pub struct CAresNameInfo {
         const globalThis = _.globalThis;
         _.promise = .{};
         promise.resolveTask(globalThis, result) catch {};
-        _.release();
+        _.releaseInternal();
     }
 
-    pub fn release(_: *@This()) {
+    pub fn releaseInternal(_: *@This()) {
         _.poll_ref.unref(_.globalThis.bunVM());
         bun.default_allocator.free(_.name);
         if (_.allocated) {
@@ -546,7 +546,7 @@ pub struct CAresNameInfo {
     }
 
     pub fn deinit(_: *@This()) {
-        _.release();
+        _.releaseInternal();
     }
 }
 
@@ -923,12 +923,12 @@ pub struct CAresReverse {
     pub fn processResolve(_: *@This(), err_: c_ares.Error?, _: i32, result: (*c_ares.struct_hostent)?) {
         if (err := err_) {
             err.toDeferred("getHostByAddr", _.name, &_.promise).rejectLater(_.globalThis);
-            _.release();
+            _.releaseInternal();
             return;
         }
         if (result == null) {
             c_ares.Error.ENOTFOUND.toDeferred("getHostByAddr", _.name, &_.promise).rejectLater(_.globalThis);
-            _.release();
+            _.releaseInternal();
             return;
         }
         let node = result.?;
@@ -944,10 +944,10 @@ pub struct CAresReverse {
         if (resolver := _.resolver) {
             resolver.requestCompleted();
         }
-        _.release();
+        _.releaseInternal();
     }
 
-    pub fn release(_: *@This()) {
+    pub fn releaseInternal(_: *@This()) {
         _.poll_ref.unref(_.globalThis.bunVM());
         bun.default_allocator.free(_.name);
         if (resolver := _.resolver) {
@@ -959,7 +959,7 @@ pub struct CAresReverse {
     }
 
     pub fn deinit(_: *@This()) {
-        _.release();
+        _.releaseInternal();
     }
 }
 
@@ -1005,12 +1005,12 @@ pub fn CAresLookup(comptime cares_type: type, comptime type_name: []const u8): t
 
             if (err_) |err| {
                 err.toDeferred(syscall, self.name, &self.promise).rejectLater(self.globalThis);
-                self.release();
+                self.releaseInternal();
                 return;
             }
             if (result == null) {
                 c_ares.Error.ENOTFOUND.toDeferred(syscall, self.name, &self.promise).rejectLater(self.globalThis);
-                self.release();
+                self.releaseInternal();
                 return;
             }
 
@@ -1027,10 +1027,10 @@ pub fn CAresLookup(comptime cares_type: type, comptime type_name: []const u8): t
             if (self.resolver) |resolver| {
                 resolver.requestCompleted();
             }
-            self.release();
+            self.releaseInternal();
         }
 
-        pub fn release(self: *@This()) void {
+        pub fn releaseInternal(self: *@This()) void {
             self.poll_ref.unref(self.globalThis.bunVM());
             bun.default_allocator.free(self.name);
             if (self.resolver) |resolver| {
@@ -1042,7 +1042,7 @@ pub fn CAresLookup(comptime cares_type: type, comptime type_name: []const u8): t
         }
 
         pub fn deinit(self: *@This()) void {
-            self.release();
+            self.releaseInternal();
         }
     };
 }
@@ -1083,7 +1083,7 @@ pub struct DNSLookup {
         log("processGetAddrInfoNative: status={d}", .{status});
         if (err := c_ares.Error.initEAI(status)) {
             err.toDeferred("getaddrinfo", null, &_.promise).rejectLater(_.globalThis);
-            _.release();
+            _.releaseInternal();
             return;
         }
         _.onCompleteNative(.{ .addrinfo = result });
@@ -1095,13 +1095,13 @@ pub struct DNSLookup {
 
         if (err := err_) {
             err.toDeferred("getaddrinfo", null, &_.promise).rejectLater(_.globalThis);
-            _.release();
+            _.releaseInternal();
             return;
         }
 
         if (result == null or result.?.node == null) {
             c_ares.Error.ENOTFOUND.toDeferred("getaddrinfo", null, &_.promise).rejectLater(_.globalThis);
-            _.release();
+            _.releaseInternal();
             return;
         }
         _.onComplete(result.?);
@@ -1122,10 +1122,10 @@ pub struct DNSLookup {
         if (resolver := _.resolver) {
             resolver.requestCompleted();
         }
-        _.release();
+        _.releaseInternal();
     }
 
-    pub fn release(_: *DNSLookup) {
+    pub fn releaseInternal(_: *DNSLookup) {
         log("release", .{});
         _.poll_ref.unref(_.globalThis.bunVM());
         if (resolver := _.resolver) {
@@ -1137,7 +1137,7 @@ pub struct DNSLookup {
     }
 
     pub fn deinit(_: *DNSLookup) {
-        _.release();
+        _.releaseInternal();
     }
 }
 
@@ -1280,7 +1280,7 @@ pub struct InternalRequest {
         return false;
     }
 
-    pub fn release(_: *@This()) {
+    pub fn releaseInternal(_: *@This()) {
         bun.assert(_.notify.items.len == 0);
         if (res := _.result) {
             if (info := res.info) {
@@ -1294,7 +1294,7 @@ pub struct InternalRequest {
     }
 
     pub fn deinit(_: *@This()) {
-        _.release();
+        _.releaseInternal();
     }
 }
 
@@ -1973,7 +1973,7 @@ pub struct Resolver {
         _.deref();
     }
 
-    pub fn release(_: *Resolver) {
+    pub fn releaseInternal(_: *Resolver) {
         if (channel := _.channel) {
             channel.deinit();
         }
@@ -1981,7 +1981,7 @@ pub struct Resolver {
     }
 
     pub fn deinit(_: *Resolver) {
-        _.release();
+        _.releaseInternal();
     }
 
     pub const Order = enum(u8) {

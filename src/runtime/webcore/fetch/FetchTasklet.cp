@@ -315,7 +315,7 @@ export class FetchTasklet {
             return response;
         }
 
-        if (response_js := @TypeOf(_.response).get()) {
+        if (response_js := _.response.get()) {
             if (response := response_js.as(Response)) {
                 return response;
             }

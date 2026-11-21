@@ -483,7 +483,7 @@ pub fn getCurrentResponse(self: *FetchTasklet) ?*Response {
                 _ = &response;
                 return response;
             }
-            if (@TypeOf(self.response).get()) |response_js| {
+            if (self.response.get()) |response_js| {
                 _ = &response_js;
                 if (response_js.as(Response)) |response| {
                     _ = &response;

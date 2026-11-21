@@ -8,9 +8,9 @@ import { Loop } from "./Loop.cp";
 import { SocketKind } from "./SocketKind.cp";
 import { us_socket_t } from "./us_socket_t.cp";
 
-pub type OnOpenFn = @c fn (*us_socket_t, i32, [*]u8!, i32): (*us_socket_t)?;
+pub type OnOpenFn = @c fn (*us_socket_t, i32, [*c]u8, i32): (*us_socket_t)?;
 pub type OptOnOpenFn = OnOpenFn?;
-pub type OnDataFn = @c fn (*us_socket_t, [*]u8!, i32): (*us_socket_t)?;
+pub type OnDataFn = @c fn (*us_socket_t, [*c]u8, i32): (*us_socket_t)?;
 pub type OptOnDataFn = OnDataFn?;
 pub type OnFdFn = @c fn (*us_socket_t, i32): (*us_socket_t)?;
 pub type OptOnFdFn = OnFdFn?;

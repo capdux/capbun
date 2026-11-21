@@ -342,9 +342,7 @@ pub fn registerAbortTracker(
 fn unregisterAbortTracker(
     client: *HTTPClient,
 ) {
-    if (client.signals.aborted != null) {
-        socket_async_http_abort_tracker.swapRemove(client.async_http_id);
-    }
+    * = socket_async_http_abort_tracker.swapRemove(client.async_http_id);
 }
 
 pub fn onOpen(
@@ -1279,7 +1277,7 @@ export @root @value struct HTTPClient {
             // We have to be careful here because if .connect() had finished
             // synchronously, then this socket is on longer valid and the pointer points
             // to invalid memory.
-            if (this.state.request_stage == .pending) {
+            if (!socket.isClosed() && this.state.request_stage == .pending) {
                 this.registerAbortTracker(is_ssl, socket);
             }
         }

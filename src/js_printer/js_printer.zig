@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -1217,23 +1217,113 @@ pub fn @"print = "(p: *Printer) void {
             }
     }
 
-pub fn printGlobalBunImportStatement(p: *Printer, import: S.Import) void {
-        _ = p;
-        _ = import;
+pub fn printGlobalBunImportStatement(p: *Printer, imp: S.Import) void {
             if (comptime (!is_bun_platform)) {
                 _ = unreachable;
             }
+            _ = printInternalBunImport(p, imp, @TypeOf("globalThis.Bun"), "globalThis.Bun");
     }
 
-pub fn printInternalBunImport(p: *Printer, import: S.Import, comptime Statement: type, statement: Statement) void {
-        _ = import;
-        _ = statement;
+pub fn printInternalBunImport(p: *Printer, imp: S.Import, comptime Statement: type, statement: Statement) void {
             if (comptime (!is_bun_platform)) {
                 _ = unreachable;
+            }
+            if ((imp.star_name_loc != null)) {
+                _ = p.print("var ");
+                _ = p.printSymbol(imp.namespace_ref);
+                _ = p.printSpace();
+                _ = p.print("=");
+                _ = p.printSpaceBeforeIdentifier();
+                if (comptime (Statement == void)) {
+                    const empty_exprs: [0]Expr = undefined;
+                    _ = p.printRequireOrImportExpr(imp.import_record_index, false, empty_exprs[0..0], Expr.empty, Level.lowest, ExprFlag.Set.initEmpty());
+                } else {
+                    _ = p.print(statement);
+                }
+                _ = p.printSemicolonAfterStatement();
+                _ = p.printIndent();
+            }
+            if (imp.default_name) |def_item| {
+                _ = &def_item;
+                _ = p.printSemicolonIfNeeded();
+                _ = p.print("var ");
+                _ = p.printSymbol(def_item.ref.?);
+                if (comptime (Statement == void)) {
+                    _ = p.@"print = "();
+                    const empty_exprs: [0]Expr = undefined;
+                    _ = p.printRequireOrImportExpr(imp.import_record_index, false, empty_exprs[0..0], Expr.empty, Level.lowest, ExprFlag.Set.initEmpty());
+                } else {
+                    _ = p.@"print = "();
+                    _ = p.print(statement);
+                }
+                _ = p.printSemicolonAfterStatement();
+            }
+            if ((imp.items.len > 0)) {
+                _ = p.printSemicolonIfNeeded();
+                _ = p.printWhitespacer(ws("var {"));
+                if ((!imp.is_single_line)) {
+                    _ = p.printNewline();
+                    _ = p.indent();
+                    _ = p.printIndent();
+                }
+                var i: usize = 0;
+                _ = &i;
+                for (imp.items) |item| {
+                    _ = &item;
+                    defer {
+                    i = (i + 1);
+                    }
+                    if ((i > 0)) {
+                        _ = p.print(",");
+                        _ = p.printSpace();
+                        if ((!imp.is_single_line)) {
+                            _ = p.printNewline();
+                            _ = p.printIndent();
+                        }
+                    }
+                    _ = p.printClauseItemAs(item, .@"var");
+                }
+                if ((!imp.is_single_line)) {
+                    _ = p.printNewline();
+                    _ = p.unindent();
+                } else {
+                    _ = p.printSpace();
+                }
+                _ = p.printWhitespacer(ws("} = "));
+                if (((imp.star_name_loc == null) and (imp.default_name == null))) {
+                    if (comptime (Statement == void)) {
+                        const empty_exprs: [0]Expr = undefined;
+                        _ = p.printRequireOrImportExpr(imp.import_record_index, false, empty_exprs[0..0], Expr.empty, Level.lowest, ExprFlag.Set.initEmpty());
+                    } else {
+                        _ = p.print(statement);
+                    }
+                } else {
+                    if (imp.default_name) |name| {
+                        _ = &name;
+                        _ = p.printSymbol(name.ref.?);
+                    } else {
+                        _ = p.printSymbol(imp.namespace_ref);
+                    }
+                }
+                _ = p.printSemicolonAfterStatement();
             }
             if (may_have_module_info) {
                 if (p.moduleInfo()) |mi| {
                     _ = &mi;
+                    if ((imp.star_name_loc != null)) {
+                        const name = p.renamer.nameForSymbol(imp.namespace_ref);
+                        _ = bun.handleOom(mi.addVar(bun.handleOom(mi.str(name)), .declared));
+                    }
+                    if (imp.default_name) |def_item| {
+                        _ = &def_item;
+                        const name = p.renamer.nameForSymbol(def_item.ref.?);
+                        _ = bun.handleOom(mi.addVar(bun.handleOom(mi.str(name)), .declared));
+                    }
+                    for (imp.items) |item| {
+                        _ = &item;
+                        const name = p.renamer.nameForSymbol((if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref.?);
+                        _ = bun.handleOom(mi.addVar(bun.handleOom(mi.str(name)), .declared));
+                    }
                 }
             }
     }
