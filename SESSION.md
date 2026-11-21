@@ -117,3 +117,7 @@
   - 修复 `src/runtime/node/node_fs.cp:5624` `req.ptrAs(([*:0]u8)?)` 被误生成为 `try [*:0]u8` 问题（全仓扫描确认仅此一处）；
   - 完成剩余 5 个次级跨作用域对象 `release()` → `releaseInternal` 重命名（`S3Stat.cp`、`ObjectURLRegistry.cp`、`s3/error_jsc.cp`、`SocketAddress.cp`、`us_socket_t.cp`），均通过 `cpc_brief.py` 4 项门禁；
   - `test/cli/{init,inspect,watch}` 扫描完成：**17 pass, 2 todo, 7 fail, 0 crash**。
+- **[2026-11-21 21:53] 收到 `cp_agy` 结单通知 `task-bun-20261121-coalesce-break-label` 并验收 ack**：`cpc` 已修复 `?? break :label [val]` / `?? continue :label`、`orelse` 终结符及带标签 `for`/`while` 前缀输出（`parser/expr.rs`, `codegen/expr/error_flow.rs`, `codegen/stmt.rs`）；已用新版 `cpc --lib` 验证 `repro_coalesce_break.cp`（成功生成 `loop: for ... consume(((x) orelse break :loop));`）并重编 `src/install/npm.cp`。
+- **[2026-11-21 22:10] `multi_run.cp` 进程回收修复里程碑（`multi-run.test.ts` 117/118 通关、0 崩溃）**：
+  - 补全 `src/cli/multi_run.cp:124-137` `ProcessHandle.start()` 缺失的 `proc_ptr.setExitHandler(_)` 与 `proc_ptr.watchOrReap()`，彻底消除 `bun run --parallel` / `--sequential` `<defunct>` 僵尸进程挂死问题；
+  - `test/cli/run/multi-run.test.ts` 从全线超时提升至 **117 pass / 1 fail / 0 crash (526 expect() calls, 50.32s)**；同步提交新版 `cpc` 重编后的 `src/install/npm.zig`（保留 `:bin` 标签）。

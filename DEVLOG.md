@@ -1487,3 +1487,5 @@
   - 对全仓 58 处 `fn release(` 定义进行风险分级巡检，将 15 个跨作用域异步/Socket/Timer/SSL/Loop 对象重命名为 `releaseInternal`/`releaseLoop`，消除 `cpc` 注入 `defer ...release()` 引发的提前析构隐患。
 - **[2026-11-21] `ptrAs((T)?)` 误判 `try` 修复与次级 `release()` 清理**：
   - `req.ptrAs(([*:0]u8)?)` 中 `)?` 后缀被 `cpc` 误降级为 `try [*:0]u8`，提取顶层类型别名 `OptCStr` 后恢复正常；同步完成剩余 5 项次级 `release()` 重命名，`cli/{init,inspect,watch}` 0 崩溃。
+- **[2026-11-21] `multi_run.cp` 遗漏 `watchOrReap` 修复**：
+  - `ProcessHandle.start()` 遗漏 `setExitHandler` 与 `watchOrReap` 导致子进程退出成为 `<defunct>` 且 `remaining_scripts` 永不递减；使用 `const proc_ptr = _.process.?.ptr;` 避免 `cpc` 对 `process` 误判可选 `.?` 后，118 个并发/顺序运行用例通过 117 个。

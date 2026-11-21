@@ -125,6 +125,17 @@ pub struct ProcessHandle {
             ptr: process,
             status: .running,
         };
+        const proc_ptr = _.process.?.ptr;
+        proc_ptr.setExitHandler(_);
+
+        switch (proc_ptr.watchOrReap()) {
+            .result => {},
+            .err e => {
+                if (!proc_ptr.hasExited()) {
+                    proc_ptr.onExit(.{ err: e }, &std.mem.zeroes(bun.spawn.Rusage));
+                }
+            },
+        }
     }
 
     fn onProcessExit(*_, _: *bun.spawn.Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) {
