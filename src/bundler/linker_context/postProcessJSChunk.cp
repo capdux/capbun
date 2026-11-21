@@ -1,7 +1,39 @@
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DeinitOptGuard<T> {
+    ptr: *T?!,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
 /// This runs after we've already populated the compile results
 pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize)! {
     let trace = bun.perf.trace("Bundler.postProcessJSChunk");
-    defer trace.end();
+    const trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
+    * = trace_guard;
 
     * = chunk_index;
     const c = ctx.c;
@@ -10,10 +42,12 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
     js_ast.Expr.Data.Store.create();
     js_ast.Stmt.Data.Store.create();
 
-    defer chunk.renamer.deinit(bun.default_allocator);
+    const renamer_guard = DeinitWithAllocGuard<@TypeOf(chunk.renamer)>{ ptr: unsafe { &chunk.renamer }, allocator: bun.default_allocator };
+    * = renamer_guard;
 
     let arena_ = bun.ArenaAllocator.init(worker.allocator);
-    defer arena_.deinit();
+    const arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_ } };
+    * = arena_guard;
 
     // Also generate the cross-chunk binding code
     let cross_chunk_prefix: js_printer.PrintResult = undefined;
@@ -53,7 +87,8 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
         };
 
         let cross_chunk_import_records = ImportRecord.List.initCapacity(worker.allocator, chunk.cross_chunk_imports.len) catch unreachable;
-        defer cross_chunk_import_records.deinit(worker.allocator);
+        const import_records_guard = DeinitWithAllocGuard<ImportRecord.List>{ ptr: unsafe { &cross_chunk_import_records }, allocator: worker.allocator };
+        * = import_records_guard;
         for (import_record of chunk.cross_chunk_imports.slice()) {
             cross_chunk_import_records.appendAssumeCapacity(
                 {
@@ -267,7 +302,7 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
             input: chunk.unique_key,
         },
     };
-    errdefer j.deinit();
+    let j_guard = DeinitOptGuard<StringJoiner>{ ptr: unsafe { &j } };
     const output_format = c.options.output_format;
 
     let line_offset: bun.SourceMap.LineColumnOffset.Optional = if (c.options.source_maps != .none)
@@ -595,6 +630,7 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
             can_have_shifts,
         );
     }
+    j_guard.ptr = null;
 }
 
 /// Recursively walk a binding && add all declared names to `ModuleInfo`.
@@ -640,7 +676,8 @@ pub fn generateEntryPointTailJS(
 ): CompileResult {
     const flags: JSMeta.Flags = c.graph.meta.items(.flags)[source_index];
     let stmts = std.array_list.Managed(Stmt).init(temp_allocator);
-    defer stmts.deinit();
+    const stmts_guard = DeinitGuard<@TypeOf(stmts)>{ ptr: unsafe { &stmts } };
+    * = stmts_guard;
     const ast: JSAst = c.graph.ast.get(source_index);
 
     switch (c.options.output_format) {

@@ -13,6 +13,13 @@ const strings = bun.strings;
 pub const MacroJSCtx = jsc.JSValue;
 pub const default_macro_js_value = jsc.JSValue.zero;
 
+struct DerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) v.deref();
+    }
+}
+
 pub struct PluginRunner {
     global_object: *jsc.JSGlobalObject,
     allocator: std.mem.Allocator,
@@ -69,7 +76,7 @@ pub struct PluginRunner {
         }
 
         const file_path = path_value.toBunString(global)?;
-        defer file_path.deref();
+        const _file_path_guard = DerefGuard<bun.String>{ val: file_path };
 
         if (file_path.length() == 0) {
             log.addError(
@@ -126,7 +133,7 @@ pub struct PluginRunner {
 
             break :brk bun.String.init("file");
         };
-        defer user_namespace.deref();
+        const _user_ns_guard = DerefGuard<bun.String>{ val: user_namespace };
 
         if (static_namespace) {
             return Fs.Path.initWithNamespace(
@@ -199,17 +206,17 @@ pub struct PluginRunner {
                 }
 
                 if (namespace_str.eqlComptime("file")) {
-                    defer namespace_str.deref();
+                    const _ns_guard = DerefGuard<bun.String>{ val: namespace_str };
                     break :brk bun.String.static("file");
                 }
 
                 if (namespace_str.eqlComptime("bun")) {
-                    defer namespace_str.deref();
+                    const _ns_guard = DerefGuard<bun.String>{ val: namespace_str };
                     break :brk bun.String.static("bun");
                 }
 
                 if (namespace_str.eqlComptime("node")) {
-                    defer namespace_str.deref();
+                    const _ns_guard = DerefGuard<bun.String>{ val: namespace_str };
                     break :brk bun.String.static("node");
                 }
 
@@ -220,11 +227,11 @@ pub struct PluginRunner {
 
             break :brk bun.String.static("file");
         };
-        defer user_namespace.deref();
+        const _user_ns_guard = DerefGuard<bun.String>{ val: user_namespace };
 
         const combined_string = std.fmt.allocPrint(this.allocator, "{f}:{f}", [user_namespace, file_path]) catch unreachable;
         let out_ = bun.String.init(combined_string);
-        defer out_.deref();
+        const _out_guard = DerefGuard<bun.String>{ val: out_ };
         const jsval = out_.toJS(this.global_object) catch |e| {
             this.allocator.free(combined_string);
             return jsc.ErrorableString.err(e, this.global_object.tryTakeException() ?? .js_undefined);

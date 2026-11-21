@@ -28,19 +28,49 @@ const Stmt = js_ast.Stmt;
 const Logger = bun.logger;
 const Loc = Logger.Loc;
 
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+pub struct UngetGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.unget(); }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DoneGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.done(); }
+    }
+}
+
 /// Step 5: Create namespace exports for every file. This is always necessary
 /// for CommonJS files, and is also necessary for other files if they are
 /// imported using an import star statement.
 pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) {
     const source_index = source_index_.get();
     let trace = bun.perf.trace("Bundler.CreateNamespaceExports");
-    defer trace.end();
+    const trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
+    * = trace_guard;
 
     const id = source_index;
     if (id >= c.graph.meta.len) return;
 
     const worker: *ThreadPool.Worker = ThreadPool.Worker.get(@fieldParentPtr("linker", c));
-    defer worker.unget();
+    const worker_guard = UngetGuard<ThreadPool.Worker>{ ptr: unsafe { worker as *ThreadPool.Worker! } };
+    * = worker_guard;
 
     // we must use this allocator here
     const allocator = worker.allocator;
@@ -110,13 +140,14 @@ pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) {
 
     // Each part tracks the other parts it depends on within this file
     let local_dependencies = std.AutoHashMap(u32, u32).init(allocator);
-    defer local_dependencies.deinit();
+    const local_deps_guard = DeinitGuard<@TypeOf(local_dependencies)>{ ptr: unsafe { &local_dependencies } };
+    * = local_deps_guard;
 
     const parts_slice: []Part = c.graph.ast.items(.parts)[id].slice();
     const named_imports: *js_ast.Ast.NamedImports = &c.graph.ast.items(.named_imports)[id];
 
     const our_imports_to_bind = imports_to_bind[id];
-    outer: for (part_index of 0..parts_slice.len) {
+    for (part_index of 0..parts_slice.len) {
         let part = &parts_slice[part_index];
         // Previously owned by `c.allocator()`, which is a `MimallocArena` (from
         // `BundleV2.graph.heap`).
@@ -168,8 +199,6 @@ pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) {
                 use.count_estimate += prop_use.count_estimate;
             }
         }
-
-        if (false) break :outer;
 
         // Now that we know this, we can determine cross-part dependencies
         const sym_keys = part.symbol_uses.keys();
@@ -241,7 +270,8 @@ pub fn createExportsForFile(
         @as(usize, @intFromBool(force_include_exports_for_entry_point));
 
     let stmts = bun.handleOom(js_ast.Stmt.Batcher.init(allocator, stmts_count));
-    defer stmts.done();
+    const stmts_guard = DoneGuard<js_ast.Stmt.Batcher>{ ptr: unsafe { &stmts } };
+    * = stmts_guard;
     const loc = Logger.Loc.Empty;
 
     let ns_export_dependencies = bun.handleOom(std.array_list.Managed(js_ast.Dependency).initCapacity(allocator, re_exports_count));

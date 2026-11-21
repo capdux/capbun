@@ -24,6 +24,48 @@ const nanoseconds_cache_valid = seconds_cache_valid * 1000000000;
 
 err BinError { NoBinFound, NeedToInstall }
 
+struct CloseGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) {
+            v.close();
+            _.val = null;
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+            _.ptr = null;
+        }
+    }
+}
+
+struct DeinitAllocGuard<T, A> {
+    ptr: *T!?,
+    alloc: A,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+            _.ptr = null;
+        }
+    }
+}
+
+struct FreeGuard<A> {
+    alloc: A,
+    slice: string?,
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+            _.slice = null;
+        }
+    }
+}
+
 pub struct BunxOptions {
     passthrough_list: std.ArrayListUnmanaged(string) = .{},
     package_name: string,
@@ -170,8 +212,7 @@ pub fn bunxAddCreatePrefix(allocator: std.mem.Allocator, input: []const u8)![:0]
 fn bunxGetBinNameFromSubpath(transpiler: *bun.Transpiler, dir_fd: bun.FD, subpath_z: [:0]const u8)![]const u8 {
     const target_package_json_fd = bun.sys.openat(dir_fd, subpath_z, bun.O.RDONLY, 0).unwrap()?;
     const target_package_json = bun.sys.File{ .handle = target_package_json_fd };
-
-    defer target_package_json.close();
+    const _guard_pkg = CloseGuard<bun.sys.File>{ val: target_package_json };
 
     const package_json_read = target_package_json.readToEnd(transpiler.allocator);
 
@@ -221,7 +262,7 @@ fn bunxGetBinNameFromSubpath(transpiler: *bun.Transpiler, dir_fd: bun.FD, subpat
         if (bin_prop := dirs.expr.asProperty("bin")) {
             if (dir_name := bin_prop.expr.asString(transpiler.allocator)) {
                 const bin_dir = bun.sys.openatA(dir_fd, dir_name, bun.O.RDONLY | bun.O.DIRECTORY, 0).unwrap()?;
-                defer bin_dir.close();
+                const _guard_bin_dir = CloseGuard<bun.FD>{ val: bin_dir };
                 let iterator = bun.DirIterator.iterate(bin_dir, bun.DirIterator.PathType.u8);
                 let entry = iterator.next();
                 while (true) : (entry = iterator.next()) {
@@ -321,10 +362,10 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
     ctx.debug.silent = true;
 
     let opts = BunxOptions.parse(ctx, argv)?;
-    defer opts.deinit();
+    const _guard_opts = DeinitGuard<BunxOptions>{ ptr: unsafe { &opts } };
 
     let requests_buf = bun.handleOom(UpdateRequest.Array.initCapacity(ctx.allocator, 64));
-    defer requests_buf.deinit(ctx.allocator);
+    const _guard_requests = DeinitAllocGuard<UpdateRequest.Array, Allocator>{ ptr: unsafe { &requests_buf }, alloc: ctx.allocator };
     const update_requests = UpdateRequest.parse(
         ctx.allocator,
         null,
@@ -476,7 +517,10 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
 
         break :brk new_path.items;
     };
-    defer if (ignore_cwd.len > 0) ctx.allocator.free(PATH_FOR_BIN_DIRS);
+    const _guard_path = FreeGuard<Allocator>{
+        alloc: ctx.allocator,
+        slice: if (ignore_cwd.len > 0) PATH_FOR_BIN_DIRS else null,
+    };
 
     const uid = if (bun.Environment.isPosix) bun.c.getuid() else bun.windows.userUniqueId();
     const delim_buf: [1]u8 = [ std.fs.path.delimiter ];
@@ -542,7 +586,7 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
                         let fd_open = bun.sys.openat(.cwd(), destination, bun.O.RDONLY, 0).unwrap() catch null;
                         if (fd_open == null) break :is_stale false;
                         const fd = fd_open.?;
-                        defer fd.close();
+                        const _guard_fd = CloseGuard<bun.FD>{ val: fd };
 
                         let io_status_block: std.os.windows.IO_STATUS_BLOCK = undefined;
                         let info: std.os.windows.FILE_BASIC_INFORMATION = undefined;
@@ -645,7 +689,7 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
 
     create_package_json: {
         let package_json = bunx_install_dir.createFileZ("package.json", .{ .truncate = true }) catch break :create_package_json;
-        defer package_json.close();
+        const _guard_pkg_json = CloseGuard<std.fs.File>{ val: package_json };
         package_json.writeAll("{}\n") catch {};
     }
 

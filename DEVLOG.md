@@ -1587,3 +1587,7 @@
 ## [2026-11-22 Wave #23] RAII 改造与 `unsafe {}` 经验
 - `ProxyTunnel.cp`：`TunnelFlushGuard` 与 `DerefGuard<T>`/`FreeGuard<T>` 接管隧道缓冲刷新与引用释放，膨胀率压降至 `0.94`。
 - `repository.cp` / `PackageManagerTask.cp`：`CloseGuard<T>`、`DeinitGuard<T>`、`FreeGuard<u8>` 消除全部文件/内存清理型 `defer`。
+
+## [2026-11-22 Wave #24] RAII 改造与 `unsafe {}` 经验
+- `DirectoryWatchStore.cp` / `upgrade_command.cp`：`WatchRollbackGuard`、`DeleteFileZGuard`、`DeleteTreeGuard` 将临时目录/文件回滚与释放统一收口至 `~init()`。
+- `doStep5.cp` / `postProcessJSChunk.cp`：保留 `Disabler.enable()`/`assert`/`i += 1` 等状态与计数器 `defer`，其余资源清理全量 Guard 化。

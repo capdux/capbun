@@ -61,23 +61,112 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const fs = @import("../resolver/fs.zig");
 pub const linker = @import("../bundler/linker.zig");
 pub const bun = @import("bun");
+pub fn FreeGuard(comptime A: type) type {
+    return struct {
+        alloc: A,
+        slice: ?[]const u8,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.alloc.free(s);
+                    self.slice = null;
+                }
+        }
+    };
+}
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                    self.ptr = null;
+                }
+        }
+    };
+}
+
+pub fn DeinitAllocGuard(comptime T: type, comptime A: type) type {
+    return struct {
+        ptr: ?*T,
+        alloc: A,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit(self.alloc);
+                    }
+                    self.ptr = null;
+                }
+        }
+    };
+}
+
+pub const DeleteFileZGuard = struct {
+    dir: ?std.fs.Dir,
+    name: [:0]const u8,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *DeleteFileZGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.dir) |d| {
+                _ = &d;
+                _ = (blk_catch_0: { break :blk_catch_0 ((d.deleteFileZ(self.name)) catch |__ce_0| { _ = &__ce_0;  }); });
+                self.dir = null;
+            }
+    }
+};
+
+pub const DeleteTreeGuard = struct {
+    dir: ?std.fs.Dir,
+    name: []const u8,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *DeleteTreeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.dir) |d| {
+                _ = &d;
+                _ = (blk_catch_1: { break :blk_catch_1 ((d.deleteTree(self.name)) catch |__ce_1| { _ = &__ce_1;  }); });
+                self.dir = null;
+            }
+    }
+};
+
 pub const Version = struct {
     zip_url: []const u8,
     tag: []const u8,
     buf: MutableString,
     size: u32 = 0,
 
-pub fn name(self: Version) ?[]const u8 {
+pub fn name(self: *const Version) ?[]const u8 {
             if (((self.tag.len <= "bun-v".len) or (!strings.hasPrefixComptime(self.tag, "bun-v")))) {
                 if (strings.eqlComptime(self.tag, "canary")) {
                     const Cli = @import("./cli.zig");
-                    return (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(bun.default_allocator, "bun-canary-timestamp-{f}", .{ bun.fmt.hexIntLower(bun.hash(std.mem.asBytes((&Cli.start_time)))) })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+                    return (blk_catch_2: { break :blk_catch_2 ((std.fmt.allocPrint(bun.default_allocator, "bun-canary-timestamp-{f}", .{ bun.fmt.hexIntLower(bun.hash(std.mem.asBytes((&Cli.start_time)))) })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
                 }
                 return self.tag;
             }
@@ -120,24 +209,21 @@ pub const UpgradeCommand = struct {
 pub fn getLatestVersion(allocator: std.mem.Allocator, env_loader: *DotEnv.Loader, refresher: ?*Progress, progress: ?*Progress.Node, use_profile: bool, comptime silent: bool) !?Version {
             var headers_buf: []const u8 = default_github_headers;
             _ = &headers_buf;
-            defer {
-            {
-                if (comptime silent) {
-                    if ((headers_buf.ptr != default_github_headers.ptr)) {
-                        _ = allocator.free(headers_buf);
-                    }
-                }
-            }
-            }
+            var _guard_headers = FreeGuard(std.mem.Allocator){ .alloc = allocator, .slice = null };
+            _ = &_guard_headers;
+            var ___guard_headers_moved = false; _ = &___guard_headers_moved;
+            defer if (!___guard_headers_moved) { ___guard_headers_moved = true; const __T = @TypeOf(_guard_headers); if (@typeInfo(__T) == .optional) { if (_guard_headers) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_headers.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_headers; _drop_val.__cp_deinit(); } };
             var header_entries: Headers.Entry.List = .empty;
             _ = &header_entries;
             const accept = Headers.Entry{ .name = .{ .offset = 0, .length = (if (comptime @typeInfo(@TypeOf("Accept".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Accept".len)) else cp_cast_int(u32, "Accept".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf("Accept".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Accept".len)) else cp_cast_int(u32, "Accept".len)), .length = (if (comptime @typeInfo(@TypeOf("application/vnd.github.v3+json".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("application/vnd.github.v3+json".len)) else cp_cast_int(u32, "application/vnd.github.v3+json".len)) } };
             _ = try header_entries.append(allocator, accept);
-            defer {
-            if (comptime silent) {
-                _ = header_entries.deinit(allocator);
-            }
-            }
+            var _guard_entries = DeinitAllocGuard(Headers.Entry.List, std.mem.Allocator){ .ptr = (if (comptime silent) (blk: {
+            break :blk (&header_entries);
+
+}) else null), .alloc = allocator };
+            _ = &_guard_entries;
+            var ___guard_entries_moved = false; _ = &___guard_entries_moved;
+            defer if (!___guard_entries_moved) { ___guard_entries_moved = true; const __T = @TypeOf(_guard_entries); if (@typeInfo(__T) == .optional) { if (_guard_entries) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_entries.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_entries; _drop_val.__cp_deinit(); } };
             var github_api_domain: []const u8 = "api.github.com";
             _ = &github_api_domain;
             if (env_loader.map.get("GITHUB_API_DOMAIN")) |api_domain| {
@@ -151,6 +237,9 @@ pub fn getLatestVersion(allocator: std.mem.Allocator, env_loader: *DotEnv.Loader
                 _ = &access_token;
                 if ((access_token.len > 0)) {
                     headers_buf = try std.fmt.allocPrint(allocator, (default_github_headers ++ "AuthorizationBearer {s}"), .{ access_token });
+                    if (comptime silent) {
+                        _guard_headers.slice = headers_buf;
+                    }
                     _ = try header_entries.append(allocator, .{ .name = .{ .offset = ((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length), .length = (if (comptime @typeInfo(@TypeOf("Authorization".len)) == .@"enum") cp_cast_int(u32, @intFromEnum("Authorization".len)) else cp_cast_int(u32, "Authorization".len)) }, .value = .{ .offset = (if (comptime @typeInfo(@TypeOf((((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))) == .@"enum") cp_cast_int(u32, @intFromEnum((((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))) else cp_cast_int(u32, (((if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).offset + (if (@typeInfo(@TypeOf(accept)) == .@"enum") @intFromEnum(accept) else accept.value).length) + "Authorization".len))), .length = (if (comptime @typeInfo(@TypeOf(("Bearer ".len + access_token.len))) == .@"enum") cp_cast_int(u32, @intFromEnum(("Bearer ".len + access_token.len))) else cp_cast_int(u32, ("Bearer ".len + access_token.len))) } });
                 }
             }
@@ -187,14 +276,16 @@ return error.HTTPError;
 }
             var log = logger.Log.init(allocator);
             _ = &log;
-            defer {
-            if (comptime silent) {
-                _ = log.deinit();
-            }
-            }
+            var _guard_log = DeinitGuard(logger.Log){ .ptr = (if (comptime silent) (blk: {
+            break :blk (&log);
+
+}) else null) };
+            _ = &_guard_log;
+            var ___guard_log_moved = false; _ = &___guard_log_moved;
+            defer if (!___guard_log_moved) { ___guard_log_moved = true; const __T = @TypeOf(_guard_log); if (@typeInfo(__T) == .optional) { if (_guard_log) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_log.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_log; _drop_val.__cp_deinit(); } };
             const source = (&logger.Source.initPathString("releases.json", metadata_body.list.items));
             _ = initializeStore();
-            var expr = (blk_catch_1: { break :blk_catch_1 ((JSON.parseUTF8(source, (&log), allocator)) catch |e| { _ = &e; if ((!silent)) {
+            var expr = (blk_catch_3: { break :blk_catch_3 ((JSON.parseUTF8(source, (&log), allocator)) catch |e| { _ = &e; if ((!silent)) {
                 _ = progress.?.end();
                 _ = refresher.?.refresh();
                 if ((log.errors > 0)) {
@@ -336,8 +427,8 @@ pub fn exec(ctx: Command.Context) !void {
                     }
                 }
             }
-            _ = (blk_catch_2: { break :blk_catch_2 ((_exec(ctx)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r>Bun upgrade failed with error: <red><b>{s}<r>\n\n<cyan>Please upgrade manually<r>:\n  <b>{s}<r>\n\n", .{ @errorName(e), manual_upgrade_command });
-            break :blk_catch_2 @as(void, Global.exit(1)); }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((_exec(ctx)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r>Bun upgrade failed with error: <red><b>{s}<r>\n\n<cyan>Please upgrade manually<r>:\n  <b>{s}<r>\n\n", .{ @errorName(e), manual_upgrade_command });
+            break :blk_catch_4 @as(void, Global.exit(1)); }); });
     }
 
 pub fn _exec(ctx: Command.Context) !void {
@@ -436,38 +527,37 @@ return error.HTTPError;
                     _ = Global.exit(1);
                 }
                 const version_name = (version.name()).?;
-                var save_dir_ = (blk_catch_3: { break :blk_catch_3 ((filesystem.tmpdir()) catch |e| { _ = &e; _ = Output.errGeneric("Failed to open temporary directory: {s}", .{ @errorName(e) });
-                break :blk_catch_3 Global.exit(1); }); });
-                _ = &save_dir_;
-                const save_dir_it = (blk_catch_4: { break :blk_catch_4 ((save_dir_.makeOpenPath(version_name, .{})) catch |e| { _ = &e; _ = Output.errGeneric("Failed to open temporary directory: {s}", .{ @errorName(e) });
-                break :blk_catch_4 Global.exit(1); }); });
-                const save_dir = save_dir_it;
-                const tmpdir_path = (blk_catch_5: { break :blk_catch_5 ((bun.FD.fromStdDir(save_dir).getFdPath((&tmpdir_path_buf))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to read temporary directory: {s}", .{ @errorName(e) });
+                var save_dir_ = (blk_catch_5: { break :blk_catch_5 ((filesystem.tmpdir()) catch |e| { _ = &e; _ = Output.errGeneric("Failed to open temporary directory: {s}", .{ @errorName(e) });
                 break :blk_catch_5 Global.exit(1); }); });
+                _ = &save_dir_;
+                const save_dir_it = (blk_catch_6: { break :blk_catch_6 ((save_dir_.makeOpenPath(version_name, .{})) catch |e| { _ = &e; _ = Output.errGeneric("Failed to open temporary directory: {s}", .{ @errorName(e) });
+                break :blk_catch_6 Global.exit(1); }); });
+                const save_dir = save_dir_it;
+                const tmpdir_path = (blk_catch_7: { break :blk_catch_7 ((bun.FD.fromStdDir(save_dir).getFdPath((&tmpdir_path_buf))) catch |e| { _ = &e; _ = Output.errGeneric("Failed to read temporary directory: {s}", .{ @errorName(e) });
+                break :blk_catch_7 Global.exit(1); }); });
                 tmpdir_path_buf[cp_cast_int(usize, tmpdir_path.len)] = 0;
                 const tmpdir_z = tmpdir_path_buf[0..tmpdir_path.len :0];
                 _ = bun.sys.chdir("", tmpdir_z);
                 const tmpname: [:0]const u8 = "bun.zip";
                 const exe = (if (use_profile) profile_exe_subpath else exe_subpath);
-                var zip_file = (blk_catch_6: { break :blk_catch_6 ((save_dir.createFileZ(tmpname, .{ .truncate = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to open temp file {s}", .{ @errorName(e) });
-                break :blk_catch_6 Global.exit(1); }); });
+                var zip_file = (blk_catch_8: { break :blk_catch_8 ((save_dir.createFileZ(tmpname, .{ .truncate = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to open temp file {s}", .{ @errorName(e) });
+                break :blk_catch_8 Global.exit(1); }); });
                 _ = &zip_file;
                 {
-                    _ = (blk_catch_7: { break :blk_catch_7 ((zip_file.writeAll(bytes)) catch |e| { _ = &e; _ = (blk_catch_8: { break :blk_catch_8 ((save_dir.deleteFileZ(tmpname)) catch |__ce_8| { _ = &__ce_8;  }); });
+                    _ = (blk_catch_9: { break :blk_catch_9 ((zip_file.writeAll(bytes)) catch |e| { _ = &e; _ = (blk_catch_10: { break :blk_catch_10 ((save_dir.deleteFileZ(tmpname)) catch |__ce_10| { _ = &__ce_10;  }); });
                     _ = Output.prettyErrorln("<r><red>error:<r> Failed to write to temp file {s}", .{ @errorName(e) });
-                    break :blk_catch_7 Global.exit(1); }); });
+                    break :blk_catch_9 Global.exit(1); }); });
                     _ = zip_file.close();
                 }
                 {
-                    defer {
-                    {
-                        _ = (blk_catch_9: { break :blk_catch_9 ((save_dir.deleteFileZ(tmpname)) catch |__ce_9| { _ = &__ce_9;  }); });
-                    }
-                    }
+                    var _guard_tmpfile = DeleteFileZGuard{ .dir = save_dir, .name = tmpname };
+                    _ = &_guard_tmpfile;
+                    var ___guard_tmpfile_moved = false; _ = &___guard_tmpfile_moved;
+                    defer if (!___guard_tmpfile_moved) { ___guard_tmpfile_moved = true; const __T = @TypeOf(_guard_tmpfile); if (@typeInfo(__T) == .optional) { if (_guard_tmpfile) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tmpfile.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tmpfile; _drop_val.__cp_deinit(); } };
                     if (comptime Environment.isPosix) {
                         const unzip_opt = which((&unzip_path_buf), ((env_loader.map.get("PATH")) orelse ("")), filesystem.top_level_dir, "unzip");
                         if ((unzip_opt == null)) {
-                            _ = (blk_catch_10: { break :blk_catch_10 ((save_dir.deleteFileZ(tmpname)) catch |__ce_10| { _ = &__ce_10;  }); });
+                            _ = (blk_catch_11: { break :blk_catch_11 ((save_dir.deleteFileZ(tmpname)) catch |__ce_11| { _ = &__ce_11;  }); });
                             _ = Output.prettyErrorln("<r><red>error:<r> Failed to locate 'unzip' in PATH. bun upgrade needs 'unzip' to work.", .{});
                             _ = Global.exit(1);
                         }
@@ -480,12 +570,12 @@ return error.HTTPError;
                         unzip_process.stdin_behavior = .Inherit;
                         unzip_process.stdout_behavior = .Inherit;
                         unzip_process.stderr_behavior = .Inherit;
-                        const unzip_result = (blk_catch_11: { break :blk_catch_11 ((unzip_process.spawnAndWait()) catch |e| { _ = &e; _ = (blk_catch_12: { break :blk_catch_12 ((save_dir.deleteFileZ(tmpname)) catch |__ce_12| { _ = &__ce_12;  }); });
+                        const unzip_result = (blk_catch_12: { break :blk_catch_12 ((unzip_process.spawnAndWait()) catch |e| { _ = &e; _ = (blk_catch_13: { break :blk_catch_13 ((save_dir.deleteFileZ(tmpname)) catch |__ce_13| { _ = &__ce_13;  }); });
                         _ = Output.prettyErrorln("<r><red>error:<r> Failed to spawn unzip due to {s}.", .{ @errorName(e) });
-                        break :blk_catch_11 Global.exit(1); }); });
+                        break :blk_catch_12 Global.exit(1); }); });
                         if ((unzip_result.Exited != 0)) {
                             _ = Output.prettyErrorln("<r><red>Unzip failed<r> (exit code: {d})", .{ unzip_result.Exited });
-                            _ = (blk_catch_13: { break :blk_catch_13 ((save_dir.deleteFileZ(tmpname)) catch |__ce_13| { _ = &__ce_13;  }); });
+                            _ = (blk_catch_14: { break :blk_catch_14 ((save_dir.deleteFileZ(tmpname)) catch |__ce_14| { _ = &__ce_14;  }); });
                             _ = Global.exit(1);
                         }
                     } else {
@@ -505,18 +595,19 @@ return error.HTTPError;
 }));
                             var unzip_argv = .{ powershell_path, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", unzip_script };
                             _ = &unzip_argv;
-                            _ = (blk_catch_16: { break :blk_catch_16 (((blk_catch_14: { break :blk_catch_14 ((bun.spawnSync((&.{ .argv = (&unzip_argv), .envp = null, .cwd = tmpdir_path, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to spawn Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
-                            break :blk_catch_14 Global.exit(1); }); }).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to run Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
-                            break :blk_catch_16 Global.exit(1); }); });
+                            _ = (blk_catch_17: { break :blk_catch_17 (((blk_catch_15: { break :blk_catch_15 ((bun.spawnSync((&.{ .argv = (&unzip_argv), .envp = null, .cwd = tmpdir_path, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to spawn Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
+                            break :blk_catch_15 Global.exit(1); }); }).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Failed to run Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
+                            break :blk_catch_17 Global.exit(1); }); });
                         }
                     }
                 }
                 {
                     var verify_argv = .{ exe, (if (use_canary) "--revision" else "--version") };
                     _ = &verify_argv;
-                    const result = (blk_catch_17: { break :blk_catch_17 ((std.process.Child.run(.{ .allocator = ctx.allocator, .argv = (&verify_argv), .cwd = tmpdir_path, .max_output_bytes = 512 })) catch |e| { _ = &e; defer {
-                    _ = (blk_catch_18: { break :blk_catch_18 ((save_dir_.deleteTree(version_name)) catch |__ce_18| { _ = &__ce_18;  }); });
-                    }
+                    const result = (blk_catch_18: { break :blk_catch_18 ((std.process.Child.run(.{ .allocator = ctx.allocator, .argv = (&verify_argv), .cwd = tmpdir_path, .max_output_bytes = 512 })) catch |e| { _ = &e; var _guard_tree = DeleteTreeGuard{ .dir = save_dir_, .name = version_name };
+                    _ = &_guard_tree;
+                    var ___guard_tree_moved = false; _ = &___guard_tree_moved;
+                    defer if (!___guard_tree_moved) { ___guard_tree_moved = true; const __T = @TypeOf(_guard_tree); if (@typeInfo(__T) == .optional) { if (_guard_tree) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tree.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tree; _drop_val.__cp_deinit(); } };
                     if ((e == error.FileNotFound)) {
                         const access_ok = brk: {
                         _ = (blk_catch_19: { break :blk_catch_19 ((std.fs.cwd().access(exe, .{})) catch |__ce_19| { _ = &__ce_19; break :brk false; }); });
@@ -529,7 +620,7 @@ return error.HTTPError;
                         }
                     }
                     _ = Output.prettyErrorln("<r><red>error<r><d>:<r> Failed to verify Bun (code: {s})<r>", .{ @errorName(e) });
-                    break :blk_catch_17 Global.exit(1); }); });
+                    break :blk_catch_18 Global.exit(1); }); });
                     if ((result.term.Exited != 0)) {
                         _ = (blk_catch_20: { break :blk_catch_20 ((save_dir_.deleteTree(version_name)) catch |__ce_20| { _ = &__ce_20;  }); });
                         _ = Output.prettyErrorln("<r><red>error<r><d>:<r> failed to verify Bun<r> (exit code: {d})", .{ result.term.Exited });
@@ -602,13 +693,14 @@ return error.HTTPError;
                         break :blk_catch_34 Global.exit(1); }); });
                         current_executable_buf[cp_cast_int(usize, target_dir_.len)] = 0;
                     }
-                    _ = (blk_catch_36: { break :blk_catch_36 ((bun.sys.moveFileZ(.fromStdDir(save_dir), exe, .fromStdDir(target_dir), target_filename)) catch |e| { _ = &e; defer {
-                    _ = (blk_catch_37: { break :blk_catch_37 ((save_dir_.deleteTree(version_name)) catch |__ce_37| { _ = &__ce_37;  }); });
-                    }
+                    _ = (blk_catch_36: { break :blk_catch_36 ((bun.sys.moveFileZ(.fromStdDir(save_dir), exe, .fromStdDir(target_dir), target_filename)) catch |e| { _ = &e; var _guard_tree = DeleteTreeGuard{ .dir = save_dir_, .name = version_name };
+                    _ = &_guard_tree;
+                    var ___guard_tree_moved = false; _ = &___guard_tree_moved;
+                    defer if (!___guard_tree_moved) { ___guard_tree_moved = true; const __T = @TypeOf(_guard_tree); if (@typeInfo(__T) == .optional) { if (_guard_tree) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tree.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tree; _drop_val.__cp_deinit(); } };
                     if (comptime Environment.isWindows) {
-                        _ = (blk_catch_38: { break :blk_catch_38 ((std.posix.rename(outdated_filename.?, destination_executable)) catch |__ce_38| { _ = &__ce_38; _ = Output.errGeneric("Failed to move new version of Bun to {s} due to {s}", .{ destination_executable, @errorName(e) });
+                        _ = (blk_catch_37: { break :blk_catch_37 ((std.posix.rename(outdated_filename.?, destination_executable)) catch |__ce_37| { _ = &__ce_37; _ = Output.errGeneric("Failed to move new version of Bun to {s} due to {s}", .{ destination_executable, @errorName(e) });
                         _ = Output.errGeneric("Failed to restore the working copy of Bun. The installation is now corrupt.\n\nPlease reinstall Bun manually with the following command:\n   {s}\n", .{ manual_upgrade_command });
-                        break :blk_catch_38 Global.exit(1); }); });
+                        break :blk_catch_37 Global.exit(1); }); });
                     }
                     _ = Output.errGeneric("Failed to move new version of Bun to {s} to {s}\n\nPlease reinstall Bun manually with the following command:\n   {s}\n", .{ destination_executable, @errorName(e), manual_upgrade_command });
                     break :blk_catch_36 Global.exit(1); }); });
@@ -619,10 +711,14 @@ return error.HTTPError;
                     _ = bun.handleOom(env_loader.map.put("IS_BUN_AUTO_UPDATE", "true"));
                     var std_map = try env_loader.map.stdEnvMap(ctx.allocator);
                     _ = &std_map;
-                    defer {
-                    _ = std_map.deinit();
-                    }
-                    _ = (blk_catch_39: { break :blk_catch_39 ((std.process.Child.run(.{ .allocator = ctx.allocator, .argv = (&completions_argv), .cwd = target_dirname, .max_output_bytes = 4096, .env_map = std_map.get() })) catch |__ce_39| { _ = &__ce_39;  }); });
+                    var _guard_std_map = DeinitGuard(@TypeOf(std_map)){ .ptr = (blk: {
+                    break :blk (&std_map);
+
+}) };
+                    _ = &_guard_std_map;
+                    var ___guard_std_map_moved = false; _ = &___guard_std_map_moved;
+                    defer if (!___guard_std_map_moved) { ___guard_std_map_moved = true; const __T = @TypeOf(_guard_std_map); if (@typeInfo(__T) == .optional) { if (_guard_std_map) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_std_map.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_std_map; _drop_val.__cp_deinit(); } };
+                    _ = (blk_catch_38: { break :blk_catch_38 ((std.process.Child.run(.{ .allocator = ctx.allocator, .argv = (&completions_argv), .cwd = target_dirname, .max_output_bytes = 4096, .env_map = std_map.get() })) catch |__ce_38| { _ = &__ce_38;  }); });
                 }
                 _ = Output.printStartEnd(ctx.start_time, std.time.nanoTimestamp());
                 if (use_canary) {
@@ -679,7 +775,10 @@ return jsc.JSValue.js_undefined;
 .result => |norm| norm,
 });
             const path_len_bytes: u16 = @truncate((path.len * 2));
-            var nt_name = std.os.windows.UNICODE_STRING{ .Length = path_len_bytes, .MaximumLength = path_len_bytes, .Buffer = @constCast(path.ptr) };
+            var nt_name = std.os.windows.UNICODE_STRING{ .Length = path_len_bytes, .MaximumLength = path_len_bytes, .Buffer = (blk: {
+            break :blk @constCast(path.ptr);
+
+}) };
             _ = &nt_name;
             var attr = std.os.windows.OBJECT_ATTRIBUTES{ .Length = @sizeOf(std.os.windows.OBJECT_ATTRIBUTES), .RootDirectory = null, .Attributes = 0, .ObjectName = (&nt_name), .SecurityDescriptor = null, .SecurityQualityOfService = null };
             _ = &attr;

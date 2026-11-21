@@ -2053,3 +2053,11 @@
 - `src/install/PackageManagerTask.{cp,zig}` (`7 -> 2` flush/wake, ratio `1.049`)
 - `src/http/ProxyTunnel.{cp,zig}` (`7 -> 0`, ratio `0.94`)
 - 复核达标：`src/install/PackageInstaller.cp` (`7` 处全为计数器/状态恢复)
+
+## [2026-11-22 Wave #24] RAII `~init()` 与 `unsafe {}` 改造（6 模块）
+- `src/bake/DevServer/DirectoryWatchStore.{cp,zig}` (`7 -> 0`, ratio `1.083`)
+- `src/bundler_jsc/PluginRunner.{cp,zig}` (`7 -> 0`, ratio `1.021`)
+- `src/bundler/linker_context/doStep5.{cp,zig}` (`7 -> 3` 状态/断言, ratio `0.961`)
+- `src/bundler/linker_context/postProcessJSChunk.{cp,zig}` (`7 -> 1` 计数器, ratio `1.033`)
+- `src/cli/bunx_command.{cp,zig}` (`7 -> 0`, ratio `0.912`)
+- `src/cli/upgrade_command.{cp,zig}` (`7 -> 0`, ratio `0.994`)

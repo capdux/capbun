@@ -6,6 +6,60 @@ pub fn initializeStore() {
     js_ast.Stmt.Data.Store.create();
 }
 
+struct FreeGuard<A> {
+    alloc: A,
+    slice: string?,
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+            _.slice = null;
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+            _.ptr = null;
+        }
+    }
+}
+
+struct DeinitAllocGuard<T, A> {
+    ptr: *T!?,
+    alloc: A,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+            _.ptr = null;
+        }
+    }
+}
+
+struct DeleteFileZGuard {
+    dir: std.fs.Dir?,
+    name: [:0]const u8,
+    ~init() {
+        if (d := _.dir) {
+            d.deleteFileZ(_.name) catch {};
+            _.dir = null;
+        }
+    }
+}
+
+struct DeleteTreeGuard {
+    dir: std.fs.Dir?,
+    name: []const u8,
+    ~init() {
+        if (d := _.dir) {
+            d.deleteTree(_.name) catch {};
+            _.dir = null;
+        }
+    }
+}
+
 pub struct Version {
     zip_url: string,
     tag: string,
@@ -100,11 +154,7 @@ pub struct UpgradeCommand {
     ): !Version? {
         let headers_buf: string = default_github_headers;
         // gonna have to free memory myself like a goddamn caveman due to a thread safety issue with ArenaAllocator
-        defer {
-            if (comptime silent) {
-                if (headers_buf.ptr != default_github_headers.ptr) allocator.free(headers_buf);
-            }
-        }
+        let _guard_headers = FreeGuard<std.mem.Allocator>{ alloc: allocator, slice: null };
 
         let header_entries: Headers.Entry.List = .empty;
         const accept = Headers.Entry{
@@ -112,7 +162,10 @@ pub struct UpgradeCommand {
             value: { offset: u32("Accept".len), length: u32("application/vnd.github.v3+json".len) },
         };
         header_entries.append(allocator, accept)?;
-        defer if (comptime silent) header_entries.deinit(allocator);
+        const _guard_entries = DeinitAllocGuard<Headers.Entry.List, std.mem.Allocator>{
+            ptr: if (comptime silent) unsafe { &header_entries } else null,
+            alloc: allocator,
+        };
 
         // Incase they're using a GitHub proxy in e.g. China
         let github_api_domain: string = "api.github.com";
@@ -135,6 +188,7 @@ pub struct UpgradeCommand {
         if (access_token := env_loader.map.get("GITHUB_TOKEN") ?? env_loader.map.get("GITHUB_ACCESS_TOKEN")) {
             if (access_token.len > 0) {
                 headers_buf = std.fmt.allocPrint(allocator, default_github_headers ++ "AuthorizationBearer {s}", .{access_token})?;
+                if (comptime silent) _guard_headers.slice = headers_buf;
                 try header_entries.append(
                     allocator,
                     {
@@ -184,7 +238,9 @@ pub struct UpgradeCommand {
         }
 
         let log = logger.Log.init(allocator);
-        defer if (comptime silent) log.deinit();
+        const _guard_log = DeinitGuard<logger.Log>{
+            ptr: if (comptime silent) unsafe { &log } else null,
+        };
         const source = &logger.Source.initPathString("releases.json", metadata_body.list.items);
         initializeStore();
         let expr = JSON.parseUTF8(source, &log, allocator) catch |e| {
@@ -515,9 +571,7 @@ pub struct UpgradeCommand {
             }
 
             {
-                defer {
-                    save_dir.deleteFileZ(tmpname) catch {};
-                }
+                const _guard_tmpfile = DeleteFileZGuard{ dir: save_dir, name: tmpname };
 
                 if (comptime Environment.isPosix) {
                     const unzip_opt = which(&unzip_path_buf, env_loader.map.get("PATH") ?? "", filesystem.top_level_dir, "unzip");
@@ -623,7 +677,7 @@ pub struct UpgradeCommand {
                     cwd: tmpdir_path,
                     max_output_bytes: 512,
                 }) catch |e| {
-                    defer save_dir_.deleteTree(version_name) catch {};
+                    const _guard_tree = DeleteTreeGuard{ dir: save_dir_, name: version_name };
 
                     if (e == error.FileNotFound) {
                     const access_ok = brk: {
@@ -758,7 +812,7 @@ pub struct UpgradeCommand {
                 }
 
                 bun.sys.moveFileZ(.fromStdDir(save_dir), exe, .fromStdDir(target_dir), target_filename) catch |e| {
-                    defer save_dir_.deleteTree(version_name) catch {};
+                    const _guard_tree = DeleteTreeGuard{ dir: save_dir_, name: version_name };
 
                     if (comptime Environment.isWindows) {
                         // Attempt to restore the old executable. If this fails, the user will be left without a working copy of bun.
@@ -799,7 +853,7 @@ pub struct UpgradeCommand {
 
                 bun.handleOom(env_loader.map.put("IS_BUN_AUTO_UPDATE", "true"));
                 let std_map = env_loader.map.stdEnvMap(ctx.allocator)?;
-                defer std_map.deinit();
+                const _guard_std_map = DeinitGuard<@TypeOf(std_map)>{ ptr: unsafe { &std_map } };
                 * = std.process.Child.run({
                     allocator: ctx.allocator,
                     argv: &completions_argv,
@@ -868,7 +922,7 @@ pub struct upgrade_js_bindings {
         let nt_name = std.os.windows.UNICODE_STRING{
             Length: path_len_bytes,
             MaximumLength: path_len_bytes,
-            Buffer: @constCast(path.ptr),
+            Buffer: unsafe { @constCast(path.ptr) },
         };
 
         let attr = std.os.windows.OBJECT_ATTRIBUTES{

@@ -1,5 +1,42 @@
 let empty_u8: [0]u8 = undefined;
 
+struct PathBufferGuard<T> {
+    buf: T?,
+    ~init() {
+        if (b := _.buf) bun.path_buffer_pool.put(b);
+    }
+}
+
+struct UnlockGuard {
+    dev: *DevServer?!,
+    ~init() {
+        if (d := _.dev) unsafe { d.graph_safety_lock.unlock(); }
+    }
+}
+
+struct FreeGuard {
+    alloc: Allocator,
+    ptr: ([]u8)?,
+    ~init() {
+        if (p := _.ptr) _.alloc.free(p);
+    }
+}
+
+struct WatchRollbackGuard {
+    store: *DirectoryWatchStore?!,
+    index: usize,
+    ~init() {
+        if (s := _.store) unsafe { s.watches.swapRemoveAt(_.index); }
+    }
+}
+
+struct FdCloseGuard {
+    fd: bun.FD?,
+    ~init() {
+        if (f := _.fd) f.close();
+    }
+}
+
 pub struct WatchEntry {
     /// The directory handle the watch is placed on
     dir: bun.FD,
@@ -62,7 +99,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
         }
 
         const buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(buf);
+        const _buf_guard = PathBufferGuard<@TypeOf(buf)>{ buf: buf };
         const joined = bun.path.joinAbsStringBuf(bun.path.dirname(import_source, .auto), buf, &[specifier], .auto);
         const dir = bun.path.dirname(joined, .auto);
 
@@ -81,7 +118,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
                 },
             };
         }
-        defer _.owner().graph_safety_lock.unlock();
+        const _lock_guard = UnlockGuard{ dev: unsafe { _.owner() } };
 
         _.insert(dir, owned_file_path, specifier) catch |e| {
             if (e == error.OutOfMemory) return error.OutOfMemory;
@@ -116,7 +153,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
             alloc.dupe(u8, specifier)?
         else
             std.fmt.allocPrint(alloc, "./{s}", [specifier])?;
-        errdefer alloc.free(specifier_cloned);
+        let specifier_guard = FreeGuard{ alloc: alloc, ptr: specifier_cloned };
 
         if (gop.found_existing) {
             const dep = _.appendDepAssumeCapacity(WatchDep{
@@ -125,9 +162,10 @@ pub const empty_watch_dep: WatchDep = WatchDep{
                 specifier: specifier_cloned,
             });
             gop.value_ptr.first_dep = dep;
+            specifier_guard.ptr = null;
             return;
         }
-        errdefer _.watches.swapRemoveAt(gop.index);
+        let watch_guard = WatchRollbackGuard{ store: unsafe { _ }, index: gop.index };
 
         // Try to use an existing open directory handle
         let cache_fd: bun.FD? = null;
@@ -167,7 +205,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
                 }
             }
         }
-        errdefer if (Watcher.requires_file_descriptors && owned_fd) fd.close();
+        let fd_guard = FdCloseGuard{ fd: if (Watcher.requires_file_descriptors && owned_fd) fd else null };
         if (Watcher.requires_file_descriptors) {
             debug.log("-> fd: {f} ({s})", [
                 fd,
@@ -176,7 +214,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
         }
 
         const dir_name = alloc.dupe(u8, dir_name_to_watch)?;
-        errdefer alloc.free(dir_name);
+        let dir_name_guard = FreeGuard{ alloc: alloc, ptr: dir_name };
 
         gop.key_ptr.* = bun.strings.withoutTrailingSlashWindowsPath(dir_name);
 
@@ -195,6 +233,10 @@ pub const empty_watch_dep: WatchDep = WatchDep{
             first_dep: dep,
             watch_index: watch_index,
         });
+        dir_name_guard.ptr = null;
+        fd_guard.fd = null;
+        watch_guard.store = null;
+        specifier_guard.ptr = null;
     }
 
     /// Caller must detach the dependency from the linked list it is in.
@@ -220,7 +262,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
 
         _.owner().bun_watcher.removeAtIndex(entry.watch_index, 0, [], .file);
 
-        defer if (entry.dir_fd_owned) entry.dir.close();
+        const _fd_guard = FdCloseGuard{ fd: if (entry.dir_fd_owned) entry.dir else null };
 
         alloc.free(_.watches.keys()[entry_index]);
         _.watches.swapRemoveAt(entry_index);
