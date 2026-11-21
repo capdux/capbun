@@ -1276,7 +1276,7 @@ pub fn NewParser_(
             while (idx < symbol_use_refs.len) : (idx += 1) {
                 const sym_ref = symbol_use_refs[idx];
                 const prev = symbol_use_values[idx];
-                symbols[sym_ref.innerIndex()].use_count_estimate -|= prev.count_estimate;
+                symbols[sym_ref.innerIndex()].use_count_estimate = symbols[sym_ref.innerIndex()].use_count_estimate -| prev.count_estimate;
             }
             const declared_refs = part.declared_symbols.refs();
             for (declared of declared_refs) {
@@ -4273,7 +4273,7 @@ pub fn NewParser_(
             if (p.options.features.auto_polyfill_require) {
                 bun.assert(p.runtime_imports.__require != null);
                 p.ignoreUsage(p.runtimeIdentifierRef(logger.Loc.Empty, "__require"));
-                p.symbols.items[p.require_ref.innerIndex()].use_count_estimate -|= 1;
+                p.symbols.items[p.require_ref.innerIndex()].use_count_estimate = p.symbols.items[p.require_ref.innerIndex()].use_count_estimate -| 1;
             }
         }
 
@@ -4970,11 +4970,11 @@ pub fn NewParser_(
         static fn ignoreUsage(p: *P, sym_ref: Ref) {
             if (!p.is_control_flow_dead && !p.is_revisit_for_substitution) {
                 if (comptime Environment.allow_assert) assert(@as(usize, sym_ref.innerIndex()) < p.symbols.items.len);
-                p.symbols.items[sym_ref.innerIndex()].use_count_estimate -|= 1;
+                p.symbols.items[sym_ref.innerIndex()].use_count_estimate = p.symbols.items[sym_ref.innerIndex()].use_count_estimate -| 1;
                 const use_opt = p.symbol_uses.get(sym_ref);
                 if (use_opt == null) return;
                 let use = use_opt.?;
-                use.count_estimate -|= 1;
+                use.count_estimate = use.count_estimate -| 1;
                 if (use.count_estimate == 0) {
                     * = p.symbol_uses.swapRemove(sym_ref);
                 } else {
@@ -6090,7 +6090,7 @@ pub fn NewParser_(
             // Remove the last child from the parent scope
             const last = parent.children.len - 1;
             if (comptime Environment.allow_assert) assert(parent.children.ptr[last] == to_flatten);
-            parent.children.len -|= 1;
+            parent.children.len = parent.children.len -| 1;
 
             for (item of to_flatten.children.slice()) {
                 item.parent = parent;

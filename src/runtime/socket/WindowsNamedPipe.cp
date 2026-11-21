@@ -165,7 +165,7 @@ export class WindowsNamedPipe {
         if (!_.flags.is_closed) {
             _.flags.is_closed = true;
             _.handlers.onClose(_.handlers.ctx);
-            _.release();
+            _.releaseInternal();
         }
     }
 
@@ -556,7 +556,7 @@ export class WindowsNamedPipe {
     }
 
     /// Free internal resources, it can be called multiple times
-    pub fn release(*_) {
+    pub fn releaseInternal(*_) {
         log("release", .{});
         _.setTimeout(0);
         if (stream := _.writer.getStream()) {
@@ -573,7 +573,7 @@ export class WindowsNamedPipe {
     }
 
     pub fn deinit(*_) {
-        _.release();
+        _.releaseInternal();
     }
 }
 

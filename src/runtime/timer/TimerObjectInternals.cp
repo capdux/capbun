@@ -469,7 +469,7 @@ export class TimerObjectInternals {
         _.deref();
     }
 
-    pub fn release(_: *TimerObjectInternals) {
+    pub fn releaseInternal(_: *TimerObjectInternals) {
         _.deinit();
     }
 

@@ -1482,3 +1482,6 @@
 - **[2026-11-21] `fetch` 选项与 HTTP/2 `h2_client` `release()` 误析构修复**：
   - 还原 `fetch.cp` `fetchImpl` 缺失选项解析逻辑并修复 `verb.getZigString(globalThis).eqlComptime("curl")` 错误传播后，`zstd` HTTP 压缩测试全部通过；
   - `Stream`/`ClientSession`/`PendingConnect` 定义 `release(*_)` 导致 `cpc` 在持有指针的局部变量作用域退出时自动注入 `defer ...release()` 提前销毁 `Stream`，合并入 `deinit()` 后 `undici-h2/run.test.ts` 11/11 全绿且 0 ASan 崩溃。
+- **[2026-11-21] `cpc` 饱和复合赋值与参数内 `?? break` 静默吞语句修复 + 全仓 15 项 `release()` RAII 清雷**：
+  - `cpc` 在结构体方法体内会静默吞掉 `+|= / -|=`（如 `BundleThread.cp` `generation +|= 1`）与函数参数内的 `?? break :label`（如 `npm.cp` `group_slice[group_i] = ...append(..., x ?? break :bin)`），展开为显式二元运算及独立变量赋值后，`resolver` 缓存失效与 `PackageManifest.parse` `0xAA` 未初始化越界 panic 均彻底修复；
+  - 对全仓 58 处 `fn release(` 定义进行风险分级巡检，将 15 个跨作用域异步/Socket/Timer/SSL/Loop 对象重命名为 `releaseInternal`/`releaseLoop`，消除 `cpc` 注入 `defer ...release()` 引发的提前析构隐患。

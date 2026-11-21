@@ -79,12 +79,12 @@ const log = Output.scoped(.PosixSignalHandle, .hidden);
         }
     }
 
-    pub fn release(*_) {
+    pub fn releaseInternal(*_) {
         bun.destroy(_);
     }
 
     pub fn deinit(*_) {
-        _.release();
+        _.releaseInternal();
     }
 }
 

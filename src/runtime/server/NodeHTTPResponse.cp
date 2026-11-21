@@ -956,7 +956,7 @@ fn writeOrEnd(
         }
         this.bytes_written = bytes_written;
     } else {
-        this.bytes_written +|= bytes.len;
+        this.bytes_written = this.bytes_written +| bytes.len;
     }
     if (is_end) {
 

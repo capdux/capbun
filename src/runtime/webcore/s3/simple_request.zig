@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -239,7 +239,7 @@ pub fn init(self: *S3HttpSimpleTask, http: bun.http.AsyncHTTP, vm: *jsc.VirtualM
             self.poll_ref = poll_ref;
     }
 
-pub fn release(self: *S3HttpSimpleTask) void {
+pub fn releaseInternal(self: *S3HttpSimpleTask) void {
             if (self.result.certificate_info) |certificate| {
                 _ = &certificate;
                 _ = certificate.deinit(bun.default_allocator);
@@ -263,7 +263,7 @@ pub fn release(self: *S3HttpSimpleTask) void {
     }
 
 pub fn deinit(self: *S3HttpSimpleTask) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.releaseInternal();
             _ = bun.destroy(self);
     }
 
@@ -370,15 +370,11 @@ pub fn onResponse(self: *S3HttpSimpleTask) JSTerminatedError!void {
             }
             _ = bun.assert((self.result.metadata != null));
             const response = self.result.metadata.?.response;
-            var __response_moved = false; _ = &__response_moved;
-            defer if (!__response_moved) { const __T = @TypeOf(response); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = response.release() catch {}; } else { response.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = response; _drop_val.release(); } };
             switch (self.callback) {
 .stat => |cb| {
 switch (response.status_code) {
 200 => {
 const cl_opt = response.headers.get("content-length");
-            var __cl_opt_moved = false; _ = &__cl_opt_moved;
-            defer if (!__cl_opt_moved) { const __T = @TypeOf(cl_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cl_opt.release() catch {}; } else { cl_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cl_opt; _drop_val.release(); } };
             const cl_size: usize = (if ((cl_opt != null)) (blk_catch_0: { break :blk_catch_0 ((std.fmt.parseInt(usize, cl_opt.?, 10)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 0; }); }) else 0);
             _ = try cb(.{ .success = .{ .etag = ((response.headers.get("etag")) orelse ("")), .lastModified = ((response.headers.get("last-modified")) orelse ("")), .contentType = ((response.headers.get("content-type")) orelse ("")), .size = cl_size } }, self.callback_context);
 },
@@ -410,8 +406,6 @@ if (self.result.body) |body| {
                 _ = &body;
                 const success = (blk_catch_1: { break :blk_catch_1 ((ListObjects.parseS3ListObjectsResult(body.slice())) catch |__ce_1| { _ = &__ce_1; _ = try self.errorWithBody(.failure);
                 return; }); });
-                var __success_moved = false; _ = &__success_moved;
-                defer if (!__success_moved) { const __T = @TypeOf(success); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = success.release() catch {}; } else { success.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = success; _drop_val.release(); } };
                 _ = try cb(.{ .success = success }, self.callback_context);
             } else {
                 _ = try self.errorWithBody(.failure);
@@ -470,8 +464,6 @@ if ((!try self.failIfContainsError(response.status_code))) {
 
 pub fn httpCallback(self: *S3HttpSimpleTask, async_http: *bun.http.AsyncHTTP, result: bun.http.HTTPClientResult) void {
             const is_done = (!result.has_more);
-            var __is_done_moved = false; _ = &__is_done_moved;
-            defer if (!__is_done_moved) { const __T = @TypeOf(is_done); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = is_done.release() catch {}; } else { is_done.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = is_done; _drop_val.release(); } };
             self.result = result;
             self.http = async_http.*;
             self.response_buffer = async_http.response_buffer.*;
@@ -523,43 +515,31 @@ pub fn executeSimpleS3Request(self: *const S3Credentials, options: S3SimpleReque
             _ = bun.default_allocator.free(range_);
         }
         const error_code_and_message = getSignErrorCodeAndMessage(sign_err);
-        var __error_code_and_message_moved = false; _ = &__error_code_and_message_moved;
-        defer if (!__error_code_and_message_moved) { const __T = @TypeOf(error_code_and_message); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = error_code_and_message.release() catch {}; } else { error_code_and_message.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = error_code_and_message; _drop_val.release(); } };
         _ = try callback.fail(error_code_and_message.code, error_code_and_message.message, callback_context);
         return; }); });
-        var __result_moved = false; _ = &__result_moved;
-        defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
+        _ = &result;
         const headers = brk: {
         var header_buffer: [12]picohttp.Header = undefined;
         _ = &header_buffer;
         if (options.range) |range_| {
             _ = &range_;
             const _headers = result.mixWithHeader((&header_buffer), .{ .name = "range", .value = range_ });
-            var ___headers_moved = false; _ = &___headers_moved;
-            defer if (!___headers_moved) { const __T = @TypeOf(_headers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = _headers.release() catch {}; } else { _headers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = _headers; _drop_val.release(); } };
             break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
         } else {
             if (options.content_type) |content_type| {
                 _ = &content_type;
                 if ((content_type.len > 0)) {
                     const _headers = result.mixWithHeader((&header_buffer), .{ .name = "Content-Type", .value = content_type });
-                    var ___headers_moved = false; _ = &___headers_moved;
-                    defer if (!___headers_moved) { const __T = @TypeOf(_headers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = _headers.release() catch {}; } else { _headers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = _headers; _drop_val.release(); } };
                     break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(_headers), bun.default_allocator));
                 }
             }
             break :brk bun.handleOom(bun.http.Headers.fromPicoHttpHeaders(@constCast(result.headers()), bun.default_allocator));
         }
 };
-        var __headers_moved = false; _ = &__headers_moved;
-        defer if (!__headers_moved) { const __T = @TypeOf(headers); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = headers.release() catch {}; } else { headers.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = headers; _drop_val.release(); } };
         var task = S3HttpSimpleTask.new(.{ .http = undefined, .sign_result = result, .callback_context = callback_context, .callback = callback, .range = options.range, .headers = headers, .vm = jsc.VirtualMachine.get() });
-        var __task_moved = false; _ = &__task_moved;
-        defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
+        _ = &task;
         _ = task.poll_ref.ref(task.vm);
         const url = bun.URL.parse(result.url);
-        var __url_moved = false; _ = &__url_moved;
-        defer if (!__url_moved) { const __T = @TypeOf(url); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = url.release() catch {}; } else { url.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = url; _drop_val.release(); } };
         const proxy = ((options.proxy_url) orelse (""));
         task.proxy_url = (if ((proxy.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, proxy)) else "");
         task.http = bun.http.AsyncHTTP.init(bun.default_allocator, options.method, url, task.headers.entries, task.headers.buf.items, (&task.response_buffer), options.body, bun.http.HTTPClientResult.Callback.New(*S3HttpSimpleTask, S3HttpSimpleTask.httpCallback).init(task), .follow, .{ .http_proxy = (if ((task.proxy_url.len > 0)) bun.URL.parse(task.proxy_url) else null), .verbose = task.vm.getVerboseFetch(), .reject_unauthorized = task.vm.getTLSRejectUnauthorized() });

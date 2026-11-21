@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -105,8 +105,7 @@ state: State = .{},
 pub fn start(opts: StartOptions) void {
         const use_sendfile = canSendfile(opts.resp, opts.file_type, opts.length);
         var stream = bun.new(FileResponseStream, .{ .ref_count = .init(), .resp = opts.resp, .vm = opts.vm, .fd = opts.fd, .auto_close = opts.auto_close, .idle_timeout = opts.idle_timeout, .ctx = opts.ctx, .on_complete = opts.on_complete, .on_abort = opts.on_abort, .on_error = opts.on_error, .mode = (if (use_sendfile) .sendfile else .reader) });
-        var __stream_moved = false; _ = &__stream_moved;
-        defer if (!__stream_moved) { const __T = @TypeOf(stream); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stream.release() catch {}; } else { stream.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stream; _drop_val.release(); } };
+        _ = &stream;
         _ = stream.resp.timeout(stream.idle_timeout);
         _ = stream.resp.onAborted(*FileResponseStream, onAborted, stream);
         _ = log("start mode={s} len={?d}", .{ @tagName(stream.mode), opts.length });
@@ -269,16 +268,10 @@ pub fn onSendfile(self: *FileResponseStream) bool {
         if (comptime bun.Environment.isLinux) {
             while (true) {
                 const adjusted = @min(self.sendfile.remain, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i32))) == .@"enum") cp_cast_int(u64, @intFromEnum(std.math.maxInt(i32))) else cp_cast_int(u64, std.math.maxInt(i32))));
-                var __adjusted_moved = false; _ = &__adjusted_moved;
-                defer if (!__adjusted_moved) { const __T = @TypeOf(adjusted); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = adjusted.release() catch {}; } else { adjusted.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = adjusted; _drop_val.release(); } };
                 var off: i64 = @intCast(self.sendfile.offset);
                 _ = &off;
                 const rc = std.os.linux.sendfile(self.sendfile.socket_fd.cast(), self.fd.cast(), (&off), adjusted);
-                var __rc_moved = false; _ = &__rc_moved;
-                defer if (!__rc_moved) { const __T = @TypeOf(rc); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = rc.release() catch {}; } else { rc.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = rc; _drop_val.release(); } };
                 const errno = bun.sys.getErrno(rc);
-                var __errno_moved = false; _ = &__errno_moved;
-                defer if (!__errno_moved) { const __T = @TypeOf(errno); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = errno.release() catch {}; } else { errno.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = errno; _drop_val.release(); } };
                 const sent: u64 = @intCast(@max((@as(i64, @intCast(off)) - @as(i64, @intCast(self.sendfile.offset))), 0));
                 self.sendfile.offset = @intCast(off);
                 self.sendfile.remain = (self.sendfile.remain -| sent);
@@ -308,8 +301,6 @@ _ = self.failWith(.{ .errno = @intFromEnum(errno), .syscall = .sendfile, .fd = s
                     var sbytes: std.posix.off_t = @intCast(@min(self.sendfile.remain, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i32))) == .@"enum") cp_cast_int(u64, @intFromEnum(std.math.maxInt(i32))) else cp_cast_int(u64, std.math.maxInt(i32)))));
                     _ = &sbytes;
                     const errno = bun.sys.getErrno(std.c.sendfile(self.fd.cast(), self.sendfile.socket_fd.cast(), @intCast(self.sendfile.offset), (&sbytes), null, 0));
-                    var __errno_moved = false; _ = &__errno_moved;
-                    defer if (!__errno_moved) { const __T = @TypeOf(errno); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = errno.release() catch {}; } else { errno.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = errno; _drop_val.release(); } };
                     const sent: u64 = @intCast(sbytes);
                     self.sendfile.offset = (self.sendfile.offset + sent);
                     self.sendfile.remain = (self.sendfile.remain -| sent);
@@ -411,7 +402,7 @@ pub fn finish(self: *FileResponseStream) void {
         _ = self.deref();
 }
 
-pub fn release(self: *FileResponseStream) void {
+pub fn releaseInternal(self: *FileResponseStream) void {
         _ = log("release", .{});
         if ((self.mode == .reader)) {
             _ = self.reader.deinit();
@@ -428,7 +419,7 @@ pub fn release(self: *FileResponseStream) void {
 }
 
 pub fn deinit(self: *FileResponseStream) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+        _ = self.releaseInternal();
 }
 
 pub fn eventLoop(self: *FileResponseStream) jsc.EventLoopHandle {

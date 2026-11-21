@@ -111,7 +111,7 @@ pub fn BundleThread(CompletionStruct: type): type {
                     };
                     has_bundled = true;
                 }
-                instance.generation +|= 1;
+                instance.generation = instance.generation +| 1;
 
                 if (has_bundled) {
                     bun.mimalloc.mi_collect(false);

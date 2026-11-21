@@ -815,7 +815,7 @@ pub fn printMetadata(writer: auto): ! {
         for (arg of bun.argv) {
             if (i != 0) writer.writeAll(" ")?;
             bun.fmt.quotedWriter(writer, arg[0..@min(arg.len, arg_chars_left)])?;
-            arg_chars_left -|= arg.len;
+            arg_chars_left = arg_chars_left -| arg.len;
             if (arg_chars_left == 0) {
                 writer.writeAll("...")?;
                 break;

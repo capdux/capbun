@@ -202,7 +202,7 @@ export class S3HttpSimpleTask {
     proxy_url: []const u8 = "";
     poll_ref: bun.Async.KeepAlive = bun.Async.KeepAlive.init();
 
-    pub fn release(*_) {
+    pub fn releaseInternal(*_) {
         if (certificate := this.result.certificate_info) {
             certificate.deinit(bun.default_allocator);
         }
@@ -223,7 +223,7 @@ export class S3HttpSimpleTask {
     }
 
     pub fn deinit(*_: *S3HttpSimpleTask) {
-        this.release();
+        this.releaseInternal();
         bun.destroy(this);
     }
 

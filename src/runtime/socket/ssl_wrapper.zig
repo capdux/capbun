@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -83,11 +83,7 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
                 _ = BoringSSL.SSL_set_accept_state(ssl);
             }
             const s_mem = BoringSSL.BIO_s_mem;
-            var __s_mem_moved = false; _ = &__s_mem_moved;
-            defer if (!__s_mem_moved) { const __T = @TypeOf(s_mem); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s_mem.release() catch {}; } else { s_mem.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s_mem; _drop_val.release(); } };
             const bio_method_in = s_mem();
-            var __bio_method_in_moved = false; _ = &__bio_method_in_moved;
-            defer if (!__bio_method_in_moved) { const __T = @TypeOf(bio_method_in); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bio_method_in.release() catch {}; } else { bio_method_in.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bio_method_in; _drop_val.release(); } };
             const input = ((BoringSSL.BIO_new(bio_method_in)) orelse {
             return @as(anyerror!This, error.OutOfMemory);
 });
@@ -95,8 +91,6 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
             _ = BoringSSL.BIO_free(input);
             }
             const bio_method_out = s_mem();
-            var __bio_method_out_moved = false; _ = &__bio_method_out_moved;
-            defer if (!__bio_method_out_moved) { const __T = @TypeOf(bio_method_out); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bio_method_out.release() catch {}; } else { bio_method_out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bio_method_out; _drop_val.release(); } };
             const output = ((BoringSSL.BIO_new(bio_method_out)) orelse {
             return @as(anyerror!This, error.OutOfMemory);
 });
@@ -112,8 +106,6 @@ pub fn init(ssl_options: jsc.API.ServerConfig.SSLConfig, is_client: bool, handle
             var err: uws.create_bun_socket_error_t = .none;
             _ = &err;
             const ssl_ctx = ((ctx_opts.createSSLContext((&err))) orelse { return error.InvalidOptions; });
-            var __ssl_ctx_moved = false; _ = &__ssl_ctx_moved;
-            defer if (!__ssl_ctx_moved) { const __T = @TypeOf(ssl_ctx); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ssl_ctx.release() catch {}; } else { ssl_ctx.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ssl_ctx; _drop_val.release(); } };
             errdefer {
             _ = BoringSSL.SSL_CTX_free(ssl_ctx);
             }
@@ -139,8 +131,6 @@ pub fn onData(ctx: T, data: []const u8) void {
             _ = data;
     }
 };
-            var __DummyReadHandler_moved = false; _ = &__DummyReadHandler_moved;
-            defer if (!__DummyReadHandler_moved) { const __T = @TypeOf(DummyReadHandler); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = DummyReadHandler.release() catch {}; } else { DummyReadHandler.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = DummyReadHandler; _drop_val.release(); } };
             self.handlers.onData = DummyReadHandler.onData;
     }
 
@@ -246,7 +236,7 @@ pub fn writeData(self: *@This(), data: []const u8) !usize {
             return @intCast(written);
     }
 
-pub fn release(self: *@This()) void {
+pub fn releaseInternal(self: *@This()) void {
             self.flags.closed_notified = true;
             if (self.ssl) |ssl| {
                 _ = &ssl;
@@ -261,7 +251,7 @@ pub fn release(self: *@This()) void {
     }
 
 pub fn deinit(self: *@This()) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.releaseInternal();
     }
 
 pub fn triggerHandshakeCallback(self: *@This(), success: bool, result: uws.us_bun_verify_error_t) void {

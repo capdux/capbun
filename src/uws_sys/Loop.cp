@@ -192,7 +192,7 @@ export @extern @value class PosixLoop {
         return _.internal_loop_data.shouldEnableDateHeaderTimer();
     }
 
-    pub fn release(*_) {
+    pub fn releaseLoop(*_) {
         this.deinit();
     }
 
@@ -300,7 +300,7 @@ export @extern class WindowsLoop {
         uws_loop_date_header_timer_update(this as *Loop);
     }
 
-    pub fn release(*_) {
+    pub fn releaseLoop(*_) {
         this.deinit();
     }
 

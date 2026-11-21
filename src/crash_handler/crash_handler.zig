@@ -1108,6 +1108,7 @@ pub fn printMetadata(writer: anytype) !void {
                     _ = try writer.writeAll(" ");
                 }
                 _ = try bun.fmt.quotedWriter(writer, arg[0..@min(arg.len, arg_chars_left)]);
+                arg_chars_left = (arg_chars_left -| arg.len);
                 if ((arg_chars_left == 0)) {
                     _ = try writer.writeAll("...");
                     break;

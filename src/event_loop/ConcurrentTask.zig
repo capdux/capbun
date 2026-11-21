@@ -40,7 +40,7 @@ pub fn from(self: *ConcurrentTask, any_task: anytype, auto_deinit: AutoDeinit) *
             return self;
     }
 
-pub fn release(self: *ConcurrentTask) void {
+pub fn releaseInternal(self: *ConcurrentTask) void {
             _ = ConcurrentTask.deinit(self);
     }
 

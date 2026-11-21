@@ -134,7 +134,7 @@ pub fn slice(self: PipelineTaskInput) []const u8 {
             return ((self.copied) orelse (self.bytes));
     }
 
-pub fn release(self: *PipelineTaskInput) void {
+pub fn releaseInternal(self: *PipelineTaskInput) void {
             if ((self.pinned != .zero)) {
                 _ = JSC__JSValue__unpinArrayBuffer(self.pinned);
             }
@@ -181,8 +181,6 @@ pending_tasks: u32 = 0,
 
 pub fn constructor(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, this_value: jsc.JSValue) bun.JSError!*Image {
         const args = callframe.arguments();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         if (((args.len < 1) or args[0].isUndefinedOrNull())) {
             return global.throwInvalidArguments("Image() expects a path, ArrayBuffer, TypedArray, Blob or data: URL", .{});
         }
@@ -191,8 +189,7 @@ pub fn constructor(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, this_
 
 pub fn fromBlobJS(global: *jsc.JSGlobalObject, blob_value: jsc.JSValue, options: jsc.JSValue) bun.JSError!jsc.JSValue {
         var img = Image.new(.{ .source = .js_buffer });
-        var __img_moved = false; _ = &__img_moved;
-        defer if (!__img_moved) { const __T = @TypeOf(img); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = img.release() catch {}; } else { img.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = img; _drop_val.release(); } };
+        _ = &img;
         errdefer {
         _ = img.finalize();
         }
@@ -204,14 +201,12 @@ pub fn fromBlobJS(global: *jsc.JSGlobalObject, blob_value: jsc.JSValue, options:
 
 pub fn fromInputJS(global: *jsc.JSGlobalObject, input: jsc.JSValue, options: jsc.JSValue, this_value: jsc.JSValue) bun.JSError!*Image {
         var img = Image.new(.{ .source = .js_buffer });
-        var __img_moved = false; _ = &__img_moved;
-        defer if (!__img_moved) { const __T = @TypeOf(img); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = img.release() catch {}; } else { img.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = img; _drop_val.release(); } };
+        _ = &img;
         errdefer {
         _ = img.finalize();
         }
         img.source = try sourceFromJS(global, input, this_value);
         _ = try applyOptions(img, global, options);
-        __img_moved = true;
         return img;
 }
 
@@ -248,41 +243,27 @@ pub fn estimatedSize(self: *Image) usize {
 pub fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_value: jsc.JSValue) bun.JSError!Source {
         if (value.isString()) {
             const str = try value.toBunString(global);
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
             defer {
             _ = str.deref();
             }
             const utf8 = str.toUTF8(bun.default_allocator);
-            var __utf8_moved = false; _ = &__utf8_moved;
-            defer if (!__utf8_moved) { const __T = @TypeOf(utf8); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = utf8.release() catch {}; } else { utf8.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = utf8; _drop_val.release(); } };
             defer {
             _ = utf8.deinit();
             }
             const s = utf8.slice();
-            var __s_moved = false; _ = &__s_moved;
-            defer if (!__s_moved) { const __T = @TypeOf(s); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s.release() catch {}; } else { s.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s; _drop_val.release(); } };
             if (bun.strings.hasPrefixComptime(s, "data:")) {
                 const comma_opt = bun.strings.indexOfChar(s, 44);
-                var __comma_opt_moved = false; _ = &__comma_opt_moved;
-                defer if (!__comma_opt_moved) { const __T = @TypeOf(comma_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = comma_opt.release() catch {}; } else { comma_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = comma_opt; _drop_val.release(); } };
                 if ((comma_opt == null)) {
                     return global.throwInvalidArguments("Image(): malformed data: URL (no comma)", .{});
                 }
                 const comma = comma_opt.?;
-                var __comma_moved = false; _ = &__comma_moved;
-                defer if (!__comma_moved) { const __T = @TypeOf(comma); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = comma.release() catch {}; } else { comma.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = comma; _drop_val.release(); } };
                 const meta_part = s[5..comma];
                 const payload = s[(comma + 1)..];
                 if ((!bun.strings.contains(meta_part, ";base64"))) {
                     return global.throwInvalidArguments("Image(): only base64 data: URLs are supported", .{});
                 }
                 const out = try bun.default_allocator.alloc(u8, bun.base64.decodeLen(payload));
-                var __out_moved = false; _ = &__out_moved;
-                defer if (!__out_moved) { const __T = @TypeOf(out); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = out.release() catch {}; } else { out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = out; _drop_val.release(); } };
                 const r = bun.base64.decode(out, payload);
-                var __r_moved = false; _ = &__r_moved;
-                defer if (!__r_moved) { const __T = @TypeOf(r); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = r.release() catch {}; } else { r.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = r; _drop_val.release(); } };
                 if ((!r.isSuccessful())) {
                     _ = bun.default_allocator.free(out);
                     return global.throwInvalidArguments("Image(): invalid base64 in data: URL", .{});
@@ -302,8 +283,6 @@ pub fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_value:
         if (value.@"as"(jsc.WebCore.Blob)) |blob| {
             _ = &blob;
             const view = blob.sharedView();
-            var __view_moved = false; _ = &__view_moved;
-            defer if (!__view_moved) { const __T = @TypeOf(view); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = view.release() catch {}; } else { view.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = view; _drop_val.release(); } };
             if ((view.len > 0)) {
                 return .{ .owned = try bun.default_allocator.dupe(u8, view) };
             }
@@ -316,8 +295,6 @@ pub fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_value:
 
 pub fn doResize(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         if (((args.len < 1) or (!args[0].isNumber()))) {
             return global.throwInvalidArguments("resize(width, height?, options?)", .{});
         }
@@ -344,8 +321,6 @@ pub fn doResize(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.CallF
 
 pub fn doRotate(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         if (((args.len < 1) or (!args[0].isNumber()))) {
             return global.throwInvalidArguments("rotate(degrees) expects 90, 180 or 270", .{});
         }
@@ -370,8 +345,6 @@ pub fn doFlop(self: *Image, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
 
 pub fn doModulate(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         var m: Modulate = ((self.pipeline.modulate) orelse (.{}));
         _ = &m;
         if (((args.len > 0) and args[0].isObject())) {
@@ -380,8 +353,6 @@ pub fn doModulate(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.Cal
                 _ = &v;
                 if (v.isNumber()) {
                     const x = v.asNumber();
-                    var __x_moved = false; _ = &__x_moved;
-                    defer if (!__x_moved) { const __T = @TypeOf(x); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = x.release() catch {}; } else { x.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = x; _drop_val.release(); } };
                     m.brightness = (if (std.math.isFinite(x)) @floatCast(@min(@max(x, 0.0), 10000.0)) else 1.0);
                 }
             }
@@ -389,8 +360,6 @@ pub fn doModulate(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.Cal
                 _ = &v;
                 if (v.isNumber()) {
                     const x = v.asNumber();
-                    var __x_moved = false; _ = &__x_moved;
-                    defer if (!__x_moved) { const __T = @TypeOf(x); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = x.release() catch {}; } else { x.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = x; _drop_val.release(); } };
                     m.saturation = (if (std.math.isFinite(x)) @floatCast(@min(@max(x, 0.0), 10000.0)) else 1.0);
                 }
             }
@@ -404,8 +373,6 @@ pub fn setFormat(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.Call
         _ = &enc;
         enc.format = fmt;
         const args = callframe.arguments();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         if (((args.len > 0) and args[0].isObject())) {
             const opt = args[0];
             if (try opt.get(global, "quality")) |q| {
@@ -517,10 +484,7 @@ pub fn rejectError(global: *jsc.JSGlobalObject, e: codecs.Error) jsc.JSValue {
 
 pub fn errorWithCode(global: *jsc.JSGlobalObject, code: [:0]const u8, msg: [:0]const u8) jsc.JSValue {
         const e = global.createErrorInstance("{s}", .{ msg });
-        var __e_moved = false; _ = &__e_moved;
-        defer if (!__e_moved) { const __T = @TypeOf(e); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = e.release() catch {}; } else { e.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = e; _drop_val.release(); } };
         _ = e.put(global, jsc.ZigString.static("code"), jsc.ZigString.init(code).toJS(global));
-        __e_moved = true;
         return e;
 }
 
@@ -549,14 +513,10 @@ pub fn pinForTask(self: Image, this_value: jsc.JSValue, _: *jsc.JSGlobalObject) 
         switch (self.source) {
 .js_buffer => {
 const v_opt = js.sourceJSGetCached(this_value);
-        var __v_opt_moved = false; _ = &__v_opt_moved;
-        defer if (!__v_opt_moved) { const __T = @TypeOf(v_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = v_opt.release() catch {}; } else { v_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = v_opt; _drop_val.release(); } };
         if ((v_opt == null)) {
             return error.Detached;
         }
         const v = v_opt.?;
-        var __v_moved = false; _ = &__v_moved;
-        defer if (!__v_moved) { const __T = @TypeOf(v); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = v.release() catch {}; } else { v.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = v; _drop_val.release(); } };
         var ptr: [*]const u8 = undefined;
         _ = &ptr;
         var len: usize = 0;
@@ -609,8 +569,7 @@ pub fn fromClipboard(global: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError
             }
             const bytes = bytes_opt.?;
             var img = Image.new(.{ .source = .{ .owned = bytes } });
-            var __img_moved = false; _ = &__img_moved;
-            defer if (!__img_moved) { const __T = @TypeOf(img); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = img.release() catch {}; } else { img.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = img; _drop_val.release(); } };
+            _ = &img;
             return img.toJS(global);
         }
         return jsc.JSValue.null;
@@ -646,15 +605,11 @@ pub fn doMetadata(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.Cal
             if ((blk_catch_2: { break :blk_catch_2 ((codecs.probe(buf, self.max_pixels)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); })) |p| {
                 _ = &p;
                 var w = p.width;
-                var __w_moved = false; _ = &__w_moved;
-                defer if (!__w_moved) { const __T = @TypeOf(w); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = w.release() catch {}; } else { w.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = w; _drop_val.release(); } };
+                _ = &w;
                 var h = p.height;
-                var __h_moved = false; _ = &__h_moved;
-                defer if (!__h_moved) { const __T = @TypeOf(h); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = h.release() catch {}; } else { h.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = h; _drop_val.release(); } };
+                _ = &h;
                 if ((self.auto_orient and (p.format == .jpeg))) {
                     const t = exif.readJpeg(buf).transform();
-                    var __t_moved = false; _ = &__t_moved;
-                    defer if (!__t_moved) { const __T = @TypeOf(t); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = t.release() catch {}; } else { t.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = t; _drop_val.release(); } };
                     if (((t.rotate == 90) or (t.rotate == 270))) {
                         _ = std.mem.swap(u32, (&w), (&h));
                     }
@@ -662,16 +617,12 @@ pub fn doMetadata(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.Cal
                 self.last_width = @intCast(w);
                 self.last_height = @intCast(h);
                 const obj = jsc.JSValue.createEmptyObject(global, 3);
-                var __obj_moved = false; _ = &__obj_moved;
-                defer if (!__obj_moved) { const __T = @TypeOf(obj); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = obj.release() catch {}; } else { obj.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = obj; _drop_val.release(); } };
                 _ = obj.put(global, jsc.ZigString.static("width"), jsc.JSValue.jsNumber(w));
                 _ = obj.put(global, jsc.ZigString.static("height"), jsc.JSValue.jsNumber(h));
                 _ = obj.put(global, jsc.ZigString.static("format"), jsc.ZigString.init(@tagName(p.format)).toJS(global));
                 return jsc.JSPromise.resolvedPromiseValue(global, obj);
             } else {
                 const probe_err = (blk_catch_3: { break :blk_catch_3 ((codecs.probe(buf, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnsupportedOnPlatform)) {  break :__sw_blk_0 cp_val(null); } } {  return jsc.JSPromise.rejectedPromise(global, Image.rejectError(global, e)).asValue(global); }  unreachable; }); }); });
-                var __probe_err_moved = false; _ = &__probe_err_moved;
-                defer if (!__probe_err_moved) { const __T = @TypeOf(probe_err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = probe_err.release() catch {}; } else { probe_err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = probe_err; _drop_val.release(); } };
                 _ = &probe_err;
             }
         }
@@ -700,12 +651,8 @@ pub fn doDataUrl(self: *Image, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame) 
 
 pub fn doPlaceholder(self: *Image, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const args = cf.arguments();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         if (((args.len > 0) and (!args[0].isUndefinedOrNull()))) {
             const s = try args[0].toBunString(global);
-            var __s_moved = false; _ = &__s_moved;
-            defer if (!__s_moved) { const __T = @TypeOf(s); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s.release() catch {}; } else { s.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s; _drop_val.release(); } };
             defer {
             _ = s.deref();
             }
@@ -718,8 +665,6 @@ pub fn doPlaceholder(self: *Image, global: *jsc.JSGlobalObject, cf: *jsc.CallFra
 
 pub fn doWrite(self: *Image, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const args = cf.arguments();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         if (((args.len < 1) or args[0].isUndefinedOrNull())) {
             return global.throwInvalidArguments("Image.write(dest): expected a path, Bun.file, Bun.s3 or fd", .{});
         }
@@ -727,14 +672,10 @@ pub fn doWrite(self: *Image, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame) bu
         _ = &output;
         if (((output == null) and args[0].isString())) {
             const str = try args[0].toBunString(global);
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
             defer {
             _ = str.deref();
             }
             const utf8 = str.toUTF8(bun.default_allocator);
-            var __utf8_moved = false; _ = &__utf8_moved;
-            defer if (!__utf8_moved) { const __T = @TypeOf(utf8); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = utf8.release() catch {}; } else { utf8.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = utf8; _drop_val.release(); } };
             defer {
             _ = utf8.deinit();
             }
@@ -760,25 +701,20 @@ pub fn schedule(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSVal
         var input = (blk_catch_4: { break :blk_catch_4 ((self.pinForTask(this_value, global)) catch |e| { _ = &e; var mut_del = blk: {
         break :blk deliver;
 };
-        var __mut_del_moved = false; _ = &__mut_del_moved;
-        defer if (!__mut_del_moved) { const __T = @TypeOf(mut_del); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mut_del.release() catch {}; } else { mut_del.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mut_del; _drop_val.release(); } };
+        _ = &mut_del;
         _ = mut_del.deinit();
         if ((e == error.OutOfMemory)) {
             _ = bun.outOfMemory();
         }
         return jsc.JSPromise.rejectedPromise(global, Image.errorWithCode(global, "ERR_INVALID_STATE", "Image: source ArrayBuffer was detached")).asValue(global); }); });
-        var __input_moved = false; _ = &__input_moved;
-        defer if (!__input_moved) { const __T = @TypeOf(input); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = input.release() catch {}; } else { input.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = input; _drop_val.release(); } };
+        _ = &input;
         const job = PipelineTask.new(.{ .image = self, .global = global, .pipeline = self.pipeline, .input = input, .kind = kind, .deliver = deliver, .max_pixels = self.max_pixels, .auto_orient = self.auto_orient });
-        var __job_moved = false; _ = &__job_moved;
-        defer if (!__job_moved) { const __T = @TypeOf(job); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = job.release() catch {}; } else { job.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = job; _drop_val.release(); } };
         if ((self.pending_tasks == 0)) {
             _ = self.this_ref.setStrong(this_value, global);
         }
         self.pending_tasks = (self.pending_tasks + 1);
         var task = AsyncImageTask.createOnJSThread(bun.default_allocator, global, job);
-        var __task_moved = false; _ = &__task_moved;
-        defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
+        _ = &task;
         _ = task.schedule();
         return task.promise.value();
 }
@@ -787,29 +723,19 @@ pub fn encodeForBody(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.
         if ((self.source == .blob)) {
             const refuse: [:0]const u8 = "Image: fd/S3-backed Bun.file as a Response body — pass `await file.bytes()` or a path string";
             const blob_js_opt = self.source.blob.get();
-            var __blob_js_opt_moved = false; _ = &__blob_js_opt_moved;
-            defer if (!__blob_js_opt_moved) { const __T = @TypeOf(blob_js_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_js_opt.release() catch {}; } else { blob_js_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_js_opt; _drop_val.release(); } };
             if ((blob_js_opt == null)) {
                 return global.throw("Image: Blob source was collected", .{});
             }
             const blob_js = blob_js_opt.?;
-            var __blob_js_moved = false; _ = &__blob_js_moved;
-            defer if (!__blob_js_moved) { const __T = @TypeOf(blob_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_js.release() catch {}; } else { blob_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_js; _drop_val.release(); } };
             const blob_opt = blob_js.@"as"(jsc.WebCore.Blob);
-            var __blob_opt_moved = false; _ = &__blob_opt_moved;
-            defer if (!__blob_opt_moved) { const __T = @TypeOf(blob_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_opt.release() catch {}; } else { blob_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_opt; _drop_val.release(); } };
             if ((blob_opt == null)) {
                 return global.throw(refuse, .{});
             }
             const blob = blob_opt.?;
-            var __blob_moved = false; _ = &__blob_moved;
-            defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
             if (blob.store) |store| {
                 _ = &store;
                 if (((store.data == .file) and (store.data.file.pathlike == .path))) {
                     const p = try bun.default_allocator.dupeZ(u8, store.data.file.pathlike.path.slice());
-                    var __p_moved = false; _ = &__p_moved;
-                    defer if (!__p_moved) { const __T = @TypeOf(p); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = p.release() catch {}; } else { p.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = p; _drop_val.release(); } };
                     _ = self.source.deinit();
                     self.source = .{ .path = p };
                 } else {
@@ -823,10 +749,9 @@ pub fn encodeForBody(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.
             _ = bun.outOfMemory();
         }
         return global.throw("Image: source ArrayBuffer was detached", .{}); }); });
-        var __input_moved = false; _ = &__input_moved;
-        defer if (!__input_moved) { const __T = @TypeOf(input); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = input.release() catch {}; } else { input.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = input; _drop_val.release(); } };
+        _ = &input;
         defer {
-        _ = (if (comptime @typeInfo(@TypeOf(input)) == .pointer) (input) else &(input)).release();
+        _ = input.releaseInternal();
         }
         var task: PipelineTask = .{ .image = self, .global = global, .pipeline = self.pipeline, .input = input, .kind = .{ .encode = self.pipeline.output }, .deliver = .uint8array, .max_pixels = self.max_pixels, .auto_orient = self.auto_orient };
         _ = &task;
@@ -858,47 +783,33 @@ pub const BlobReadChain = struct {
 
 pub fn start(image: *Image, global: *jsc.JSGlobalObject, this_value: jsc.JSValue, kind: PipelineKind, deliver: PipelineDeliver) bun.JSError!jsc.JSValue {
             const blob_js_opt = image.source.blob.get();
-            var __blob_js_opt_moved = false; _ = &__blob_js_opt_moved;
-            defer if (!__blob_js_opt_moved) { const __T = @TypeOf(blob_js_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_js_opt.release() catch {}; } else { blob_js_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_js_opt; _drop_val.release(); } };
             if ((blob_js_opt == null)) {
                 var mut_del1 = blk: {
                 break :blk deliver;
 };
-                var __mut_del1_moved = false; _ = &__mut_del1_moved;
-                defer if (!__mut_del1_moved) { const __T = @TypeOf(mut_del1); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mut_del1.release() catch {}; } else { mut_del1.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mut_del1; _drop_val.release(); } };
+                _ = &mut_del1;
                 _ = mut_del1.deinit();
                 return global.throw("Image: Blob source was collected", .{});
             }
             const blob_js = blob_js_opt.?;
-            var __blob_js_moved = false; _ = &__blob_js_moved;
-            defer if (!__blob_js_moved) { const __T = @TypeOf(blob_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_js.release() catch {}; } else { blob_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_js; _drop_val.release(); } };
             const blob_opt = blob_js.@"as"(jsc.WebCore.Blob);
-            var __blob_opt_moved = false; _ = &__blob_opt_moved;
-            defer if (!__blob_opt_moved) { const __T = @TypeOf(blob_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_opt.release() catch {}; } else { blob_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_opt; _drop_val.release(); } };
             if ((blob_opt == null)) {
                 var mut_del2 = blk: {
                 break :blk deliver;
 };
-                var __mut_del2_moved = false; _ = &__mut_del2_moved;
-                defer if (!__mut_del2_moved) { const __T = @TypeOf(mut_del2); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mut_del2.release() catch {}; } else { mut_del2.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mut_del2; _drop_val.release(); } };
+                _ = &mut_del2;
                 _ = mut_del2.deinit();
                 return global.throw("Image: Blob source is no longer a Blob", .{});
             }
             const blob = blob_opt.?;
-            var __blob_moved = false; _ = &__blob_moved;
-            defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
             if ((image.pending_tasks == 0)) {
                 _ = image.this_ref.setStrong(this_value, global);
             }
             image.pending_tasks = (image.pending_tasks + 1);
             var chain = bun.new(BlobReadChain, .{ .image = image, .global = global, .kind = kind, .deliver = deliver, .outer = jsc.JSPromise.Strong.init(global) });
-            var __chain_moved = false; _ = &__chain_moved;
-            defer if (!__chain_moved) { const __T = @TypeOf(chain); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = chain.release() catch {}; } else { chain.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = chain; _drop_val.release(); } };
+            _ = &chain;
             const promise = (chain.outer.strong.get()).?;
-            var __promise_moved = false; _ = &__promise_moved;
-            defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
             _ = try blob.readBytesToHandler(BlobReadChain, chain, global);
-            __promise_moved = true;
             return promise;
     }
 
@@ -927,16 +838,12 @@ if ((image.source == .blob)) {
                 _ = bun.default_allocator.free(bytes);
             }
             const this_val_opt = image.this_ref.tryGet();
-            var __this_val_opt_moved = false; _ = &__this_val_opt_moved;
-            defer if (!__this_val_opt_moved) { const __T = @TypeOf(this_val_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = this_val_opt.release() catch {}; } else { this_val_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = this_val_opt; _drop_val.release(); } };
             if ((this_val_opt == null)) {
                 _ = (blk_catch_6: { break :blk_catch_6 ((outer.reject(global, global.createErrorInstance("Image: collected before read completed", .{}))) catch |__ce_6| { _ = &__ce_6;  }); });
                 _ = deliver.deinit();
                 return;
             }
             const this_value = this_val_opt.?;
-            var __this_value_moved = false; _ = &__this_value_moved;
-            defer if (!__this_value_moved) { const __T = @TypeOf(this_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = this_value.release() catch {}; } else { this_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = this_value; _drop_val.release(); } };
             const inner = (blk_catch_7: { break :blk_catch_7 ((image.schedule(global, this_value, kind, deliver)) catch |__ce_7| { _ = &__ce_7; _ = deliver.deinit();
             _ = (blk_catch_8: { break :blk_catch_8 ((outer.reject(global, global.createErrorInstance("Image: pipeline schedule failed", .{}))) catch |__ce_8| { _ = &__ce_8;  }); });
             return; }); });
@@ -984,8 +891,6 @@ pub fn run(self: *PipelineTask) void {
                 }
 },
 });
-                var __file_moved = false; _ = &__file_moved;
-                defer if (!__file_moved) { const __T = @TypeOf(file); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = file.release() catch {}; } else { file.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = file; _drop_val.release(); } };
                 defer {
                 _ = file.close();
                 }
@@ -998,8 +903,6 @@ pub fn run(self: *PipelineTask) void {
                 }
 },
 });
-                var __st_moved = false; _ = &__st_moved;
-                defer if (!__st_moved) { const __T = @TypeOf(st); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = st.release() catch {}; } else { st.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = st; _drop_val.release(); } };
                 if ((!bun.S.ISREG(@intCast(st.mode)))) {
                     self.result = .{ .io_err = .{ .errno = @intFromEnum(bun.sys.E.NODEV), .syscall = .read, .path = p } };
                     return;
@@ -1009,13 +912,10 @@ pub fn run(self: *PipelineTask) void {
                     return;
                 }
                 const r = file.readToEnd(bun.default_allocator);
-                var __r_moved = false; _ = &__r_moved;
-                defer if (!__r_moved) { const __T = @TypeOf(r); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = r.release() catch {}; } else { r.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = r; _drop_val.release(); } };
                 if (r.err) |e| {
                     _ = &e;
                     var bytes = r.bytes;
-                    var __bytes_moved = false; _ = &__bytes_moved;
-                    defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
+                    _ = &bytes;
                     _ = bytes.deinit();
                     self.result = .{ .io_err = e.withPath(p) };
                     return;
@@ -1029,15 +929,11 @@ pub fn run(self: *PipelineTask) void {
                 if ((blk_catch_11: { break :blk_catch_11 ((codecs.probe(input, self.max_pixels)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); })) |p| {
                     _ = &p;
                     var w = p.width;
-                    var __w_moved = false; _ = &__w_moved;
-                    defer if (!__w_moved) { const __T = @TypeOf(w); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = w.release() catch {}; } else { w.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = w; _drop_val.release(); } };
+                    _ = &w;
                     var h = p.height;
-                    var __h_moved = false; _ = &__h_moved;
-                    defer if (!__h_moved) { const __T = @TypeOf(h); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = h.release() catch {}; } else { h.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = h; _drop_val.release(); } };
+                    _ = &h;
                     if ((self.auto_orient and (p.format == .jpeg))) {
                         const t = exif.readJpeg(input).transform();
-                        var __t_moved = false; _ = &__t_moved;
-                        defer if (!__t_moved) { const __T = @TypeOf(t); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = t.release() catch {}; } else { t.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = t; _drop_val.release(); } };
                         if (((t.rotate == 90) or (t.rotate == 270))) {
                             _ = std.mem.swap(u32, (&w), (&h));
                         }
@@ -1047,8 +943,6 @@ pub fn run(self: *PipelineTask) void {
                 } else {
                     const probe_err = (blk_catch_12: { break :blk_catch_12 ((codecs.probe(input, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_12 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnsupportedOnPlatform)) {  break :__sw_blk_1 cp_val(null); } } {  self.result = PipelineResult{ .@"err" = e };
                     return; }  unreachable; }); }); });
-                    var __probe_err_moved = false; _ = &__probe_err_moved;
-                    defer if (!__probe_err_moved) { const __T = @TypeOf(probe_err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = probe_err.release() catch {}; } else { probe_err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = probe_err; _drop_val.release(); } };
                     _ = &probe_err;
                 }
             }
@@ -1063,8 +957,6 @@ pub fn run(self: *PipelineTask) void {
                 const swap_explicit = ((self.pipeline.rotate == 90) or (self.pipeline.rotate == 270));
                 const swap_exif = (self.auto_orient and blk2: {
                 const t = exif.readJpeg(input).transform();
-                var __t_moved = false; _ = &__t_moved;
-                defer if (!__t_moved) { const __T = @TypeOf(t); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = t.release() catch {}; } else { t.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = t; _drop_val.release(); } };
                 break :blk2 ((t.rotate == 90) or (t.rotate == 270));
 });
                 if ((swap_explicit != swap_exif)) {
@@ -1074,16 +966,13 @@ pub fn run(self: *PipelineTask) void {
             }
             var decoded = (blk_catch_13: { break :blk_catch_13 ((codecs.decode(input, self.max_pixels, hint)) catch |e| { _ = &e; self.result = PipelineResult{ .@"err" = e };
             return; }); });
-            var __decoded_moved = false; _ = &__decoded_moved;
-            defer if (!__decoded_moved) { const __T = @TypeOf(decoded); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = decoded.release() catch {}; } else { decoded.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = decoded; _drop_val.release(); } };
+            _ = &decoded;
             defer {
             _ = decoded.deinit();
             }
             const src_format = ((codecs.Format.sniff(input)) orelse (.png));
             if ((self.auto_orient and (src_format == .jpeg))) {
                 const orient = exif.readJpeg(input);
-                var __orient_moved = false; _ = &__orient_moved;
-                defer if (!__orient_moved) { const __T = @TypeOf(orient); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = orient.release() catch {}; } else { orient.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = orient; _drop_val.release(); } };
                 if ((orient != .normal)) {
                     _ = (blk_catch_14: { break :blk_catch_14 ((PipelineTask.applyOrientation((&decoded), orient)) catch |e| { _ = &e; self.result = PipelineResult{ .@"err" = e };
                     return; }); });
@@ -1109,8 +998,6 @@ else => src_format,
             }
             const out = (blk_catch_17: { break :blk_catch_17 ((codecs.encode(decoded.rgba, decoded.width, decoded.height, enc)) catch |e| { _ = &e; self.result = PipelineResult{ .@"err" = e };
             return; }); });
-            var __out_moved = false; _ = &__out_moved;
-            defer if (!__out_moved) { const __T = @TypeOf(out); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = out.release() catch {}; } else { out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = out; _drop_val.release(); } };
             self.result = PipelineResult{ .encoded = EncodedResult{ .out = out, .format = enc.format, .w = decoded.width, .h = decoded.height } };
     }
 
@@ -1143,22 +1030,15 @@ pub fn makePlaceholder(rgba: []const u8, sw: u32, sh: u32) codecs.Error!Pipeline
                 pixels = owned.?;
             }
             const thumbhash_max_len = (comptime thumbhash.max_len);
-            var __thumbhash_max_len_moved = false; _ = &__thumbhash_max_len_moved;
-            defer if (!__thumbhash_max_len_moved) { const __T = @TypeOf(thumbhash_max_len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = thumbhash_max_len.release() catch {}; } else { thumbhash_max_len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = thumbhash_max_len; _drop_val.release(); } };
+            _ = &thumbhash_max_len;
             var buf: [thumbhash_max_len]u8 = undefined;
             _ = &buf;
             const hash = thumbhash.encode((&buf), w, h, pixels);
-            var __hash_moved = false; _ = &__hash_moved;
-            defer if (!__hash_moved) { const __T = @TypeOf(hash); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = hash.release() catch {}; } else { hash.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = hash; _drop_val.release(); } };
             const rendered = try thumbhash.decode(hash);
-            var __rendered_moved = false; _ = &__rendered_moved;
-            defer if (!__rendered_moved) { const __T = @TypeOf(rendered); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = rendered.release() catch {}; } else { rendered.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = rendered; _drop_val.release(); } };
             defer {
             _ = bun.default_allocator.free(rendered.rgba);
             }
             const png_out = try codecs.png.encode(rendered.rgba, rendered.w, rendered.h, -1, null);
-            var __png_out_moved = false; _ = &__png_out_moved;
-            defer if (!__png_out_moved) { const __T = @TypeOf(png_out); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = png_out.release() catch {}; } else { png_out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = png_out; _drop_val.release(); } };
             return PipelineResult{ .encoded = EncodedResult{ .out = png_out, .format = .png, .w = rendered.w, .h = rendered.h } };
     }
 
@@ -1166,7 +1046,7 @@ pub fn then(self: *PipelineTask, promise: *jsc.JSPromise) bun.JSTerminated!void 
             defer {
             _ = self.deinit();
             }
-            _ = (if (comptime @typeInfo(@TypeOf(self.input)) == .pointer) (self.input) else &(self.input)).release();
+            _ = self.input.releaseInternal();
             const global = self.global;
             switch (self.result) {
 .encoded => |r| {
@@ -1186,8 +1066,7 @@ else => {
 switch (self.deliver) {
 .uint8array => {
 var ab = jsc.ArrayBuffer.fromBytes(enc.out.bytes, .Uint8Array);
-            var __ab_moved = false; _ = &__ab_moved;
-            defer if (!__ab_moved) { const __T = @TypeOf(ab); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ab.release() catch {}; } else { ab.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ab; _drop_val.release(); } };
+            _ = &ab;
             _ = try promise.resolve(global, (blk_catch_18: { break :blk_catch_18 ((ab.toJSWithContext(global, null, enc.out.free)) catch |__ce_18| { _ = &__ce_18; return promise.reject(global, error.JSError); }); }));
 },
 .buffer => {
@@ -1195,12 +1074,9 @@ _ = try promise.resolve(global, jsc.JSValue.createBufferWithCtx(global, enc.out.
 },
 .blob => {
 const owned = bun.handleOom(bun.default_allocator.dupe(u8, enc.out.bytes));
-            var __owned_moved = false; _ = &__owned_moved;
-            defer if (!__owned_moved) { const __T = @TypeOf(owned); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = owned.release() catch {}; } else { owned.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = owned; _drop_val.release(); } };
             _ = enc.out.deinit();
             var blob = jsc.WebCore.Blob.init(owned, bun.default_allocator, global);
-            var __blob_moved = false; _ = &__blob_moved;
-            defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
+            _ = &blob;
             blob.content_type = enc.format.mime();
             blob.content_type_was_set = true;
             _ = try promise.resolve(global, jsc.WebCore.Blob.new(blob).toJS(global));
@@ -1214,58 +1090,42 @@ defer {
             const is_dataurl = (self.deliver == .dataurl);
             const pre: []const u8 = (if (is_dataurl) ((std.fmt.bufPrint((&pre_buf), "data:{s};base64,", .{ enc.format.mime() })) catch unreachable) else "");
             const buf = bun.handleOom(bun.default_allocator.alloc(u8, (pre.len + bun.base64.encodeLen(enc.out.bytes))));
-            var __buf_moved = false; _ = &__buf_moved;
-            defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
             defer {
             _ = bun.default_allocator.free(buf);
             }
             _ = @memcpy(buf[0..pre.len], pre);
             const wrote = (pre.len + bun.base64.encode(buf[pre.len..], enc.out.bytes));
             const str = (blk_catch_20: { break :blk_catch_20 ((bun.String.createUTF8ForJS(global, buf[0..wrote])) catch |__ce_20| { _ = &__ce_20; return promise.reject(global, error.JSError); }); });
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
             _ = try promise.resolve(global, str);
 },
 .write_dest => |*dest| {
 const dest_js_opt = dest.get();
-            var __dest_js_opt_moved = false; _ = &__dest_js_opt_moved;
-            defer if (!__dest_js_opt_moved) { const __T = @TypeOf(dest_js_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = dest_js_opt.release() catch {}; } else { dest_js_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dest_js_opt; _drop_val.release(); } };
             if ((dest_js_opt == null)) {
                 _ = enc.out.deinit();
                 _ = (blk_catch_21: { break :blk_catch_21 ((promise.reject(global, global.createErrorInstance("Image.write: destination was collected", .{}))) catch |__ce_21| { _ = &__ce_21;  }); });
                 return;
             }
             const dest_js = dest_js_opt.?;
-            var __dest_js_moved = false; _ = &__dest_js_moved;
-            defer if (!__dest_js_moved) { const __T = @TypeOf(dest_js); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = dest_js.release() catch {}; } else { dest_js.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = dest_js; _drop_val.release(); } };
             const data = jsc.JSValue.createBufferWithCtx(global, enc.out.bytes, null, enc.out.free);
-            var __data_moved = false; _ = &__data_moved;
-            defer if (!__data_moved) { const __T = @TypeOf(data); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = data.release() catch {}; } else { data.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = data; _drop_val.release(); } };
             var arg_slice = jsc.CallFrame.ArgumentsSlice.init(global.bunVM(), (&.{ dest_js }));
-            var __arg_slice_moved = false; _ = &__arg_slice_moved;
-            defer if (!__arg_slice_moved) { const __T = @TypeOf(arg_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arg_slice.release() catch {}; } else { arg_slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arg_slice; _drop_val.release(); } };
+            _ = &arg_slice;
             defer {
             _ = arg_slice.deinit();
             }
             var path_or_blob = (blk_catch_22: { break :blk_catch_22 ((jsc.Node.PathOrBlob.fromJSNoCopy(global, (&arg_slice))) catch |__ce_22| { _ = &__ce_22; return promise.reject(global, error.JSError); }); });
-            var __path_or_blob_moved = false; _ = &__path_or_blob_moved;
-            defer if (!__path_or_blob_moved) { const __T = @TypeOf(path_or_blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path_or_blob.release() catch {}; } else { path_or_blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path_or_blob; _drop_val.release(); } };
+            _ = &path_or_blob;
             defer {
             if ((path_or_blob == .path)) {
                 _ = path_or_blob.path.deinit();
             }
             }
             const write_promise = (blk_catch_23: { break :blk_catch_23 ((jsc.WebCore.Blob.writeFileInternal(global, (&path_or_blob), data, .{})) catch |__ce_23| { _ = &__ce_23; return promise.reject(global, error.JSError); }); });
-            var __write_promise_moved = false; _ = &__write_promise_moved;
-            defer if (!__write_promise_moved) { const __T = @TypeOf(write_promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = write_promise.release() catch {}; } else { write_promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = write_promise; _drop_val.release(); } };
             _ = try promise.resolve(global, write_promise);
 },
 }
 },
 .@"meta" => |m| {
 const obj = jsc.JSValue.createEmptyObject(global, 3);
-            var __obj_moved = false; _ = &__obj_moved;
-            defer if (!__obj_moved) { const __T = @TypeOf(obj); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = obj.release() catch {}; } else { obj.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = obj; _drop_val.release(); } };
             _ = obj.put(global, jsc.ZigString.static("width"), jsc.JSValue.jsNumber(m.w));
             _ = obj.put(global, jsc.ZigString.static("height"), jsc.JSValue.jsNumber(m.h));
             _ = obj.put(global, jsc.ZigString.static("format"), jsc.ZigString.init(@tagName(m.format)).toJS(global));
@@ -1284,8 +1144,6 @@ pub fn applyPipeline(self: *PipelineTask, decoded_img: *codecs.Decoded) codecs.E
             const p = self.pipeline;
             if ((p.rotate != 0)) {
                 const next = try codecs.rotate(decoded_img.rgba, decoded_img.width, decoded_img.height, p.rotate);
-                var __next_moved = false; _ = &__next_moved;
-                defer if (!__next_moved) { const __T = @TypeOf(next); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next.release() catch {}; } else { next.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next; _drop_val.release(); } };
                 _ = bun.default_allocator.free(decoded_img.rgba);
                 decoded_img.rgba = next.rgba;
                 decoded_img.width = next.width;
@@ -1293,15 +1151,11 @@ pub fn applyPipeline(self: *PipelineTask, decoded_img: *codecs.Decoded) codecs.E
             }
             if (p.flip) {
                 const next = try codecs.flip(decoded_img.rgba, decoded_img.width, decoded_img.height, false);
-                var __next_moved = false; _ = &__next_moved;
-                defer if (!__next_moved) { const __T = @TypeOf(next); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next.release() catch {}; } else { next.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next; _drop_val.release(); } };
                 _ = bun.default_allocator.free(decoded_img.rgba);
                 decoded_img.rgba = next;
             }
             if (p.flop) {
                 const next = try codecs.flip(decoded_img.rgba, decoded_img.width, decoded_img.height, true);
-                var __next_moved = false; _ = &__next_moved;
-                defer if (!__next_moved) { const __T = @TypeOf(next); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next.release() catch {}; } else { next.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next; _drop_val.release(); } };
                 _ = bun.default_allocator.free(decoded_img.rgba);
                 decoded_img.rgba = next;
             }
@@ -1313,8 +1167,6 @@ pub fn applyPipeline(self: *PipelineTask, decoded_img: *codecs.Decoded) codecs.E
                 }
                 if (((t.w != decoded_img.width) or (t.h != decoded_img.height))) {
                     const next = try codecs.resize(decoded_img.rgba, decoded_img.width, decoded_img.height, t.w, t.h, r.filter);
-                    var __next_moved = false; _ = &__next_moved;
-                    defer if (!__next_moved) { const __T = @TypeOf(next); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next.release() catch {}; } else { next.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next; _drop_val.release(); } };
                     _ = bun.default_allocator.free(decoded_img.rgba);
                     decoded_img.rgba = next;
                     decoded_img.width = t.w;
@@ -1336,8 +1188,6 @@ pub fn resolveResize(r: Resize, sw: u32, sh: u32) ResolvedResize {
                 const sx = (@as(f64, @floatFromInt(w)) / @as(f64, @floatFromInt(sw)));
                 const sy = (@as(f64, @floatFromInt(h)) / @as(f64, @floatFromInt(sh)));
                 const s = @min(sx, sy);
-                var __s_moved = false; _ = &__s_moved;
-                defer if (!__s_moved) { const __T = @TypeOf(s); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s.release() catch {}; } else { s.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s; _drop_val.release(); } };
                 w = @max(1, @as(u32, @intFromFloat(@round((@as(f64, @floatFromInt(sw)) * s)))));
                 h = @max(1, @as(u32, @intFromFloat(@round((@as(f64, @floatFromInt(sh)) * s)))));
             }
@@ -1349,26 +1199,18 @@ pub fn resolveResize(r: Resize, sw: u32, sh: u32) ResolvedResize {
 
 pub fn applyOrientation(decoded_img: *codecs.Decoded, orient: exif.Orientation) codecs.Error!void {
             const t = orient.transform();
-            var __t_moved = false; _ = &__t_moved;
-            defer if (!__t_moved) { const __T = @TypeOf(t); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = t.release() catch {}; } else { t.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = t; _drop_val.release(); } };
             if (t.flip) {
                 const next = try codecs.flip(decoded_img.rgba, decoded_img.width, decoded_img.height, false);
-                var __next_moved = false; _ = &__next_moved;
-                defer if (!__next_moved) { const __T = @TypeOf(next); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next.release() catch {}; } else { next.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next; _drop_val.release(); } };
                 _ = bun.default_allocator.free(decoded_img.rgba);
                 decoded_img.rgba = next;
             }
             if (t.flop) {
                 const next = try codecs.flip(decoded_img.rgba, decoded_img.width, decoded_img.height, true);
-                var __next_moved = false; _ = &__next_moved;
-                defer if (!__next_moved) { const __T = @TypeOf(next); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next.release() catch {}; } else { next.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next; _drop_val.release(); } };
                 _ = bun.default_allocator.free(decoded_img.rgba);
                 decoded_img.rgba = next;
             }
             if ((t.rotate != 0)) {
                 const next = try codecs.rotate(decoded_img.rgba, decoded_img.width, decoded_img.height, t.rotate);
-                var __next_moved = false; _ = &__next_moved;
-                defer if (!__next_moved) { const __T = @TypeOf(next); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next.release() catch {}; } else { next.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next; _drop_val.release(); } };
                 _ = bun.default_allocator.free(decoded_img.rgba);
                 decoded_img.rgba = next.rgba;
                 decoded_img.width = next.width;

@@ -224,6 +224,7 @@ pub fn add(self: *History, line: []const u8) !void {
             while ((self.entries.items.len > MAX_HISTORY_SIZE)) {
                 const old = self.entries.orderedRemove(0);
                 _ = self.allocator.free(old);
+                self.position = (self.position -| 1);
             }
     }
 

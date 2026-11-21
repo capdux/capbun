@@ -966,6 +966,10 @@ extern_string_count_bin = (extern_string_count_bin + (obj.properties.len * 2));
 }
                         for (cp_iter_slice(obj.properties.slice())) |bin_prop| {
                             _ = &bin_prop;
+                            const key_str = ((bin_prop.key.?.asString(allocator)) orelse break);
+                            _ = string_builder.count(key_str);
+                            const val_str = (((if (@typeInfo(@TypeOf(bin_prop)) == .@"enum") @intFromEnum(bin_prop) else bin_prop.value).?.asString(allocator)) orelse break);
+                            _ = string_builder.count(val_str);
                         }
 },
 .e_string => {
@@ -1250,6 +1254,8 @@ var group_slice = extern_strings_bin_entries[0..(obj.properties.len * 2)];
                         _ = &group_i;
                         for (cp_iter_slice(obj.properties.slice())) |bin_prop| {
                             _ = &bin_prop;
+                            const key_str = ((bin_prop.key.?.asString(allocator)) orelse break);
+                            group_slice[cp_cast_int(usize, group_i)] = string_builder.append(ExternalString, key_str);
                             if (is_identical) {
                                 is_identical = (group_slice[@as(usize, @intCast(group_i))].hash == prev_extern_bin_group.?[@as(usize, @intCast(group_i))].hash);
                                 if (comptime Environment.allow_assert) {
@@ -1263,6 +1269,8 @@ var group_slice = extern_strings_bin_entries[0..(obj.properties.len * 2)];
                                 }
                             }
                             group_i = (group_i + 1);
+                            const val_str = (((if (@typeInfo(@TypeOf(bin_prop)) == .@"enum") @intFromEnum(bin_prop) else bin_prop.value).?.asString(allocator)) orelse break);
+                            group_slice[cp_cast_int(usize, group_i)] = string_builder.append(ExternalString, val_str);
                             if (is_identical) {
                                 is_identical = (group_slice[@as(usize, @intCast(group_i))].hash == prev_extern_bin_group.?[@as(usize, @intCast(group_i))].hash);
                                 if (comptime Environment.allow_assert) {

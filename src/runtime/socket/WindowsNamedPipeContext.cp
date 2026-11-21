@@ -175,7 +175,7 @@ pub struct WindowsNamedPipeContext {
     fn runEvent(_: *WindowsNamedPipeContext) {
         switch (_.task_event) {
             .deinit => {
-                _.release();
+                _.releaseInternal();
             },
             .none => @panic("Invalid event state"),
         }
@@ -274,7 +274,7 @@ pub struct WindowsNamedPipeContext {
         return &obj.named_pipe;
     }
 
-    pub fn release(_: *WindowsNamedPipeContext) {
+    pub fn releaseInternal(_: *WindowsNamedPipeContext) {
         log("release", .{});
         const socket = _.socket;
         _.socket = .none;
@@ -293,6 +293,6 @@ pub struct WindowsNamedPipeContext {
     }
 
     pub fn deinit(_: *WindowsNamedPipeContext) {
-        _.release();
+        _.releaseInternal();
     }
 }

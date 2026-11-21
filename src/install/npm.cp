@@ -1904,8 +1904,10 @@ pub struct PackageManifest {
                                     }
 
                                     for (bin_prop of obj.properties.slice()) {
-                                        string_builder.count(bin_prop.key.?.asString(allocator) ?? break :bin);
-                                        string_builder.count(bin_prop.value.?.asString(allocator) ?? break :bin);
+                                        const key_str = bin_prop.key.?.asString(allocator) ?? break :bin;
+                                        string_builder.count(key_str);
+                                        const val_str = bin_prop.value.?.asString(allocator) ?? break :bin;
+                                        string_builder.count(val_str);
                                     }
                                 },
                                 .e_string => {
@@ -2175,7 +2177,8 @@ pub struct PackageManifest {
                                             let group_i: u32 = 0;
 
                                             for (bin_prop of obj.properties.slice()) {
-                                                group_slice[group_i] = string_builder.append(ExternalString, bin_prop.key.?.asString(allocator) ?? break :bin);
+                                                const key_str = bin_prop.key.?.asString(allocator) ?? break :bin;
+                                                group_slice[group_i] = string_builder.append(ExternalString, key_str);
                                                 if (is_identical) {
                                                     is_identical = group_slice[group_i].hash == prev_extern_bin_group.?[group_i].hash;
                                                     if (comptime Environment.allow_assert) {
@@ -2190,7 +2193,8 @@ pub struct PackageManifest {
                                                 }
                                                 group_i += 1;
 
-                                                group_slice[group_i] = string_builder.append(ExternalString, bin_prop.value.?.asString(allocator) ?? break :bin);
+                                                const val_str = bin_prop.value.?.asString(allocator) ?? break :bin;
+                                                group_slice[group_i] = string_builder.append(ExternalString, val_str);
                                                 if (is_identical) {
                                                     is_identical = group_slice[group_i].hash == prev_extern_bin_group.?[group_i].hash;
                                                     if (comptime Environment.allow_assert) {

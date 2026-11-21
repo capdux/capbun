@@ -701,9 +701,8 @@ pub fn clearSymbolUsagesFromDeadPart(p: *P, part: *const js_ast.Part) void {
             _ = &idx;
             while ((idx < symbol_use_refs.len)) : (idx = (idx + 1)) {
                 const sym_ref = symbol_use_refs[@as(usize, @intCast(idx))];
-                _ = &sym_ref;
                 const prev = symbol_use_values[@as(usize, @intCast(idx))];
-                _ = &prev;
+                symbols[@as(usize, @intCast(sym_ref.innerIndex()))].use_count_estimate = (symbols[@as(usize, @intCast(sym_ref.innerIndex()))].use_count_estimate -| prev.count_estimate);
             }
             const declared_refs = part.declared_symbols.refs();
             for (cp_iter_slice(declared_refs)) |declared| {
@@ -3008,6 +3007,7 @@ pub fn ignoreUsageOfRuntimeRequire(p: *P) void {
             if (p.options.features.auto_polyfill_require) {
                 _ = bun.assert((p.runtime_imports.__require != null));
                 _ = p.ignoreUsage(p.runtimeIdentifierRef(logger.Loc.Empty, "__require"));
+                p.symbols.items[@as(usize, @intCast(p.require_ref.innerIndex()))].use_count_estimate = (p.symbols.items[@as(usize, @intCast(p.require_ref.innerIndex()))].use_count_estimate -| 1);
             }
     }
 
@@ -3333,12 +3333,14 @@ pub fn ignoreUsage(p: *P, sym_ref: Ref) void {
                 if (comptime Environment.allow_assert) {
                     _ = assert(((if (comptime @typeInfo(@TypeOf(sym_ref.innerIndex())) == .@"enum") cp_cast_int(usize, @intFromEnum(sym_ref.innerIndex())) else cp_cast_int(usize, sym_ref.innerIndex())) < p.symbols.items.len));
                 }
+                p.symbols.items[@as(usize, @intCast(sym_ref.innerIndex()))].use_count_estimate = (p.symbols.items[@as(usize, @intCast(sym_ref.innerIndex()))].use_count_estimate -| 1);
                 const use_opt = p.symbol_uses.get(sym_ref);
                 if ((use_opt == null)) {
                     return;
                 }
                 var use = use_opt.?;
                 _ = &use;
+                use.count_estimate = (use.count_estimate -| 1);
                 if ((use.count_estimate == 0)) {
                     _ = p.symbol_uses.swapRemove(sym_ref);
                 } else {
@@ -4102,6 +4104,7 @@ pub fn popAndFlattenScope(p: *P, scope_index: usize) void {
             if (comptime Environment.allow_assert) {
                 _ = assert((parent.children.ptr[@as(usize, @intCast(last))] == to_flatten));
             }
+            parent.children.len = (parent.children.len -| 1);
             for (cp_iter_slice(to_flatten.children.slice())) |item| {
                 _ = &item;
                 item.parent = parent;

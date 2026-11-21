@@ -1147,7 +1147,7 @@ _ = p.writer.print(StringType, str);
     }
 
 pub fn unindent(p: *Printer) void {
-        _ = p;
+            p.options.indent.count = (p.options.indent.count -| 1);
     }
 
 pub fn indent(p: *Printer) void {

@@ -22,11 +22,7 @@ head: std.atomic.Value(u16) = std.atomic.Value(u16).init(0),
 
 pub fn enqueue(self: *PosixSignalHandle, signal: u8) bool {
         const old_tail = self.tail.load(.acquire);
-        var __old_tail_moved = false; _ = &__old_tail_moved;
-        defer if (!__old_tail_moved) { const __T = @TypeOf(old_tail); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = old_tail.release() catch {}; } else { old_tail.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = old_tail; _drop_val.release(); } };
         const head_val = self.head.load(.acquire);
-        var __head_val_moved = false; _ = &__head_val_moved;
-        defer if (!__head_val_moved) { const __T = @TypeOf(head_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = head_val.release() catch {}; } else { head_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = head_val; _drop_val.release(); } };
         const next_tail = ((old_tail +% 1) % buffer_size);
         if ((next_tail == (head_val % buffer_size))) {
             _ = log("signal queue is full; dropping", .{});
@@ -43,20 +39,13 @@ pub fn enqueue(self: *PosixSignalHandle, signal: u8) bool {
 
 pub fn dequeue(self: *PosixSignalHandle) ?u8 {
         const old_head = self.head.load(.acquire);
-        var __old_head_moved = false; _ = &__old_head_moved;
-        defer if (!__old_head_moved) { const __T = @TypeOf(old_head); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = old_head.release() catch {}; } else { old_head.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = old_head; _drop_val.release(); } };
         const tail_val = self.tail.load(.acquire);
-        var __tail_val_moved = false; _ = &__tail_val_moved;
-        defer if (!__tail_val_moved) { const __T = @TypeOf(tail_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = tail_val.release() catch {}; } else { tail_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = tail_val; _drop_val.release(); } };
         if ((old_head == tail_val)) {
             return null;
         }
         const slot_index = (old_head % buffer_size);
         const signal = @atomicRmw(u8, (&self.signals[@as(usize, @intCast(slot_index))]), .Xchg, 0, .acq_rel);
-        var __signal_moved = false; _ = &__signal_moved;
-        defer if (!__signal_moved) { const __T = @TypeOf(signal); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = signal.release() catch {}; } else { signal.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = signal; _drop_val.release(); } };
         _ = self.head.store((old_head +% 1), .release);
-        __signal_moved = true;
         return signal;
 }
 
@@ -65,19 +54,18 @@ pub fn drain(self: *PosixSignalHandle, event_loop: *jsc.EventLoop) void {
             var posix_signal_task: PosixSignalTask = undefined;
             _ = &posix_signal_task;
             var task = jsc.Task.init((&posix_signal_task));
-            var __task_moved = false; _ = &__task_moved;
-            defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
+            _ = &task;
             _ = task.setUintptr(signal);
             _ = event_loop.enqueueTask(task);
         }
 }
 
-pub fn release(self: *PosixSignalHandle) void {
+pub fn releaseInternal(self: *PosixSignalHandle) void {
         _ = bun.destroy(self);
 }
 
 pub fn deinit(self: *PosixSignalHandle) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+        _ = self.releaseInternal();
 }
 pub const new = bun.TrivialNew(@This());
 pub const PosixSignalTask = struct {
@@ -113,8 +101,7 @@ pub export fn Bun__ensureSignalHandler() callconv(.c) void {
             if (VirtualMachine.getMainThreadVM()) |vm| {
                 _ = &vm;
                 var el = vm.eventLoop();
-                var __el_moved = false; _ = &__el_moved;
-                defer if (!__el_moved) { const __T = @TypeOf(el); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = el.release() catch {}; } else { el.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = el; _drop_val.release(); } };
+                _ = &el;
                 if ((el.signal_handler == null)) {
                     el.signal_handler = PosixSignalHandle.new(.{});
                     _ = @memset((&el.signal_handler.?.signals), 0);

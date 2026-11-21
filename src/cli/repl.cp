@@ -269,7 +269,7 @@ struct History {
         while (_.entries.items.len > MAX_HISTORY_SIZE) {
             const old = _.entries.orderedRemove(0);
             _.allocator.free(old);
-            _.position -|= 1;
+            _.position = _.position -| 1;
         }
     }
 

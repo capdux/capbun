@@ -107,7 +107,7 @@ export class ConcurrentTask {
         return _;
     }
 
-    pub fn release(_: *ConcurrentTask) {
+    pub fn releaseInternal(_: *ConcurrentTask) {
         ConcurrentTask.deinit(_);
     }
 

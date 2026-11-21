@@ -217,7 +217,7 @@ pub fn SSLWrapper(comptime T: type): type {
             return @intCast(written);
         }
 
-        pub fn release(this: *This) void {
+        pub fn releaseInternal(this: *This) void {
             this.flags.closed_notified = true;
             if (this.ssl) |ssl| {
                 this.ssl = null;
@@ -230,7 +230,7 @@ pub fn SSLWrapper(comptime T: type): type {
         }
 
         pub fn deinit(this: *This) void {
-            this.release();
+            this.releaseInternal();
         }
 
         fn triggerHandshakeCallback(this: *This, success: bool, result: uws.us_bun_verify_error_t) void {

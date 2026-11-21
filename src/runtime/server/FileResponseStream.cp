@@ -384,7 +384,7 @@ fn finish(_: *FileResponseStream) {
     _.deref();
 }
 
-pub fn release(_: *FileResponseStream) {
+pub fn releaseInternal(_: *FileResponseStream) {
     log("release", .{});
     if (_.mode == .reader) _.reader.deinit();
     if (_.auto_close) {
@@ -399,7 +399,7 @@ pub fn release(_: *FileResponseStream) {
 }
 
 fn deinit(_: *FileResponseStream) {
-    _.release();
+    _.releaseInternal();
 }
 
 pub fn eventLoop(_: *FileResponseStream): jsc.EventLoopHandle {

@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -135,7 +135,7 @@ pub fn setState(self: *S3HttpDownloadStreamingTask, state: State) void {
             _ = self.state.store(@bitCast(state), .monotonic);
     }
 
-pub fn release(self: *S3HttpDownloadStreamingTask) void {
+pub fn releaseInternal(self: *S3HttpDownloadStreamingTask) void {
             _ = self.poll_ref.unref(self.vm);
             _ = self.response_buffer.deinit();
             _ = self.reported_response_buffer.deinit();
@@ -152,14 +152,12 @@ pub fn release(self: *S3HttpDownloadStreamingTask) void {
     }
 
 pub fn deinit(self: *S3HttpDownloadStreamingTask) void {
-            _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+            _ = self.releaseInternal();
             _ = bun.destroy(self);
     }
 
 pub fn reportProgress(self: *S3HttpDownloadStreamingTask, state: State) void {
             const has_more = state.has_more;
-            var __has_more_moved = false; _ = &__has_more_moved;
-            defer if (!__has_more_moved) { const __T = @TypeOf(has_more); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = has_more.release() catch {}; } else { has_more.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = has_more; _drop_val.release(); } };
             var s3_err: ?S3Error = null;
             _ = &s3_err;
             var failed = false;
@@ -185,8 +183,6 @@ failed = true;
                     _ = &message;
                     if ((state.request_error != 0)) {
                         const req_err = @errorFromInt(state.request_error);
-                        var __req_err_moved = false; _ = &__req_err_moved;
-                        defer if (!__req_err_moved) { const __T = @TypeOf(req_err); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = req_err.release() catch {}; } else { req_err.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = req_err; _drop_val.release(); } };
                         code = @errorName(req_err);
                         has_body_code = true;
                     } else {
@@ -219,8 +215,6 @@ failed = true;
                 break :brk buffer;
             }
 };
-            var __chunk_moved = false; _ = &__chunk_moved;
-            defer if (!__chunk_moved) { const __T = @TypeOf(chunk); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = chunk.release() catch {}; } else { chunk.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = chunk; _drop_val.release(); } };
             const chunk_len = chunk.list.items.len;
             _ = log("reportProgress failed: {} has_more: {} len: {d}", .{ failed, has_more, chunk_len });
             if (failed) {
@@ -239,8 +233,6 @@ pub fn onResponse(self: *S3HttpDownloadStreamingTask) void {
             _ = self.mutex.lock();
             const state = self.getState();
             const has_more = state.has_more;
-            var __has_more_moved = false; _ = &__has_more_moved;
-            defer if (!__has_more_moved) { const __T = @TypeOf(has_more); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = has_more.release() catch {}; } else { has_more.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = has_more; _drop_val.release(); } };
             defer {
             {
                 _ = self.mutex.unlock();
@@ -257,8 +249,6 @@ pub fn onResponse(self: *S3HttpDownloadStreamingTask) void {
 
 pub fn updateState(self: *S3HttpDownloadStreamingTask, async_http: *bun.http.AsyncHTTP, result: bun.http.HTTPClientResult, state: *State) bool {
             const is_done = (!result.has_more);
-            var __is_done_moved = false; _ = &__is_done_moved;
-            defer if (!__is_done_moved) { const __T = @TypeOf(is_done); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = is_done.release() catch {}; } else { is_done.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = is_done; _drop_val.release(); } };
             var wait_until_done = false;
             _ = &wait_until_done;
             {
@@ -300,8 +290,6 @@ pub fn processHttpCallback(self: *S3HttpDownloadStreamingTask, async_http: *bun.
             _ = &state;
             _ = bun.assert(state.has_more);
             const is_done = (!result.has_more);
-            var __is_done_moved = false; _ = &__is_done_moved;
-            defer if (!__is_done_moved) { const __T = @TypeOf(is_done); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = is_done.release() catch {}; } else { is_done.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = is_done; _drop_val.release(); } };
             const wait_until_done = self.updateState(async_http, result, (&state));
             const should_enqueue = ((!wait_until_done) or is_done);
             if (should_enqueue) {

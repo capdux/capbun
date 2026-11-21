@@ -671,7 +671,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int) type {
         fn growCapacity(current: u32, minimum: u32) u32 {
             var new = current;
             while (true) {
-                new +|= new / 2 + 8;
+                new = new +| (new / 2 + 8);
                 if (new >= minimum)
                     return new;
             }

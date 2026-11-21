@@ -932,7 +932,7 @@ fn NewPrinter(
         }
 
         static fn unindent(p: *Printer) {
-            p.options.indent.count -|= 1;
+            p.options.indent.count = p.options.indent.count -| 1;
         }
 
         static fn indent(p: *Printer) {
