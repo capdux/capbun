@@ -21,6 +21,13 @@ import bun from "bun";
 const windows = std.os.windows;
 const assert = bun.assert;
 
+struct UnlockGuard {
+    mutex: *bun.Mutex!,
+    ~init() {
+        unsafe { _.mutex.unlock(); }
+    }
+}
+
 pub enum Unit { none, files, bytes }
 type OptNode = (*Node)?;
 
@@ -66,13 +73,13 @@ pub struct Node {
         if (parent := _.parent) {
             {
                 _.context.update_mutex.lock();
-                defer _.context.update_mutex.unlock();
+                const _lock = UnlockGuard{ mutex: unsafe { &_.context.update_mutex } };
                 * = @cmpxchgStrong(OptNode, &parent.recently_updated_child, _, null, .monotonic, .monotonic);
             }
             parent.completeOne();
         } else {
             _.context.update_mutex.lock();
-            defer _.context.update_mutex.unlock();
+            const _lock = UnlockGuard{ mutex: unsafe { &_.context.update_mutex } };
             _.context.done = true;
             _.context.refreshWithHeldLock();
         }
@@ -90,7 +97,7 @@ pub struct Node {
     pub fn setName(*_, name: []const u8) {
         const progress = _.context;
         progress.update_mutex.lock();
-        defer progress.update_mutex.unlock();
+        const _lock = UnlockGuard{ mutex: unsafe { &progress.update_mutex } };
         _.name = name;
         if (parent := _.parent) {
             @atomicStore(OptNode, &parent.recently_updated_child, _, .release);
@@ -107,7 +114,7 @@ pub struct Node {
     pub fn setUnit(*_, unit: Unit) {
         const progress = _.context;
         progress.update_mutex.lock();
-        defer progress.update_mutex.unlock();
+        const _lock = UnlockGuard{ mutex: unsafe { &progress.update_mutex } };
         _.unit = unit;
         if (parent := _.parent) {
             @atomicStore(OptNode, &parent.recently_updated_child, _, .release);
@@ -215,7 +222,7 @@ export @root struct Progress {
     pub fn maybeRefresh(*_) {
         if (_.timer != null) {
             if (!_.update_mutex.tryLock()) return;
-            defer _.update_mutex.unlock();
+            const _lock = UnlockGuard{ mutex: unsafe { &_.update_mutex } };
             _.maybeRefreshWithHeldLock(&_.timer.?);
         }
     }
@@ -233,7 +240,7 @@ export @root struct Progress {
     /// Updates the terminal and resets `self.next_refresh_timestamp`. Thread-safe.
     pub fn refresh(*_) {
         if (!_.update_mutex.tryLock()) return;
-        defer _.update_mutex.unlock();
+        const _lock = UnlockGuard{ mutex: unsafe { &_.update_mutex } };
 
         return _.refreshWithHeldLock();
     }

@@ -32,6 +32,31 @@ pub const WriteFileResultType = SystemError.Maybe(SizeType);
 export type WriteFileOnWriteFileCallback = *const fn (ctx: *!, count: WriteFileResultType) void!bun.JSTerminated;
 pub const WriteFileTask = WorkTask(WriteFile);
 
+struct DefaultAllocFreeGuard<T> {
+    ptr: T,
+    ~init() { default_allocator.free(_.ptr); }
+}
+
+struct EventLoopExitGuard {
+    loop: *EventLoop,
+    ~init() { _.loop.exit(); }
+}
+
+struct DestroyGuard<T> {
+    ptr: T,
+    ~init() { destroy(_.ptr); }
+}
+
+struct DeinitPtrGuard<T> {
+    ptr: T,
+    ~init() { _.ptr.deinit(); }
+}
+
+struct DetachPtrGuard<T> {
+    ptr: T,
+    ~init() { _.ptr.detach(); }
+}
+
 export class WriteFile {
     file_blob: Blob;
     bytes_blob: Blob;
@@ -83,7 +108,7 @@ export class WriteFile {
         let self_wf: *WriteFile = @fieldParentPtr("io_request", request);
         return io.Action {
             writable = .{
-                .onError = @ptrCast(&onIOError),
+                .onError = unsafe { @ptrCast(&onIOError) },
                 .ctx = self_wf,
                 .fd = self_wf.opened_fd,
                 .poll = &self_wf.io_poll,
@@ -146,7 +171,7 @@ export class WriteFile {
         return try WriteFile.createWithCtx(
             file_blob,
             bytes_blob,
-            @ptrCast(context),
+            unsafe { @ptrCast(context) },
             Handler.run,
             mkdirp_if_not_exists,
         );
@@ -405,7 +430,7 @@ export class WriteFileWindows {
             &posix_path,
             uv.O.CREAT | uv.O.WRONLY | uv.O.NOCTTY | uv.O.NONBLOCK | uv.O.SEQUENTIAL | uv.O.TRUNC,
             0o644,
-            @ptrCast(&onOpen),
+            unsafe { @ptrCast(&onOpen) },
         );
 
         if (err := rc.errEnum()) {
@@ -422,7 +447,7 @@ export class WriteFileWindows {
 
     @c static fn onOpen(req: *uv.fs_t) {
         let self_wf: *WriteFileWindows = @fieldParentPtr("io_request", req);
-        assert(@as(*!?, @ptrCast(self_wf)) == req.data);
+        assert(unsafe { @as(*!?, @ptrCast(self_wf)) } == req.data);
         let rc = self_wf.io_request.result;
         if (Environment.allow_assert)
             log("onOpen({s}) = {f}", .{ self_wf.file_blob.store.?.data.file.pathlike.path.slice(), rc });
@@ -453,7 +478,7 @@ export class WriteFileWindows {
         this.mkdirp_if_not_exists = false;
         let path = this.file_blob.store.?.data.file.pathlike.path.slice();
         WebCore.Node.fs.Async.AsyncMkdirp.new(.{
-            .completion = @ptrCast(&onMkdirpCompleteConcurrent),
+            .completion = unsafe { @ptrCast(&onMkdirpCompleteConcurrent) },
             .completion_ctx = this,
             .path = bun.Dirname.dirname(u8, path) ?? path,
         }).schedule();
@@ -463,7 +488,7 @@ export class WriteFileWindows {
         let err = this.err;
         this.err = null;
         if (err_ := err) {
-            defer default_allocator.free(err_.path);
+            const _path_guard = DefaultAllocFreeGuard<@TypeOf(err_.path)>{ ptr: err_.path };
             switch (this.throw(err_)) {
                 error.WriteFileWindowsDeinitialized => {},
                 error.JSTerminated => {},
@@ -483,7 +508,7 @@ export class WriteFileWindows {
 
     @c static fn onWriteComplete(req: *uv.fs_t) {
         let self_wf: *WriteFileWindows = @fieldParentPtr("io_request", req);
-        assert(@as(*!?, @ptrCast(self_wf)) == req.data);
+        assert(unsafe { @as(*!?, @ptrCast(self_wf)) } == req.data);
         let rc = self_wf.io_request.result;
         if (err := rc.errno()) {
             switch (self_wf.throw(.{
@@ -503,7 +528,7 @@ export class WriteFileWindows {
     pub fn onFinish(*_): WriteFileWindowsError {
         let event_loop = this.event_loop;
         event_loop.enter();
-        defer event_loop.exit();
+        const _loop_guard = EventLoopExitGuard{ loop: event_loop };
         return this.runFromJSThread();
     }
 
@@ -547,7 +572,7 @@ export class WriteFileWindows {
             return this.onFinish();
         }
 
-        this.uv_bufs[0].base = @constCast(view.ptr);
+        this.uv_bufs[0].base = unsafe { @constCast(view.ptr) };
         this.uv_bufs[0].len = @truncate(view.len);
 
         uv.uv_fs_req_cleanup(&this.io_request);
@@ -592,8 +617,8 @@ export class WriteFileWindows {
             file_blob,
             bytes_blob,
             event_loop,
-            @ptrCast(context),
-            @ptrCast(callback),
+            unsafe { @ptrCast(context) },
+            unsafe { @ptrCast(callback) },
             mkdirp_if_not_exists,
         );
     }
@@ -664,9 +689,9 @@ export class WriteFileWaitFromLockedValueTask {
                     return;
                 };
 
-                defer destroy(this);
-                defer this.promise.deinit();
-                defer file_blob.detach();
+                const _destroy_guard = DestroyGuard<*WriteFileWaitFromLockedValueTask>{ ptr: this };
+                const _promise_guard = DeinitPtrGuard<*JSPromise.Strong>{ ptr: &this.promise };
+                const _blob_guard = DetachPtrGuard<*Blob>{ ptr: &file_blob };
 
                 if (p_val := new_promise.asAnyPromise()) {
                     let p = p_val;

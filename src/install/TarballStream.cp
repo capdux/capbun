@@ -4,6 +4,37 @@ import integrity_mod from "./integrity.zig";
 
 type string = []const u8;
 
+pub struct UnlockGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct CloseValGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct ArchiveGuard<T> {
+    ar: T?,
+    ~init() {
+        if (a := _.ar) {
+            * = a.readClose();
+            * = a.readFree();
+        }
+    }
+}
+
 enum Phase {
     want_header,
     want_data,
@@ -298,7 +329,7 @@ fn drain(client: *TarballStream) {
 /// added or the stream is now closed.
 fn takePending(client: *TarballStream): bool {
     client.mutex.lock();
-    defer client.mutex.unlock();
+    const _guard_mutex = UnlockGuard<@TypeOf(&client.mutex)>{ ptr: &client.mutex };
 
     if (client.pending.items.len == 0) return client.closed;
 
@@ -387,29 +418,27 @@ fn step(client: *TarballStream)! {
 
 fn openArchive(client: *TarballStream)! {
     const ar = lib.Archive.readNew();
-    errdefer {
-        * = ar.readClose();
-        * = ar.readFree();
-    }
+    let guard_ar = ArchiveGuard<@TypeOf(ar)>{ ar: ar };
     // Bypass bidding entirely: the stream is always gzip → tar, and
     // bidding would try to read-ahead before any bytes have arrived.
     // ARCHIVE_FILTER_GZIP = 1, ARCHIVE_FORMAT_TAR = 0x30000.
-    if (lib.archive_read_append_filter(@ptrCast(ar), 1) != 0) return error.Fail;
-    if (lib.archive_read_set_format(@ptrCast(ar), 0x30000) != 0) return error.Fail;
+    if (unsafe { lib.archive_read_append_filter(@ptrCast(ar), 1) } != 0) return error.Fail;
+    if (unsafe { lib.archive_read_set_format(@ptrCast(ar), 0x30000) } != 0) return error.Fail;
     * = ar.readSetOptions("read_concatenated_archives");
 
-    switch (@as(lib.Archive.Result, @enumFromInt(lib.archive_read_open(
+    switch (@as(lib.Archive.Result, @enumFromInt(unsafe { lib.archive_read_open(
         @ptrCast(ar),
         client,
         null,
         archiveReadCallback,
         null,
-    )))) {
+    ) }))) {
         .ok, .warn => {},
         .retry => {
             // open() runs the filter bidder which we bypassed, but the
             // client open path may still probe; treat as transient.
             client.archive = ar;
+            guard_ar.ar = null;
             return;
         },
         else => {
@@ -420,6 +449,7 @@ fn openArchive(client: *TarballStream)! {
         },
     }
     client.archive = ar;
+    guard_ar.ar = null;
 }
 
 fn openDestination(client: *TarballStream)! {
@@ -473,7 +503,7 @@ fn beginEntry(client: *TarballStream, entry: *lib.Archive.Entry)! {
         if (comptime Environment.isWindows) {
             const list = std.array_list.Managed(u8).init(bun.default_allocator);
             let result = strings.toUTF8ListWithType(list, root)?;
-            defer result.deinit();
+            const _guard_result = DeinitGuard<@TypeOf(&result)>{ ptr: &result };
             client.resolved_github_dirname = FileSystem.DirnameStore.instance.append(
                 string,
                 result.items,
@@ -818,7 +848,7 @@ fn populateResult(client: *TarballStream, task: *Task) {
                 bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC,
                 0o644,
             ).unwrap() catch break :insert_tag;
-            defer gh_tag.close();
+            const _guard_gh_tag = CloseValGuard<@TypeOf(gh_tag)>{ val: gh_tag };
             const gh_file = bun.sys.File{ handle: gh_tag };
             gh_file.writeAll(client.resolved_github_dirname).unwrap() catch {
                 * = bun.sys.unlinkat(client.dest.?, ".bun-tag");
@@ -910,7 +940,7 @@ const lib = bun.libarchive.lib;
     ctx: *!,
     out_buffer: [*c]*const !,
 ): lib.la_ssize_t {
-    const stream: *TarballStream = @ptrCast(@alignCast(ctx));
+    const stream: *TarballStream = unsafe { @ptrCast(@alignCast(ctx)) };
 
     const remaining = stream.reading.items[stream.read_pos..];
     if (remaining.len > 0) {
@@ -942,7 +972,7 @@ const lib = bun.libarchive.lib;
     }
 
     if (closed) {
-        out_buffer.* = @ptrCast(@alignCast(stream)); // unused when len==0
+        unsafe { out_buffer.* = @ptrCast(@alignCast(stream)); } // unused when len==0
         return 0;
     }
 

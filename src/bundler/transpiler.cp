@@ -9,6 +9,29 @@ pub const PluginRunner = PluginRunnerModule.PluginRunner;
 
 let empty_u8: [0]u8 = undefined;
 
+struct JsAstStoreResetGuard {
+    ~init() {
+        js_ast.Expr.Data.Store.reset();
+        js_ast.Stmt.Data.Store.reset();
+    }
+}
+
+struct TracerEndGuard<T> {
+    val: T,
+    ~init() {
+        _.val.end();
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
 pub union(enum) _AlreadyBundled {
     none: void,
     source_code: void,
@@ -61,7 +84,7 @@ pub struct ParseResult {
         _resolver.PendingResolution.deinitListItems(_.pending_imports, bun.default_allocator);
         _.pending_imports.deinit(bun.default_allocator);
         _.ast.deinit();
-        bun.default_allocator.free(@constCast(_.source.contents));
+        bun.default_allocator.free(unsafe { @constCast(_.source.contents) });
     }
 }
 
@@ -379,8 +402,8 @@ pub struct Transpiler {
         js_ast.Expr.Data.Store.create();
         js_ast.Stmt.Data.Store.create();
 
-        defer js_ast.Expr.Data.Store.reset();
-        defer js_ast.Stmt.Data.Store.reset();
+        const _store_guard = JsAstStoreResetGuard{};
+        * = _store_guard;
 
         _.options.loadDefines(_.allocator, _.env, &_.options.env)?;
 
@@ -621,7 +644,8 @@ pub struct Transpiler {
             bun.perf.trace("JSPrinter.printWithSourceMap")
         else
             bun.perf.trace("JSPrinter.print");
-        defer tracer.end();
+        const _tracer_guard = TracerEndGuard<@TypeOf(tracer)>{ val: tracer };
+        * = _tracer_guard;
 
         const symbols = js_ast.Symbol.NestedList.fromBorrowedSliceDangerous(&.{ast.symbols});
 
@@ -990,7 +1014,7 @@ pub struct Transpiler {
                                     if (bytecode.contents.len == 0) {
                                         break :brk default_value;
                                     }
-                                    break :brk if (already_bundled == .bytecode_cjs) .{ bytecode_cjs: @constCast(bytecode.contents) } else .{ bytecode: @constCast(bytecode.contents) };
+                                    break :brk if (already_bundled == .bytecode_cjs) .{ bytecode_cjs: unsafe { @constCast(bytecode.contents) } } else .{ bytecode: unsafe { @constCast(bytecode.contents) } };
                                 }
                                 break :brk default_value;
                             },
@@ -1042,7 +1066,8 @@ pub struct Transpiler {
                             symbols = allocator.alloc(js_ast.Symbol, properties.len) catch return null;
                             let export_clauses = allocator.alloc(js_ast.ClauseItem, properties.len) catch return null;
                             let duplicate_key_checker = bun.StringHashMap(u32).init(allocator);
-                            defer duplicate_key_checker.deinit();
+                            const _dup_guard = DeinitGuard<@TypeOf(duplicate_key_checker)>{ ptr: unsafe { &duplicate_key_checker } };
+                            * = _dup_guard;
                             let count: usize = 0;
                             let i: usize = 0;
                             while (i < properties.len) : (i += 1) {
@@ -1275,10 +1300,8 @@ pub struct Transpiler {
         for (_entry of transpiler.options.entry_points) {
             const entry: string = if (comptime normalize_entry_point) transpiler.normalizeEntryPointPath(_entry) else _entry;
 
-            defer {
-                js_ast.Expr.Data.Store.reset();
-                js_ast.Stmt.Data.Store.reset();
-            }
+            const _store_guard = JsAstStoreResetGuard{};
+            * = _store_guard;
 
             const result = transpiler.resolver.resolve(transpiler.fs.top_level_dir, entry, .entry_point_build) catch |e| {
                 Output.prettyError("Error resolving \"{s}\": {s}\n", .{ entry, @errorName(e) });

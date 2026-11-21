@@ -7,6 +7,27 @@ const Output = bun.Output;
 const PathBuffer = bun.PathBuffer;
 const WPathBuffer = bun.WPathBuffer;
 
+struct DeinitGuard<T> {
+    item: T,
+    ~init() {
+        _.item.deinit();
+    }
+}
+
+struct PathBufGuard<T> {
+    buf: T,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+struct WPathBufGuard<T> {
+    buf: T,
+    ~init() {
+        bun.w_path_buffer_pool.put(_.buf);
+    }
+}
+
 pub const Options = struct {
     check_length: CheckLength = CheckLength.assume_always_less_than_max_path,
     sep: PathSeparators = PathSeparators.any,
@@ -738,11 +759,11 @@ pub fn Path(comptime opts: Options): type {
 
         pub fn appendFmt(this: *@This(), comptime fmt: []const u8, args: anytype) Result(void) {
             // TODO: there's probably a better way to do this. needed for trimming slashes
-            let temp: Path(.{ .buf_type = .pool }) = .init();
-            defer temp.deinit();
+            const PoolPath = Path(.{ .buf_type = .pool });
+            const temp_guard = DeinitGuard<PoolPath>{ item: .init() };
 
             const input = switch (comptime opts.buf_type) {
-                .pool => std.fmt.bufPrint(temp._buf.pooled, fmt, args) catch {
+                .pool => std.fmt.bufPrint(temp_guard.item._buf.pooled, fmt, args) catch {
                     if (comptime opts.check_length == .check_for_greater_than_max_path) {
                         return error.MaxPathExceeded;
                     }
@@ -768,13 +789,12 @@ pub fn Path(comptime opts: Options): type {
                 },
             }
 
-            const cloned = this.clone();
-            defer cloned.deinit();
+            const cloned_guard = DeinitGuard<@This()>{ item: this.clone() };
 
             switch (comptime opts.buf_type) {
                 .pool => {
                     const joined = bun.path.joinAbsStringBuf(
-                        cloned.slice(),
+                        cloned_guard.item.slice(),
                         this._buf.pooled,
                         parts,
                         switch (opts.sep) {
@@ -804,9 +824,9 @@ pub fn Path(comptime opts: Options): type {
                     switch (comptime opts.pathUnit()) {
                         u8 => {
                             const cwd_path_buf = bun.path_buffer_pool.get();
-                            defer bun.path_buffer_pool.put(cwd_path_buf);
+                            const cwd_buf_guard = PathBufGuard<@TypeOf(cwd_path_buf)>{ buf: cwd_path_buf };
                             const current_slice = this.slice();
-                            const cwd_path = cwd_path_buf[0..current_slice.len];
+                            const cwd_path = cwd_buf_guard.buf[0..current_slice.len];
                             bun.copy(u8, cwd_path, current_slice);
 
                             const parts: [2][]const u8 = .{ cwd_path, part };
@@ -825,8 +845,8 @@ pub fn Path(comptime opts: Options): type {
                         },
                         u16 => {
                             const path_buf = bun.w_path_buffer_pool.get();
-                            defer bun.w_path_buffer_pool.put(path_buf);
-                            const converted = bun.strings.convertUTF8toUTF16InBuffer(path_buf, part);
+                            const path_buf_guard = WPathBufGuard<@TypeOf(path_buf)>{ buf: path_buf };
+                            const converted = bun.strings.convertUTF8toUTF16InBuffer(path_buf_guard.buf, part);
                             return this.appendJoin(converted);
                         },
                         else => @compileError("unsupported unit type"),
@@ -836,9 +856,9 @@ pub fn Path(comptime opts: Options): type {
                     switch (comptime opts.pathUnit()) {
                         u16 => {
                             const cwd_path_buf = bun.w_path_buffer_pool.get();
-                            defer bun.w_path_buffer_pool.put(cwd_path_buf);
+                            const cwd_buf_guard = WPathBufGuard<@TypeOf(cwd_path_buf)>{ buf: cwd_path_buf };
                             const current_slice = this.slice();
-                            const cwd_path = cwd_path_buf[0..current_slice.len];
+                            const cwd_path = cwd_buf_guard.buf[0..current_slice.len];
                             bun.copy(u16, cwd_path, current_slice);
 
                             const parts: [2][]const u16 = .{ cwd_path, part };
@@ -857,8 +877,8 @@ pub fn Path(comptime opts: Options): type {
                         },
                         u8 => {
                             const path_buf = bun.path_buffer_pool.get();
-                            defer bun.path_buffer_pool.put(path_buf);
-                            const converted = bun.strings.convertUTF16toUTF8InBuffer(path_buf, part) catch {
+                            const path_buf_guard = PathBufGuard<@TypeOf(path_buf)>{ buf: path_buf };
+                            const converted = bun.strings.convertUTF16toUTF8InBuffer(path_buf_guard.buf, part) catch {
                                 return .initError(.MaxPathExceeded);
                             };
                             return this.appendJoin(converted);

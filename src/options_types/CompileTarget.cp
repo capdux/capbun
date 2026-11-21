@@ -14,6 +14,35 @@ const MutableString = bun.MutableString;
 const Output = bun.Output;
 const strings = bun.strings;
 
+struct EndGuard<T> {
+    item: T,
+    ~init() {
+        _.item.end();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
+struct CloseGuard<T> {
+    item: T,
+    ~init() {
+        _.item.close();
+    }
+}
+
+struct DeleteTreeGuard {
+    path: []const u8,
+    ~init() {
+        std.fs.cwd().deleteTree(_.path) catch {};
+    }
+}
+
 export @root struct CompileTarget {
     os: Environment.OperatingSystem = Environment.os;
     arch: Environment.Architecture = Environment.arch;
@@ -156,8 +185,7 @@ export @root struct CompileTarget {
             const url_str_copy = bun.default_allocator.dupe(u8, url_str)?;
             const url = bun.URL.parse(url_str_copy);
             {
-                let progress = refresher.start("Downloading", 0);
-                defer progress.end();
+                const progress_guard = EndGuard<@TypeOf(refresher.start("Downloading", 0))>{ item: refresher.start("Downloading", 0) };
                 const http_proxy: bun.URL? = env.getHttpProxyFor(url);
 
                 unsafe {
@@ -174,7 +202,7 @@ export @root struct CompileTarget {
                         HTTP.FetchRedirect.follow,
                     );
                 }
-                async_http.client.progress_node = progress;
+                async_http.client.progress_node = progress_guard.item;
                 async_http.client.flags.reject_unauthorized = env.getTLSRejectUnauthorized();
 
                 const response = async_http.sendSync()?;
@@ -196,7 +224,8 @@ export @root struct CompileTarget {
             let tarball_bytes: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8).empty;
             {
                 refresher.refresh();
-                defer compressed_archive_bytes.list.deinit(allocator);
+                const archive_guard = unsafe { DeinitWithAllocGuard<@TypeOf(compressed_archive_bytes.list)>{ ptr: &compressed_archive_bytes.list, allocator: allocator } };
+                * = archive_guard;
 
                 if (compressed_archive_bytes.list.items.len == 0) {
                     // Return error without printing - let caller handle the messaging
@@ -204,15 +233,14 @@ export @root struct CompileTarget {
                 }
 
                 {
-                    let node = refresher.start("Decompressing", 0);
-                    defer node.end();
+                    let node_guard = EndGuard<@TypeOf(refresher.start("Decompressing", 0))>{ item: refresher.start("Decompressing", 0) };
                     let gunzip = bun.zlib.ZlibReaderArrayList.init(compressed_archive_bytes.list.items, *tarball_bytes, allocator) catch {
-                        node.end();
+                        node_guard.item.end();
                         // Return error without printing - let caller handle the messaging
                         return error.InvalidResponse;
                     };
                     gunzip.readAll(true) catch {
-                        node.end();
+                        node_guard.item.end();
                         // Return error without printing - let caller handle the messaging
                         return error.InvalidResponse;
                     };
@@ -221,18 +249,18 @@ export @root struct CompileTarget {
                 refresher.refresh();
 
                 {
-                    let node = refresher.start("Extracting", 0);
-                    defer node.end();
+                    let node_guard = EndGuard<@TypeOf(refresher.start("Extracting", 0))>{ item: refresher.start("Extracting", 0) };
 
                     const libarchive = bun.libarchive;
                     let tmpname_buf: [1024]u8 = undefined;
                     const tempdir_name = bun.fs.FileSystem.tmpname("tmp", &tmpname_buf, bun.fastRandom())?;
-                    let tmpdir = std.fs.cwd().makeOpenPath(tempdir_name, {})?;
-                    defer tmpdir.close();
-                    defer std.fs.cwd().deleteTree(tempdir_name) catch {};
+                    const tmpdir = std.fs.cwd().makeOpenPath(tempdir_name, {})?;
+                    const tmpdir_guard = CloseGuard<@TypeOf(tmpdir)>{ item: tmpdir };
+                    const tempdir_guard = DeleteTreeGuard{ path: tempdir_name };
+                    * = tempdir_guard;
                     * = libarchive.Archiver.extractToDir(
                         tarball_bytes.items,
-                        tmpdir,
+                        tmpdir_guard.item,
                         null,
                         void,
                         undefined,
@@ -241,14 +269,14 @@ export @root struct CompileTarget {
                             depth_to_skip: 2,
                         },
                     ) catch {
-                        node.end();
+                        node_guard.item.end();
                         // Return error without printing - let caller handle the messaging
                         return error.ExtractionFailed;
                     };
 
                     let did_retry = false;
                     while (true) {
-                        bun.sys.moveFileZ(.fromStdDir(tmpdir), if (this.os == .windows) "bun.exe" else "bun", bun.invalid_fd, dest_z) catch {
+                        bun.sys.moveFileZ(.fromStdDir(tmpdir_guard.item), if (this.os == .windows) "bun.exe" else "bun", bun.invalid_fd, dest_z) catch {
                             if (!did_retry) {
                                 did_retry = true;
                                 const dirname = bun.path.dirname(dest_z, .loose);
@@ -259,7 +287,7 @@ export @root struct CompileTarget {
 
                                 // fallthrough, failed for another reason
                             }
-                            node.end();
+                            node_guard.item.end();
                             // Return error without printing - let caller handle the messaging
                             return error.ExtractionFailed;
                         };

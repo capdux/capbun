@@ -69,11 +69,34 @@ const Trns = extern struct {
     type3_alpha: [256]u8,
 };
 
+struct SpngCtxGuard {
+    ctx: *spng_ctx,
+    ~init() {
+        spng_ctx_free(_.ctx);
+    }
+}
+
+struct SliceFreeGuard {
+    slice: ([]u8)?,
+    ~init() {
+        if (s := _.slice) {
+            bun.default_allocator.free(s);
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     const ctx_opt = spng_ctx_new(0);
     if (ctx_opt == null) return error.OutOfMemory;
     const ctx = ctx_opt.?;
-    defer spng_ctx_free(ctx);
+    const ctx_guard = SpngCtxGuard{ ctx: ctx };
     if (spng_set_png_buffer(ctx, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
     let ihdr: Ihdr = undefined;
     if (spng_get_ihdr(ctx, &ihdr) != 0) return error.DecodeFailed;
@@ -81,7 +104,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     let size: usize = 0;
     if (spng_decoded_image_size(ctx, SPNG_FMT_RGBA8, &size) != 0) return error.DecodeFailed;
     const out = bun.default_allocator.alloc(u8, size)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = SliceFreeGuard{ slice: out };
     if (spng_decode_image(ctx, out.ptr, out.len, SPNG_FMT_RGBA8, SPNG_DECODE_TRNS) != 0)
         return error.DecodeFailed;
 
@@ -95,9 +118,10 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     // colour shift, which is the exact bug #30197 is about.
     let iccp: Iccp = std.mem.zeroes(Iccp);
     const icc: ([]u8)? = if (spng_get_iccp(ctx, &iccp) == 0 && iccp.profile_len > 0 && iccp.profile != null)
-        try bun.default_allocator.dupe(u8, iccp.profile.?[0..iccp.profile_len])
+        bun.default_allocator.dupe(u8, unsafe { iccp.profile.?[0..iccp.profile_len] })?
     else
         null;
+    out_guard.slice = null;
     return { rgba: out, width: ihdr.width, height: ihdr.height, icc_profile: icc };
 }
 
@@ -121,7 +145,7 @@ fn embedIccp(ctx: *spng_ctx, icc_profile: ([]const u8)?) {
         // `profile` is `char*` in libspng; the library reads-only during
         // encode when `user.iccp = 1` (set by spng_set_iccp). Const-cast
         // to fit the extern-struct field type without duping.
-        profile: @constCast(p.ptr),
+        profile: unsafe { @constCast(p.ptr) },
     };
     const name = "ICC Profile";
     @memcpy(iccp.profile_name[0..name.len], name);
@@ -132,7 +156,7 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, level: i8, icc_profile: ([]const
     const ctx_opt = spng_ctx_new(SPNG_CTX_ENCODER);
     if (ctx_opt == null) return error.OutOfMemory;
     const ctx = ctx_opt.?;
-    defer spng_ctx_free(ctx);
+    const ctx_guard = SpngCtxGuard{ ctx: ctx };
     * = spng_set_option(ctx, SPNG_ENCODE_TO_BUFFER, 1);
     if (level >= 0) * = spng_set_option(ctx, SPNG_IMG_COMPRESSION_LEVEL, @min(level, 9));
     let ihdr: Ihdr = {
@@ -152,7 +176,7 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, level: i8, icc_profile: ([]const
     const buf = buf_opt.?;
     // spng_get_png_buffer transfers ownership (libc malloc); hand to JS
     // with libc `free` as the finalizer instead of duping.
-    return { bytes: buf[0..len], free: codecs.Encoded.wrap(std.c.free) };
+    return { bytes: unsafe { buf[0..len] }, free: codecs.Encoded.wrap(std.c.free) };
 }
 
 /// Quantize RGBA to ≤ `colors` and emit an indexed (colour-type 3) PNG
@@ -163,12 +187,12 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, level: i8, icc_profile: ([]const
 /// to be interpreted correctly — same contract as truecolour encode.
 pub fn encodeIndexed(rgba: []const u8, w: u32, h: u32, level: i8, colors: u16, dither: bool, icc_profile: ([]const u8)?): codecs.Error!codecs.Encoded {
     let q = quantize.quantize(rgba, w, h, { max_colors: colors, dither: dither })?;
-    defer q.deinit();
+    let q_guard = DeinitGuard<@TypeOf(q)>{ val: q };
 
     const ctx_opt = spng_ctx_new(SPNG_CTX_ENCODER);
     if (ctx_opt == null) return error.OutOfMemory;
     const ctx = ctx_opt.?;
-    defer spng_ctx_free(ctx);
+    const ctx_guard = SpngCtxGuard{ ctx: ctx };
     * = spng_set_option(ctx, SPNG_ENCODE_TO_BUFFER, 1);
     if (level >= 0) * = spng_set_option(ctx, SPNG_IMG_COMPRESSION_LEVEL, @min(level, 9));
 
@@ -181,16 +205,16 @@ pub fn encodeIndexed(rgba: []const u8, w: u32, h: u32, level: i8, colors: u16, d
     if (spng_set_ihdr(ctx, &ihdr) != 0) return error.EncodeFailed;
     embedIccp(ctx, icc_profile);
 
-    let plte: Plte = { n_entries: q.colors, entries: undefined };
-    let trns: Trns = { n_type3_entries: q.colors, type3_alpha: undefined };
-    for (i of 0..q.colors) {
-        plte.entries[i] = .{ q.palette[i * 4], q.palette[i * 4 + 1], q.palette[i * 4 + 2], 255 };
-        trns.type3_alpha[i] = q.palette[i * 4 + 3];
+    let plte: Plte = { n_entries: q_guard.val.colors, entries: undefined };
+    let trns: Trns = { n_type3_entries: q_guard.val.colors, type3_alpha: undefined };
+    for (i of 0..q_guard.val.colors) {
+        plte.entries[i] = .{ q_guard.val.palette[i * 4], q_guard.val.palette[i * 4 + 1], q_guard.val.palette[i * 4 + 2], 255 };
+        trns.type3_alpha[i] = q_guard.val.palette[i * 4 + 3];
     }
     if (spng_set_plte(ctx, &plte) != 0) return error.EncodeFailed;
-    if (q.has_alpha && spng_set_trns(ctx, &trns) != 0) return error.EncodeFailed;
+    if (q_guard.val.has_alpha && spng_set_trns(ctx, &trns) != 0) return error.EncodeFailed;
 
-    if (spng_encode_image(ctx, q.indices.ptr, q.indices.len, SPNG_FMT_PNG, SPNG_ENCODE_FINALIZE) != 0)
+    if (spng_encode_image(ctx, q_guard.val.indices.ptr, q_guard.val.indices.len, SPNG_FMT_PNG, SPNG_ENCODE_FINALIZE) != 0)
         return error.EncodeFailed;
 
     let len: usize = 0;
@@ -198,7 +222,7 @@ pub fn encodeIndexed(rgba: []const u8, w: u32, h: u32, level: i8, colors: u16, d
     const buf_opt = spng_get_png_buffer(ctx, &len, &e);
     if (buf_opt == null) return error.EncodeFailed;
     const buf = buf_opt.?;
-    return { bytes: buf[0..len], free: codecs.Encoded.wrap(std.c.free) };
+    return { bytes: unsafe { buf[0..len] }, free: codecs.Encoded.wrap(std.c.free) };
 }
 
 import bun from "bun";

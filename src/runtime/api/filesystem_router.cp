@@ -1,6 +1,35 @@
 const default_extensions: []const []const u8 = &["tsx", "jsx", "ts", "mjs", "cjs", "js"];
 const max_path_x2 = bun.MAX_PATH_BYTES * 2;
 
+struct DeinitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.allocator);
+        }
+    }
+}
+
+struct FreeSliceGuard<T> {
+    slice: ([]T)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
 pub struct FileSystemRouter {
     origin: (*jsc.RefString)? = null,
     base_dir: (*jsc.RefString)? = null,
@@ -27,7 +56,7 @@ pub struct FileSystemRouter {
         let vm = globalThis.bunVM();
 
         let root_dir_path: ZigString.Slice = ZigString.Slice.fromUTF8NeverFree(vm.transpiler.fs.top_level_dir);
-        defer root_dir_path.deinit();
+        const root_dir_path_guard = DeinitGuard<ZigString.Slice>{ ptr: &root_dir_path };
         let origin_str: ZigString.Slice = {};
         let asset_prefix_slice: ZigString.Slice = {};
 
@@ -308,8 +337,8 @@ pub struct FileSystemRouter {
         }
 
         if (strings.hasPrefixComptime(path.slice(), "http://") || strings.hasPrefixComptime(path.slice(), "https://") || strings.hasPrefixComptime(path.slice(), "file://")) {
-            const prev_path = path;
-            defer prev_path.deinit();
+            let prev_path = path;
+            const prev_path_guard = DeinitGuard<ZigString.Slice>{ ptr: &prev_path };
             path = ZigString.Slice.initDupe(globalThis.allocator(), URL.parse(path.slice()).pathname)?;
         }
 
@@ -317,7 +346,7 @@ pub struct FileSystemRouter {
             return globalThis.throw("{s} parsing path: {s}", [@errorName(e), path.slice()]);
         };
         let params = Router.Param.List{};
-        defer params.deinit(globalThis.allocator());
+        const params_guard = DeinitWithAllocGuard<Router.Param.List>{ ptr: &params, allocator: globalThis.allocator() };
         const route = _.router.routes.matchPageWithAllocator(
             "",
             url_path,
@@ -359,7 +388,7 @@ pub struct FileSystemRouter {
         const paths = _.router.getEntryPoints();
         const names = _.router.getNames();
         let name_strings = bun.default_allocator.alloc(ZigString, names.len * 2)?;
-        defer bun.default_allocator.free(name_strings);
+        const name_strings_guard = FreeSliceGuard<ZigString>{ slice: name_strings, allocator: bun.default_allocator };
         let paths_strings = name_strings[names.len..];
         for (i of 0..names.len) {
             name_strings[i] = ZigString.init(names[i]).withEncoding();

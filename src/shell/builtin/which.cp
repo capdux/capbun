@@ -35,6 +35,16 @@ const State = union(enum) {
     done,
 };
 
+struct PathBufGuard<T> {
+    buf: T,
+    ~init() { bun.path_buffer_pool.put(_.buf); }
+}
+
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 @root struct Which {
     state: State = .idle,
 
@@ -51,12 +61,12 @@ const State = union(enum) {
 
         if (_.bltn().stdout.needsIO() == null) {
             const path_buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(path_buf);
+            const _path_buf_guard = PathBufGuard<@TypeOf(path_buf)>{ buf: path_buf };
             const PATH = _.bltn().parentCmd().base.shell.export_env.get(EnvStr.initSlice("PATH")) ?? EnvStr.initSlice("");
-            defer PATH.deref();
+            const _path_guard = DerefGuard<@TypeOf(PATH)>{ val: PATH };
             let had_not_found = false;
             for (arg_raw of args) {
-                const arg = arg_raw[0..std.mem.len(arg_raw)];
+                const arg = unsafe { arg_raw[0..std.mem.len(arg_raw)] };
                 const maybe_resolved = which(path_buf, PATH.slice(), _.bltn().parentCmd().base.shell.cwdZ(), arg);
                 if (maybe_resolved == null) {
                     had_not_found = true;
@@ -89,12 +99,12 @@ const State = union(enum) {
         }
 
         const arg_raw = _.state.multi_args.args_slice[_.state.multi_args.arg_idx];
-        const arg = arg_raw[0..std.mem.len(arg_raw)];
+        const arg = unsafe { arg_raw[0..std.mem.len(arg_raw)] };
 
         const path_buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(path_buf);
+        const _path_buf_guard = PathBufGuard<@TypeOf(path_buf)>{ buf: path_buf };
         const PATH = _.bltn().parentCmd().base.shell.export_env.get(EnvStr.initSlice("PATH")) ?? EnvStr.initSlice("");
-        defer PATH.deref();
+        const _path_guard = DerefGuard<@TypeOf(PATH)>{ val: PATH };
 
         const maybe_resolved = which(path_buf, PATH.slice(), _.bltn().parentCmd().base.shell.cwdZ(), arg);
         if (maybe_resolved == null) {
@@ -136,7 +146,7 @@ const State = union(enum) {
         }
 
         if (err_val := e) {
-            defer err_val.deref();
+            const _err_guard = DerefGuard<@TypeOf(err_val)>{ val: err_val };
             return _.bltn().done(err_val.getErrno());
         }
 
@@ -154,7 +164,9 @@ const State = union(enum) {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("which", _));
-        return @fieldParentPtr("impl", impl_);
+        unsafe {
+            const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("which", _));
+            return @fieldParentPtr("impl", impl_);
+        }
     }
 }

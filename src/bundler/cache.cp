@@ -19,6 +19,32 @@ pub const Set = CacheSet;
 
 const debug = Output.scoped(.fs, .visible);
 
+struct FileCloseGuard {
+    file: std.fs.File?,
+    debug_log: bool = false,
+
+    ~init() {
+        if (f := _.file) {
+            if (_.debug_log) {
+                debug("readFileWithAllocator close({f})", .{ bun.fs.printHandle(f.handle) });
+            }
+            f.close();
+        }
+    }
+}
+
+struct TempLogFlushGuard {
+    temp_log: *logger.Log!,
+    log: *logger.Log!,
+    source: *const logger.Source!,
+
+    ~init() {
+        unsafe {
+            _.temp_log.appendToMaybeRecycled(_.log, _.source) catch {};
+        }
+    }
+}
+
 pub type FreeFn = *const fn (*!?) callconv(.c) void;
 pub type OptFreeFn = FreeFn?;
 
@@ -110,11 +136,9 @@ pub struct Fs {
             file_handle = std.fs.openFileAbsoluteZ(path, { mode: .read_only })?;
         }
 
-        defer {
-            if (rfs.needToCloseFiles() && cached_file_descriptor == null) {
-                file_handle.close();
-            }
-        }
+        const _file_guard = FileCloseGuard{
+            file: if (rfs.needToCloseFiles() && cached_file_descriptor == null) file_handle else null,
+        };
 
         const file = (rfs.readFileWithHandle(path, null, file_handle, true, shared, _.stream)) catch |e| {
             if (comptime Environment.isDebug) {
@@ -180,12 +204,10 @@ pub struct Fs {
             debug("openat({f}, {s}) = {f}", .{ dirname_fd, path, bun.FD.fromStdFile(file_handle) });
 
         const will_close = rfs.needToCloseFiles() && _file_handle == null;
-        defer {
-            if (will_close) {
-                debug("readFileWithAllocator close({f})", .{ bun.fs.printHandle(file_handle.handle) });
-                file_handle.close();
-            }
-        }
+        const _file_guard = FileCloseGuard{
+            file: if (will_close) file_handle else null,
+            debug_log: true,
+        };
 
         const file = if (_.stream)
             (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), true)) catch |e| {
@@ -269,7 +291,11 @@ pub struct JavaScript {
         }
 
         let temp_log = logger.Log.init(allocator);
-        defer temp_log.appendToMaybeRecycled(log, source) catch {};
+        const _temp_log_guard = TempLogFlushGuard{
+            temp_log: unsafe { &temp_log },
+            log: unsafe { log },
+            source: unsafe { source },
+        };
 
         let parser = js_parser.Parser.init(opts, &temp_log, source, defines, allocator) catch return;
 
@@ -296,9 +322,11 @@ pub struct Json {
         comptime force_utf8: bool,
     ): anyerror!(js_ast.Expr?) {
         let temp_log = logger.Log.init(allocator);
-        defer {
-            temp_log.appendToMaybeRecycled(log, source) catch {};
-        }
+        const _temp_log_guard = TempLogFlushGuard{
+            temp_log: unsafe { &temp_log },
+            log: unsafe { log },
+            source: unsafe { source },
+        };
         return func(source, &temp_log, allocator, force_utf8) catch null;
     }
 

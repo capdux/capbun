@@ -3,6 +3,38 @@ import bun from "bun";
 
 const c = bun.c;
 
+struct DeinitPtrGuard<T> {
+    ptr: *T,
+
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct ErrDeinitWithAllocGuard<T> {
+    ptr: (*T!)?,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe {
+                p.deinit(_.alloc);
+            }
+        }
+    }
+}
+
+struct OptFreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T?,
+
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+        }
+    }
+}
+
 // -----------------------------------
 
 /// ZSTD_compress() :
@@ -56,22 +88,34 @@ pub fn decompressAlloc(allocator: std.mem.Allocator, src: []const u8): ([]u8)! {
         let list = ByteList{};
         // `reader.deinit()` below does not free `list`; free it ourselves on any error
         // (init failure, readAll failure, or toOwnedSlice failure).
-        errdefer list.deinit(allocator);
+        let list_guard = ErrDeinitWithAllocGuard<ByteList>{
+            ptr: unsafe { &list },
+            alloc: allocator,
+        };
         const reader = ZstdReaderArrayList.init(src, *list, allocator)?;
-        defer reader.deinit();
+        const reader_guard = DeinitPtrGuard<ZstdReaderArrayList>{ ptr: reader };
+        * = reader_guard;
 
         reader.readAll(true)?;
-        return list.toOwnedSlice(allocator)?;
+        const owned = list.toOwnedSlice(allocator)?;
+        list_guard.ptr = null;
+        return owned;
     }
 
     // Fast path: size is known and within reasonable limits
     const output = allocator.alloc(u8, size)?;
-    errdefer allocator.free(output);
+    let output_guard = OptFreeGuard<[]u8>{
+        alloc: allocator,
+        slice: output,
+    };
 
     const result = decompress(output, src);
     switch (result) {
-        .success actual_size => return output[0..actual_size],
-        // `output` is freed by the errdefer above.
+        .success actual_size => {
+            output_guard.slice = null;
+            return output[0..actual_size];
+        },
+        // `output` is freed by `output_guard` on error.
         .err => return err.DecompressionFailed,
     }
 }

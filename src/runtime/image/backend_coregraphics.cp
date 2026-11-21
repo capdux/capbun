@@ -34,6 +34,11 @@ const CG_DECODE_FAILED = 2;
 const CG_ENCODE_FAILED = 3;
 const CG_TOO_MANY_PIXELS = 4;
 
+struct DefaultFreeGuard {
+    slice: ([]u8)? = null,
+    ~init() { if (s := _.slice) bun.default_allocator.free(s); }
+}
+
 fn mapErr(rc: i32): BackendError {
     return switch (rc) {
         CG_UNAVAILABLE => error.BackendUnavailable,
@@ -54,7 +59,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): BackendError!codecs.Decoded {
         else => |rc| return mapErr(rc),
     }
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * h * 4)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = DefaultFreeGuard{ slice: out };
     // Phase 2: render. The C side re-creates the CGImageSource (cheap — the
     // header parse is the only repeated work) so we don't have to thread an
     // opaque handle across the boundary.
@@ -62,6 +67,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): BackendError!codecs.Decoded {
         CG_OK => {},
         else => |rc| return mapErr(rc),
     }
+    out_guard.slice = null;
     return { rgba: out, width: w, height: h };
 }
 
@@ -78,12 +84,13 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: codecs.EncodeOpti
         else => |rc| return mapErr(rc),
     }
     const out = bun.default_allocator.alloc(u8, len)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = DefaultFreeGuard{ slice: out };
     // Phase 2: copy out and release the CFData.
     switch (bun_coregraphics_encode(rgba.ptr, width, height, fmt, opts.quality, out.ptr, &len)) {
         CG_OK => {},
         else => |rc| return mapErr(rc),
     }
+    out_guard.slice = null;
     return out[0..len];
 }
 
@@ -102,25 +109,28 @@ extern fn bun_coregraphics_reflect(src: [*]const u8, w: u32, h: u32, dst: [*]u8,
 pub fn scale(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, filter: codecs.Filter): BackendError![]u8 {
     if (filter != .lanczos3) return error.BackendUnavailable;
     const out = bun.default_allocator.alloc(u8, @as(usize, dw) * dh * 4)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = DefaultFreeGuard{ slice: out };
     if (bun_coregraphics_scale(src.ptr, sw, sh, out.ptr, dw, dh) != CG_OK)
         return error.BackendUnavailable;
+    out_guard.slice = null;
     return out;
 }
 
 pub fn rotate(src: []const u8, w: u32, h: u32, quarters: u32): BackendError![]u8 {
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * h * 4)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = DefaultFreeGuard{ slice: out };
     if (bun_coregraphics_rotate90(src.ptr, w, h, out.ptr, quarters) != CG_OK)
         return error.BackendUnavailable;
+    out_guard.slice = null;
     return out;
 }
 
 pub fn flip(src: []const u8, w: u32, h: u32, horizontal: bool): BackendError![]u8 {
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * h * 4)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = DefaultFreeGuard{ slice: out };
     if (bun_coregraphics_reflect(src.ptr, w, h, out.ptr, @intFromBool(horizontal)) != CG_OK)
         return error.BackendUnavailable;
+    out_guard.slice = null;
     return out;
 }
 
@@ -143,8 +153,9 @@ pub fn clipboard(): ClipboardError!(([]u8)?) {
     if (bun_coregraphics_clipboard(null, &len, 0) != CG_OK) return error.BackendUnavailable;
     if (len == 0) return null;
     const out = bun.default_allocator.alloc(u8, len)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = DefaultFreeGuard{ slice: out };
     if (bun_coregraphics_clipboard(out.ptr, &len, 0) != CG_OK) return error.BackendUnavailable;
+    out_guard.slice = null;
     return out[0..len];
 }
 

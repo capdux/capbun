@@ -1599,3 +1599,8 @@
 ## [2026-11-22 Wave #26] RAII 改造与 `unsafe {}` 经验
 - `HTMLScanner.cp`：对本就为指针类型的 `lol.HTMLRewriter` / `lol.HTMLRewriterBuilder` 使用值持有型 `PtrDeinitGuard<T>`，避免 `DeinitGuard` 取址产生两级指针 `**T` 导致 `.deinit()` 方法解析失败。
 - `PackageManager.cp` / `install_with_manager.cp` / `ClientSession.cp`：`CloseGuard<T>`、`PoolPutGuard<T>`、`DerefGuard<T>`、`DeinitWithAllocGuard<T>` 清除全部资源型 `defer`。
+
+## [2026-11-22 Wave #27 & Wave #28] RAII 改造与 `unsafe {}` 经验
+- `lexer.cp`：将局部别名 `const ClearGuard = ClearRetainingCapacityGuard(...);` 改为直接构造非泛型 `TempBufferU16ClearGuard{ ptr: ... }`，确保 `cpc` 为全部 4 处作用域正确注入 `defer __cp_deinit()`（修复 `NewLexer_.restore` 中的 `temp_buffer_u16.items.len == 0` 断言）。
+- `bun.cp`：`SelfExePathMemo.lock` 显式使用 `threading.Mutex` 避免 `cpc` 将 `Mutex` 降级为内置 `CpBareMutex`。
+- `JSPromise.cp` / `tsconfig_json.cp` / `Path.cp`：顶层错误联合返回类型写为 `T!E`（`JSValue!bun.JSTerminated`）；`PathsMapFreeGuard` 改用 `p.deinit()`；嵌套 `.{ ... }` 泛型参数提取为顶层常量 `PoolPath` 避免 `<` 比较符歧义。

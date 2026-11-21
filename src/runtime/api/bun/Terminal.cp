@@ -14,6 +14,33 @@ const Termios = if (Environment.isPosix) std.posix.termios else void;
 const HANDLE = bun.windows.HANDLE;
 const HPCON = bun.windows.HPCON;
 
+struct DeinitGuard<T> {
+    ptr: (*T)?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+struct WinHandleGuard {
+    handle: HANDLE?,
+    ~init() {
+        if (h := _.handle) {
+            * = bun.windows.CloseHandle(h);
+        }
+    }
+}
+
+struct WinHpconGuard {
+    hpcon: HPCON?,
+    ~init() {
+        if (h := _.hpcon) {
+            bun.windows.ClosePseudoConsole(h);
+        }
+    }
+}
+
 pub struct PipePair {
     server: HANDLE,
     client: HANDLE,
@@ -52,7 +79,7 @@ pub struct Options {
     /// Parse terminal options from a JS object
     static fn parseFromJS(globalObject: *jsc.JSGlobalObject, js_options: JSValue): bun.JSError!Options {
         let options = Options{};
-        errdefer options.deinit();
+        let options_guard = DeinitGuard<Options>{ ptr: &options };
 
         if (n := js_options.getOptional(globalObject, "cols", i32)?) {
             if (n > 0 && n <= 65535) options.cols = @intCast(n);
@@ -88,6 +115,7 @@ pub struct Options {
             }
         }
 
+        options_guard.ptr = null;
         return options;
     }
 
@@ -338,7 +366,7 @@ fn createOverlappedPipePair(
         null,
     );
     if (server == w.INVALID_HANDLE_VALUE) return error.OpenPtyFailed;
-    errdefer * = w.CloseHandle(server);
+    let server_guard = WinHandleGuard{ handle: server };
 
     const client_access: u32 = if (server_access == std.os.windows.PIPE_ACCESS_INBOUND)
         std.os.windows.GENERIC_WRITE
@@ -356,6 +384,7 @@ fn createOverlappedPipePair(
     );
     if (client == w.INVALID_HANDLE_VALUE) return error.OpenPtyFailed;
 
+    server_guard.handle = null;
     return PipePair{ server: server, client: client };
 }
 
@@ -363,56 +392,49 @@ fn createPtyWindows(cols: u16, rows: u16): CreatePtyError!PtyResult {
     const w = bun.windows;
 
     // Track ownership explicitly: handles are nulled out as they are closed or
-    // transferred so the errdefer cleanup never double-closes.
-    let out_server: HANDLE? = null;
-    let out_client: HANDLE? = null;
-    let in_server: HANDLE? = null;
-    let in_client: HANDLE? = null;
-    let hpcon: HPCON? = null;
-    errdefer {
-        if (h := hpcon) w.ClosePseudoConsole(h);
-        if (h := out_server) * = w.CloseHandle(h);
-        if (h := out_client) * = w.CloseHandle(h);
-        if (h := in_server) * = w.CloseHandle(h);
-        if (h := in_client) * = w.CloseHandle(h);
-    }
+    // transferred so the RAII guard cleanup never double-closes.
+    let in_client_guard = WinHandleGuard{ handle: null };
+    let in_server_guard = WinHandleGuard{ handle: null };
+    let out_client_guard = WinHandleGuard{ handle: null };
+    let out_server_guard = WinHandleGuard{ handle: null };
+    let hpcon_guard = WinHpconGuard{ hpcon: null };
 
     // Output pipe: ConPTY writes (client), we read (overlapped server).
     {
         const pair = createOverlappedPipePair(std.os.windows.PIPE_ACCESS_INBOUND)?;
-        out_server = pair.server;
-        out_client = pair.client;
+        out_server_guard.handle = pair.server;
+        out_client_guard.handle = pair.client;
     }
 
     // Input pipe: we write (overlapped server), ConPTY reads (client).
     {
         const pair = createOverlappedPipePair(std.os.windows.PIPE_ACCESS_OUTBOUND)?;
-        in_server = pair.server;
-        in_client = pair.client;
+        in_server_guard.handle = pair.server;
+        in_client_guard.handle = pair.client;
     }
 
     const size = w.COORD{ X: clampToCoord(cols), Y: clampToCoord(rows) };
     {
         let pc: HPCON = undefined;
-        if (w.CreatePseudoConsole(size, in_client.?, out_client.?, 0, &pc) < 0)
+        if (w.CreatePseudoConsole(size, in_client_guard.handle.?, out_client_guard.handle.?, 0, &pc) < 0)
             return error.OpenPtyFailed;
-        hpcon = pc;
+        hpcon_guard.hpcon = pc;
     }
 
     // ConPTY duplicated the client handles internally; close our copies.
-    * = w.CloseHandle(in_client.?);
-    in_client = null;
-    * = w.CloseHandle(out_client.?);
-    out_client = null;
+    * = w.CloseHandle(in_client_guard.handle.?);
+    in_client_guard.handle = null;
+    * = w.CloseHandle(out_client_guard.handle.?);
+    out_client_guard.handle = null;
 
     // Move ownership: out_server becomes read_fd, in_server becomes write_fd,
-    // and hpcon moves to the caller. Disarm errdefer by nulling out.
-    const result_read_fd = bun.FD.fromNative(out_server.?);
-    out_server = null;
-    const result_write_fd = bun.FD.fromNative(in_server.?);
-    in_server = null;
-    const result_hpcon = hpcon.?;
-    hpcon = null;
+    // and hpcon moves to the caller. Disarm guards by nulling out.
+    const result_read_fd = bun.FD.fromNative(out_server_guard.handle.?);
+    out_server_guard.handle = null;
+    const result_write_fd = bun.FD.fromNative(in_server_guard.handle.?);
+    in_server_guard.handle = null;
+    const result_hpcon = hpcon_guard.hpcon.?;
+    hpcon_guard.hpcon = null;
 
     return PtyResult{
         master: bun.invalid_fd,
@@ -842,8 +864,8 @@ const PosixIoctl = struct {
         // Get bytes to write using StringOrBuffer
         const maybe_sob = jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, data)?;
         if (maybe_sob == null) return globalObject.throw("write() argument must be a string or ArrayBuffer", {});
-        const string_or_buffer = maybe_sob.?;
-        defer string_or_buffer.deinit();
+        let string_or_buffer = maybe_sob.?;
+        const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: &string_or_buffer };
 
         const bytes = string_or_buffer.slice();
 

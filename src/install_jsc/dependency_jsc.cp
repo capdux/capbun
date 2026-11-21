@@ -6,6 +6,16 @@ const logger = bun.logger;
 const Dependency = bun.install.Dependency;
 const SlicedString = bun.Semver.SlicedString;
 
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 pub fn versionToJS(dep: &Dependency.Version, buf: []const u8, globalThis: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
     const object = jsc.JSValue.createEmptyObject(globalThis, 0);
     object.put(globalThis, "type", bun.String.static(@tagName(dep.tag)).toJS(globalThis)?);
@@ -65,12 +75,12 @@ pub fn tagInferFromJS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
         return jsc.JSValue.js_undefined;
     }
 
-    const dependency_str = arguments[0].toBunString(globalObject)?;
-    defer dependency_str.deref();
-    let as_utf8 = dependency_str.toUTF8(bun.default_allocator);
-    defer as_utf8.deinit();
+    const dependency_str = DerefGuard<bun.String>{ val: arguments[0].toBunString(globalObject)? };
+    let as_utf8 = DeinitGuard<@TypeOf(dependency_str.val.toUTF8(bun.default_allocator))>{
+        val: dependency_str.val.toUTF8(bun.default_allocator),
+    };
 
-    const tag = Dependency.Version.Tag.infer(as_utf8.slice());
+    const tag = Dependency.Version.Tag.infer(as_utf8.val.slice());
     let str = bun.String.init(@tagName(tag));
     return str.transferToJS(globalObject);
 }
@@ -80,9 +90,10 @@ pub fn dependencyFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFra
     if (arguments.len == 1) {
         return bun.install.PackageManager.UpdateRequest.fromJS(globalThis, arguments[0])?;
     }
-    let arena_alloc = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_alloc.deinit();
-    let stack = std.heap.stackFallback(1024, arena_alloc.allocator());
+    let arena_alloc = DeinitGuard<std.heap.ArenaAllocator>{
+        val: std.heap.ArenaAllocator.init(bun.default_allocator),
+    };
+    let stack = std.heap.stackFallback(1024, arena_alloc.val.allocator());
     const allocator = stack.get();
 
     const alias_value: jsc.JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
@@ -90,25 +101,23 @@ pub fn dependencyFromJS(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFra
     if (!alias_value.isString()) {
         return jsc.JSValue.js_undefined;
     }
-    const alias_slice = alias_value.toSlice(globalThis, allocator)?;
-    defer alias_slice.deinit();
+    const alias_slice = DeinitGuard<jsc.ZigString.Slice>{ val: alias_value.toSlice(globalThis, allocator)? };
 
-    if (alias_slice.len == 0) {
+    if (alias_slice.val.len == 0) {
         return jsc.JSValue.js_undefined;
     }
 
     const name_value: jsc.JSValue = if (arguments.len > 1) arguments[1] else .js_undefined;
-    const name_slice = name_value.toSlice(globalThis, allocator)?;
-    defer name_slice.deinit();
+    const name_slice = DeinitGuard<jsc.ZigString.Slice>{ val: name_value.toSlice(globalThis, allocator)? };
 
-    let name = alias_slice.slice();
-    let alias = alias_slice.slice();
+    let name = alias_slice.val.slice();
+    let alias = alias_slice.val.slice();
     let buf = alias;
 
     if (name_value.isString()) {
-        let builder = bun.handleOom(bun.StringBuilder.initCapacity(allocator, name_slice.len + alias_slice.len));
-        name = builder.append(name_slice.slice());
-        alias = builder.append(alias_slice.slice());
+        let builder = bun.handleOom(bun.StringBuilder.initCapacity(allocator, name_slice.val.len + alias_slice.val.len));
+        name = builder.append(name_slice.val.slice());
+        alias = builder.append(alias_slice.val.slice());
         buf = builder.allocatedSlice();
     }
 

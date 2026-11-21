@@ -1,3 +1,17 @@
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
     jsc.markBinding(@src());
 
@@ -11,16 +25,14 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
 
     const returns = bun.cpp.JSMockFunction__getReturns(globalThis, value)?;
     if (!returns.jsType().isArray()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter.val) });
     }
 
     const calls_count: u32 = @truncate(returns.getLength(globalThis)?);
     let pass = false;
 
-    let successful_returns = std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator);
-    defer successful_returns.deinit();
+    let successful_returns = DeinitGuard<std.array_list.Managed(JSValue)>{ val: std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator) };
 
     let has_errors = false;
 
@@ -32,12 +44,11 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         if (result.isObject()) {
             const result_type = (result.get(globalThis, "type")?) ?? .js_undefined;
             if (result_type.isString()) {
-                const type_str = result_type.toBunString(globalThis)?;
-                defer type_str.deref();
+                const type_str = DerefGuard<bun.String>{ val: result_type.toBunString(globalThis)? };
 
-                if (type_str.eqlComptime("return")) {
+                if (type_str.val.eqlComptime("return")) {
                     const result_value = (result.get(globalThis, "value")?) ?? .js_undefined;
-                    successful_returns.append(result_value)?;
+                    successful_returns.val.append(result_value)?;
 
                     // Check for pass condition only if not already passed
                     if (!pass) {
@@ -45,7 +56,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
                             pass = true;
                         }
                     }
-                } else if (type_str.eqlComptime("throw")) {
+                } else if (type_str.val.eqlComptime("throw")) {
                     has_errors = true;
                 }
             }
@@ -57,22 +68,21 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
     }
 
     // Handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
 
     const signature = comptime getSignature("toHaveReturnedWith", "<green>expected<r>", false);
 
     if (client.flags.not) {
         const not_signature = comptime getSignature("toHaveReturnedWith", "<green>expected<r>", true);
-        return client.throw(globalThis, not_signature, "\n\n" ++ "Expected mock function not to have returned: <green>{f}<r>\n", .{ expected.toFmt(&formatter) });
+        return client.throw(globalThis, not_signature, "\n\n" ++ "Expected mock function not to have returned: <green>{f}<r>\n", .{ expected.toFmt(&formatter.val) });
     }
 
     // No match was found.
-    const successful_returns_count = successful_returns.items.len;
+    const successful_returns_count = successful_returns.val.items.len;
 
     // Case: Only one successful return, no errors
     if (calls_count == 1 && successful_returns_count == 1) {
-        const received = successful_returns.items[0];
+        const received = successful_returns.val.items[0];
         if (expected.isString() && received.isString()) {
             const diff_format = DiffFormatter{
                 expected: expected,
@@ -84,8 +94,8 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         }
 
         return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ 
-            expected.toFmt(&formatter),
-            received.toFmt(&formatter),
+            expected.toFmt(&formatter.val),
+            received.toFmt(&formatter.val),
         });
     }
 
@@ -94,7 +104,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         const list_formatter = mock.AllCallsFormatter{
             globalThis: globalThis,
             returns: returns,
-            formatter: &formatter,
+            formatter: &formatter.val,
         };
         const fmt =
             "Some calls errored:\n\n" ++
@@ -107,7 +117,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         switch (Output.enable_ansi_colors_stderr) {
             inline else => |colors| {
                 return client.throw(globalThis, signature, Output.prettyFmt("\n\n" ++ fmt ++ "\n", colors), .{ 
-                    expected.toFmt(&formatter),
+                    expected.toFmt(&formatter.val),
                     list_formatter,
                     successful_returns_count,
                     calls_count,
@@ -118,8 +128,8 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         // Case: No errors, but no match (and multiple returns)
         const list_formatter = mock.SuccessfulReturnsFormatter{
             globalThis: globalThis,
-            successful_returns: &successful_returns,
-            formatter: &formatter,
+            successful_returns: &successful_returns.val,
+            formatter: &formatter.val,
         };
         const fmt =
             "    <green>Expected<r>: {f}\n" ++
@@ -130,7 +140,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         switch (Output.enable_ansi_colors_stderr) {
             inline else => |colors| {
                 return client.throw(globalThis, signature, Output.prettyFmt("\n\n" ++ fmt ++ "\n", colors), .{ 
-                    expected.toFmt(&formatter),
+                    expected.toFmt(&formatter.val),
                     list_formatter,
                     successful_returns_count,
                 });

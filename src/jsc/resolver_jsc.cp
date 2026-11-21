@@ -1,6 +1,13 @@
 //! Host fns / C++ exports for `node:module` `_nodeModulePaths`. Extracted from
 //! `resolver/resolver.zig` so `resolver/` has no JSC references.
 
+struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+struct DeinitGuard<T> { val: T, ~init() { _.val.deinit(); } }
+struct PathBufferGuard {
+    buf: @TypeOf(bun.path_buffer_pool.get()),
+    ~init() { bun.path_buffer_pool.put(_.buf); }
+}
+
 pub fn nodeModulePathsForJS(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun.jsc.CallFrame): bun.JSError!jsc.JSValue {
     bun.jsc.markBinding(@src());
     const argument: bun.jsc.JSValue = callframe.argument(0);
@@ -9,9 +16,8 @@ pub fn nodeModulePathsForJS(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun
         return globalThis.throwInvalidArgumentType("nodeModulePaths", "path", "string");
     }
 
-    const in_str = argument.toBunString(globalThis)?;
-    defer in_str.deref();
-    return nodeModulePathsJSValue(in_str, globalThis, false);
+    const in_str = DerefGuard<bun.String>{ val: argument.toBunString(globalThis)? };
+    return nodeModulePathsJSValue(in_str.val, globalThis, false);
 }
 
 @callconv("c")
@@ -24,23 +30,19 @@ pub fn nodeModulePathsForJS(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun
 
 @callconv("c")
 pub fn nodeModulePathsJSValue(in_str: bun.String, globalObject: *bun.jsc.JSGlobalObject, use_dirname: bool): bun.jsc.JSValue {
-    let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
-    let stack_fallback_allocator = std.heap.stackFallback(1024, arena_.allocator());
+    let arena_ = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
+    let stack_fallback_allocator = std.heap.stackFallback(1024, arena_.val.allocator());
     const alloc = stack_fallback_allocator.get();
 
-    let list = std.array_list.Managed(bun.String).init(alloc);
-    defer list.deinit();
+    let list = DeinitGuard<std.array_list.Managed(bun.String)>{ val: std.array_list.Managed(bun.String).init(alloc) };
 
-    const sliced = in_str.toUTF8(bun.default_allocator);
-    defer sliced.deinit();
-    const base_path = if (use_dirname) std.fs.path.dirname(sliced.slice()) ?? sliced.slice() else sliced.slice();
-    const buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(buf);
+    const sliced = DeinitGuard<@TypeOf(in_str.toUTF8(bun.default_allocator))>{ val: in_str.toUTF8(bun.default_allocator) };
+    const base_path = if (use_dirname) std.fs.path.dirname(sliced.val.slice()) ?? sliced.val.slice() else sliced.val.slice();
+    const buf = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
 
     const full_path = bun.path.joinAbsStringBuf(
         bun.fs.FileSystem.instance.top_level_dir,
-        buf,
+        buf.buf,
         &[base_path],
         .auto,
     );
@@ -60,7 +62,7 @@ pub fn nodeModulePathsJSValue(in_str: bun.String, globalObject: *bun.jsc.JSGloba
                 it_idx = i + 1;
             }
 
-            list.append(bun.String.createFormat(
+            list.val.append(bun.String.createFormat(
                 "{s}{s}" ++ std.fs.path.sep_str ++ "node_modules",
                 .{
                     root_path,
@@ -74,12 +76,12 @@ pub fn nodeModulePathsJSValue(in_str: bun.String, globalObject: *bun.jsc.JSGloba
         root_path.len -= 1;
     }
 
-    list.append(bun.String.createFormat(
+    list.val.append(bun.String.createFormat(
         "{s}" ++ std.fs.path.sep_str ++ "node_modules",
         .{root_path},
     ) catch |e| bun.handleOom(e)) catch |e| bun.handleOom(e);
 
-    return bun.String.toJSArray(globalObject, list.items) catch .zero;
+    return bun.String.toJSArray(globalObject, list.val.items) catch .zero;
 }
 
 comptime {

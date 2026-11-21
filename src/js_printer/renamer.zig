@@ -62,10 +62,579 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const JSLexer = @import("../js_parser/lexer.zig");
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub const NumberScopePoolGuard = struct {
+    scope: *NumberScope,
+    initial_scope: ?*NumberScope = null,
+    renamer: *NumberRenamer,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *NumberScopePoolGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.initial_scope) |init_s| {
+                _ = &init_s;
+                if ((self.scope == init_s)) {
+                    return;
+                }
+            }
+            {
+                _ = self.scope.deinit(self.renamer.temp_allocator);
+                _ = self.renamer.number_scope_pool.put(self.scope);
+            }
+    }
+};
+
+pub const MinifyRenamer = struct {
+    reserved_names: bun.StringHashMapUnmanaged(u32),
+    allocator: std.mem.Allocator,
+    slots: SymbolSlot.List = undefined,
+    top_level_symbol_to_slot: TopLevelSymbolSlotMap,
+    symbols: js_ast.Symbol.Map,
+
+pub fn init(allocator: std.mem.Allocator, symbols: js_ast.Symbol.Map, first_top_level_slots: js_ast.SlotCounts, reserved_names: bun.StringHashMapUnmanaged(u32)) !*MinifyRenamer {
+            const renamer = try allocator.create(MinifyRenamer);
+            var slots = SymbolSlot.List.initUndefined();
+            _ = &slots;
+            var ns: usize = 0;
+            _ = &ns;
+            while ((ns < first_top_level_slots.slots.values.len)) : (ns = (ns + 1)) {
+                const count = first_top_level_slots.slots.values[@as(usize, @intCast(ns))];
+                slots.values[cp_cast_int(usize, ns)] = try std.array_list.Managed(SymbolSlot).initCapacity(allocator, count);
+                slots.values[@as(usize, @intCast(ns))].items.len = count;
+                _ = @memset(slots.values[@as(usize, @intCast(ns))].items[0..count], SymbolSlot{  });
+            }
+            {
+                renamer.* = MinifyRenamer{ .symbols = symbols, .reserved_names = reserved_names, .slots = slots, .top_level_symbol_to_slot = TopLevelSymbolSlotMap{  }, .allocator = allocator };
+            }
+            return renamer;
+    }
+
+pub fn deinit(self: *MinifyRenamer, allocator: std.mem.Allocator) void {
+            for (cp_mut_slice(&self.slots.values)) |*val| {
+                _ = &val;
+                _ = (val.*).deinit();
+            }
+            _ = self.reserved_names.deinit(allocator);
+            _ = self.top_level_symbol_to_slot.deinit(allocator);
+            {
+                _ = allocator.destroy(self);
+            }
+    }
+
+pub fn toRenamer(self: *MinifyRenamer) Renamer {
+            return Renamer{ .MinifyRenamer = (blk: {
+            break :blk self;
+
+}) };
+    }
+
+pub fn nameForSymbol(self: *MinifyRenamer, _ref: Ref) []const u8 {
+            const sym_ref = self.symbols.follow(_ref);
+            const symbol = (self.symbols.get(sym_ref)).?;
+            const ns = symbol.slotNamespace();
+            if ((ns == .must_not_be_renamed)) {
+                return symbol.original_name;
+            }
+            const i = ((symbol.nestedScopeSlot()) orelse (((self.top_level_symbol_to_slot.get(sym_ref)) orelse { return symbol.original_name; })));
+            return (if (@typeInfo(@TypeOf(self.slots.getPtr(ns).items[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(self.slots.getPtr(ns).items[@as(usize, @intCast(i))])) == .@"union") @tagName(self.slots.getPtr(ns).items[@as(usize, @intCast(i))]) else self.slots.getPtr(ns).items[@as(usize, @intCast(i))].name).slice();
+    }
+
+pub fn originalName(self: *MinifyRenamer, sym_ref: Ref) ?[]const u8 {
+            _ = &sym_ref;
+            const _unused_self = self.allocator;
+            _ = &_unused_self;
+            return null;
+    }
+
+pub fn accumulateSymbolUseCounts(self: *MinifyRenamer, top_level_symbols: *StableSymbolCount.Array, symbol_uses: js_ast.Part.SymbolUseMap, stable_source_indices: []const u32) !void {
+            var iter = symbol_uses.iterator();
+            _ = &iter;
+            while (iter.next()) |value| {
+                _ = try self.accumulateSymbolUseCount(top_level_symbols, value.key_ptr.*, value.value_ptr.*.count_estimate, stable_source_indices);
+            }
+    }
+
+pub fn accumulateSymbolUseCount(self: *MinifyRenamer, top_level_symbols: *StableSymbolCount.Array, _ref: Ref, count: u32, stable_source_indices: []const u32) !void {
+            var sym_ref = self.symbols.follow(_ref);
+            _ = &sym_ref;
+            var symbol = (self.symbols.get(sym_ref)).?;
+            _ = &symbol;
+            while ((symbol.namespace_alias != null)) {
+                const ref_ = self.symbols.follow(symbol.namespace_alias.?.namespace_ref);
+                if (ref_.eql(sym_ref)) {
+                    break;
+                }
+                sym_ref = ref_;
+                symbol = (self.symbols.get(ref_)).?;
+            }
+            const ns = symbol.slotNamespace();
+            if ((ns == .must_not_be_renamed)) {
+                return;
+            }
+            if (symbol.nestedScopeSlot()) |i| {
+                _ = &i;
+                var slot = (&self.slots.getPtr(ns).items[@as(usize, @intCast(i))]);
+                _ = &slot;
+                slot.count = (slot.count + count);
+                if (symbol.must_start_with_capital_letter_for_jsx) {
+                    slot.needs_capital_for_jsx = true;
+                }
+                return;
+            }
+            _ = try top_level_symbols.append(StableSymbolCount{ .stable_source_index = stable_source_indices[@as(usize, @intCast(sym_ref.sourceIndex()))], .ref = sym_ref, .count = count });
+    }
+
+pub fn allocateTopLevelSymbolSlots(self: *MinifyRenamer, top_level_symbols: StableSymbolCount.Array) !void {
+            for (top_level_symbols.items) |stable| {
+                _ = &stable;
+                const symbol = (self.symbols.get(stable.ref)).?;
+                var slots = self.slots.getPtr(symbol.slotNamespace());
+                _ = &slots;
+                const existing = try self.top_level_symbol_to_slot.getOrPut(self.allocator, stable.ref);
+                if (existing.found_existing) {
+                    var slot = (&slots.items[@as(usize, @intCast(existing.value_ptr.*))]);
+                    _ = &slot;
+                    slot.count = (slot.count + stable.count);
+                    if (symbol.must_start_with_capital_letter_for_jsx) {
+                        slot.needs_capital_for_jsx = true;
+                    }
+                } else {
+                    existing.value_ptr.* = slots.items.len;
+                    _ = try slots.append(SymbolSlot{ .count = stable.count, .needs_capital_for_jsx = symbol.must_start_with_capital_letter_for_jsx });
+                }
+            }
+    }
+
+pub fn assignNamesByFrequency(self: *MinifyRenamer, name_minifier: *js_ast.NameMinifier) !void {
+            var name_buf = try std.array_list.Managed(u8).initCapacity(self.allocator, 64);
+            _ = &name_buf;
+            const name_buf_ptr = (blk: {
+            break :blk (&name_buf);
+
+});
+            var _name_buf_guard = DeinitGuard(std.array_list.Managed(u8)){ .ptr = name_buf_ptr };
+            _ = &_name_buf_guard;
+            var ___name_buf_guard_moved = false; _ = &___name_buf_guard_moved;
+            defer if (!___name_buf_guard_moved) { ___name_buf_guard_moved = true; const __T = @TypeOf(_name_buf_guard); if (@typeInfo(__T) == .optional) { if (_name_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _name_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _name_buf_guard; _drop_val.__cp_deinit(); } };
+            var sorted = SlotAndCount.Array.init(self.allocator);
+            _ = &sorted;
+            const sorted_ptr = (blk: {
+            break :blk (&sorted);
+
+});
+            var _sorted_guard = DeinitGuard(SlotAndCount.Array){ .ptr = sorted_ptr };
+            _ = &_sorted_guard;
+            var ___sorted_guard_moved = false; _ = &___sorted_guard_moved;
+            defer if (!___sorted_guard_moved) { ___sorted_guard_moved = true; const __T = @TypeOf(_sorted_guard); if (@typeInfo(__T) == .optional) { if (_sorted_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sorted_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sorted_guard; _drop_val.__cp_deinit(); } };
+            inline for ((comptime std.enums.values(js_ast.Symbol.SlotNamespace))) |ns| {
+                var slots = self.slots.getPtr(ns);
+                _ = &slots;
+                _ = sorted.clearRetainingCapacity();
+                _ = try sorted.ensureUnusedCapacity(slots.items.len);
+                sorted.items.len = slots.items.len;
+                var i: usize = 0;
+                _ = &i;
+                while ((i < sorted.items.len)) : (i = (i + 1)) {
+                    sorted.items[cp_cast_int(usize, i)] = SlotAndCount{ .slot = @as(u32, @intCast(i)), .count = slots.items[@as(usize, @intCast(i))].count };
+                }
+                const empty_sort_ctx: void = undefined;
+                _ = std.sort.pdq(SlotAndCount, sorted.items, empty_sort_ctx, SlotAndCount.lessThan);
+                var next_name: isize = 0;
+                _ = &next_name;
+                for (sorted.items) |data| {
+                    _ = &data;
+                    var slot = (&slots.items[@as(usize, @intCast(data.slot))]);
+                    _ = &slot;
+                    _ = try name_minifier.numberToMinifiedName((&name_buf), next_name);
+                    next_name = (next_name + 1);
+                    switch ((comptime ns)) {
+.default => {
+while (self.reserved_names.contains(name_buf.items)) {
+                        _ = try name_minifier.numberToMinifiedName((&name_buf), next_name);
+                        next_name = (next_name + 1);
+                    }
+                    if (slot.needs_capital_for_jsx) {
+                        while ((name_buf.items[0] >= 97)) {
+                            if ((name_buf.items[0] > 122)) {
+                                break;
+                            }
+                            _ = try name_minifier.numberToMinifiedName((&name_buf), next_name);
+                            next_name = (next_name + 1);
+                        }
+                    }
+},
+.label => {
+while (JSLexer.Keywords.has(name_buf.items)) {
+                        _ = try name_minifier.numberToMinifiedName((&name_buf), next_name);
+                        next_name = (next_name + 1);
+                    }
+},
+.private_name => {
+_ = try name_buf.insert(0, 35);
+},
+else => {
+
+},
+}
+                    (if (@typeInfo(@TypeOf(slot)) == .@"enum" or @typeInfo(@TypeOf(slot)) == .@"union") @tagName(slot) else slot.name) = ((TinyString.init(name_buf.items, self.allocator)) catch unreachable);
+                }
+            }
+    }
+    pub const TopLevelSymbolSlotMap = std.HashMapUnmanaged(Ref, usize, RefCtx, 80);
+};
+
+pub const NameUse = union(enum) {
+    unused: void,
+    same_scope: u32,
+    used: void,
+};
+
+pub const UnusedName = union(enum) {
+    no_collision: void,
+    renamed: []const u8,
+};
+
+pub const NumberScope = struct {
+    parent: ?*NumberScope = null,
+    name_counts: bun.StringHashMapUnmanaged(u32) = .{},
+
+pub fn deinit(self: *NumberScope, allocator: std.mem.Allocator) void {
+            _ = self.name_counts.deinit(allocator);
+            {
+                self.* = undefined;
+            }
+    }
+
+pub fn findNameUse(scope: *NumberScope, name: []const u8) NameUse {
+            if (comptime Environment.allow_assert) {
+                _ = bun.assert(JSLexer.isIdentifier(name));
+            }
+            const ctx = bun.StringHashMapContext.pre(name);
+            if (scope.name_counts.getAdapted(name, ctx)) |count| {
+                _ = &count;
+                return NameUse{ .same_scope = count };
+            }
+            var s: ?*NumberScope = scope.parent;
+            _ = &s;
+            while (s) |cur| : (s = cur.parent) {
+                if (cur.name_counts.containsAdapted(name, ctx)) {
+                    return .used;
+                }
+            }
+            return .unused;
+    }
+
+pub fn findUnusedName(self: *NumberScope, allocator: std.mem.Allocator, temp_allocator: std.mem.Allocator, input_name: []const u8) UnusedName {
+            var name = ((bun.MutableString.ensureValidIdentifier(input_name, temp_allocator)) catch unreachable);
+            _ = &name;
+            const use = NumberScope.findNameUse((blk: {
+            break :blk self;
+
+}), name);
+            if ((use != .unused)) {
+                var tries: u32 = (switch (use) {
+.used => 1,
+.same_scope => |sc| sc,
+.unused => unreachable,
+});
+                _ = &tries;
+                const prefix = name;
+                tries = (tries + 1);
+                var mutable_name = MutableString.initEmpty(temp_allocator);
+                _ = &mutable_name;
+                _ = ((mutable_name.growIfNeeded((prefix.len + 4))) catch unreachable);
+                _ = ((mutable_name.appendSlice(prefix)) catch unreachable);
+                _ = ((mutable_name.appendInt(tries)) catch unreachable);
+                const cur_use = NumberScope.findNameUse((blk: {
+                break :blk self;
+
+}), mutable_name.slice());
+                if ((cur_use == .unused)) {
+                    name = mutable_name.slice();
+                    if ((use == .same_scope)) {
+                        const existing = ((self.name_counts.getOrPut(allocator, prefix)) catch unreachable);
+                        if ((!existing.found_existing)) {
+                            if (strings.eqlLong(input_name, prefix, true)) {
+                                existing.key_ptr.* = input_name;
+                            } else {
+                                existing.key_ptr.* = ((allocator.dupe(u8, prefix)) catch unreachable);
+                            }
+                        }
+                        existing.value_ptr.* = tries;
+                    }
+                } else {
+                    while (true) {
+                        _ = mutable_name.resetTo(prefix.len);
+                        _ = ((mutable_name.appendInt(tries)) catch unreachable);
+                        tries = (tries + 1);
+                        if ((NumberScope.findNameUse((blk: {
+                        break :blk self;
+
+}), mutable_name.slice()) == .unused)) {
+                            if ((cur_use == .same_scope)) {
+                                const existing = ((self.name_counts.getOrPut(allocator, prefix)) catch unreachable);
+                                if ((!existing.found_existing)) {
+                                    if (strings.eqlLong(input_name, prefix, true)) {
+                                        existing.key_ptr.* = input_name;
+                                    } else {
+                                        existing.key_ptr.* = ((allocator.dupe(u8, prefix)) catch unreachable);
+                                    }
+                                }
+                                existing.value_ptr.* = tries;
+                            }
+                            name = mutable_name.slice();
+                            break;
+                        }
+                    }
+                }
+            }
+            if (strings.eqlLong(name, input_name, true)) {
+                _ = ((self.name_counts.putNoClobber(allocator, input_name, 1)) catch unreachable);
+                return .no_collision;
+            }
+            name = ((allocator.dupe(u8, name)) catch unreachable);
+            _ = ((self.name_counts.putNoClobber(allocator, name, 1)) catch unreachable);
+            return UnusedName{ .renamed = name };
+    }
+};
+
+pub const NumberRenamer = struct {
+    symbols: js_ast.Symbol.Map,
+    names: []bun.BabyList(string) = &.{},
+    allocator: std.mem.Allocator,
+    temp_allocator: std.mem.Allocator,
+    number_scope_pool: bun.HiveArray(NumberScope, 128).Fallback,
+    arena: bun.ArenaAllocator,
+    root: NumberScope = .{},
+    name_stack_fallback: std.heap.StackFallbackAllocator(512) = undefined,
+    name_temp_allocator: std.mem.Allocator = undefined,
+
+pub fn deinit(self: *NumberRenamer) void {
+            _ = self.allocator.free(self.names);
+            _ = self.root.deinit(self.temp_allocator);
+            _ = self.arena.deinit();
+    }
+
+pub fn toRenamer(self: *NumberRenamer) Renamer {
+            return Renamer{ .NumberRenamer = (blk: {
+            break :blk self;
+
+}) };
+    }
+
+pub fn originalName(self: *NumberRenamer, sym_ref: Ref) []const u8 {
+            if (sym_ref.isSourceContentsSlice()) {
+                _ = unreachable;
+            }
+            const resolved = self.symbols.follow(sym_ref);
+            return (self.symbols.getConst(resolved)).?.original_name;
+    }
+
+pub fn assignName(self: *NumberRenamer, scope: *NumberScope, input_ref: Ref) void {
+            const sym_ref = self.symbols.follow(input_ref);
+            var inner: *bun.BabyList(string) = (blk: {
+            break :blk (&self.names[@as(usize, @intCast(sym_ref.sourceIndex()))]);
+
+});
+            _ = &inner;
+            if ((inner.len > sym_ref.innerIndex())) {
+                if ((inner.at(sym_ref.innerIndex()).len > 0)) {
+                    return;
+                }
+            }
+            const symbol = (self.symbols.get(sym_ref)).?;
+            if ((symbol.slotNamespace() != .default)) {
+                return;
+            }
+            self.name_stack_fallback.fixed_buffer_allocator.end_index = 0;
+            const name = (switch (scope.findUnusedName(self.allocator, self.name_temp_allocator, symbol.original_name)) {
+.renamed => |n| n,
+.no_collision => symbol.original_name,
+});
+            const new_len = @max(inner.len, (sym_ref.innerIndex() + 1));
+            if ((inner.cap <= new_len)) {
+                const prev_cap = inner.len;
+                _ = ((inner.ensureUnusedCapacity(self.allocator, (new_len - prev_cap))) catch unreachable);
+                const to_write = (blk: {
+                break :blk inner.ptr[prev_cap..inner.cap];
+
+});
+                _ = @memset(std.mem.sliceAsBytes(to_write), 0);
+            }
+            inner.len = new_len;
+            (inner.mut(sym_ref.innerIndex())).* = name;
+    }
+
+pub fn init(allocator: std.mem.Allocator, temp_allocator: std.mem.Allocator, symbols: js_ast.Symbol.Map, root_names: bun.StringHashMapUnmanaged(u32)) !*NumberRenamer {
+            var renamer = try allocator.create(NumberRenamer);
+            _ = &renamer;
+            {
+                renamer.* = NumberRenamer{ .symbols = symbols, .allocator = allocator, .temp_allocator = temp_allocator, .names = try allocator.alloc(bun.BabyList(string), symbols.symbols_for_source.len), .number_scope_pool = undefined, .arena = bun.ArenaAllocator.init(temp_allocator) };
+            }
+            renamer.name_stack_fallback = .{ .buffer = undefined, .fallback_allocator = renamer.arena.allocator(), .fixed_buffer_allocator = undefined };
+            renamer.name_temp_allocator = renamer.name_stack_fallback.get();
+            renamer.number_scope_pool = .init(renamer.arena.allocator());
+            renamer.root.name_counts = root_names;
+            if (comptime Environment.allow_assert) {
+                if ((!Environment.isWindows)) {
+                    if ((std.posix.getenv("BUN_DUMP_SYMBOLS") != null)) {
+                        _ = symbols.dump();
+                    }
+                }
+            }
+            _ = @memset(std.mem.sliceAsBytes(renamer.names), 0);
+            return renamer;
+    }
+
+pub fn assignNamesRecursive(self: *NumberRenamer, scope: *js_ast.Scope, source_index: u32, parent: ?*NumberScope, sorted: *std.array_list.Managed(u32)) void {
+            var s = self.number_scope_pool.get();
+            _ = &s;
+            {
+                s.* = NumberScope{ .parent = parent, .name_counts = .{} };
+            }
+            var _scope_guard = NumberScopePoolGuard{ .scope = s, .renamer = (blk: {
+            break :blk self;
+
+}) };
+            _ = &_scope_guard;
+            var ___scope_guard_moved = false; _ = &___scope_guard_moved;
+            defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
+            _ = self.assignNamesRecursiveWithNumberScope(s, scope, source_index, sorted);
+    }
+
+pub fn assignNamesInScope(self: *NumberRenamer, s: *NumberScope, scope: *js_ast.Scope, source_index: u32, sorted: *std.array_list.Managed(u32)) void {
+            {
+                _ = sorted.clearRetainingCapacity();
+                _ = ((sorted.ensureUnusedCapacity(scope.members.count())) catch unreachable);
+                sorted.items.len = scope.members.count();
+                var remaining = sorted.items;
+                _ = &remaining;
+                var value_iter = scope.members.valueIterator();
+                _ = &value_iter;
+                while (value_iter.next()) |value_ref| {
+                    if (comptime Environment.allow_assert) {
+                        _ = bun.assert((!value_ref.ref.isSourceContentsSlice()));
+                    }
+                    remaining[cp_cast_int(usize, 0)] = value_ref.ref.innerIndex();
+                    remaining = remaining[1..];
+                }
+                _ = bun.assert((remaining.len == 0));
+                const empty_sort_ctx: void = undefined;
+                _ = std.sort.pdq(u32, sorted.items, empty_sort_ctx, std.sort.asc(u32));
+                for (sorted.items) |inner_index| {
+                    _ = &inner_index;
+                    _ = self.assignName(s, Ref.init(@intCast(inner_index), source_index, false));
+                }
+            }
+            for (cp_iter_slice(scope.generated.slice())) |sym_ref| {
+                _ = &sym_ref;
+                _ = self.assignName(s, sym_ref);
+            }
+    }
+
+pub fn assignNamesRecursiveWithNumberScope(self: *NumberRenamer, initial_scope: *NumberScope, scope_: *js_ast.Scope, source_index: u32, sorted: *std.array_list.Managed(u32)) void {
+            var s = initial_scope;
+            _ = &s;
+            var scope = scope_;
+            _ = &scope;
+            var _scope_guard = NumberScopePoolGuard{ .scope = s, .initial_scope = initial_scope, .renamer = (blk: {
+            break :blk self;
+
+}) };
+            _ = &_scope_guard;
+            var ___scope_guard_moved = false; _ = &___scope_guard_moved;
+            defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
+            while (true) {
+                var should_create = (scope.members.count() > 0);
+                _ = &should_create;
+                if ((!should_create)) {
+                    should_create = (scope.generated.len > 0);
+                }
+                if (should_create) {
+                    const new_child_scope = self.number_scope_pool.get();
+                    {
+                        new_child_scope.* = NumberScope{ .parent = s, .name_counts = .{} };
+                    }
+                    s = new_child_scope;
+                    _scope_guard.scope = new_child_scope;
+                    _ = self.assignNamesInScope(s, scope, source_index, sorted);
+                }
+                if ((scope.children.len == 1)) {
+                    scope = (blk: {
+                    break :blk scope.children.ptr[0];
+
+});
+                } else {
+                    break;
+                }
+            }
+            for (cp_iter_slice(scope.children.slice())) |child| {
+                _ = &child;
+                _ = self.assignNamesRecursiveWithNumberScope(s, child, source_index, sorted);
+            }
+    }
+
+pub fn addTopLevelSymbol(self: *NumberRenamer, sym_ref: Ref) void {
+            _ = self.assignName((&self.root), sym_ref);
+    }
+
+pub fn addTopLevelDeclaredSymbols(self: *NumberRenamer, declared_symbols: js_ast.DeclaredSymbol.List) void {
+            var decls = declared_symbols;
+            _ = &decls;
+            _ = js_ast.DeclaredSymbol.forEachTopLevelSymbol((blk: {
+            break :blk (&decls);
+
+}), (blk: {
+            break :blk self;
+
+}), NumberRenamer.addTopLevelSymbol);
+    }
+
+pub fn nameForSymbol(self: *NumberRenamer, sym_ref: Ref) []const u8 {
+            if (sym_ref.isSourceContentsSlice()) {
+                _ = bun.unreachablePanic("Unexpected unbound symbol!\n{f}", .{ sym_ref });
+            }
+            const resolved = self.symbols.follow(sym_ref);
+            const source_index = resolved.sourceIndex();
+            const inner_index = resolved.innerIndex();
+            const renamed_list = self.names[@as(usize, @intCast(source_index))];
+            if ((renamed_list.len > inner_index)) {
+                const renamed = (renamed_list.at(inner_index)).*;
+                if ((renamed.len > 0)) {
+                    return renamed;
+                }
+            }
+            return self.symbols.symbols_for_source.at(source_index).at(inner_index).original_name;
+    }
+};
+
 pub const NoOpRenamer = struct {
     symbols: js_ast.Symbol.Map,
     source: *const logger.Source,
@@ -176,215 +745,6 @@ pub const SymbolSlot = struct {
     needs_capital_for_jsx: bool = false,
     pub const List = std.EnumArray(js_ast.Symbol.SlotNamespace, std.array_list.Managed(SymbolSlot));
 };
-pub const MinifyRenamer = struct {
-    reserved_names: bun.StringHashMapUnmanaged(u32),
-    allocator: std.mem.Allocator,
-    slots: SymbolSlot.List = undefined,
-    top_level_symbol_to_slot: TopLevelSymbolSlotMap,
-    symbols: js_ast.Symbol.Map,
-
-    pub const TopLevelSymbolSlotMap = std.HashMapUnmanaged(Ref, usize, RefCtx, 80);
-
-    pub fn init(
-        allocator: std.mem.Allocator,
-        symbols: js_ast.Symbol.Map,
-        first_top_level_slots: js_ast.SlotCounts,
-        reserved_names: bun.StringHashMapUnmanaged(u32),
-    ) !*MinifyRenamer {
-        const renamer = try allocator.create(MinifyRenamer);
-        var slots = SymbolSlot.List.initUndefined();
-
-        for (first_top_level_slots.slots.values, 0..) |count, ns| {
-            slots.values[ns] = try std.array_list.Managed(SymbolSlot).initCapacity(allocator, count);
-            slots.values[ns].items.len = count;
-            @memset(slots.values[ns].items[0..count], SymbolSlot{});
-        }
-
-        renamer.* = MinifyRenamer{
-            .symbols = symbols,
-            .reserved_names = reserved_names,
-            .slots = slots,
-            .top_level_symbol_to_slot = TopLevelSymbolSlotMap{},
-            .allocator = allocator,
-        };
-
-        return renamer;
-    }
-
-    pub fn deinit(this: *MinifyRenamer, allocator: std.mem.Allocator) void {
-        for (&this.slots.values) |*val| {
-            val.deinit();
-        }
-        this.reserved_names.deinit(allocator);
-        this.top_level_symbol_to_slot.deinit(allocator);
-        allocator.destroy(this);
-    }
-
-    pub fn toRenamer(this: *MinifyRenamer) Renamer {
-        return .{
-            .MinifyRenamer = this,
-        };
-    }
-
-    pub fn nameForSymbol(this: *MinifyRenamer, _ref: Ref) string {
-        const ref = this.symbols.follow(_ref);
-        const symbol = this.symbols.get(ref).?;
-
-        const ns = symbol.slotNamespace();
-        if (ns == .must_not_be_renamed) {
-            return symbol.original_name;
-        }
-
-        const i = symbol.nestedScopeSlot() orelse
-            this.top_level_symbol_to_slot.get(ref) orelse
-            return symbol.original_name;
-
-        // This has to be a pointer because the string might be stored inline
-        return this.slots.getPtr(ns).items[i].name.slice();
-    }
-
-    pub fn originalName(this: *MinifyRenamer, ref: Ref) ?string {
-        _ = ref;
-        _ = this;
-        return null;
-    }
-
-    pub fn accumulateSymbolUseCounts(
-        this: *MinifyRenamer,
-        top_level_symbols: *StableSymbolCount.Array,
-        symbol_uses: js_ast.Part.SymbolUseMap,
-        stable_source_indices: []const u32,
-    ) !void {
-        var iter = symbol_uses.iterator();
-        while (iter.next()) |value| {
-            try this.accumulateSymbolUseCount(top_level_symbols, value.key_ptr.*, value.value_ptr.*.count_estimate, stable_source_indices);
-        }
-    }
-
-    pub fn accumulateSymbolUseCount(
-        this: *MinifyRenamer,
-        top_level_symbols: *StableSymbolCount.Array,
-        _ref: Ref,
-        count: u32,
-        stable_source_indices: []const u32,
-    ) !void {
-        var ref = this.symbols.follow(_ref);
-        var symbol = this.symbols.get(ref).?;
-
-        while (symbol.namespace_alias != null) {
-            const ref_ = this.symbols.follow(symbol.namespace_alias.?.namespace_ref);
-            if (ref_.eql(ref)) break;
-            ref = ref_;
-            symbol = this.symbols.get(ref_).?;
-        }
-
-        const ns = symbol.slotNamespace();
-        if (ns == .must_not_be_renamed) return;
-
-        if (symbol.nestedScopeSlot()) |i| {
-            var slot = &this.slots.getPtr(ns).items[i];
-            slot.count += count;
-            if (symbol.must_start_with_capital_letter_for_jsx) {
-                slot.needs_capital_for_jsx = true;
-            }
-            return;
-        }
-
-        try top_level_symbols.append(StableSymbolCount{
-            .stable_source_index = stable_source_indices[ref.sourceIndex()],
-            .ref = ref,
-            .count = count,
-        });
-    }
-
-    pub fn allocateTopLevelSymbolSlots(this: *MinifyRenamer, top_level_symbols: StableSymbolCount.Array) !void {
-        for (top_level_symbols.items) |stable| {
-            const symbol = this.symbols.get(stable.ref).?;
-            var slots = this.slots.getPtr(symbol.slotNamespace());
-
-            const existing = try this.top_level_symbol_to_slot.getOrPut(this.allocator, stable.ref);
-            if (existing.found_existing) {
-                var slot = &slots.items[existing.value_ptr.*];
-                slot.count += stable.count;
-                if (symbol.must_start_with_capital_letter_for_jsx) {
-                    slot.needs_capital_for_jsx = true;
-                }
-            } else {
-                existing.value_ptr.* = slots.items.len;
-                try slots.append(SymbolSlot{
-                    .count = stable.count,
-                    .needs_capital_for_jsx = symbol.must_start_with_capital_letter_for_jsx,
-                });
-            }
-        }
-    }
-
-    pub fn assignNamesByFrequency(this: *MinifyRenamer, name_minifier: *js_ast.NameMinifier) !void {
-        var name_buf = try std.array_list.Managed(u8).initCapacity(this.allocator, 64);
-        defer name_buf.deinit();
-
-        var sorted = SlotAndCount.Array.init(this.allocator);
-        defer sorted.deinit();
-
-        inline for (comptime std.enums.values(js_ast.Symbol.SlotNamespace)) |ns| {
-            var slots = this.slots.getPtr(ns);
-            sorted.clearRetainingCapacity();
-            try sorted.ensureUnusedCapacity(slots.items.len);
-            sorted.items.len = slots.items.len;
-
-            for (sorted.items, slots.items, 0..) |*elem, slot, i| {
-                elem.* = SlotAndCount{
-                    .slot = @as(u32, @intCast(i)),
-                    .count = slot.count,
-                };
-            }
-            std.sort.pdq(SlotAndCount, sorted.items, {}, SlotAndCount.lessThan);
-
-            var next_name: isize = 0;
-
-            for (sorted.items) |data| {
-                var slot = &slots.items[data.slot];
-
-                try name_minifier.numberToMinifiedName(&name_buf, next_name);
-                next_name += 1;
-
-                // Make sure we never generate a reserved name. We only have to worry
-                // about collisions with reserved identifiers for normal symbols, && we
-                // only have to worry about collisions with keywords for labels. We do
-                // not have to worry about either for private names because they start
-                // with a "#" character.
-                switch (comptime ns) {
-                    .default => {
-                        while (this.reserved_names.contains(name_buf.items)) {
-                            try name_minifier.numberToMinifiedName(&name_buf, next_name);
-                            next_name += 1;
-                        }
-
-                        if (slot.needs_capital_for_jsx) {
-                            while (name_buf.items[0] >= 'a') {
-                                if (name_buf.items[0] > 'z') break;
-                                try name_minifier.numberToMinifiedName(&name_buf, next_name);
-                                next_name += 1;
-                            }
-                        }
-                    },
-                    .label => {
-                        while (JSLexer.Keywords.has(name_buf.items)) {
-                            try name_minifier.numberToMinifiedName(&name_buf, next_name);
-                            next_name += 1;
-                        }
-                    },
-                    .private_name => {
-                        try name_buf.insert(0, '#');
-                    },
-                    else => {},
-                }
-
-                slot.name = TinyString.init(name_buf.items, this.allocator) catch unreachable;
-            }
-        }
-    }
-};
 pub const StableSymbolCount = struct {
     stable_source_index: u32,
     ref: Ref,
@@ -418,354 +778,6 @@ const SlotAndCount = packed struct(u64) {
         if (a.count < b.count) return false;
         return a.slot < b.slot;
     }
-};
-pub const NumberRenamer = struct {
-    symbols: js_ast.Symbol.Map,
-    names: []bun.BabyList(string) = &.{},
-    allocator: std.mem.Allocator,
-    temp_allocator: std.mem.Allocator,
-    number_scope_pool: bun.HiveArray(NumberScope, 128).Fallback,
-    arena: bun.ArenaAllocator,
-    root: NumberScope = .{},
-    name_stack_fallback: std.heap.StackFallbackAllocator(512) = undefined,
-    name_temp_allocator: std.mem.Allocator = undefined,
-
-    pub fn deinit(self: *NumberRenamer) void {
-        self.allocator.free(self.names);
-        self.root.deinit(self.temp_allocator);
-        self.arena.deinit();
-    }
-
-    pub fn toRenamer(this: *NumberRenamer) Renamer {
-        return .{
-            .NumberRenamer = this,
-        };
-    }
-
-    pub fn originalName(r: *NumberRenamer, ref: Ref) string {
-        if (ref.isSourceContentsSlice()) {
-            unreachable;
-        }
-
-        const resolved = r.symbols.follow(ref);
-        return r.symbols.getConst(resolved).?.original_name;
-    }
-
-    pub fn assignName(r: *NumberRenamer, scope: *NumberScope, input_ref: Ref) void {
-        const ref = r.symbols.follow(input_ref);
-
-        // Don't rename the same symbol more than once
-        var inner: *bun.BabyList(string) = &r.names[ref.sourceIndex()];
-        if (inner.len > ref.innerIndex()) {
-            if (inner.at(ref.innerIndex()).len > 0) return;
-        }
-
-        // Don't rename unbound symbols, symbols marked as reserved names, labels, || private names
-        const symbol = r.symbols.get(ref).?;
-        if (symbol.slotNamespace() != .default) {
-            return;
-        }
-
-        r.name_stack_fallback.fixed_buffer_allocator.end_index = 0;
-        const name = switch (scope.findUnusedName(r.allocator, r.name_temp_allocator, symbol.original_name)) {
-            .renamed => |name| name,
-            .no_collision => symbol.original_name,
-        };
-        const new_len = @max(inner.len, ref.innerIndex() + 1);
-        if (inner.cap <= new_len) {
-            const prev_cap = inner.len;
-            inner.ensureUnusedCapacity(r.allocator, new_len - prev_cap) catch unreachable;
-            const to_write = inner.ptr[prev_cap..inner.cap];
-            @memset(std.mem.sliceAsBytes(to_write), 0);
-        }
-        inner.len = new_len;
-        inner.mut(ref.innerIndex()).* = name;
-    }
-
-    pub fn init(
-        allocator: std.mem.Allocator,
-        temp_allocator: std.mem.Allocator,
-        symbols: js_ast.Symbol.Map,
-        root_names: bun.StringHashMapUnmanaged(u32),
-    ) !*NumberRenamer {
-        var renamer = try allocator.create(NumberRenamer);
-        renamer.* = NumberRenamer{
-            .symbols = symbols,
-            .allocator = allocator,
-            .temp_allocator = temp_allocator,
-            .names = try allocator.alloc(bun.BabyList(string), symbols.symbols_for_source.len),
-            .number_scope_pool = undefined,
-            .arena = bun.ArenaAllocator.init(temp_allocator),
-        };
-        renamer.name_stack_fallback = .{
-            .buffer = undefined,
-            .fallback_allocator = renamer.arena.allocator(),
-            .fixed_buffer_allocator = undefined,
-        };
-        renamer.name_temp_allocator = renamer.name_stack_fallback.get();
-        renamer.number_scope_pool = .init(renamer.arena.allocator());
-        renamer.root.name_counts = root_names;
-        if (comptime Environment.allow_assert) {
-            if (!Environment.isWindows) {
-                if (std.posix.getenv("BUN_DUMP_SYMBOLS") != null)
-                    symbols.dump();
-            }
-        }
-
-        @memset(std.mem.sliceAsBytes(renamer.names), 0);
-
-        return renamer;
-    }
-
-    pub fn assignNamesRecursive(r: *NumberRenamer, scope: *js_ast.Scope, source_index: u32, parent: ?*NumberScope, sorted: *std.array_list.Managed(u32)) void {
-        var s = r.number_scope_pool.get();
-        s.* = NumberScope{
-            .parent = parent,
-            .name_counts = .{},
-        };
-        defer {
-            s.deinit(r.temp_allocator);
-            r.number_scope_pool.put(s);
-        }
-
-        assignNamesRecursiveWithNumberScope(r, s, scope, source_index, sorted);
-    }
-
-    fn assignNamesInScope(
-        r: *NumberRenamer,
-        s: *NumberScope,
-        scope: *js_ast.Scope,
-        source_index: u32,
-        sorted: *std.array_list.Managed(u32),
-    ) void {
-        {
-            sorted.clearRetainingCapacity();
-            sorted.ensureUnusedCapacity(scope.members.count()) catch unreachable;
-            sorted.items.len = scope.members.count();
-            var remaining = sorted.items;
-            var value_iter = scope.members.valueIterator();
-            while (value_iter.next()) |value_ref| {
-                if (comptime Environment.allow_assert)
-                    bun.assert(!value_ref.ref.isSourceContentsSlice());
-
-                remaining[0] = value_ref.ref.innerIndex();
-                remaining = remaining[1..];
-            }
-            bun.assert(remaining.len == 0);
-            std.sort.pdq(u32, sorted.items, {}, std.sort.asc(u32));
-
-            for (sorted.items) |inner_index| {
-                r.assignName(s, Ref.init(@intCast(inner_index), source_index, false));
-            }
-        }
-
-        for (scope.generated.slice()) |ref| {
-            r.assignName(s, ref);
-        }
-    }
-
-    pub fn assignNamesRecursiveWithNumberScope(r: *NumberRenamer, initial_scope: *NumberScope, scope_: *js_ast.Scope, source_index: u32, sorted: *std.array_list.Managed(u32)) void {
-        var s = initial_scope;
-        var scope = scope_;
-        defer if (s != initial_scope) {
-            s.deinit(r.temp_allocator);
-            r.number_scope_pool.put(s);
-        };
-
-        while (true) {
-            var should_create = scope.members.count() > 0;
-            if (!should_create) {
-                should_create = scope.generated.len > 0;
-            }
-            if (should_create) {
-                const new_child_scope = r.number_scope_pool.get();
-                new_child_scope.* = NumberScope{
-                    .parent = s,
-                    .name_counts = .{},
-                };
-                s = new_child_scope;
-
-                r.assignNamesInScope(s, scope, source_index, sorted);
-            }
-
-            if (scope.children.len == 1) {
-                scope = scope.children.ptr[0];
-            } else {
-                break;
-            }
-        }
-
-        // Symbols in child scopes may also have to be renamed to avoid conflicts
-        for (scope.children.slice()) |child| {
-            r.assignNamesRecursiveWithNumberScope(s, child, source_index, sorted);
-        }
-    }
-
-    pub fn addTopLevelSymbol(r: *NumberRenamer, ref: Ref) void {
-        r.assignName(&r.root, ref);
-    }
-
-    pub fn addTopLevelDeclaredSymbols(r: *NumberRenamer, declared_symbols: js_ast.DeclaredSymbol.List) void {
-        var decls = declared_symbols;
-        js_ast.DeclaredSymbol.forEachTopLevelSymbol(&decls, r, addTopLevelSymbol);
-    }
-
-    pub fn nameForSymbol(renamer: *NumberRenamer, ref: Ref) string {
-        if (ref.isSourceContentsSlice()) {
-            bun.unreachablePanic("Unexpected unbound symbol!\n{f}", .{ref});
-        }
-
-        const resolved = renamer.symbols.follow(ref);
-
-        const source_index = resolved.sourceIndex();
-        const inner_index = resolved.innerIndex();
-
-        const renamed_list = renamer.names[source_index];
-
-        if (renamed_list.len > inner_index) {
-            const renamed = renamed_list.at(inner_index).*;
-            if (renamed.len > 0) {
-                return renamed;
-            }
-        }
-
-        return renamer.symbols.symbols_for_source.at(source_index).at(inner_index).original_name;
-    }
-
-    pub const NumberScope = struct {
-        parent: ?*NumberScope = null,
-        name_counts: bun.StringHashMapUnmanaged(u32) = .{},
-
-        pub fn deinit(this: *NumberScope, allocator: std.mem.Allocator) void {
-            this.name_counts.deinit(allocator);
-            this.* = undefined;
-        }
-
-        pub const NameUse = union(enum) {
-            unused: void,
-            same_scope: u32,
-            used: void,
-
-            pub fn find(this: *NumberScope, name: []const u8) NameUse {
-                // This version doesn't allocate
-                if (comptime Environment.allow_assert)
-                    bun.assert(JSLexer.isIdentifier(name));
-
-                // avoid rehashing the same string over for each scope
-                const ctx = bun.StringHashMapContext.pre(name);
-
-                if (this.name_counts.getAdapted(name, ctx)) |count| {
-                    return .{ .same_scope = count };
-                }
-
-                var s: ?*NumberScope = this.parent;
-
-                while (s) |scope| : (s = scope.parent) {
-                    if (scope.name_counts.containsAdapted(name, ctx)) {
-                        return .{ .used = {} };
-                    }
-                }
-
-                return .{ .unused = {} };
-            }
-        };
-
-        const UnusedName = union(enum) {
-            no_collision: void,
-            renamed: string,
-        };
-
-        /// Caller must use an arena allocator
-        pub fn findUnusedName(this: *NumberScope, allocator: std.mem.Allocator, temp_allocator: std.mem.Allocator, input_name: []const u8) UnusedName {
-            var name = bun.MutableString.ensureValidIdentifier(input_name, temp_allocator) catch unreachable;
-
-            switch (NameUse.find(this, name)) {
-                .unused => {},
-                else => |use| {
-                    var tries: u32 = if (use == .used)
-                        1
-                    else
-                        // To avoid O(n^2) behavior, the number must start off being the number
-                        // that we used last time there was a collision with this name. Otherwise
-                        // if there are many collisions with the same name, each name collision
-                        // would have to increment the counter past all previous name collisions
-                        // which is a O(n^2) time algorithm. Only do this if this symbol comes
-                        // from the same scope as the previous one since sibling scopes can reuse
-                        // the same name without problems.
-                        use.same_scope;
-
-                    const prefix = name;
-
-                    tries += 1;
-
-                    var mutable_name = MutableString.initEmpty(temp_allocator);
-                    mutable_name.growIfNeeded(prefix.len + 4) catch unreachable;
-                    mutable_name.appendSlice(prefix) catch unreachable;
-                    mutable_name.appendInt(tries) catch unreachable;
-
-                    switch (NameUse.find(this, mutable_name.slice())) {
-                        .unused => {
-                            name = mutable_name.slice();
-
-                            if (use == .same_scope) {
-                                const existing = this.name_counts.getOrPut(allocator, prefix) catch unreachable;
-                                if (!existing.found_existing) {
-                                    if (strings.eqlLong(input_name, prefix, true)) {
-                                        existing.key_ptr.* = input_name;
-                                    } else {
-                                        existing.key_ptr.* = allocator.dupe(u8, prefix) catch unreachable;
-                                    }
-                                }
-
-                                existing.value_ptr.* = tries;
-                            }
-                        },
-                        else => |cur_use| {
-                            while (true) {
-                                mutable_name.resetTo(prefix.len);
-                                mutable_name.appendInt(tries) catch unreachable;
-
-                                tries += 1;
-
-                                switch (NameUse.find(this, mutable_name.slice())) {
-                                    .unused => {
-                                        if (cur_use == .same_scope) {
-                                            const existing = this.name_counts.getOrPut(allocator, prefix) catch unreachable;
-                                            if (!existing.found_existing) {
-                                                if (strings.eqlLong(input_name, prefix, true)) {
-                                                    existing.key_ptr.* = input_name;
-                                                } else {
-                                                    existing.key_ptr.* = allocator.dupe(u8, prefix) catch unreachable;
-                                                }
-                                            }
-
-                                            existing.value_ptr.* = tries;
-                                        }
-
-                                        name = mutable_name.slice();
-                                        break;
-                                    },
-                                    else => {},
-                                }
-                            }
-                        },
-                    }
-                },
-            }
-
-            // Each name starts off with a count of 1 so that the first collision with
-            // "name" is called "name2"
-            if (strings.eqlLong(name, input_name, true)) {
-                this.name_counts.putNoClobber(allocator, input_name, 1) catch unreachable;
-                return .{ .no_collision = {} };
-            }
-
-            name = allocator.dupe(u8, name) catch unreachable;
-
-            this.name_counts.putNoClobber(allocator, name, 1) catch unreachable;
-            return .{ .renamed = name };
-        }
-    };
 };
 pub const ExportRenamer = struct {
     string_buffer: bun.MutableString,
@@ -835,9 +847,14 @@ pub fn assignNestedScopeSlots(allocator: std.mem.Allocator, module_scope: *js_as
         _ = &slot_counts;
         var sorted_members = std.array_list.Managed(u32).init(allocator);
         _ = &sorted_members;
-        defer {
-        _ = sorted_members.deinit();
-        }
+        const sorted_members_ptr = (blk: {
+        break :blk (&sorted_members);
+
+});
+        var _sorted_members_guard = DeinitGuard(std.array_list.Managed(u32)){ .ptr = sorted_members_ptr };
+        _ = &_sorted_members_guard;
+        var ___sorted_members_guard_moved = false; _ = &___sorted_members_guard_moved;
+        defer if (!___sorted_members_guard_moved) { ___sorted_members_guard_moved = true; const __T = @TypeOf(_sorted_members_guard); if (@typeInfo(__T) == .optional) { if (_sorted_members_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sorted_members_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sorted_members_guard; _drop_val.__cp_deinit(); } };
         const valid_slot: u32 = 0;
         var members = module_scope.members.valueIterator();
         _ = &members;

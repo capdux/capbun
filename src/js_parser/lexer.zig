@@ -81,7 +81,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const FeatureFlags = @import("../bun_core/feature_flags.zig");
 pub const JSIdentifier = @import("./lexer/identifier.zig");
@@ -178,6 +178,19 @@ pub fn scan(kind: PragmaArg, offset_: usize, pragma: []const u8, text_: []const 
     }
     
     pub const OptSpan = ?js_ast.Span;
+};
+
+pub const TempBufferU16ClearGuard = struct {
+    ptr: *std.array_list.Managed(u16),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *TempBufferU16ClearGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.ptr.clearRetainingCapacity();
+            }
+    }
 };
 
 pub const JSXPragma = struct {
@@ -896,7 +909,10 @@ pub inline fn nextCodepointSlice(it: *const LexerType) []const u8 {
             if ((it.current >= it.source.contents.len)) {
                 return "";
             }
-            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(it.source.contents.ptr[@as(usize, @intCast(it.current))]);
+            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid((blk: {
+            break :blk it.source.contents.ptr[@as(usize, @intCast(it.current))];
+
+}));
             return (if ((!((cp_len + it.current) > it.source.contents.len))) it.source.contents[it.current..(cp_len + it.current)] else "");
     }
 
@@ -909,12 +925,18 @@ pub inline fn nextCodepoint(it: *LexerType) CodePoint {
                 it.end = it.source.contents.len;
                 return -1;
             }
-            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(it.source.contents.ptr[@as(usize, @intCast(it.current))]);
+            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid((blk: {
+            break :blk it.source.contents.ptr[@as(usize, @intCast(it.current))];
+
+}));
             const slice = (if ((!((cp_len + it.current) > it.source.contents.len))) it.source.contents[it.current..(cp_len + it.current)] else "");
             const code_point = (switch (slice.len) {
 0 => -1,
 1 => (if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(slice[0])) else @as(CodePoint, slice[0])),
-else => strings.decodeWTF8RuneTMultibyte(slice.ptr[0..4], @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
+else => strings.decodeWTF8RuneTMultibyte((blk: {
+            break :blk slice.ptr[0..4];
+
+}), @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
 });
             it.end = it.current;
             it.current = (it.current + (if ((code_point != strings.unicode_replacement)) cp_len else 1));
@@ -1010,9 +1032,14 @@ _ = try lexer.syntaxError();
             }
             const original_text = lexer.raw();
             _ = bun.assert((lexer.temp_buffer_u16.items.len == 0));
-            defer {
-            _ = lexer.temp_buffer_u16.clearRetainingCapacity();
-            }
+            const buf_ptr = (blk: {
+            break :blk (&lexer.temp_buffer_u16);
+
+});
+            var _clear_guard = TempBufferU16ClearGuard{ .ptr = buf_ptr };
+            _ = &_clear_guard;
+            var ___clear_guard_moved = false; _ = &___clear_guard_moved;
+            defer if (!___clear_guard_moved) { ___clear_guard_moved = true; const __T = @TypeOf(_clear_guard); if (@typeInfo(__T) == .optional) { if (_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _clear_guard; _drop_val.__cp_deinit(); } };
             _ = try lexer.temp_buffer_u16.ensureUnusedCapacity(original_text.len);
             _ = try lexer.decodeEscapeSequences(lexer.start, original_text, std.array_list.Managed(u16), (&lexer.temp_buffer_u16));
             result.contents = try lexer.utf16ToString(lexer.temp_buffer_u16.items);
@@ -1760,7 +1787,7 @@ pub fn unexpected(lexer: *LexerType) !void {
             _ = try lexer.addRangeError(lexer.range(), "Unexpected {s}", .{ found }, true);
     }
 
-pub fn raw(self: @This()) []const u8 {
+pub fn raw(self: *const @This()) []const u8 {
             return self.source.contents[self.start..self.end];
     }
 
@@ -1909,8 +1936,7 @@ pub fn scanPragma(lexer: *LexerType, offset_for_errors: usize, chunk: []const u8
             return 0;
     }
 
-pub fn removeMultilineCommentIndent(self: *@This(), _: *LexerType, _: []const u8, text: []const u8) []const u8 {
-        _ = self;
+pub fn removeMultilineCommentIndent(_: *LexerType, _: []const u8, text: []const u8) []const u8 {
             return text;
     }
 
@@ -1948,9 +1974,14 @@ return js_ast.E.String.init(@as([]const u16, @ptrCast(@alignCast(std.mem.bytesAs
 },
 .needs_decode => {
 _ = bun.assert((lexer.temp_buffer_u16.items.len == 0));
-            defer {
-            _ = lexer.temp_buffer_u16.clearRetainingCapacity();
-            }
+            const buf_ptr = (blk: {
+            break :blk (&lexer.temp_buffer_u16);
+
+});
+            var _clear_guard = TempBufferU16ClearGuard{ .ptr = buf_ptr };
+            _ = &_clear_guard;
+            var ___clear_guard_moved = false; _ = &___clear_guard_moved;
+            defer if (!___clear_guard_moved) { ___clear_guard_moved = true; const __T = @TypeOf(_clear_guard); if (@typeInfo(__T) == .optional) { if (_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _clear_guard; _drop_val.__cp_deinit(); } };
             _ = try lexer.temp_buffer_u16.ensureUnusedCapacity(lexer.string_literal_raw_content.len);
             _ = try lexer.decodeEscapeSequences(lexer.string_literal_start, lexer.string_literal_raw_content, std.array_list.Managed(u16), (&lexer.temp_buffer_u16));
             const first_non_ascii = strings.firstNonASCII16(lexer.temp_buffer_u16.items);
@@ -2229,9 +2260,14 @@ if ((lexer.code_point >= 128)) {
             const raw_content_slice = lexer.source.contents[(lexer.start + 1)..(lexer.end - 1)];
             if (needs_decode) {
                 _ = bun.assert((lexer.temp_buffer_u16.items.len == 0));
-                defer {
-                _ = lexer.temp_buffer_u16.clearRetainingCapacity();
-                }
+                const buf_ptr = (blk: {
+                break :blk (&lexer.temp_buffer_u16);
+
+});
+                var _clear_guard = TempBufferU16ClearGuard{ .ptr = buf_ptr };
+                _ = &_clear_guard;
+                var ___clear_guard_moved = false; _ = &___clear_guard_moved;
+                defer if (!___clear_guard_moved) { ___clear_guard_moved = true; const __T = @TypeOf(_clear_guard); if (@typeInfo(__T) == .optional) { if (_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _clear_guard; _drop_val.__cp_deinit(); } };
                 _ = try lexer.temp_buffer_u16.ensureUnusedCapacity(raw_content_slice.len);
                 _ = try lexer.fixWhitespaceAndDecodeJSXEntities(raw_content_slice, (&lexer.temp_buffer_u16));
                 lexer.string_literal_raw_content = std.mem.sliceAsBytes(try lexer.allocator.dupe(u16, lexer.temp_buffer_u16.items));
@@ -2294,9 +2330,14 @@ needs_fixing = (needs_fixing or (lexer.code_point >= 128));
                 const raw_content_slice = lexer.source.contents[original_start..lexer.end];
                 if (needs_fixing) {
                     _ = bun.assert((lexer.temp_buffer_u16.items.len == 0));
-                    defer {
-                    _ = lexer.temp_buffer_u16.clearRetainingCapacity();
-                    }
+                    const buf_ptr = (blk: {
+                    break :blk (&lexer.temp_buffer_u16);
+
+});
+                    var _clear_guard = TempBufferU16ClearGuard{ .ptr = buf_ptr };
+                    _ = &_clear_guard;
+                    var ___clear_guard_moved = false; _ = &___clear_guard_moved;
+                    defer if (!___clear_guard_moved) { ___clear_guard_moved = true; const __T = @TypeOf(_clear_guard); if (@typeInfo(__T) == .optional) { if (_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _clear_guard; _drop_val.__cp_deinit(); } };
                     _ = try lexer.temp_buffer_u16.ensureUnusedCapacity(raw_content_slice.len);
                     _ = try lexer.fixWhitespaceAndDecodeJSXEntities(raw_content_slice, (&lexer.temp_buffer_u16));
                     lexer.string_literal_raw_content = std.mem.sliceAsBytes(try lexer.allocator.dupe(u16, lexer.temp_buffer_u16.items));
@@ -2959,18 +3000,42 @@ pub fn skipToInterestingCharacterInMultilineComment(text_: []const u8) ?u32 {
         _ = bun.assertWithLocation((text_end_len <= text.len), @src());
         const text_end_ptr = (text.ptr + text_end_len);
         while ((text_end_ptr != text.ptr)) {
-            const vec = (if (comptime @typeInfo(strings.AsciiVector) == .@"enum") @as(strings.AsciiVector, @enumFromInt((text.ptr[0..strings.ascii_vector_size]).*)) else @as(strings.AsciiVector, (text.ptr[0..strings.ascii_vector_size]).*));
+            const vec = (if (comptime @typeInfo(strings.AsciiVector) == .@"enum") @as(strings.AsciiVector, @enumFromInt((blk: {
+            break :blk (text.ptr[0..strings.ascii_vector_size]).*;
+
+}))) else @as(strings.AsciiVector, (blk: {
+            break :blk (text.ptr[0..strings.ascii_vector_size]).*;
+
+})));
             const any_significant = (((@as(V1x16, @bitCast((vec > strings.max_16_ascii))) | @as(V1x16, @bitCast((star == vec)))) | @as(V1x16, @bitCast((carriage == vec)))) | @as(V1x16, @bitCast((newline == vec))));
             if ((@reduce(.Max, any_significant) > 0)) {
                 const bitmask = @as(u16, @bitCast(any_significant));
                 const first = @ctz(bitmask);
                 _ = bun.assertWithLocation((first < strings.ascii_vector_size), @src());
-                _ = bun.assertWithLocation(((((text.ptr[@as(usize, @intCast(first))] == 42) or (text.ptr[@as(usize, @intCast(first))] == 13)) or (text.ptr[@as(usize, @intCast(first))] == 10)) or (text.ptr[@as(usize, @intCast(first))] > 127)), @src());
-                return @as(u32, @truncate((first + (@intFromPtr(text.ptr) - @intFromPtr(text_.ptr)))));
+                _ = bun.assertWithLocation((((((blk: {
+                break :blk text.ptr[@as(usize, @intCast(first))];
+
+}) == 42) or ((blk: {
+                break :blk text.ptr[@as(usize, @intCast(first))];
+
+}) == 13)) or ((blk: {
+                break :blk text.ptr[@as(usize, @intCast(first))];
+
+}) == 10)) or ((blk: {
+                break :blk text.ptr[@as(usize, @intCast(first))];
+
+}) > 127)), @src());
+                return @as(u32, @truncate((first + (blk: {
+                break :blk (@intFromPtr(text.ptr) - @intFromPtr(text_.ptr));
+
+}))));
             }
             text.ptr = (text.ptr + strings.ascii_vector_size);
         }
-        return @as(u32, @truncate((@intFromPtr(text.ptr) - @intFromPtr(text_.ptr))));
+        return @as(u32, @truncate((blk: {
+        break :blk (@intFromPtr(text.ptr) - @intFromPtr(text_.ptr));
+
+})));
 }
 
 pub fn indexOfInterestingCharacterInStringLiteral(text_: []const u8, quote: u8) ?usize {

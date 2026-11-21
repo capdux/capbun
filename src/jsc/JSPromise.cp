@@ -17,6 +17,20 @@ const VM = jsc.VM;
     fn JSC__JSPromise__wrap(global: *jsc.JSGlobalObject, ptr: *!, callback: WrapCallback): JSValue;
 }
 
+struct ExitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.exit();
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 pub const JSPromiseStatus = enum(u32) {
     pending = 0, // Making this as 0, so that, we can change the status from Pending to others without masking.
     fulfilled = 1,
@@ -44,7 +58,7 @@ pub fn JSPromiseWeak(comptime T: type): type {
         pub fn rejectTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) {
             const loop = jsc.VirtualMachine.get().eventLoop();
             loop.enter();
-            defer loop.exit();
+            const loop_guard = ExitGuard<@TypeOf(loop.*)>{ ptr: loop };
 
             _.reject(globalThis, val);
         }
@@ -57,7 +71,7 @@ pub fn JSPromiseWeak(comptime T: type): type {
         pub fn resolveTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) {
             const loop = jsc.VirtualMachine.get().eventLoop();
             loop.enter();
-            defer loop.exit();
+            const loop_guard = ExitGuard<@TypeOf(loop.*)>{ ptr: loop };
             _.resolve(globalThis, val);
         }
 
@@ -137,7 +151,7 @@ pub const JSPromiseStrong = struct {
     pub fn rejectTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): bun.JSTerminated!void {
         const loop = jsc.VirtualMachine.get().eventLoop();
         loop.enter();
-        defer loop.exit();
+        const loop_guard = ExitGuard<@TypeOf(loop.*)>{ ptr: loop };
         _.reject(globalThis, val)?;
     }
 
@@ -151,7 +165,7 @@ pub const JSPromiseStrong = struct {
     pub fn resolveTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): bun.JSTerminated!void {
         const loop = jsc.VirtualMachine.get().eventLoop();
         loop.enter();
-        defer loop.exit();
+        const loop_guard = ExitGuard<@TypeOf(loop.*)>{ ptr: loop };
         _.resolve(globalThis, val)?;
     }
 
@@ -204,6 +218,30 @@ inline fn wrapFnType(comptime F: auto): type {
     return T;
 }
 
+fn wrapImpl(
+    globalObject: *JSGlobalObject,
+    comptime Function: auto,
+    args: std.@"meta".ArgsTuple(wrapFnType(Function)),
+): JSValue!bun.JSTerminated {
+    const Args = std.@"meta".ArgsTuple(wrapFnType(Function));
+    const Fn = Function;
+    const Wrapper = struct {
+        args: Args,
+
+        pub fn call(this: *@This(), g: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+            return jsc.toJSHostCall(g, @src(), Fn, this.args);
+        }
+    };
+
+    let scope: jsc.TopExceptionScope = undefined;
+    scope.init(globalObject, @src());
+    const scope_guard = DeinitGuard<jsc.TopExceptionScope>{ ptr: &scope };
+    let ctx = Wrapper{ .args = args };
+    const promise = unsafe { JSC__JSPromise__wrap(globalObject, &ctx, @ptrCast(&Wrapper.call)) };
+    scope.assertNoExceptionExceptTermination()?;
+    return promise;
+}
+
 pub const JSPromise = opaque {
     pub const Status = JSPromiseStatus;
     pub const Weak = JSPromiseWeak;
@@ -218,23 +256,7 @@ pub const JSPromise = opaque {
         comptime Function: anytype,
         args: std.@"meta".ArgsTuple(wrapFnType(Function)),
     ): bun.JSTerminated!JSValue {
-        const Args = std.@"meta".ArgsTuple(wrapFnType(Function));
-        const Fn = Function;
-        const Wrapper = struct {
-            args: Args,
-
-            pub fn call(this: *@This(), g: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
-                return jsc.toJSHostCall(g, @src(), Fn, this.args);
-            }
-        };
-
-        let scope: jsc.TopExceptionScope = undefined;
-        scope.init(globalObject, @src());
-        defer scope.deinit();
-        let ctx = Wrapper{ .args = args };
-        const promise = JSC__JSPromise__wrap(globalObject, &ctx, @ptrCast(&Wrapper.call));
-        try scope.assertNoExceptionExceptTermination();
-        return promise;
+        return wrapImpl(globalObject, Function, args);
     }
 
     pub fn wrapValue(globalObject: *JSGlobalObject, value: JSValue): JSValue {

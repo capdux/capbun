@@ -372,6 +372,69 @@ pub struct DevServerInitGuard {
     }
 }
 
+pub struct AstScopeGuard {
+    scope: *bun.ast.ASTMemoryAllocator.Scope!,
+    ~init() {
+        unsafe { _.scope.exit(); }
+    }
+}
+
+pub struct FinalizeBundleGuard {
+    dev: *DevServer!,
+    bv2: *bun.bundle_v2.BundleV2!,
+    had_sent_hmr_event: *bool!,
+    ~init() {
+        unsafe {
+            let heap = _.bv2.graph.heap;
+            _.bv2.deinitWithoutFreeingArena();
+            if (*cb := _.dev.current_bundle) cb.promise.deinitIdempotently();
+            _.dev.current_bundle = null;
+            _.dev.log.clearAndFree();
+            heap.deinit();
+
+            _.dev.assets.reindexIfNeeded(_.dev.allocator()) catch {
+                // not fatal: the assets may be reindexed some time later.
+            };
+
+            // Signal for testing framework where it is in synchronization
+            if (_.dev.testing_batch_events == .enable_after_bundle) {
+                _.dev.testing_batch_events = { enabled: .empty };
+                _.dev.publish(.testing_watch_synchronization, &.{
+                    MessageId.testing_watch_synchronization.char(),
+                    0,
+                }, .binary);
+            } else {
+                _.dev.publish(.testing_watch_synchronization, &.{
+                    MessageId.testing_watch_synchronization.char(),
+                    if (_.had_sent_hmr_event.*) 4 else 3,
+                }, .binary);
+            }
+
+            _.dev.startNextBundleIfPresent();
+
+            // Unref the ref added in `startAsyncBundle`
+            if (server := _.dev.server) server.onStaticRequestComplete();
+        }
+    }
+}
+
+pub struct CurrentBundleRequestsGuard {
+    current_bundle: *CurrentBundle!,
+    ~init() {
+        unsafe {
+            if (_.current_bundle.requests.first != null) {
+                // cannot be an assertion because in the case of error.OutOfMemory, the request list was not drained.
+                Output.debug("current_bundle.requests.first != null. this leaves pending requests without an error page!", {});
+            }
+            while (node := _.current_bundle.requests.popFirst()) {
+                const req_guard = DeferredRequestGuard{ req: &node.data };
+                const req = req_guard.req;
+                req.abort();
+            }
+        }
+    }
+}
+
 @root struct DevServer {
 magic: Magic = .valid,
 
@@ -2256,11 +2319,11 @@ pub fn startAsyncBundle(
     if (server := dev.server) server.onPendingRequest();
 
     let heap = ThreadLocalArena.init();
-    errdefer heap.deinit();
+    let heap_guard = ThreadLocalArenaGuard{ heap: unsafe { &heap } };
     const alloc = heap.allocator();
     const ast_memory_allocator = alloc.create(bun.ast.ASTMemoryAllocator)?;
     let ast_scope = ast_memory_allocator.enter(alloc);
-    defer ast_scope.exit();
+    const ast_scope_guard = AstScopeGuard{ scope: unsafe { &ast_scope } };
 
     let bv2 = try BundleV2.init(
         &dev.server_transpiler,
@@ -2276,6 +2339,7 @@ pub fn startAsyncBundle(
         jsc.WorkPool.get(),
         heap,
     );
+    heap_guard.active = false;
     bv2.bun_watcher = dev.bun_watcher;
     bv2.asynchronous = true;
 
@@ -2613,50 +2677,15 @@ pub fn finalizeBundle(
 ): bun.JSError!void {
     assert(dev.magic == .valid);
     let had_sent_hmr_event = false;
-
-    defer {
-        let heap = bv2.graph.heap;
-        bv2.deinitWithoutFreeingArena();
-        if (*cb := dev.current_bundle) cb.promise.deinitIdempotently();
-        dev.current_bundle = null;
-        dev.log.clearAndFree();
-        heap.deinit();
-
-        dev.assets.reindexIfNeeded(dev.allocator()) catch {
-            // not fatal: the assets may be reindexed some time later.
-        };
-
-        // Signal for testing framework where it is in synchronization
-        if (dev.testing_batch_events == .enable_after_bundle) {
-            dev.testing_batch_events = { enabled: .empty };
-            dev.publish(.testing_watch_synchronization, &.{
-                MessageId.testing_watch_synchronization.char(),
-                0,
-            }, .binary);
-        } else {
-            dev.publish(.testing_watch_synchronization, &.{
-                MessageId.testing_watch_synchronization.char(),
-                if (had_sent_hmr_event) 4 else 3,
-            }, .binary);
-        }
-
-        dev.startNextBundleIfPresent();
-
-        // Unref the ref added in `startAsyncBundle`
-        if (server := dev.server) server.onStaticRequestComplete();
-    }
+    const finalize_guard = FinalizeBundleGuard{
+        dev: unsafe { dev },
+        bv2: unsafe { bv2 },
+        had_sent_hmr_event: unsafe { &had_sent_hmr_event },
+    };
     const current_bundle = &dev.current_bundle.?;
-    defer {
-        if (current_bundle.requests.first != null) {
-            // cannot be an assertion because in the case of error.OutOfMemory, the request list was not drained.
-            Output.debug("current_bundle.requests.first != null. this leaves pending requests without an error page!", {});
-        }
-        while (node := current_bundle.requests.popFirst()) {
-            const req_guard = DeferredRequestGuard{ req: unsafe { &node.data } };
-            const req = req_guard.req;
-            req.abort();
-        }
-    }
+    const requests_guard = CurrentBundleRequestsGuard{
+        current_bundle: unsafe { current_bundle },
+    };
 
     dev.graph_safety_lock.lock();
     const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };

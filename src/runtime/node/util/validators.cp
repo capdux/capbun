@@ -1,3 +1,17 @@
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 pub fn getTypeName(globalObject: *JSGlobalObject, value: JSValue): ZigString {
     let js_type = value.jsType();
     if (js_type.isArray()) {
@@ -114,18 +128,16 @@ pub fn validateInt32(globalThis: *JSGlobalObject, value: JSValue, comptime name_
         return throwErrInvalidArgType(globalThis, name_fmt, name_args, "number", value);
     }
     if (!value.isAnyInt()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-        defer formatter.deinit();
-        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be an integer. Received {f}", name_args ++ .{value.toFmt(&formatter)});
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: .{ globalThis: globalThis } };
+        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be an integer. Received {f}", name_args ++ .{value.toFmt(&formatter.val)});
     }
     const num = value.asNumber();
     const min_f: f64 = @floatFromInt(min);
     const max_f: f64 = @floatFromInt(max);
     // Use floating point comparison here to ensure values out of i32 range get caught instead of clamp/truncated.
     if (num < min_f || num > max_f) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-        defer formatter.deinit();
-        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be >= {d} && <= {d}. Received {f}", name_args ++ .{ min, max, value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: .{ globalThis: globalThis } };
+        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be >= {d} && <= {d}. Received {f}", name_args ++ .{ min, max, value.toFmt(&formatter.val) });
     }
     return @intFromFloat(num);
 }
@@ -135,17 +147,15 @@ pub fn validateUint32(globalThis: *JSGlobalObject, value: JSValue, comptime name
         return throwErrInvalidArgType(globalThis, name_fmt, name_args, "number", value);
     }
     if (!value.isAnyInt()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-        defer formatter.deinit();
-        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be an integer. Received {f}", name_args ++ .{value.toFmt(&formatter)});
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: .{ globalThis: globalThis } };
+        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be an integer. Received {f}", name_args ++ .{value.toFmt(&formatter.val)});
     }
     const num: i64 = value.asInt52();
     const min: i64 = if (greater_than_zero) 1 else 0;
     const max: i64 = @intCast(std.math.maxInt(u32));
     if (num < min || num > max) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-        defer formatter.deinit();
-        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be >= {d} && <= {d}. Received {f}", name_args ++ .{ min, max, value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: .{ globalThis: globalThis } };
+        return throwRangeError(globalThis, "The value of \"" ++ name_fmt ++ "\" is out of range. It must be >= {d} && <= {d}. Received {f}", name_args ++ .{ min, max, value.toFmt(&formatter.val) });
     }
     return @truncate(@as(u63, @intCast(num)));
 }
@@ -271,8 +281,8 @@ pub fn validateUndefined(globalThis: *JSGlobalObject, value: JSValue, comptime n
 }
 
 pub fn validateStringEnum(comptime T: type, globalThis: *JSGlobalObject, value: JSValue, comptime name_fmt: string, name_args: anytype): bun.JSError!T {
-    const str = try value.toBunString(globalThis);
-    defer str.deref();
+    const str_guard = DerefGuard<bun.String>{ val: try value.toBunString(globalThis) };
+    const str = str_guard.val;
     inline for (enum_field of @typeInfo(T).@"enum".fields) {
         if (str.eqlComptime(enum_field.name))
             return @field(T, enum_field.name);

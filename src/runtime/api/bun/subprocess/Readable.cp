@@ -1,3 +1,10 @@
+struct DetachGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.detach(); }
+    }
+}
+
 pub const Readable = union(enum) {
     fd: bun.FD,
     memfd: bun.FD,
@@ -104,7 +111,7 @@ pub const Readable = union(enum) {
                 this.* = .closed;
             },
             .pipe => |pipe| {
-                defer pipe.detach();
+                const _detach = DetachGuard<PipeReader>{ ptr: unsafe { pipe as *PipeReader! } };
                 this.* = .closed;
             },
             .buffer => |*buf| {
@@ -124,7 +131,7 @@ pub const Readable = union(enum) {
                 return fd.toJS(globalThis);
             },
             .pipe => |pipe| {
-                defer pipe.detach();
+                const _detach = DetachGuard<PipeReader>{ ptr: unsafe { pipe as *PipeReader! } };
                 this.* = .closed;
                 return pipe.toJS(globalThis);
             },
@@ -157,7 +164,7 @@ pub const Readable = union(enum) {
                 return jsc.ArrayBuffer.toJSBufferFromMemfd(fd, globalThis);
             },
             .pipe => |pipe| {
-                defer pipe.detach();
+                const _detach = DetachGuard<PipeReader>{ ptr: unsafe { pipe as *PipeReader! } };
                 this.* = .closed;
                 return pipe.toBuffer(globalThis);
             },

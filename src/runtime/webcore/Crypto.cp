@@ -15,6 +15,24 @@ const BunString = String;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
+pub struct DerefGuard<T> {
+    val: T;
+
+    ~init() {
+        let v = _.val;
+        v.deref();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    val: T;
+
+    ~init() {
+        let v = _.val;
+        v.deinit();
+    }
+}
+
 fn throwInvalidParameter(globalThis: *JSGlobalObject): JSError {
     return globalThis.ERR(.CRYPTO_SCRYPT_INVALID_PARAMETER, "Invalid scrypt parameters", .{}).throw();
 }
@@ -24,7 +42,7 @@ fn randomData(
     ptr: [*]u8,
     len: usize,
 ) {
-    const slice = ptr[0..len];
+    const slice = unsafe { ptr[0..len] };
 
     const max_entropy = jsc.RareData.EntropyCache.size / 8;
     if (slice.len == 0) {
@@ -92,7 +110,7 @@ fn randomData(
     ): JSValue {
         const slice = array.slice();
         randomData(globalThis, slice.ptr, slice.len);
-        return @as(JSValue, @enumFromInt(@as(i64, @bitCast(@intFromPtr(array)))));
+        return unsafe { @as(JSValue, @enumFromInt(@as(i64, @bitCast(@intFromPtr(array))))) };
     }
 
     fn randomUUID(
@@ -117,7 +135,7 @@ fn randomData(
         const pair = BunString.createUninitialized(.latin1, 36);
         let str = pair[0];
         const bytes = pair[1];
-        defer str.deref();
+        const str_guard = DerefGuard<BunString>{ val: str };
 
         const uuid = globalThis.bunVM().rare_data.?.nextUUID();
 
@@ -225,7 +243,7 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
     const name = brk: {
         if (name_value.isString()) {
             const name_str = try name_value.toBunString(globalThis);
-            defer name_str.deref();
+            const name_str_guard = DerefGuard<BunString>{ val: name_str };
             const result = name_str.toUTF8(default_allocator);
 
             break :brk result;
@@ -235,14 +253,14 @@ pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
             return globalThis.ERR(.INVALID_ARG_TYPE, "The \"name\" argument must be of type string or BufferSource", .{}).throw();
         }
     };
-    defer name.deinit();
+    const name_guard = DeinitGuard<jsc.ZigString.Slice>{ val: name };
 
     const namespace = brk: {
         if (namespace_value.isString()) {
             const namespace_str = try namespace_value.toBunString(globalThis);
-            defer namespace_str.deref();
+            const namespace_str_guard = DerefGuard<BunString>{ val: namespace_str };
             const namespace_slice = namespace_str.toUTF8(default_allocator);
-            defer namespace_slice.deinit();
+            const namespace_slice_guard = DeinitGuard<jsc.ZigString.Slice>{ val: namespace_slice };
 
             if (namespace_slice.slice().len != 36) {
                 if (namespace := UUID5.namespaces.get(namespace_slice.slice())) {

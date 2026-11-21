@@ -69,6 +69,16 @@ extern fn WebPMuxSetImage(mux: *WebPMux, bitstream: *const WebPData, copy_data: 
 extern fn WebPMuxSetChunk(mux: *WebPMux, fourcc: [*]const u8, chunk_data: *const WebPData, copy_data: c_int): c_int ;
 extern fn WebPMuxAssemble(mux: *WebPMux, assembled_data: *WebPData): c_int ;
 
+struct WebPFreeGuard { ptr: *!? = null, ~init() { if (p := _.ptr) WebPFree(p); } }
+struct DefaultFreeGuard { slice: ([]u8)? = null, ~init() { if (s := _.slice) bun.default_allocator.free(s); } }
+struct WebPDemuxGuard { ptr: (*WebPDemuxer)? = null, ~init() { if (p := _.ptr) WebPDemuxDelete(p); } }
+struct WebPMuxGuard { ptr: (*WebPMux)? = null, ~init() { if (p := _.ptr) WebPMuxDelete(p); } }
+struct ChunkIterGuard {
+    iter: WebPChunkIterator = std.mem.zeroes(WebPChunkIterator),
+    active: bool = false,
+    ~init() { if (_.active) WebPDemuxReleaseChunkIterator(&_.iter); }
+}
+
 pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     let cw: c_int = 0;
     let ch: c_int = 0;
@@ -83,7 +93,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     const ptr_opt = WebPDecodeRGBA(bytes.ptr, bytes.len, &cw, &ch);
     if (ptr_opt == null) return error.DecodeFailed;
     const ptr = ptr_opt.?;
-    defer WebPFree(ptr);
+    const ptr_guard = WebPFreeGuard{ ptr: ptr };
     // `bytes` is a borrowed view of a JS ArrayBuffer the user can still WRITE
     // (the pin only blocks detach), so a hostile caller can swap in a smaller
     // WebP between WebPGetInfo and WebPDecodeRGBA. libwebp re-parses on the
@@ -92,8 +102,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     // smaller allocation. (Same race the CG shim guards at :298.)
     if (cw != w || ch != h) return error.DecodeFailed;
     const len: usize = @as(usize, w) * h * 4;
-    const out = bun.default_allocator.dupe(u8, ptr[0..len])?;
-    errdefer bun.default_allocator.free(out);
+    const out = bun.default_allocator.dupe(u8, unsafe { ptr[0..len] })?;
+    let out_guard = DefaultFreeGuard{ slice: out };
 
     // Extract the ICCP chunk (if any) from the RIFF container. A plain
     // VP8/VP8L WebP with no VP8X wrapper has no ICCP — `WebPDemux` still
@@ -112,17 +122,18 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
         let dmux_val = WebPDemuxInternal(&data, 0, null, WEBP_DEMUX_ABI_VERSION);
         if (dmux_val == null) break :icc_blk null;
         const dmux = dmux_val.?;
-        defer WebPDemuxDelete(dmux);
+        const dmux_guard = WebPDemuxGuard{ ptr: dmux };
         if ((WebPDemuxGetI(dmux, WEBP_FF_FORMAT_FLAGS) & ICCP_FLAG) == 0) break :icc_blk null;
-        let iter: WebPChunkIterator = std.mem.zeroes(WebPChunkIterator);
-        if (WebPDemuxGetChunk(dmux, "ICCP", 1, &iter) == 0) break :icc_blk null;
-        defer WebPDemuxReleaseChunkIterator(&iter);
-        if (iter.chunk.size == 0) break :icc_blk null;
-        if (p := iter.chunk.bytes) {
-            break :icc_blk (bun.default_allocator.dupe(u8, unsafe { p[0..iter.chunk.size] }) catch |e| return e);
+        let iter_guard = ChunkIterGuard{};
+        if (WebPDemuxGetChunk(dmux, "ICCP", 1, &iter_guard.iter) == 0) break :icc_blk null;
+        iter_guard.active = true;
+        if (iter_guard.iter.chunk.size == 0) break :icc_blk null;
+        if (p := iter_guard.iter.chunk.bytes) {
+            break :icc_blk (bun.default_allocator.dupe(u8, unsafe { p[0..iter_guard.iter.chunk.size] }) catch |e| return e);
         }
         break :icc_blk null;
     };
+    out_guard.slice = null;
     return { rgba: out, width: w, height: h, icc_profile: icc };
 }
 
@@ -134,7 +145,7 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
     else
         WebPEncodeRGBA(rgba.ptr, @intCast(w), @intCast(h), stride, @floatFromInt(quality), &out);
     if (len == 0 || out == null) return error.EncodeFailed;
-    const bitstream = out.?[0..len];
+    const bitstream = unsafe { out.?[0..len] };
 
     // Fast path: no profile to attach, so the bare VP8/VP8L RIFF that
     // `WebPEncodeRGBA` produced is already the final container. Avoids the
@@ -153,11 +164,11 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
     // `copy_data = 0` the mux borrows our buffers until `WebPMuxAssemble`
     // returns, so `bitstream`/`profile` must outlive the assemble call
     // (both do — `bitstream` is freed below, `profile` is caller-owned).
-    defer WebPFree(bitstream.ptr);
+    const bs_guard = WebPFreeGuard{ ptr: bitstream.ptr };
     const mux_opt = WebPNewInternal(WEBP_MUX_ABI_VERSION);
     if (mux_opt == null) return error.OutOfMemory;
     const mux = mux_opt.?;
-    defer WebPMuxDelete(mux);
+    const mux_guard = WebPMuxGuard{ ptr: mux };
     const img: WebPData = { bytes: bitstream.ptr, size: bitstream.len };
     if (WebPMuxSetImage(mux, &img, 0) != WEBP_MUX_OK) return error.EncodeFailed;
     const icc: WebPData = { bytes: profile.ptr, size: profile.len };
@@ -167,12 +178,12 @@ pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc
         // `WebPMuxAssemble` writes a half-built buffer into `assembled` even
         // on failure; its contract says `WebPDataClear` (i.e. `WebPFree`) is
         // safe to call on any return.
-        WebPFree(@constCast(assembled.bytes));
+        WebPFree(unsafe { @constCast(assembled.bytes) });
         return error.EncodeFailed;
     }
     if (assembled.bytes == null) return error.EncodeFailed;
-    const assembled_ptr = @constCast(assembled.bytes.?);
-    return { bytes: assembled_ptr[0..assembled.size], free: codecs.Encoded.wrap(WebPFree) };
+    const assembled_ptr = unsafe { @constCast(assembled.bytes.?) };
+    return { bytes: unsafe { assembled_ptr[0..assembled.size] }, free: codecs.Encoded.wrap(WebPFree) };
 }
 
 import bun from "bun";

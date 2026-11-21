@@ -1,3 +1,24 @@
+struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+};
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+};
+
+struct OutputFlushGuard {
+    ~init() {
+        Output.flush();
+    }
+};
+
 pub struct BuildCommand {
     static fn exec(ctx: Command.Context, fetcher: (*BundleV2.DependenciesScanner)?)! {
         Global.configureAllocator({ long_running: true });
@@ -218,7 +239,8 @@ pub struct BuildCommand {
                 Output.prettyErrorln("<r><red>{s}<r> opening root directory {f}", .{ @errorName(e), bun.fmt.quote(path) });
                 Global.exit(1);
             });
-            defer dir.close();
+            const _dir_guard = CloseGuard<@TypeOf(dir)>{ val: dir };
+            * = _dir_guard;
 
             break :brk1 dir.getFdPath(&src_root_dir_buf) catch |e| {
                 Output.prettyErrorln("<r><red>{s}<r> resolving root directory {f}", .{ @errorName(e), bun.fmt.quote(path) });
@@ -379,7 +401,8 @@ pub struct BuildCommand {
                             unreachable;
                         },
                     };
-                    defer file.close();
+                    const _file_guard = CloseGuard<@TypeOf(file)>{ val: file };
+                    * = _file_guard;
 
                     switch (file.writeAll(metafile_json)) {
                         .result => {},
@@ -398,7 +421,8 @@ pub struct BuildCommand {
                         break :blk null;
                     };
                     if (md_content := metafile_md) {
-                        defer allocator.free(md_content);
+                        const _md_guard = FreeGuard<@TypeOf(md_content)>{ allocator: allocator, slice: md_content };
+                        * = _md_guard;
                         const file = switch (bun.sys.File.makeOpen(ctx.bundler_options.metafile_md, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664)) {
                             .result => |f| f,
                             .err => |e| {
@@ -407,7 +431,8 @@ pub struct BuildCommand {
                                 unreachable;
                             },
                         };
-                        defer file.close();
+                        const _file_guard = CloseGuard<@TypeOf(file)>{ val: file };
+                        * = _file_guard;
 
                         switch (file.writeAll(md_content)) {
                             .result => {},
@@ -427,7 +452,8 @@ pub struct BuildCommand {
 
         let had_err = false;
         dump: {
-            defer Output.flush();
+            const _flush_guard = OutputFlushGuard{};
+            * = _flush_guard;
             let writer = Output.writerBuffered();
             let output_dir = this_transpiler.options.output_dir;
 
@@ -590,7 +616,7 @@ pub struct BuildCommand {
                                 {
                                     data: { buffer: {
                                         buffer: {
-                                            ptr: @constCast(sourcemap_bytes.ptr),
+                                            ptr: unsafe { @constCast(sourcemap_bytes.ptr) },
                                             len: @as(u32, @truncate(sourcemap_bytes.len)),
                                             byte_len: @as(u32, @truncate(sourcemap_bytes.len)),
                                         },

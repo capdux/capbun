@@ -49,163 +49,6 @@ comptime {
     _ = assert((GenericIndex(u32, opaque {}) != GenericIndex(u32, opaque {})));
 
 }
-// --- Multithreading Synchronization Primitives (cap:sync) ---
-const NativeMutex = struct {
-    state: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
-    pub fn lock(self: *NativeMutex) void {
-        var spin: usize = 0;
-        while (true) {
-            if (self.state.cmpxchgWeak(0, 1, .acquire, .monotonic) == null) return;
-            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
-        }
-    }
-    pub fn unlock(self: *NativeMutex) void { _ = self.state.swap(0, .release); }
-    pub fn tryLock(self: *NativeMutex) bool { return self.state.cmpxchgWeak(0, 1, .acquire, .monotonic) == null; }
-    pub fn isLocked(self: *NativeMutex) bool { return self.state.load(.monotonic) != 0; }
-};
-
-const NativeRwLock = struct {
-    state: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
-    const WRITER_BIT: u32 = 1 << 31;
-    const READER_MASK: u32 = ~WRITER_BIT;
-    pub fn lockShared(self: *NativeRwLock) void {
-        var spin: usize = 0;
-        while (true) {
-            const current = self.state.load(.monotonic);
-            if ((current & WRITER_BIT) == 0) { if (self.state.cmpxchgWeak(current, current + 1, .acquire, .monotonic) == null) return; }
-            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
-        }
-    }
-    pub fn unlockShared(self: *NativeRwLock) void {
-        while (true) {
-            const current = self.state.load(.monotonic);
-            const count = current & READER_MASK;
-            if (count == 0) return;
-            if (self.state.cmpxchgWeak(current, current - 1, .release, .monotonic) == null) return;
-        }
-    }
-    pub fn tryLockShared(self: *NativeRwLock) bool { const current = self.state.load(.monotonic); if ((current & WRITER_BIT) != 0) return false; return self.state.cmpxchgWeak(current, current + 1, .acquire, .monotonic) == null; }
-    pub fn lockExclusive(self: *NativeRwLock) void {
-        var spin: usize = 0;
-        while (true) {
-            if (self.state.cmpxchgWeak(0, WRITER_BIT, .acquire, .monotonic) == null) return;
-            if (spin < 100) { std.atomic.spinLoopHint(); spin += 1; } else { std.Thread.yield() catch {}; }
-        }
-    }
-    pub fn unlockExclusive(self: *NativeRwLock) void { _ = self.state.cmpxchgStrong(WRITER_BIT, 0, .release, .monotonic); }
-    pub fn tryLockExclusive(self: *NativeRwLock) bool { return self.state.cmpxchgWeak(0, WRITER_BIT, .acquire, .monotonic) == null; }
-    pub fn isReadLocked(self: *NativeRwLock) bool { return (self.state.load(.monotonic) & READER_MASK) > 0; }
-    pub fn isWriteLocked(self: *NativeRwLock) bool { return (self.state.load(.monotonic) & WRITER_BIT) != 0; }
-};
-
-const CpBareMutex = struct {
-    raw: NativeMutex = .{},
-    pub fn lock(self: *CpBareMutex) void { self.raw.lock(); }
-    pub fn unlock(self: *CpBareMutex) void { self.raw.unlock(); }
-    pub fn tryLock(self: *CpBareMutex) bool { return self.raw.tryLock(); }
-    pub fn isLocked(self: *CpBareMutex) bool { return self.raw.isLocked(); }
-};
-
-const CpBareRwLock = struct {
-    raw: NativeRwLock = .{},
-    pub fn lock(self: *CpBareRwLock) void { self.raw.lockExclusive(); }
-    pub fn unlock(self: *CpBareRwLock) void { self.raw.unlockExclusive(); }
-    pub fn lockShared(self: *CpBareRwLock) void { self.raw.lockShared(); }
-    pub fn unlockShared(self: *CpBareRwLock) void { self.raw.unlockShared(); }
-    pub fn read(self: *CpBareRwLock) void { self.raw.lockShared(); }
-    pub fn write(self: *CpBareRwLock) void { self.raw.lockExclusive(); }
-    pub fn tryLock(self: *CpBareRwLock) bool { return self.raw.tryLockExclusive(); }
-    pub fn tryLockShared(self: *CpBareRwLock) bool { return self.raw.tryLockShared(); }
-    pub fn tryRead(self: *CpBareRwLock) bool { return self.raw.tryLockShared(); }
-    pub fn tryWrite(self: *CpBareRwLock) bool { return self.raw.tryLockExclusive(); }
-    pub fn isReadLocked(self: *CpBareRwLock) bool { return self.raw.isReadLocked(); }
-    pub fn isWriteLocked(self: *CpBareRwLock) bool { return self.raw.isWriteLocked(); }
-};
-
-fn LockGuard(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        mutex: *CpMutex(__T),
-        data: *__T,
-        pub fn release(self: Self) void { self.mutex.raw.unlock(); }
-        pub fn unlock(self: Self) void { self.release(); }
-    };
-}
-
-fn ReadGuard(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        rwlock: *CpRwLock(__T),
-        data: *const __T,
-        pub fn release(self: Self) void { self.rwlock.raw.unlockShared(); }
-        pub fn unlock(self: Self) void { self.release(); }
-    };
-}
-
-fn WriteGuard(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        rwlock: *CpRwLock(__T),
-        data: *__T,
-        pub fn release(self: Self) void { self.rwlock.raw.unlockExclusive(); }
-        pub fn unlock(self: Self) void { self.release(); }
-    };
-}
-
-fn CpMutex(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        raw: NativeMutex = .{},
-        data: __T,
-        pub fn init(val: __T) Self { return .{ .data = val }; }
-        pub fn lock(self: *Self) LockGuard(__T) { self.raw.lock(); return .{ .mutex = self, .data = &self.data }; }
-        pub fn tryLock(self: *Self) ?LockGuard(__T) { if (self.raw.tryLock()) { return LockGuard(__T){ .mutex = self, .data = &self.data }; } return null; }
-        pub fn isLocked(self: *Self) bool { return self.raw.isLocked(); }
-    };
-}
-
-fn CpRwLock(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        raw: NativeRwLock = .{},
-        data: __T,
-        pub fn init(val: __T) Self { return .{ .data = val }; }
-        pub fn read(self: *Self) ReadGuard(__T) { self.raw.lockShared(); return .{ .rwlock = self, .data = &self.data }; }
-        pub fn tryRead(self: *Self) ?ReadGuard(__T) { if (self.raw.tryLockShared()) { return ReadGuard(__T){ .rwlock = self, .data = &self.data }; } return null; }
-        pub fn write(self: *Self) WriteGuard(__T) { self.raw.lockExclusive(); return .{ .rwlock = self, .data = &self.data }; }
-        pub fn tryWrite(self: *Self) ?WriteGuard(__T) { if (self.raw.tryLockExclusive()) { return WriteGuard(__T){ .rwlock = self, .data = &self.data }; } return null; }
-        pub fn isReadLocked(self: *Self) bool { return self.raw.isReadLocked(); }
-        pub fn isWriteLocked(self: *Self) bool { return self.raw.isWriteLocked(); }
-    };
-}
-
-fn CpAtomic(comptime __T: type) type {
-    return struct {
-        const Self = @This();
-        raw: std.atomic.Value(__T),
-        pub fn init(val: __T) Self { return .{ .raw = std.atomic.Value(__T).init(val) }; }
-        pub fn load(self: *const Self) __T { return self.raw.load(.seq_cst); }
-        pub fn store(self: *Self, val: __T) void { self.raw.store(val, .seq_cst); }
-        pub fn swap(self: *Self, val: __T) __T { return self.raw.swap(val, .seq_cst); }
-        pub fn cas(self: *Self, expected: __T, desired: __T) bool { return self.raw.cmpxchgStrong(expected, desired, .seq_cst, .seq_cst) == null; }
-        pub fn compareAndSwap(self: *Self, expected: __T, desired: __T) bool { return self.cas(expected, desired); }
-        pub fn add(self: *Self, delta: __T) __T { return self.raw.fetchAdd(delta, .seq_cst); }
-        pub fn sub(self: *Self, delta: __T) __T { return self.raw.fetchSub(delta, .seq_cst); }
-        pub fn inc(self: *Self) __T { return self.add(1); }
-        pub fn dec(self: *Self) __T { return self.sub(1); }
-        pub fn @"and"(self: *Self, mask: __T) __T { return self.raw.fetchAnd(mask, .seq_cst); }
-        pub fn @"or"(self: *Self, mask: __T) __T { return self.raw.fetchOr(mask, .seq_cst); }
-        pub fn @"xor"(self: *Self, mask: __T) __T { return self.raw.fetchXor(mask, .seq_cst); }
-        pub fn testAndSet(self: *Self) bool { if (comptime __T == bool) { return self.raw.swap(true, .seq_cst); } else { return self.raw.swap(1, .seq_cst) != 0; } }
-        pub fn clear(self: *Self) void { if (comptime __T == bool) { self.raw.store(false, .seq_cst); } else { self.raw.store(0, .seq_cst); } }
-    };
-}
-
-fn cp_make_mutex(val: anytype) CpMutex(@TypeOf(val)) { return CpMutex(@TypeOf(val)).init(val); }
-fn cp_make_rwlock(val: anytype) CpRwLock(@TypeOf(val)) { return CpRwLock(@TypeOf(val)).init(val); }
-fn CpAtomicConcreteType(comptime __T: type) type { if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
-fn cp_make_atomic(val: anytype) CpAtomic(CpAtomicConcreteType(@TypeOf(val))) { const __T = CpAtomicConcreteType(@TypeOf(val)); return CpAtomic(__T).init(@as(__T, val)); }
-
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -235,7 +78,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Environment = @import("./bun_core/env.zig");
 pub const env_var = @import("./bun_core/env_var.zig");
@@ -380,6 +223,51 @@ pub const UseSystemCAError = error{
     JSError,
     OutOfMemory,
 };
+
+pub const FdChdirCloseGuard = struct {
+    prev_fd: std.posix.fd_t,
+    needs_chdir: bool = false,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FdChdirCloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.needs_chdir) {
+                _ = ((std.posix.fchdir(self.prev_fd)) catch unreachable);
+            }
+            _ = std.posix.close(self.prev_fd);
+    }
+};
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn LockUnlockGuard(comptime T: type) type {
+    return struct {
+        lock: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.lock.unlock();
+                }
+        }
+    };
+}
 
 pub const debug_allocator_data = struct {
     pub var backing: ?std.heap.DebugAllocator(std.heap.DebugAllocatorConfig{}) = null;
@@ -687,7 +575,7 @@ pub fn count(self: StringSet) usize {
             return self.map.count();
     }
 
-pub fn keys(self: StringSet) []const []const u8 {
+pub fn keys(self: *const StringSet) []const []const u8 {
             return self.map.keys();
     }
 
@@ -736,11 +624,11 @@ pub fn init(allocator: std.mem.Allocator, dupe_keys: bool) StringMap {
             return StringMap{ .map = Map.init(allocator), .dupe_keys = dupe_keys };
     }
 
-pub fn keys(self: StringMap) []const []const u8 {
+pub fn keys(self: *const StringMap) []const []const u8 {
             return self.map.keys();
     }
 
-pub fn values(self: StringMap) []const []const u8 {
+pub fn values(self: *const StringMap) []const []const u8 {
             return self.map.values();
     }
 
@@ -764,7 +652,7 @@ pub fn insert(self: *StringMap, key: []const u8, value: []const u8) !void {
             entry.value_ptr.* = try self.map.allocator.dupe(u8, value);
     }
 
-pub fn get(self: StringMap, key: []const u8) ?[]const u8 {
+pub fn get(self: *const StringMap, key: []const u8) ?[]const u8 {
             return self.map.get(key);
     }
 
@@ -837,8 +725,11 @@ pub fn makeOpenPathAccessMaskW(dir: std.fs.Dir, comptime T: type, sub_path: []co
             var component = ((it.last()) orelse (Iterator.Component{ .name = &.{}, .path = sub_path }));
             _ = &component;
             while (true) {
-                const sub_path_w = (if (comptime (T == u16)) try w.wToPrefixedFileW(dir.fd, @ptrCast(component.path)) else try w.sliceToPrefixedFileW(dir.fd, component.path));
-                var result = (blk_catch_0: { break :blk_catch_0 ((makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, .{ .no_follow = no_follow, .create_disposition = w.FILE_OPEN_IF })) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                const sub_path_w = (if (comptime (T == u16)) try w.wToPrefixedFileW(dir.fd, (blk: {
+                break :blk @ptrCast(component.path);
+
+})) else try w.sliceToPrefixedFileW(dir.fd, component.path));
+                var result = (blk_catch_1: { break :blk_catch_1 ((makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, .{ .no_follow = no_follow, .create_disposition = w.FILE_OPEN_IF })) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                     if (it.previous()) |prev| {
                         _ = &prev;
                         component = prev;
@@ -921,7 +812,7 @@ pub fn makePath(comptime T: type, self: std.fs.Dir, sub_path: []const T) !void {
             var component = ((it.last()) orelse { return; });
             _ = &component;
             while (true) {
-                _ = (blk_catch_1: { break :blk_catch_1 ((std.fs.Dir.makeDir(self, component.path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
+                _ = (blk_catch_2: { break :blk_catch_2 ((std.fs.Dir.makeDir(self, component.path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
                 } else {
                     if ((e == error.FileNotFound)) {
                         if (it.previous()) |prev| {
@@ -1063,12 +954,18 @@ pub fn get(self: *StackFallbackAllocator) std.mem.Allocator {
     }
 
 pub fn alloc(ctx: *anyopaque, n: usize, alignment: std.mem.Alignment, ra: usize) ?[*]u8 {
-            const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+            const self: *StackFallbackAllocator = (blk: {
+            break :blk @ptrCast(@alignCast(ctx));
+
+});
             return ((std.heap.FixedBufferAllocator.alloc((&self.fixed), n, alignment, ra)) orelse (self.fallback.rawAlloc(n, alignment, ra)));
     }
 
 pub fn resize(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize) bool {
-            const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+            const self: *StackFallbackAllocator = (blk: {
+            break :blk @ptrCast(@alignCast(ctx));
+
+});
             if (self.fixed.ownsPtr(buf.ptr)) {
                 return std.heap.FixedBufferAllocator.resize((&self.fixed), buf, alignment, new_len, ra);
             }
@@ -1076,7 +973,10 @@ pub fn resize(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, new_len:
     }
 
 pub fn remap(ctx: *anyopaque, mem: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize) ?[*]u8 {
-            const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+            const self: *StackFallbackAllocator = (blk: {
+            break :blk @ptrCast(@alignCast(ctx));
+
+});
             if (self.fixed.ownsPtr(mem.ptr)) {
                 return std.heap.FixedBufferAllocator.remap((&self.fixed), mem, alignment, new_len, ra);
             }
@@ -1084,7 +984,10 @@ pub fn remap(ctx: *anyopaque, mem: []u8, alignment: std.mem.Alignment, new_len: 
     }
 
 pub fn free(ctx: *anyopaque, buf: []u8, alignment: std.mem.Alignment, ra: usize) void {
-            const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+            const self: *StackFallbackAllocator = (blk: {
+            break :blk @ptrCast(@alignCast(ctx));
+
+});
             if (self.fixed.ownsPtr(buf.ptr)) {
                 return std.heap.FixedBufferAllocator.free((&self.fixed), buf, alignment, ra);
             }
@@ -1096,7 +999,7 @@ pub const SelfExePathMemo = struct {
     pub var set: bool = false;
     pub var value: [4097]u8 = undefined;
     pub var len: usize = 0;
-    pub var lock: CpBareMutex = .{};
+    pub var lock: threading.Mutex = .{};
 
 pub fn load() !SliceZ {
             const init = try std.fs.selfExePath((&value));
@@ -1153,8 +1056,8 @@ pub fn ns(self: timespec) u64 {
             }
             _ = assert((self.sec >= 0));
             _ = assert((self.nsec >= 0));
-            const s_ns = (blk_catch_2: { break :blk_catch_2 ((std.math.mul(u64, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))), std.time.ns_per_s)) catch |__ce_2| { _ = &__ce_2; return std.math.maxInt(u64); }); });
-            return (blk_catch_3: { break :blk_catch_3 ((std.math.add(u64, s_ns, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))))) catch |__ce_3| { _ = &__ce_3; return std.math.maxInt(i64); }); });
+            const s_ns = (blk_catch_3: { break :blk_catch_3 ((std.math.mul(u64, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.sec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.sec, 0))) else cp_cast_int(i32, @max(self.sec, 0))))), std.time.ns_per_s)) catch |__ce_3| { _ = &__ce_3; return std.math.maxInt(u64); }); });
+            return (blk_catch_4: { break :blk_catch_4 ((std.math.add(u64, s_ns, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(@max(self.nsec, 0))) == .@"enum") cp_cast_int(i32, @intFromEnum(@max(self.nsec, 0))) else cp_cast_int(i32, @max(self.nsec, 0))))))) catch |__ce_4| { _ = &__ce_4; return std.math.maxInt(i64); }); });
     }
 
 pub fn nsSigned(self: timespec) i64 {
@@ -1266,7 +1169,7 @@ pub fn getThreadCountFromUser() ?u16 {
                 _ = &envname;
                 if (getenvZ(envname)) |env| {
                     _ = &env;
-                    if ((blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(u16, env, 10)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); })) |parsed| {
+                    if ((blk_catch_5: { break :blk_catch_5 ((std.fmt.parseInt(u16, env, 10)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); })) |parsed| {
                         _ = &parsed;
                         if ((parsed >= min_threads)) {
                             if (bun.logger.Log.default_log_level.atLeast(.debug)) {
@@ -1296,7 +1199,10 @@ pub fn configureThread() void {
     }
 
 pub fn getStackEnd() usize {
-            return @intFromPtr(cpp.Bun__StackCheck__getMaxStack());
+            return (blk: {
+            break :blk @intFromPtr(cpp.Bun__StackCheck__getMaxStack());
+
+});
     }
 
 pub fn init() StackCheck {
@@ -1571,11 +1477,17 @@ pub inline fn namedAllocator(comptime name: [:0]const u8) std.mem.Allocator {
 }
 
 pub fn platformIOVecCreate(input: []const u8) PlatformIOVec {
-        return .{ .len = @truncate(input.len), .base = @constCast(input.ptr) };
+        return .{ .len = @truncate(input.len), .base = (blk: {
+        break :blk @constCast(input.ptr);
+
+}) };
 }
 
 pub fn platformIOVecConstCreate(input: []const u8) PlatformIOVecConst {
-        return .{ .len = @truncate(input.len), .base = @constCast(input.ptr) };
+        return .{ .len = @truncate(input.len), .base = (blk: {
+        break :blk @constCast(input.ptr);
+
+}) };
 }
 
 pub fn platformIOVecToSlice(iovec: PlatformIOVec) []u8 {
@@ -1627,9 +1539,15 @@ pub fn freeAllThreadlocalBuffers() void {
 
 pub inline fn cast(comptime To: type, value: anytype) To {
         if ((@typeInfo(@TypeOf(value)) == .int)) {
-            return @ptrFromInt((if (comptime @typeInfo(@TypeOf(value)) == .@"enum") cp_cast_int(usize, @intFromEnum(value)) else cp_cast_int(usize, value)));
+            return (blk: {
+            break :blk @ptrFromInt((if (comptime @typeInfo(@TypeOf(value)) == .@"enum") cp_cast_int(usize, @intFromEnum(value)) else cp_cast_int(usize, value)));
+
+});
         }
-        return @ptrCast(@alignCast(value));
+        return (blk: {
+        break :blk @ptrCast(@alignCast(value));
+
+});
 }
 
 pub fn len(value: anytype) usize {
@@ -1649,7 +1567,10 @@ else => @compileError("invalid type given to std.mem.len"),
 .many => {
 {
             const sentinel_ptr = ((info.sentinel_ptr) orelse (@compileError("length of pointer with no sentinel")));
-            const s_ptr_cast: *align(1) const info.child = @ptrCast(sentinel_ptr);
+            const s_ptr_cast: *align(1) const info.child = (blk: {
+            break :blk @ptrCast(sentinel_ptr);
+
+});
             const sentinel = s_ptr_cast.*;
             return std.mem.indexOfSentinel(info.child, sentinel, value);
         }
@@ -1720,7 +1641,10 @@ pub fn span(pointer: anytype) Span(@TypeOf(pointer)) {
         const ptr_info = @typeInfo(Result).pointer;
         if (ptr_info.sentinel_ptr) |s_ptr| {
             _ = &s_ptr;
-            const s_ptr_cast: *align(1) const ptr_info.child = @ptrCast(s_ptr);
+            const s_ptr_cast: *align(1) const ptr_info.child = (blk: {
+            break :blk @ptrCast(s_ptr);
+
+});
             const s = s_ptr_cast.*;
             _ = &s;
             return pointer[0..l :s];
@@ -1748,7 +1672,7 @@ pub fn RangeArray(comptime min: anytype, comptime max: anytype) type {
         return [n]usize;
 }
 
-pub inline fn range(comptime min: anytype, comptime max: anytype) RangeArray(min,max) {
+pub inline fn range(comptime min: anytype, comptime max: anytype) RangeArray(min, max) {
         return (comptime brk: {
         _ = @setEvalBranchQuota(100000);
         const n = (max - min);
@@ -1823,8 +1747,8 @@ pub fn assertNonBlocking(fd: anytype) void {
 }
 
 pub fn ensureNonBlocking(fd: anytype) void {
-        const current = (blk_catch_7: { break :blk_catch_7 ((std.posix.fcntl(fd, std.posix.F.GETFL, 0)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 0; }); });
-        _ = (blk_catch_8: { break :blk_catch_8 ((std.posix.fcntl(fd, std.posix.F.SETFL, (current | O.NONBLOCK))) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 0; }); });
+        const current = (blk_catch_8: { break :blk_catch_8 ((std.posix.fcntl(fd, std.posix.F.GETFL, 0)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 0; }); });
+        _ = (blk_catch_9: { break :blk_catch_9 ((std.posix.fcntl(fd, std.posix.F.SETFL, (current | O.NONBLOCK))) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); });
 }
 
 pub fn isReadable(fd: FD) PollFlag {
@@ -1836,7 +1760,7 @@ pub fn isReadable(fd: FD) PollFlag {
         _ = &PollFd;
         var polls: [1]PollFd = .{ PollFd{ .fd = fd.cast(), .events = ((std.posix.POLL.IN | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 } };
         _ = &polls;
-        const result = ((blk_catch_9: { break :blk_catch_9 ((std.posix.poll((&polls), 0)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); }) != 0);
+        const result = ((blk_catch_10: { break :blk_catch_10 ((std.posix.poll((&polls), 0)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); }) != 0);
         const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
         _ = global_scope_log("poll({f}, .readable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if (((polls[0].revents & std.posix.POLL.ERR) != 0)) " ERR " else "") });
         return rc;
@@ -1867,7 +1791,7 @@ pub fn isWritable(fd: FD) PollFlag {
         _ = &PollFd;
         var polls: [1]PollFd = .{ PollFd{ .fd = fd.cast(), .events = ((std.posix.POLL.OUT | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 } };
         _ = &polls;
-        const result = ((blk_catch_10: { break :blk_catch_10 ((std.posix.poll((&polls), 0)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); }) != 0);
+        const result = ((blk_catch_11: { break :blk_catch_11 ((std.posix.poll((&polls), 0)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 0; }); }) != 0);
         const rc = (if ((result and ((polls[0].revents & (std.posix.POLL.HUP | std.posix.POLL.ERR)) != 0))) PollFlag.hup else (if (result) PollFlag.ready else PollFlag.not_ready));
         _ = global_scope_log("poll({f}, .writable): {} ({s}{s})", .{ fd, result, @tagName(rc), (if (((polls[0].revents & std.posix.POLL.ERR) != 0)) " ERR " else "") });
         return rc;
@@ -1922,7 +1846,10 @@ pub fn rangeOfSliceInBuffer(slice: []const u8, buffer: []const u8) ?[2]u32 {
         if ((!isSliceInBuffer(slice, buffer))) {
             return null;
         }
-        const r: [2]u32 = .{ @as(u32, @truncate((@intFromPtr(slice.ptr) -| @intFromPtr(buffer.ptr)))), @as(u32, @truncate(slice.len)) };
+        const r: [2]u32 = (blk: {
+        break :blk .{ @as(u32, @truncate((@intFromPtr(slice.ptr) -| @intFromPtr(buffer.ptr)))), @as(u32, @truncate(slice.len)) };
+
+});
         if (comptime Environment.allow_assert) {
             _ = assert(strings.eqlLong(slice, buffer[r[0]..][0..r[1]], false));
         }
@@ -2156,18 +2083,12 @@ pub fn zero(comptime Type: type) Type {
 
 pub fn getFdPathViaCWD(fd: std.posix.fd_t, buf: *bun.PathBuffer) ![]u8 {
         const prev_fd = try std.posix.openatZ(std.fs.cwd().fd, ".", .{ .DIRECTORY = true }, 0);
-        var needs_chdir = false;
-        _ = &needs_chdir;
-        defer {
-        {
-            if (needs_chdir) {
-                _ = ((std.posix.fchdir(prev_fd)) catch unreachable);
-            }
-            _ = std.posix.close(prev_fd);
-        }
-        }
+        var fd_guard = FdChdirCloseGuard{ .prev_fd = prev_fd };
+        _ = &fd_guard;
+        var __fd_guard_moved = false; _ = &__fd_guard_moved;
+        defer if (!__fd_guard_moved) { __fd_guard_moved = true; const __T = @TypeOf(fd_guard); if (@typeInfo(__T) == .optional) { if (fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = fd_guard; _drop_val.__cp_deinit(); } };
         _ = try std.posix.fchdir(fd);
-        needs_chdir = true;
+        fd_guard.needs_chdir = true;
         return std.posix.getcwd(buf);
 }
 
@@ -2231,7 +2152,10 @@ switch (@typeInfo(ptr_info.child)) {
 .array => |array_info| {
 if (array_info.sentinel_ptr) |sentinel_ptr| {
             _ = &sentinel_ptr;
-            const sp: *align(1) const array_info.child = @ptrCast(sentinel_ptr);
+            const sp: *align(1) const array_info.child = (blk: {
+            break :blk @ptrCast(sentinel_ptr);
+
+});
             const sentinel = sp.*;
             if ((sentinel == end)) {
                 return std.mem.indexOfSentinel(array_info.child, end, pointer);
@@ -2247,7 +2171,10 @@ else => {
 .many => {
 if (ptr_info.sentinel_ptr) |sentinel_ptr| {
             _ = &sentinel_ptr;
-            const sp: *align(1) const ptr_info.child = @ptrCast(sentinel_ptr);
+            const sp: *align(1) const ptr_info.child = (blk: {
+            break :blk @ptrCast(sentinel_ptr);
+
+});
             const sentinel = sp.*;
             var i: usize = 0;
             _ = &i;
@@ -2264,7 +2191,10 @@ _ = assert((pointer != null));
 .slice => {
 if (ptr_info.sentinel_ptr) |sentinel_ptr| {
             _ = &sentinel_ptr;
-            const sp: *align(1) const ptr_info.child = @ptrCast(sentinel_ptr);
+            const sp: *align(1) const ptr_info.child = (blk: {
+            break :blk @ptrCast(sentinel_ptr);
+
+});
             const sentinel = sp.*;
             if ((sentinel == end)) {
                 return std.mem.indexOfSentinel(ptr_info.child, sentinel, pointer);
@@ -2298,7 +2228,10 @@ switch (@typeInfo(ptr_info.child)) {
 new_ptr_info.child = array_info.child;
         if (array_info.sentinel_ptr) |sentinel_ptr| {
             _ = &sentinel_ptr;
-            const sp: *align(1) const array_info.child = @ptrCast(sentinel_ptr);
+            const sp: *align(1) const array_info.child = (blk: {
+            break :blk @ptrCast(sentinel_ptr);
+
+});
             const sentinel = sp.*;
             if ((end == sentinel)) {
                 new_ptr_info.sentinel_ptr = (&end);
@@ -2315,7 +2248,10 @@ else => {
 .many, .slice => {
 if (ptr_info.sentinel_ptr) |sentinel_ptr| {
             _ = &sentinel_ptr;
-            const sp: *align(1) const ptr_info.child = @ptrCast(sentinel_ptr);
+            const sp: *align(1) const ptr_info.child = (blk: {
+            break :blk @ptrCast(sentinel_ptr);
+
+});
             const sentinel = sp.*;
             if ((end == sentinel)) {
                 new_ptr_info.sentinel_ptr = (&end);
@@ -2339,13 +2275,13 @@ else => {
         _ = @compileError(("invalid type given to std.mem.sliceTo: " ++ @typeName(T)));
 }
 
-pub fn sliceTo(pointer: anytype, comptime end: std.@"meta".Elem(@TypeOf(pointer))) SliceTo(@TypeOf(pointer),end) {
+pub fn sliceTo(pointer: anytype, comptime end: std.@"meta".Elem(@TypeOf(pointer))) SliceTo(@TypeOf(pointer), end) {
         if ((@typeInfo(@TypeOf(pointer)) == .optional)) {
             if (pointer) |non_null| {
                 _ = &non_null;
                 return sliceTo(non_null, end);
             } else {
-                return (if (comptime @typeInfo(SliceTo(@TypeOf(pointer),end)) == .@"enum") @as(SliceTo(@TypeOf(pointer),end), @enumFromInt(null)) else @as(SliceTo(@TypeOf(pointer),end), null));
+                return (if (comptime @typeInfo(SliceTo(@TypeOf(pointer), end)) == .@"enum") @as(SliceTo(@TypeOf(pointer), end), @enumFromInt(null)) else @as(SliceTo(@TypeOf(pointer), end), null));
             }
         }
         const Result = SliceTo(@TypeOf(pointer), end);
@@ -2353,7 +2289,10 @@ pub fn sliceTo(pointer: anytype, comptime end: std.@"meta".Elem(@TypeOf(pointer)
         const ptr_info = @typeInfo(Result).pointer;
         if (ptr_info.sentinel_ptr) |s_ptr| {
             _ = &s_ptr;
-            const sp: *align(1) const ptr_info.child = @ptrCast(s_ptr);
+            const sp: *align(1) const ptr_info.child = (blk: {
+            break :blk @ptrCast(s_ptr);
+
+});
             const s = sp.*;
             _ = &s;
             return pointer[0..length :s];
@@ -2482,8 +2421,14 @@ pub fn reloadProcess(allocator: std.mem.Allocator, clear_terminal: bool, comptim
             }
         }
         const exec_path = ((bun.selfExePath()) catch unreachable).ptr;
-        const newargv = @as(ArgvPtr, @ptrCast(dupe_argv.ptr));
-        const envp = @as(ArgvPtr, @ptrCast(environ.ptr));
+        const newargv = (blk: {
+        break :blk @as(ArgvPtr, @ptrCast(dupe_argv.ptr));
+
+});
+        const envp = (blk: {
+        break :blk @as(ArgvPtr, @ptrCast(environ.ptr));
+
+});
         if (comptime Environment.isMac) {
             var actions = ((spawn.Actions.init()) catch unreachable);
             _ = &actions;
@@ -2494,7 +2439,10 @@ pub fn reloadProcess(allocator: std.mem.Allocator, clear_terminal: bool, comptim
             _ = &attrs;
             _ = (blk_catch_23: { break :blk_catch_23 ((attrs.resetSignals()) catch |__ce_23| { _ = &__ce_23;  }); });
             _ = ((attrs.set((((c.POSIX_SPAWN_CLOEXEC_DEFAULT | c.POSIX_SPAWN_SETEXEC) | c.POSIX_SPAWN_SETSIGDEF) | c.POSIX_SPAWN_SETSIGMASK))) catch unreachable);
-            switch (spawn.spawnZ(exec_path, actions, attrs, @as(ArgvPtr, @ptrCast(newargv)), @as(ArgvPtr, @ptrCast(envp)))) {
+            switch ((blk: {
+            break :blk spawn.spawnZ(exec_path, actions, attrs, @as(ArgvPtr, @ptrCast(newargv)), @as(ArgvPtr, @ptrCast(envp)));
+
+})) {
 .err => |e| {
 if (may_return) {
                 _ = Output.errGeneric("Failed to reload process: {s}", .{ @tagName(e.getErrno()) });
@@ -2702,9 +2650,13 @@ pub fn appendOptionsEnv(env: []const u8, comptime ArgType: type, args: *std.arra
                 }
             }
             if (ArgType == bun.String) {
-defer {
-            _ = buf.deinit();
-            }
+var buf_guard = DeinitGuard(std.array_list.Managed(u8)){ .ptr = (blk: {
+            break :blk (&buf);
+
+}) };
+            _ = &buf_guard;
+            var __buf_guard_moved = false; _ = &__buf_guard_moved;
+            defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
             _ = try args.insert(offset_in_args, bun.String.cloneUTF8(buf.items));
 } else if (ArgType == [:0]const u8) {
 _ = try buf.append(0);
@@ -2819,7 +2771,10 @@ pub fn serializable(input: anytype) @TypeOf(input) {
         const zeroed_len = (comptime @sizeOf(T));
         var zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
         _ = &zeroed;
-        const result: *T = @ptrCast(@alignCast((&zeroed)));
+        const result: *T = (blk: {
+        break :blk @ptrCast(@alignCast((&zeroed)));
+
+});
         inline for ((comptime std.@"meta".fieldNames(T))) |field_name| {
             @field(result, field_name) = @field(input, field_name);
         }
@@ -2830,7 +2785,10 @@ pub inline fn serializableInto(comptime T: type, init: anytype) T {
         const zeroed_len = (comptime @sizeOf(T));
         var zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
         _ = &zeroed;
-        const result: *T = @ptrCast(@alignCast((&zeroed)));
+        const result: *T = (blk: {
+        break :blk @ptrCast(@alignCast((&zeroed)));
+
+});
         inline for ((comptime std.@"meta".fieldNames(@TypeOf(init)))) |field_name| {
             @field(result, field_name) = @field(init, field_name);
         }
@@ -2893,9 +2851,12 @@ pub fn PathLiteralType(comptime n: usize, comptime Char: type) type {
         return *const PathLiteralBufType(n, Char);
 }
 
-pub inline fn pathLiteral(comptime literal: anytype) PathLiteralType(literal.len,u8) {
+pub inline fn pathLiteral(comptime literal: anytype) PathLiteralType(literal.len, u8) {
         if ((!Environment.isWindows)) {
-            return @ptrCast(literal);
+            return (blk: {
+            break :blk @ptrCast(literal);
+
+});
         }
         return (comptime brk: {
         const BufType = PathLiteralBufType(literal.len, u8);
@@ -2917,9 +2878,12 @@ pub inline fn pathLiteral(comptime literal: anytype) PathLiteralType(literal.len
 });
 }
 
-pub inline fn OSPathLiteral(comptime literal: anytype) PathLiteralType(literal.len,OSPathChar) {
+pub inline fn OSPathLiteral(comptime literal: anytype) PathLiteralType(literal.len, OSPathChar) {
         if ((!Environment.isWindows)) {
-            return @ptrCast(literal);
+            return (blk: {
+            break :blk @ptrCast(literal);
+
+});
         }
         return (comptime brk: {
         const BufType = PathLiteralBufType(literal.len, OSPathChar);
@@ -2998,12 +2962,12 @@ pub inline fn dupe(comptime T: type, t: *T) *T {
 }
 
 pub fn TrivialNew(comptime T: type) *const fn (T) *T {
-        return struct {
+        return (struct {
 
 pub fn new(t: T) *T {
             return bun.new(T, t);
     }
-}.new;
+}).new;
 }
 
 pub fn TrivialDeinitType(comptime T: type) type {
@@ -3017,12 +2981,12 @@ pub fn deinit(self_: *T) void {
 }
 
 pub fn TrivialDeinit(comptime T: type) TrivialDeinitType(T) {
-        return struct {
+        return (struct {
 
 pub fn deinit(self_: *T) void {
             _ = bun.destroy(self_);
     }
-}.deinit;
+}).deinit;
 }
 
 pub fn exitThread() noreturn {
@@ -3076,10 +3040,13 @@ pub fn ReinterpretSliceType(comptime T: type, comptime slice: type) type {
         return @Type(std.builtin.Type{ .pointer = .{ .size = p.size, .is_const = p.is_const, .is_volatile = p.is_volatile, .alignment = @alignOf(T), .address_space = p.address_space, .child = T, .is_allowzero = p.is_allowzero, .sentinel_ptr = p.sentinel_ptr } });
 }
 
-pub fn reinterpretSlice(comptime T: type, slice: anytype) ReinterpretSliceType(T,@TypeOf(slice)) {
+pub fn reinterpretSlice(comptime T: type, slice: anytype) ReinterpretSliceType(T, @TypeOf(slice)) {
         const is_const = @typeInfo(@TypeOf(slice)).pointer.is_const;
         const bytes = std.mem.sliceAsBytes(slice);
-        const new_ptr = @as(if (is_const) [*]const T else [*]T, @ptrCast(@alignCast(bytes.ptr)));
+        const new_ptr = (blk: {
+        break :blk @as(if (is_const) [*]const T else [*]T, @ptrCast(@alignCast(bytes.ptr)));
+
+});
         return new_ptr[0..@divTrunc(bytes.len, @sizeOf(T))];
 }
 
@@ -3168,9 +3135,13 @@ pub fn selfExePath() !SliceZ {
             return (if (@typeInfo(@TypeOf(memo)) == .@"enum") @intFromEnum(memo) else memo.value)[0..memo.len :0];
         }
         _ = memo.lock.lock();
-        defer {
-        _ = memo.lock.unlock();
-        }
+        var lock_guard = LockUnlockGuard(threading.Mutex){ .lock = (blk: {
+        break :blk (&memo.lock);
+
+}) };
+        _ = &lock_guard;
+        var __lock_guard_moved = false; _ = &__lock_guard_moved;
+        defer if (!__lock_guard_moved) { __lock_guard_moved = true; const __T = @TypeOf(lock_guard); if (@typeInfo(__T) == .optional) { if (lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lock_guard; _drop_val.__cp_deinit(); } };
         if (memo.set) {
             return (if (@typeInfo(@TypeOf(memo)) == .@"enum") @intFromEnum(memo) else memo.value)[0..memo.len :0];
         }
@@ -3190,10 +3161,9 @@ pub fn next(self: *@This()) ?T {
             if ((self.index >= self.items.len)) {
                 return null;
             }
-            defer {
+            const item = self.items[@as(usize, @intCast(self.index))];
             self.index = (self.index + 1);
-            }
-            return self.items[@as(usize, @intCast(self.index))];
+            return item;
     }
 };
 }
@@ -3478,7 +3448,10 @@ pub fn splitAtMut(comptime T: type, slice: []T, mid: usize) SplitAtMutResult(T) 
 
 pub fn indexOfPointerInSlice(comptime T: type, slice: []const T, item: *const T) usize {
         _ = bun.assert(isSliceInBufferT(T, item[0..1], slice));
-        const offset = (@intFromPtr(item) - @intFromPtr(slice.ptr));
+        const offset = (blk: {
+        break :blk (@intFromPtr(item) - @intFromPtr(slice.ptr));
+
+});
         const index = @divExact(offset, @sizeOf(T));
         return index;
 }
@@ -3508,9 +3481,13 @@ pub fn call(self: *@This(), args: std.@"meta".ArgsTuple(@TypeOf(f))) Return {
 pub fn callSlow(self: *@This(), args: std.@"meta".ArgsTuple(@TypeOf(f))) Return {
             @branchHint(.cold);
             _ = self.mutex.lock();
-            defer {
-            _ = self.mutex.unlock();
-            }
+            var lock_guard = LockUnlockGuard(@TypeOf(self.mutex)){ .lock = (blk: {
+            break :blk (&self.mutex);
+
+}) };
+            _ = &lock_guard;
+            var __lock_guard_moved = false; _ = &__lock_guard_moved;
+            defer if (!__lock_guard_moved) { __lock_guard_moved = true; const __T = @TypeOf(lock_guard); if (@typeInfo(__T) == .optional) { if (lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lock_guard; _drop_val.__cp_deinit(); } };
             if ((!self.done)) {
                 self.payload = @call(.auto, f, args);
                 _ = @atomicStore(bool, (&self.done), true, .release);
@@ -3545,7 +3522,9 @@ pub inline fn move(val: anytype) switch (@typeInfo(@TypeOf(val))) {
     else => @compileError("unexpected move type"),
 } {
         const tmp = val.*;
-        (@constCast(val)).* = undefined;
+        {
+            (@constCast(val)).* = undefined;
+        }
         return tmp;
 }
 
@@ -3592,7 +3571,9 @@ pub noinline fn throwStackOverflow() StackOverflow!void {
 }
 
 pub fn freeSensitive(allocator: std.mem.Allocator, slice: anytype) void {
-        _ = std.crypto.secureZero(std.@"meta".Child(@TypeOf(slice)), @constCast(slice));
+        {
+            _ = std.crypto.secureZero(std.@"meta".Child(@TypeOf(slice)), @constCast(slice));
+        }
         _ = allocator.free(slice);
 }
 

@@ -24,6 +24,29 @@ const IDENTIFIER = "a.out\x00";
 const SIGNATURE_PAGE_SIZE: usize = 1 << 12;
 const SIGNATURE_HASH_SIZE: usize = 32;
 
+pub struct DeinitGuard<T> {
+    val: T,
+    active: bool = true,
+
+    ~init() {
+        if (_.active) {
+            _.val.deinit();
+        }
+    }
+}
+
+pub struct DestroyGuard<T> {
+    allocator: Allocator,
+    ptr: *T!,
+    active: bool = true,
+
+    ~init() {
+        if (_.active) {
+            _.allocator.destroy(_.ptr);
+        }
+    }
+}
+
 pub struct Shifter {
     start: u64,
     amount: u64,
@@ -55,7 +78,7 @@ pub struct MachoSigner {
 
     pub static fn init(allocator: Allocator, obj: []const u8): (*MachoSigner!)! {
         let res = allocator.create(MachoSigner)?;
-        errdefer allocator.destroy(res);
+        let res_guard = DestroyGuard<MachoSigner>{ allocator: allocator, ptr: res };
 
         const header_size: usize = @sizeOf(macho.mach_header_64);
         const header = unsafe { std.mem.bytesAsValue(macho.mach_header_64, obj[0..header_size]).* };
@@ -109,13 +132,14 @@ pub struct MachoSigner {
             return err.MissingRequiredSegment;
         }
 
-        let buf_data = std.array_list.Managed(u8).initCapacity(allocator, obj.len)?;
-        errdefer buf_data.deinit();
-        buf_data.appendSlice(obj)?;
+        let buf_guard = DeinitGuard<std.array_list.Managed(u8)>{
+            val: std.array_list.Managed(u8).initCapacity(allocator, obj.len)?,
+        };
+        buf_guard.val.appendSlice(obj)?;
 
         unsafe {
             res.* = MachoSigner{
-                data: buf_data,
+                data: buf_guard.val,
                 sig_off: sig_off,
                 sig_sz: sig_sz,
                 cs_cmd_off: cs_cmd_off,
@@ -125,6 +149,8 @@ pub struct MachoSigner {
                 allocator: allocator,
             };
         }
+        buf_guard.active = false;
+        res_guard.active = false;
 
         return res;
     }
@@ -240,24 +266,27 @@ pub struct MachoFile {
     allocator: Allocator,
 
     pub static fn init(allocator: Allocator, obj_file: []const u8, blob_to_embed_length: usize): (*MachoFile!)! {
-        let data = std.array_list.Managed(u8).initCapacity(allocator, obj_file.len + blob_to_embed_length)?;
-        errdefer data.deinit();
-        data.appendSlice(obj_file)?;
+        let data_guard = DeinitGuard<std.array_list.Managed(u8)>{
+            val: std.array_list.Managed(u8).initCapacity(allocator, obj_file.len + blob_to_embed_length)?,
+        };
+        data_guard.val.appendSlice(obj_file)?;
 
-        const header = unsafe { std.mem.bytesAsValue(macho.mach_header_64, data.items[0..@sizeOf(macho.mach_header_64)]).* };
+        const header = unsafe { std.mem.bytesAsValue(macho.mach_header_64, data_guard.val.items[0..@sizeOf(macho.mach_header_64)]).* };
 
         let res = allocator.create(MachoFile)?;
-        errdefer allocator.destroy(res);
+        let res_guard = DestroyGuard<MachoFile>{ allocator: allocator, ptr: res };
 
         unsafe {
             res.* = MachoFile{
                 header: header,
-                data: data,
+                data: data_guard.val,
                 segment: std.mem.zeroes(macho.segment_command_64),
                 section: std.mem.zeroes(macho.section_64),
                 allocator: allocator,
             };
         }
+        data_guard.active = false;
+        res_guard.active = false;
 
         return res;
     }
@@ -294,7 +323,7 @@ pub struct MachoFile {
                     const command = entry.cast(macho.segment_command_64).?;
                     if (strings.eqlComptime(command.segName(), "__BUN")) {
                         if (command.nsects > 0) {
-                            const section_offset = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
+                            const section_offset = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
                             const seg_hdr_sz: usize = @sizeOf(macho.segment_command_64);
                             const sect_sz: usize = @sizeOf(macho.section_64);
                             let s_idx: usize = 0;
@@ -334,11 +363,11 @@ pub struct MachoFile {
                             }
                         }
                     } else if (strings.eqlComptime(command.segName(), SEG_LINKEDIT)) {
-                        linkedit_seg_idx = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
+                        linkedit_seg_idx = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
                     }
                 },
                 .CODE_SIGNATURE => {
-                    code_sign_cmd_idx = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
+                    code_sign_cmd_idx = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
                 },
                 else => {},
             }
@@ -430,7 +459,7 @@ pub struct MachoFile {
 
         while (entry := iter.next()) {
             const cmd = entry.hdr;
-            const cmd_off = @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr);
+            const cmd_off = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
 
             switch (cmd.cmd) {
                 .SYMTAB => {
@@ -514,12 +543,14 @@ pub struct MachoFile {
 
     pub fn buildAndSign(*_, writer: *std.Io.Writer): void! {
         if (this.header.cputype == macho.CPU_TYPE_ARM64 && !bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()) {
-            let out_data = std.array_list.Managed(u8).init(this.allocator);
-            defer out_data.deinit();
-            this.build(out_data.writer())?;
-            let signer = MachoSigner.init(this.allocator, out_data.items)?;
-            defer signer.deinit();
-            signer.sign(writer)?;
+            let out_data_guard = DeinitGuard<std.array_list.Managed(u8)>{
+                val: std.array_list.Managed(u8).init(this.allocator),
+            };
+            this.build(out_data_guard.val.writer())?;
+            let signer_guard = DeinitGuard<*MachoSigner!>{
+                val: MachoSigner.init(this.allocator, out_data_guard.val.items)?,
+            };
+            signer_guard.val.sign(writer)?;
         } else {
             this.build(writer)?;
         }

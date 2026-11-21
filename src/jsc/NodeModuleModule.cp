@@ -5,6 +5,22 @@ const ErrorableString = jsc.ErrorableString;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deref();
+    }
+}
+
 export const NodeModuleModule__findPath = jsc.host_fn.wrap3(findPath);
 
 // https://github.com/nodejs/node/blob/40ef9d541ed79470977f90eb445c291b95ab75a0/lib/internal/modules/cjs/loader.js#L666
@@ -16,9 +32,8 @@ fn findPath(
     let stack_buf = std.heap.stackFallback(8192, bun.default_allocator);
     const alloc = stack_buf.get();
 
-    const request_slice = request_bun_str.toUTF8(alloc);
-    defer request_slice.deinit();
-    const request = request_slice.slice();
+    let request_slice_guard = DeinitGuard<@TypeOf(request_bun_str.toUTF8(alloc))>{ val: request_bun_str.toUTF8(alloc) };
+    const request = request_slice_guard.val.slice();
 
     const absolute_request = std.fs.path.isAbsolute(request);
     if (!absolute_request && paths_maybe == null) {
@@ -30,10 +45,9 @@ fn findPath(
     if (paths := paths_maybe) {
         let iter = paths.iterator(global)?;
         while (path := iter.next()?) {
-            const cur_path = bun.String.fromJS(path, global)?;
-            defer cur_path.deref();
+            const cur_path_guard = DerefGuard<bun.String>{ val: bun.String.fromJS(path, global)? };
 
-            if (inner := findPathInner(request_bun_str, cur_path, global)) {
+            if (inner := findPathInner(request_bun_str, cur_path_guard.val, global)) {
                 found = inner;
                 break;
             }
@@ -172,9 +186,8 @@ pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const
 ) {
     let sfa_state = std.heap.stackFallback(8192, bun.default_allocator);
     const alloc = sfa_state.get();
-    const str_slice = str.toUTF8(alloc);
-    defer str_slice.deinit();
-    onRequireExtensionModify(global, str_slice.slice(), loader, value) catch |e| {
+    let str_slice_guard = DeinitGuard<@TypeOf(str.toUTF8(alloc))>{ val: str.toUTF8(alloc) };
+    onRequireExtensionModify(global, str_slice_guard.val.slice(), loader, value) catch |e| {
         if (e == error.OutOfMemory) bun.outOfMemory();
     };
 }
@@ -185,9 +198,8 @@ pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const
 ) {
     let sfa_state = std.heap.stackFallback(8192, bun.default_allocator);
     const alloc = sfa_state.get();
-    const str_slice = str.toUTF8(alloc);
-    defer str_slice.deinit();
-    onRequireExtensionModifyNonFunction(global, str_slice.slice()) catch |e| {
+    let str_slice_guard = DeinitGuard<@TypeOf(str.toUTF8(alloc))>{ val: str.toUTF8(alloc) };
+    onRequireExtensionModifyNonFunction(global, str_slice_guard.val.slice()) catch |e| {
         if (e == error.OutOfMemory) bun.outOfMemory();
     };
 }

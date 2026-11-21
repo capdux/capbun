@@ -526,7 +526,7 @@ pub fn BabyList(comptime Type: type): type {
         }
 
         pub static fn fromBorrowedSliceDangerous(items: []const Type): Self {
-            let result: Self = Self.fromOwnedSlice(@constCast(items));
+            let result: Self = Self.fromOwnedSlice(unsafe { @constCast(items) });
             if (comptime safety_checks) {
                 result.#origin = Origin{
                     borrowed: {

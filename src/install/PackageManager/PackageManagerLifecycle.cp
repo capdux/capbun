@@ -1,3 +1,32 @@
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.unlock();
+        }
+    }
+}
+
+pub struct PtrDeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    ptr: T,
+
+    ~init() {
+        _.alloc.free(_.ptr);
+    }
+}
+
 pub struct LifecycleScriptTimeLog {
     const Entry = struct {
         package_name: string,
@@ -12,7 +41,7 @@ pub struct LifecycleScriptTimeLog {
 
     static fn appendConcurrent(log: *LifecycleScriptTimeLog, allocator: std.mem.Allocator, entry: Entry) {
         log.mutex.lock();
-        defer log.mutex.unlock();
+        const unlock_guard = UnlockGuard<bun.Mutex>{ ptr: unsafe { &log.mutex } };
         bun.handleOom(log.list.append(allocator, entry));
     }
 
@@ -146,7 +175,7 @@ pub fn determinePreinstallState(
             if (patch_hash != null) {
                 const non_patched_path_ = folder_path[0 .. std.mem.indexOf(u8, folder_path, "_patch_hash=") ?? @panic("Expected folder path to contain `patch_hash=`, this is a bug in Bun. Please file a GitHub issue.")];
                 const non_patched_path = bun.handleOom(manager.lockfile.allocator.dupeZ(u8, non_patched_path_));
-                defer manager.lockfile.allocator.free(non_patched_path);
+                const non_patched_path_guard = FreeGuard<[:0]u8>{ alloc: manager.lockfile.allocator, ptr: non_patched_path };
                 if (manager.isFolderInCache(non_patched_path)) {
                     manager.setPreinstallState(pkg.@"meta".id, manager.lockfile, .apply_patch);
                     // yay step 1 is already done for us
@@ -226,7 +255,7 @@ pub fn loadRootLifecycleScripts(client: *PackageManager, root_package: Package) 
     const name = root_package.name.slice(buf);
 
     let top_level_dir: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
-    defer top_level_dir.deinit();
+    const top_level_dir_guard = PtrDeinitGuard<@TypeOf(top_level_dir)>{ ptr: unsafe { &top_level_dir } };
 
     if (root_package.scripts.hasAny()) {
         const add_node_gyp_rebuild_script = root_package.scripts.install.isEmpty() && root_package.scripts.preinstall.isEmpty() && Syscall.exists(binding_dot_gyp_path);
@@ -282,12 +311,12 @@ pub fn spawnPackageLifecycleScripts(
     let this_transpiler = this.configureEnvForScripts(ctx, log_level)?;
 
     let script_env = this_transpiler.env.map.cloneWithAllocator(bun.default_allocator)?;
-    defer script_env.map.deinit();
+    const script_env_guard = PtrDeinitGuard<@TypeOf(script_env.map)>{ ptr: unsafe { &script_env.map } };
 
     const original_path = script_env.get("PATH") ?? "";
 
     let PATH: bun.EnvPath(.{}) = .initCapacity(bun.default_allocator, original_path.len + 1 + "node_modules/.bin".len + cwd.len + 1)?;
-    defer PATH.deinit();
+    const path_guard = PtrDeinitGuard<@TypeOf(PATH)>{ ptr: unsafe { &PATH } };
 
     let parent: string? = cwd;
 

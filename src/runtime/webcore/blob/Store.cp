@@ -44,6 +44,23 @@ const s3ListObjects = s3client.listObjects;
 const Blob = webcore.Blob;
 const SizeType = Blob.SizeType;
 
+pub struct DeinitGuard<T> {
+    val: T;
+
+    ~init() {
+        let v = _.val;
+        v.deinit();
+    }
+}
+
+pub struct DeinitPtrGuard<T> {
+    ptr: *T!;
+
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub struct StoreFile {
     pathlike: Node.PathOrFileDescriptor;
     mime_type: MimeType = .other;
@@ -136,8 +153,8 @@ pub struct StoreS3 {
             global: *JSGlobalObject,
 
             pub fn resolve(result: S3DeleteResult, opaque_self: *!?): !void {
-                let wrap: *@This() = @ptrCast(@alignCast(opaque_self.?));
-                defer wrap.deinit();
+                let wrap: *@This() = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
+                const wrap_guard = DeinitPtrGuard<@This()>{ ptr: wrap };
                 const globalObject = wrap.global;
                 switch (result) {
                     .success => {
@@ -162,10 +179,10 @@ pub struct StoreS3 {
         let proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
         let proxy = if (proxy_url != null) proxy_url.?.href else null;
         let aws_options = try this.getCredentialsWithOptions(extra_options, globalThis);
-        defer aws_options.deinit();
+        const aws_options_guard = DeinitGuard<S3CredentialsWithOptions>{ val: aws_options };
         store.ref();
 
-        try s3Delete(&aws_options.credentials, this.path(), @ptrCast(&Wrapper.resolve), bun.new(Wrapper, .{
+        try s3Delete(&aws_options.credentials, this.path(), unsafe { @ptrCast(&Wrapper.resolve) }, bun.new(Wrapper, .{
             .promise = promise,
             .store = store,
             .global = globalThis,
@@ -186,13 +203,13 @@ pub struct StoreS3 {
             global: *JSGlobalObject,
 
             pub fn resolve(result: S3ListObjectsResult, opaque_self: *!?): !void {
-                let wrap: *@This() = @ptrCast(@alignCast(opaque_self.?));
-                defer wrap.deinit();
+                let wrap: *@This() = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
+                const wrap_guard = DeinitPtrGuard<@This()>{ ptr: wrap };
                 const globalObject = wrap.global;
                 switch (result) {
                     .success => |list_result| {
                         let list_result_mut = list_result;
-                        defer list_result_mut.deinit();
+                        const list_result_guard = DeinitGuard<S3ListObjectsResult>{ val: list_result_mut };
                         const list_result_js = list_result_mut.toJS(globalObject) catch return wrap.promise.reject(globalObject, error.JSError);
                         try wrap.promise.resolve(globalObject, list_result_js);
                     },
@@ -216,12 +233,12 @@ pub struct StoreS3 {
         let proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
         let proxy = if (proxy_url != null) proxy_url.?.href else null;
         let aws_options = try this.getCredentialsWithOptions(extra_options, globalThis);
-        defer aws_options.deinit();
+        const aws_options_guard = DeinitGuard<S3CredentialsWithOptions>{ val: aws_options };
 
         let options = try getListObjectsOptionsFromJS(globalThis, listOptions);
         store.ref();
 
-        try s3ListObjects(&aws_options.credentials, options, @ptrCast(&Wrapper.resolve), bun.new(Wrapper, .{
+        try s3ListObjects(&aws_options.credentials, options, unsafe { @ptrCast(&Wrapper.resolve) }, bun.new(Wrapper, .{
             .promise = promise,
             .store = store,
             .resolvedlistOptions = options,
@@ -263,7 +280,7 @@ pub struct StoreS3 {
 
     pub fn deinit(*_, allocator: Allocator) {
         switch (this.pathlike) {
-            .string => allocator.free(@constCast(this.pathlike.slice())),
+            .string => allocator.free(unsafe { @constCast(this.pathlike.slice()) }),
             else => this.pathlike.deinit(),
         }
         this.pathlike = .{
@@ -318,7 +335,7 @@ pub struct StoreBytes {
 
         let result: Blob.Internal = .{
             .bytes = .{
-                .items = ptr[0..this.len],
+                .items = unsafe { ptr[0..this.len] },
                 .capacity = this.cap,
                 .allocator = this.allocator,
             },
@@ -332,14 +349,14 @@ pub struct StoreBytes {
 
     pub fn slice(_: *const StoreBytes): []u8 {
         if (this.ptr != null) {
-            return this.ptr.?[0..this.len];
+            return unsafe { this.ptr.?[0..this.len] };
         }
         return "";
     }
 
     pub fn allocatedSlice(_: *const StoreBytes): []u8 {
         if (this.ptr != null) {
-            return this.ptr.?[0..this.cap];
+            return unsafe { this.ptr.?[0..this.cap] };
         }
         return "";
     }
@@ -347,7 +364,7 @@ pub struct StoreBytes {
     pub fn deinit(*_) {
         default_allocator.free(this.stored_name.slice());
         if (this.ptr != null) {
-            this.allocator.free(this.ptr.?[0..this.cap]);
+            this.allocator.free(unsafe { this.ptr.?[0..this.cap] });
         }
         this.ptr = null;
         this.len = @as(SizeType, 0);
@@ -360,7 +377,7 @@ pub struct StoreBytes {
 
     pub fn asArrayListLeak(_: *const StoreBytes): ArrayListUnmanaged(u8) {
         return .{
-            .items = if (this.ptr != null) this.ptr.?[0..this.len] else &.{},
+            .items = if (this.ptr != null) unsafe { this.ptr.?[0..this.len] } else &.{},
             .capacity = this.cap,
         };
     }
@@ -546,7 +563,7 @@ export class Store {
             .file => |file| {
                 if (file.pathlike == .path) {
                     switch (file.pathlike.path) {
-                        .string => allocator.free(@constCast(file.pathlike.path.slice())),
+                        .string => allocator.free(unsafe { @constCast(file.pathlike.path.slice()) }),
                         else => file.pathlike.path.deinit(),
                     }
                 }

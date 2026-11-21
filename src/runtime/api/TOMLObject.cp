@@ -1,3 +1,7 @@
+pub struct DeinitGuard<T> { ptr: *T!, ~init() { _.ptr.deinit(); } }
+pub struct ExitGuard<T> { ptr: *T!, ~init() { _.ptr.exit(); } }
+pub struct DerefGuard<T> { ptr: *T!, ~init() { _.ptr.deref(); } }
+
 pub fn create(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
     const object = JSValue.createEmptyObject(globalThis, 1);
     object.put(
@@ -21,21 +25,21 @@ pub fn parse(
 ): bun.JSError!jsc.JSValue {
     let arena_ = bun.ArenaAllocator.init(globalThis.allocator());
     const allocator = arena_.allocator();
-    defer arena_.deinit();
+    const arena_guard = DeinitGuard<@TypeOf(arena_)>{ ptr: &arena_ };
 
     let ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
     let ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
+    const ast_scope_guard = ExitGuard<@TypeOf(ast_scope)>{ ptr: &ast_scope };
 
     let log = logger.Log.init(default_allocator);
-    defer log.deinit();
+    const log_guard = DeinitGuard<@TypeOf(log)>{ ptr: &log };
     const input_value = callframe.argument(0);
     if (input_value.isEmptyOrUndefinedOrNull()) {
         return globalThis.throwInvalidArguments("Expected a string to parse", {});
     }
 
     let input_slice = input_value.toSlice(globalThis, bun.default_allocator)?;
-    defer input_slice.deinit();
+    const input_slice_guard = DeinitGuard<@TypeOf(input_slice)>{ ptr: &input_slice };
     const source = &logger.Source.initPathString("input.toml", input_slice.slice());
     const log_ptr: *logger.Log = &log;
     const parse_result = TOML.parse(source, log_ptr, allocator, false) catch |e| {
@@ -62,7 +66,7 @@ pub fn parse(
 
     const slice = writer.ctx.buffer.slice();
     let out = bun.String.borrowUTF8(slice);
-    defer out.deref();
+    const out_guard = DerefGuard<@TypeOf(out)>{ ptr: &out };
 
     return out.toJSByParseJSON(globalThis);
 }

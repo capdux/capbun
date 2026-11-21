@@ -160,10 +160,17 @@ pub fn Bun__Process__send_(globalObject: *JSGlobalObject, callFrame: *jsc.CallFr
     return if (jsc.VirtualMachine.get().getTLSRejectUnauthorized()) 1 else 0;
 }
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 @export @c fn Bun__isNoProxy(hostname_ptr: [*]const u8, hostname_len: usize, host_ptr: [*]const u8, host_len: usize): bool {
     const vm = jsc.VirtualMachine.get();
-    const hostname: ([]const u8)? = if (hostname_len > 0) hostname_ptr[0..hostname_len] else null;
-    const host: ([]const u8)? = if (host_len > 0) host_ptr[0..host_len] else null;
+    const hostname: ([]const u8)? = if (hostname_len > 0) unsafe { hostname_ptr[0..hostname_len] } else null;
+    const host: ([]const u8)? = if (host_len > 0) unsafe { host_ptr[0..host_len] } else null;
     return vm.transpiler.env.isNoProxy(hostname, host);
 }
 
@@ -181,37 +188,32 @@ pub fn Bun__Process__send_(globalObject: *JSGlobalObject, callFrame: *jsc.CallFr
 
 @export @c fn Bun__addBakeSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
-    const slice = specifier.toUTF8(sfb.get());
-    defer slice.deinit();
-    vm.source_mappings.putBakeSourceProvider(@ptrCast(opaque_source_provider), slice.slice());
+    const slice = DeinitGuard<@TypeOf(specifier.toUTF8(sfb.get()))>{ val: specifier.toUTF8(sfb.get()) };
+    unsafe { vm.source_mappings.putBakeSourceProvider(@ptrCast(opaque_source_provider), slice.val.slice()); }
 }
 
 @export @c fn Bun__addDevServerSourceProvider(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
-    const slice = specifier.toUTF8(sfb.get());
-    defer slice.deinit();
-    vm.source_mappings.putDevServerSourceProvider(@ptrCast(opaque_source_provider), slice.slice());
+    const slice = DeinitGuard<@TypeOf(specifier.toUTF8(sfb.get()))>{ val: specifier.toUTF8(sfb.get()) };
+    unsafe { vm.source_mappings.putDevServerSourceProvider(@ptrCast(opaque_source_provider), slice.val.slice()); }
 }
 
 @export @c fn Bun__removeDevServerSourceProvider(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
-    const slice = specifier.toUTF8(sfb.get());
-    defer slice.deinit();
-    vm.source_mappings.removeDevServerSourceProvider(@ptrCast(opaque_source_provider), slice.slice());
+    const slice = DeinitGuard<@TypeOf(specifier.toUTF8(sfb.get()))>{ val: specifier.toUTF8(sfb.get()) };
+    unsafe { vm.source_mappings.removeDevServerSourceProvider(@ptrCast(opaque_source_provider), slice.val.slice()); }
 }
 
 @export @c fn Bun__addSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
-    const slice = specifier.toUTF8(sfb.get());
-    defer slice.deinit();
-    vm.source_mappings.putZigSourceProvider(opaque_source_provider, slice.slice());
+    const slice = DeinitGuard<@TypeOf(specifier.toUTF8(sfb.get()))>{ val: specifier.toUTF8(sfb.get()) };
+    vm.source_mappings.putZigSourceProvider(opaque_source_provider, slice.val.slice());
 }
 
 @export @c fn Bun__removeSourceProviderSourceMap(vm: *VirtualMachine, opaque_source_provider: *!, specifier: *bun.String) {
     let sfb = std.heap.stackFallback(4096, bun.default_allocator);
-    const slice = specifier.toUTF8(sfb.get());
-    defer slice.deinit();
-    vm.source_mappings.removeZigSourceProvider(opaque_source_provider, slice.slice());
+    const slice = DeinitGuard<@TypeOf(specifier.toUTF8(sfb.get()))>{ val: specifier.toUTF8(sfb.get()) };
+    vm.source_mappings.removeZigSourceProvider(opaque_source_provider, slice.val.slice());
 }
 
 pub fn Bun__setSyntheticAllocationLimitForTesting(globalObject: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {

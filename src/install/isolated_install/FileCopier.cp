@@ -10,6 +10,13 @@ const sys = bun.sys;
 
 const empty_skip_dirnames: [0]bun.OSPathSlice = undefined;
 
+struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
 pub struct FileCopier {
     src_path: bun.AbsPath(.{ .sep = .auto, .unit = .os }),
     dest_subpath: bun.Path(.{ .sep = .auto, .unit = .os }),
@@ -79,7 +86,7 @@ pub struct FileCopier {
 
             return .initErr(bun.sys.Error.fromCode(errno, .copyfile));
         };
-        defer dest_dir.close();
+        const _dest_dir_guard = CloseGuard<@TypeOf(dest_dir)>{ val: dest_dir };
 
         let copy_file_state: bun.CopyFileState = .{};
 
@@ -149,7 +156,7 @@ pub struct FileCopier {
                         return .initErr(e);
                     },
                 };
-                defer src.close();
+                const _src_guard = CloseGuard<@TypeOf(src)>{ val: src };
 
                 let dest = dest_dir.createFileZ(entry.path, .{}) catch dest: {
                     if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
@@ -161,7 +168,7 @@ pub struct FileCopier {
                         Global.exit(1);
                     };
                 };
-                defer dest.close();
+                const _dest_guard = CloseGuard<@TypeOf(dest)>{ val: dest };
 
                 if (comptime Environment.isPosix) {
                     const stat = (src.stat().unwrap()) catch continue;

@@ -37,13 +37,13 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const fs = @import("../resolver/fs.zig");
 pub const bun = @import("bun");
@@ -63,6 +63,39 @@ pub const CacheSet = struct {
 
 pub fn init(allocator: std.mem.Allocator) CacheSet {
             return CacheSet{ .js = JavaScript.init(allocator), .fs = Fs{ .shared_buffer = ((MutableString.init(allocator, 0)) catch unreachable), .macro_shared_buffer = ((MutableString.init(allocator, 0)) catch unreachable) }, .json = Json{  } };
+    }
+};
+
+pub const FileCloseGuard = struct {
+    file: ?std.fs.File,
+    debug_log: bool = false,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FileCloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.file) |f| {
+                _ = &f;
+                if (self.debug_log) {
+                    _ = debug("readFileWithAllocator close({f})", .{ bun.fs.printHandle(f.handle) });
+                }
+                _ = f.close();
+            }
+    }
+};
+
+pub const TempLogFlushGuard = struct {
+    temp_log: *logger.Log,
+    log: *logger.Log,
+    source: *const logger.Source,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *TempLogFlushGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = (blk_catch_2: { break :blk_catch_2 ((self.temp_log.appendToMaybeRecycled(self.log, self.source)) catch |__ce_2| { _ = &__ce_2;  }); });
+            }
     }
 };
 
@@ -151,14 +184,11 @@ pub fn readFileShared(self: *Fs, _fs: *fs.FileSystem, path: [:0]const u8, cached
             } else {
                 file_handle = try std.fs.openFileAbsoluteZ(path, .{ .mode = .read_only });
             }
-            defer {
-            {
-                if ((rfs.needToCloseFiles() and (cached_file_descriptor == null))) {
-                    _ = file_handle.close();
-                }
-            }
-            }
-            const file = (blk_catch_2: { break :blk_catch_2 ((rfs.readFileWithHandle(path, null, file_handle, true, shared, self.stream)) catch |e| { _ = &e; if (comptime Environment.isDebug) {
+            var _file_guard = FileCloseGuard{ .file = (if ((rfs.needToCloseFiles() and (cached_file_descriptor == null))) file_handle else null) };
+            _ = &_file_guard;
+            var ___file_guard_moved = false; _ = &___file_guard_moved;
+            defer if (!___file_guard_moved) { ___file_guard_moved = true; const __T = @TypeOf(_file_guard); if (@typeInfo(__T) == .optional) { if (_file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _file_guard; _drop_val.__cp_deinit(); } };
+            const file = (blk_catch_3: { break :blk_catch_3 ((rfs.readFileWithHandle(path, null, file_handle, true, shared, self.stream)) catch |e| { _ = &e; if (comptime Environment.isDebug) {
                 _ = Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
             }
             return e; }); });
@@ -180,7 +210,7 @@ pub fn readFileWithAllocator(self: *Fs, allocator: std.mem.Allocator, _fs: *fs.F
                 _ = try file_handle.seekTo(0);
             } else {
                 if ((FeatureFlags.store_file_descriptors and dirname_fd.isValid())) {
-                    const fd_res = (blk_catch_3: { break :blk_catch_3 ((bun.sys.openatA(dirname_fd, std.fs.path.basename(path), bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; break :blk_catch_3 brk: {
+                    const fd_res = (blk_catch_4: { break :blk_catch_4 ((bun.sys.openatA(dirname_fd, std.fs.path.basename(path), bun.O.RDONLY, 0).unwrap()) catch |e| { _ = &e; break :blk_catch_4 brk: {
                     if ((e == error.ENOENT)) {
                         const handle = try bun.openFile(path, .{ .mode = .read_only });
                         _ = Output.prettyErrorln("<r><d>Internal error: directory mismatch for directory \"{s}\", fd {f}<r>. You don't need to do anything, but this indicates a bug.", .{ path, dirname_fd });
@@ -198,18 +228,14 @@ pub fn readFileWithAllocator(self: *Fs, allocator: std.mem.Allocator, _fs: *fs.F
                 _ = debug("openat({f}, {s}) = {f}", .{ dirname_fd, path, bun.FD.fromStdFile(file_handle) });
             }
             const will_close = (rfs.needToCloseFiles() and (_file_handle == null));
-            defer {
-            {
-                if (will_close) {
-                    _ = debug("readFileWithAllocator close({f})", .{ bun.fs.printHandle(file_handle.handle) });
-                    _ = file_handle.close();
-                }
-            }
-            }
-            const file = (if (self.stream) (blk_catch_4: { break :blk_catch_4 ((rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, self.sharedBuffer(), true)) catch |e| { _ = &e; if (Environment.isDebug) {
+            var _file_guard = FileCloseGuard{ .file = (if (will_close) file_handle else null), .debug_log = true };
+            _ = &_file_guard;
+            var ___file_guard_moved = false; _ = &___file_guard_moved;
+            defer if (!___file_guard_moved) { ___file_guard_moved = true; const __T = @TypeOf(_file_guard); if (@typeInfo(__T) == .optional) { if (_file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _file_guard; _drop_val.__cp_deinit(); } };
+            const file = (if (self.stream) (blk_catch_5: { break :blk_catch_5 ((rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, self.sharedBuffer(), true)) catch |e| { _ = &e; if (Environment.isDebug) {
                 _ = Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
             }
-            return e; }); }) else (blk_catch_5: { break :blk_catch_5 ((rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, self.sharedBuffer(), false)) catch |e| { _ = &e; if (Environment.isDebug) {
+            return e; }); }) else (blk_catch_6: { break :blk_catch_6 ((rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, self.sharedBuffer(), false)) catch |e| { _ = &e; if (Environment.isDebug) {
                 _ = Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
             }
             return e; }); }));
@@ -241,15 +267,15 @@ pub fn parse(_: *const JavaScript, allocator: std.mem.Allocator, opts: js_parser
             var temp_log = logger.Log.init(allocator);
             _ = &temp_log;
             temp_log.level = log.level;
-            var parser = (blk_catch_6: { break :blk_catch_6 ((js_parser.Parser.init(opts, (&temp_log), source, defines, allocator)) catch |__ce_6| { _ = &__ce_6; _ = (blk_catch_7: { break :blk_catch_7 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_7| { _ = &__ce_7;  }); });
+            var parser = (blk_catch_7: { break :blk_catch_7 ((js_parser.Parser.init(opts, (&temp_log), source, defines, allocator)) catch |__ce_7| { _ = &__ce_7; _ = (blk_catch_8: { break :blk_catch_8 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_8| { _ = &__ce_8;  }); });
             return null; }); });
             _ = &parser;
-            const result = (blk_catch_8: { break :blk_catch_8 ((parser.parse()) catch |e| { _ = &e; if ((temp_log.errors == 0)) {
+            const result = (blk_catch_9: { break :blk_catch_9 ((parser.parse()) catch |e| { _ = &e; if ((temp_log.errors == 0)) {
                 _ = ((log.addRangeError(source, parser.lexer.range(), @errorName(e))) catch unreachable);
             }
-            _ = (blk_catch_10: { break :blk_catch_10 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_10| { _ = &__ce_10;  }); });
-            return null; }); });
             _ = (blk_catch_11: { break :blk_catch_11 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_11| { _ = &__ce_11;  }); });
+            return null; }); });
+            _ = (blk_catch_12: { break :blk_catch_12 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_12| { _ = &__ce_12;  }); });
             return result;
     }
 
@@ -259,9 +285,19 @@ pub fn scan(_: *JavaScript, allocator: std.mem.Allocator, scan_pass_result: *js_
             }
             var temp_log = logger.Log.init(allocator);
             _ = &temp_log;
-            defer {
-            _ = (blk_catch_12: { break :blk_catch_12 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_12| { _ = &__ce_12;  }); });
-            }
+            var _temp_log_guard = TempLogFlushGuard{ .temp_log = (blk: {
+            break :blk (&temp_log);
+
+}), .log = (blk: {
+            break :blk log;
+
+}), .source = (blk: {
+            break :blk source;
+
+}) };
+            _ = &_temp_log_guard;
+            var ___temp_log_guard_moved = false; _ = &___temp_log_guard_moved;
+            defer if (!___temp_log_guard_moved) { ___temp_log_guard_moved = true; const __T = @TypeOf(_temp_log_guard); if (@typeInfo(__T) == .optional) { if (_temp_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _temp_log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _temp_log_guard; _drop_val.__cp_deinit(); } };
             var parser = (blk_catch_13: { break :blk_catch_13 ((js_parser.Parser.init(opts, (&temp_log), source, defines, allocator)) catch |__ce_13| { _ = &__ce_13; return; }); });
             _ = &parser;
             return try parser.scanImports(scan_pass_result);
@@ -278,12 +314,20 @@ pub fn init(_: std.mem.Allocator) Json {
 pub fn parse(_: *Json, log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator, comptime func: anytype, comptime force_utf8: bool) anyerror!?js_ast.Expr {
             var temp_log = logger.Log.init(allocator);
             _ = &temp_log;
-            defer {
-            {
-                _ = (blk_catch_14: { break :blk_catch_14 ((temp_log.appendToMaybeRecycled(log, source)) catch |__ce_14| { _ = &__ce_14;  }); });
-            }
-            }
-            return (blk_catch_15: { break :blk_catch_15 ((func(source, (&temp_log), allocator, force_utf8)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 null; }); });
+            var _temp_log_guard = TempLogFlushGuard{ .temp_log = (blk: {
+            break :blk (&temp_log);
+
+}), .log = (blk: {
+            break :blk log;
+
+}), .source = (blk: {
+            break :blk source;
+
+}) };
+            _ = &_temp_log_guard;
+            var ___temp_log_guard_moved = false; _ = &___temp_log_guard_moved;
+            defer if (!___temp_log_guard_moved) { ___temp_log_guard_moved = true; const __T = @TypeOf(_temp_log_guard); if (@typeInfo(__T) == .optional) { if (_temp_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _temp_log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _temp_log_guard; _drop_val.__cp_deinit(); } };
+            return (blk_catch_14: { break :blk_catch_14 ((func(source, (&temp_log), allocator, force_utf8)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 null; }); });
     }
 
 pub fn parseJSON(cache: *Json, log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator, mode: JsonMode, comptime force_utf8: bool) anyerror!?js_ast.Expr {

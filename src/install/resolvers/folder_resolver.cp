@@ -22,6 +22,36 @@ const PackageManager = @import("../install.zig").PackageManager;
 type stringZ = [:0]const u8;
 const joined_buf_len = bun.MAX_PATH_BYTES + 2;
 
+struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+struct TraceEndGuard<T> {
+    tracer: T,
+    ~init() {
+        _.tracer.end();
+    }
+}
+
+struct BodyPoolGuard<T> {
+    body: T,
+    ~init() {
+        const release_pool = Npm.Registry.BodyPool.release;
+        release_pool(_.body);
+    }
+}
+
+struct MoveToUnmanagedGuard<ListT, ManT> {
+    list: *ListT!,
+    man: *ManT!,
+    ~init() {
+        unsafe { _.list.* = _.man.moveToUnmanaged(); }
+    }
+}
+
 pub enum FolderResolutionTag {
     package_id,
     @"err",
@@ -206,14 +236,13 @@ fn readPackageJSONFromDisk(
     resolver: *ResolverType,
 ): !Lockfile.Package {
     let body = Npm.Registry.BodyPool.get(manager.allocator);
-    const release_pool = Npm.Registry.BodyPool.release;
-    defer release_pool(body);
+    const _body_guard = BodyPoolGuard<@TypeOf(body)>{ body: body };
 
     let package: Lockfile.Package = {};
 
     if (comptime ResolverType == WorkspaceResolver) {
         let tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.workspace");
-        defer tracer.end();
+        const _tracer_guard = TraceEndGuard<@TypeOf(tracer)>{ tracer: tracer };
 
         const json = manager.workspace_package_json_cache.getWithPath(manager.allocator, manager.log, abs, .{}).unwrap()?;
 
@@ -230,7 +259,7 @@ fn readPackageJSONFromDisk(
         )?;
     } else {
         let tracer = bun.perf.trace("FolderResolver.readPackageJSONFromDisk.folder");
-        defer tracer.end();
+        const _tracer_guard = TraceEndGuard<@TypeOf(tracer)>{ tracer: tracer };
 
         let file = bun.sys.File.from(bun.sys.openatA(
             bun.FD.cwd(),
@@ -238,12 +267,12 @@ fn readPackageJSONFromDisk(
             bun.O.RDONLY,
             0,
         ).unwrap()?);
-        defer file.close();
+        const _file_guard = CloseGuard<@TypeOf(file)>{ val: file };
 
         {
             body.data.reset();
             let man = body.data.list.toManaged(manager.allocator);
-            defer body.data.list = man.moveToUnmanaged();
+            const _man_guard = MoveToUnmanagedGuard<@TypeOf(body.data.list), @TypeOf(man)>{ list: unsafe { &body.data.list }, man: unsafe { &man } };
             * = file.readToEndWithArrayList(&man, .probably_small).unwrap()?;
         }
 
@@ -309,8 +338,10 @@ pub union(FolderResolutionTag) FolderResolution {
 
         // replace before getting hash. rel may or may not be contained in abs
         if (comptime bun.Environment.isWindows) {
-            bun.path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(abs));
-            bun.path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(rel));
+            unsafe {
+                bun.path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(abs));
+                bun.path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(rel));
+            }
         }
         const abs_hash = bun.hash(abs);
 

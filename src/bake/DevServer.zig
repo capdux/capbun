@@ -85,7 +85,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const RouteBundle = @import("./DevServer/RouteBundle.zig");
 pub const MemoryCost = @import("./DevServer/memory_cost.zig");
@@ -604,6 +604,78 @@ pub fn __cp_deinit(self: *DevServerInitGuard) void {
     }
 };
 
+pub const AstScopeGuard = struct {
+    scope: *bun.ast.ASTMemoryAllocator.Scope,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *AstScopeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.scope.exit();
+            }
+    }
+};
+
+pub const FinalizeBundleGuard = struct {
+    dev: *DevServer,
+    bv2: *bun.bundle_v2.BundleV2,
+    had_sent_hmr_event: *bool,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FinalizeBundleGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                var heap = self.bv2.graph.heap;
+                _ = &heap;
+                _ = self.bv2.deinitWithoutFreeingArena();
+                if (self.dev.current_bundle) |*cb| {
+                    _ = &cb;
+                    _ = (cb.*).promise.deinitIdempotently();
+                }
+                self.dev.current_bundle = null;
+                _ = self.dev.log.clearAndFree();
+                _ = heap.deinit();
+                _ = (blk_catch_0: { break :blk_catch_0 ((self.dev.assets.reindexIfNeeded(self.dev.allocator())) catch |__ce_0| { _ = &__ce_0;  }); });
+                if ((self.dev.testing_batch_events == .enable_after_bundle)) {
+                    self.dev.testing_batch_events = .{ .enabled = .empty };
+                    _ = self.dev.publish(.testing_watch_synchronization, (&.{ MessageId.testing_watch_synchronization.char(), 0 }), .binary);
+                } else {
+                    _ = self.dev.publish(.testing_watch_synchronization, (&.{ MessageId.testing_watch_synchronization.char(), (if (self.had_sent_hmr_event.*) 4 else 3) }), .binary);
+                }
+                _ = self.dev.startNextBundleIfPresent();
+                if (self.dev.server) |server| {
+                    _ = &server;
+                    _ = server.onStaticRequestComplete();
+                }
+            }
+    }
+};
+
+pub const CurrentBundleRequestsGuard = struct {
+    current_bundle: *CurrentBundle,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *CurrentBundleRequestsGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                if ((self.current_bundle.requests.first != null)) {
+                    _ = Output.debug("current_bundle.requests.first != null. this leaves pending requests without an error page!", .{});
+                }
+                while (self.current_bundle.requests.popFirst()) |node| {
+                    var req_guard = DeferredRequestGuard{ .req = (&node.data) };
+                    _ = &req_guard;
+                    var __req_guard_moved = false; _ = &__req_guard_moved;
+                    defer if (!__req_guard_moved) { __req_guard_moved = true; const __T = @TypeOf(req_guard); if (@typeInfo(__T) == .optional) { if (req_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { req_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = req_guard; _drop_val.__cp_deinit(); } };
+                    const req = req_guard.req;
+                    _ = req.abort();
+                }
+            }
+    }
+};
+
 pub const DevServer = @This();
 
 magic: Magic = .valid,
@@ -1064,7 +1136,7 @@ pub fn runWithBody(ctx: *UnrefSourceMapRequest, body: []const u8, r: AnyResponse
             }
             var generation: u32 = undefined;
             _ = &generation;
-            _ = (blk_catch_2: { break :blk_catch_2 ((std.fmt.hexToBytes(std.mem.asBytes((&generation)), body)) catch |__ce_2| { _ = &__ce_2; return error.InvalidRequest; }); });
+            _ = (blk_catch_3: { break :blk_catch_3 ((std.fmt.hexToBytes(std.mem.asBytes((&generation)), body)) catch |__ce_3| { _ = &__ce_3; return error.InvalidRequest; }); });
             const source_map_key = SourceMapStore.Key.init(cp_shl((if (comptime @typeInfo(@TypeOf(generation)) == .@"enum") cp_cast_int(u64, @intFromEnum(generation)) else cp_cast_int(u64, generation)), 32));
             _ = ctx.dev.source_maps.removeOrUpgradeWeakRef(source_map_key, .remove);
             _ = r.writeStatus("204 No Content");
@@ -1437,7 +1509,7 @@ pub fn init(options: Options) bun.JSOOM!*DevServer {
         if (comptime bun.FeatureFlags.bake_debugging_features) {
             if (options.dump_sources) |dir| {
                 _ = &dir;
-                dump_dir = (blk_catch_3: { break :blk_catch_3 ((std.fs.cwd().makeOpenPath(dir, .{})) catch |e| { _ = &e; break :blk_catch_3 dir: {
+                dump_dir = (blk_catch_4: { break :blk_catch_4 ((std.fs.cwd().makeOpenPath(dir, .{})) catch |e| { _ = &e; break :blk_catch_4 dir: {
                 _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 _ = Output.warn("Could not open directory for dumping sources: {}", .{ e });
                 break :dir null;
@@ -1476,26 +1548,26 @@ pub fn init(options: Options) bun.JSOOM!*DevServer {
         var __lock_guard_moved = false; _ = &__lock_guard_moved;
         defer if (!__lock_guard_moved) { __lock_guard_moved = true; const __T = @TypeOf(lock_guard); if (@typeInfo(__T) == .optional) { if (lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lock_guard; _drop_val.__cp_deinit(); } };
         const generic_action: [:0]const u8 = "while initializing development server";
-        const fs = (blk_catch_4: { break :blk_catch_4 ((bun.fs.FileSystem.init(options.root)) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
-        dev.bun_watcher = (blk_catch_5: { break :blk_catch_5 ((Watcher.init(DevServer, dev, fs, bun.default_allocator)) catch |e| { _ = &e; return global.throwError(e, "while initializing file watcher for development server"); }); });
+        const fs = (blk_catch_5: { break :blk_catch_5 ((bun.fs.FileSystem.init(options.root)) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
+        dev.bun_watcher = (blk_catch_6: { break :blk_catch_6 ((Watcher.init(DevServer, dev, fs, bun.default_allocator)) catch |e| { _ = &e; return global.throwError(e, "while initializing file watcher for development server"); }); });
         init_guard.deinit_watcher = true;
-        _ = (blk_catch_6: { break :blk_catch_6 ((dev.bun_watcher.start()) catch |e| { _ = &e; return global.throwError(e, "while initializing file watcher thread for development server"); }); });
+        _ = (blk_catch_7: { break :blk_catch_7 ((dev.bun_watcher.start()) catch |e| { _ = &e; return global.throwError(e, "while initializing file watcher thread for development server"); }); });
         dev.watcher_atomics = WatcherAtomics.init(dev);
         const transpiler_allocator = bun.default_allocator;
-        _ = (blk_catch_7: { break :blk_catch_7 ((dev.framework.initTranspiler(transpiler_allocator, (&dev.log), .development, .server, (&dev.server_transpiler), (&dev.bundler_options.server))) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
+        _ = (blk_catch_8: { break :blk_catch_8 ((dev.framework.initTranspiler(transpiler_allocator, (&dev.log), .development, .server, (&dev.server_transpiler), (&dev.bundler_options.server))) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
         dev.server_transpiler.options.dev_server = dev;
-        _ = (blk_catch_8: { break :blk_catch_8 ((dev.framework.initTranspiler(transpiler_allocator, (&dev.log), .development, .client, (&dev.client_transpiler), (&dev.bundler_options.client))) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
+        _ = (blk_catch_9: { break :blk_catch_9 ((dev.framework.initTranspiler(transpiler_allocator, (&dev.log), .development, .client, (&dev.client_transpiler), (&dev.bundler_options.client))) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
         dev.client_transpiler.options.dev_server = dev;
         dev.server_transpiler.resolver.watcher = dev.bun_watcher.getResolveWatcher();
         dev.client_transpiler.resolver.watcher = dev.bun_watcher.getResolveWatcher();
         if (separate_ssr_graph) {
-            _ = (blk_catch_9: { break :blk_catch_9 ((dev.framework.initTranspiler(transpiler_allocator, (&dev.log), .development, .ssr, (&dev.ssr_transpiler), (&dev.bundler_options.ssr))) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
+            _ = (blk_catch_10: { break :blk_catch_10 ((dev.framework.initTranspiler(transpiler_allocator, (&dev.log), .development, .ssr, (&dev.ssr_transpiler), (&dev.bundler_options.ssr))) catch |e| { _ = &e; return global.throwError(e, generic_action); }); });
             dev.ssr_transpiler.options.dev_server = dev;
             dev.ssr_transpiler.resolver.watcher = dev.bun_watcher.getResolveWatcher();
         }
         _ = assert((dev.server_transpiler.resolver.opts.target != .browser));
         _ = assert((dev.client_transpiler.resolver.opts.target == .browser));
-        dev.framework = (blk_catch_10: { break :blk_catch_10 ((dev.framework.resolve((&dev.server_transpiler.resolver), (&dev.client_transpiler.resolver), options.@"arena")) catch |__ce_10| { _ = &__ce_10; if (dev.framework.is_built_in_react) {
+        dev.framework = (blk_catch_11: { break :blk_catch_11 ((dev.framework.resolve((&dev.server_transpiler.resolver), (&dev.client_transpiler.resolver), options.@"arena")) catch |__ce_11| { _ = &__ce_11; if (dev.framework.is_built_in_react) {
             _ = try bake.Framework.addReactInstallCommandNote((&dev.log));
         }
         return global.throwValue(try dev.log.toJSAggregateError(global, bun.String.static("Framework is missing required files!"))); }); });
@@ -1504,7 +1576,7 @@ pub fn init(options: Options) bun.JSOOM!*DevServer {
         var hash = std.hash.Wyhash.init(128);
         _ = &hash;
         if (bun.Environment.isDebug) {
-            const stat = (blk_catch_13: { break :blk_catch_13 ((bun.sys.stat((blk_catch_11: { break :blk_catch_11 ((bun.selfExePath()) catch |e| { _ = &e; break :blk_catch_11 Output.panic("unhandled {}", .{ e }); }); })).unwrap()) catch |e| { _ = &e; break :blk_catch_13 Output.panic("unhandled {}", .{ e }); }); });
+            const stat = (blk_catch_14: { break :blk_catch_14 ((bun.sys.stat((blk_catch_12: { break :blk_catch_12 ((bun.selfExePath()) catch |e| { _ = &e; break :blk_catch_12 Output.panic("unhandled {}", .{ e }); }); })).unwrap()) catch |e| { _ = &e; break :blk_catch_14 Output.panic("unhandled {}", .{ e }); }); });
             _ = bun.writeAnyToHasher((&hash), stat.mtime());
             _ = hash.update(bake.getHmrRuntime(.client).code);
             _ = hash.update(bake.getHmrRuntime(.server).code);
@@ -1828,7 +1900,7 @@ pub fn initServerRuntime(dev: *DevServer) void {
             _ = &sc;
             separate_ssr_graph = sc.separate_ssr_graph;
         }
-        const hmr_interface = (blk_catch_14: { break :blk_catch_14 ((c.BakeLoadInitialServerCode((blk: {
+        const hmr_interface = (blk_catch_15: { break :blk_catch_15 ((c.BakeLoadInitialServerCode((blk: {
         break :blk @ptrCast(dev.vm.global);
 
 }), runtime, separate_ssr_graph)) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
@@ -1836,11 +1908,11 @@ pub fn initServerRuntime(dev: *DevServer) void {
         if ((!hmr_interface.isObject())) {
             _ = @panic("Internal assertion failure: expected interface from HMR runtime to be an object");
         }
-        const fetch_opt = (blk_catch_15: { break :blk_catch_15 ((hmr_interface.get(dev.vm.global, "handleRequest")) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 null; }); });
+        const fetch_opt = (blk_catch_16: { break :blk_catch_16 ((hmr_interface.get(dev.vm.global, "handleRequest")) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
         const fetch_function = ((fetch_opt) orelse (@panic("Internal assertion failure: expected interface from HMR runtime to contain handleRequest")));
         _ = bun.assert(fetch_function.isCallable());
         dev.server_fetch_function_callback = .create(fetch_function, dev.vm.global);
-        const register_opt = (blk_catch_16: { break :blk_catch_16 ((hmr_interface.get(dev.vm.global, "registerUpdate")) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
+        const register_opt = (blk_catch_17: { break :blk_catch_17 ((hmr_interface.get(dev.vm.global, "registerUpdate")) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 null; }); });
         const register_update = ((register_opt) orelse (@panic("Internal assertion failure: expected interface from HMR runtime to contain registerUpdate")));
         dev.server_register_update_callback = .create(register_update, dev.vm.global);
         _ = fetch_function.ensureStillAlive();
@@ -1919,7 +1991,7 @@ pub fn onJsRequest(dev: *DevServer, req: *Request, resp: AnyResponse) void {
             _ = &arena_guard;
             var __arena_guard_moved = false; _ = &__arena_guard_moved;
             defer if (!__arena_guard_moved) { __arena_guard_moved = true; const __T = @TypeOf(arena_guard); if (@typeInfo(__T) == .optional) { if (arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = arena_guard; _drop_val.__cp_deinit(); } };
-            const json_bytes: []u8 = (blk_catch_17: { break :blk_catch_17 ((entry.renderJSON(dev, arena_guard.@"arena".allocator(), source_id.kind, dev.allocator(), .client)) catch |e| { _ = &e; break :blk_catch_17 (if ((e == error.OutOfMemory)) bun.outOfMemory() else unreachable); }); });
+            const json_bytes: []u8 = (blk_catch_18: { break :blk_catch_18 ((entry.renderJSON(dev, arena_guard.@"arena".allocator(), source_id.kind, dev.allocator(), .client)) catch |e| { _ = &e; break :blk_catch_18 (if ((e == error.OutOfMemory)) bun.outOfMemory() else unreachable); }); });
             var response_guard = StaticRouteDerefGuard{ .route = StaticRoute.initFromAnyBlob((&.fromOwnedSlice(dev.allocator(), json_bytes)), .{ .server = dev.server, .mime_type = (&.json) }) };
             _ = &response_guard;
             var __response_guard_moved = false; _ = &__response_guard_moved;
@@ -1949,7 +2021,7 @@ pub fn onAssetRequest(dev: *DevServer, req: *Request, resp: AnyResponse) void {
         _ = &out_len;
         var out: [out_len]u8 = undefined;
         _ = &out;
-        _ = assert(((blk_catch_18: { break :blk_catch_18 ((std.fmt.hexToBytes((&out), hex)) catch |__ce_18| { _ = &__ce_18; return notFound(resp); }); }).len == @sizeOf(u64)));
+        _ = assert(((blk_catch_19: { break :blk_catch_19 ((std.fmt.hexToBytes((&out), hex)) catch |__ce_19| { _ = &__ce_19; return notFound(resp); }); }).len == @sizeOf(u64)));
         const hash: u64 = @bitCast(out);
         _ = debug.log("onAssetRequest {} {s}", .{ hash, param });
         const asset = ((dev.assets.get(hash)) orelse { return notFound(resp); });
@@ -1962,7 +2034,7 @@ pub fn parseHexToInt(comptime T: type, slice: []const u8) ?T {
         _ = &out_len;
         var out: [out_len]u8 = undefined;
         _ = &out;
-        _ = assert(((blk_catch_19: { break :blk_catch_19 ((std.fmt.hexToBytes((&out), slice)) catch |__ce_19| { _ = &__ce_19; return null; }); }).len == @sizeOf(T)));
+        _ = assert(((blk_catch_20: { break :blk_catch_20 ((std.fmt.hexToBytes((&out), slice)) catch |__ce_20| { _ = &__ce_20; return null; }); }).len == @sizeOf(T)));
         return @bitCast(out);
 }
 
@@ -1970,24 +2042,24 @@ pub inline fn wrapGenericRequestHandler(comptime handler: anytype, comptime is_s
         const fn_info = @typeInfo(@TypeOf(handler)).@"fn";
         _ = assert((fn_info.params.len == 3));
         const uses_any_response = (((fn_info.params[2].@"type") orelse (void)) == AnyResponse);
-        return struct {
+        return (struct {
 
 pub fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response) void {
             _ = assert((dev.magic == .valid));
             _ = handler(dev, req, (if (uses_any_response) AnyResponse.init(resp) else resp));
     }
-}.handle;
+}).handle;
 }
 
 pub inline fn redirectHandler(comptime path: []const u8, comptime is_ssl: bool) *const fn (*DevServer, *Request, *uws.NewApp(is_ssl).Response) void {
-        return struct {
+        return (struct {
 
 pub fn handle(_: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) void {
             _ = resp.writeStatus("302 Found");
             _ = resp.writeHeader("Location", path);
             _ = resp.end("Redirecting...", false);
     }
-}.handle;
+}).handle;
 }
 
 pub fn onIncrementalVisualizer(_: *DevServer, _: *Request, resp: AnyResponse) void {
@@ -2104,7 +2176,7 @@ break;
             _ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined);
             _ = try defer_function(ctx, .next_bundle);
             dev.routeBundlePtr(route_bundle_index).server_state = .bundling;
-            _ = (blk_catch_21: { break :blk_catch_21 ((dev.startAsyncBundle(entry_points.*, false, (blk_catch_20: { break :blk_catch_20 ((std.time.Timer.start()) catch |__ce_20| { _ = &__ce_20; @panic("timers unsupported"); }); }))) catch |e| { _ = &e; break :blk_catch_21 bun.handleOom(e); }); });
+            _ = (blk_catch_22: { break :blk_catch_22 ((dev.startAsyncBundle(entry_points.*, false, (blk_catch_21: { break :blk_catch_21 ((std.time.Timer.start()) catch |__ce_21| { _ = &__ce_21; @panic("timers unsupported"); }); }))) catch |e| { _ = &e; break :blk_catch_22 bun.handleOom(e); }); });
 },
 .deferred_to_next_bundle => {
 _ = bun.assert((dev.next_bundle.route_queue.get(route_bundle_index) != null));
@@ -2180,7 +2252,7 @@ server_handler = saved;
 },
 }
         _ = server_handler.ctx.ref();
-        _ = server_handler.ctx.setAdditionalOnAbortCallback(.{ .cb = DeferredRequest.onAbortWrapper, .data = (&deferred.data), .deref_fn = struct {
+        _ = server_handler.ctx.setAdditionalOnAbortCallback(.{ .cb = DeferredRequest.onAbortWrapper, .data = (&deferred.data), .deref_fn = (struct {
 
 pub fn deref_fn(ptr: *anyopaque) void {
             var deferred_req: *DeferredRequest = (blk: {
@@ -2190,7 +2262,7 @@ pub fn deref_fn(ptr: *anyopaque) void {
             _ = &deferred_req;
             _ = deferred_req.weakDeref();
     }
-}.deref_fn });
+}).deref_fn });
         break :brk .{ .server_handler = server_handler };
 },
 }) };
@@ -2352,7 +2424,7 @@ pub fn computeArgumentsForFrameworkRequest(dev: *DevServer, route_bundle_index: 
 })), .client_id = ((framework_bundle.cached_client_bundle_url.get()) orelse (str: {
         const bundle_index: u32 = route_bundle_index.get();
         const generation: u32 = route_bundle.client_script_generation;
-        var str_guard = BunStringGuard{ .str = (blk_catch_22: { break :blk_catch_22 ((bun.String.createFormat((client_prefix ++ "/route-{x}{x}.js"), .{ std.mem.asBytes((&bundle_index)), std.mem.asBytes((&generation)) })) catch |e| { _ = &e; break :blk_catch_22 bun.handleOom(e); }); }) };
+        var str_guard = BunStringGuard{ .str = (blk_catch_23: { break :blk_catch_23 ((bun.String.createFormat((client_prefix ++ "/route-{x}{x}.js"), .{ std.mem.asBytes((&bundle_index)), std.mem.asBytes((&generation)) })) catch |e| { _ = &e; break :blk_catch_23 bun.handleOom(e); }); }) };
         _ = &str_guard;
         var __str_guard_moved = false; _ = &__str_guard_moved;
         defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
@@ -2584,18 +2656,27 @@ pub fn startAsyncBundle(dev: *DevServer, entry_points: EntryPointList, had_reloa
         }
         var heap = ThreadLocalArena.init();
         _ = &heap;
-        errdefer {
-        _ = heap.deinit();
-        }
+        var heap_guard = ThreadLocalArenaGuard{ .heap = (blk: {
+        break :blk (&heap);
+
+}) };
+        _ = &heap_guard;
+        var __heap_guard_moved = false; _ = &__heap_guard_moved;
+        defer if (!__heap_guard_moved) { __heap_guard_moved = true; const __T = @TypeOf(heap_guard); if (@typeInfo(__T) == .optional) { if (heap_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { heap_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = heap_guard; _drop_val.__cp_deinit(); } };
         const alloc = heap.allocator();
         const ast_memory_allocator = try alloc.create(bun.ast.ASTMemoryAllocator);
         var ast_scope = ast_memory_allocator.enter(alloc);
         _ = &ast_scope;
-        defer {
-        _ = ast_scope.exit();
-        }
+        var ast_scope_guard = AstScopeGuard{ .scope = (blk: {
+        break :blk (&ast_scope);
+
+}) };
+        _ = &ast_scope_guard;
+        var __ast_scope_guard_moved = false; _ = &__ast_scope_guard_moved;
+        defer if (!__ast_scope_guard_moved) { __ast_scope_guard_moved = true; const __T = @TypeOf(ast_scope_guard); if (@typeInfo(__T) == .optional) { if (ast_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { ast_scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = ast_scope_guard; _drop_val.__cp_deinit(); } };
         var bv2 = try BundleV2.init((&dev.server_transpiler), .{ .framework = dev.framework, .client_transpiler = (&dev.client_transpiler), .ssr_transpiler = (&dev.ssr_transpiler), .plugins = dev.bundler_options.plugin }, alloc, .{ .js = dev.vm.eventLoop() }, false, jsc.WorkPool.get(), heap);
         _ = &bv2;
+        heap_guard.active = false;
         bv2.bun_watcher = dev.bun_watcher;
         bv2.asynchronous = true;
         {
@@ -2649,7 +2730,7 @@ _ = unreachable;
             if (Environment.isDebug) {
                 _ = Output.debugWarn("dev.log should not be written into when using DevServer", .{});
             }
-            _ = (blk_catch_23: { break :blk_catch_23 ((dev.log.print(Output.errorWriter())) catch |__ce_23| { _ = &__ce_23;  }); });
+            _ = (blk_catch_24: { break :blk_catch_24 ((dev.log.print(Output.errorWriter())) catch |__ce_24| { _ = &__ce_24;  }); });
         }
 }
 
@@ -2933,51 +3014,27 @@ pub fn finalizeBundle(dev: *DevServer, bv2: *bun.bundle_v2.BundleV2, result: *co
         _ = assert((dev.magic == .valid));
         var had_sent_hmr_event = false;
         _ = &had_sent_hmr_event;
-        defer {
-        {
-            var heap = bv2.graph.heap;
-            _ = &heap;
-            _ = bv2.deinitWithoutFreeingArena();
-            if (dev.current_bundle) |*cb| {
-                _ = &cb;
-                _ = (cb.*).promise.deinitIdempotently();
-            }
-            dev.current_bundle = null;
-            _ = dev.log.clearAndFree();
-            _ = heap.deinit();
-            _ = (blk_catch_25: { break :blk_catch_25 ((dev.assets.reindexIfNeeded(dev.allocator())) catch |__ce_25| { _ = &__ce_25;  }); });
-            if ((dev.testing_batch_events == .enable_after_bundle)) {
-                dev.testing_batch_events = .{ .enabled = .empty };
-                _ = dev.publish(.testing_watch_synchronization, (&.{ MessageId.testing_watch_synchronization.char(), 0 }), .binary);
-            } else {
-                _ = dev.publish(.testing_watch_synchronization, (&.{ MessageId.testing_watch_synchronization.char(), (if (had_sent_hmr_event) 4 else 3) }), .binary);
-            }
-            _ = dev.startNextBundleIfPresent();
-            if (dev.server) |server| {
-                _ = &server;
-                _ = server.onStaticRequestComplete();
-            }
-        }
-        }
-        const current_bundle = (&dev.current_bundle.?);
-        defer {
-        {
-            if ((current_bundle.requests.first != null)) {
-                _ = Output.debug("current_bundle.requests.first != null. this leaves pending requests without an error page!", .{});
-            }
-            while (current_bundle.requests.popFirst()) |node| {
-                var req_guard = DeferredRequestGuard{ .req = (blk: {
-                break :blk (&node.data);
+        var finalize_guard = FinalizeBundleGuard{ .dev = (blk: {
+        break :blk dev;
+
+}), .bv2 = (blk: {
+        break :blk bv2;
+
+}), .had_sent_hmr_event = (blk: {
+        break :blk (&had_sent_hmr_event);
 
 }) };
-                _ = &req_guard;
-                var __req_guard_moved = false; _ = &__req_guard_moved;
-                defer if (!__req_guard_moved) { __req_guard_moved = true; const __T = @TypeOf(req_guard); if (@typeInfo(__T) == .optional) { if (req_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { req_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = req_guard; _drop_val.__cp_deinit(); } };
-                const req = req_guard.req;
-                _ = req.abort();
-            }
-        }
-        }
+        _ = &finalize_guard;
+        var __finalize_guard_moved = false; _ = &__finalize_guard_moved;
+        defer if (!__finalize_guard_moved) { __finalize_guard_moved = true; const __T = @TypeOf(finalize_guard); if (@typeInfo(__T) == .optional) { if (finalize_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { finalize_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = finalize_guard; _drop_val.__cp_deinit(); } };
+        const current_bundle = (&dev.current_bundle.?);
+        var requests_guard = CurrentBundleRequestsGuard{ .current_bundle = (blk: {
+        break :blk current_bundle;
+
+}) };
+        _ = &requests_guard;
+        var __requests_guard_moved = false; _ = &__requests_guard_moved;
+        defer if (!__requests_guard_moved) { __requests_guard_moved = true; const __T = @TypeOf(requests_guard); if (@typeInfo(__T) == .optional) { if (requests_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { requests_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = requests_guard; _drop_val.__cp_deinit(); } };
         _ = dev.graph_safety_lock.lock();
         var lock_guard = GraphSafetyLockGuard{ .lock = (blk: {
         break :blk (&dev.graph_safety_lock);

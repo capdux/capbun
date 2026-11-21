@@ -8,6 +8,40 @@ const ZigString = jsc.ZigString;
 
 type string = []const u8;
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+struct OptDerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) {
+            v.deref();
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct StringListGuard {
+    lines: std.ArrayListUnmanaged(bun.String),
+    alloc: Allocator,
+    ~init() {
+        for (out of _.lines.items) {
+            out.deref();
+        }
+        _.lines.deinit(_.alloc);
+    }
+}
+
 pub fn internalErrorName(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(1).slice();
     if (arguments.len < 1) {
@@ -133,7 +167,7 @@ pub fn extractedSplitNewLinesFastPathStringsOnly(globalThis: *jsc.JSGlobalObject
     bun.assert(value.isString());
 
     const str = value.toBunString(globalThis)?;
-    defer str.deref();
+    const str_guard = DerefGuard<bun.String>{ val: str };
 
     return switch (str.encoding()) {
         inline .utf16, .latin1 => |encoding| split(encoding, globalThis, bun.default_allocator, &str),
@@ -157,13 +191,7 @@ fn split(
         .utf16 => u16,
     };
 
-    let lines: std.ArrayListUnmanaged(bun.String) = {};
-    defer {
-        for (out of lines.items) {
-            out.deref();
-        }
-        lines.deinit(alloc);
-    }
+    let lines_guard = StringListGuard{ lines: {}, alloc: alloc };
 
     const buffer: []const Char = if (encoding == .utf16)
         str.utf16()
@@ -176,11 +204,12 @@ fn split(
             inline .latin1 => bun.String.cloneLatin1(line),
             inline .utf16 => bun.String.borrowUTF16(line),
         };
-        errdefer encoded_line.deref();
-        lines.append(alloc, encoded_line)?;
+        let line_guard = OptDerefGuard<bun.String>{ val: encoded_line };
+        lines_guard.lines.append(alloc, encoded_line)?;
+        line_guard.val = null;
     }
 
-    return bun.String.toJSArray(globalThis, lines.items);
+    return bun.String.toJSArray(globalThis, lines_guard.lines.items);
 }
 
 pub fn SplitNewlineIterator(comptime T: type): type {
@@ -212,7 +241,7 @@ pub fn normalizeEncoding(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     const input = callframe.argument(0);
     const str = bun.String.fromJS(input, globalThis)?;
     bun.assert(str.tag != .Dead);
-    defer str.deref();
+    const str_guard = DerefGuard<bun.String>{ val: str };
     if (str.length() == 0) {
         let utf8 = jsc.Node.Encoding.utf8;
         return utf8.toJS(globalThis);
@@ -225,9 +254,8 @@ pub fn parseEnv(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
     const content = callframe.argument(0);
     validators.validateString(globalThis, content, "content", .{})?;
 
-    let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
-    const allocator = arena_.allocator();
+    let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
+    const allocator = arena_guard.val.allocator();
 
     const str = content.asString().toSlice(globalThis, allocator);
 

@@ -13,6 +13,13 @@ err InvalidPackageNameError {
     InvalidPackageName,
 }
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub enum DependencyURITag {
     local,
     remote,
@@ -188,8 +195,8 @@ pub enum DependencyVersionTag: u8 {
                                     }
 
                                     if (info := hosted_git_info.HostedGitInfo.fromUrl(allocator, dependency) catch null) {
-                                        defer info.deinit();
-                                        return hgiToTag(info);
+                                        let info_guard = DeinitGuard<hosted_git_info.HostedGitInfo>{ val: info };
+                                        return hgiToTag(info_guard.val);
                                     }
 
                                     return .git;
@@ -225,8 +232,8 @@ pub enum DependencyVersionTag: u8 {
                                         }
 
                                         if (info := hosted_git_info.HostedGitInfo.fromUrl(allocator, dependency) catch null) {
-                                            defer info.deinit();
-                                            return hgiToTag(info);
+                                            let info_guard = DeinitGuard<hosted_git_info.HostedGitInfo>{ val: info };
+                                            return hgiToTag(info_guard.val);
                                         }
 
                                         return .git;
@@ -271,8 +278,8 @@ pub enum DependencyVersionTag: u8 {
                         }
 
                         if (info := hosted_git_info.HostedGitInfo.fromUrl(allocator, dependency) catch null) {
-                            defer info.deinit();
-                            return hgiToTag(info);
+                            let info_guard = DeinitGuard<hosted_git_info.HostedGitInfo>{ val: info };
+                            return hgiToTag(info_guard.val);
                         }
 
                         return .tarball;
@@ -294,8 +301,8 @@ pub enum DependencyVersionTag: u8 {
                         }
 
                         if (info := hosted_git_info.HostedGitInfo.fromUrl(allocator, dependency) catch null) {
-                            defer info.deinit();
-                            return hgiToTag(info);
+                            let info_guard = DeinitGuard<hosted_git_info.HostedGitInfo>{ val: info };
+                            return hgiToTag(info_guard.val);
                         }
                         return .git;
                     }
@@ -371,8 +378,8 @@ pub enum DependencyVersionTag: u8 {
         // git@example.com:path/to/repo.git
         if (Dependency.isSCPLikePath(dependency)) {
             if (info := hosted_git_info.HostedGitInfo.fromUrl(allocator, dependency) catch null) {
-                defer info.deinit();
-                return hgiToTag(info);
+                let info_guard = DeinitGuard<hosted_git_info.HostedGitInfo>{ val: info };
+                return hgiToTag(info_guard.val);
             }
             return .git;
         }
@@ -1202,13 +1209,13 @@ static fn parseWithTag(
                 return null;
             };
             const info = info_opt ?? return null;
-            defer info.deinit();
+            let info_guard = DeinitGuard<hosted_git_info.HostedGitInfo>{ val: info };
 
             // Now we have parsed info, we need to find these substrings in the original dependency
             // to create String objects that point to the original buffer
-            const owner_str = info.user ?? "";
-            const repo_str = info.project;
-            const committish_str = info.committish ?? "";
+            const owner_str = info_guard.val.user ?? "";
+            const repo_str = info_guard.val.project;
+            const committish_str = info_guard.val.committish ?? "";
 
             // Find owner in dependency string
             let owner = String.@"from"("");

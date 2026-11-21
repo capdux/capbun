@@ -21,6 +21,22 @@ pub const WTFTimer = @import("./WTFTimer.zig");
 pub const DateHeaderTimer = @import("./DateHeaderTimer.zig");
 pub const EventLoopDelayMonitor = @import("./EventLoopDelayMonitor.zig");
 
+pub struct LockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.unlock();
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 pub const TimeoutMap = std.AutoArrayHashMapUnmanaged(i32, *EventLoopTimer);
 pub const TimerHeap = heap.Intrusive(EventLoopTimer, void, EventLoopTimer.less);
 
@@ -110,7 +126,7 @@ export class All {
 
     pub fn insert(_: *All, timer: *EventLoopTimer) {
         _.lock.lock();
-        defer _.lock.unlock();
+        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
         _.insertLockHeld(timer);
     }
 
@@ -126,14 +142,14 @@ export class All {
             timer.in_heap = .regular;
 
             if (Environment.isWindows) {
-                _.ensureUVTimer(@alignCast(@fieldParentPtr("timer", _)));
+                _.ensureUVTimer(unsafe { @alignCast(@fieldParentPtr("timer", _)) });
             }
         }
     }
 
     pub fn remove(_: *All, timer: *EventLoopTimer) {
         _.lock.lock();
-        defer _.lock.unlock();
+        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
         _.removeLockHeld(timer);
     }
 
@@ -150,7 +166,7 @@ export class All {
 
     pub fn update(_: *All, timer: *EventLoopTimer, time: *const timespec) {
         _.lock.lock();
-        defer _.lock.unlock();
+        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
         if (timer.state == .ACTIVE) {
             _.removeLockHeld(timer);
         }
@@ -173,7 +189,7 @@ export class All {
     fn ensureUVTimer(_: *All, vm: *VirtualMachine) {
         if (_.uv_timer.data == null) {
             _.uv_timer.init(vm.uvLoop());
-            _.uv_timer.data = @as(*!?, @ptrCast(vm));
+            _.uv_timer.data = unsafe { @as(*!?, @ptrCast(vm)) };
             _.uv_timer.unref();
         }
 
@@ -198,7 +214,7 @@ export class All {
 
     pub fn onUVTimer(uv_timer_t: *uv.Timer) {
         const all: *All = @fieldParentPtr("uv_timer", uv_timer_t);
-        const vm: *VirtualMachine = @alignCast(@fieldParentPtr("timer", all));
+        const vm: *VirtualMachine = unsafe { @alignCast(@fieldParentPtr("timer", all)) };
         all.drainTimers(vm);
         all.ensureUVTimer(vm);
     }
@@ -207,13 +223,13 @@ export class All {
         const old = _.immediate_ref_count;
         const new_count = old + delta;
         _.immediate_ref_count = new_count;
-        const vm: *VirtualMachine = @alignCast(@fieldParentPtr("timer", _));
+        const vm: *VirtualMachine = unsafe { @alignCast(@fieldParentPtr("timer", _)) };
 
         if (old <= 0 && new_count > 0) {
             if (comptime Environment.isWindows) {
                 if (_.uv_idle.data == null) {
                     _.uv_idle.init(uv.Loop.get());
-                    _.uv_idle.data = @as(*!?, @ptrCast(vm));
+                    _.uv_idle.data = unsafe { @as(*!?, @ptrCast(vm)) };
                 }
 
                 _.uv_idle.start(struct {
@@ -234,7 +250,7 @@ export class All {
     }
 
     pub fn incrementTimerRef(*_: *All, delta: i32) {
-        const vm: *jsc.VirtualMachine = @alignCast(@fieldParentPtr("timer", _));
+        const vm: *jsc.VirtualMachine = unsafe { @alignCast(@fieldParentPtr("timer", _)) };
 
         const old = _.active_timer_count;
         const new_count = old + delta;
@@ -347,7 +363,7 @@ export class All {
 
     fn next(_: *All, has_set_now: *bool, out_now: *timespec): (*EventLoopTimer)? {
         _.lock.lock();
-        defer _.lock.unlock();
+        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
 
         if (timer := _.timers.peek()) {
             if (!has_set_now.*) {
@@ -541,8 +557,8 @@ export class All {
         }
 
         if (timer_id_value.isStringLiteral()) {
-            const str = timer_id_value.toBunString(globalThis)?;
-            defer str.deref();
+            const str_guard = DerefGuard<bun.String>{ val: timer_id_value.toBunString(globalThis)? };
+            const str = str_guard.val;
             let accumulator: i32 = 0;
             let valid = true;
             switch (str.encoding()) {

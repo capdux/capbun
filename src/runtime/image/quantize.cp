@@ -9,6 +9,24 @@
 //! entry. Mapping is nearest-entry by squared RGBA distance, optionally with
 //! Floyd–Steinberg error diffusion (`dither: true`).
 
+pub struct FreeGuard<T> {
+    slice: ([]T)?,
+
+    ~init() {
+        if (s := _.slice) {
+            bun.default_allocator.free(s);
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.deinit(bun.default_allocator); }
+    }
+}
+
 pub struct Result {
     /// `[colors][4]u8` RGBA palette, `bun.default_allocator`-owned.
     palette: []u8,
@@ -68,14 +86,14 @@ pub fn quantize(rgba: []const u8, w: u32, h: u32, opts: Options): QuantizeError!
     // `order` is a permutation of pixel indices that we partition in-place;
     // each Box owns a contiguous [lo,hi) slice of it.
     let order = bun.default_allocator.alloc(u32, n)?;
-    defer bun.default_allocator.free(order);
+    let order_guard = FreeGuard<u32>{ slice: order };
     let oi: usize = 0;
     while (oi < n) : (oi += 1) {
         order[oi] = @intCast(oi);
     }
 
     let boxes = std.ArrayList(QuantizeBox).initCapacity(bun.default_allocator, want)?;
-    defer boxes.deinit(bun.default_allocator);
+    let boxes_guard = DeinitWithAllocGuard<std.ArrayList(QuantizeBox)>{ ptr: unsafe { &boxes } };
     boxes.appendAssumeCapacity(shrink(rgba, order, 0, n));
 
     while (boxes.items.len < want) {
@@ -108,7 +126,7 @@ pub fn quantize(rgba: []const u8, w: u32, h: u32, opts: Options): QuantizeError!
 
     const k: u16 = @intCast(boxes.items.len);
     let palette = bun.default_allocator.alloc(u8, @as(usize, k) * 4)?;
-    errdefer bun.default_allocator.free(palette);
+    let palette_guard = FreeGuard<u8>{ slice: palette };
     let has_alpha = false;
     let bi: usize = 0;
     while (bi < boxes.items.len) : (bi += 1) {
@@ -125,7 +143,7 @@ pub fn quantize(rgba: []const u8, w: u32, h: u32, opts: Options): QuantizeError!
     }
 
     let indices = bun.default_allocator.alloc(u8, n)?;
-    errdefer bun.default_allocator.free(indices);
+    let indices_guard = FreeGuard<u8>{ slice: indices };
     if (opts.dither) {
         mapFloydSteinberg(rgba, w, h, palette, k, indices)?;
     } else {
@@ -138,6 +156,8 @@ pub fn quantize(rgba: []const u8, w: u32, h: u32, opts: Options): QuantizeError!
         }
     }
 
+    palette_guard.slice = null;
+    indices_guard.slice = null;
     return { palette: palette, indices: indices, colors: k, has_alpha: has_alpha };
 }
 
@@ -169,9 +189,9 @@ fn mapFloydSteinberg(
     // `nxt` collects error for the row below.
     const stride: usize = @as(usize, w) * 4;
     let cur = bun.default_allocator.alloc(i32, stride)?;
-    defer bun.default_allocator.free(cur);
+    let cur_guard = FreeGuard<i32>{ slice: cur };
     let nxt = bun.default_allocator.alloc(i32, stride)?;
-    defer bun.default_allocator.free(nxt);
+    let nxt_guard = FreeGuard<i32>{ slice: nxt };
     @memset(cur, 0);
     @memset(nxt, 0);
 

@@ -50,6 +50,36 @@ fn ignoredWorkspacePaths(path: []const u8): bool {
 
 const GlobWalker = glob.GlobWalker(ignoredWorkspacePaths, glob.walk.SyscallAccessor, false);
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitBoolGuard<T> {
+    val: T,
+    arg: bool,
+    ~init() {
+        if (_.arg) _.val.deinit(true) else _.val.deinit(false);
+    }
+}
+
+pub struct DestroyGuard<T> {
+    allocator: Allocator,
+    ptr: *T!,
+    ~init() {
+        _.allocator.destroy(_.ptr);
+    }
+}
+
+pub struct ArenaResetGuard {
+    arena: *std.heap.ArenaAllocator!,
+    ~init() {
+        * = _.arena.reset(.retain_capacity);
+    }
+}
+
 @root struct WorkspaceMap {
     map: Map,
 
@@ -155,11 +185,15 @@ pub fn processNamesArray(
 
     const orig_msgs_len = log.msgs.items.len;
 
-    let workspace_globs = std.array_list.Managed(string).init(allocator);
-    defer workspace_globs.deinit();
+    let workspace_globs = DeinitGuard<std.array_list.Managed(string)>{
+        val: std.array_list.Managed(string).init(allocator),
+    };
     const filepath_bufOS = allocator.create(bun.PathBuffer) catch unreachable;
-    const filepath_buf = std.mem.asBytes(filepath_bufOS);
-    defer allocator.destroy(filepath_bufOS);
+    const filepath_buf_guard = DestroyGuard<bun.PathBuffer>{
+        allocator: allocator,
+        ptr: filepath_bufOS,
+    };
+    const filepath_buf = std.mem.asBytes(filepath_buf_guard.ptr);
 
     for (item of arr.slice()) {
         const input_path_opt = item.asStringZ(allocator)?;
@@ -172,7 +206,7 @@ pub fn processNamesArray(
         if (input_path.len == 0 || (input_path.len == 1 && input_path[0] == '.') || strings.eqlComptime(input_path, "./") || strings.eqlComptime(input_path, ".\\\\")) continue;
 
         if (glob.detectGlobSyntax(input_path)) {
-            bun.handleOom(workspace_globs.append(input_path));
+            bun.handleOom(workspace_globs.val.append(input_path));
             continue;
         }
 
@@ -235,7 +269,7 @@ pub fn processNamesArray(
             true,
         );
         if (comptime Environment.isWindows) {
-            Path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(workspace_path));
+            unsafe { Path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(workspace_path)); }
         }
 
         if (builder := string_builder) {
@@ -254,21 +288,25 @@ pub fn processNamesArray(
         })?;
     }
 
-    if (workspace_globs.items.len > 0) {
-        let arena_alloc = std.heap.ArenaAllocator.init(allocator);
-        defer arena_alloc.deinit();
-        for (user_pattern of workspace_globs.items) {
-            defer * = arena_alloc.reset(.retain_capacity);
+    if (workspace_globs.val.items.len > 0) {
+        let arena_alloc = DeinitGuard<std.heap.ArenaAllocator>{
+            val: std.heap.ArenaAllocator.init(allocator),
+        };
+        for (user_pattern of workspace_globs.val.items) {
+            let arena_reset = ArenaResetGuard{
+                arena: unsafe { &arena_alloc.val },
+            };
+            * = &arena_reset;
 
             const glob_pattern = if (user_pattern.len == 0) "package.json" else brk: {
                 const parts: [2][]const u8 = [ user_pattern, "package.json" ];
-                break :brk bun.handleOom(arena_alloc.allocator().dupe(u8, bun.path.join(&parts, .auto)));
+                break :brk bun.handleOom(arena_alloc.val.allocator().dupe(u8, bun.path.join(&parts, .auto)));
             };
 
             let walker: GlobWalker = {};
             let cwd = bun.path.dirname(source.path.text, .auto);
             cwd = if (bun.strings.eql(cwd, "")) bun.fs.FileSystem.instance.top_level_dir else cwd;
-            const init_res = walker.initWithCwd(&arena_alloc, glob_pattern, cwd, false, false, false, false, true)?;
+            const init_res = walker.initWithCwd(unsafe { &arena_alloc.val }, glob_pattern, cwd, false, false, false, false, true)?;
             if (err_opt := init_res.asErr()) {
                 const e = err_opt;
                 log.addErrorFmt(
@@ -280,13 +318,17 @@ pub fn processNamesArray(
                 ) catch {};
                 return error.GlobError;
             }
-            defer walker.deinit(false);
-
-            let iter = GlobWalker.Iterator{
-                walker: &walker,
+            let walker_guard = DeinitBoolGuard<GlobWalker>{
+                val: walker,
+                arg: false,
             };
-            defer iter.deinit();
-            const iter_res = iter.init()?;
+
+            let iter = DeinitGuard<GlobWalker.Iterator>{
+                val: GlobWalker.Iterator{
+                    walker: unsafe { &walker_guard.val },
+                },
+            };
+            const iter_res = iter.val.init()?;
             if (err_opt := iter_res.asErr()) {
                 const e = err_opt;
                 log.addErrorFmt(
@@ -300,7 +342,7 @@ pub fn processNamesArray(
             }
 
             next_match: while (true) {
-                const match_result = iter.next()?;
+                const match_result = iter.val.next()?;
                 let matched_path: []const u8 = "";
                 switch (match_result) {
                     .result => |r| {
@@ -374,7 +416,7 @@ pub fn processNamesArray(
                     true,
                 );
                 if (comptime Environment.isWindows) {
-                    Path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(workspace_path));
+                    unsafe { Path.dangerouslyConvertPathToPosixInPlace(u8, @constCast(workspace_path)); }
                 }
 
                 if (builder := string_builder) {

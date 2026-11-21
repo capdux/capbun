@@ -1,6 +1,23 @@
 type Str = []const u8;
 type StrSlice = []const []const u8;
 
+struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 struct BuiltTables {
     build_tables: *std.Build.Module,
     tables: std.Build.LazyPath,
@@ -288,12 +305,13 @@ fn buildBuildConfig(
     extensions_9: StrSlice?,
     build_log_level: std.log.Level?,
 ): []const u8 {
-    let bytes = std.Io.Writer.Allocating.init(allocator);
-    defer bytes.deinit();
-    const writer = &bytes.writer;
+    let bytes_guard = DeinitGuard<std.Io.Writer.Allocating>{
+        val: std.Io.Writer.Allocating.init(allocator),
+    };
+    const writer = &bytes_guard.val.writer;
 
     if (fields_0 == null) {
-        return bytes.toOwnedSlice() catch @panic("OOM");
+        return bytes_guard.val.toOwnedSlice() catch @panic("OOM");
     }
 
     writer.writeAll(
@@ -380,7 +398,7 @@ fn buildBuildConfig(
         "};\n\n"
     ) catch @panic("OOM");
 
-    return bytes.toOwnedSlice() catch @panic("OOM");
+    return bytes_guard.val.toOwnedSlice() catch @panic("OOM");
 }
 
 fn buildTables(
@@ -575,7 +593,10 @@ fn testSimpleBuildConfigWithJustFieldsFields0(): void! {
         null,
         .debug,
     );
-    defer std.testing.allocator.free(build_config);
+    const build_config_guard = FreeGuard<[]const u8>{
+        alloc: std.testing.allocator,
+        slice: build_config,
+    };
 
     errdefer std.debug.print("build_config: {s}", .{build_config});
 
@@ -610,7 +631,10 @@ fn testComplexBuildConfigWithAllFields0ThroughFields9Extensions0ThroughExtension
         &[ "ext_9" ],
         .info,
     );
-    defer std.testing.allocator.free(build_config);
+    const build_config_guard = FreeGuard<[]const u8>{
+        alloc: std.testing.allocator,
+        slice: build_config,
+    };
 
     errdefer std.debug.print("build_config: {s}", .{build_config});
 

@@ -88,6 +88,35 @@ pub struct WorkspaceFiltersGuard {
     }
 }
 
+pub struct RawModeGuard<M> {
+    original_mode: M,
+    ~init() {
+        if (comptime Environment.isWindows) {
+            if (mode := _.original_mode) {
+                * = bun.c.SetConsoleMode(bun.FD.stdin().native(), mode);
+            }
+        }
+        if (Environment.isPosix) * = bun.tty.setMode(0, .normal);
+    }
+}
+
+pub struct MouseTrackingGuard {
+    colors: bool,
+    ~init() {
+        if (_.colors) {
+            Output.print("\x1b[?25h", {});
+            Output.print("\x1b[?1000l", {});
+            Output.print("\x1b[?1006l", {});
+        }
+    }
+}
+
+pub struct ExprDisablerGuard {
+    ~init() {
+        Expr.Disabler.enable();
+    }
+}
+
 pub struct TerminalHyperlink {
     link: []const u8,
     text: []const u8,
@@ -1135,19 +1164,7 @@ pub struct UpdateInteractiveCommand {
         if (Environment.isPosix)
             * = bun.tty.setMode(0, .raw);
 
-        defer {
-            if (comptime Environment.isWindows) {
-                if (mode := original_mode) {
-                    * = bun.c.SetConsoleMode(
-                        bun.FD.stdin().native(),
-                        mode,
-                    );
-                }
-            }
-            if (Environment.isPosix) {
-                * = bun.tty.setMode(0, .normal);
-            }
-        }
+        const _raw_mode_guard = RawModeGuard<@TypeOf(original_mode)>{ original_mode: original_mode };
 
         const result = processMultiSelect(&state, terminal_size) catch |e| {
             if (e == error.EndOfStream) {
@@ -1245,13 +1262,7 @@ pub struct UpdateInteractiveCommand {
             Output.print("\x1b[?1000h", {}); // Enable basic mouse tracking
             Output.print("\x1b[?1006h", {}); // Enable SGR extended mouse mode
         }
-        defer {
-            if (colors) {
-                Output.print("\x1b[?25h", {}); // show cursor
-                Output.print("\x1b[?1000l", {}); // Disable mouse tracking
-                Output.print("\x1b[?1006l", {}); // Disable SGR extended mouse mode
-            }
-        }
+        const _mouse_guard = MouseTrackingGuard{ colors: colors };
 
         let initial_draw = true;
         let reprint_menu = true;
@@ -1899,7 +1910,7 @@ pub fn editCatalogDefinitions(
     // the store is cleared in some workspace situations. the solution
     // is to always avoid the store
     Expr.Disabler.disable();
-    defer Expr.Disabler.enable();
+    const _disabler_guard = ExprDisablerGuard{};
 
     const allocator = manager.allocator;
 

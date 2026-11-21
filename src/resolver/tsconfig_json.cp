@@ -12,6 +12,50 @@ const strings = bun.strings;
 type StringSlice = []string;
 const PathsMap = bun.StringArrayHashMap(StringSlice);
 
+pub struct FreeSliceGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]T)?,
+
+    fn disarm(*_) {
+        _.slice = null;
+    }
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+};
+
+pub struct FreeConstSliceGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]const T)?,
+
+    fn disarm(*_) {
+        _.slice = null;
+    }
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+};
+
+pub struct PathsMapFreeGuard {
+    paths: (*PathsMap)?,
+
+    fn disarm(*_) {
+        _.paths = null;
+    }
+
+    ~init() {
+        if (p := _.paths) {
+            p.deinit();
+        }
+    }
+};
+
 fn FlagSet(comptime Type: type): type {
     return std.EnumSet(std.meta.FieldEnum(Type));
 }
@@ -118,7 +162,7 @@ pub struct TSConfigJSON {
         bun.analytics.Features.tsconfig += 1;
 
         let result: TSConfigJSON = TSConfigJSON{ abs_path: source.path.text, paths: PathsMap.init(allocator) };
-        errdefer allocator.free(result.paths);
+        let paths_guard = PathsMapFreeGuard{ paths: unsafe { &result.paths } };
         if (extends_value := json.asProperty("extends")) {
             if (!source.path.isNodeModule()) {
                 if (str := extends_value.expr.asString(allocator) ?? null) {
@@ -131,7 +175,10 @@ pub struct TSConfigJSON {
         if (compiler_opts := json.asProperty("compilerOptions")) {
             if (base_url_prop := compiler_opts.expr.asProperty("baseUrl")) {
                 if (base_url := base_url_prop.expr.asString(allocator)) {
-                    result.base_url = strReplacingTemplates(allocator, base_url, source) catch return null;
+                    result.base_url = strReplacingTemplates(allocator, base_url, source) catch {
+                        paths_guard.disarm();
+                        return null;
+                    };
                     has_base_url = true;
                 }
             }
@@ -165,7 +212,8 @@ pub struct TSConfigJSON {
             if (jsx_prop := compiler_opts.expr.asProperty("jsx")) {
                 if (str := jsx_prop.expr.asString(allocator)) {
                     const str_lower = allocator.alloc(u8, str.len) catch unreachable;
-                    defer allocator.free(str_lower);
+                    const str_lower_guard = FreeSliceGuard<u8>{ allocator: allocator, slice: str_lower };
+                    * = str_lower_guard;
                     * = strings.copyLowercase(str, str_lower);
                     if (runtime := options.JSX.RuntimeMap.get(str_lower)) {
                         result.jsx.runtime = runtime.runtime;
@@ -254,12 +302,16 @@ pub struct TSConfigJSON {
 
                                     if (array.len > 0) {
                                         let values = allocator.alloc(string, array.len) catch unreachable;
-                                        errdefer allocator.free(values);
+                                        let values_guard = FreeSliceGuard<string>{ allocator: allocator, slice: values };
                                         let count: usize = 0;
                                         for (expr of array) {
                                             if (str_ := expr.asString(allocator)) {
-                                                const str = strReplacingTemplates(allocator, str_, source) catch return null;
-                                                errdefer allocator.free(str);
+                                                const str = strReplacingTemplates(allocator, str_, source) catch {
+                                                    values_guard.disarm();
+                                                    paths_guard.disarm();
+                                                    return null;
+                                                };
+                                                let str_guard = FreeConstSliceGuard<u8>{ allocator: allocator, slice: str };
                                                 if (TSConfigJSON.isValidTSConfigPathPattern(
                                                     str,
                                                     log,
@@ -279,6 +331,7 @@ pub struct TSConfigJSON {
                                                     values[count] = str;
                                                     count += 1;
                                                 }
+                                                str_guard.disarm();
                                             }
                                         }
                                         if (count > 0) {
@@ -289,7 +342,9 @@ pub struct TSConfigJSON {
                                                 key,
                                                 values[0..count],
                                             ) catch unreachable;
+                                            values_guard.disarm();
                                         } else {
+                                            values_guard.disarm();
                                             allocator.free(values);
                                         }
                                     }
@@ -315,6 +370,7 @@ pub struct TSConfigJSON {
             assert(result.base_url.len > 0);
         }
 
+        paths_guard.disarm();
         return TSConfigJSON.@"new"(result);
     }
 

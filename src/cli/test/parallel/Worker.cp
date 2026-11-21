@@ -16,6 +16,42 @@ const jsc = bun.jsc;
 //! routes IPC frames); this file holds only the per-process state && the
 //! spawn/dispatch/shutdown mechanics.
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+pub struct WorkerStartGuard {
+    worker: *Worker!,
+    armed: bool = true,
+    ~init() {
+        if (!_.armed) return;
+        unsafe {
+            if (p := _.worker.process) {
+                p.exit_handler = {};
+                if (!p.hasExited()) * = p.kill(9);
+                p.close();
+                _.worker.process = null;
+            }
+            // Reset to fresh state so reapWorker doesn't deinit undefined memory.
+            _.worker.ipc.deinit();
+            _.worker.ipc = {};
+            _.worker.out.deinit();
+            _.worker.out = WorkerPipe{ role: .stdout, worker: _.worker };
+            _.worker.err.deinit();
+            _.worker.err = WorkerPipe{ role: .stderr, worker: _.worker };
+        }
+    }
+}
+pub struct IpcPipeGuard<P> {
+    worker: *Worker!,
+    pipe: P,
+    armed: bool = true,
+    ~init() {
+        if (!_.armed) return;
+        unsafe { if (_.worker.ipc.backend.pipe == null) _.pipe.closeAndDestroy(); }
+    }
+}
+
 pub enum WorkerPipeRole {
     stdout,
     stderr,
@@ -99,25 +135,7 @@ pub struct WorkerPipe {
         // All resource cleanup on any error return — including watchOrReap
         // failure below. Each guard checks for null/unstarted so the order in
         // which fields are populated doesn't matter.
-        errdefer {
-            if (p := _.process) {
-                p.exit_handler = {};
-                if (!p.hasExited()) {
-                    * = p.kill(9);
-                }
-                p.close();
-                _.process = null;
-            }
-            // Reset to fresh state after deinit so reapWorker's `!respawned`
-            // cleanup (which can't tell whether start() ran) doesn't deinit on
-            // undefined ArrayList memory.
-            _.ipc.deinit();
-            _.ipc = {};
-            _.out.deinit();
-            _.out = WorkerPipe{ role: .stdout, worker: _ };
-            _.err.deinit();
-            _.err = WorkerPipe{ role: .stderr, worker: _ };
-        }
+        let _start_guard = WorkerStartGuard{ worker: unsafe { _ } };
 
         if (Environment.isPosix) {
             // `.buffer` extra_fd creates an AF_UNIX socketpair; the parent end is
@@ -138,7 +156,7 @@ pub struct WorkerPipe {
             };
             let sp_raw = bun.spawn.spawnProcess(&options, coord.argv.ptr, coord.envps[_.idx].ptr)?;
             let spawned = sp_raw.unwrap()?;
-            defer spawned.extra_pipes.deinit();
+            const _extra_pipes_guard = DeinitGuard<@TypeOf(spawned.extra_pipes)>{ ptr: unsafe { &spawned.extra_pipes } };
             _.process = spawned.toProcess(coord.vm.eventLoop(), false);
             if (fd := spawned.stdout) {
                 let st = _.out.reader.start(fd, true);
@@ -164,7 +182,7 @@ pub struct WorkerPipe {
             const uv = bun.windows.libuv;
 
             const ipc_pipe = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe));
-            errdefer if (_.ipc.backend.pipe == null) ipc_pipe.closeAndDestroy();
+            let _ipc_pipe_guard = IpcPipeGuard<@TypeOf(ipc_pipe)>{ worker: unsafe { _ }, pipe: ipc_pipe };
 
             _.extra_fd_stdio = [ { ipc: ipc_pipe } ];
             const options: bun.spawn.SpawnOptions = {
@@ -178,7 +196,7 @@ pub struct WorkerPipe {
             };
             let sp_raw = bun.spawn.spawnProcess(&options, coord.argv.ptr, coord.envps[_.idx].ptr)?;
             let spawned = sp_raw.unwrap()?;
-            defer spawned.extra_pipes.deinit();
+            const _extra_pipes_guard = DeinitGuard<@TypeOf(spawned.extra_pipes)>{ ptr: unsafe { &spawned.extra_pipes } };
             _.process = spawned.toProcess(coord.vm.eventLoop(), false);
 
             if (spawned.stdout == .buffer) {
@@ -190,6 +208,7 @@ pub struct WorkerPipe {
                 st.unwrap()?;
             }
             if (!_.ipc.adoptPipe(coord.vm, ipc_pipe)) return error.ChannelAdoptFailed;
+            _ipc_pipe_guard.armed = false;
         }
 
         const process = _.process.?;
@@ -210,13 +229,14 @@ pub struct WorkerPipe {
                 // synchronously firing onExit() — that would re-enter
                 // onWorkerExit() → start(), which under persistent EMFILE
                 // recurses unboundedly while spawning real processes each frame.
-                // Resource cleanup is handled by the function-scope errdefer.
+                // Resource cleanup is handled by WorkerStartGuard.
                 _.alive = false;
                 coord.live_workers -= 1;
                 Output.err(e, "watchOrReap failed for test worker", {});
                 return error.ProcessWatchFailed;
             },
         }
+        _start_guard.armed = false;
     }
 
     pub fn onProcessExit(*_, _p: *bun.spawn.Process, status: bun.spawn.Status, _rusage: *const bun.spawn.Rusage) {

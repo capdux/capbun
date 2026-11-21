@@ -9,6 +9,11 @@ const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const JSGlobalObject = jsc.JSGlobalObject;
 
+pub struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }
+pub struct CloseGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.close(); } } }
+pub struct FreeGuard { allocator: std.mem.Allocator, slice: []const u8, ~init() { _.allocator.free(_.slice); } }
+pub struct DerefGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deref(); } } }
+
 pub struct bun_install_js_bindings {
     pub static fn generate(global: *JSGlobalObject): JSValue {
         const obj = JSValue.createEmptyObject(global, 1);
@@ -20,16 +25,16 @@ pub struct bun_install_js_bindings {
     pub static fn jsParseLockfile(globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame): JSValue ! bun.JSError {
         const allocator = bun.default_allocator;
         let log = logger.Log.init(allocator);
-        defer log.deinit();
+        const _log_guard = DeinitGuard<logger.Log>{ ptr: unsafe { &log } };
 
         const args = callFrame.arguments_old(1).slice();
-        const cwd = args[0].toSliceOrNull(globalObject)?;
-        defer cwd.deinit();
+        let cwd = args[0].toSliceOrNull(globalObject)?;
+        const _cwd_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &cwd } };
 
         let dir = bun.openDirAbsoluteNotForDeletingOrRenaming(cwd.slice()) catch e => {
             return globalObject.throw("failed to open: {s}, '{s}'", [@errorName(e), cwd.slice()]);
         };
-        defer dir.close();
+        const _dir_guard = CloseGuard<std.fs.Dir>{ ptr: unsafe { &dir } };
 
         const lockfile_path = Path.joinAbsStringZ(cwd.slice(), &["bun.lockb"], .auto);
 
@@ -59,10 +64,10 @@ pub struct bun_install_js_bindings {
             emit_nonportable_numbers_as_strings: true,
         });
         const stringified = bun.handleOom(std.fmt.allocPrint(allocator, "{f}", [fmt_val]));
-        defer allocator.free(stringified);
+        const _str_free_guard = FreeGuard{ allocator: allocator, slice: stringified };
 
         let str = bun.String.cloneUTF8(stringified);
-        defer str.deref();
+        const _str_guard = DerefGuard<bun.String>{ ptr: unsafe { &str } };
 
         return str.toJSByParseJSON(globalObject);
     }

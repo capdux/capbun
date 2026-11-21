@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,9 +59,35 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
 const DiffFormatter = @import("../diff_format.zig").DiffFormatter;
 const Output = bun.Output;
 const jsc = bun.jsc;
@@ -83,21 +109,19 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         _ = client.incrementExpectCallCounter();
         const returns = try bun.cpp.JSMockFunction__getReturns(globalThis, value);
         if ((!returns.jsType().isArray())) {
-            var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true };
+            var formatter = DeinitGuard(jsc.ConsoleObject.Formatter){ .val = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true } };
             _ = &formatter;
-            defer {
-            _ = formatter.deinit();
-            }
-            return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt((&formatter)) });
+            var __formatter_moved = false; _ = &__formatter_moved;
+            defer if (!__formatter_moved) { __formatter_moved = true; const __T = @TypeOf(formatter); if (@typeInfo(__T) == .optional) { if (formatter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { formatter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = formatter; _drop_val.__cp_deinit(); } };
+            return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt((&formatter.val)) });
         }
         const calls_count: u32 = @truncate(try returns.getLength(globalThis));
         var pass = false;
         _ = &pass;
-        var successful_returns = std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator);
+        var successful_returns = DeinitGuard(std.array_list.Managed(JSValue)){ .val = std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator) };
         _ = &successful_returns;
-        defer {
-        _ = successful_returns.deinit();
-        }
+        var __successful_returns_moved = false; _ = &__successful_returns_moved;
+        defer if (!__successful_returns_moved) { __successful_returns_moved = true; const __T = @TypeOf(successful_returns); if (@typeInfo(__T) == .optional) { if (successful_returns) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { successful_returns.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = successful_returns; _drop_val.__cp_deinit(); } };
         var has_errors = false;
         _ = &has_errors;
         var i: u32 = 0;
@@ -107,20 +131,20 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
             if (result.isObject()) {
                 const result_type = ((try result.get(globalThis, "type")) orelse (.js_undefined));
                 if (result_type.isString()) {
-                    const type_str = try result_type.toBunString(globalThis);
-                    defer {
-                    _ = type_str.deref();
-                    }
-                    if (type_str.eqlComptime("return")) {
+                    var type_str = DerefGuard(bun.String){ .val = try result_type.toBunString(globalThis) };
+                    _ = &type_str;
+                    var __type_str_moved = false; _ = &__type_str_moved;
+                    defer if (!__type_str_moved) { __type_str_moved = true; const __T = @TypeOf(type_str); if (@typeInfo(__T) == .optional) { if (type_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { type_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = type_str; _drop_val.__cp_deinit(); } };
+                    if (type_str.val.eqlComptime("return")) {
                         const result_value = ((try result.get(globalThis, "value")) orelse (.js_undefined));
-                        _ = try successful_returns.append(result_value);
+                        _ = try successful_returns.val.append(result_value);
                         if ((!pass)) {
                             if (try result_value.jestDeepEquals(expected, globalThis)) {
                                 pass = true;
                             }
                         }
                     } else {
-                        if (type_str.eqlComptime("throw")) {
+                        if (type_str.val.eqlComptime("throw")) {
                             has_errors = true;
                         }
                     }
@@ -130,39 +154,38 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
         if ((pass != client.flags.not)) {
             return JSValue.js_undefined;
         }
-        var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true };
+        var formatter = DeinitGuard(jsc.ConsoleObject.Formatter){ .val = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true } };
         _ = &formatter;
-        defer {
-        _ = formatter.deinit();
-        }
+        var __formatter_moved = false; _ = &__formatter_moved;
+        defer if (!__formatter_moved) { __formatter_moved = true; const __T = @TypeOf(formatter); if (@typeInfo(__T) == .optional) { if (formatter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { formatter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = formatter; _drop_val.__cp_deinit(); } };
         const signature = (comptime getSignature("toHaveReturnedWith", "<green>expected<r>", false));
         if (client.flags.not) {
             const not_signature = (comptime getSignature("toHaveReturnedWith", "<green>expected<r>", true));
-            return client.throw(globalThis, not_signature, ("\n\n" ++ "Expected mock function not to have returned: <green>{f}<r>\n"), .{ expected.toFmt((&formatter)) });
+            return client.throw(globalThis, not_signature, ("\n\n" ++ "Expected mock function not to have returned: <green>{f}<r>\n"), .{ expected.toFmt((&formatter.val)) });
         }
-        const successful_returns_count = successful_returns.items.len;
+        const successful_returns_count = successful_returns.val.items.len;
         if (((calls_count == 1) and (successful_returns_count == 1))) {
-            const received = successful_returns.items[0];
+            const received = successful_returns.val.items[0];
             if ((expected.isString() and received.isString())) {
                 const diff_format = DiffFormatter{ .expected = expected, .received = received, .globalThis = globalThis, .not = false };
                 return client.throw(globalThis, signature, "\n\n{f}\n", .{ diff_format });
             }
-            return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ expected.toFmt((&formatter)), received.toFmt((&formatter)) });
+            return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ expected.toFmt((&formatter.val)), received.toFmt((&formatter.val)) });
         }
         if (has_errors) {
-            const list_formatter = mock.AllCallsFormatter{ .globalThis = globalThis, .returns = returns, .formatter = (&formatter) };
+            const list_formatter = mock.AllCallsFormatter{ .globalThis = globalThis, .returns = returns, .formatter = (&formatter.val) };
             const fmt = ((((("Some calls errored:\n\n" ++ "    Expected: {f}\n") ++ "    Received:\n") ++ "{f}\n\n") ++ "    Number of returns: {d}\n") ++ "    Number of calls:   {d}");
             switch (Output.enable_ansi_colors_stderr) {
 inline else => |colors| {
-return client.throw(globalThis, signature, Output.prettyFmt((("\n\n" ++ fmt) ++ "\n"), colors), .{ expected.toFmt((&formatter)), list_formatter, successful_returns_count, calls_count });
+return client.throw(globalThis, signature, Output.prettyFmt((("\n\n" ++ fmt) ++ "\n"), colors), .{ expected.toFmt((&formatter.val)), list_formatter, successful_returns_count, calls_count });
 },
 }
         } else {
-            const list_formatter = mock.SuccessfulReturnsFormatter{ .globalThis = globalThis, .successful_returns = (&successful_returns), .formatter = (&formatter) };
+            const list_formatter = mock.SuccessfulReturnsFormatter{ .globalThis = globalThis, .successful_returns = (&successful_returns.val), .formatter = (&formatter.val) };
             const fmt = ((("    <green>Expected<r>: {f}\n" ++ "    <red>Received<r>:\n") ++ "{f}\n\n") ++ "    Number of returns: {d}");
             switch (Output.enable_ansi_colors_stderr) {
 inline else => |colors| {
-return client.throw(globalThis, signature, Output.prettyFmt((("\n\n" ++ fmt) ++ "\n"), colors), .{ expected.toFmt((&formatter)), list_formatter, successful_returns_count });
+return client.throw(globalThis, signature, Output.prettyFmt((("\n\n" ++ fmt) ++ "\n"), colors), .{ expected.toFmt((&formatter.val)), list_formatter, successful_returns_count });
 },
 }
         }

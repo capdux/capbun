@@ -17,6 +17,35 @@ const createCryptoError = jsc.API.Bun.Crypto.createCryptoError;
 const EVP = jsc.API.Bun.Crypto.EVP;
 const Algorithm = EVP.Algorithm;
 
+struct ReleaseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.release(); }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct PBKDF2ExceptionGuard {
+    ptr: *PBKDF2!,
+    globalThis: *jsc.JSGlobalObject!,
+    is_async: bool,
+    ~init() {
+        if (unsafe { _.globalThis.hasException() }) {
+            if (_.is_async) {
+                unsafe { _.ptr.deinitAndUnprotect(); }
+            } else {
+                unsafe { _.ptr.deinit(); }
+            }
+        }
+    }
+}
+
 pub struct Job_ {
     pbkdf2: PBKDF2,
     output: []u8 = &.{},
@@ -50,7 +79,7 @@ pub struct Job_ {
     }
 
     pub fn runFromJS(*_: *Job_): bun.JSError!void {
-        defer this.release();
+        const _rel = ReleaseGuard<Job_>{ ptr: unsafe { this as *Job_! } };
         if (this.vm.isShuttingDown()) {
             return;
         }
@@ -193,47 +222,41 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
         return error.JSError;
     }
 
-    const algorithm = ({
-        if (!arg4.isString()) {
-            return globalThis.throwInvalidArgumentTypeValue("digest", "string", arg4);
-        }
+    if (!arg4.isString()) {
+        return globalThis.throwInvalidArgumentTypeValue("digest", "string", arg4);
+    }
 
-        const maybe_alg = EVP.Algorithm.map.fromJSCaseInsensitive(globalThis, arg4)?;
-        if (maybe_alg == null) {
+    const maybe_alg = EVP.Algorithm.map.fromJSCaseInsensitive(globalThis, arg4)?;
+    if (maybe_alg == null) {
+        if (!globalThis.hasException()) {
+            let slice = arg4.toSlice(globalThis, bun.default_allocator)?;
+            const _slice_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &slice } };
+            const name = slice.slice();
+            return globalThis.ERR(.CRYPTO_INVALID_DIGEST, "Invalid digest: {s}", .{name}).throw();
+        }
+        return error.JSError;
+    }
+
+    const algorithm = maybe_alg.?;
+    switch (algorithm) {
+        .shake128, .shake256 => {
             if (!globalThis.hasException()) {
-                const slice = arg4.toSlice(globalThis, bun.default_allocator)?;
-                defer slice.deinit();
+                let slice = arg4.toSlice(globalThis, bun.default_allocator)?;
+                const _slice_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &slice } };
                 const name = slice.slice();
                 return globalThis.ERR(.CRYPTO_INVALID_DIGEST, "Invalid digest: {s}", .{name}).throw();
             }
             return error.JSError;
-        }
-
-        const alg = maybe_alg.?;
-        switch (alg) {
-            .shake128, .shake256 => {
-                if (!globalThis.hasException()) {
-                    const slice = arg4.toSlice(globalThis, bun.default_allocator)?;
-                    defer slice.deinit();
-                    const name = slice.slice();
-                    return globalThis.ERR(.CRYPTO_INVALID_DIGEST, "Invalid digest: {s}", .{name}).throw();
-                }
-                return error.JSError;
-            },
-            else => alg,
-        }
-    });
+        },
+        else => {},
+    }
 
     let out = PBKDF2{ .iteration_count = @intCast(iteration_count), .length = keylen, .algorithm = algorithm };
-    defer {
-        if (globalThis.hasException()) {
-            if (is_async) {
-                out.deinitAndUnprotect();
-            } else {
-                out.deinit();
-            }
-        }
-    }
+    const _out_guard = PBKDF2ExceptionGuard{
+        ptr: unsafe { &out },
+        globalThis: unsafe { globalThis as *jsc.JSGlobalObject! },
+        is_async: is_async,
+    };
 
     const allow_string_object = true;
     const maybe_salt = jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, arg1, is_async, allow_string_object)?;

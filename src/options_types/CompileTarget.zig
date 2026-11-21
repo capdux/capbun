@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const options_jsc = @import("../bundler_jsc/options_jsc.zig");
@@ -101,6 +101,59 @@ pub const ParseError = error{
     InvalidTarget,
 };
 
+pub fn EndGuard(comptime T: type) type {
+    return struct {
+        item: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.item.end();
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        allocator: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit(self.allocator);
+                }
+        }
+    };
+}
+
+pub fn CloseGuard(comptime T: type) type {
+    return struct {
+        item: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.item.close();
+        }
+    };
+}
+
+pub const DeleteTreeGuard = struct {
+    path: []const u8,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *DeleteTreeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = (blk_catch_0: { break :blk_catch_0 ((std.fs.cwd().deleteTree(self.path)) catch |__ce_0| { _ = &__ce_0;  }); });
+    }
+};
+
 pub const CompileTarget = @This();
 
 os: Environment.OperatingSystem = Environment.os,
@@ -118,7 +171,7 @@ pub fn isDefault(self: CompileTarget) bool {
         return self.eql((&default_target));
 }
 
-pub fn toNPMRegistryURL(self: CompileTarget, buf: []u8) ![]const u8 {
+pub fn toNPMRegistryURL(self: *const CompileTarget, buf: []u8) ![]const u8 {
         if (bun.env_var.BUN_COMPILE_TARGET_TARBALL_URL.get()) |url| {
             _ = &url;
             if ((strings.hasPrefixComptime(url, "http://") or strings.hasPrefixComptime(url, "https://"))) {
@@ -128,7 +181,7 @@ pub fn toNPMRegistryURL(self: CompileTarget, buf: []u8) ![]const u8 {
         return try self.toNPMRegistryURLWithURL(buf, "https://registry.npmjs.org");
 }
 
-pub fn toNPMRegistryURLWithURL(self: CompileTarget, buf: []u8, registry_url: []const u8) ![]const u8 {
+pub fn toNPMRegistryURLWithURL(self: *const CompileTarget, buf: []u8, registry_url: []const u8) ![]const u8 {
         if ((!self.isSupported())) {
             return error.UnsupportedTarget;
         }
@@ -139,7 +192,7 @@ inline else => |libc| (switch (self.baseline) {
 inline else => |is_baseline| {
 {
             const fmt_str = (comptime (((((((((((("{s}/@oven/bun-" ++ os.npmName()) ++ "-") ++ arch.npmName()) ++ libc.npmName()) ++ (if (is_baseline) "-baseline" else "")) ++ "/-/bun-") ++ os.npmName()) ++ "-") ++ arch.npmName()) ++ libc.npmName()) ++ (if (is_baseline) "-baseline" else "")) ++ "-{d}.{d}.{d}.tgz"));
-            return (blk_catch_0: { break :blk_catch_0 ((std.fmt.bufPrint(buf, fmt_str, .{ registry_url, self.version.major, self.version.minor, self.version.patch })) catch |err_val| { _ = &err_val; if ((err_val == error.NoSpaceLeft)) {
+            return (blk_catch_1: { break :blk_catch_1 ((std.fmt.bufPrint(buf, fmt_str, .{ registry_url, self.version.major, self.version.minor, self.version.patch })) catch |err_val| { _ = &err_val; if ((err_val == error.NoSpaceLeft)) {
                 return error.BufferTooSmall;
             }
             return err_val; }); });
@@ -155,10 +208,10 @@ pub fn format(self: CompileTarget, writer: *std.Io.Writer) std.Io.Writer.Error!v
         _ = try writer.print("bun-{s}-{s}{f}{f}-v{d}.{d}.{d}", .{ self.os.npmName(), self.arch.npmName(), self.libc, BaselineFormatter{ .baseline = self.baseline }, self.version.major, self.version.minor, self.version.patch });
 }
 
-pub fn exePath(self: CompileTarget, buf: *bun.PathBuffer, version_str: [:0]const u8, env: *bun.DotEnv.Loader, needs_download: *bool) [:0]const u8 {
+pub fn exePath(self: *const CompileTarget, buf: *bun.PathBuffer, version_str: [:0]const u8, env: *bun.DotEnv.Loader, needs_download: *bool) [:0]const u8 {
         if (self.isDefault()) {
             _ = brk: {
-            const self_exe_path = (blk_catch_1: { break :blk_catch_1 ((bun.selfExePath()) catch |__ce_1| { _ = &__ce_1; break :brk; }); });
+            const self_exe_path = (blk_catch_2: { break :blk_catch_2 ((bun.selfExePath()) catch |__ce_2| { _ = &__ce_2; break :brk; }); });
             _ = @memcpy(buf, self_exe_path);
             buf[cp_cast_int(usize, self_exe_path.len)] = 0;
             needs_download.* = false;
@@ -192,20 +245,19 @@ pub fn downloadToPath(self: CompileTarget, env: *bun.DotEnv.Loader, allocator: s
             }
             var url_buffer: [2048]u8 = undefined;
             _ = &url_buffer;
-            const url_str = (blk_catch_2: { break :blk_catch_2 ((self.toNPMRegistryURL((&url_buffer))) catch |err_val| { _ = &err_val; return err_val; }); });
+            const url_str = (blk_catch_3: { break :blk_catch_3 ((self.toNPMRegistryURL((&url_buffer))) catch |err_val| { _ = &err_val; return err_val; }); });
             const url_str_copy = try bun.default_allocator.dupe(u8, url_str);
             const url = bun.URL.parse(url_str_copy);
             {
-                var progress = refresher.start("Downloading", 0);
-                _ = &progress;
-                defer {
-                _ = progress.end();
-                }
+                var progress_guard = EndGuard(@TypeOf(refresher.start("Downloading", 0))){ .item = refresher.start("Downloading", 0) };
+                _ = &progress_guard;
+                var __progress_guard_moved = false; _ = &__progress_guard_moved;
+                defer if (!__progress_guard_moved) { __progress_guard_moved = true; const __T = @TypeOf(progress_guard); if (@typeInfo(__T) == .optional) { if (progress_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { progress_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = progress_guard; _drop_val.__cp_deinit(); } };
                 const http_proxy: ?bun.URL = env.getHttpProxyFor(url);
                 {
                     async_http.* = HTTP.AsyncHTTP.initSync(allocator, .GET, url, .{}, "", compressed_archive_bytes, "", http_proxy, null, HTTP.FetchRedirect.follow);
                 }
-                async_http.client.progress_node = progress;
+                async_http.client.progress_node = progress_guard.item;
                 async_http.client.flags.reject_unauthorized = env.getTLSRejectUnauthorized();
                 const response = try async_http.sendSync();
                 switch (response.status_code) {
@@ -227,50 +279,55 @@ return error.NetworkError;
             _ = &tarball_bytes;
             {
                 _ = refresher.refresh();
-                defer {
-                _ = compressed_archive_bytes.list.deinit(allocator);
-                }
+                var archive_guard = (blk: {
+                break :blk DeinitWithAllocGuard(@TypeOf(compressed_archive_bytes.list)){ .ptr = (&compressed_archive_bytes.list), .allocator = allocator };
+
+});
+                _ = &archive_guard;
+                var __archive_guard_moved = false; _ = &__archive_guard_moved;
+                defer if (!__archive_guard_moved) { __archive_guard_moved = true; const __T = @TypeOf(archive_guard); if (@typeInfo(__T) == .optional) { if (archive_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { archive_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = archive_guard; _drop_val.__cp_deinit(); } };
+                _ = &archive_guard;
                 if ((compressed_archive_bytes.list.items.len == 0)) {
                     return error.InvalidResponse;
                 }
                 {
-                    var node = refresher.start("Decompressing", 0);
-                    _ = &node;
-                    defer {
-                    _ = node.end();
-                    }
-                    var gunzip = (blk_catch_3: { break :blk_catch_3 ((bun.zlib.ZlibReaderArrayList.init(compressed_archive_bytes.list.items, (&tarball_bytes), allocator)) catch |__ce_3| { _ = &__ce_3; _ = node.end();
+                    var node_guard = EndGuard(@TypeOf(refresher.start("Decompressing", 0))){ .item = refresher.start("Decompressing", 0) };
+                    _ = &node_guard;
+                    var __node_guard_moved = false; _ = &__node_guard_moved;
+                    defer if (!__node_guard_moved) { __node_guard_moved = true; const __T = @TypeOf(node_guard); if (@typeInfo(__T) == .optional) { if (node_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { node_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = node_guard; _drop_val.__cp_deinit(); } };
+                    var gunzip = (blk_catch_4: { break :blk_catch_4 ((bun.zlib.ZlibReaderArrayList.init(compressed_archive_bytes.list.items, (&tarball_bytes), allocator)) catch |__ce_4| { _ = &__ce_4; _ = node_guard.item.end();
                     return error.InvalidResponse; }); });
                     _ = &gunzip;
-                    _ = (blk_catch_4: { break :blk_catch_4 ((gunzip.readAll(true)) catch |__ce_4| { _ = &__ce_4; _ = node.end();
+                    _ = (blk_catch_5: { break :blk_catch_5 ((gunzip.readAll(true)) catch |__ce_5| { _ = &__ce_5; _ = node_guard.item.end();
                     return error.InvalidResponse; }); });
                     _ = gunzip.deinit();
                 }
                 _ = refresher.refresh();
                 {
-                    var node = refresher.start("Extracting", 0);
-                    _ = &node;
-                    defer {
-                    _ = node.end();
-                    }
+                    var node_guard = EndGuard(@TypeOf(refresher.start("Extracting", 0))){ .item = refresher.start("Extracting", 0) };
+                    _ = &node_guard;
+                    var __node_guard_moved = false; _ = &__node_guard_moved;
+                    defer if (!__node_guard_moved) { __node_guard_moved = true; const __T = @TypeOf(node_guard); if (@typeInfo(__T) == .optional) { if (node_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { node_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = node_guard; _drop_val.__cp_deinit(); } };
                     const libarchive = bun.libarchive;
                     var tmpname_buf: [1024]u8 = undefined;
                     _ = &tmpname_buf;
                     const tempdir_name = try bun.fs.FileSystem.tmpname("tmp", (&tmpname_buf), bun.fastRandom());
-                    var tmpdir = try std.fs.cwd().makeOpenPath(tempdir_name, .{});
-                    _ = &tmpdir;
-                    defer {
-                    _ = tmpdir.close();
-                    }
-                    defer {
-                    _ = (blk_catch_5: { break :blk_catch_5 ((std.fs.cwd().deleteTree(tempdir_name)) catch |__ce_5| { _ = &__ce_5;  }); });
-                    }
-                    _ = (blk_catch_6: { break :blk_catch_6 ((libarchive.Archiver.extractToDir(tarball_bytes.items, tmpdir, null, void, undefined, .{ .depth_to_skip = 2 })) catch |__ce_6| { _ = &__ce_6; _ = node.end();
+                    const tmpdir = try std.fs.cwd().makeOpenPath(tempdir_name, .{});
+                    var tmpdir_guard = CloseGuard(@TypeOf(tmpdir)){ .item = tmpdir };
+                    _ = &tmpdir_guard;
+                    var __tmpdir_guard_moved = false; _ = &__tmpdir_guard_moved;
+                    defer if (!__tmpdir_guard_moved) { __tmpdir_guard_moved = true; const __T = @TypeOf(tmpdir_guard); if (@typeInfo(__T) == .optional) { if (tmpdir_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { tmpdir_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = tmpdir_guard; _drop_val.__cp_deinit(); } };
+                    var tempdir_guard = DeleteTreeGuard{ .path = tempdir_name };
+                    _ = &tempdir_guard;
+                    var __tempdir_guard_moved = false; _ = &__tempdir_guard_moved;
+                    defer if (!__tempdir_guard_moved) { __tempdir_guard_moved = true; const __T = @TypeOf(tempdir_guard); if (@typeInfo(__T) == .optional) { if (tempdir_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { tempdir_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = tempdir_guard; _drop_val.__cp_deinit(); } };
+                    _ = &tempdir_guard;
+                    _ = (blk_catch_6: { break :blk_catch_6 ((libarchive.Archiver.extractToDir(tarball_bytes.items, tmpdir_guard.item, null, void, undefined, .{ .depth_to_skip = 2 })) catch |__ce_6| { _ = &__ce_6; _ = node_guard.item.end();
                     return error.ExtractionFailed; }); });
                     var did_retry = false;
                     _ = &did_retry;
                     while (true) {
-                        _ = (blk_catch_7: { break :blk_catch_7 ((bun.sys.moveFileZ(.fromStdDir(tmpdir), (if ((self.os == .windows)) "bun.exe" else "bun"), bun.invalid_fd, dest_z)) catch |__ce_7| { _ = &__ce_7; if ((!did_retry)) {
+                        _ = (blk_catch_7: { break :blk_catch_7 ((bun.sys.moveFileZ(.fromStdDir(tmpdir_guard.item), (if ((self.os == .windows)) "bun.exe" else "bun"), bun.invalid_fd, dest_z)) catch |__ce_7| { _ = &__ce_7; if ((!did_retry)) {
                             did_retry = true;
                             const dirname = bun.path.dirname(dest_z, .loose);
                             if ((dirname.len > 0)) {
@@ -278,7 +335,7 @@ return error.NetworkError;
                                 continue;
                             }
                         }
-                        _ = node.end();
+                        _ = node_guard.item.end();
                         return error.ExtractionFailed; }); });
                         break;
                     }
@@ -446,7 +503,7 @@ const input = bun.strings.trim(input_, " \t\r");
         return res;
 }
 
-pub fn defineKeys(self: CompileTarget) []const []const u8 {
+pub fn defineKeys(self: *const CompileTarget) []const []const u8 {
         _ = self.os;
         return (&.{ "process.platform", "process.arch", "process.versions.bun" });
 }
@@ -472,7 +529,7 @@ pub fn makeDefineValues(comptime os: Environment.OperatingSystem, comptime arch:
         return (&S.values);
 }
 
-pub fn defineValues(self: CompileTarget) []const []const u8 {
+pub fn defineValues(self: *const CompileTarget) []const []const u8 {
         switch (self.os) {
 inline else => |os| {
 switch (self.arch) {

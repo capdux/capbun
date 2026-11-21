@@ -3,6 +3,16 @@ import hgi from "../install/hosted_git_info.zig";
 
 const jsc = bun.jsc;
 
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 pub fn hostedGitInfoToJS(_: &hgi.HostedGitInfo, go: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
     const obj = jsc.JSValue.createEmptyObject(go, 6);
     obj.put(
@@ -54,16 +64,16 @@ pub fn jsParseUrl(go: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSVal
         return go.throw("hostedGitInfo.prototype.parseUrl takes a string as its first argument", {});
     }
 
-    const npa_str = arg0.toBunString(go)?;
-    defer npa_str.deref();
-    let as_utf8 = npa_str.toUTF8(allocator);
-    defer as_utf8.deinit();
-    const parsed = hgi.parseUrl(allocator, as_utf8.mut()) catch e => {
+    const npa_str = DerefGuard<bun.String>{ val: arg0.toBunString(go)? };
+    let as_utf8 = DeinitGuard<@TypeOf(npa_str.val.toUTF8(allocator))>{
+        val: npa_str.val.toUTF8(allocator),
+    };
+    const parsed = hgi.parseUrl(allocator, as_utf8.val.mut()) catch e => {
         return go.throw("Invalid Git URL: {}", [e]);
     };
-    defer parsed.url.deinit();
+    let parsed_url = DeinitGuard<@TypeOf(parsed.url)>{ val: parsed.url };
 
-    return parsed.url.href().toJS(go);
+    return parsed_url.val.href().toJS(go);
 }
 
 pub fn jsFromUrl(go: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
@@ -78,11 +88,11 @@ pub fn jsFromUrl(go: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValu
         return go.throw("hostedGitInfo.prototype.fromUrl takes a string as its first argument", {});
     }
 
-    const npa_str = arg0.toBunString(go)?;
-    defer npa_str.deref();
-    let as_utf8 = npa_str.toUTF8(allocator);
-    defer as_utf8.deinit();
-    const maybe_parsed = hgi.HostedGitInfo.fromUrl(allocator, as_utf8.mut()) catch e => {
+    const npa_str = DerefGuard<bun.String>{ val: arg0.toBunString(go)? };
+    let as_utf8 = DeinitGuard<@TypeOf(npa_str.val.toUTF8(allocator))>{
+        val: npa_str.val.toUTF8(allocator),
+    };
+    const maybe_parsed = hgi.HostedGitInfo.fromUrl(allocator, as_utf8.val.mut()) catch e => {
         return go.throw("Invalid Git URL: {}", [e]);
     };
     if (maybe_parsed == null) return jsc.JSValue.@"null";

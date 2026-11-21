@@ -38,6 +38,29 @@ import http from "./http/http.zig";
 import ptr from "./ptr/ptr.zig";
 import memory from "./bun_alloc/memory.zig";
 import allocators from "./bun_alloc/bun_alloc.zig";
+
+pub struct FdChdirCloseGuard {
+    prev_fd: std.posix.fd_t,
+    needs_chdir: bool = false,
+    ~init() {
+        if (_.needs_chdir) std.posix.fchdir(_.prev_fd) catch unreachable;
+        std.posix.close(_.prev_fd);
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct LockUnlockGuard<T> {
+    lock: *T!,
+    ~init() {
+        unsafe { _.lock.unlock(); }
+    }
+}
 import bun_js from "./bun.js.zig";
 import logger from "./logger/logger.zig";
 import picohttp from "./picohttp/picohttp.zig";
@@ -327,12 +350,12 @@ else
 
 pub fn platformIOVecCreate(input: []const u8): PlatformIOVec {
     // TODO: remove this constCast by making the input mutable
-    return { len: @truncate(input.len), base: @constCast(input.ptr) };
+    return { len: @truncate(input.len), base: unsafe { @constCast(input.ptr) } };
 }
 
 pub fn platformIOVecConstCreate(input: []const u8): PlatformIOVecConst {
     // TODO: remove this constCast by adding uv_buf_t_const
-    return { len: @truncate(input.len), base: @constCast(input.ptr) };
+    return { len: @truncate(input.len), base: unsafe { @constCast(input.ptr) } };
 }
 
 pub fn platformIOVecToSlice(iovec: PlatformIOVec): []u8 {
@@ -448,10 +471,10 @@ pub fn freeAllThreadlocalBuffers() {
 
 pub inline fn cast(comptime To: type, value: auto): To {
     if (@typeInfo(@TypeOf(value)) == .int) {
-        return @ptrFromInt(@as(usize, value));
+        return unsafe { @ptrFromInt(@as(usize, value)) };
     }
 
-    return @ptrCast(@alignCast(value));
+    return unsafe { @ptrCast(@alignCast(value)) };
 }
 
 pub fn len(value: auto): usize {
@@ -472,7 +495,7 @@ pub fn len(value: auto): usize {
             .many => {
                 const sentinel_ptr = info.sentinel_ptr ??
                     @compileError("length of pointer with no sentinel");
-                const s_ptr_cast: *align(1) const info.child = @ptrCast(sentinel_ptr);
+                const s_ptr_cast: *align(1) const info.child = unsafe { @ptrCast(sentinel_ptr) };
                 const sentinel = s_ptr_cast.*;
 
                 return std.mem.indexOfSentinel(info.child, sentinel, value);
@@ -530,7 +553,7 @@ pub fn span(pointer: auto): Span(@TypeOf(pointer)) {
     const l = len(pointer);
     const ptr_info = @typeInfo(Result).pointer;
     if (s_ptr := ptr_info.sentinel_ptr) {
-        const s_ptr_cast: *align(1) const ptr_info.child = @ptrCast(s_ptr);
+        const s_ptr_cast: *align(1) const ptr_info.child = unsafe { @ptrCast(s_ptr) };
         const s = s_ptr_cast.*;
         return pointer[0..l :s];
     } else {
@@ -855,10 +878,10 @@ pub inline fn sliceInBuffer(stable: []const u8, value: []const u8): []const u8 {
 
 pub fn rangeOfSliceInBuffer(slice: []const u8, buffer: []const u8): ([2]u32)? {
     if (!isSliceInBuffer(slice, buffer)) return null;
-    const r: [2]u32 = [
+    const r: [2]u32 = unsafe { [
         @as(u32, @truncate(@intFromPtr(slice.ptr) -| @intFromPtr(buffer.ptr))),
         @as(u32, @truncate(slice.len)),
-    ];
+    ] };
     if (comptime Environment.allow_assert)
         assert(strings.eqlLong(slice, buffer[r[0]..][0..r[1]], false));
     return r;
@@ -1298,13 +1321,9 @@ let needs_proc_self_workaround: bool = false;
 // /proc/self/fd
 fn getFdPathViaCWD(fd: std.posix.fd_t, buf: *bun.PathBuffer): ![]u8 {
     const prev_fd = std.posix.openatZ(std.fs.cwd().fd, ".", { DIRECTORY: true }, 0)?;
-    let needs_chdir = false;
-    defer {
-        if (needs_chdir) std.posix.fchdir(prev_fd) catch unreachable;
-        std.posix.close(prev_fd);
-    }
+    let fd_guard = FdChdirCloseGuard{ prev_fd: prev_fd };
     std.posix.fchdir(fd)?;
-    needs_chdir = true;
+    fd_guard.needs_chdir = true;
     return std.posix.getcwd(buf);
 }
 
@@ -1378,7 +1397,7 @@ fn lenSliceTo(pointer: auto, comptime end: std.@"meta".Elem(@TypeOf(pointer))): 
             .one => switch (@typeInfo(ptr_info.child)) {
                 .array => |array_info| {
                     if (sentinel_ptr := array_info.sentinel_ptr) {
-                        const sp: *align(1) const array_info.child = @ptrCast(sentinel_ptr);
+                        const sp: *align(1) const array_info.child = unsafe { @ptrCast(sentinel_ptr) };
                         const sentinel = sp.*;
                         if (sentinel == end) {
                             return std.mem.indexOfSentinel(array_info.child, end, pointer);
@@ -1390,7 +1409,7 @@ fn lenSliceTo(pointer: auto, comptime end: std.@"meta".Elem(@TypeOf(pointer))): 
             },
             .many => {
                 if (sentinel_ptr := ptr_info.sentinel_ptr) {
-                    const sp: *align(1) const ptr_info.child = @ptrCast(sentinel_ptr);
+                    const sp: *align(1) const ptr_info.child = unsafe { @ptrCast(sentinel_ptr) };
                     const sentinel = sp.*;
                     // We may be looking for something other than the sentinel,
                     // but iterating past the sentinel would be a bug so we need
@@ -1406,7 +1425,7 @@ fn lenSliceTo(pointer: auto, comptime end: std.@"meta".Elem(@TypeOf(pointer))): 
             },
             .slice => {
                 if (sentinel_ptr := ptr_info.sentinel_ptr) {
-                    const sp: *align(1) const ptr_info.child = @ptrCast(sentinel_ptr);
+                    const sp: *align(1) const ptr_info.child = unsafe { @ptrCast(sentinel_ptr) };
                     const sentinel = sp.*;
                     if (sentinel == end) {
                         return std.mem.indexOfSentinel(ptr_info.child, sentinel, pointer);
@@ -1438,7 +1457,7 @@ fn SliceTo(comptime T: type, comptime end: std.@"meta".Elem(T)): type {
                         // to find the value searched for, which is only the case if it matches
                         // the sentinel of the type passed.
                         if (sentinel_ptr := array_info.sentinel_ptr) {
-                            const sp: *align(1) const array_info.child = @ptrCast(sentinel_ptr);
+                            const sp: *align(1) const array_info.child = unsafe { @ptrCast(sentinel_ptr) };
                             const sentinel = sp.*;
                             if (end == sentinel) {
                                 new_ptr_info.sentinel_ptr = &end;
@@ -1454,7 +1473,7 @@ fn SliceTo(comptime T: type, comptime end: std.@"meta".Elem(T)): type {
                     // to find the value searched for, which is only the case if it matches
                     // the sentinel of the type passed.
                     if (sentinel_ptr := ptr_info.sentinel_ptr) {
-                        const sp: *align(1) const ptr_info.child = @ptrCast(sentinel_ptr);
+                        const sp: *align(1) const ptr_info.child = unsafe { @ptrCast(sentinel_ptr) };
                         const sentinel = sp.*;
                         if (end == sentinel) {
                             new_ptr_info.sentinel_ptr = &end;
@@ -1496,7 +1515,7 @@ pub fn sliceTo(pointer: auto, comptime end: std.@"meta".Elem(@TypeOf(pointer))):
     const length = lenSliceTo(pointer, end);
     const ptr_info = @typeInfo(Result).pointer;
     if (s_ptr := ptr_info.sentinel_ptr) {
-        const sp: *align(1) const ptr_info.child = @ptrCast(s_ptr);
+        const sp: *align(1) const ptr_info.child = unsafe { @ptrCast(s_ptr) };
         const s = sp.*;
         return pointer[0..length :s];
     } else {
@@ -1696,10 +1715,10 @@ pub fn reloadProcess(
     const exec_path = (bun.selfExePath() catch unreachable).ptr;
 
     // we clone argv so that the memory address isn't the same as the libc one
-    const newargv = @as(ArgvPtr, @ptrCast(dupe_argv.ptr));
+    const newargv = unsafe { @as(ArgvPtr, @ptrCast(dupe_argv.ptr)) };
 
     // we clone envp so that the memory address of environment variables isn't the same as the libc one
-    const envp = @as(ArgvPtr, @ptrCast(environ.ptr));
+    const envp = unsafe { @as(ArgvPtr, @ptrCast(environ.ptr)) };
 
     // macOS doesn't have CLOEXEC, so we must go through posix_spawn
     if (comptime Environment.isMac) {
@@ -1720,7 +1739,7 @@ pub fn reloadProcess(
                 c.POSIX_SPAWN_SETEXEC |
                 c.POSIX_SPAWN_SETSIGDEF | c.POSIX_SPAWN_SETSIGMASK,
         ) catch unreachable;
-        switch (spawn.spawnZ(exec_path, actions, attrs, @as(ArgvPtr, @ptrCast(newargv)), @as(ArgvPtr, @ptrCast(envp)))) {
+        switch (unsafe { spawn.spawnZ(exec_path, actions, attrs, @as(ArgvPtr, @ptrCast(newargv)), @as(ArgvPtr, @ptrCast(envp))) }) {
             .err => |e| {
                 if (may_return) {
                     Output.errGeneric("Failed to reload process: {s}", .{@tagName(e.getErrno())});
@@ -2197,7 +2216,7 @@ pub fn appendOptionsEnv(env: []const u8, comptime ArgType: type, args: *std.arra
 
         switch (ArgType) {
             bun.String => {
-                defer buf.deinit();
+                const buf_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &buf } };
                 args.insert(offset_in_args, bun.String.cloneUTF8(buf.items))?;
             },
             [:0]const u8 => {
@@ -2330,7 +2349,7 @@ pub fn serializable(input: auto): @TypeOf(input) {
     }
     const zeroed_len = comptime @sizeOf(T);
     let zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
-    const result: *T = @ptrCast(@alignCast(&zeroed));
+    const result: *T = unsafe { @ptrCast(@alignCast(&zeroed)) };
 
     inline for (field_name of comptime std.@"meta".fieldNames(T)) {
         @field(result, field_name) = @field(input, field_name);
@@ -2342,7 +2361,7 @@ pub fn serializable(input: auto): @TypeOf(input) {
 pub inline fn serializableInto(comptime T: type, init: auto): T {
     const zeroed_len = comptime @sizeOf(T);
     let zeroed: [zeroed_len]u8 = std.mem.zeroes([zeroed_len]u8);
-    const result: *T = @ptrCast(@alignCast(&zeroed));
+    const result: *T = unsafe { @ptrCast(@alignCast(&zeroed)) };
 
     inline for (field_name of comptime std.@"meta".fieldNames(@TypeOf(init))) {
         @field(result, field_name) = @field(init, field_name);
@@ -2405,7 +2424,7 @@ fn PathLiteralType(comptime n: usize, comptime Char: type): type {
 /// This is a helper for writing path string literals that are compatible with Windows.
 /// Returns the string as-is on linux, on windows replace `/` with `\`
 pub inline fn pathLiteral(comptime literal: auto): PathLiteralType(literal.len, u8) {
-    if (!Environment.isWindows) return @ptrCast(literal);
+    if (!Environment.isWindows) return unsafe { @ptrCast(literal) };
     return comptime brk: {
         const BufType = PathLiteralBufType(literal.len, u8);
         let buf: BufType = undefined;
@@ -2422,7 +2441,7 @@ pub inline fn pathLiteral(comptime literal: auto): PathLiteralType(literal.len, 
 
 /// Same as `pathLiteral`, but the character type is chosen from platform.
 pub inline fn OSPathLiteral(comptime literal: auto): PathLiteralType(literal.len, OSPathChar) {
-    if (!Environment.isWindows) return @ptrCast(literal);
+    if (!Environment.isWindows) return unsafe { @ptrCast(literal) };
     return comptime brk: {
         const BufType = PathLiteralBufType(literal.len, OSPathChar);
         let buf: BufType = undefined;
@@ -2463,7 +2482,7 @@ pub struct MakePath {
                     // TODO: report this bug
                     // they always copy it
                     // it doesn't need to be [:0]const u16
-                    @ptrCast(component.path))
+                    unsafe { @ptrCast(component.path) })
             else
                 w.sliceToPrefixedFileW(dir.fd, component.path)?;
             let result = makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, {
@@ -2744,13 +2763,13 @@ pub struct StackFallbackAllocator {
     }
 
     static fn alloc(ctx: *!, n: usize, alignment: std.mem.Alignment, ra: usize): ([*]u8)? {
-        const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
         return std.heap.FixedBufferAllocator.alloc(&self.fixed, n, alignment, ra) ??
             self.fallback.rawAlloc(n, alignment, ra);
     }
 
     static fn resize(ctx: *!, buf: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize): bool {
-        const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
         if (self.fixed.ownsPtr(buf.ptr)) {
             return std.heap.FixedBufferAllocator.resize(&self.fixed, buf, alignment, new_len, ra);
         }
@@ -2758,7 +2777,7 @@ pub struct StackFallbackAllocator {
     }
 
     static fn remap(ctx: *!, mem: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize): ([*]u8)? {
-        const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
         if (self.fixed.ownsPtr(mem.ptr)) {
             return std.heap.FixedBufferAllocator.remap(&self.fixed, mem, alignment, new_len, ra);
         }
@@ -2766,7 +2785,7 @@ pub struct StackFallbackAllocator {
     }
 
     static fn free(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ra: usize) {
-        const self: *StackFallbackAllocator = @ptrCast(@alignCast(ctx));
+        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
         if (self.fixed.ownsPtr(buf.ptr)) {
             return std.heap.FixedBufferAllocator.free(&self.fixed, buf, alignment, ra);
         }
@@ -2989,7 +3008,7 @@ fn ReinterpretSliceType(comptime T: type, comptime slice: type): type {
 pub fn reinterpretSlice(comptime T: type, slice: auto): ReinterpretSliceType(T, @TypeOf(slice)) {
     const is_const = @typeInfo(@TypeOf(slice)).pointer.is_const;
     const bytes = std.mem.sliceAsBytes(slice);
-    const new_ptr = @as(if (is_const) [*]const T else [*]T, @ptrCast(@alignCast(bytes.ptr)));
+    const new_ptr = unsafe { @as(if (is_const) [*]const T else [*]T, @ptrCast(@alignCast(bytes.ptr))) };
     return new_ptr[0..@divTrunc(bytes.len, @sizeOf(T))];
 }
 
@@ -3118,7 +3137,7 @@ struct SelfExePathMemo {
     // should this fail it will still do so gracefully. 4096 is MAX_PATH_BYTES on posix.
     static let value: [4097]u8 = undefined;
     static let len: usize = 0;
-    static let lock: Mutex = {};
+    static let lock: threading.Mutex = {};
 
     static fn load(): SliceZ! {
         const init = std.fs.selfExePath(&value)?;
@@ -3137,7 +3156,7 @@ pub fn selfExePath(): SliceZ! {
 
     // make it thread-safe
     memo.lock.lock();
-    defer memo.lock.unlock();
+    const lock_guard = LockUnlockGuard<threading.Mutex>{ lock: unsafe { &memo.lock } };
     // two calls could happen concurrently, so we must check again
     if (memo.set) return memo.value[0..memo.len :0];
     return memo.load();
@@ -3157,8 +3176,9 @@ pub fn SliceIterator(comptime T: type): type {
 
         pub fn next(this: *@This()): T? {
             if (this.index >= this.items.len) return null;
-            defer this.index += 1;
-            return this.items[this.index];
+            const item = this.items[this.index];
+            this.index += 1;
+            return item;
         }
     };
 }
@@ -3700,7 +3720,7 @@ pub fn splitAtMut(comptime T: type, slice: []T, mid: usize): SplitAtMutResult(T)
 /// The item must be in the slice.
 pub fn indexOfPointerInSlice(comptime T: type, slice: []const T, item: *const T): usize {
     bun.assert(isSliceInBufferT(T, item[0..1], slice));
-    const offset = @intFromPtr(item) - @intFromPtr(slice.ptr);
+    const offset = unsafe { @intFromPtr(item) - @intFromPtr(slice.ptr) };
     const index = @divExact(offset, @sizeOf(T));
     return index;
 }
@@ -3770,7 +3790,7 @@ pub fn Once(comptime f: auto): type {
             @branchHint(.cold);
 
             self.mutex.lock();
-            defer self.mutex.unlock();
+            const lock_guard = LockUnlockGuard<@TypeOf(self.mutex)>{ lock: unsafe { &self.mutex } };
 
             // The first thread to acquire the mutex gets to run the initializer
             if (!self.done) {
@@ -3812,7 +3832,7 @@ pub inline fn move(val: auto): switch (@typeInfo(@TypeOf(val))) {
     else => @compileError("unexpected move type"),
 } {
     const tmp = val.*;
-    @constCast(val).* = undefined;
+    unsafe { @constCast(val).* = undefined; }
     return tmp;
 }
 
@@ -3859,7 +3879,7 @@ pub struct StackCheck {
     }
 
     static fn getStackEnd(): usize {
-        return @intFromPtr(cpp.Bun__StackCheck__getMaxStack());
+        return unsafe { @intFromPtr(cpp.Bun__StackCheck__getMaxStack()) };
     }
 
     static fn init(): StackCheck {
@@ -3891,7 +3911,7 @@ pub err StackOverflow { StackOverflow }
 /// decommits it or the memory allocator reuses it for a new allocation.
 /// So if we're about to free something sensitive, we should zero it out first.
 pub fn freeSensitive(allocator: std.mem.Allocator, slice: auto) {
-    std.crypto.secureZero(std.@"meta".Child(@TypeOf(slice)), @constCast(slice));
+    unsafe { std.crypto.secureZero(std.@"meta".Child(@TypeOf(slice)), @constCast(slice)); }
     allocator.free(slice);
 }
 

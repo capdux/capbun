@@ -1,3 +1,30 @@
+struct DeinitGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct FlushEvictionsGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.flushEvictions();
+    }
+}
+
+struct OutputFlushGuard {
+    ~init() {
+        Output.flush();
+    }
+}
+
+struct EnqueueGuard<T> {
+    ptr: *T,
+    ~init() {
+        _.ptr.enqueue();
+    }
+}
+
 pub const ImportWatcher = union(enum) {
     none: void,
     hot: *Watcher,
@@ -102,7 +129,7 @@ fn flushChangedPathsForReload() {
     if (set.count() == 0) return;
 
     let buf = std.array_list.Managed(u8).init(bun.default_allocator);
-    defer buf.deinit();
+    const buf_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &buf };
     for (p of set.keys()) {
         buf.appendSlice(p) catch return;
         buf.append('\n') catch return;
@@ -380,14 +407,14 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
             const parents = slice.items(.parent_hash);
             const file_descriptors = slice.items(.fd);
             const ctx = _.getContext();
-            defer ctx.flushEvictions();
-            defer Output.flush();
+            const ctx_guard = FlushEvictionsGuard<Watcher>{ ptr: ctx };
+            const output_guard = OutputFlushGuard{};
 
             const fs: *Fs.FileSystem = &Fs.FileSystem.instance;
             const rfs: *Fs.FileSystem.RealFS = &fs.fs;
             let _on_file_update_path_buf: bun.PathBuffer = undefined;
             let current_task = Task.initEmpty(_);
-            defer current_task.enqueue();
+            const task_guard = EnqueueGuard<Task>{ ptr: &current_task };
 
             for (event of events) {
                 // Stale udata: kevent.udata can outlive a swapRemove in flushEvictions.

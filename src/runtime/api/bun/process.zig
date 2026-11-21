@@ -88,7 +88,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const multi_run = @import("../../../cli/multi_run.zig");
 pub const filter_run = @import("../../../cli/filter_run.zig");
@@ -1119,15 +1119,14 @@ pub fn deinit(self: PosixSpawnOptions) void {
             _ = self.stdin;
     }
     pub const Stdio = union(enum) {
-            path: []const u8,
-            inherit: void,
-            ignore: void,
-            buffer: void,
-            ipc: void,
-            pipe: bun.FD,
-            // TODO: remove this entry, it doesn't seem to be used
-            dup2: struct { out: bun.jsc.Subprocess.StdioKind, to: bun.jsc.Subprocess.StdioKind },
-        };
+        path: []const u8,
+        inherit: void,
+        ignore: void,
+        buffer: void,
+        ipc: void,
+        pipe: bun.FD,
+        dup2: struct { out: bun.jsc.Subprocess.StdioKind, to: bun.jsc.Subprocess.StdioKind },
+    };
 };
 
 pub const WindowsSpawnResult = struct {
@@ -1655,13 +1654,13 @@ pub fn waitMacKqueue(child: std.c.pid_t, ppid: std.c.pid_t, jc: *const JobContro
             _ = &changes_buf;
             var changes: []std.c.Kevent = changes_buf[0..0];
             _ = &changes;
-            const add = struct {
+            const add = (struct {
 
 pub fn f(list: []std.c.Kevent, ident: usize, filter: i16, fflags: u32, udata: usize) void {
             list.len = (list.len + 1);
             list.*[cp_cast_int(usize, (list.len - 1))] = .{ .ident = ident, .filter = filter, .flags = ((std.c.EV.ADD | std.c.EV.RECEIPT) | std.c.EV.CLEAR), .fflags = fflags, .data = 0, .udata = udata };
     }
-}.f;
+}).f;
             if ((ppid > 1)) {
                 _ = add((&changes), (if (comptime @typeInfo(@TypeOf(ppid)) == .@"enum") cp_cast_int(i32, @intFromEnum(ppid)) else cp_cast_int(i32, ppid)), std.c.EVFILT.PROC, std.c.NOTE.EXIT, TAG_PPID);
             }
@@ -1879,13 +1878,13 @@ _ = (if ((e.getErrno() == .SRCH)) bun.Global.exit(bun.ParentDeathWatchdog.exit_c
                 _ = &buf;
                 var pfds: []std.c.pollfd = buf[0..0];
                 _ = &pfds;
-                const push = struct {
+                const push = (struct {
 
 pub fn f(l: *PollFdSlice, fd: bun.FD) void {
             l.len = (l.len + 1);
             l.*[cp_cast_int(usize, (l.len - 1))] = .{ .fd = (if (comptime @typeInfo(@TypeOf(fd.cast())) == .@"enum") cp_cast_int(i32, @intFromEnum(fd.cast())) else cp_cast_int(i32, fd.cast())), .events = ((std.posix.POLL.IN | std.posix.POLL.ERR) | std.posix.POLL.HUP), .revents = 0 };
     }
-}.f;
+}).f;
                 for (cp_iter_slice(out_fds_to_wait_for)) |fd| {
                     _ = &fd;
                     if ((fd != bun.invalid_fd)) {

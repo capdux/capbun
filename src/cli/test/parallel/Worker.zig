@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const FileRange = @import("./FileRange.zig");
@@ -74,6 +74,74 @@ pub const WorkerPipeRole = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub const WorkerStartGuard = struct {
+    worker: *Worker,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *WorkerStartGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if ((!self.armed)) {
+                return;
+            }
+            {
+                if (self.worker.process) |p| {
+                    _ = &p;
+                    p.exit_handler = .{};
+                    if ((!p.hasExited())) {
+                        _ = p.kill(9);
+                    }
+                    _ = p.close();
+                    self.worker.process = null;
+                }
+                _ = self.worker.ipc.deinit();
+                self.worker.ipc = .{};
+                _ = self.worker.out.deinit();
+                self.worker.out = WorkerPipe{ .role = .stdout, .worker = self.worker };
+                _ = self.worker.err.deinit();
+                self.worker.err = WorkerPipe{ .role = .stderr, .worker = self.worker };
+            }
+    }
+};
+
+pub fn IpcPipeGuard(comptime P: type) type {
+    return struct {
+        worker: *Worker,
+        pipe: P,
+        armed: bool = true,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if ((!self.armed)) {
+                    return;
+                }
+                {
+                    if ((self.worker.ipc.backend.pipe == null)) {
+                        _ = self.pipe.closeAndDestroy();
+                    }
+                }
+        }
+    };
+}
 
 pub const WorkerPipe = struct {
     reader: bun.io.BufferedReader = bun.io.BufferedReader.init(WorkerPipe),
@@ -114,7 +182,7 @@ pub const Worker = @This();
 coord: *Coordinator,
 idx: u32,
 process: ?*bun.spawn.Process = null,
-ipc: Channel(Worker,"ipc") = .{},
+ipc: Channel(Worker, "ipc") = .{},
 out: WorkerPipe,
 err: WorkerPipe,
 inflight: ?u32 = null,
@@ -130,25 +198,13 @@ pub fn start(self: *Worker) !void {
         const coord = self.coord;
         _ = self.out.reader.setParent((&self.out));
         _ = self.err.reader.setParent((&self.err));
-        errdefer {
-        {
-            if (self.process) |p| {
-                _ = &p;
-                p.exit_handler = .{};
-                if ((!p.hasExited())) {
-                    _ = p.kill(9);
-                }
-                _ = p.close();
-                self.process = null;
-            }
-            _ = self.ipc.deinit();
-            self.ipc = .{};
-            _ = self.out.deinit();
-            self.out = WorkerPipe{ .role = .stdout, .worker = self };
-            _ = self.err.deinit();
-            self.err = WorkerPipe{ .role = .stderr, .worker = self };
-        }
-        }
+        var _start_guard = WorkerStartGuard{ .worker = (blk: {
+        break :blk self;
+
+}) };
+        _ = &_start_guard;
+        var ___start_guard_moved = false; _ = &___start_guard_moved;
+        defer if (!___start_guard_moved) { ___start_guard_moved = true; const __T = @TypeOf(_start_guard); if (@typeInfo(__T) == .optional) { if (_start_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _start_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _start_guard; _drop_val.__cp_deinit(); } };
         if (Environment.isPosix) {
             self.extra_fd_stdio = .{ .buffer };
             const options: bun.spawn.SpawnOptions = .{ .stdin = .ignore, .stdout = .buffer, .stderr = .buffer, .extra_fds = (&self.extra_fd_stdio), .cwd = coord.cwd, .stream = true, .new_process_group = true, .linux_pdeathsig = (if (Environment.isLinux) std.posix.SIG.KILL else null) };
@@ -156,9 +212,13 @@ pub fn start(self: *Worker) !void {
             _ = &sp_raw;
             var spawned = try sp_raw.unwrap();
             _ = &spawned;
-            defer {
-            _ = spawned.extra_pipes.deinit();
-            }
+            var _extra_pipes_guard = DeinitGuard(@TypeOf(spawned.extra_pipes)){ .ptr = (blk: {
+            break :blk (&spawned.extra_pipes);
+
+}) };
+            _ = &_extra_pipes_guard;
+            var ___extra_pipes_guard_moved = false; _ = &___extra_pipes_guard_moved;
+            defer if (!___extra_pipes_guard_moved) { ___extra_pipes_guard_moved = true; const __T = @TypeOf(_extra_pipes_guard); if (@typeInfo(__T) == .optional) { if (_extra_pipes_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _extra_pipes_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _extra_pipes_guard; _drop_val.__cp_deinit(); } };
             self.process = spawned.toProcess(coord.vm.eventLoop(), false);
             if (spawned.stdout) |fd| {
                 _ = &fd;
@@ -182,20 +242,26 @@ pub fn start(self: *Worker) !void {
         } else {
             const uv = bun.windows.libuv;
             const ipc_pipe = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe));
-            errdefer {
-            if ((self.ipc.backend.pipe == null)) {
-                _ = ipc_pipe.closeAndDestroy();
-            }
-            }
+            var _ipc_pipe_guard = IpcPipeGuard(@TypeOf(ipc_pipe)){ .worker = (blk: {
+            break :blk self;
+
+}), .pipe = ipc_pipe };
+            _ = &_ipc_pipe_guard;
+            var ___ipc_pipe_guard_moved = false; _ = &___ipc_pipe_guard_moved;
+            defer if (!___ipc_pipe_guard_moved) { ___ipc_pipe_guard_moved = true; const __T = @TypeOf(_ipc_pipe_guard); if (@typeInfo(__T) == .optional) { if (_ipc_pipe_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _ipc_pipe_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _ipc_pipe_guard; _drop_val.__cp_deinit(); } };
             self.extra_fd_stdio = .{ .{ .ipc = ipc_pipe } };
             const options: bun.spawn.SpawnOptions = .{ .stdin = .ignore, .stdout = .{ .buffer = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe)) }, .stderr = .{ .buffer = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe)) }, .extra_fds = (&self.extra_fd_stdio), .cwd = coord.cwd, .windows = .{ .loop = jsc.EventLoopHandle.init(coord.vm) }, .stream = true };
             var sp_raw = try bun.spawn.spawnProcess((&options), coord.argv.ptr, coord.envps[@as(usize, @intCast(self.idx))].ptr);
             _ = &sp_raw;
             var spawned = try sp_raw.unwrap();
             _ = &spawned;
-            defer {
-            _ = spawned.extra_pipes.deinit();
-            }
+            var _extra_pipes_guard = DeinitGuard(@TypeOf(spawned.extra_pipes)){ .ptr = (blk: {
+            break :blk (&spawned.extra_pipes);
+
+}) };
+            _ = &_extra_pipes_guard;
+            var ___extra_pipes_guard_moved = false; _ = &___extra_pipes_guard_moved;
+            defer if (!___extra_pipes_guard_moved) { ___extra_pipes_guard_moved = true; const __T = @TypeOf(_extra_pipes_guard); if (@typeInfo(__T) == .optional) { if (_extra_pipes_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _extra_pipes_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _extra_pipes_guard; _drop_val.__cp_deinit(); } };
             self.process = spawned.toProcess(coord.vm.eventLoop(), false);
             if ((spawned.stdout == .buffer)) {
                 var st = self.out.reader.startWithPipe(spawned.stdout.buffer);
@@ -210,6 +276,7 @@ pub fn start(self: *Worker) !void {
             if ((!self.ipc.adoptPipe(coord.vm, ipc_pipe))) {
                 return error.ChannelAdoptFailed;
             }
+            _ipc_pipe_guard.armed = false;
         }
         const process = self.process.?;
         if (Environment.isWindows) {
@@ -234,6 +301,7 @@ self.alive = false;
         return error.ProcessWatchFailed;
 },
 }
+        _start_guard.armed = false;
 }
 
 pub fn onProcessExit(self: *Worker, _p: *bun.spawn.Process, status: bun.spawn.Status, _rusage: *const bun.spawn.Rusage) void {

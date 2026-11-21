@@ -24,6 +24,32 @@ pub const MultiArgs = struct {
     state: MultiArgsState = .none,
 };
 
+pub fn PathBufGuard(comptime T: type) type {
+    return struct {
+        buf: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = bun.path_buffer_pool.put(self.buf);
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
 pub const Which = @This();
 
 state: State = .idle,
@@ -41,18 +67,23 @@ pub fn start(self: *Which) Yield {
         }
         if ((self.bltn().stdout.needsIO() == null)) {
             const path_buf = bun.path_buffer_pool.get();
-            defer {
-            _ = bun.path_buffer_pool.put(path_buf);
-            }
+            var _path_buf_guard = PathBufGuard(@TypeOf(path_buf)){ .buf = path_buf };
+            _ = &_path_buf_guard;
+            var ___path_buf_guard_moved = false; _ = &___path_buf_guard_moved;
+            defer if (!___path_buf_guard_moved) { ___path_buf_guard_moved = true; const __T = @TypeOf(_path_buf_guard); if (@typeInfo(__T) == .optional) { if (_path_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_buf_guard; _drop_val.__cp_deinit(); } };
             const PATH = ((self.bltn().parentCmd().base.shell.export_env.get(EnvStr.initSlice("PATH"))) orelse (EnvStr.initSlice("")));
-            defer {
-            _ = PATH.deref();
-            }
+            var _path_guard = DerefGuard(@TypeOf(PATH)){ .val = PATH };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
             var had_not_found = false;
             _ = &had_not_found;
             for (cp_iter_slice(args)) |arg_raw| {
                 _ = &arg_raw;
-                const arg = arg_raw[0..std.mem.len(arg_raw)];
+                const arg = (blk: {
+                break :blk arg_raw[0..std.mem.len(arg_raw)];
+
+});
                 const maybe_resolved = which(path_buf, PATH.slice(), self.bltn().parentCmd().base.shell.cwdZ(), arg);
                 if ((maybe_resolved == null)) {
                     had_not_found = true;
@@ -74,15 +105,20 @@ pub fn next(self: *Which) Yield {
             return self.bltn().done(@intFromBool(self.state.multi_args.had_not_found));
         }
         const arg_raw = self.state.multi_args.args_slice[@as(usize, @intCast(self.state.multi_args.arg_idx))];
-        const arg = arg_raw[0..std.mem.len(arg_raw)];
+        const arg = (blk: {
+        break :blk arg_raw[0..std.mem.len(arg_raw)];
+
+});
         const path_buf = bun.path_buffer_pool.get();
-        defer {
-        _ = bun.path_buffer_pool.put(path_buf);
-        }
+        var _path_buf_guard = PathBufGuard(@TypeOf(path_buf)){ .buf = path_buf };
+        _ = &_path_buf_guard;
+        var ___path_buf_guard_moved = false; _ = &___path_buf_guard_moved;
+        defer if (!___path_buf_guard_moved) { ___path_buf_guard_moved = true; const __T = @TypeOf(_path_buf_guard); if (@typeInfo(__T) == .optional) { if (_path_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_buf_guard; _drop_val.__cp_deinit(); } };
         const PATH = ((self.bltn().parentCmd().base.shell.export_env.get(EnvStr.initSlice("PATH"))) orelse (EnvStr.initSlice("")));
-        defer {
-        _ = PATH.deref();
-        }
+        var _path_guard = DerefGuard(@TypeOf(PATH)){ .val = PATH };
+        _ = &_path_guard;
+        var ___path_guard_moved = false; _ = &___path_guard_moved;
+        defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
         const maybe_resolved = which(path_buf, PATH.slice(), self.bltn().parentCmd().base.shell.cwdZ(), arg);
         if ((maybe_resolved == null)) {
             self.state.multi_args.had_not_found = true;
@@ -121,9 +157,10 @@ pub fn onIOWriterChunk(self: *Which, _: usize, e: ?jsc.SystemError) Yield {
         }
         if (e) |err_val| {
             _ = &err_val;
-            defer {
-            _ = err_val.deref();
-            }
+            var _err_guard = DerefGuard(@TypeOf(err_val)){ .val = err_val };
+            _ = &_err_guard;
+            var ___err_guard_moved = false; _ = &___err_guard_moved;
+            defer if (!___err_guard_moved) { ___err_guard_moved = true; const __T = @TypeOf(_err_guard); if (@typeInfo(__T) == .optional) { if (_err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_guard; _drop_val.__cp_deinit(); } };
             return self.bltn().done(err_val.getErrno());
         }
         if ((self.state == .one_arg)) {
@@ -138,8 +175,10 @@ pub fn deinit(self: *Which) void {
 }
 
 pub inline fn bltn(self: *Which) *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("which", self));
-        return @fieldParentPtr("impl", impl_);
+        {
+            const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("which", self));
+            return @fieldParentPtr("impl", impl_);
+        }
 }
 const log = bun.Output.scoped(.which, .hidden);
 const EnvStr = interpreter.EnvStr;

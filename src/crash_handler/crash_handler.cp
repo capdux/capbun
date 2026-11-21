@@ -29,6 +29,30 @@ type CmdLineU16 = bun.BoundedArray(u16, 4096);
 type CmdLineU8 = bun.BoundedArray(u8, 4096);
 type StringArrayList = std.array_list.Managed(string);
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct CloseGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.unlock(); }
+    }
+}
+
 let has_printed_message: bool = false;
 let panicking = std.atomic.Value(u8).init(0);
 let panic_mutex = bun.Mutex{};
@@ -199,7 +223,7 @@ pub fn crashHandler(
 
             {
                 panic_mutex.lock();
-                defer panic_mutex.unlock();
+                const _panic_lock = UnlockGuard<bun.Mutex>{ ptr: unsafe { &panic_mutex } };
 
                 let writer_w = std.fs.File.stderr().writerStreaming(empty_u8_slice);
                 const writer = &writer_w.interface;
@@ -642,8 +666,8 @@ const metadata_version_line = std.fmt.comptimePrint(
 
 @c fn handleSegfaultPosix(sig: i32, info: *const std.posix.siginfo_t!, _ctx: *!?): noreturn {
     const addr = switch (bun.Environment.os) {
-        .linux => @intFromPtr(info.fields.sigfault.addr),
-        .mac | .freebsd => @intFromPtr(info.addr),
+        .linux => unsafe { @intFromPtr(info.fields.sigfault.addr) },
+        .mac | .freebsd => unsafe { @intFromPtr(info.addr) },
         .windows | .wasm => @compileError("unreachable"),
     };
 
@@ -754,7 +778,7 @@ const stack_overflow_reason: CrashReason = .stack_overflow;
     crashHandler(
         reason,
         null,
-        @intFromPtr(info.ExceptionRecord.ExceptionAddress),
+        unsafe { @intFromPtr(info.ExceptionRecord.ExceptionAddress) },
     );
 }
 
@@ -963,7 +987,7 @@ struct StackLine {
                 const module = bun.windows.getModuleHandleFromAddress(addr) orelse
                     return null;
 
-                const base_address = @intFromPtr(module);
+                const base_address = unsafe { @intFromPtr(module) };
 
                 let temp_buf: [512]u16 = undefined;
                 const name = bun.windows.getModuleNameW(module, &temp_buf) orelse
@@ -989,7 +1013,7 @@ struct StackLine {
                 let i: u32 = 0;
                 while (i < image_count) : (i += 1) {
                     const header = std.c._dyld_get_image_header(i) orelse continue;
-                    const base_address = @intFromPtr(header);
+                    const base_address = unsafe { @intFromPtr(header) };
                     if (address < base_address) continue;
                     const vmaddr_slide = std.c._dyld_get_image_vmaddr_slide(i);
 
@@ -1427,9 +1451,8 @@ pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimi
         else => posix_programs,
     };
     for (program of programs) {
-        let arena_alloc = bun.ArenaAllocator.init(bun.default_allocator);
-        defer arena_alloc.deinit();
-        let sfa = std.heap.stackFallback(16384, arena_alloc.allocator());
+        let arena_guard = DeinitGuard<bun.ArenaAllocator>{ val: bun.ArenaAllocator.init(bun.default_allocator) };
+        let sfa = std.heap.stackFallback(16384, arena_guard.val.allocator());
         spawnSymbolizer(program, sfa.get(), &trace) catch e => switch (e) {
             error.FileNotFound => continue,
             else => {},
@@ -1571,7 +1594,7 @@ pub fn appendPreCrashHandler(comptime T: type, ptr: *T!, comptime handler: fn (*
     const wrap = PreCrashWrapper(T, handler);
 
     before_crash_handlers_mutex.lock();
-    defer before_crash_handlers_mutex.unlock();
+    const _handlers_lock = UnlockGuard<bun.Mutex>{ ptr: unsafe { &before_crash_handlers_mutex } };
     unsafe {
         before_crash_handlers.append(bun.default_allocator, BeforeCrashHandlerEntry{ ptr: ptr as *!, cb: wrap.onCrash })?;
     }
@@ -1579,7 +1602,7 @@ pub fn appendPreCrashHandler(comptime T: type, ptr: *T!, comptime handler: fn (*
 
 pub fn removePreCrashHandler(ptr: *!) {
     before_crash_handlers_mutex.lock();
-    defer before_crash_handlers_mutex.unlock();
+    const _handlers_lock = UnlockGuard<bun.Mutex>{ ptr: unsafe { &before_crash_handlers_mutex } };
     let index_opt: usize? = null;
     let i: usize = 0;
     for (item of before_crash_handlers.items) {
@@ -1776,14 +1799,13 @@ fn printLineInfo(
 }
 
 fn printLineFromFileAnyOs(out_stream: auto, tty_config: std.io.tty.Config, source_location: SourceLocation): ! {
-    let f = std.fs.cwd().openFile(source_location.file_name, {})?;
-    defer f.close();
+    let f_guard = CloseGuard<std.fs.File>{ val: std.fs.cwd().openFile(source_location.file_name, {})? };
 
     let line_buf: [4096]u8 = undefined;
     let fbs = std.io.fixedBufferStream(&line_buf);
     read_line: {
         let buf: [4096]u8 = undefined;
-        let amt_read = f.read(buf[0..])?;
+        let amt_read = f_guard.val.read(buf[0..])?;
         const line_start = seek: {
             let current_line_start: usize = 0;
             let next_line: usize = 1;
@@ -1792,13 +1814,13 @@ fn printLineFromFileAnyOs(out_stream: auto, tty_config: std.io.tty.Config, sourc
                 if (pos := bun.strings.indexOfChar(slice, '\n')) {
                     next_line += 1;
                     if (pos == slice.len - 1) {
-                        amt_read = f.read(buf[0..])?;
+                        amt_read = f_guard.val.read(buf[0..])?;
                         current_line_start = 0;
                     } else current_line_start += pos + 1;
                 } else if (amt_read < buf.len) {
                     return error.EndOfFile;
                 } else {
-                    amt_read = f.read(buf[0..])?;
+                    amt_read = f_guard.val.read(buf[0..])?;
                     current_line_start = 0;
                 }
             }
@@ -1814,7 +1836,7 @@ fn printLineFromFileAnyOs(out_stream: auto, tty_config: std.io.tty.Config, sourc
             std.mem.replaceScalar(u8, slice, '\t', ' ');
             fbs.writer().writeAll(slice) catch break :read_line;
             while (amt_read == buf.len) {
-                amt_read = f.read(buf[0..])?;
+                amt_read = f_guard.val.read(buf[0..])?;
                 if (pos := bun.strings.indexOfChar(buf[0..amt_read], '\n')) {
                     const line = buf[0..pos];
                     std.mem.replaceScalar(u8, line, '\t', ' ');

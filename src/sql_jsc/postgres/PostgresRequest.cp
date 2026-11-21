@@ -19,6 +19,22 @@ const max_parameters = std.math.maxInt(u16);
 
 pub const Queue = bun.LinearFifo(*PostgresSQLQuery, .Dynamic);
 
+struct DerefGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deref();
+    }
+}
+
+struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub fn writeBind(
     name: []const u8,
     cursor_name: bun.String,
@@ -94,13 +110,12 @@ pub fn writeBind(
 
         switch (if (tag.isBinaryFormatSupported() && value.isString()) .text else tag) {
             .jsonb, .json => {
-                let str = bun.String.empty;
-                defer str.deref();
-                value.jsonStringifyFast(globalObject, &str)?;
-                const slice = str.toUTF8WithoutRef(bun.default_allocator);
-                defer slice.deinit();
+                let str_guard = DerefGuard<bun.String>{ val: bun.String.empty };
+                value.jsonStringifyFast(globalObject, &str_guard.val)?;
+                const raw_slice = str_guard.val.toUTF8WithoutRef(bun.default_allocator);
+                let slice_guard = DeinitGuard<@TypeOf(raw_slice)>{ val: raw_slice };
                 const l = writer.length()?;
-                writer.write(slice.slice())?;
+                writer.write(slice_guard.val.slice())?;
                 l.writeExcludingSelf()?;
             },
             .@"bool" => {
@@ -141,13 +156,13 @@ pub fn writeBind(
                 l.writeExcludingSelf()?;
             },
             else => {
-                const str = String.fromJS(value, globalObject)?;
-                if (str.tag == .Dead) return err.OutOfMemory;
-                defer str.deref();
-                const slice = str.toUTF8WithoutRef(bun.default_allocator);
-                defer slice.deinit();
+                const str_val = String.fromJS(value, globalObject)?;
+                if (str_val.tag == .Dead) return err.OutOfMemory;
+                let str_guard = DerefGuard<bun.String>{ val: str_val };
+                const raw_slice = str_guard.val.toUTF8WithoutRef(bun.default_allocator);
+                let slice_guard = DeinitGuard<@TypeOf(raw_slice)>{ val: raw_slice };
                 const l = writer.length()?;
-                writer.write(slice.slice())?;
+                writer.write(slice_guard.val.slice())?;
                 l.writeExcludingSelf()?;
             },
         }

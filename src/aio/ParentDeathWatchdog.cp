@@ -6,6 +6,21 @@ import bun from "bun";
 const Environment = bun.Environment;
 const jsc = bun.jsc;
 
+struct DeinitWithAllocGuard<T> {
+    val: T,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
+struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
 export @root struct ParentDeathWatchdog {
     pub const exit_code: u8 = 128 + 1;
 }
@@ -130,16 +145,20 @@ pub fn killDescendants() {
 
     const self_pid = std.c.getpid();
 
-    let to_visit: std.ArrayListUnmanaged(std.c.pid_t) = .{};
-    defer to_visit.deinit(bun.default_allocator);
-    let to_kill: std.ArrayListUnmanaged(std.c.pid_t) = .{};
-    defer to_kill.deinit(bun.default_allocator);
+    let to_visit = DeinitWithAllocGuard<std.ArrayListUnmanaged(std.c.pid_t)>{
+        val: .{},
+        allocator: bun.default_allocator,
+    };
+    let to_kill = DeinitWithAllocGuard<std.ArrayListUnmanaged(std.c.pid_t)>{
+        val: .{},
+        allocator: bun.default_allocator,
+    };
 
-    to_visit.append(bun.default_allocator, self_pid) catch return;
+    to_visit.val.append(bun.default_allocator, self_pid) catch return;
 
     let buf: [std.c.pid_t; 4096] = undefined;
-    while (to_visit.items.len > 0 && to_kill.items.len < 4096) {
-        const parent = to_visit.swapRemove(to_visit.items.len - 1);
+    while (to_visit.val.items.len > 0 && to_kill.val.items.len < 4096) {
+        const parent = to_visit.val.swapRemove(to_visit.val.items.len - 1);
         const n = listChildPids(parent, &buf) orelse continue;
         for (child of buf[0..n]) {
             if (child == self_pid || child <= 1) { continue; }
@@ -148,18 +167,18 @@ pub fn killDescendants() {
                 * = std.c.kill(child, std.posix.SIG.CONT);
                 continue;
             }
-            to_kill.append(bun.default_allocator, child) catch {
+            to_kill.val.append(bun.default_allocator, child) catch {
                 * = std.c.kill(child, std.posix.SIG.KILL);
                 continue;
             };
-            to_visit.append(bun.default_allocator, child) catch {};
+            to_visit.val.append(bun.default_allocator, child) catch {};
         }
     }
 
-    let i: usize = to_kill.items.len;
+    let i: usize = to_kill.val.items.len;
     while (i > 0) {
         i -= 1;
-        * = std.c.kill(to_kill.items[i], std.posix.SIG.KILL);
+        * = std.c.kill(to_kill.val.items[i], std.posix.SIG.KILL);
     }
 }
 
@@ -196,25 +215,29 @@ pub fn killSubreaperAdoptees(siblings: []const std.c.pid_t) {
 fn killTreeRootedAt(root: std.c.pid_t, expected_ppid_of_root: std.c.pid_t) {
     if (comptime !Environment.isPosix) { return; }
 
-    let to_visit: std.ArrayListUnmanaged(std.c.pid_t) = .{};
-    defer to_visit.deinit(bun.default_allocator);
-    let to_kill: std.ArrayListUnmanaged(std.c.pid_t) = .{};
-    defer to_kill.deinit(bun.default_allocator);
+    let to_visit = DeinitWithAllocGuard<std.ArrayListUnmanaged(std.c.pid_t)>{
+        val: .{},
+        allocator: bun.default_allocator,
+    };
+    let to_kill = DeinitWithAllocGuard<std.ArrayListUnmanaged(std.c.pid_t)>{
+        val: .{},
+        allocator: bun.default_allocator,
+    };
 
     if (std.c.kill(root, std.posix.SIG.STOP) != 0) { return; }
     if (parentPidOf(root) != expected_ppid_of_root) {
         * = std.c.kill(root, std.posix.SIG.CONT);
         return;
     }
-    to_kill.append(bun.default_allocator, root) catch {
+    to_kill.val.append(bun.default_allocator, root) catch {
         * = std.c.kill(root, std.posix.SIG.KILL);
         return;
     };
-    to_visit.append(bun.default_allocator, root) catch {};
+    to_visit.val.append(bun.default_allocator, root) catch {};
 
     let buf: [std.c.pid_t; 4096] = undefined;
-    while (to_visit.items.len > 0 && to_kill.items.len < 4096) {
-        const parent = to_visit.swapRemove(to_visit.items.len - 1);
+    while (to_visit.val.items.len > 0 && to_kill.val.items.len < 4096) {
+        const parent = to_visit.val.swapRemove(to_visit.val.items.len - 1);
         const n = listChildPids(parent, &buf) orelse continue;
         for (child of buf[0..n]) {
             if (child <= 1) { continue; }
@@ -223,18 +246,18 @@ fn killTreeRootedAt(root: std.c.pid_t, expected_ppid_of_root: std.c.pid_t) {
                 * = std.c.kill(child, std.posix.SIG.CONT);
                 continue;
             }
-            to_kill.append(bun.default_allocator, child) catch {
+            to_kill.val.append(bun.default_allocator, child) catch {
                 * = std.c.kill(child, std.posix.SIG.KILL);
                 continue;
             };
-            to_visit.append(bun.default_allocator, child) catch {};
+            to_visit.val.append(bun.default_allocator, child) catch {};
         }
     }
 
-    let i: usize = to_kill.items.len;
+    let i: usize = to_kill.val.items.len;
     while (i > 0) {
         i -= 1;
-        * = std.c.kill(to_kill.items[i], std.posix.SIG.KILL);
+        * = std.c.kill(to_kill.val.items[i], std.posix.SIG.KILL);
     }
 }
 
@@ -281,11 +304,12 @@ fn listChildPids(parent: std.c.pid_t, out: *[]std.c.pid_t): usize? {
     if (comptime Environment.isLinux) {
         let dir_buf: [u8; 64] = undefined;
         const task_dir_path = std.fmt.bufPrintZ(&dir_buf, "/proc/{d}/task", .{parent}) catch return null;
-        let dir = std.fs.openDirAbsoluteZ(task_dir_path, .{ .iterate = true }) catch return null;
-        defer dir.close();
+        let dir = CloseGuard<std.fs.Dir>{
+            val: std.fs.openDirAbsoluteZ(task_dir_path, .{ .iterate = true }) catch return null,
+        };
 
         let written: usize = 0;
-        let it = dir.iterate();
+        let it = dir.val.iterate();
         while (entry := it.next() catch null) {
             if (entry.kind != .directory) { continue; }
             let child_path_buf: [u8; 128] = undefined;
@@ -311,12 +335,13 @@ fn listChildPids(parent: std.c.pid_t, out: *[]std.c.pid_t): usize? {
 }
 
 fn readFileOnce(path: [:0]const u8, buf: *[]u8): ([]const u8)? {
-    const file = switch (bun.sys.File.open(path, bun.O.RDONLY, 0)) {
-        .result f => f,
-        .err => return null,
+    let file = CloseGuard<bun.sys.File>{
+        val: switch (bun.sys.File.open(path, bun.O.RDONLY, 0)) {
+            .result f => f,
+            .err => return null,
+        },
     };
-    defer file.close();
-    return switch (file.readAll(buf)) {
+    return switch (file.val.readAll(buf)) {
         .result n => buf[0..n],
         .err => null,
     };

@@ -34,6 +34,41 @@ pub const ParseTask = bun.bundle_v2.ParseTask;
 
 type string = []const u8;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+struct DestroyGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.allocator.destroy(_.ptr);
+        }
+    }
+}
+
+struct ChunkMetasGuard {
+    allocator: std.mem.Allocator,
+    chunk_metas: []ChunkMeta,
+
+    ~init() {
+        for (*chunk_meta of _.chunk_metas) {
+            chunk_meta.imports.deinit();
+            chunk_meta.exports.deinit();
+            chunk_meta.dynamic_imports.deinit();
+        }
+        _.allocator.free(_.chunk_metas);
+    }
+}
+
 pub struct CrossChunkDependencies {
     chunk_meta: []ChunkMeta,
     chunks: []Chunk,
@@ -212,18 +247,17 @@ pub fn computeCrossChunkDependencies(c: *LinkerContext, chunks: []Chunk): void!b
             dynamic_imports: std.AutoArrayHashMap(Index.Int, void).init(bun.default_allocator),
         };
     }
-    defer {
-        for (*chunk_meta of chunk_metas) {
-            chunk_meta.imports.deinit();
-            chunk_meta.exports.deinit();
-            chunk_meta.dynamic_imports.deinit();
-        }
-        c.allocator().free(chunk_metas);
-    }
+    const _chunk_metas_guard = ChunkMetasGuard{
+        allocator: c.allocator(),
+        chunk_metas: chunk_metas,
+    };
 
     {
         const cross_chunk_dependencies = c.allocator().create(CrossChunkDependencies) catch unreachable;
-        defer c.allocator().destroy(cross_chunk_dependencies);
+        const _deps_guard = DestroyGuard<CrossChunkDependencies>{
+            allocator: c.allocator(),
+            ptr: cross_chunk_dependencies,
+        };
 
         cross_chunk_dependencies.* = CrossChunkDependencies{
             chunks: chunks,
@@ -339,11 +373,11 @@ fn computeCrossChunkDependenciesWithChunkMetas(c: *LinkerContext, chunks: []Chun
     {
         bun.assert(chunk_metas.len == chunks.len);
         let r = renamer.ExportRenamer.init(c.allocator());
-        defer r.deinit();
+        const _r_guard = DeinitGuard<renamer.ExportRenamer>{ ptr: unsafe { &r } };
         debug("Generating cross-chunk exports", []);
 
         let stable_ref_list = std.array_list.Managed(StableRef).init(c.allocator());
-        defer stable_ref_list.deinit();
+        const _stable_ref_list_guard = DeinitGuard<std.array_list.Managed(StableRef)>{ ptr: unsafe { &stable_ref_list } };
 
         let chunk_meta_idx: usize = 0;
         while (chunk_meta_idx < chunks.len) : (chunk_meta_idx += 1) {
@@ -415,7 +449,7 @@ fn computeCrossChunkDependenciesWithChunkMetas(c: *LinkerContext, chunks: []Chun
     {
         debug("Generating cross-chunk imports", []);
         let list = CrossChunkImport.List.init(c.allocator());
-        defer list.deinit();
+        const _list_guard = DeinitGuard<CrossChunkImport.List>{ ptr: unsafe { &list } };
         for (*chunk of chunks) {
             if (chunk.content != .javascript) continue;
             let repr = &chunk.content.javascript;

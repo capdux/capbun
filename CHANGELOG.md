@@ -2077,3 +2077,7 @@
 - `src/install/PackageManager/install_with_manager.{cp,zig}` (`6 -> 1` 刷新, ratio `1.034`)
 - `src/bundler/HTMLScanner.{cp,zig}` (`6 -> 1` 错误上报, ratio `1.11`)
 - `src/bundler/linker_context/findAllImportedPartsInJSOrder.{cp,zig}` (`6 -> 2` 写回/计数, ratio `1.09`)
+
+## [2026-11-22 Wave #27 & Wave #28] RAII `~init()` 与 `unsafe {}` 改造（6-defer 清零 17 模块 + 5-defer 首批 27 模块）
+- 6-defer (17): `ParentDeathWatchdog`, `Progress`, `crash_handler`, `macho`, `dependency`, `WorkspaceMap`, `PackageManagerLifecycle`, `NodeModuleModule`, `CompileTarget`, `Path`, `Terminal`, `filesystem_router`, `backend_coregraphics`, `codec_webp`, `quantize`, `lexer`, `renamer` (ratio `0.703 ~ 1.178`)
+- 5-defer 首批 (27): `cache`, `computeCrossChunkDependencies`, `DevServer`, `bun`, `transpiler`, `build_command`, `Worker`, `update_interactive_command`, `baby_list`, `PackageInstall`, `TarballStream`, `FileCopier`, `folder_resolver`, `dependency_jsc`, `hosted_git_info_jsc`, `install_binding`, `visitExpr`, `JSPromise`, `hot_reloader`, `resolver_jsc`, `virtual_machine_exports`, `shared`, `tsconfig_json`, `TOMLObject`, `process`, `Readable`, `PBKDF2`, `codec_png`, `node_util_binding`, `validators`, `Timer`, `Crypto`, `Store`, `write_file`, `which`, `PostgresRequest`, `env`, `expect`, `toHaveReturnedWith`, `build`, `zstd` (含审计重编文件, ratio `0.911 ~ 1.199`)

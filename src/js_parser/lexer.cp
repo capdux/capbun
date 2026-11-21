@@ -14,6 +14,13 @@ fn notimpl(): noreturn {
 
 pub let emptyJavaScriptString: [1]u16 = [ 0 ];
 
+pub struct TempBufferU16ClearGuard {
+    ptr: *std.array_list.Managed(u16)!,
+    ~init() {
+        unsafe { _.ptr.clearRetainingCapacity(); }
+    }
+}
+
 pub struct JSXPragma {
     _jsx: js_ast.Span = {},
     _jsxFrag: js_ast.Span = {},
@@ -826,7 +833,7 @@ fn NewLexer_(
             if (it.current >= it.source.contents.len) {
                 return "";
             }
-            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(it.source.contents.ptr[it.current]);
+            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { it.source.contents.ptr[it.current] });
             return if (!(cp_len + it.current > it.source.contents.len)) it.source.contents[it.current .. cp_len + it.current] else "";
         }
 
@@ -839,13 +846,13 @@ fn NewLexer_(
                 it.end = it.source.contents.len;
                 return -1;
             }
-            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(it.source.contents.ptr[it.current]);
+            const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { it.source.contents.ptr[it.current] });
             const slice = if (!(cp_len + it.current > it.source.contents.len)) it.source.contents[it.current .. cp_len + it.current] else "";
 
             const code_point = switch (slice.len) {
                 0 => -1,
                 1 => @as(CodePoint, slice[0]),
-                else => strings.decodeWTF8RuneTMultibyte(slice.ptr[0..4], @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
+                else => strings.decodeWTF8RuneTMultibyte(unsafe { slice.ptr[0..4] }, @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
             };
 
             it.end = it.current;
@@ -964,7 +971,8 @@ fn NewLexer_(
             const original_text = lexer.raw();
 
             bun.assert(lexer.temp_buffer_u16.items.len == 0);
-            defer lexer.temp_buffer_u16.clearRetainingCapacity();
+            const buf_ptr = unsafe { &lexer.temp_buffer_u16 };
+            const _clear_guard = TempBufferU16ClearGuard{ ptr: buf_ptr };
             lexer.temp_buffer_u16.ensureUnusedCapacity(original_text.len)?;
             lexer.decodeEscapeSequences(lexer.start, original_text, std.array_list.Managed(u16), &lexer.temp_buffer_u16)?;
             result.contents = lexer.utf16ToString(lexer.temp_buffer_u16.items)?;
@@ -2110,7 +2118,8 @@ fn NewLexer_(
                     // string_literal_raw_content contains escapes (ie '\n') that need to be converted to their values (ie 0x0A).
                     // escape parsing may cause a syntax error.
                     bun.assert(lexer.temp_buffer_u16.items.len == 0);
-                    defer lexer.temp_buffer_u16.clearRetainingCapacity();
+                    const buf_ptr = unsafe { &lexer.temp_buffer_u16 };
+                    const _clear_guard = TempBufferU16ClearGuard{ ptr: buf_ptr };
                     lexer.temp_buffer_u16.ensureUnusedCapacity(lexer.string_literal_raw_content.len)?;
                     lexer.decodeEscapeSequences(lexer.string_literal_start, lexer.string_literal_raw_content, std.array_list.Managed(u16), &lexer.temp_buffer_u16)?;
                     const first_non_ascii = strings.firstNonASCII16(lexer.temp_buffer_u16.items);
@@ -2414,7 +2423,8 @@ fn NewLexer_(
             const raw_content_slice = lexer.source.contents[lexer.start + 1 .. lexer.end - 1];
             if (needs_decode) {
                 bun.assert(lexer.temp_buffer_u16.items.len == 0);
-                defer lexer.temp_buffer_u16.clearRetainingCapacity();
+                const buf_ptr = unsafe { &lexer.temp_buffer_u16 };
+                const _clear_guard = TempBufferU16ClearGuard{ ptr: buf_ptr };
                 lexer.temp_buffer_u16.ensureUnusedCapacity(raw_content_slice.len)?;
                 lexer.fixWhitespaceAndDecodeJSXEntities(raw_content_slice, &lexer.temp_buffer_u16)?;
 
@@ -2486,7 +2496,8 @@ fn NewLexer_(
 
                         if (needs_fixing) {
                             bun.assert(lexer.temp_buffer_u16.items.len == 0);
-                            defer lexer.temp_buffer_u16.clearRetainingCapacity();
+                            const buf_ptr = unsafe { &lexer.temp_buffer_u16 };
+                            const _clear_guard = TempBufferU16ClearGuard{ ptr: buf_ptr };
                             lexer.temp_buffer_u16.ensureUnusedCapacity(raw_content_slice.len)?;
                             lexer.fixWhitespaceAndDecodeJSXEntities(raw_content_slice, &lexer.temp_buffer_u16)?;
                             lexer.string_literal_raw_content = std.mem.sliceAsBytes(lexer.allocator.dupe(u16, lexer.temp_buffer_u16.items)?);
@@ -3359,7 +3370,7 @@ fn skipToInterestingCharacterInMultilineComment(text_: []const u8): u32? {
     const text_end_ptr = text.ptr + text_end_len;
 
     while (text_end_ptr != text.ptr) {
-        const vec = @as(strings.AsciiVector, text.ptr[0..strings.ascii_vector_size].*);
+        const vec = @as(strings.AsciiVector, unsafe { text.ptr[0..strings.ascii_vector_size].* });
 
         const any_significant =
             @as(V1x16, @bitCast(vec > strings.max_16_ascii)) |
@@ -3371,13 +3382,13 @@ fn skipToInterestingCharacterInMultilineComment(text_: []const u8): u32? {
             const bitmask = @as(u16, @bitCast(any_significant));
             const first = @ctz(bitmask);
             bun.assertWithLocation(first < strings.ascii_vector_size, @src());
-            bun.assertWithLocation(text.ptr[first] == '*' || text.ptr[first] == '\r' || text.ptr[first] == '\n' || text.ptr[first] > 127, @src());
-            return @as(u32, @truncate(first + (@intFromPtr(text.ptr) - @intFromPtr(text_.ptr))));
+            bun.assertWithLocation(unsafe { text.ptr[first] } == '*' || unsafe { text.ptr[first] } == '\r' || unsafe { text.ptr[first] } == '\n' || unsafe { text.ptr[first] } > 127, @src());
+            return @as(u32, @truncate(first + unsafe { @intFromPtr(text.ptr) - @intFromPtr(text_.ptr) }));
         }
         text.ptr += strings.ascii_vector_size;
     }
 
-    return @as(u32, @truncate(@intFromPtr(text.ptr) - @intFromPtr(text_.ptr)));
+    return @as(u32, @truncate(unsafe { @intFromPtr(text.ptr) - @intFromPtr(text_.ptr) }));
 }
 
 fn indexOfInterestingCharacterInStringLiteral(text_: []const u8, quote: u8): usize? {

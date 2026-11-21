@@ -323,3 +323,7 @@
 ### [2026-11-22 Wave #26] RAII `~init()` + `unsafe {}` 专项改造（6 模块，全仓 `zig:check` + `bun bd test` 通过）
 - 完成 `css_parser`, `ClientSession`, `PackageManager`, `install_with_manager`, `HTMLScanner`, `findAllImportedPartsInJSOrder` 共 6 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.925 ~ 1.11 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS。
+
+### [2026-11-22 Wave #27 & Wave #28] RAII `~init()` + `unsafe {}` 专项改造（6-defer 全清零 17 模块 + 5-defer 首批 27 模块，全仓 `zig:check` + `bun bd test` 通过）
+- 完成全仓剩余 6-defer 模块（17 个）与 5-defer 首批模块（27 个，含状态恢复审计保留）的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
+- 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.703 ~ 1.199 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls）。
