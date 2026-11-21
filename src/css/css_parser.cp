@@ -82,6 +82,29 @@ pub const LogicalGroup = logical.LogicalGroup;
 import css_printer from "./printer.zig";
 pub const Printer = css_printer.Printer;
 pub const PrinterOptions = css_printer.PrinterOptions;
+
+struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+            _.ptr = null;
+        }
+    }
+};
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T)? = null,
+    allocator: Allocator,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.allocator);
+            _.ptr = null;
+        }
+    }
+};
 import targets from "./targets.zig";
 pub const Targets = css_printer.Targets;
 pub const ImportInfo = css_printer.ImportInfo;
@@ -3174,7 +3197,10 @@ pub fn StyleSheet(comptime AtRule: type): type {
 
                 break :brk custom_media;
             } else null;
-            defer if (custom_media) |*media| media.deinit(allocator);
+            let _custom_media_guard = DeinitWithAllocGuard<CustomMediaMap>{
+                ptr: if (custom_media != null) &custom_media.? else null,
+                allocator: allocator,
+            };
 
             let minify_ctx = MinifyContext{
                 .allocator = allocator,
@@ -7093,7 +7119,7 @@ pub struct parse_utility {
     ): Result(T) {
         // I hope this is okay
         let import_records: bun.BabyList(bun.ImportRecord) = {};
-        defer import_records.deinit(allocator);
+        let _import_records_guard = DeinitWithAllocGuard<bun.BabyList(bun.ImportRecord)>{ ptr: &import_records, allocator: allocator };
         let i = ParserInput.new(allocator, input);
         let parser = Parser.new(&i, &import_records, {}, null);
         const result = switch (parse_one(&parser)) {
@@ -7119,15 +7145,16 @@ pub struct to_css {
         symbols: *const bun.ast.Symbol.Map,
     ): PrintErr![]const u8 {
         let s = std.Io.Writer.Allocating.init(allocator);
-        errdefer s.deinit();
+        let _s_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &s };
         const writer = &s.writer;
         // PERF: think about how cheap this is to create
         let printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
-        defer printer.deinit();
+        let _printer_guard = DeinitGuard<Printer>{ ptr: &printer };
         switch (T) {
             CSSString => try CSSStringFns.toCss(val, &printer),
             else => try val.toCss(&printer),
         }
+        _s_guard.ptr = null;
         return s.written();
     }
 
@@ -7289,7 +7316,7 @@ pub fn dtoa_short(buf: *[129]u8, value: f32, comptime precision: u8): [[]u8, Not
 pub fn dtoa_short_impl(buf: *[129]u8, value: f32, comptime precision: u8): [[]u8, Notation] {
     buf[0] = '0';
     bun.debugAssert(std.math.isFinite(value));
-    const buf_len = bun.fmt.FormatDouble.dtoa(@ptrCast(buf[1..].ptr), @floatCast(value)).len;
+    const buf_len = unsafe { bun.fmt.FormatDouble.dtoa(@ptrCast(buf[1..].ptr), @floatCast(value)).len };
     return restrict_prec(buf[0 .. buf_len + 1], precision);
 }
 

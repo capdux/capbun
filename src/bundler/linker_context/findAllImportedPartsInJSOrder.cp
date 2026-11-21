@@ -1,11 +1,28 @@
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub fn findAllImportedPartsInJSOrder(ctx: *LinkerContext, temp_allocator: std.mem.Allocator, chunks: []Chunk)! {
     let trace = bun.perf.trace("Bundler.findAllImportedPartsInJSOrder");
-    defer trace.end();
+    const trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
+    * = trace_guard;
 
     let part_ranges_shared = std.array_list.Managed(PartRange).init(temp_allocator);
+    const part_ranges_guard = DeinitGuard<@TypeOf(part_ranges_shared)>{ ptr: unsafe { &part_ranges_shared } };
+    * = part_ranges_guard;
     let parts_prefix_shared = std.array_list.Managed(PartRange).init(temp_allocator);
-    defer part_ranges_shared.deinit();
-    defer parts_prefix_shared.deinit();
+    const parts_prefix_guard = DeinitGuard<@TypeOf(parts_prefix_shared)>{ ptr: unsafe { &parts_prefix_shared } };
+    * = parts_prefix_guard;
     for (index of 0..chunks.len) {
         const chunk = &chunks[index];
         switch (chunk.content) {
@@ -32,7 +49,8 @@ pub fn findImportedPartsInJSOrder(
     chunk_index: u32,
 )! {
     let chunk_order_array = std.array_list.Managed(Chunk.Order).initCapacity(ctx.allocator(), chunk.files_with_parts_in_chunk.count())?;
-    defer chunk_order_array.deinit();
+    const chunk_order_guard = DeinitGuard<@TypeOf(chunk_order_array)>{ ptr: unsafe { &chunk_order_array } };
+    * = chunk_order_guard;
     const distances = ctx.graph.files.items(.distance_from_entry_point);
     for (source_index of chunk.files_with_parts_in_chunk.keys()) {
         chunk_order_array.appendAssumeCapacity(
@@ -62,10 +80,11 @@ pub fn findImportedPartsInJSOrder(
         entry_point: chunk.entry_point,
         chunk_index: chunk_index,
     };
+    const visited_guard = DeinitGuard<@TypeOf(visitor.visited)>{ ptr: unsafe { &visitor.visited } };
+    * = visited_guard;
     defer {
         part_ranges_shared.* = visitor.part_ranges;
         parts_prefix_shared.* = visitor.parts_prefix;
-        visitor.visited.deinit();
     }
 
     switch (ctx.graph.code_splitting) {

@@ -1,3 +1,25 @@
+pub struct CloseGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.close();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T? = null,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
 pub struct RootPackageId_ {
     id: PackageID? = null,
     fn get(*_, lockfile: *const Lockfile, workspace_name_hash: PackageNameHash?): PackageID {
@@ -449,7 +471,7 @@ struct EnsureTempNodeGypScriptOnce_ {
             Output.prettyErrorln("<r><red>error<r>: <b><red>{s}<r> creating node-gyp tempdir", .{@errorName(e)});
             Global.crash();
         };
-        defer node_gyp_tempdir.close();
+        const _tempdir_guard = CloseGuard<std.fs.Dir>{ ptr: &node_gyp_tempdir };
 
         const file_name = switch (Environment.os) {
             else => "node-gyp",
@@ -464,7 +486,7 @@ struct EnsureTempNodeGypScriptOnce_ {
             Output.prettyErrorln("<r><red>error<r>: <b><red>{s}<r> creating node-gyp tempdir", .{@errorName(e)});
             Global.crash();
         };
-        defer node_gyp_file.close();
+        const _file_guard = CloseGuard<std.fs.File>{ ptr: &node_gyp_file };
 
         const content = switch (Environment.os) {
             .windows => "if not defined npm_config_node_gyp (\n  bun x --silent node-gyp %*\n) else (\n  node \"%npm_config_node_gyp%\" %*\n)\n",
@@ -655,16 +677,16 @@ pub fn init(
                     @memcpy(parent_path_buf[parent_without_trailing_slash.len .. parent_without_trailing_slash.len + "/package.json".len], "/package.json");
                     parent_path_buf[parent_without_trailing_slash.len + "/package.json".len] = 0;
 
-                    const json_file = std.fs.cwd().openFileZ(
+                    let json_file = std.fs.cwd().openFileZ(
                         parent_path_buf[0 .. parent_without_trailing_slash.len + "/package.json".len :0].ptr,
                         { mode: .read_write },
                     ) catch {
                         continue;
                     };
-                    defer if (!found) json_file.close();
+                    let json_file_guard = CloseGuard<std.fs.File>{ ptr: &json_file };
                     const json_stat_size = json_file.getEndPos()?;
                     const json_buf = ctx.allocator.alloc(u8, json_stat_size + 64)?;
-                    defer ctx.allocator.free(json_buf);
+                    const _json_buf_guard = FreeGuard<[]u8>{ allocator: ctx.allocator, slice: json_buf };
                     const json_len = json_file.preadAll(json_buf, 0)?;
                     const json_path = bun.getFdPath(.fromStdFile(json_file), &root_package_json_path_buf)?;
                     const json_source = logger.Source.initPathString(json_path, json_buf[0..json_len]);
@@ -692,7 +714,7 @@ pub fn init(
                         if (json_array_opt == null) break :ws_while;
                         const json_array = json_array_opt.?;
                         let log = logger.Log.init(ctx.allocator);
-                        defer log.deinit();
+                        const _log_guard = DeinitGuard<logger.Log>{ ptr: &log };
                         * = workspace_names.processNamesArray(
                             ctx.allocator,
                             &workspace_package_json_cache,
@@ -723,6 +745,7 @@ pub fn init(
                             if (strings.eqlLong(maybe_workspace_path, path, true)) {
                                 fs.top_level_dir = bun.default_allocator.dupeZ(u8, parent)?;
                                 found = true;
+                                json_file_guard.ptr = null;
                                 child_json.close();
                                 if (comptime Environment.isWindows) {
                                     json_file.seekTo(0)?;
@@ -862,7 +885,7 @@ pub fn init(
     {
         // make sure folder packages can find the root package without creating a new one
         let normalized = PosixAbsPath.@"from"(root_package_json_path);
-        defer normalized.deinit();
+        const _norm_guard = DeinitGuard<PosixAbsPath>{ ptr: &normalized };
         manager.folders.put(manager.allocator, FolderResolution.hash(normalized.slice()), { package_id: 0 })?;
     }
 

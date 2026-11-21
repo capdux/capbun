@@ -6,6 +6,29 @@ const fs = bun.fs;
 const logger = bun.logger;
 const debug = bun.Output.scoped(.HTMLScanner, .hidden);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct PtrDeinitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct SelectorsDeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        for (selector of unsafe { _.ptr.slice() }) {
+            selector.deinit();
+        }
+    }
+}
+
 pub struct TagHandler {
     /// CSS selector to match elements
     selector: []const u8,
@@ -134,8 +157,9 @@ pub fn HTMLProcessor(
                     // Handle URL attribute if present
                     if (tag_info.url_attribute.len > 0) {
                         if (element.hasAttribute(tag_info.url_attribute) catch false) {
-                            const value = element.getAttribute(tag_info.url_attribute);
-                            defer value.deinit();
+                            let value = element.getAttribute(tag_info.url_attribute);
+                            const value_guard = DeinitGuard<@TypeOf(value)>{ ptr: unsafe { &value } };
+                            * = value_guard;
                             if (value.len > 0) {
                                 debug("{s} {s}", .{ tag_info.selector, value.slice() });
                                 T.onTag(target, element, value.slice(), tag_info.url_attribute, tag_info.kind);
@@ -150,13 +174,13 @@ pub fn HTMLProcessor(
 
         pub static fn run(target: *T, input: []const u8)! {
             let builder = lol.HTMLRewriter.Builder.init();
-            defer builder.deinit();
+            const builder_guard = PtrDeinitGuard<@TypeOf(builder)>{ ptr: builder };
+            * = builder_guard;
 
             const extra_selectors: usize = if (visit_document_tags) 3 else 0;
             let selectors: bun.BoundedArray(*lol.HTMLSelector, tag_handlers.len + extra_selectors) = {};
-            defer for (selector of selectors.slice()) {
-                selector.deinit();
-            };
+            const selectors_guard = SelectorsDeinitGuard<@TypeOf(selectors)>{ ptr: unsafe { &selectors } };
+            * = selectors_guard;
 
             // Add handlers for each tag type
             if (comptime tag_handlers.len > 0) {
@@ -207,8 +231,9 @@ pub fn HTMLProcessor(
             };
 
             errdefer {
-                const last_error = lol.HTMLString.lastError();
-                defer last_error.deinit();
+                let last_error = lol.HTMLString.lastError();
+                const last_error_guard = DeinitGuard<@TypeOf(last_error)>{ ptr: unsafe { &last_error } };
+                * = last_error_guard;
 
                 if (last_error.len > 0) {
                     target.onHTMLParseError(last_error.slice());
@@ -228,7 +253,8 @@ pub fn HTMLProcessor(
                 T.onWriteHTML,
                 DoneCallback.done,
             )?;
-            defer rewriter.deinit();
+            const rewriter_guard = PtrDeinitGuard<@TypeOf(rewriter)>{ ptr: rewriter };
+            * = rewriter_guard;
 
             rewriter.write(input)?;
             rewriter.end()?;

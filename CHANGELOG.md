@@ -2069,3 +2069,11 @@
 - `src/cli/why_command.{cp,zig}` (`7 -> 2` 状态恢复, ratio `1.116`)
 - `src/http_jsc/websocket_client/CppWebSocket.{cp,zig}` (`7 -> 0`, ratio `1.021`)
 - `src/http_jsc/websocket_client/WebSocketProxyTunnel.{cp,zig}` (`7 -> 0`, ratio `0.903`)
+
+## [2026-11-22 Wave #26] RAII `~init()` 与 `unsafe {}` 改造（6 模块）
+- `src/css/css_parser.{cp,zig}` (`6 -> 2` 状态恢复, ratio `1.022`)
+- `src/http/h2_client/ClientSession.{cp,zig}` (`6 -> 0`, ratio `0.925`)
+- `src/install/PackageManager.{cp,zig}` (`6 -> 0`, ratio `0.993`)
+- `src/install/PackageManager/install_with_manager.{cp,zig}` (`6 -> 1` 刷新, ratio `1.034`)
+- `src/bundler/HTMLScanner.{cp,zig}` (`6 -> 1` 错误上报, ratio `1.11`)
+- `src/bundler/linker_context/findAllImportedPartsInJSOrder.{cp,zig}` (`6 -> 2` 写回/计数, ratio `1.09`)

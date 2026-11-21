@@ -1595,3 +1595,7 @@
 ## [2026-11-22 Wave #25] RAII 改造与 `unsafe {}` 经验
 - `CppWebSocket.cp` / `WebSocketProxyTunnel.cp` / `AsyncHTTP.cp`：`LoopExitGuard<T>`、`DerefGuard<T>`、`FreeGuard<T>` 全部清零手动 `defer`，膨胀率控制在 `0.903 ~ 1.021`。
 - `runner.cp` / `why_command.cp`：`TmpDirGuard`、`AbortHandlerGuard`、`TargetVersionsGuard` 收口临时目录、信号处理器与嵌套版本列表析构。
+
+## [2026-11-22 Wave #26] RAII 改造与 `unsafe {}` 经验
+- `HTMLScanner.cp`：对本就为指针类型的 `lol.HTMLRewriter` / `lol.HTMLRewriterBuilder` 使用值持有型 `PtrDeinitGuard<T>`，避免 `DeinitGuard` 取址产生两级指针 `**T` 导致 `.deinit()` 方法解析失败。
+- `PackageManager.cp` / `install_with_manager.cp` / `ClientSession.cp`：`CloseGuard<T>`、`PoolPutGuard<T>`、`DerefGuard<T>`、`DeinitWithAllocGuard<T>` 清除全部资源型 `defer`。

@@ -1,6 +1,37 @@
+pub struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T? = null,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+pub struct PoolPutGuard<T> {
+    buf: T? = null,
+    ~init() {
+        if (b := _.buf) bun.path_buffer_pool.put(b);
+    }
+}
+
+pub struct RootScriptsNameGuard {
+    manager: *PackageManager,
+    ~init() {
+        if (root_scripts := _.manager.root_lifecycle_scripts) {
+            _.manager.allocator.free(root_scripts.package_name);
+        }
+    }
+}
+
 pub fn getWorkspaceFilters(manager: *PackageManager, original_cwd: []const u8): !WorkspaceFilterResult {
     const path_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(path_buf);
+    const _path_buf_guard = PoolPutGuard<@TypeOf(path_buf)>{ buf: path_buf };
 
     let workspace_filters: std.ArrayListUnmanaged(WorkspaceFilter) = {};
     // only populated when subcommand is `.install`
@@ -71,7 +102,7 @@ pub fn installWithManager(
             let hostname_stack = std.heap.stackFallback(512, ctx.allocator);
             const allocator = hostname_stack.get();
             const hostname = allocator.dupeZ(u8, manager.options.scope.url.hostname)?;
-            defer allocator.free(hostname);
+            const _hostname_guard = FreeGuard<[:0]u8>{ allocator: allocator, slice: hostname };
             bun.dns.internal.prefetch(manager.event_loop.loop(), hostname, manager.options.scope.url.getPortAuto());
         }
     }
@@ -746,10 +777,8 @@ pub fn installWithManager(
 
                     Global.exit(1);
                 }) {
-                    defer {
-                        let results_mut = results;
-                        results_mut.deinit();
-                    }
+                    let results_mut = results;
+                    const _results_guard = DeinitGuard<@TypeOf(results_mut)>{ ptr: &results_mut };
 
                     security_scanner.printSecurityAdvisories(manager, &results);
 
@@ -768,11 +797,7 @@ pub fn installWithManager(
 
     // append scripts to lockfile before generating new metahash
     manager.loadRootLifecycleScripts(root);
-    defer {
-        if (root_scripts := manager.root_lifecycle_scripts) {
-            manager.allocator.free(root_scripts.package_name);
-        }
-    }
+    const _root_scripts_guard = RootScriptsNameGuard{ manager: manager };
 
     if (root_scripts := manager.root_lifecycle_scripts) {
         root_scripts.appendToLockfile(manager.lockfile);
@@ -899,7 +924,7 @@ pub fn installWithManager(
     const workspace_filter_result = getWorkspaceFilters(manager, original_cwd)?;
     const workspace_filters = workspace_filter_result[0];
     const install_root_dependencies = workspace_filter_result[1];
-    defer manager.allocator.free(workspace_filters);
+    const _workspace_filters_guard = FreeGuard<@TypeOf(workspace_filters)>{ allocator: manager.allocator, slice: workspace_filters };
 
     const install_summary: PackageInstall.Summary = install_summary: {
         if (!manager.options.do.install_packages) {

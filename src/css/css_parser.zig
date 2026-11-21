@@ -86,7 +86,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const prefixes = @import("./prefixes.zig");
@@ -224,6 +224,41 @@ else => "delimiter",
 });
     }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit();
+                    self.ptr = null;
+                }
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        allocator: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.deinit(self.allocator);
+                    self.ptr = null;
+                }
+        }
+    };
+}
 
 pub const todo_stuff = struct {
     pub const think_mem_mgmt = "TODO: think about memory management";
@@ -422,14 +457,14 @@ pub const DefaultAtRuleParser = struct {
                 return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
         }
     
-    pub fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
+    pub fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule, void) {
                 return .{ .err = undefined };
         }
     
     pub fn onImportRule(_: *This, _: *ImportRule, _: u32, _: u32) void {
         }
     
-    pub fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName,1)) void {
+    pub fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName, 1)) void {
         }
     
     pub fn enclosingLayerLength(_: *This) u32 {
@@ -494,7 +529,7 @@ pub const BundlerAtRuleParser = struct {
                 return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
         }
     
-    pub fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule,void) {
+    pub fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule, void) {
                 if (comptime ENABLE_TAILWIND_PARSING) {
                     return (switch (prelude) {
     .tailwind => |v| {
@@ -511,7 +546,7 @@ pub const BundlerAtRuleParser = struct {
                 _ = (blk_catch_0: { break :blk_catch_0 ((b.import_records.append(b.allocator, ImportRecord{ .path = bun.fs.Path.init(import_rule.url), .kind = (if ((import_rule.supports != null)) .at_conditional else .at), .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(start_position) }, .len = @intCast((end_position - start_position)) } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
         }
     
-    pub fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName,1)) void {
+    pub fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName, 1)) void {
                 if ((b.anon_layer_count > 0)) {
                     return;
                 }
@@ -668,7 +703,7 @@ pub const StyleAttribute = struct {
     declarations: DeclarationBlock,
     sources: ArrayList(string),
 
-pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(StyleAttribute,Err(ParserError)) {
+pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(StyleAttribute, Err(ParserError)) {
             var parser_extra = ParserExtra{ .local_scope = .{}, .symbols = .{}, .source_index = source_index };
             _ = &parser_extra;
             var input = ParserInput.new(allocator, code);
@@ -831,11 +866,11 @@ pub fn currentSourceLocation(self: Parser) SourceLocation {
             return self.input.tokenizer.currentSourceLocation();
     }
 
-pub fn currentSourceMapUrl(self: Parser) ?[]const u8 {
+pub fn currentSourceMapUrl(self: *const Parser) ?[]const u8 {
             return self.input.tokenizer.currentSourceMapUrl();
     }
 
-pub fn sliceFrom(self: Parser, start_position: usize) []const u8 {
+pub fn sliceFrom(self: *const Parser, start_position: usize) []const u8 {
             return self.input.tokenizer.sliceFrom(start_position);
     }
 
@@ -928,7 +963,7 @@ return .success;
 });
                 switch (tok.*) {
 .function, .open_paren, .open_square, .open_curly => {
-if (self.parseNestedBlock(void, @as(void, undefined), struct {
+if (self.parseNestedBlock(void, @as(void, undefined), (struct {
 
 pub fn parse(_: void, i: *Parser) Result(void) {
             if (i.expectNoErrorToken().asErr()) |err_val| {
@@ -937,7 +972,7 @@ pub fn parse(_: void, i: *Parser) Result(void) {
             }
             return .success;
     }
-}.parse).asErr()) |e| {
+}).parse).asErr()) |e| {
                     _ = &e;
                     return .{ .err = e };
                 }
@@ -1216,7 +1251,7 @@ return .{ .result = value };
 },
 .function => |name| {
 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
-                const result = self.parseNestedBlock(string, @as(void, undefined), struct {
+                const result = self.parseNestedBlock(string, @as(void, undefined), (struct {
 
 pub fn parse(_: void, parser: *Parser) Result(string) {
             return (switch (parser.expectString()) {
@@ -1224,7 +1259,7 @@ pub fn parse(_: void, parser: *Parser) Result(string) {
 .err => |e| .{ .err = e },
 });
     }
-}.parse);
+}).parse);
                 return (switch (result) {
 .result => |v| .{ .result = v },
 .err => |e| .{ .err = e },
@@ -1255,7 +1290,7 @@ return .{ .result = value };
 },
 .function => |name| {
 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
-                const result = self.parseNestedBlock(string, @as(void, undefined), struct {
+                const result = self.parseNestedBlock(string, @as(void, undefined), (struct {
 
 pub fn parse(_: void, parser: *Parser) Result(string) {
             return (switch (parser.expectString()) {
@@ -1263,7 +1298,7 @@ pub fn parse(_: void, parser: *Parser) Result(string) {
 .err => |e| .{ .err = e },
 });
     }
-}.parse);
+}).parse);
                 return (switch (result) {
 .result => |v| .{ .result = v },
 .err => |e| .{ .err = e },
@@ -1496,7 +1531,7 @@ pub fn sourceLocation(self: ParserState) SourceLocation {
 
 pub const nth = struct {
 
-pub fn parse_number_saturate(allocator: Allocator, str: []const u8) Maybe(i32,void) {
+pub fn parse_number_saturate(allocator: Allocator, str: []const u8) Maybe(i32, void) {
             var input = ParserInput.new(allocator, str);
             _ = &input;
             var parser = Parser.new((&input), null, .{}, null);
@@ -1516,7 +1551,7 @@ return .{ .err = undefined };
             return .{ .result = int };
     }
 
-pub fn parse_n_dash_digits(allocator: Allocator, str: []const u8) Maybe(i32,void) {
+pub fn parse_n_dash_digits(allocator: Allocator, str: []const u8) Maybe(i32, void) {
             const bytes = str;
             if ((((bytes.len >= 3) and bun.strings.eqlCaseInsensitiveASCIIICheckLength(bytes[0..2], "n-")) and brk: {
             for (cp_iter_slice(bytes[2..])) |b| {
@@ -1707,7 +1742,7 @@ pub fn init(allocator: Allocator, src: []const u8) Tokenizer {
             return lexer;
     }
 
-pub fn currentSourceMapUrl(self: Tokenizer) ?[]const u8 {
+pub fn currentSourceMapUrl(self: *const Tokenizer) ?[]const u8 {
             return self.source_map_url;
     }
 
@@ -1764,11 +1799,11 @@ pub fn seeFunction(self: *Tokenizer, name: []const u8) void {
             }
     }
 
-pub inline fn next(self: *Tokenizer) Maybe(Token,void) {
+pub inline fn next(self: *Tokenizer) Maybe(Token, void) {
             return self.nextImpl();
     }
 
-pub fn nextImpl(self: *Tokenizer) Maybe(Token,void) {
+pub fn nextImpl(self: *Tokenizer) Maybe(Token, void) {
             if (self.isEof()) {
                 return Maybe(Token, void).err;
             }
@@ -2963,8 +2998,8 @@ pub fn format(tok: *const Token, writer: *std.Io.Writer) !void {
 });
     }
 
-pub fn raw(self: Token) []const u8 {
-            return (switch (self) {
+pub fn raw(self: *const Token) []const u8 {
+            return (switch (self.*) {
 .ident => self.ident,
 });
     }
@@ -2973,7 +3008,7 @@ pub inline fn kind(self: Token) TokenKind {
             return @as(TokenKind, @enumFromInt(self));
     }
 
-pub inline fn kindString(self: Token) []const u8 {
+pub inline fn kindString(self: *const Token) []const u8 {
             return cp_string_from(self.kind);
     }
 
@@ -3277,17 +3312,15 @@ pub fn hueToRgb(m1: f32, m2: f32, _h3: f32) f32 {
             parse,
         };
     pub const AngleOrNumber = union(enum) {
-            /// `<number>`.
-            number: struct {
+        number: struct {
                 /// The numeric value parsed, as a float.
                 value: f32,
             },
-            /// `<angle>`
-            angle: struct {
+        angle: struct {
                 /// The value as a number of degrees.
                 degrees: f32,
             },
-        };
+    };
     const RGB = struct { u8, u8, u8 };
     pub const named_colors = bun.ComptimeStringMap(RGB, .{ .{ "aliceblue", .{ 240, 248, 255 } }, .{ "antiquewhite", .{ 250, 235, 215 } }, .{ "aqua", .{ 0, 255, 255 } }, .{ "aquamarine", .{ 127, 255, 212 } }, .{ "azure", .{ 240, 255, 255 } }, .{ "beige", .{ 245, 245, 220 } }, .{ "bisque", .{ 255, 228, 196 } }, .{ "black", .{ 0, 0, 0 } }, .{ "blanchedalmond", .{ 255, 235, 205 } }, .{ "blue", .{ 0, 0, 255 } }, .{ "blueviolet", .{ 138, 43, 226 } }, .{ "brown", .{ 165, 42, 42 } }, .{ "burlywood", .{ 222, 184, 135 } }, .{ "cadetblue", .{ 95, 158, 160 } }, .{ "chartreuse", .{ 127, 255, 0 } }, .{ "chocolate", .{ 210, 105, 30 } }, .{ "coral", .{ 255, 127, 80 } }, .{ "cornflowerblue", .{ 100, 149, 237 } }, .{ "cornsilk", .{ 255, 248, 220 } }, .{ "crimson", .{ 220, 20, 60 } }, .{ "cyan", .{ 0, 255, 255 } }, .{ "darkblue", .{ 0, 0, 139 } }, .{ "darkcyan", .{ 0, 139, 139 } }, .{ "darkgoldenrod", .{ 184, 134, 11 } }, .{ "darkgray", .{ 169, 169, 169 } }, .{ "darkgreen", .{ 0, 100, 0 } }, .{ "darkgrey", .{ 169, 169, 169 } }, .{ "darkkhaki", .{ 189, 183, 107 } }, .{ "darkmagenta", .{ 139, 0, 139 } }, .{ "darkolivegreen", .{ 85, 107, 47 } }, .{ "darkorange", .{ 255, 140, 0 } }, .{ "darkorchid", .{ 153, 50, 204 } }, .{ "darkred", .{ 139, 0, 0 } }, .{ "darksalmon", .{ 233, 150, 122 } }, .{ "darkseagreen", .{ 143, 188, 143 } }, .{ "darkslateblue", .{ 72, 61, 139 } }, .{ "darkslategray", .{ 47, 79, 79 } }, .{ "darkslategrey", .{ 47, 79, 79 } }, .{ "darkturquoise", .{ 0, 206, 209 } }, .{ "darkviolet", .{ 148, 0, 211 } }, .{ "deeppink", .{ 255, 20, 147 } }, .{ "deepskyblue", .{ 0, 191, 255 } }, .{ "dimgray", .{ 105, 105, 105 } }, .{ "dimgrey", .{ 105, 105, 105 } }, .{ "dodgerblue", .{ 30, 144, 255 } }, .{ "firebrick", .{ 178, 34, 34 } }, .{ "floralwhite", .{ 255, 250, 240 } }, .{ "forestgreen", .{ 34, 139, 34 } }, .{ "fuchsia", .{ 255, 0, 255 } }, .{ "gainsboro", .{ 220, 220, 220 } }, .{ "ghostwhite", .{ 248, 248, 255 } }, .{ "gold", .{ 255, 215, 0 } }, .{ "goldenrod", .{ 218, 165, 32 } }, .{ "gray", .{ 128, 128, 128 } }, .{ "green", .{ 0, 128, 0 } }, .{ "greenyellow", .{ 173, 255, 47 } }, .{ "grey", .{ 128, 128, 128 } }, .{ "honeydew", .{ 240, 255, 240 } }, .{ "hotpink", .{ 255, 105, 180 } }, .{ "indianred", .{ 205, 92, 92 } }, .{ "indigo", .{ 75, 0, 130 } }, .{ "ivory", .{ 255, 255, 240 } }, .{ "khaki", .{ 240, 230, 140 } }, .{ "lavender", .{ 230, 230, 250 } }, .{ "lavenderblush", .{ 255, 240, 245 } }, .{ "lawngreen", .{ 124, 252, 0 } }, .{ "lemonchiffon", .{ 255, 250, 205 } }, .{ "lightblue", .{ 173, 216, 230 } }, .{ "lightcoral", .{ 240, 128, 128 } }, .{ "lightcyan", .{ 224, 255, 255 } }, .{ "lightgoldenrodyellow", .{ 250, 250, 210 } }, .{ "lightgray", .{ 211, 211, 211 } }, .{ "lightgreen", .{ 144, 238, 144 } }, .{ "lightgrey", .{ 211, 211, 211 } }, .{ "lightpink", .{ 255, 182, 193 } }, .{ "lightsalmon", .{ 255, 160, 122 } }, .{ "lightseagreen", .{ 32, 178, 170 } }, .{ "lightskyblue", .{ 135, 206, 250 } }, .{ "lightslategray", .{ 119, 136, 153 } }, .{ "lightslategrey", .{ 119, 136, 153 } }, .{ "lightsteelblue", .{ 176, 196, 222 } }, .{ "lightyellow", .{ 255, 255, 224 } }, .{ "lime", .{ 0, 255, 0 } }, .{ "limegreen", .{ 50, 205, 50 } }, .{ "linen", .{ 250, 240, 230 } }, .{ "magenta", .{ 255, 0, 255 } }, .{ "maroon", .{ 128, 0, 0 } }, .{ "mediumaquamarine", .{ 102, 205, 170 } }, .{ "mediumblue", .{ 0, 0, 205 } }, .{ "mediumorchid", .{ 186, 85, 211 } }, .{ "mediumpurple", .{ 147, 112, 219 } }, .{ "mediumseagreen", .{ 60, 179, 113 } }, .{ "mediumslateblue", .{ 123, 104, 238 } }, .{ "mediumspringgreen", .{ 0, 250, 154 } }, .{ "mediumturquoise", .{ 72, 209, 204 } }, .{ "mediumvioletred", .{ 199, 21, 133 } }, .{ "midnightblue", .{ 25, 25, 112 } }, .{ "mintcream", .{ 245, 255, 250 } }, .{ "mistyrose", .{ 255, 228, 225 } }, .{ "moccasin", .{ 255, 228, 181 } }, .{ "navajowhite", .{ 255, 222, 173 } }, .{ "navy", .{ 0, 0, 128 } }, .{ "oldlace", .{ 253, 245, 230 } }, .{ "olive", .{ 128, 128, 0 } }, .{ "olivedrab", .{ 107, 142, 35 } }, .{ "orange", .{ 255, 165, 0 } }, .{ "orangered", .{ 255, 69, 0 } }, .{ "orchid", .{ 218, 112, 214 } }, .{ "palegoldenrod", .{ 238, 232, 170 } }, .{ "palegreen", .{ 152, 251, 152 } }, .{ "paleturquoise", .{ 175, 238, 238 } }, .{ "palevioletred", .{ 219, 112, 147 } }, .{ "papayawhip", .{ 255, 239, 213 } }, .{ "peachpuff", .{ 255, 218, 185 } }, .{ "peru", .{ 205, 133, 63 } }, .{ "pink", .{ 255, 192, 203 } }, .{ "plum", .{ 221, 160, 221 } }, .{ "powderblue", .{ 176, 224, 230 } }, .{ "purple", .{ 128, 0, 128 } }, .{ "rebeccapurple", .{ 102, 51, 153 } }, .{ "red", .{ 255, 0, 0 } }, .{ "rosybrown", .{ 188, 143, 143 } }, .{ "royalblue", .{ 65, 105, 225 } }, .{ "saddlebrown", .{ 139, 69, 19 } }, .{ "salmon", .{ 250, 128, 114 } }, .{ "sandybrown", .{ 244, 164, 96 } }, .{ "seagreen", .{ 46, 139, 87 } }, .{ "seashell", .{ 255, 245, 238 } }, .{ "sienna", .{ 160, 82, 45 } }, .{ "silver", .{ 192, 192, 192 } }, .{ "skyblue", .{ 135, 206, 235 } }, .{ "slateblue", .{ 106, 90, 205 } }, .{ "slategray", .{ 112, 128, 144 } }, .{ "slategrey", .{ 112, 128, 144 } }, .{ "snow", .{ 255, 250, 250 } }, .{ "springgreen", .{ 0, 255, 127 } }, .{ "steelblue", .{ 70, 130, 180 } }, .{ "tan", .{ 210, 180, 140 } }, .{ "teal", .{ 0, 128, 128 } }, .{ "thistle", .{ 216, 191, 216 } }, .{ "tomato", .{ 255, 99, 71 } }, .{ "turquoise", .{ 64, 224, 208 } }, .{ "violet", .{ 238, 130, 238 } }, .{ "wheat", .{ 245, 222, 179 } }, .{ "white", .{ 255, 255, 255 } }, .{ "whitesmoke", .{ 245, 245, 245 } }, .{ "yellow", .{ 255, 255, 0 } }, .{ "yellowgreen", .{ 154, 205, 50 } } });
 };
@@ -3493,9 +3526,10 @@ pub const parse_utility = struct {
 pub fn parseString(allocator: Allocator, comptime T: type, input: []const u8, comptime parse_one: *const fn (*Parser) Result(T)) Result(T) {
             var import_records: bun.BabyList(bun.ImportRecord) = .{};
             _ = &import_records;
-            defer {
-            _ = import_records.deinit(allocator);
-            }
+            var _import_records_guard = DeinitWithAllocGuard(bun.BabyList(bun.ImportRecord)){ .ptr = (&import_records), .allocator = allocator };
+            _ = &_import_records_guard;
+            var ___import_records_guard_moved = false; _ = &___import_records_guard_moved;
+            defer if (!___import_records_guard_moved) { ___import_records_guard_moved = true; const __T = @TypeOf(_import_records_guard); if (@typeInfo(__T) == .optional) { if (_import_records_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _import_records_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _import_records_guard; _drop_val.__cp_deinit(); } };
             var i = ParserInput.new(allocator, input);
             _ = &i;
             var parser = Parser.new((&i), (&import_records), .{}, null);
@@ -3519,20 +3553,23 @@ pub const to_css = struct {
 pub fn string(allocator: Allocator, comptime T: type, val: *const T, options: PrinterOptions, import_info: ?ImportInfo, local_names: ?*const LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) PrintErr![]const u8 {
             var s = std.Io.Writer.Allocating.init(allocator);
             _ = &s;
-            errdefer {
-            _ = s.deinit();
-            }
+            var _s_guard = DeinitGuard(std.Io.Writer.Allocating){ .ptr = (&s) };
+            _ = &_s_guard;
+            var ___s_guard_moved = false; _ = &___s_guard_moved;
+            defer if (!___s_guard_moved) { ___s_guard_moved = true; const __T = @TypeOf(_s_guard); if (@typeInfo(__T) == .optional) { if (_s_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _s_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _s_guard; _drop_val.__cp_deinit(); } };
             const writer = (&s.writer);
             var printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
             _ = &printer;
-            defer {
-            _ = printer.deinit();
-            }
+            var _printer_guard = DeinitGuard(Printer){ .ptr = (&printer) };
+            _ = &_printer_guard;
+            var ___printer_guard_moved = false; _ = &___printer_guard_moved;
+            defer if (!___printer_guard_moved) { ___printer_guard_moved = true; const __T = @TypeOf(_printer_guard); if (@typeInfo(__T) == .optional) { if (_printer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _printer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _printer_guard; _drop_val.__cp_deinit(); } };
             if (T == CSSString) {
 _ = try CSSStringFns.toCss(val, (&printer));
 } else {
 _ = try val.toCss((&printer));
 }
+            _s_guard.ptr = null;
             return s.written();
     }
 
@@ -3870,191 +3907,33 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
         _ = &property_name;
         _ = &PropertyFieldMap;
         return struct {
-        /// Returns a shorthand from the longhand properties defined in the given declaration block.
-        pub fn fromLonghands(allocator: Allocator, decls: *const DeclarationBlock, vendor_prefix: VendorPrefix) ?struct { T, bool } {
-            _ = allocator; // autofix
-            _ = decls; // autofix
-            _ = vendor_prefix; // autofix
-            // var count: usize = 0;
-            // var important_count: usize = 0;
-            // var this: T = undefined;
-            // var set_fields = std.StaticBitSet(std.meta.fields(T).len).initEmpty();
-            // const all_fields_set = std.StaticBitSet(std.meta.fields(T).len).initFull();
 
-            // // Loop through each property in `decls.declarations` and then `decls.important_declarations`
-            // // The inline for loop is so we can share the code for both
-            // const DECL_FIELDS = &.{ "declarations", "important_declarations" };
-            // inline for (DECL_FIELDS) |decl_field_name| {
-            //     const decl_list: *const ArrayList(css_properties.Property) = &@field(decls, decl_field_name);
-            //     const important = comptime std.mem.eql(u8, decl_field_name, "important_declarations");
+pub fn fromLonghands(allocator: Allocator, decls: *const DeclarationBlock, vendor_prefix: VendorPrefix) ?struct { T, bool } {
+            _ = &allocator;
+            _ = &decls;
+            _ = &vendor_prefix;
+            _ = @compileError(todo_stuff.depth);
+    }
 
-            //     // Now loop through each property in the list
-            //     main_loop: for (decl_list.items) |*property| {
-            //         // The property field map maps each field in `T` to a tag of `Property`
-            //         // Here we do `inline for` to basically switch on the tag of `property` to see
-            //         // if it matches a field in `T` which maps to the same tag
-            //         //
-            //         // Basically, check that `@as(PropertyIdTag, property.*)` equals `T.PropertyFieldMap[field.name]`
-            //         inline for (std.meta.fields(@TypeOf(T.PropertyFieldMap))) |field| {
-            //             const tag: PropertyIdTag = @as(?*const PropertyIdTag, field.default_value).?.*;
+pub fn longhands(vendor_prefix: VendorPrefix) []const PropertyId {
+            _ = &vendor_prefix;
+            _ = @compileError(todo_stuff.depth);
+    }
 
-            //             if (@intFromEnum(@as(PropertyIdTag, property.*)) == tag) {
-            //                 if (@hasField(T.VendorPrefixMap, field.name)) {
-            //                     if (@hasField(T.VendorPrefixMap, field.name) and
-            //                         !VendorPrefix.eq(@field(property, field.name)[1], vendor_prefix))
-            //                     {
-            //                         return null;
-            //                     }
+pub fn longhand(self: *const @This(), allocator: Allocator, property_id: *const PropertyId) ?Property {
+            _ = self;
+            _ = &allocator;
+            _ = &property_id;
+            _ = @compileError(todo_stuff.depth);
+    }
 
-            //                     @field(this, field.name) = if (@hasDecl(@TypeOf(@field(property, field.name)[0]), "clone"))
-            //                         @field(property, field.name)[0].deepClone(allocator)
-            //                     else
-            //                         @field(property, field.name)[0];
-            //                 } else {
-            //                     @field(this, field.name) = if (@hasDecl(@TypeOf(@field(property, field.name)), "clone"))
-            //                         @field(property, field.name).deepClone(allocator)
-            //                     else
-            //                         @field(property, field.name);
-            //                 }
-
-            //                 set_fields.set(std.meta.fieldIndex(T, field.name));
-            //                 count += 1;
-            //                 if (important) {
-            //                     important_count += 1;
-            //                 }
-
-            //                 continue :main_loop;
-            //             }
-            //         }
-
-            //         // If `property` matches none of the tags in `T.PropertyFieldMap` then let's try
-            //         // if it matches the tag specified by `property_name`
-            //         if (@as(PropertyIdTag, property.*) == property_name) {
-            //             inline for (std.meta.fields(@TypeOf(T.PropertyFieldMap))) |field| {
-            //                 if (@hasField(T.VendorPrefixMap, field.name)) {
-            //                     @field(this, field.name) = if (@hasDecl(@TypeOf(@field(property, field.name)[0]), "clone"))
-            //                         @field(property, field.name)[0].deepClone(allocator)
-            //                     else
-            //                         @field(property, field.name)[0];
-            //                 } else {
-            //                     @field(this, field.name) = if (@hasDecl(@TypeOf(@field(property, field.name)), "clone"))
-            //                         @field(property, field.name).deepClone(allocator)
-            //                     else
-            //                         @field(property, field.name);
-            //                 }
-
-            //                 set_fields.set(std.meta.fieldIndex(T, field.name));
-            //                 count += 1;
-            //                 if (important) {
-            //                     important_count += 1;
-            //                 }
-            //             }
-            //             continue :main_loop;
-            //         }
-
-            //         // Otherwise, try to convert to te fields using `.longhand()`
-            //         inline for (std.meta.fields(@TypeOf(T.PropertyFieldMap))) |field| {
-            //             const property_id = @unionInit(
-            //                 PropertyId,
-            //                 field.name,
-            //                 if (@hasDecl(T.VendorPrefixMap, field.name)) vendor_prefix,
-            //             );
-            //             const value = property.longhand(&property_id);
-            //             if (@as(PropertyIdTag, value) == @as(PropertyIdTag, property_id)) {
-            //                 @field(this, field.name) = if (@hasDecl(T.VendorPrefixMap, field.name))
-            //                     @field(value, field.name)[0]
-            //                 else
-            //                     @field(value, field.name);
-            //                 set_fields.set(std.meta.fieldIndex(T, field.name));
-            //                 count += 1;
-            //                 if (important) {
-            //                     important_count += 1;
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
-
-            // if (important_count > 0 and important_count != count) {
-            //     return null;
-            // }
-
-            // // All properties in the group must have a matching value to produce a shorthand.
-            // if (set_fields.eql(all_fields_set)) {
-            //     return .{ this, important_count > 0 };
-            // }
-
-            // return null;
-            @compileError(todo_stuff.depth);
-        }
-
-        /// Returns a shorthand from the longhand properties defined in the given declaration block.
-        pub fn longhands(vendor_prefix: VendorPrefix) []const PropertyId {
-            _ = vendor_prefix; // autofix
-            // const out: []const PropertyId = comptime out: {
-            //     var out: [std.meta.fields(@TypeOf(T.PropertyFieldMap)).len]PropertyId = undefined;
-
-            //     for (std.meta.fields(@TypeOf(T.PropertyFieldMap)), 0..) |field, i| {
-            //         out[i] = @unionInit(
-            //             PropertyId,
-            //             field.name,
-            //             if (@hasField(T.VendorPrefixMap, field.name)) vendor_prefix,
-            //         );
-            //     }
-
-            //     break :out out;
-            // };
-            // return out;
-
-            @compileError(todo_stuff.depth);
-        }
-
-        /// Returns a longhand property for this shorthand.
-        pub fn longhand(this: *const T, allocator: Allocator, property_id: *const PropertyId) ?Property {
-            _ = this; // autofix
-            _ = allocator; // autofix
-            _ = property_id; // autofix
-            // inline for (std.meta.fields(@TypeOf(T.PropertyFieldMap))) |field| {
-            //     if (@as(PropertyIdTag, property_id.*) == @field(T.PropertyFieldMap, field.name)) {
-            //         const val = if (@hasDecl(@TypeOf(@field(T, field.namee)), "clone"))
-            //             @field(this, field.name).deepClone(allocator)
-            //         else
-            //             @field(this, field.name);
-            //         return @unionInit(
-            //             Property,
-            //             field.name,
-            //             if (@field(T.VendorPrefixMap, field.name))
-            //                 .{ val, @field(property_id, field.name)[1] }
-            //             else
-            //                 val,
-            //         );
-            //     }
-            // }
-            // return null;
-            @compileError(todo_stuff.depth);
-        }
-
-        /// Updates this shorthand from a longhand property.
-        pub fn setLonghand(this: *T, allocator: Allocator, property: *const Property) bool {
-            _ = this; // autofix
-            _ = allocator; // autofix
-            _ = property; // autofix
-            // inline for (std.meta.fields(T.PropertyFieldMap)) |field| {
-            //     if (@as(PropertyIdTag, property.*) == @field(T.PropertyFieldMap, field.name)) {
-            //         const val = if (@hasDecl(@TypeOf(@field(T, field.name)), "clone"))
-            //             @field(this, field.name).deepClone(allocator)
-            //         else
-            //             @field(this, field.name);
-
-            //         @field(this, field.name) = val;
-
-            //         return true;
-            //     }
-            // }
-            // return false;
-            @compileError(todo_stuff.depth);
-        }
-    };
+pub fn setLonghand(self: *@This(), allocator: Allocator, property: *const Property) bool {
+            _ = self;
+            _ = &allocator;
+            _ = &property;
+            _ = @compileError(todo_stuff.depth);
+    }
+};
 }
 
 pub fn DefineRectShorthand(comptime T: type, comptime V: type) type {
@@ -4587,7 +4466,7 @@ return .{ .err = e };
         return .{ .result = .{ .unknown = .{ .name = name, .tokens = tokens } } };
 }
 
-pub fn parse_custom_at_rule_without_block(comptime T: type, prelude: T.CustomAtRuleParser.Prelude, start: *const ParserState, options: *const ParserOptions, at_rule_parser: *T, is_nested: bool) Maybe(CssRule(T.CustomAtRuleParser.AtRule),void) {
+pub fn parse_custom_at_rule_without_block(comptime T: type, prelude: T.CustomAtRuleParser.Prelude, start: *const ParserState, options: *const ParserOptions, at_rule_parser: *T, is_nested: bool) Maybe(CssRule(T.CustomAtRuleParser.AtRule), void) {
         const RuleT = CssRule(T.CustomAtRuleParser.AtRule);
         _ = &RuleT;
         return (switch (T.CustomAtRuleParser.ruleWithoutBlock(at_rule_parser, prelude, start, options, is_nested)) {
@@ -4798,7 +4677,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type) type {
     at_rule_parser: *AtRuleParserT,
     rules: *CssRuleList(AtRuleT),
     composes: *ComposesMap,
-    composes_refs: SmallList(bun.bundle_v2.Ref,2) = .{},
+    composes_refs: SmallList(bun.bundle_v2.Ref, 2) = .{},
     local_properties: *LocalPropertyUsage,
 
 pub fn new(allocator: Allocator, options: *const ParserOptions, at_rule_parser: *AtRuleParserT, rules: *CssRuleList(AtRuleT), composes: *ComposesMap, local_properties: *LocalPropertyUsage) @This() {
@@ -4939,7 +4818,7 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                 return NestedRuleParser(AtRuleParserT).AtRuleParser.parseBlock((&nested_parser), prelude, start, input);
         }
     
-    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule,void) {
+    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
                 const loc_ = start.sourceLocation();
                 const loc = css_rules.Location{ .source_index = parser.options.source_index, .line = loc_.line, .column = loc_.column };
                 switch (prelude) {
@@ -5038,7 +4917,7 @@ pub fn NestedRuleParser(comptime T: type) type {
     is_in_style_rule: bool,
     allow_declarations: bool,
     composes_state: ComposesState = .disallow_entirely,
-    composes_refs: *SmallList(bun.bundle_v2.Ref,2),
+    composes_refs: *SmallList(bun.bundle_v2.Ref, 2),
     composes: *ComposesMap,
     local_properties: *LocalPropertyUsage,
     allocator: Allocator,
@@ -5059,7 +4938,7 @@ pub fn recordComposes(self: *@This(), allocator: Allocator, composes: *Composes)
             }
     }
 
-pub fn parseNested(self: *@This(), input: *Parser, is_style_rule: bool) Result(struct{DeclarationBlock,CssRuleList(T.CustomAtRuleParser.AtRule)}) {
+pub fn parseNested(self: *@This(), input: *Parser, is_style_rule: bool) Result(struct { DeclarationBlock, CssRuleList(T.CustomAtRuleParser.AtRule) }) {
             var rules: CssRuleList(T.CustomAtRuleParser.AtRule) = .{};
             _ = &rules;
             var nested_parser = This{ .allocator = input.allocator(), .options = self.options, .at_rule_parser = self.at_rule_parser, .declarations = DeclarationList{  }, .important_declarations = DeclarationList{  }, .rules = (&rules), .is_in_style_rule = (self.is_in_style_rule or is_style_rule), .allow_declarations = ((self.allow_declarations or self.is_in_style_rule) or is_style_rule), .composes_state = (if ((self.is_in_style_rule and (self.composes_state == .allow))) .{ .disallow_nested = .{ .line = self.composes_state.allow.line, .column = self.composes_state.allow.column } } else self.composes_state), .composes = self.composes, .composes_refs = self.composes_refs, .local_properties = self.local_properties };
@@ -5610,7 +5489,7 @@ return .{ .err = e };
     }
         }
     
-    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule,void) {
+    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
                 const loc = parser.getLoc(start);
                 switch (prelude) {
     .layer => {
@@ -5860,7 +5739,7 @@ pub fn empty(allocator: Allocator) This {
             return .{ .rules = .{}, .sources = .{}, .source_map_urls = .{}, .license_comments = .{}, .options = ParserOptions.default(allocator, null), .composes = .{} };
     }
 
-pub fn minify(self: *@This(), allocator: Allocator, options: MinifyOptions, extra: *const StylesheetExtra) Maybe(void,Err(MinifyErrorKind)) {
+pub fn minify(self: *@This(), allocator: Allocator, options: MinifyOptions, extra: *const StylesheetExtra) Maybe(void, Err(MinifyErrorKind)) {
             const ctx = PropertyHandlerContext.new(allocator, options.targets, (&options.unused_symbols));
             var handler = declaration.DeclarationHandler.default();
             _ = &handler;
@@ -5878,12 +5757,10 @@ pub fn minify(self: *@This(), allocator: Allocator, options: MinifyOptions, extr
             break :brk custom_media;
 } else null);
             _ = &custom_media;
-            defer {
-            if (custom_media) |*media| {
-                _ = &media;
-                _ = (media.*).deinit(allocator);
-            }
-            }
+            var _custom_media_guard = DeinitWithAllocGuard(CustomMediaMap){ .ptr = (if ((custom_media != null)) (&custom_media.?) else null), .allocator = allocator };
+            _ = &_custom_media_guard;
+            var ___custom_media_guard_moved = false; _ = &___custom_media_guard_moved;
+            defer if (!___custom_media_guard_moved) { ___custom_media_guard_moved = true; const __T = @TypeOf(_custom_media_guard); if (@typeInfo(__T) == .optional) { if (_custom_media_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _custom_media_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _custom_media_guard; _drop_val.__cp_deinit(); } };
             var minify_ctx = MinifyContext{ .allocator = allocator, .targets = (&options.targets), .handler = (&handler), .important_handler = (&important_handler), .handler_context = ctx, .unused_symbols = (&options.unused_symbols), .custom_media = custom_media, .css_modules = (self.options.css_modules != null), .extra = extra };
             _ = &minify_ctx;
             _ = (blk_catch_0: { break :blk_catch_0 ((self.rules.minify((&minify_ctx), false)) catch |__ce_0| { _ = &__ce_0; @panic("TODO: Handle"); }); });
@@ -5939,19 +5816,19 @@ return .{ .err = e };
             return .{ .result = ToCssResult{ .code = dest.written(), .dependencies = result.dependencies, .exports = result.exports, .references = result.references } };
     }
 
-pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: ?*bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct{This,StylesheetExtra},Err(ParserError)) {
+pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: ?*bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             var default_at_rule_parser = DefaultAtRuleParser{  };
             _ = &default_at_rule_parser;
             return parseWith(allocator, code, options, DefaultAtRuleParser, (&default_at_rule_parser), import_records, source_index);
     }
 
-pub fn parseBundler(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct{This,StylesheetExtra},Err(ParserError)) {
+pub fn parseBundler(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             var at_rule_parser = BundlerAtRuleParser{ .import_records = import_records, .allocator = allocator, .options = (&options), .layer_names = .{} };
             _ = &at_rule_parser;
             return This.parseWith(allocator, code, options, BundlerAtRuleParser, (&at_rule_parser), import_records, source_index);
     }
 
-pub fn parseWith(allocator: Allocator, code: []const u8, options: ParserOptions, comptime P: type, at_rule_parser: *P, import_records: ?*bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct{This,StylesheetExtra},Err(ParserError)) {
+pub fn parseWith(allocator: Allocator, code: []const u8, options: ParserOptions, comptime P: type, at_rule_parser: *P, import_records: ?*bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             var composes = ComposesMap{  };
             _ = &composes;
             var parser_extra = ParserExtra{ .local_scope = .{}, .symbols = .{}, .source_index = source_index };
@@ -6214,13 +6091,13 @@ else => {
     token: Token,
     start: ParserState,
 };
-                break :result self.input.parseUntilAfter(Delimiters{ .semicolon = true }, I, (&Closure{ .token = token, .start = start }), struct {
+                break :result self.input.parseUntilAfter(Delimiters{ .semicolon = true }, I, (&Closure{ .token = token, .start = start }), (struct {
 
 pub fn parseFn(closure: *const Closure, i: *Parser) Result(I) {
             _ = &i;
             return .{ .err = closure.start.sourceLocation().newUnexpectedTokenError(closure.token) };
     }
-}.parseFn);
+}).parseFn);
 });
                 return result;
             }
@@ -6286,7 +6163,10 @@ pub fn dtoa_short(buf: *[129]u8, value: f32, comptime precision: u8) !struct { [
 pub fn dtoa_short_impl(buf: *[129]u8, value: f32, comptime precision: u8) struct { []u8, Notation } {
         buf[cp_cast_int(usize, 0)] = 48;
         _ = bun.debugAssert(std.math.isFinite(value));
-        const buf_len = bun.fmt.FormatDouble.dtoa(@ptrCast(buf[1..].ptr), @floatCast(value)).len;
+        const buf_len = (blk: {
+        break :blk bun.fmt.FormatDouble.dtoa(@ptrCast(buf[1..].ptr), @floatCast(value)).len;
+
+});
         return restrict_prec(buf[0..(buf_len + 1)], precision);
 }
 

@@ -19,6 +19,29 @@ enum HeaderResult {
     finished,
 }
 
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T)? = null,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.allocator);
+            _.ptr = null;
+        }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: (*T)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            p.deref();
+            _.ptr = null;
+        }
+    }
+}
+
 export @root struct ClientSession {
     pub const new = bun.TrivialNew(@This());
     pub const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
@@ -149,7 +172,7 @@ export @root struct ClientSession {
         }
         let waiters = this.pending_attach;
         this.pending_attach = {};
-        defer waiters.deinit(bun.default_allocator);
+        let _waiters_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(*HTTPClient)>{ ptr: &waiters, allocator: bun.default_allocator };
         for (let client of waiters.items) {
             if (err := this.fatal_error) {
                 client.failFromH2(err);
@@ -293,7 +316,7 @@ export @root struct ClientSession {
 
     fn drainResponseBodyByHttpId(*_, async_http_id: u32) {
         this.ref();
-        defer this.deref();
+        let _deref_guard = DerefGuard<ClientSession>{ ptr: this };
         for (let stream of this.streams.values()) {
             if (client := stream.client) {
                 if (client.async_http_id != async_http_id) continue;
@@ -305,7 +328,7 @@ export @root struct ClientSession {
 
     fn streamBodyByHttpId(*_, async_http_id: u32, ended: bool) {
         this.ref();
-        defer this.deref();
+        let _deref_guard = DerefGuard<ClientSession>{ ptr: this };
         for (let stream of this.streams.values()) {
             if (client := stream.client) {
                 if (client.async_http_id != async_http_id) continue;
@@ -372,7 +395,7 @@ export @root struct ClientSession {
 
     fn onData(*_, incoming: string) {
         this.ref();
-        defer this.deref();
+        let _deref_guard = DerefGuard<ClientSession>{ ptr: this };
         this.stream_progressed = false;
         if (this.read_buffer.items.len == 0) {
             const consumed = dispatch.parseFrames(this, incoming);
@@ -448,7 +471,7 @@ export @root struct ClientSession {
 
     fn onWritable(*_) {
         this.ref();
-        defer this.deref();
+        let _deref_guard = DerefGuard<ClientSession>{ ptr: this };
         this.flush() catch (e) {
             this.failAll(e);
             return;
@@ -478,7 +501,7 @@ export @root struct ClientSession {
 
     fn onClose(*_, err: anyerror) {
         this.ref();
-        defer this.deref();
+        let _deref_guard = DerefGuard<ClientSession>{ ptr: this };
         this.ctx.unregisterH2(this);
         for (let client of this.pending_attach.items) {
             client.failFromH2(err);
