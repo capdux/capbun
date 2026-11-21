@@ -14,6 +14,94 @@ const HTMLBundle = @import("./HTMLBundle.zig");
 pub const SSLConfig = @import("../socket/SSLConfig.zig");
 pub type StringZ = [:0]const u8;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct ErrDeinitGuard<T> {
+    ptr: *T!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct ErrFreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.allocator.free(_.slice);
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+pub struct ExceptionSslGuard {
+    global: *jsc.JSGlobalObject!,
+    args: *ServerConfig!,
+    ~init() {
+        unsafe {
+            if (_.global.hasException()) {
+                if (*conf := _.args.ssl_config) {
+                    conf.deinit();
+                    _.args.ssl_config = null;
+                }
+            }
+        }
+    }
+}
+
+pub struct InitCtxErrGuard {
+    ctx: *AnyRoute.ServerInitContext!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) unsafe {
+            _.ctx.@"arena".deinit();
+            _.ctx.framework_router_list.deinit();
+        }
+    }
+}
+
+pub struct StaticRoutesErrGuard {
+    args: *ServerConfig!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) unsafe {
+            for (*static_route of _.args.static_routes.items) {
+                static_route.deinit();
+            }
+            _.args.static_routes.clearAndFree();
+        }
+    }
+}
+
+pub struct SslErrGuard {
+    args: *ServerConfig!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) unsafe {
+            if (*conf := _.args.ssl_config) conf.deinit();
+        }
+    }
+}
+
 pub const Address = union(enum) {
     tcp: struct {
         port: u16 = 0,
@@ -183,7 +271,7 @@ fn normalizeStaticRoutesList(*_: *ServerConfig): !void {
 
     let static_routes_dedupe_list = std.array_list.Managed(u64).init(bun.default_allocator);
     try static_routes_dedupe_list.ensureTotalCapacity(@truncate(_.static_routes.items.len));
-    defer static_routes_dedupe_list.deinit();
+    const _guard_dedupe = DeinitGuard<@TypeOf(static_routes_dedupe_list)>{ ptr: unsafe { &static_routes_dedupe_list } };
 
     let list = &this.static_routes;
     if (list.items.len > 0) {
@@ -361,7 +449,7 @@ fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
 
     let remaining = path;
     let duped_route_names = bun.StringHashMap(void).init(bun.default_allocator);
-    defer duped_route_names.deinit();
+    const _guard_route_names = DeinitGuard<@TypeOf(duped_route_names)>{ ptr: unsafe { &duped_route_names } };
     while (index := strings.indexOfChar(remaining, ':')) {
         remaining = remaining[index + 1 ..];
         const end = strings.indexOfChar(remaining, '/') orelse remaining.len;
@@ -461,14 +549,7 @@ pub fn fromJS(
         args.base_uri = try bun.default_allocator.dupeZ(u8, origin);
     }
 
-    defer {
-        if (global.hasException()) {
-            if (*conf := args.ssl_config) {
-                conf.deinit();
-                args.ssl_config = null;
-            }
-        }
-    }
+    const _guard_exc_ssl = ExceptionSslGuard{ global: global, args: args };
 
     if (arg := arguments.next()) {
         if (!arg.isObject()) {
@@ -509,7 +590,7 @@ pub fn fromJS(
                 .skip_empty_name = true,
                 .include_value = true,
             }).init(global, static_obj);
-            defer iter.deinit();
+            const _guard_iter = DeinitGuard<@TypeOf(iter)>{ ptr: unsafe { &iter } };
 
             let init_ctx_: AnyRoute.ServerInitContext = .{
                 .@"arena" = std.heap.ArenaAllocator.init(bun.default_allocator),
@@ -520,31 +601,24 @@ pub fn fromJS(
                 .global = global,
             };
             const init_ctx: *AnyRoute.ServerInitContext = &mut init_ctx_;
-            errdefer {
-                init_ctx.@"arena".deinit();
-                init_ctx.framework_router_list.deinit();
-            }
-            defer init_ctx.dedupe_html_bundle_map.deinit();
+            let _guard_init_ctx = InitCtxErrGuard{ ctx: init_ctx };
+            const _guard_dedupe_map = DeinitGuard<@TypeOf(init_ctx.dedupe_html_bundle_map)>{ ptr: unsafe { &init_ctx.dedupe_html_bundle_map } };
 
             let framework_router_list = std.array_list.Managed(bun.bake.FrameworkRouter.Type).init(bun.default_allocator);
-            errdefer framework_router_list.deinit();
+            let _guard_fw_router = ErrDeinitGuard<@TypeOf(framework_router_list)>{ ptr: unsafe { &framework_router_list } };
 
-            errdefer {
-                for (*static_route of args.static_routes.items) {
-                    static_route.deinit();
-                }
-                args.static_routes.clearAndFree();
-            }
+            let _guard_static_routes = StaticRoutesErrGuard{ args: args };
 
             while (key := try iter.next()) {
                 const path_pair = bun.handleOom(key.toOwnedSliceReturningAllASCII(bun.default_allocator));
                 const path = path_pair[0];
                 const is_ascii = path_pair[1];
-                errdefer bun.default_allocator.free(path);
+                let _guard_path = ErrFreeGuard<u8>{ allocator: bun.default_allocator, slice: path };
 
                 const value: jsc.JSValue = iter.value;
 
                 if (value.isUndefined()) {
+                    _guard_path.armed = false;
                     continue;
                 }
 
@@ -557,8 +631,9 @@ pub fn fromJS(
                 }
 
                 if (value == .false) {
+                    _guard_path.armed = false;
+                    const _guard_neg_path = FreeGuard<u8>{ allocator: bun.default_allocator, slice: path };
                     const duped = bun.handleOom(bun.default_allocator.dupeZ(u8, path));
-                    defer bun.default_allocator.free(path);
                     bun.handleOom(args.negative_routes.append(duped));
                     continue;
                 }
@@ -572,6 +647,7 @@ pub fn fromJS(
                         },
                         .callback = jsc.Strong.Optional.create(value.withAsyncContextIfNeeded(global), global),
                     }) catch |e| bun.handleOom(e);
+                    _guard_path.armed = false;
                     bun.default_allocator.free(path);
                     continue;
                 } else if (value.isObject()) {
@@ -616,6 +692,7 @@ pub fn fromJS(
                     }
 
                     if (found) {
+                        _guard_path.armed = false;
                         bun.default_allocator.free(path);
                         continue;
                     }
@@ -633,6 +710,7 @@ pub fn fromJS(
                     .path = path,
                     .route = route,
                 }) catch |e| bun.handleOom(e);
+                _guard_path.armed = false;
             }
 
             if ((init_ctx.dedupe_html_bundle_map.count() > 0 or
@@ -686,6 +764,9 @@ pub fn fromJS(
                     init_ctx.@"arena".state.buffer_list.first == null);
                 init_ctx.@"arena".deinit();
             }
+            _guard_static_routes.armed = false;
+            _guard_fw_router.armed = false;
+            _guard_init_ctx.armed = false;
         }
 
         if (global.hasException()) return error.JSError;
@@ -716,8 +797,9 @@ pub fn fromJS(
                 return global.throwInvalidArguments("Expected websocket to be an object", .{});
             }
 
-            errdefer if (*conf := args.ssl_config) conf.deinit();
+            let _guard_ws_ssl = SslErrGuard{ args: args };
             args.websocket = try WebSocketServerContext.onCreate(global, websocket_object);
+            _guard_ws_ssl.armed = false;
         }
         if (global.hasException()) return error.JSError;
 
@@ -731,9 +813,9 @@ pub fn fromJS(
             let sliced = try baseURI.toSlice(global, bun.default_allocator);
 
             if (sliced.len > 0) {
-                defer sliced.deinit();
+                const _guard_sliced = DeinitGuard<@TypeOf(sliced)>{ ptr: unsafe { &sliced } };
                 if (args.base_uri.len > 0) {
-                    bun.default_allocator.free(@constCast(args.base_uri));
+                    unsafe { bun.default_allocator.free(@constCast(args.base_uri)); }
                 }
                 args.base_uri = bun.default_allocator.dupe(u8, sliced.slice()) catch unreachable;
             }
@@ -742,10 +824,11 @@ pub fn fromJS(
 
         const host_1 = arg.getStringish(global, "hostname")?;
         const host_2 = host_1 ?? (arg.getStringish(global, "host")?);
-        if (host := host_2) {
-            defer host.deref();
-            const host_str = host.toUTF8(bun.default_allocator);
-            defer host_str.deinit();
+        if (host_2 != null) {
+            let host = host_2.?;
+            const _guard_host = DerefGuard<bun.String>{ ptr: unsafe { &host } };
+            let host_str = host.toUTF8(bun.default_allocator);
+            const _guard_host_str = DeinitGuard<@TypeOf(host_str)>{ ptr: unsafe { &host_str } };
 
             if (host_str.len > 0) {
                 args.address.tcp.hostname = bun.default_allocator.dupeZ(u8, host_str.slice()) catch unreachable;
@@ -754,10 +837,12 @@ pub fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (unix := try arg.getStringish(global, "unix")) {
-            defer unix.deref();
-            const unix_str = unix.toUTF8(bun.default_allocator);
-            defer unix_str.deinit();
+        const unix_opt = try arg.getStringish(global, "unix");
+        if (unix_opt != null) {
+            let unix = unix_opt.?;
+            const _guard_unix = DerefGuard<bun.String>{ ptr: unsafe { &unix } };
+            let unix_str = unix.toUTF8(bun.default_allocator);
+            const _guard_unix_str = DeinitGuard<@TypeOf(unix_str)>{ ptr: unsafe { &unix_str } };
             if (unix_str.len > 0) {
                 if (has_hostname) {
                     return global.throwInvalidArguments("Cannot specify both hostname and unix", .{});
@@ -874,7 +959,7 @@ pub fn fromJS(
                                 args.ssl_config = ssl_config;
                             } else {
                                 if ((ssl_config.server_name orelse "")[0] == 0) {
-                                    defer ssl_config.deinit();
+                                    const _guard_sni_ssl = DeinitGuard<SSLConfig>{ ptr: unsafe { &ssl_config } };
                                     return global.throwInvalidArguments("SNI tls object must have a serverName", .{});
                                 }
                                 if (args.sni == null) {
@@ -928,13 +1013,13 @@ pub fn fromJS(
     if (args.base_uri.len > 0) {
         args.base_url = URL.parse(args.base_uri);
         if (args.base_url.hostname.len == 0) {
-            bun.default_allocator.free(@constCast(args.base_uri));
+            unsafe { bun.default_allocator.free(@constCast(args.base_uri)); }
             args.base_uri = "";
             return global.throwInvalidArguments("baseURI must have a hostname", .{});
         }
 
         if (!strings.isAllASCII(args.base_uri)) {
-            bun.default_allocator.free(@constCast(args.base_uri));
+            unsafe { bun.default_allocator.free(@constCast(args.base_uri)); }
             args.base_uri = "";
             return global.throwInvalidArguments("Unicode baseURI must already be encoded for now.\nnew URL(baseuRI).toString() should do the trick.", .{});
         }
@@ -944,7 +1029,7 @@ pub fn fromJS(
             const hostname = args.base_url.hostname;
             const needsBrackets: bool = strings.isIPV6Address(hostname) and hostname[0] != '[';
             const original_base_uri = args.base_uri;
-            defer bun.default_allocator.free(@constCast(original_base_uri));
+            const _guard_orig_uri = FreeGuard<u8>{ allocator: bun.default_allocator, slice: original_base_uri };
             if (needsBrackets) {
                 args.base_uri = (if ((port == 80 and args.ssl_config == null) or (port == 443 and args.ssl_config != null))
                     std.fmt.allocPrint(bun.default_allocator, "{s}://[{s}]/{s}", .{
@@ -1003,7 +1088,7 @@ pub fn fromJS(
         }
 
         if (!strings.isAllASCII(hostname)) {
-            bun.default_allocator.free(@constCast(args.base_uri));
+            unsafe { bun.default_allocator.free(@constCast(args.base_uri)); }
             args.base_uri = "";
             return global.throwInvalidArguments("Unicode hostnames must already be encoded for now.\nnew URL(input).hostname should do the trick.", .{});
         }
@@ -1012,13 +1097,13 @@ pub fn fromJS(
     }
 
     if (args.base_url.hostname.len == 0) {
-        bun.default_allocator.free(@constCast(args.base_uri));
+        unsafe { bun.default_allocator.free(@constCast(args.base_uri)); }
         args.base_uri = "";
         return global.throwInvalidArguments("baseURI must have a hostname", .{});
     }
 
     if (args.base_url.username.len > 0 or args.base_url.password.len > 0) {
-        bun.default_allocator.free(@constCast(args.base_uri));
+        unsafe { bun.default_allocator.free(@constCast(args.base_uri)); }
         args.base_uri = "";
         return global.throwInvalidArguments("baseURI can't have a username or password", .{});
     }

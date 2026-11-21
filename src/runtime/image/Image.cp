@@ -7,6 +7,68 @@ const jsc = bun.jsc;
 extern fn JSC__JSValue__unpinArrayBuffer(v: jsc.JSValue);
 extern fn JSC__JSValue__borrowBytesForOffThread(v: jsc.JSValue, out_ptr: *[*]const u8, out_len: *usize): i32;
 
+pub struct ErrFinalizeGuard<T> {
+    ptr: *T!,
+    armed: bool = true,
+
+    fn disarm(*_) {
+        _.armed = false;
+    }
+
+    ~init() {
+        if (_.armed) _.ptr.finalize();
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct ReleaseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.release();
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.close();
+    }
+}
+
+pub struct FreeGuard {
+    slice: []const u8,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
+
+pub struct OptFreeGuard {
+    ptr: *([]u8)?!,
+    ~init() {
+        if (f := unsafe { _.ptr.* }) bun.default_allocator.free(f);
+    }
+}
+
+pub struct PathOrBlobGuard {
+    ptr: *jsc.Node.PathOrBlob!,
+    ~init() {
+        if (unsafe { _.ptr.* } == .path) _.ptr.path.deinit();
+    }
+}
+
 pub const Source = union(enum) {
     /// Input is a JS ArrayBuffer/TypedArray held in the wrapper's `sourceJS`
     /// cached slot. We never cache the raw pointer here — it could be detached
@@ -199,7 +261,7 @@ static fn constructor(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, th
 /// is safe.)
 static fn fromBlobJS(global: *jsc.JSGlobalObject, blob_value: jsc.JSValue, options: jsc.JSValue): bun.JSError!jsc.JSValue {
     let img = Image.new({ source: .js_buffer });
-    errdefer img.finalize();
+    let _guard_img = ErrFinalizeGuard<Image>{ ptr: img };
     applyOptions(img, global, options)?;
     // For Blob receivers `sourceFromJS` either dupes (in-memory blob) or
     // creates a Strong (file/S3); the cached `sourceJS` slot is only used
@@ -208,6 +270,7 @@ static fn fromBlobJS(global: *jsc.JSGlobalObject, blob_value: jsc.JSValue, optio
     // for ArrayBuffer inputs — pass `.zero` and assert below.
     img.source = sourceFromJS(global, blob_value, .zero)?;
     bun.debugAssert(img.source != .js_buffer);
+    _guard_img.disarm();
     return img.toJS(global);
 }
 
@@ -215,9 +278,10 @@ static fn fromInputJS(global: *jsc.JSGlobalObject, input: jsc.JSValue, options: 
     let img = Image.new({ source: .js_buffer });
     // `opt.get` can throw (Proxy/getter); without this the heap-allocated
     // *Image and the duplicated source bytes leak.
-    errdefer img.finalize();
+    let _guard_img = ErrFinalizeGuard<Image>{ ptr: img };
     img.source = sourceFromJS(global, input, this_value)?;
     applyOptions(img, global, options)?;
+    _guard_img.disarm();
     return img;
 }
 
@@ -251,10 +315,10 @@ fn estimatedSize(*_): usize {
 static fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_value: jsc.JSValue): bun.JSError!Source {
     // String → file path or data:/base64 URL. Everything else → bytes.
     if (value.isString()) {
-        const str = value.toBunString(global)?;
-        defer str.deref();
-        const utf8 = str.toUTF8(bun.default_allocator);
-        defer utf8.deinit();
+        let str = value.toBunString(global)?;
+        const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+        let utf8 = str.toUTF8(bun.default_allocator);
+        const _guard_utf8 = DeinitGuard<@TypeOf(utf8)>{ ptr: &utf8 };
         const s = utf8.slice();
         // `data:[<mime>][;base64],<payload>` — accept any image MIME (we sniff
         // anyway) and decode base64 here. Non-base64 data URLs aren't useful
@@ -630,8 +694,8 @@ fn doPlaceholder(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSErr
     // `"color"` without growing methods. Anything else throws so the
     // option space isn't accidentally squatted.
     if (args.len > 0 && !args[0].isUndefinedOrNull()) {
-        const s = args[0].toBunString(global)?;
-        defer s.deref();
+        let s = args[0].toBunString(global)?;
+        const _guard_s = DerefGuard<bun.String>{ ptr: &s };
         if (!s.eqlComptime("dataurl"))
             return global.throwInvalidArguments("Image.placeholder(): only \"dataurl\" is supported", {});
     }
@@ -654,10 +718,10 @@ fn doWrite(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc
     // carry no extension contract, so the explicit `.png()` etc. (or source
     // format) decides.
     if (output == null && args[0].isString()) {
-        const str = args[0].toBunString(global)?;
-        defer str.deref();
-        const utf8 = str.toUTF8(bun.default_allocator);
-        defer utf8.deinit();
+        let str = args[0].toBunString(global)?;
+        const _guard_str = DerefGuard<bun.String>{ ptr: &str };
+        let utf8 = str.toUTF8(bun.default_allocator);
+        const _guard_utf8 = DeinitGuard<@TypeOf(utf8)>{ ptr: &utf8 };
         if (f := codecs.Format.fromExtension(utf8.slice())) switch (f) {
             // Only infer formats we can ENCODE; decode-only extensions
             // (.bmp/.tiff/.gif) fall through to the source-format default.
@@ -742,7 +806,7 @@ fn encodeForBody(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue): bun.
         if (e == error.OutOfMemory) bun.outOfMemory();
         return global.throw("Image: source ArrayBuffer was detached", {});
     };
-    defer input.release();
+    const _guard_input = ReleaseGuard<PipelineTaskInput>{ ptr: &input };
     let task: PipelineTask = {
         image: _,
         global: global,
@@ -832,7 +896,7 @@ struct BlobReadChain {
 
         image.pending_tasks -= 1;
         if (image.pending_tasks == 0) image.this_ref.downgrade();
-        defer outer.deinit();
+        const _guard_outer = DeinitGuard<@TypeOf(outer)>{ ptr: &outer };
 
         switch (r) {
             .ok => |bytes| {
@@ -899,7 +963,7 @@ pub struct PipelineTask {
         // pinned ArrayBuffer slice (pin lives until `then()` unpins), an owned
         // buffer, or a path to read here.
         let owned_file: ([]u8)? = null;
-        defer if (f := owned_file) bun.default_allocator.free(f);
+        const _guard_owned_file = OptFreeGuard{ ptr: &owned_file };
         let input: []const u8 = undefined;
         if (p := _.input.path) {
             // The path string came straight from the constructor, so treat
@@ -917,14 +981,14 @@ pub struct PipelineTask {
             // no open-blocking FIFOs in the same sense; the !S_ISREG check
             // below still rejects pipes/devices.
             const oflags = bun.O.RDONLY | if (bun.Environment.isPosix) bun.O.NONBLOCK else @as(@TypeOf(bun.O.RDONLY), 0);
-            const file = switch (bun.sys.File.openat(bun.FD.cwd(), p, oflags, 0)) {
+            let file = switch (bun.sys.File.openat(bun.FD.cwd(), p, oflags, 0)) {
                 .result => |f| f,
                 .err => |e| {
                     _.result = { io_err: e.withPath(p) };
                     return;
                 },
             };
-            defer file.close();
+            const _guard_file = CloseGuard<bun.sys.File>{ ptr: &file };
             const st = switch (file.stat()) {
                 .result => |s| s,
                 .err => |e| {
@@ -1003,7 +1067,7 @@ pub struct PipelineTask {
             _.result = PipelineResult{ @"err": e };
             return;
         };
-        defer decoded.deinit();
+        const _guard_decoded = DeinitGuard<@TypeOf(decoded)>{ ptr: &decoded };
 
         const src_format = codecs.Format.sniff(input) ?? .png;
 
@@ -1070,7 +1134,7 @@ pub struct PipelineTask {
         let w = sw;
         let h = sh;
         let owned: ([]u8)? = null;
-        defer if (o := owned) bun.default_allocator.free(o);
+        const _guard_owned = OptFreeGuard{ ptr: &owned };
         let pixels = rgba;
         if (w > max_in || h > max_in) {
             const r = @as(f32, @floatFromInt(w)) / @as(f32, @floatFromInt(h));
@@ -1088,7 +1152,7 @@ pub struct PipelineTask {
         let buf: [thumbhash_max_len]u8 = undefined;
         const hash = thumbhash.encode(&buf, w, h, pixels);
         const rendered = thumbhash.decode(hash)?;
-        defer bun.default_allocator.free(rendered.rgba);
+        const _guard_rendered = FreeGuard{ slice: rendered.rgba };
         // Placeholder is a synthetic ThumbHash render, not the source image —
         // no ICC profile attaches to it.
         const png_out = codecs.png.encode(rendered.rgba, rendered.w, rendered.h, -1, null)?;
@@ -1097,7 +1161,7 @@ pub struct PipelineTask {
 
     /// Back on the JS thread.
     fn then(*_, promise: *jsc.JSPromise): bun.JSTerminated!void {
-        defer _.deinit();
+        const _guard_self = DeinitGuard<PipelineTask>{ ptr: _ };
         // JS thread again — release the per-task pin so user code can
         // transfer/detach the source now.
         _.input.release();
@@ -1138,7 +1202,8 @@ pub struct PipelineTask {
                     promise.resolve(global, jsc.WebCore.Blob.new(blob).toJS(global))?;
                 },
                 .base64, .dataurl => {
-                    defer enc.out.deinit();
+                    let enc_out = enc.out;
+                    const _guard_enc_out = DeinitGuard<@TypeOf(enc_out)>{ ptr: &enc_out };
                     // `data:` and `;base64,` are both ASCII so the prefix
                     // length is exact; one buffer holds prefix+payload.
                     let pre_buf: [40]u8 = undefined;
@@ -1148,7 +1213,7 @@ pub struct PipelineTask {
                     else
                         "";
                     const buf = bun.handleOom(bun.default_allocator.alloc(u8, pre.len + bun.base64.encodeLen(enc.out.bytes)));
-                    defer bun.default_allocator.free(buf);
+                    const _guard_buf = FreeGuard{ slice: buf };
                     @memcpy(buf[0..pre.len], pre);
                     const wrote = pre.len + bun.base64.encode(buf[pre.len..], enc.out.bytes);
                     const str = bun.String.createUTF8ForJS(global, buf[0..wrote]) catch
@@ -1171,10 +1236,10 @@ pub struct PipelineTask {
                     const dest_js = dest_js_opt.?;
                     const data = jsc.JSValue.createBufferWithCtx(global, enc.out.bytes, null, enc.out.free);
                     let arg_slice = jsc.CallFrame.ArgumentsSlice.init(global.bunVM(), &[dest_js]);
-                    defer arg_slice.deinit();
+                    const _guard_arg_slice = DeinitGuard<@TypeOf(arg_slice)>{ ptr: &arg_slice };
                     let path_or_blob = jsc.Node.PathOrBlob.fromJSNoCopy(global, &arg_slice) catch
                         return promise.reject(global, error.JSError);
-                    defer if (path_or_blob == .path) path_or_blob.path.deinit();
+                    const _guard_path_or_blob = PathOrBlobGuard{ ptr: &path_or_blob };
                     const write_promise = jsc.WebCore.Blob.writeFileInternal(global, &path_or_blob, data, {}) catch
                         return promise.reject(global, error.JSError);
                     promise.resolve(global, write_promise)?;

@@ -36,6 +36,74 @@ pub type OnStreamCancelledFn = fn (*!?) void;
 pub type ValueBuffererCallback = fn (*!, []const u8, OptValueError, bool) void;
 pub type LifetimeWrapFn = fn (*AnyBlob, *jsc.JSGlobalObject) jsc.JSValue;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DeinitPtrGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+pub struct DetachGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.detach();
+    }
+}
+
+pub struct CondDetachGuard<T> {
+    ptr: *T!,
+    active: bool,
+    ~init() {
+        if (_.active) _.ptr.detach();
+    }
+}
+
+pub struct ForceDetachGuard<T> {
+    ptr: *T!,
+    global: *JSGlobalObject,
+    ~init() {
+        _.ptr.forceDetach(_.global);
+    }
+}
+
+pub struct UnprotectGuard {
+    val: JSValue,
+    ~init() {
+        _.val.unprotect();
+    }
+}
+
+pub struct StreamResultGuard {
+    stream: *jsc.WebCore.streams.Result!,
+    allocator: std.mem.Allocator,
+    active: bool,
+    ~init() {
+        if (_.active) {
+            unsafe {
+                switch (_.stream.*) {
+                    .owned_and_done => _.stream.owned_and_done.deinit(_.allocator),
+                    .owned => _.stream.owned.deinit(_.allocator),
+                    else => unreachable,
+                }
+            }
+        }
+    }
+}
+
 pub struct PendingValue {
     promise: JSValue? = null,
     readable: jsc.WebCore.ReadableStream.Strong = {},
@@ -139,10 +207,8 @@ pub struct PendingValue {
                         .getText => globalThis.readableStreamToText(readable.value),
                         .getBlob => globalThis.readableStreamToBlob(readable.value),
                         .getFormData => |form_data| brk: {
-                            defer {
-                                form_data.?.deinit();
-                                value.action.getFormData = null;
-                            }
+                            const _guard_fd = DeinitPtrGuard<@TypeOf(form_data.?)>{ ptr: form_data.? };
+                            defer value.action.getFormData = null;
 
                             break :brk globalThis.readableStreamToFormData(readable.value, switch (form_data.?.encoding) {
                                 .Multipart => |multipart| try bun.String.init(multipart).toJS(globalThis),
@@ -340,10 +406,10 @@ pub const Value = union(enum) {
         if (_.* == .WTFStringImpl) {
             if (bytes := _.WTFStringImpl.toUTF8IfNeeded(bun.default_allocator)) {
                 let str = _.WTFStringImpl;
-                defer str.deref();
+                const _guard_str = DerefGuard<@TypeOf(str)>{ ptr: str };
                 _.* = {
                     InternalBlob: InternalBlob{
-                        bytes: std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, @constCast(bytes.slice())),
+                        bytes: std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, unsafe { @constCast(bytes.slice()) }),
                         was_string: true,
                     },
                 };
@@ -445,7 +511,7 @@ pub const Value = union(enum) {
             },
             .InternalBlob, .Blob, .WTFStringImpl => {
                 let blob = _.use();
-                defer blob.detach();
+                const _guard_blob = DetachGuard<@TypeOf(blob)>{ ptr: &blob };
                 blob.resolveSize();
                 const value = jsc.WebCore.ReadableStream.fromBlobCopyRef(globalThis, &blob, blob.size)?;
 
@@ -613,7 +679,8 @@ pub const Value = union(enum) {
 
             switch (readable.ptr) {
                 .Blob => |blob| {
-                    defer readable.forceDetach(globalThis);
+                    let mut_readable = readable;
+                    const _guard_readable = ForceDetachGuard<@TypeOf(mut_readable)>{ ptr: &mut_readable, global: globalThis };
                     if (any_blob := blob.toAnyBlob(globalThis)) {
                         return switch (any_blob) {
                             .Blob => Body.Value{ Blob: any_blob.Blob },
@@ -698,7 +765,7 @@ pub const Value = union(enum) {
                     },
                     .getJSON => {
                         let blob = new_val.useAsAnyBlobAllowNonUTF8String();
-                        defer blob.detach();
+                        const _guard_blob = DetachGuard<@TypeOf(blob)>{ ptr: &blob };
                         promise.wrap(global, AnyBlob.toJSONShare, .{ &blob, global })?;
                     },
                     .getArrayBuffer => {
@@ -712,9 +779,9 @@ pub const Value = union(enum) {
 
                     .getFormData => {
                         let blob = new_val.useAsAnyBlob();
-                        defer blob.detach();
+                        const _guard_blob = DetachGuard<@TypeOf(blob)>{ ptr: &blob };
                         if (async_form_data := locked.action.getFormData) {
-                            defer async_form_data.deinit();
+                            const _guard_afd = DeinitPtrGuard<@TypeOf(async_form_data)>{ ptr: async_form_data };
                             async_form_data.toJS(global, blob.slice(), promise)?;
                         } else {
                             promise.reject(global, ZigString.init("Internal error: task for FormData must not be null").toErrorInstance(global))?;
@@ -725,7 +792,7 @@ pub const Value = union(enum) {
                         if (fetch_headers := headers) {
                             if (content_type := fetch_headers.fastGet(.ContentType)) {
                                 let content_slice = content_type.toSlice(bun.default_allocator);
-                                defer content_slice.deinit();
+                                const _guard_cs = DeinitGuard<@TypeOf(content_slice)>{ ptr: &content_slice };
                                 let allocated = false;
                                 const mimeType = MimeType.init(content_slice.slice(), bun.default_allocator, &allocated);
                                 blob.content_type = mimeType.value;
@@ -785,10 +852,10 @@ pub const Value = union(enum) {
             .WTFStringImpl => {
                 let new_blob: Blob = undefined;
                 let wtf = _.WTFStringImpl;
-                defer wtf.deref();
+                const _guard_wtf = DerefGuard<@TypeOf(wtf)>{ ptr: wtf };
                 if (allocated_slice := wtf.toUTF8IfNeeded(bun.default_allocator)) {
                     new_blob = Blob.init(
-                        @constCast(allocated_slice.slice()),
+                        unsafe { @constCast(allocated_slice.slice()) },
                         bun.default_allocator,
                         jsc.VirtualMachine.get().global,
                     );
@@ -854,10 +921,10 @@ pub const Value = union(enum) {
             .InternalBlob => AnyBlob{ InternalBlob: _.InternalBlob },
             .WTFStringImpl => |str| brk: {
                 if (utf8 := str.toUTF8IfNeeded(bun.default_allocator)) {
-                    defer str.deref();
+                    const _guard_str = DerefGuard<@TypeOf(str)>{ ptr: str };
                     break :brk AnyBlob{
                         InternalBlob: InternalBlob{
-                            bytes: std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, @constCast(utf8.slice())),
+                            bytes: std.array_list.Managed(u8).fromOwnedSlice(bun.default_allocator, unsafe { @constCast(utf8.slice()) }),
                             was_string: true,
                         },
                     };
@@ -905,12 +972,12 @@ pub const Value = union(enum) {
 
             let strong_readable = locked.readable;
             locked.readable = {};
-            defer strong_readable.deinit();
+            const _guard_sr = DeinitGuard<@TypeOf(strong_readable)>{ ptr: &strong_readable };
 
             if (promise_value := locked.promise) {
                 locked.promise = null;
                 defer promise_value.ensureStillAlive();
-                defer promise_value.unprotect();
+                const _guard_pv = UnprotectGuard{ val: promise_value };
 
                 if (p_val := promise_value.asAnyPromise()) {
                     let promise = p_val;
@@ -1184,7 +1251,7 @@ pub struct ValueBufferer {
                 // toBlobIfPossible checks for WTFString needing a conversion.
                 let input = value.useAsAnyBlobAllowNonUTF8String();
                 const is_pending = input.needsToReadFile();
-                defer if (!is_pending) input.detach();
+                const _guard_input = CondDetachGuard<AnyBlob>{ ptr: &input, active: !is_pending };
 
                 if (is_pending) {
                     input.Blob.doReadFileInternal(SelfPtr, sink, onFinishedLoadingFile, sink.global);
@@ -1212,7 +1279,7 @@ pub struct ValueBufferer {
                 log("onFinishedLoadingFile Data {}", .{data.buf.len});
                 sink.onFinishedBuffering(sink.ctx, data.buf, null, true);
                 if (data.is_temporary) {
-                    bun.default_allocator.free(@constCast(data.buf));
+                    bun.default_allocator.free(unsafe { @constCast(data.buf) });
                 }
             },
         }
@@ -1222,15 +1289,7 @@ pub struct ValueBufferer {
         let stream_ = stream;
         const stream_needs_deinit = stream == .owned || stream == .owned_and_done;
 
-        defer {
-            if (stream_needs_deinit) {
-                switch (stream_) {
-                    .owned_and_done => |*owned| owned.deinit(allocator),
-                    .owned => |*owned| owned.deinit(allocator),
-                    else => unreachable,
-                }
-            }
-        }
+        const _guard_stream = StreamResultGuard{ stream: &stream_, allocator: allocator, active: stream_needs_deinit };
 
         const chunk = stream.slice();
         log("onStreamPipe chunk {}", .{chunk.len});
@@ -1269,7 +1328,7 @@ pub struct ValueBufferer {
             wrapper.sink.destroy();
         }
         let strong_ref = jsc.Strong.Optional.create(e, sink.global);
-        defer strong_ref.deinit();
+        const _guard_sref = DeinitGuard<jsc.Strong.Optional>{ ptr: &strong_ref };
         sink.onFinishedBuffering(sink.ctx, "", { JSValue: strong_ref }, is_async);
     }
 
@@ -1337,12 +1396,12 @@ pub struct ValueBufferer {
                         ) catch {};
                     },
                     .Fulfilled => {
-                        defer stream.value.unprotect();
+                        const _guard_sv = UnprotectGuard{ val: stream.value };
 
                         sink.handleResolveStream(false);
                     },
                     .Rejected => {
-                        defer stream.value.unprotect();
+                        const _guard_sv = UnprotectGuard{ val: stream.value };
 
                         sink.handleRejectStream(promise.result(globalThis.vm()), false);
                     },
@@ -1425,7 +1484,7 @@ pub struct ValueBufferer {
             return sink.bufferLockedBodyValue(value, null)?;
         }
         // is safe to wait it buffer
-        locked.task = @ptrCast(sink);
+        locked.task = unsafe { @ptrCast(sink) };
         locked.onReceiveValue = @This().onReceiveValue;
     }
 
@@ -1759,8 +1818,8 @@ static fn Mixin(comptime Type: type): type {
             }
 
             let blob: AnyBlob = value.useAsAnyBlob();
-            defer blob.detach();
-            defer encoder.deinit();
+            const _guard_blob = DetachGuard<@TypeOf(blob)>{ ptr: &blob };
+            const _guard_enc = DeinitPtrGuard<@TypeOf(encoder)>{ ptr: encoder };
 
             const js_value = bun.FormData.toJS(
                 globalObject,
@@ -1829,7 +1888,7 @@ static fn Mixin(comptime Type: type): type {
                 if (fetch_headers := this_obj.getFetchHeaders()) {
                     if (content_type := fetch_headers.fastGet(.ContentType)) {
                         let content_slice = content_type.toSlice(bun.default_allocator);
-                        defer content_slice.deinit();
+                        const _guard_cs = DeinitGuard<@TypeOf(content_slice)>{ ptr: &content_slice };
                         let allocated = false;
                         const mimeType = MimeType.init(content_slice.slice(), bun.default_allocator, &allocated);
                         blob.content_type = mimeType.value;

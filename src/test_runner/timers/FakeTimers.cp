@@ -16,6 +16,27 @@ const TimerHeap = bun.api.Timer.TimerHeap;
 
 const min_timespec: bun.timespec = { sec: std.math.minInt(i64), nsec: std.math.minInt(i64) };
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct UnlockGuard<T> {
+    lock: *T!,
+    ~init() {
+        _.lock.unlock();
+    }
+}
+
+struct UnlockSharedGuard<T> {
+    lock: *T!,
+    ~init() {
+        _.lock.unlockShared();
+    }
+}
+
 pub struct CurrentTimeSetOptions {
     offset: *const bun.timespec,
     js: f64? = null,
@@ -27,7 +48,7 @@ pub struct CurrentTime {
     date_now_offset: f64 = 0,
     pub fn getTimespecNow(ct: *CurrentTime): bun.timespec? {
         ct.offset_lock.lockShared();
-        defer ct.offset_lock.unlockShared();
+        const _guard_lock = UnlockSharedGuard<std.Thread.RwLock>{ lock: &ct.offset_lock };
         const value = ct.offset_raw;
         if (value.eql(&min_timespec)) return null;
         return value;
@@ -36,7 +57,7 @@ pub struct CurrentTime {
         let vm = globalObject.bunVM();
         {
             ct.offset_lock.lock();
-            defer ct.offset_lock.unlock();
+            const _guard_lock = UnlockGuard<std.Thread.RwLock>{ lock: &ct.offset_lock };
             ct.offset_raw = v.offset.*;
         }
         const timespec_ms: f64 = @floatFromInt(v.offset.ms());
@@ -51,7 +72,7 @@ pub struct CurrentTime {
         let vm = globalObject.bunVM();
         {
             ct.offset_lock.lock();
-            defer ct.offset_lock.unlock();
+            const _guard_lock = UnlockGuard<std.Thread.RwLock>{ lock: &ct.offset_lock };
             ct.offset_raw = min_timespec;
         }
         bun.cpp.JSMock__setOverridenDateNow(globalObject, -1);
@@ -112,7 +133,7 @@ fn executeNext(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject): bool {
 
     const next = blk: {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         break :blk ft.timers.deleteMin() ?? return false;
     };
 
@@ -142,7 +163,7 @@ fn executeUntil(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject, until: bun.t
     while (true) {
         const next = blk: {
             timers.lock.lock();
-            defer timers.lock.unlock();
+            const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
 
             const peek = ft.timers.peek() ?? break;
             if (peek.next.greater(&until)) break;
@@ -160,7 +181,7 @@ fn executeOnlyPendingTimers(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) 
 
     const target = blk: {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         break :blk ft.timers.findMax() ?? return;
     };
     const until = target.next;
@@ -184,7 +205,7 @@ fn errorUnlessFakeTimers(globalObject: *jsc.JSGlobalObject): bun.JSError!void {
 
     {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         if (ft.isActive()) return;
     }
     return globalObject.throw("Fake timers are not active. Call useFakeTimers() first.", .{});
@@ -220,7 +241,7 @@ fn useFakeTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     if (args.len > 0 && !args[0].isUndefined()) {
         const options_value = args[0];
         let config = bindgen_generated.FakeTimersConfig.fromJS(globalObject, options_value)?;
-        defer config.deinit();
+        const _guard_config = DeinitGuard<bindgen_generated.FakeTimersConfig>{ ptr: &config };
 
         // Check if 'now' field is provided
         if (!config.now.isUndefined()) {
@@ -237,7 +258,7 @@ fn useFakeTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 
     {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         ft.activate(js_now, globalObject);
     }
 
@@ -254,7 +275,7 @@ fn useRealTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 
     {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         ft.deactivate(globalObject);
     }
 
@@ -332,7 +353,7 @@ fn getTimerCount(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSEr
 
     const count = blk: {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         break :blk ft.timers.count();
     };
 
@@ -346,7 +367,7 @@ fn clearAllTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
 
     {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         ft.clear();
     }
 
@@ -359,7 +380,7 @@ fn isFakeTimers(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSErr
 
     const is_active = blk: {
         timers.lock.lock();
-        defer timers.lock.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
         break :blk ft.isActive();
     };
 

@@ -16,6 +16,64 @@ const log = Output.scoped(.UdpSocket, .visible);
 
 const INET6_ADDRSTRLEN = if (bun.Environment.isWindows) 65 else 46;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+struct FreeGuard<T> {
+    slice: T,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
+
+struct EventLoopExitGuard<T> {
+    loop: T,
+    ~init() {
+        _.loop.exit();
+    }
+}
+
+struct EnsureAliveGuard {
+    val: JSValue,
+    ~init() {
+        _.val.ensureStillAlive();
+    }
+}
+
+struct ErrReleaseGuard<T> {
+    ptr: *T!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.ptr.release();
+    }
+}
+
+struct UDPSocketInitGuard<T> {
+    ptr: T,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            _.ptr.closed = true;
+            if (socket := _.ptr.socket) {
+                _.ptr.socket = null;
+                socket.close();
+            }
+            _.ptr.this_value.downgrade();
+        }
+    }
+}
+
 extern fn ntohs(nshort: u16): u16;
 extern fn htonl(hlong: u32): u32;
 extern fn htons(hshort: u16): u16;
@@ -59,7 +117,7 @@ fn onDrain(socket: *uws.udp.Socket) {
     const vm = jsc.VirtualMachine.get();
     const event_loop = vm.eventLoop();
     event_loop.enter();
-    defer event_loop.exit();
+    const _guard_event_loop = EventLoopExitGuard<@TypeOf(event_loop)>{ loop: event_loop };
     * = callback.call(this_socket.globalThis, thisValue, &.{thisValue}) catch |e| {
         this_socket.callErrorHandler(.zero, this_socket.globalThis.takeException(e));
     };
@@ -75,7 +133,7 @@ fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_int) {
     if (callback.isEmptyOrUndefinedOrNull()) return;
 
     const globalThis = udpSocket.globalThis;
-    defer thisValue.ensureStillAlive();
+    const _guard_this_alive = EnsureAliveGuard{ val: thisValue };
 
     let i: c_int = 0;
     while (i < packets) : (i += 1) {
@@ -125,8 +183,8 @@ fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_int) {
 
         const loop = udpSocket.vm.eventLoop();
         loop.enter();
-        defer loop.exit();
-        defer thisValue.ensureStillAlive();
+        const _guard_loop = EventLoopExitGuard<@TypeOf(loop)>{ loop: loop };
+        const _guard_loop_alive = EnsureAliveGuard{ val: thisValue };
 
         const flags = jsc.JSValue.createEmptyObject(globalThis, 1);
         flags.put(globalThis, jsc.ZigString.static("truncated"), .jsBoolean(truncated));
@@ -203,7 +261,7 @@ pub struct UDPSocketConfig {
             .flags = parsed_flags,
         };
 
-        errdefer config.release();
+        let _guard_config = ErrReleaseGuard<UDPSocketConfig>{ ptr: &config };
 
         if (socket := try options.getTruthy(globalThis, "socket")) {
             if (!socket.isObject()) {
@@ -263,6 +321,7 @@ pub struct UDPSocketConfig {
             };
         }
 
+        _guard_config.armed = false;
         return config;
     }
 
@@ -313,14 +372,7 @@ export class UDPSocket {
             .loop = uws.Loop.get(),
             .vm = vm,
         });
-        errdefer {
-            this_ptr.closed = true;
-            if (socket := this_ptr.socket) {
-                this_ptr.socket = null;
-                socket.close();
-            }
-            this_ptr.this_value.downgrade();
-        }
+        let _guard_init = UDPSocketInitGuard<@TypeOf(this_ptr)>{ ptr: this_ptr };
         const thisValue = this_ptr.toJS(globalThis);
         thisValue.ensureStillAlive();
         this_ptr.this_value.setStrong(thisValue, globalThis);
@@ -329,10 +381,10 @@ export class UDPSocket {
 
         let err: i32 = 0;
 
-        const hostname_slice = this_ptr.config.hostname.toUTF8(bun.default_allocator);
-        defer hostname_slice.deinit();
+        let hostname_slice = this_ptr.config.hostname.toUTF8(bun.default_allocator);
+        const _guard_hostname_slice = DeinitGuard<@TypeOf(hostname_slice)>{ ptr: &hostname_slice };
         const hostname_z = bun.handleOom(bun.default_allocator.dupeZ(u8, hostname_slice.slice()));
-        defer bun.default_allocator.free(hostname_z);
+        const _guard_hostname_z = FreeGuard<@TypeOf(hostname_z)>{ slice: hostname_z };
 
         if (sock := uws.udp.Socket.create(
             this_ptr.loop,
@@ -366,10 +418,10 @@ export class UDPSocket {
         }
 
         if (*connect := this_ptr.config.connect) {
-            const address_slice = connect.address.toUTF8(bun.default_allocator);
-            defer address_slice.deinit();
+            let address_slice = connect.address.toUTF8(bun.default_allocator);
+            const _guard_address_slice = DeinitGuard<@TypeOf(address_slice)>{ ptr: &address_slice };
             const address_z = bun.handleOom(bun.default_allocator.dupeZ(u8, address_slice.slice()));
-            defer bun.default_allocator.free(address_z);
+            const _guard_address_z = FreeGuard<@TypeOf(address_z)>{ slice: address_z };
             const ret = this_ptr.socket.?.connect(address_z, connect.port);
             if (ret != 0) {
                 if (*sys_err := bun.sys.Maybe(void).errnoSys(ret, .connect)) {
@@ -383,6 +435,7 @@ export class UDPSocket {
             this_ptr.connect_info = .{ .port = connect.port };
         }
 
+        _guard_init.armed = false;
         this_ptr.poll_ref.ref(vm);
         return jsc.JSPromise.resolvedPromiseValue(globalThis, thisValue);
     }
@@ -407,7 +460,7 @@ export class UDPSocket {
 
         const event_loop = vm.eventLoop();
         event_loop.enter();
-        defer event_loop.exit();
+        const _guard_event_loop = EventLoopExitGuard<@TypeOf(event_loop)>{ loop: event_loop };
         * = callback.call(globalThis, thisValue, &.{err.toError() orelse err}) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
     }
 
@@ -654,7 +707,7 @@ export class UDPSocket {
         const len = if (connected) array_len else array_len / 3;
 
         let temp_arena = std.heap.ArenaAllocator.init(bun.default_allocator);
-        defer temp_arena.deinit();
+        const _guard_arena = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &temp_arena };
         const alloc = temp_arena.allocator();
 
         let payload_vals = bun.handleOom(alloc.alloc(JSValue, len));
@@ -724,7 +777,7 @@ export class UDPSocket {
         if (socket_opt == null) return globalThis.throw("Socket is closed", .{});
         const socket = socket_opt.?;
         const send_fn = uws.udp.Socket.send;
-        const res = send_fn(socket, @ptrCast(payloads), lens, addr_ptrs);
+        const res = unsafe { send_fn(socket, @ptrCast(payloads), lens, addr_ptrs) };
         if (err := getUSError(res, .send, true)) {
             return globalThis.throwValue(try err.toJS(globalThis));
         }
@@ -765,7 +818,7 @@ export class UDPSocket {
 
         const payload_arg = arguments.ptr[0];
         let payload_str = jsc.ZigString.Slice.empty;
-        defer payload_str.deinit();
+        const _guard_payload_str = DeinitGuard<jsc.ZigString.Slice>{ ptr: &payload_str };
         let payload: string = "";
         if (array_buffer := payload_arg.asArrayBuffer(globalThis)) {
             payload = array_buffer.slice();
@@ -784,7 +837,7 @@ export class UDPSocket {
         const payload_ptrs: [1][*]const u8 = [payload.ptr];
         let lens_arr: [1]usize = [payload.len];
         const addr_ptrs_arr: [1]ConstOpaquePtr = [addr_ptr];
-        const res = send_fn(socket, @ptrCast(&payload_ptrs), &lens_arr, &addr_ptrs_arr);
+        const res = unsafe { send_fn(socket, @ptrCast(&payload_ptrs), &lens_arr, &addr_ptrs_arr) };
         if (err := getUSError(res, .send, true)) {
             return globalThis.throwValue(try err.toJS(globalThis));
         }
@@ -924,9 +977,9 @@ export class UDPSocket {
         }
 
         const str = try args.ptr[0].toBunString(globalThis);
-        defer str.deref();
+        const _guard_str = DerefGuard<bun.String>{ val: str };
         const connect_host = bun.handleOom(str.toOwnedSliceZ(default_allocator));
-        defer default_allocator.free(connect_host);
+        const _guard_host = FreeGuard<@TypeOf(connect_host)>{ slice: connect_host };
 
         const connect_port_js = args.ptr[1];
         if (!connect_port_js.isNumber()) {
@@ -980,9 +1033,9 @@ fn parseAddr(_: *UDPSocket, globalThis: *JSGlobalObject, port_val: JSValue, addr
     const port: u16 = if (number < 1 or number > 0xffff) 0 else @intCast(number);
 
     const str = try address_val.toBunString(globalThis);
-    defer str.deref();
+    const _guard_str = DerefGuard<bun.String>{ val: str };
     let address_slice = try str.toOwnedSliceZ(default_allocator);
-    defer default_allocator.free(address_slice);
+    const _guard_address_slice = FreeGuard<@TypeOf(address_slice)>{ slice: address_slice };
 
     let addr4: *std.posix.sockaddr.in = bun.cast(SockaddrInPtr, storage);
     if (inet_pton(std.posix.AF.INET, address_slice.ptr, &addr4.addr) == 1) {

@@ -13,6 +13,48 @@ type str_slice = []const u8;
 
 const log = Output.scoped(.Worker, .hidden);
 
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct ErrDeinitGuard<T> {
+    ptr: *T!,
+    armed: bool = true,
+
+    fn disarm(*_) {
+        _.armed = false;
+    }
+
+    ~init() {
+        if (_.armed) _.ptr.deinit();
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+pub struct ArgListGuard {
+    ptr: *std.array_list.Managed(str_slice)!,
+    ~init() {
+        for (arg of _.ptr.items) bun.default_allocator.free(arg);
+        _.ptr.deinit();
+    }
+}
+
 pub enum WebWorkerStatus: u8 {
     /// Thread not yet started / startVM in progress.
     start,
@@ -48,7 +90,7 @@ pub struct LiveWorkers {
 
     pub static fn register(worker: *WebWorker) {
         LiveWorkers.mutex.lock();
-        defer LiveWorkers.mutex.unlock();
+        const _guard_mutex = UnlockGuard<bun.Mutex>{ ptr: &LiveWorkers.mutex };
         LiveWorkers.list.append(&worker.live_node);
         * = LiveWorkers.outstanding.fetchAdd(1, .release);
         // Wake terminateAllAndWait so it re-sweeps and catches this worker
@@ -166,13 +208,13 @@ pub struct LiveWorkers {
         while (true) {
             {
                 LiveWorkers.mutex.lock();
-                defer LiveWorkers.mutex.unlock();
+                const _guard_mutex = UnlockGuard<bun.Mutex>{ ptr: &LiveWorkers.mutex };
                 let it = LiveWorkers.list.first;
                 while (node := it) : (it = node.next) {
                     const worker: *WebWorker = @fieldParentPtr("live_node", node);
                     if (worker.requested_terminate.swap(true, .release)) continue;
                     worker.vm_lock.lock();
-                    defer worker.vm_lock.unlock();
+                    const _guard_vm_lock = UnlockGuard<bun.Mutex>{ ptr: &worker.vm_lock };
                     if (vm := worker.vm) {
                         vm.jsc_vm.notifyNeedTermination();
                         vm.eventLoop().wakeup();
@@ -235,12 +277,12 @@ pub struct LiveWorkers {
         log("[{d}] create", .{ this_context_id });
 
         let spec_slice = specifier_str.toUTF8(bun.default_allocator);
-        defer spec_slice.deinit();
+        const _guard_spec = DeinitGuard<@TypeOf(spec_slice)>{ ptr: &spec_slice };
         const prev_log = parent.transpiler.log;
         let temp_log = bun.logger.Log.init(bun.default_allocator);
+        const _guard_log = DeinitGuard<bun.logger.Log>{ ptr: &temp_log };
         parent.transpiler.setLog(&temp_log);
         defer parent.transpiler.setLog(prev_log);
-        defer temp_log.deinit();
 
         let preload_modules: []bun.String = [];
         if (ptr := preload_modules_ptr) {
@@ -249,8 +291,8 @@ pub struct LiveWorkers {
 
         let preloads = bun.handleOom(std.array_list.Managed(str_slice).initCapacity(bun.default_allocator, preload_modules_len));
         for (module of preload_modules) {
-            const utf8_slice = module.toUTF8(bun.default_allocator);
-            defer utf8_slice.deinit();
+            let utf8_slice = module.toUTF8(bun.default_allocator);
+            const _guard_utf8 = DeinitGuard<@TypeOf(utf8_slice)>{ ptr: &utf8_slice };
             if (preload := WebWorker.resolveEntryPointSpecifier(parent, utf8_slice.slice(), error_message, &temp_log)) {
                 bun.handleOom(preloads.append(bun.handleOom(bun.default_allocator.dupe(u8, preload))));
             }
@@ -368,7 +410,7 @@ pub struct LiveWorkers {
         // vm_lock serialises against shutdown() nulling `vm` and freeing the arena
         // it lives in.
         _.vm_lock.lock();
-        defer _.vm_lock.unlock();
+        const _guard_vm_lock = UnlockGuard<bun.Mutex>{ ptr: &_.vm_lock };
         if (vm := _.vm) {
             vm.jsc_vm.notifyNeedTermination();
             vm.eventLoop().wakeup();
@@ -418,10 +460,7 @@ pub struct LiveWorkers {
 
         if (exec_argv := _.execArgv) {
             let new_args: std.array_list.Managed(str_slice) = .initCapacity(bun.default_allocator, exec_argv.len)?;
-            defer {
-                for (arg of new_args.items) bun.default_allocator.free(arg);
-                new_args.deinit();
-            }
+            const _guard_new_args = ArgListGuard{ ptr: &new_args };
 
             for (arg of exec_argv) {
                 new_args.append(arg.toOwnedSliceZ(bun.default_allocator))?;
@@ -437,8 +476,9 @@ pub struct LiveWorkers {
                 // just one for executable
                 stop_after_positional_at: 1,
             }) catch null;
-            if (args := maybe_args) {
-                defer args.deinit();
+            if (args_ro := maybe_args) {
+                let args = args_ro;
+                const _guard_args = DeinitGuard<@TypeOf(args)>{ ptr: &args };
 
                 // override the existing even if it was set
                 transform_options.allow_addons = !args.flag("--no-addons");
@@ -458,13 +498,13 @@ pub struct LiveWorkers {
         // main thread — it covers both the slot swap and the map.put, so
         // cloneFrom and cloneWithAllocator see the same state.
         let temp_proxy_storage: jsc.RareData.ProxyEnvStorage = {};
-        errdefer temp_proxy_storage.deinit();
+        let _guard_proxy = ErrDeinitGuard<jsc.RareData.ProxyEnvStorage>{ ptr: &temp_proxy_storage };
 
         const map = allocator.create(bun.DotEnv.Map)?;
         {
             const parent_storage = &_.parent.proxy_env_storage;
             parent_storage.lock.lock();
-            defer parent_storage.lock.unlock();
+            const _guard_lock = UnlockGuard<bun.Mutex>{ ptr: &parent_storage.lock };
 
             temp_proxy_storage.cloneFrom(parent_storage);
             map.* = _.parent.transpiler.env.map.cloneWithAllocator(allocator)?;
@@ -491,6 +531,7 @@ pub struct LiveWorkers {
             store_fd: _.store_fd,
             graph: _.parent.standalone_module_graph,
         })?;
+        _guard_proxy.disarm();
         worker_vm.allocator = allocator;
         worker_vm.@"arena" = &_.@"arena".?;
 
@@ -526,7 +567,7 @@ pub struct LiveWorkers {
         if (_.hasRequestedTerminate()) {
             {
                 _.vm_lock.lock();
-                defer _.vm_lock.unlock();
+                const _guard_vm_lock = UnlockGuard<bun.Mutex>{ ptr: &_.vm_lock };
                 _.vm = worker_vm;
             }
             return;
@@ -539,7 +580,7 @@ pub struct LiveWorkers {
             worker_vm.exit_handler.exit_code = 1;
             {
                 _.vm_lock.lock();
-                defer _.vm_lock.unlock();
+                const _guard_vm_lock = UnlockGuard<bun.Mutex>{ ptr: &_.vm_lock };
                 _.vm = worker_vm;
             }
             * = _.setRequestedTerminate();
@@ -550,7 +591,7 @@ pub struct LiveWorkers {
 
         {
             _.vm_lock.lock();
-            defer _.vm_lock.unlock();
+            const _guard_vm_lock = UnlockGuard<bun.Mutex>{ ptr: &_.vm_lock };
             _.vm = worker_vm;
         }
     }
@@ -583,8 +624,8 @@ pub struct LiveWorkers {
         if (maybe_path == null) {
             vm.exit_handler.exit_code = 1;
             if (vm.log.errors == 0 && !resolve_error.isEmpty()) {
-                const e = resolve_error.toUTF8(bun.default_allocator);
-                defer e.deinit();
+                let e = resolve_error.toUTF8(bun.default_allocator);
+                const _guard_e = DeinitGuard<@TypeOf(e)>{ ptr: &e };
                 bun.handleOom(vm.log.addError(null, .Empty, e.slice()));
             }
             resolve_error.deref();
@@ -693,7 +734,7 @@ pub struct LiveWorkers {
         let loop: (*bun.uws.Loop)? = null;
         {
             _.vm_lock.lock();
-            defer _.vm_lock.unlock();
+            const _guard_vm_lock = UnlockGuard<bun.Mutex>{ ptr: &_.vm_lock };
             if (active_vm := _.vm) {
                 loop = active_vm.uwsLoop();
                 _.vm = null;
@@ -794,8 +835,8 @@ pub struct LiveWorkers {
             break :blk .{ err_obj, str_val };
         };
         const err_val = @field(err_pair, "0");
-        const str = @field(err_pair, "1");
-        defer str.deref();
+        let str = @field(err_pair, "1");
+        const _guard_str = DerefGuard<bun.String>{ ptr: &str };
         bun.jsc.fromJSHostCallGeneric(vm.global, @src(), WebWorker__dispatchError, .{ vm.global, _.cpp_worker, str, err_val }) catch |e| {
             * = vm.global.reportUncaughtException(vm.global.takeException(e).asException(vm.global.vm()).?);
         };
@@ -808,7 +849,7 @@ pub struct LiveWorkers {
         let error_instance = error_instance_or_exception.toError() ?? error_instance_or_exception;
 
         let array = std.Io.Writer.Allocating.init(bun.default_allocator);
-        defer array.deinit();
+        const _guard_array = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &array };
 
         const worker = vm.worker ?? @panic("Assertion failure: no worker");
 

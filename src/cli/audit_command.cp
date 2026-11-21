@@ -23,6 +23,46 @@ const strings = bun.strings;
 const http = bun.http;
 const HeaderBuilder = http.HeaderBuilder;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct SkippedPackagesGuard {
+    allocator: std.mem.Allocator,
+    list: *std.array_list.Managed(string)!,
+    ~init() {
+        unsafe {
+            for (package_name of _.list.items) {
+                _.allocator.free(package_name);
+            }
+            _.list.deinit();
+        }
+    }
+}
+
+pub struct ProdPackagesGuard<PtrT> {
+    map: PtrT,
+    ~init() {
+        unsafe {
+            if (m_val := _.map.*) {
+                let m = m_val;
+                m.deinit();
+            }
+        }
+    }
+}
+
 pub struct VulnerabilityInfo {
     severity: []const u8,
     title: []const u8,
@@ -77,6 +117,23 @@ pub struct AuditPackageEntry {
     versions: std.array_list.Managed(string),
 }
 
+pub struct PackagesListGuard {
+    allocator: std.mem.Allocator,
+    list: *std.array_list.Managed(AuditPackageEntry)!,
+    ~init() {
+        unsafe {
+            for (item of _.list.items) {
+                _.allocator.free(item.name);
+                for (version of item.versions.items) {
+                    _.allocator.free(version);
+                }
+                item.versions.deinit();
+            }
+            _.list.deinit();
+        }
+    }
+}
+
 pub struct PackagesForAuditResult {
     audit_body: []u8,
     skipped_packages: std.array_list.Managed(string),
@@ -120,19 +177,14 @@ pub struct AuditCommand {
         PackageManagerCommand.handleLoadLockfileErrors(load_lockfile, pm);
 
         let dependency_tree = buildDependencyTree(ctx.allocator, pm)?;
-        defer dependency_tree.deinit();
+        const _guard_dep_tree = DeinitGuard<@TypeOf(dependency_tree)>{ ptr: unsafe { &dependency_tree } };
 
-        const packages_result = collectPackagesForAudit(ctx.allocator, pm, audit_prod_only)?;
-        defer ctx.allocator.free(packages_result.audit_body);
-        defer {
-            for (package_name of packages_result.skipped_packages.items) {
-                ctx.allocator.free(package_name);
-            }
-            packages_result.skipped_packages.deinit();
-        }
+        let packages_result = collectPackagesForAudit(ctx.allocator, pm, audit_prod_only)?;
+        const _guard_audit_body = FreeGuard<u8>{ allocator: ctx.allocator, slice: packages_result.audit_body };
+        const _guard_skipped = SkippedPackagesGuard{ allocator: ctx.allocator, list: unsafe { &packages_result.skipped_packages } };
 
         const response_text = sendAuditRequest(ctx.allocator, pm, packages_result.audit_body)?;
-        defer ctx.allocator.free(response_text);
+        const _guard_resp_text = FreeGuard<u8>{ allocator: ctx.allocator, slice: response_text };
 
         if (json_output) {
             Output.writer().writeAll(response_text) catch {};
@@ -141,7 +193,7 @@ pub struct AuditCommand {
             if (response_text.len > 0) {
                 const source = &logger.Source.initPathString("audit-response.json", response_text);
                 let log = logger.Log.init(ctx.allocator);
-                defer log.deinit();
+                const _guard_log = DeinitGuard<logger.Log>{ ptr: unsafe { &log } };
 
                 const expr = bun.json.parse(source, &log, ctx.allocator, true) catch {
                     Output.prettyErrorln("<red>error<r>: audit request failed to parse json. Is the registry down?", .{});
@@ -245,7 +297,7 @@ fn buildProductionPackageSet(allocator: std.mem.Allocator, pm: *PackageManager, 
     const root_id = pm.root_package_id.get(pm.lockfile, pm.workspace_name_hash);
 
     let queue = bun.LinearFifo(u32, .Dynamic).init(allocator);
-    defer queue.deinit();
+    const _guard_queue = DeinitGuard<@TypeOf(queue)>{ ptr: unsafe { &queue } };
 
     const root_deps = pkg_dependencies[root_id];
     const root_resolutions = pkg_resolutions[root_id];
@@ -292,26 +344,12 @@ fn collectPackagesForAudit(allocator: std.mem.Allocator, pm: *PackageManager, pr
     const root_id = pm.root_package_id.get(pm.lockfile, pm.workspace_name_hash);
 
     let packages_list = std.array_list.Managed(AuditPackageEntry).init(allocator);
-    defer {
-        for (item of packages_list.items) {
-            allocator.free(item.name);
-            for (version of item.versions.items) {
-                allocator.free(version);
-            }
-            item.versions.deinit();
-        }
-        packages_list.deinit();
-    }
+    const _guard_packages_list = PackagesListGuard{ allocator: allocator, list: unsafe { &packages_list } };
 
     let skipped_packages = std.array_list.Managed(string).init(allocator);
 
     let prod_packages: bun.StringHashMap(void)? = null;
-    defer {
-        if (map := prod_packages) {
-            let m = map;
-            m.deinit();
-        }
-    }
+    const _guard_prod_packages = ProdPackagesGuard<@TypeOf(&prod_packages)>{ map: unsafe { &prod_packages } };
 
     if (prod_only) {
         let mut_prod_map = bun.StringHashMap(void).init(allocator);
@@ -411,11 +449,11 @@ fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body: []c
     const compressor_opt = libdeflate.Compressor.alloc(6);
     if (compressor_opt == null) return error.OutOfMemory;
     let compressor = compressor_opt.?;
-    defer compressor.deinit();
+    const _guard_compressor = DeinitGuard<libdeflate.Compressor>{ ptr: unsafe { compressor } };
 
     const max_compressed_size = compressor.maxBytesNeeded(body, .gzip);
     const compressed_body = allocator.alloc(u8, max_compressed_size)?;
-    defer allocator.free(compressed_body);
+    const _guard_compressed_body = FreeGuard<u8>{ allocator: allocator, slice: compressed_body };
 
     const compression_result = compressor.gzip(body, compressed_body);
     const final_compressed_body = compressed_body[0..compression_result.written];
@@ -442,7 +480,7 @@ fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body: []c
     }
 
     const url_str = std.fmt.allocPrint(allocator, "{s}/-/npm/v1/security/advisories/bulk", .{ strings.withoutTrailingSlash(pm.options.scope.url.href) })?;
-    defer allocator.free(url_str);
+    const _guard_url_str = FreeGuard<u8>{ allocator: allocator, slice: url_str };
     const url = URL.parse(url_str);
 
     const http_proxy = pm.env.getHttpProxyFor(url);
@@ -576,11 +614,11 @@ fn findDependencyPaths(
     }
 
     let queue = bun.LinearFifo(string, .Dynamic).init(allocator);
-    defer queue.deinit();
+    const _guard_queue = DeinitGuard<@TypeOf(queue)>{ ptr: unsafe { &queue } };
     let visited = bun.StringHashMap(void).init(allocator);
-    defer visited.deinit();
+    const _guard_visited = DeinitGuard<@TypeOf(visited)>{ ptr: unsafe { &visited } };
     let parent_map = bun.StringHashMap(string).init(allocator);
-    defer parent_map.deinit();
+    const _guard_parent_map = DeinitGuard<@TypeOf(parent_map)>{ ptr: unsafe { &parent_map } };
 
     if (dependents := dependency_tree.get(target_package)) {
         for (dependent of dependents.items) {
@@ -630,7 +668,7 @@ fn findDependencyPaths(
 
             let trace = current;
             let seen_in_trace = bun.StringHashMap(void).init(allocator);
-            defer seen_in_trace.deinit();
+            const _guard_seen = DeinitGuard<@TypeOf(seen_in_trace)>{ ptr: unsafe { &seen_in_trace } };
 
             while (true) {
                 if (seen_in_trace.contains(trace)) {
@@ -678,7 +716,7 @@ fn printEnhancedAuditReport(
 ): bun.OOM!u32 {
     const source = &logger.Source.initPathString("audit-response.json", response_text);
     let log = logger.Log.init(allocator);
-    defer log.deinit();
+    const _guard_log = DeinitGuard<logger.Log>{ ptr: unsafe { &log } };
 
     const expr = bun.json.parse(source, &log, allocator, true) catch {
         Output.writer().writeAll(response_text) catch {};
@@ -692,7 +730,7 @@ fn printEnhancedAuditReport(
     }
 
     let audit_result = AuditResult.init(allocator);
-    defer audit_result.deinit();
+    const _guard_audit_result = DeinitGuard<AuditResult>{ ptr: unsafe { &audit_result } };
 
     let vuln_counts = VulnCounts{};
 
@@ -795,10 +833,10 @@ fn printEnhancedAuditReport(
                             let reversed_items = std.array_list.Managed(string).init(allocator);
                             for (item of pth.path.items[1..]) reversed_items.append(item)?;
                             std.mem.reverse(string, reversed_items.items);
-                            defer reversed_items.deinit();
+                            const _guard_rev = DeinitGuard<@TypeOf(reversed_items)>{ ptr: unsafe { &reversed_items } };
 
                             const vuln_pkg_path = std.mem.join(allocator, " › ", reversed_items.items)?;
-                            defer allocator.free(vuln_pkg_path);
+                            const _guard_vuln_path = FreeGuard<u8>{ allocator: allocator, slice: vuln_pkg_path };
 
                             Output.prettyln("  <d>{s} › <red>{s}<r>", .{ vuln_pkg_path, vulnerable_pkg });
                         }

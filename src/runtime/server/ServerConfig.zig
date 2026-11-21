@@ -62,9 +62,164 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn ErrDeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        armed: bool = true,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.armed) {
+                    {
+                        _ = self.ptr.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: []const T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.allocator.free(self.slice);
+        }
+    };
+}
+
+pub fn ErrFreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: []const T,
+        armed: bool = true,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.armed) {
+                    _ = self.allocator.free(self.slice);
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deref();
+                }
+        }
+    };
+}
+
+pub const ExceptionSslGuard = struct {
+    global: *jsc.JSGlobalObject,
+    args: *ServerConfig,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ExceptionSslGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                if (self.global.hasException()) {
+                    if (self.args.ssl_config) |*conf| {
+                        _ = &conf;
+                        _ = (conf.*).deinit();
+                        self.args.ssl_config = null;
+                    }
+                }
+            }
+    }
+};
+
+pub const InitCtxErrGuard = struct {
+    ctx: *AnyRoute.ServerInitContext,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *InitCtxErrGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                {
+                    _ = self.ctx.@"arena".deinit();
+                    _ = self.ctx.framework_router_list.deinit();
+                }
+            }
+    }
+};
+
+pub const StaticRoutesErrGuard = struct {
+    args: *ServerConfig,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *StaticRoutesErrGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                {
+                    for (self.args.static_routes.items) |*static_route| {
+                        _ = &static_route;
+                        _ = (static_route.*).deinit();
+                    }
+                    _ = self.args.static_routes.clearAndFree();
+                }
+            }
+    }
+};
+
+pub const SslErrGuard = struct {
+    args: *ServerConfig,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SslErrGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                {
+                    if (self.args.ssl_config) |*conf| {
+                        _ = &conf;
+                        _ = (conf.*).deinit();
+                    }
+                }
+            }
+    }
+};
+
 pub const ServerConfig = @This();
 
 address: Address = .{ .tcp = .{} },
@@ -140,9 +295,13 @@ var iter = set.iterator();
         var static_routes_dedupe_list = std.array_list.Managed(u64).init(bun.default_allocator);
         _ = &static_routes_dedupe_list;
         _ = try static_routes_dedupe_list.ensureTotalCapacity(@truncate(self.static_routes.items.len));
-        defer {
-        _ = static_routes_dedupe_list.deinit();
-        }
+        var _guard_dedupe = DeinitGuard(@TypeOf(static_routes_dedupe_list)){ .ptr = (blk: {
+        break :blk (&static_routes_dedupe_list);
+
+}) };
+        _ = &_guard_dedupe;
+        var ___guard_dedupe_moved = false; _ = &___guard_dedupe_moved;
+        defer if (!___guard_dedupe_moved) { ___guard_dedupe_moved = true; const __T = @TypeOf(_guard_dedupe); if (@typeInfo(__T) == .optional) { if (_guard_dedupe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dedupe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dedupe; _drop_val.__cp_deinit(); } };
         var list = (&self.static_routes);
         _ = &list;
         if ((list.items.len > 0)) {
@@ -321,9 +480,13 @@ pub fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8) !void {
         _ = &remaining;
         var duped_route_names = bun.StringHashMap(void).init(bun.default_allocator);
         _ = &duped_route_names;
-        defer {
-        _ = duped_route_names.deinit();
-        }
+        var _guard_route_names = DeinitGuard(@TypeOf(duped_route_names)){ .ptr = (blk: {
+        break :blk (&duped_route_names);
+
+}) };
+        _ = &_guard_route_names;
+        var ___guard_route_names_moved = false; _ = &___guard_route_names_moved;
+        defer if (!___guard_route_names_moved) { ___guard_route_names_moved = true; const __T = @TypeOf(_guard_route_names); if (@typeInfo(__T) == .optional) { if (_guard_route_names) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_route_names.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_route_names; _drop_val.__cp_deinit(); } };
         while (strings.indexOfChar(remaining, 58)) |index| {
             remaining = remaining[(index + 1)..];
             const end = ((strings.indexOfChar(remaining, 47)) orelse (remaining.len));
@@ -394,17 +557,10 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
             _ = &origin;
             args.base_uri = try bun.default_allocator.dupeZ(u8, origin);
         }
-        defer {
-        {
-            if (global.hasException()) {
-                if (args.ssl_config) |*conf| {
-                    _ = &conf;
-                    _ = (conf.*).deinit();
-                    args.ssl_config = null;
-                }
-            }
-        }
-        }
+        var _guard_exc_ssl = ExceptionSslGuard{ .global = global, .args = args };
+        _ = &_guard_exc_ssl;
+        var ___guard_exc_ssl_moved = false; _ = &___guard_exc_ssl_moved;
+        defer if (!___guard_exc_ssl_moved) { ___guard_exc_ssl_moved = true; const __T = @TypeOf(_guard_exc_ssl); if (@typeInfo(__T) == .optional) { if (_guard_exc_ssl) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_exc_ssl.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_exc_ssl; _drop_val.__cp_deinit(); } };
         if (arguments.next()) |arg| {
             _ = &arg;
             if ((!arg.isObject())) {
@@ -443,44 +599,51 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
                 args.had_routes_object = true;
                 var iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = true, .include_value = true }).init(global, static_obj);
                 _ = &iter;
-                defer {
-                _ = iter.deinit();
-                }
+                var _guard_iter = DeinitGuard(@TypeOf(iter)){ .ptr = (blk: {
+                break :blk (&iter);
+
+}) };
+                _ = &_guard_iter;
+                var ___guard_iter_moved = false; _ = &___guard_iter_moved;
+                defer if (!___guard_iter_moved) { ___guard_iter_moved = true; const __T = @TypeOf(_guard_iter); if (@typeInfo(__T) == .optional) { if (_guard_iter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_iter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_iter; _drop_val.__cp_deinit(); } };
                 var init_ctx_: AnyRoute.ServerInitContext = .{ .@"arena" = std.heap.ArenaAllocator.init(bun.default_allocator), .dedupe_html_bundle_map = std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)).init(bun.default_allocator), .framework_router_list = std.array_list.Managed(bun.bake.Framework.FileSystemRouterType).init(bun.default_allocator), .js_string_allocations = .empty, .user_routes = (&args.static_routes), .global = global };
                 _ = &init_ctx_;
                 const init_ctx: *AnyRoute.ServerInitContext = (&init_ctx_);
-                errdefer {
-                {
-                    _ = init_ctx.@"arena".deinit();
-                    _ = init_ctx.framework_router_list.deinit();
-                }
-                }
-                defer {
-                _ = init_ctx.dedupe_html_bundle_map.deinit();
-                }
+                var _guard_init_ctx = InitCtxErrGuard{ .ctx = init_ctx };
+                _ = &_guard_init_ctx;
+                var ___guard_init_ctx_moved = false; _ = &___guard_init_ctx_moved;
+                defer if (!___guard_init_ctx_moved) { ___guard_init_ctx_moved = true; const __T = @TypeOf(_guard_init_ctx); if (@typeInfo(__T) == .optional) { if (_guard_init_ctx) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_init_ctx.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_init_ctx; _drop_val.__cp_deinit(); } };
+                var _guard_dedupe_map = DeinitGuard(@TypeOf(init_ctx.dedupe_html_bundle_map)){ .ptr = (blk: {
+                break :blk (&init_ctx.dedupe_html_bundle_map);
+
+}) };
+                _ = &_guard_dedupe_map;
+                var ___guard_dedupe_map_moved = false; _ = &___guard_dedupe_map_moved;
+                defer if (!___guard_dedupe_map_moved) { ___guard_dedupe_map_moved = true; const __T = @TypeOf(_guard_dedupe_map); if (@typeInfo(__T) == .optional) { if (_guard_dedupe_map) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dedupe_map.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dedupe_map; _drop_val.__cp_deinit(); } };
                 var framework_router_list = std.array_list.Managed(bun.bake.FrameworkRouter.Type).init(bun.default_allocator);
                 _ = &framework_router_list;
-                errdefer {
-                _ = framework_router_list.deinit();
-                }
-                errdefer {
-                {
-                    for (args.static_routes.items) |*static_route| {
-                        _ = &static_route;
-                        _ = (static_route.*).deinit();
-                    }
-                    _ = args.static_routes.clearAndFree();
-                }
-                }
+                var _guard_fw_router = ErrDeinitGuard(@TypeOf(framework_router_list)){ .ptr = (blk: {
+                break :blk (&framework_router_list);
+
+}) };
+                _ = &_guard_fw_router;
+                var ___guard_fw_router_moved = false; _ = &___guard_fw_router_moved;
+                defer if (!___guard_fw_router_moved) { ___guard_fw_router_moved = true; const __T = @TypeOf(_guard_fw_router); if (@typeInfo(__T) == .optional) { if (_guard_fw_router) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fw_router.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fw_router; _drop_val.__cp_deinit(); } };
+                var _guard_static_routes = StaticRoutesErrGuard{ .args = args };
+                _ = &_guard_static_routes;
+                var ___guard_static_routes_moved = false; _ = &___guard_static_routes_moved;
+                defer if (!___guard_static_routes_moved) { ___guard_static_routes_moved = true; const __T = @TypeOf(_guard_static_routes); if (@typeInfo(__T) == .optional) { if (_guard_static_routes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_static_routes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_static_routes; _drop_val.__cp_deinit(); } };
                 while (try iter.next()) |key| {
                     const path_pair = bun.handleOom(key.toOwnedSliceReturningAllASCII(bun.default_allocator));
                     const path = path_pair[0];
                     const is_ascii = path_pair[1];
-                    errdefer {
-                    _ = bun.default_allocator.free(path);
-                    }
+                    var _guard_path = ErrFreeGuard(u8){ .allocator = bun.default_allocator, .slice = path };
+                    _ = &_guard_path;
+                    var ___guard_path_moved = false; _ = &___guard_path_moved;
+                    defer if (!___guard_path_moved) { ___guard_path_moved = true; const __T = @TypeOf(_guard_path); if (@typeInfo(__T) == .optional) { if (_guard_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_path; _drop_val.__cp_deinit(); } };
                     const value: jsc.JSValue = (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value);
                     if (value.isUndefined()) {
+                        _guard_path.armed = false;
                         continue;
                     }
                     if (((path.len == 0) or (path[0] != 47))) {
@@ -490,16 +653,19 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
                         return global.throwInvalidArguments("Invalid route {f}. Please encode all non-ASCII characters in the path.", .{ bun.fmt.quote(path) });
                     }
                     if ((value == .false)) {
+                        _guard_path.armed = false;
+                        var _guard_neg_path = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = path };
+                        _ = &_guard_neg_path;
+                        var ___guard_neg_path_moved = false; _ = &___guard_neg_path_moved;
+                        defer if (!___guard_neg_path_moved) { ___guard_neg_path_moved = true; const __T = @TypeOf(_guard_neg_path); if (@typeInfo(__T) == .optional) { if (_guard_neg_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_neg_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_neg_path; _drop_val.__cp_deinit(); } };
                         const duped = bun.handleOom(bun.default_allocator.dupeZ(u8, path));
-                        defer {
-                        _ = bun.default_allocator.free(path);
-                        }
                         _ = bun.handleOom(args.negative_routes.append(duped));
                         continue;
                     }
                     if (value.isCallable()) {
                         _ = try validateRouteName(global, path);
                         _ = (blk_catch_5: { break :blk_catch_5 ((args.user_routes_to_build.append(.{ .route = .{ .path = bun.handleOom(bun.default_allocator.dupeZ(u8, path)), .method = .@"any" }, .callback = jsc.Strong.Optional.create(value.withAsyncContextIfNeeded(global), global) })) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
+                        _guard_path.armed = false;
                         _ = bun.default_allocator.free(path);
                         continue;
                     } else {
@@ -528,6 +694,7 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
                                 }
                             }
                             if (found) {
+                                _guard_path.armed = false;
                                 _ = bun.default_allocator.free(path);
                                 continue;
                             }
@@ -538,6 +705,7 @@ pub fn fromJS(global: *jsc.JSGlobalObject, args: *ServerConfig, arguments: *jsc.
                     return global.throwInvalidArguments("'routes' expects a Record<string, Response | HTMLBundle | {[method: string]: (req: BunRequest) => Response|Promise<Response>}>\n\nTo bundle frontend apps on-demand with Bun.serve(), import HTML files.\n\nExample:\n\n```js\nimport { serve } from \"bun\";\nimport app from \"./app.html\";\n\nserve({\n  routes: {\n    \"/index.json\": Response.json({ message: \"Hello World\" }),\n    \"/app\": app,\n    \"/path/:param\": (req) => {\n      const param = req.params.param;\n      return Response.json({ message: `Hello ${param}` });\n    },\n    \"/path\": {\n      GET(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n      POST(req) {\n        return Response.json({ message: \"Hello World\" });\n      },\n    },\n  },\n\n  fetch(request) {\n    return new Response(\"fallback response\");\n  },\n});\n```\n\nSee https://bun.com/docs/api/http for more information.", .{});
 });
                     _ = (blk_catch_8: { break :blk_catch_8 ((args.static_routes.append(.{ .path = path, .route = route })) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
+                    _guard_path.armed = false;
                 }
                 if (((init_ctx.dedupe_html_bundle_map.count() > 0) or (init_ctx.framework_router_list.items.len > 0))) {
                     if (args.development.isHMREnabled()) {
@@ -577,6 +745,9 @@ else => {
                     _ = bun.debugAssert(((init_ctx.@"arena".state.end_index == 0) and (init_ctx.@"arena".state.buffer_list.first == null)));
                     _ = init_ctx.@"arena".deinit();
                 }
+                _guard_static_routes.armed = false;
+                _guard_fw_router.armed = false;
+                _guard_init_ctx.armed = false;
             }
             if (global.hasException()) {
                 return error.JSError;
@@ -606,13 +777,12 @@ else => {
                     }
                     return global.throwInvalidArguments("Expected websocket to be an object", .{});
                 }
-                errdefer {
-                if (args.ssl_config) |*conf| {
-                    _ = &conf;
-                    _ = (conf.*).deinit();
-                }
-                }
+                var _guard_ws_ssl = SslErrGuard{ .args = args };
+                _ = &_guard_ws_ssl;
+                var ___guard_ws_ssl_moved = false; _ = &___guard_ws_ssl_moved;
+                defer if (!___guard_ws_ssl_moved) { ___guard_ws_ssl_moved = true; const __T = @TypeOf(_guard_ws_ssl); if (@typeInfo(__T) == .optional) { if (_guard_ws_ssl) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_ssl.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_ssl; _drop_val.__cp_deinit(); } };
                 args.websocket = try WebSocketServerContext.onCreate(global, websocket_object);
+                _guard_ws_ssl.armed = false;
             }
             if (global.hasException()) {
                 return error.JSError;
@@ -630,11 +800,17 @@ else => {
                 var sliced = try baseURI.toSlice(global, bun.default_allocator);
                 _ = &sliced;
                 if ((sliced.len > 0)) {
-                    defer {
-                    _ = sliced.deinit();
-                    }
+                    var _guard_sliced = DeinitGuard(@TypeOf(sliced)){ .ptr = (blk: {
+                    break :blk (&sliced);
+
+}) };
+                    _ = &_guard_sliced;
+                    var ___guard_sliced_moved = false; _ = &___guard_sliced_moved;
+                    defer if (!___guard_sliced_moved) { ___guard_sliced_moved = true; const __T = @TypeOf(_guard_sliced); if (@typeInfo(__T) == .optional) { if (_guard_sliced) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_sliced.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_sliced; _drop_val.__cp_deinit(); } };
                     if ((args.base_uri.len > 0)) {
-                        _ = bun.default_allocator.free(@constCast(args.base_uri));
+                        {
+                            _ = bun.default_allocator.free(@constCast(args.base_uri));
+                        }
                     }
                     args.base_uri = ((bun.default_allocator.dupe(u8, sliced.slice())) catch unreachable);
                 }
@@ -644,15 +820,25 @@ else => {
             }
             const host_1 = try arg.getStringish(global, "hostname");
             const host_2 = ((host_1) orelse (try arg.getStringish(global, "host")));
-            if (host_2) |host| {
+            if ((host_2 != null)) {
+                var host = host_2.?;
                 _ = &host;
-                defer {
-                _ = host.deref();
-                }
-                const host_str = host.toUTF8(bun.default_allocator);
-                defer {
-                _ = host_str.deinit();
-                }
+                var _guard_host = DerefGuard(bun.String){ .ptr = (blk: {
+                break :blk (&host);
+
+}) };
+                _ = &_guard_host;
+                var ___guard_host_moved = false; _ = &___guard_host_moved;
+                defer if (!___guard_host_moved) { ___guard_host_moved = true; const __T = @TypeOf(_guard_host); if (@typeInfo(__T) == .optional) { if (_guard_host) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_host.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_host; _drop_val.__cp_deinit(); } };
+                var host_str = host.toUTF8(bun.default_allocator);
+                _ = &host_str;
+                var _guard_host_str = DeinitGuard(@TypeOf(host_str)){ .ptr = (blk: {
+                break :blk (&host_str);
+
+}) };
+                _ = &_guard_host_str;
+                var ___guard_host_str_moved = false; _ = &___guard_host_str_moved;
+                defer if (!___guard_host_str_moved) { ___guard_host_str_moved = true; const __T = @TypeOf(_guard_host_str); if (@typeInfo(__T) == .optional) { if (_guard_host_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_host_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_host_str; _drop_val.__cp_deinit(); } };
                 if ((host_str.len > 0)) {
                     args.address.tcp.hostname = ((bun.default_allocator.dupeZ(u8, host_str.slice())) catch unreachable);
                     has_hostname = true;
@@ -661,15 +847,26 @@ else => {
             if (global.hasException()) {
                 return error.JSError;
             }
-            if (try arg.getStringish(global, "unix")) |unix| {
+            const unix_opt = try arg.getStringish(global, "unix");
+            if ((unix_opt != null)) {
+                var unix = unix_opt.?;
                 _ = &unix;
-                defer {
-                _ = unix.deref();
-                }
-                const unix_str = unix.toUTF8(bun.default_allocator);
-                defer {
-                _ = unix_str.deinit();
-                }
+                var _guard_unix = DerefGuard(bun.String){ .ptr = (blk: {
+                break :blk (&unix);
+
+}) };
+                _ = &_guard_unix;
+                var ___guard_unix_moved = false; _ = &___guard_unix_moved;
+                defer if (!___guard_unix_moved) { ___guard_unix_moved = true; const __T = @TypeOf(_guard_unix); if (@typeInfo(__T) == .optional) { if (_guard_unix) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_unix.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_unix; _drop_val.__cp_deinit(); } };
+                var unix_str = unix.toUTF8(bun.default_allocator);
+                _ = &unix_str;
+                var _guard_unix_str = DeinitGuard(@TypeOf(unix_str)){ .ptr = (blk: {
+                break :blk (&unix_str);
+
+}) };
+                _ = &_guard_unix_str;
+                var ___guard_unix_str_moved = false; _ = &___guard_unix_str_moved;
+                defer if (!___guard_unix_str_moved) { ___guard_unix_str_moved = true; const __T = @TypeOf(_guard_unix_str); if (@typeInfo(__T) == .optional) { if (_guard_unix_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_unix_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_unix_str; _drop_val.__cp_deinit(); } };
                 if ((unix_str.len > 0)) {
                     if (has_hostname) {
                         return global.throwInvalidArguments("Cannot specify both hostname and unix", .{});
@@ -807,9 +1004,13 @@ else => {
                                         args.ssl_config = ssl_config;
                                     } else {
                                         if ((((ssl_config.server_name) orelse (""))[0] == 0)) {
-                                            defer {
-                                            _ = ssl_config.deinit();
-                                            }
+                                            var _guard_sni_ssl = DeinitGuard(SSLConfig){ .ptr = (blk: {
+                                            break :blk (&ssl_config);
+
+}) };
+                                            _ = &_guard_sni_ssl;
+                                            var ___guard_sni_ssl_moved = false; _ = &___guard_sni_ssl_moved;
+                                            defer if (!___guard_sni_ssl_moved) { ___guard_sni_ssl_moved = true; const __T = @TypeOf(_guard_sni_ssl); if (@typeInfo(__T) == .optional) { if (_guard_sni_ssl) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_sni_ssl.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_sni_ssl; _drop_val.__cp_deinit(); } };
                                             return global.throwInvalidArguments("SNI tls object must have a serverName", .{});
                                         }
                                         if ((args.sni == null)) {
@@ -866,12 +1067,16 @@ else => {
         if ((args.base_uri.len > 0)) {
             args.base_url = URL.parse(args.base_uri);
             if ((args.base_url.hostname.len == 0)) {
-                _ = bun.default_allocator.free(@constCast(args.base_uri));
+                {
+                    _ = bun.default_allocator.free(@constCast(args.base_uri));
+                }
                 args.base_uri = "";
                 return global.throwInvalidArguments("baseURI must have a hostname", .{});
             }
             if ((!strings.isAllASCII(args.base_uri))) {
-                _ = bun.default_allocator.free(@constCast(args.base_uri));
+                {
+                    _ = bun.default_allocator.free(@constCast(args.base_uri));
+                }
                 args.base_uri = "";
                 return global.throwInvalidArguments("Unicode baseURI must already be encoded for now.\nnew URL(baseuRI).toString() should do the trick.", .{});
             }
@@ -880,9 +1085,10 @@ else => {
                 const hostname = args.base_url.hostname;
                 const needsBrackets: bool = (strings.isIPV6Address(hostname) and (hostname[0] != 91));
                 const original_base_uri = args.base_uri;
-                defer {
-                _ = bun.default_allocator.free(@constCast(original_base_uri));
-                }
+                var _guard_orig_uri = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = original_base_uri };
+                _ = &_guard_orig_uri;
+                var ___guard_orig_uri_moved = false; _ = &___guard_orig_uri_moved;
+                defer if (!___guard_orig_uri_moved) { ___guard_orig_uri_moved = true; const __T = @TypeOf(_guard_orig_uri); if (@typeInfo(__T) == .optional) { if (_guard_orig_uri) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_orig_uri.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_orig_uri; _drop_val.__cp_deinit(); } };
                 if (needsBrackets) {
                     args.base_uri = (((if ((((port == 80) and (args.ssl_config == null)) or ((port == 443) and (args.ssl_config != null)))) std.fmt.allocPrint(bun.default_allocator, "{s}://[{s}]/{s}", .{ protocol, hostname, strings.trimLeadingChar(args.base_url.pathname, 47) }) else std.fmt.allocPrint(bun.default_allocator, "{s}://[{s}]:{d}/{s}", .{ protocol, hostname, port, strings.trimLeadingChar(args.base_url.pathname, 47) }))) catch unreachable);
                 } else {
@@ -900,19 +1106,25 @@ else => {
                 args.base_uri = (((if ((((port == 80) and (args.ssl_config == null)) or ((port == 443) and (args.ssl_config != null)))) std.fmt.allocPrint(bun.default_allocator, "{s}://{s}/", .{ protocol, hostname }) else std.fmt.allocPrint(bun.default_allocator, "{s}://{s}:{d}/", .{ protocol, hostname, port }))) catch unreachable);
             }
             if ((!strings.isAllASCII(hostname))) {
-                _ = bun.default_allocator.free(@constCast(args.base_uri));
+                {
+                    _ = bun.default_allocator.free(@constCast(args.base_uri));
+                }
                 args.base_uri = "";
                 return global.throwInvalidArguments("Unicode hostnames must already be encoded for now.\nnew URL(input).hostname should do the trick.", .{});
             }
             args.base_url = URL.parse(args.base_uri);
         }
         if ((args.base_url.hostname.len == 0)) {
-            _ = bun.default_allocator.free(@constCast(args.base_uri));
+            {
+                _ = bun.default_allocator.free(@constCast(args.base_uri));
+            }
             args.base_uri = "";
             return global.throwInvalidArguments("baseURI must have a hostname", .{});
         }
         if (((args.base_url.username.len > 0) or (args.base_url.password.len > 0))) {
-            _ = bun.default_allocator.free(@constCast(args.base_uri));
+            {
+                _ = bun.default_allocator.free(@constCast(args.base_uri));
+            }
             args.base_uri = "";
             return global.throwInvalidArguments("baseURI can't have a username or password", .{});
         }
@@ -938,14 +1150,14 @@ pub const RouteDeclaration = struct {
         specific: HTTP.Method,
     } = .@"any",
 
-    pub fn release(this: *RouteDeclaration) void {
-        if (this.path.len > 0) {
-            bun.default_allocator.free(this.path);
-        }
+pub fn release(self: *@This()) void {
+            if ((self.path.len > 0)) {
+                _ = bun.default_allocator.free(self.path);
+            }
     }
 
-    pub fn deinit(this: *RouteDeclaration) void {
-        this.release();
+pub fn deinit(self: *@This()) void {
+            _ = self.release();
     }
 };
 pub const StaticRouteEntry = struct {
@@ -1015,21 +1227,22 @@ pub const Address = union(enum) {
     },
     unix: [:0]const u8,
 
-    pub fn deinit(this: *@This(), allocator: std.mem.Allocator) void {
-        switch (this.*) {
-            .tcp => |tcp| {
-                if (tcp.hostname) |host| {
-                    allocator.free(bun.sliceTo(host, 0));
-                }
-            },
-            .unix => |addr| {
-                allocator.free(addr);
-            },
-        }
-        this.* = .{ .tcp = .{} };
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            switch (self.*) {
+.tcp => |tcp| {
+if (tcp.hostname) |host| {
+                _ = &host;
+                _ = allocator.free(bun.sliceTo(host, 0));
+            }
+},
+.unix => |addr| {
+_ = allocator.free(addr);
+},
+}
+            self.* = .{ .tcp = .{} };
     }
 
-    pub fn release(this: *@This(), allocator: std.mem.Allocator) void {
-        this.deinit(allocator);
+pub fn release(self: *@This(), allocator: std.mem.Allocator) void {
+            _ = self.deinit(allocator);
     }
 };

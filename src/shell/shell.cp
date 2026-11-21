@@ -30,6 +30,59 @@ pub const STDERR_FD: bun.FD = .fromUV(2);
 pub const POSIX_DEV_NULL: [:0]const u8 = "/dev/null";
 pub const WINDOWS_DEV_NULL: [:0]const u8 = "NUL";
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+};
+
+struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+};
+
+struct AllocFreeGuard<T> {
+    allocator: Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+};
+
+struct ShellErrThrowGuard {
+    ptr: *const ShellErr!,
+    ~init() {
+        unsafe {
+            switch (_.ptr.*) {
+                .sys => {},
+                .custom, .invalid_arguments, .todo => {
+                    _.ptr.deinit(bun.default_allocator);
+                },
+            }
+        }
+    }
+};
+
+struct ShellErrValGuard {
+    val: ShellErr,
+    ~init() {
+        _.val.deinit(bun.default_allocator);
+    }
+};
+
+struct JsStringsGuard<T> {
+    ptr: *T!,
+    ~init() {
+        for (bunstr of _.ptr.items[0..]) {
+            bunstr.deref();
+        }
+        _.ptr.deinit();
+    }
+};
+
 /// The strings in this type are allocated with event loop ctx allocator
 pub const ShellErr = union(enum) {
     sys: jsc.SystemError,
@@ -57,17 +110,7 @@ pub const ShellErr = union(enum) {
     }
 
     pub fn throwJS(this: *const @This(), globalThis: *jsc.JSGlobalObject): bun.JSError {
-        defer {
-            // basically `transferToJS`. don't want to double deref the sys error
-            switch (this.*) {
-                .sys => {
-                    // sys.toErrorInstance handles decrementing the ref count
-                },
-                .custom, .invalid_arguments, .todo => {
-                    this.deinit(bun.default_allocator);
-                },
-            }
-        }
+        const _guard_err = ShellErrThrowGuard{ ptr: this };
         switch (this.*) {
             .sys => {
                 const e = this.sys.toErrorInstance(globalThis);
@@ -88,7 +131,7 @@ pub const ShellErr = union(enum) {
     }
 
     pub fn throwMini(this: @This()): noreturn {
-        defer this.deinit(bun.default_allocator);
+        const _guard_err = ShellErrValGuard{ val: this };
         switch (this) {
             .sys => |e| {
                 bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>bunsh: {f}: {f}<r>", .{ e.message, e.path });
@@ -3984,7 +4027,7 @@ pub fn handleTemplateValue(
         if (template_value.isObject()) {
             if (maybe_str := template_value.getOwnTruthy(globalThis, "raw")?) {
                 const bunstr = maybe_str.toBunString(globalThis)?;
-                defer bunstr.deref();
+                const _guard_bunstr = DerefGuard<bun.String>{ val: bunstr };
 
                 // Check for null bytes in shell argument (security: prevent null byte injection)
                 if (bunstr.indexOfAsciiChar(0) != null) {
@@ -4041,7 +4084,7 @@ pub struct ShellSrcBuilder {
 
     fn appendJSValueStr(*_, jsval: JSValue, comptime allow_escape: bool): bun.JSError!bool {
         const bunstr = jsval.toBunString(_.globalThis)?;
-        defer bunstr.deref();
+        const _guard_bunstr = DerefGuard<bun.String>{ val: bunstr };
 
         // Check for null bytes in shell argument (security: prevent null byte injection)
         if (bunstr.indexOfAsciiChar(0) != null) {
@@ -4089,7 +4132,7 @@ pub struct ShellSrcBuilder {
         if (allow_escape) {
             if (needsEscapeUtf8AsciiLatin1(utf8)) {
                 const bunstr = bun.String.cloneUTF8(utf8);
-                defer bunstr.deref();
+                const _guard_bunstr = DerefGuard<bun.String>{ val: bunstr };
                 _.appendJSStrRef(bunstr)?;
                 return true;
             }
@@ -4529,9 +4572,9 @@ pub struct TestingAPIs {
         const str_arg = str_arg_opt.?;
 
         const bunstr = str_arg.toBunString(globalThis)?;
-        defer bunstr.deref();
-        const utf8str = bunstr.toUTF8(bun.default_allocator);
-        defer utf8str.deinit();
+        const _guard_bunstr = DerefGuard<bun.String>{ val: bunstr };
+        let utf8str = bunstr.toUTF8(bun.default_allocator);
+        const _guard_utf8str = DeinitGuard<@TypeOf(utf8str)>{ ptr: &utf8str };
 
         inline for (disabled of Interpreter.Builtin.Kind.DISABLED_ON_POSIX) {
             if (bun.strings.eqlComptime(utf8str.byteSlice(), @tagName(disabled))) {
@@ -4555,7 +4598,7 @@ pub struct TestingAPIs {
         const string_args = string_args_opt.?;
 
         let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        const _guard_arena = DeinitGuard<@TypeOf(arena_)>{ ptr: &arena_ };
 
         const template_args_js_opt = arguments.nextEat();
         if (template_args_js_opt == null) return globalThis.throw("shell: expected 2 arguments, got 0", {});
@@ -4563,14 +4606,9 @@ pub struct TestingAPIs {
         let template_args = template_args_js.arrayIterator(globalThis)?;
         let stack_alloc = std.heap.stackFallback(@sizeOf(bun.String) * 4, arena_.allocator());
         let jsstrings = std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4)?;
-        defer {
-            for (bunstr of jsstrings.items[0..]) {
-                bunstr.deref();
-            }
-            jsstrings.deinit();
-        }
+        const _guard_jsstrings = JsStringsGuard<@TypeOf(jsstrings)>{ ptr: &jsstrings };
         let jsobjs = std.array_list.Managed(JSValue).init(arena_.allocator());
-        defer jsobjs.deinit();
+        const _guard_jsobjs = DeinitGuard<@TypeOf(jsobjs)>{ ptr: &jsobjs };
 
         let script = std.array_list.Managed(u8).init(arena_.allocator());
         shellCmdFromJS(globalThis, string_args, &template_args, &jsobjs, &jsstrings, &script, marked_argument_buffer)?;
@@ -4604,7 +4642,7 @@ pub struct TestingAPIs {
 
         const str = bun.handleOom(std.fmt.allocPrint(globalThis.bunVM().allocator, "{f}", .{std.json.fmt(test_tokens.items[0..], {})}));
 
-        defer globalThis.bunVM().allocator.free(str);
+        const _guard_str = AllocFreeGuard<@TypeOf(str)>{ allocator: globalThis.bunVM().allocator, slice: str };
         let bun_str = bun.String.fromBytes(str);
         return bun_str.toJS(globalThis);
     }
@@ -4623,7 +4661,7 @@ pub struct TestingAPIs {
         const string_args = string_args_opt.?;
 
         let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        const _guard_arena = DeinitGuard<@TypeOf(arena_)>{ ptr: &arena_ };
 
         const template_args_js_opt = arguments.nextEat();
         if (template_args_js_opt == null) return globalThis.throw("shell: expected 2 arguments, got 0", {});
@@ -4631,14 +4669,9 @@ pub struct TestingAPIs {
         let template_args = template_args_js.arrayIterator(globalThis)?;
         let stack_alloc = std.heap.stackFallback(@sizeOf(bun.String) * 4, arena_.allocator());
         let jsstrings = std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4)?;
-        defer {
-            for (bunstr of jsstrings.items[0..]) {
-                bunstr.deref();
-            }
-            jsstrings.deinit();
-        }
+        const _guard_jsstrings = JsStringsGuard<@TypeOf(jsstrings)>{ ptr: &jsstrings };
         let jsobjs = std.array_list.Managed(JSValue).init(arena_.allocator());
-        defer jsobjs.deinit();
+        const _guard_jsobjs = DeinitGuard<@TypeOf(jsobjs)>{ ptr: &jsobjs };
         let script = std.array_list.Managed(u8).init(arena_.allocator());
         shellCmdFromJS(globalThis, string_args, &template_args, &jsobjs, &jsstrings, &script, marked_argument_buffer)?;
 
@@ -4662,7 +4695,7 @@ pub struct TestingAPIs {
 
         const str = bun.handleOom(std.fmt.allocPrint(globalThis.bunVM().allocator, "{f}", .{std.json.fmt(script_ast, {})}));
 
-        defer globalThis.bunVM().allocator.free(str);
+        const _guard_str = AllocFreeGuard<@TypeOf(str)>{ allocator: globalThis.bunVM().allocator, slice: str };
         return bun.String.createUTF8ForJS(globalThis, str);
     }
 }

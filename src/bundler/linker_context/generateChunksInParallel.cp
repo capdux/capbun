@@ -1,3 +1,57 @@
+struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct StandaloneChunkContentsGuard {
+    scc: *([]string?)?!,
+    ~init() {
+        unsafe {
+            if (scc := _.scc.*) {
+                for (maybe_buf of scc) {
+                    if (buf := maybe_buf) {
+                        if (buf.len > 0)
+                            Chunk.IntermediateOutput.allocatorForSize(buf.len).free(@constCast(buf));
+                    }
+                }
+                bun.default_allocator.free(scc);
+            }
+        }
+    }
+}
+
 fn ReturnType(comptime is_dev_server: bool): type {
     return if (is_dev_server) void else std.array_list.Managed(options.OutputFile);
 }
@@ -10,7 +64,7 @@ pub fn generateChunksInParallel(
     comptime is_dev_server: bool,
 ): ReturnType(is_dev_server)! {
     let trace = bun.perf.trace("Bundler.generateChunksInParallel");
-    defer trace.end();
+    const _guard_trace = EndGuard<@TypeOf(trace)>{ ptr: &trace };
 
     c.mangleLocalCss();
 
@@ -79,7 +133,7 @@ pub fn generateChunksInParallel(
 
     {
         const chunk_contexts = bun.handleOom(c.allocator().alloc(GenerateChunkCtx, chunks.len));
-        defer c.allocator().free(chunk_contexts);
+        const _guard_chunk_contexts = FreeGuard<GenerateChunkCtx>{ allocator: c.allocator(), slice: chunk_contexts };
 
         {
             let total_count: usize = 0;
@@ -113,7 +167,7 @@ pub fn generateChunksInParallel(
             debug(" START {d} compiling part ranges", [ total_count ]);
             defer debug("  DONE {d} compiling part ranges", [ total_count ]);
             const combined_part_ranges = bun.handleOom(c.allocator().alloc(PendingPartRange, total_count));
-            defer c.allocator().free(combined_part_ranges);
+            const _guard_part_ranges = FreeGuard<PendingPartRange>{ allocator: c.allocator(), slice: combined_part_ranges };
             let remaining_part_ranges = combined_part_ranges;
             let batch: ThreadPoolLib.Batch = {};
             let c_idx: usize = 0;
@@ -223,12 +277,12 @@ pub fn generateChunksInParallel(
     // TODO: enforceNoCyclicChunkImports()
     {
         let path_names_map = bun.StringHashMap(void).init(c.allocator());
-        defer path_names_map.deinit();
+        const _guard_path_names = DeinitGuard<bun.StringHashMap(void)>{ ptr: &path_names_map };
 
         let duplicates_map: bun.StringArrayHashMapUnmanaged(DuplicateEntry) = {};
 
         let chunk_visit_map = AutoBitSet.initEmpty(c.allocator(), chunks.len)?;
-        defer chunk_visit_map.deinit(c.allocator());
+        const _guard_visit_map = DeinitWithAllocGuard<AutoBitSet>{ ptr: &chunk_visit_map, allocator: c.allocator() };
 
         // Compute the final hashes of each chunk, then use those to create the final
         // paths of each chunk. This can technically be done in parallel but it
@@ -267,7 +321,7 @@ pub fn generateChunksInParallel(
 
         if (duplicates_map.count() > 0) {
             let msg = std.array_list.Managed(u8).init(bun.default_allocator);
-            errdefer msg.deinit();
+            const _guard_msg = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &msg };
 
             let entry_naming: ([]const u8)? = null;
             let chunk_naming: ([]const u8)? = null;
@@ -333,7 +387,7 @@ pub fn generateChunksInParallel(
         // Build map from unique_key -> final resolved path
         const b: *bun.bundle_v2.BundleV2 = @fieldParentPtr("linker", c);
         let unique_key_to_path = bun.StringHashMap(string).init(c.allocator());
-        defer unique_key_to_path.deinit();
+        const _guard_unique_key = DeinitGuard<bun.StringHashMap(string)>{ ptr: &unique_key_to_path };
         for (*ch of chunks) {
             if (ch.unique_key.len > 0 && ch.final_rel_path.len > 0) {
                 // Use the per-chunk public_path to match what IntermediateOutput.code()
@@ -356,7 +410,7 @@ pub fn generateChunksInParallel(
 
             // Collect replacements first (can't modify string table while iterating)
             let replacements: std.ArrayListUnmanaged(ModuleInfoReplacement) = {};
-            defer replacements.deinit(c.allocator());
+            const _guard_replacements = DeinitWithAllocGuard<std.ArrayListUnmanaged(ModuleInfoReplacement)>{ ptr: &replacements, allocator: c.allocator() };
 
             let offset: usize = 0;
             for (string_index of 0..mi.strings_lens.items.len) {
@@ -414,23 +468,13 @@ pub fn generateChunksInParallel(
 
     const bundler: *bun.bundle_v2.BundleV2 = @fieldParentPtr("linker", c);
     let static_route_visitor = StaticRouteVisitor{ c: c, visited: bun.handleOom(bun.bit_set.AutoBitSet.initEmpty(bun.default_allocator, c.graph.files.len)) };
-    defer static_route_visitor.deinit();
+    const _guard_route_visitor = DeinitGuard<StaticRouteVisitor>{ ptr: &static_route_visitor };
 
     // For standalone mode, resolve JS/CSS chunks so we can inline their content into HTML.
     // Closing tag escaping (</script → <\\/script, </style → <\\/style) is handled during
     // the HTML assembly step in codeWithSourceMapShifts, not here.
     let standalone_chunk_contents: ([]string?)? = null;
-    defer {
-        if (scc := standalone_chunk_contents) {
-            for (maybe_buf of scc) {
-                if (buf := maybe_buf) {
-                    if (buf.len > 0)
-                        Chunk.IntermediateOutput.allocatorForSize(buf.len).free(@constCast(buf));
-                }
-            }
-            bun.default_allocator.free(scc);
-        }
-    }
+    const _guard_scc = StandaloneChunkContentsGuard{ scc: &standalone_chunk_contents };
 
     if (is_standalone) {
         let scc = bun.handleOom(bun.default_allocator.alloc(OptionalString, chunks.len));
@@ -586,7 +630,7 @@ pub fn generateChunksInParallel(
                 },
                 .@"inline" => {
                     const output_source_map = chunk.output_source_map.finalize(bun.default_allocator, code_result.shifts) catch @panic("Failed to allocate memory for external source map");
-                    defer bun.default_allocator.free(output_source_map);
+                    const _guard_osm = FreeGuard<u8>{ allocator: bun.default_allocator, slice: output_source_map };
                     const encode_len = base64.encodeLen(output_source_map);
 
                     const source_map_start = "//# sourceMappingURL=data:application/json;base64,";
@@ -640,14 +684,13 @@ pub fn generateChunksInParallel(
                             break :url_blk bun.String.createFormat("{s}{s}", [ normalizer[0], normalizer[1] ])?;
                         } else bun.String.createFormat("{s}" ++ bun.bytecode_extension, [ chunk.final_rel_path ])?;
                         source_provider_url.ref();
-
-                        defer source_provider_url.deref();
+                        const _guard_spu = DerefGuard<bun.String>{ ptr: &source_provider_url };
 
                         if (result := jsc.CachedBytecode.generate(c.options.output_format, code_result.buffer, &source_provider_url)) {
                             const bytecode = result[0];
                             const cached_bytecode = result[1];
-                            const source_provider_url_str = source_provider_url.toSlice(bun.default_allocator);
-                            defer source_provider_url_str.deinit();
+                            let source_provider_url_str = source_provider_url.toSlice(bun.default_allocator);
+                            const _guard_spu_str = DeinitGuard<@TypeOf(source_provider_url_str)>{ ptr: &source_provider_url_str };
                             debug("Bytecode cache generated {s}: {f}", [ source_provider_url_str.slice(), bun.fmt.size(bytecode.len, { space_between_number_and_unit: true }) ]);
                             @memcpy(fdpath[0..chunk.final_rel_path.len], chunk.final_rel_path);
                             fdpath[chunk.final_rel_path.len..][0..bun.bytecode_extension.len].* = bun.bytecode_extension.*;

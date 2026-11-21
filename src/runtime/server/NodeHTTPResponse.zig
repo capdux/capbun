@@ -4,7 +4,1302 @@
 const std = @import("std");
 const string = []const u8;
 
-const bun = @import("bun");
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val << @as(ShiftType, @truncate(u_shift));
+    }
+    return val << shift;
+}
+fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val >> @as(ShiftType, @truncate(u_shift));
+    }
+    return val >> shift;
+}
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
+pub const bun = @import("bun");
+pub const BodyReadState = enum(u8) {
+    none = 0,
+    pending = 1,
+    done = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const AbortEvent = enum(u8) {
+    none = 0,
+    abort = 1,
+    timeout = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deref();
+                }
+        }
+    };
+}
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn OptionalDeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    if (self.ptr.*) |*s| {
+                        _ = &s;
+                        _ = (s.*).deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: []const T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.allocator.free(self.slice);
+        }
+    };
+}
+
+pub fn ClearAndFreeGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        allocator: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.clearAndFree(self.allocator);
+                }
+        }
+    };
+}
+
+pub const UpgradeCleanupGuard = struct {
+    resp: *NodeHTTPResponse,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *UpgradeCleanupGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.resp.setOnAbortedHandler();
+                _ = self.resp.upgrade_context.deinit();
+            }
+    }
+};
+
+pub const OnDataLastGuard = struct {
+    resp: *NodeHTTPResponse,
+    last: bool,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *OnDataLastGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.last) {
+                {
+                    if (self.resp.body_read_ref.has) {
+                        _ = self.resp.body_read_ref.unref(jsc.VirtualMachine.get());
+                        _ = self.resp.markRequestAsDoneIfNecessary();
+                    }
+                    _ = self.resp.deref();
+                }
+            }
+    }
+};
+
+pub const BodyReadUnrefGuard = struct {
+    resp: *NodeHTTPResponse,
+    vm: *jsc.VirtualMachine,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *BodyReadUnrefGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                if (self.resp.body_read_ref.has) {
+                    _ = self.resp.body_read_ref.unref(self.vm);
+                }
+            }
+    }
+};
+
+pub const Flags = packed struct(u8) {
+    socket_closed: bool = false,
+    request_has_completed: bool = false,
+    ended: bool = false,
+    upgraded: bool = false,
+    hasCustomOnData: bool = false,
+    is_request_pending: bool = true,
+    is_data_buffered_during_pause: bool = false,
+    is_data_buffered_during_pause_last: bool = false,
+
+pub fn isRequestedCompletedOrEnded(self: Flags) bool {
+            return (self.request_has_completed or self.ended);
+    }
+
+pub fn isDone(self: Flags) bool {
+            return (self.isRequestedCompletedOrEnded() or self.socket_closed);
+    }
+};
+
+pub const UpgradeCTX = struct {
+    context: ?*uws.WebSocketUpgradeContext = null,
+    request: ?*uws.Request = null,
+    sec_websocket_key: []const u8 = "",
+    sec_websocket_protocol: []const u8 = "",
+    sec_websocket_extensions: []const u8 = "",
+
+pub fn deinit(self: *UpgradeCTX) void {
+            const sec_websocket_key = self.sec_websocket_key;
+            const sec_websocket_protocol = self.sec_websocket_protocol;
+            const sec_websocket_extensions = self.sec_websocket_extensions;
+            self.* = .{};
+            if ((sec_websocket_extensions.len > 0)) {
+                _ = bun.default_allocator.free(sec_websocket_extensions);
+            }
+            if ((sec_websocket_protocol.len > 0)) {
+                _ = bun.default_allocator.free(sec_websocket_protocol);
+            }
+            if ((sec_websocket_key.len > 0)) {
+                _ = bun.default_allocator.free(sec_websocket_key);
+            }
+    }
+
+pub fn preserveWebSocketHeadersIfNeeded(self: *UpgradeCTX) void {
+            if (self.request) |request| {
+                _ = &request;
+                self.request = null;
+                const sec_websocket_key = ((request.header("sec-websocket-key")) orelse (""));
+                const sec_websocket_protocol = ((request.header("sec-websocket-protocol")) orelse (""));
+                const sec_websocket_extensions = ((request.header("sec-websocket-extensions")) orelse (""));
+                if ((sec_websocket_key.len > 0)) {
+                    self.sec_websocket_key = bun.handleOom(bun.default_allocator.dupe(u8, sec_websocket_key));
+                }
+                if ((sec_websocket_protocol.len > 0)) {
+                    self.sec_websocket_protocol = bun.handleOom(bun.default_allocator.dupe(u8, sec_websocket_protocol));
+                }
+                if ((sec_websocket_extensions.len > 0)) {
+                    self.sec_websocket_extensions = bun.handleOom(bun.default_allocator.dupe(u8, sec_websocket_extensions));
+                }
+            }
+    }
+};
+
+pub const NodeHTTPResponse = @This();
+
+ref_count: RefCount = .init(),
+raw_response: ?uws.AnyResponse,
+flags: Flags = .{},
+poll_ref: jsc.Ref = .{},
+body_read_state: BodyReadState = .none,
+body_read_ref: jsc.Ref = .{},
+promise: jsc.Strong.Optional = .empty,
+server: AnyServer,
+buffered_request_body_data_during_pause: bun.ByteList = .{},
+bytes_written: usize = 0,
+upgrade_context: UpgradeCTX = .{},
+auto_flusher: AutoFlusher = .{},
+
+pub fn getThisValue(client: *NodeHTTPResponse) jsc.JSValue {
+        if (((client.flags.socket_closed or client.flags.upgraded) or (client.raw_response == null))) {
+            return .zero;
+        }
+        return Bun__getNodeHTTPResponseThisValue((client.raw_response.? == .SSL), client.raw_response.?.socket());
+}
+
+pub fn getServerSocketValue(client: *NodeHTTPResponse) jsc.JSValue {
+        if (((client.flags.socket_closed or client.flags.upgraded) or (client.raw_response == null))) {
+            return .zero;
+        }
+        return Bun__getNodeHTTPServerSocketThisValue((client.raw_response.? == .SSL), client.raw_response.?.socket());
+}
+
+pub fn pauseSocket(client: *NodeHTTPResponse) void {
+        _ = log("pauseSocket", .{});
+        if ((((client.flags.socket_closed or client.flags.upgraded) or (client.raw_response == null)) or client.raw_response.?.isConnectRequest())) {
+            return;
+        }
+        _ = client.raw_response.?.pause();
+}
+
+pub fn resumeSocket(client: *NodeHTTPResponse) void {
+        _ = log("resumeSocket", .{});
+        if ((((client.flags.socket_closed or client.flags.upgraded) or (client.raw_response == null)) or client.raw_response.?.isConnectRequest())) {
+            return;
+        }
+        _ = client.raw_response.?.@"resume"();
+}
+
+pub fn upgrade(client: *NodeHTTPResponse, data_value: JSValue, sec_websocket_protocol: ZigString, sec_websocket_extensions: ZigString) bool {
+        const upgrade_ctx = ((client.upgrade_context.context) orelse { return false; });
+        const ws_handler = ((client.server.webSocketHandler()) orelse { return false; });
+        const socketValue = client.getServerSocketValue();
+        if ((socketValue == .zero)) {
+            return false;
+        }
+        _ = resumeSocket(client);
+        var _guard_upgrade = UpgradeCleanupGuard{ .resp = client };
+        _ = &_guard_upgrade;
+        var ___guard_upgrade_moved = false; _ = &___guard_upgrade_moved;
+        defer if (!___guard_upgrade_moved) { ___guard_upgrade_moved = true; const __T = @TypeOf(_guard_upgrade); if (@typeInfo(__T) == .optional) { if (_guard_upgrade) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_upgrade.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_upgrade; _drop_val.__cp_deinit(); } };
+        _ = data_value.ensureStillAlive();
+        const ws = ServerWebSocket.init(ws_handler, data_value, null);
+        var sec_websocket_protocol_str: ?ZigString.Slice = null;
+        _ = &sec_websocket_protocol_str;
+        var _guard_proto = OptionalDeinitGuard(?ZigString.Slice){ .ptr = (&sec_websocket_protocol_str) };
+        _ = &_guard_proto;
+        var ___guard_proto_moved = false; _ = &___guard_proto_moved;
+        defer if (!___guard_proto_moved) { ___guard_proto_moved = true; const __T = @TypeOf(_guard_proto); if (@typeInfo(__T) == .optional) { if (_guard_proto) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_proto.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_proto; _drop_val.__cp_deinit(); } };
+        var sec_websocket_extensions_str: ?ZigString.Slice = null;
+        _ = &sec_websocket_extensions_str;
+        var _guard_ext = OptionalDeinitGuard(?ZigString.Slice){ .ptr = (&sec_websocket_extensions_str) };
+        _ = &_guard_ext;
+        var ___guard_ext_moved = false; _ = &___guard_ext_moved;
+        defer if (!___guard_ext_moved) { ___guard_ext_moved = true; const __T = @TypeOf(_guard_ext); if (@typeInfo(__T) == .optional) { if (_guard_ext) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ext.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ext; _drop_val.__cp_deinit(); } };
+        const sec_websocket_protocol_value = brk: {
+        if (sec_websocket_protocol.isEmpty()) {
+            if (client.upgrade_context.request) |request| {
+                _ = &request;
+                break :brk ((request.header("sec-websocket-protocol")) orelse (""));
+            } else {
+                break :brk client.upgrade_context.sec_websocket_protocol;
+            }
+        }
+        sec_websocket_protocol_str = sec_websocket_protocol.toSlice(bun.default_allocator);
+        break :brk sec_websocket_protocol_str.?.slice();
+};
+        const sec_websocket_extensions_value = brk: {
+        if (sec_websocket_extensions.isEmpty()) {
+            if (client.upgrade_context.request) |request| {
+                _ = &request;
+                break :brk ((request.header("sec-websocket-extensions")) orelse (""));
+            } else {
+                break :brk client.upgrade_context.sec_websocket_extensions;
+            }
+        }
+        sec_websocket_extensions_str = sec_websocket_extensions.toSlice(bun.default_allocator);
+        break :brk sec_websocket_extensions_str.?.slice();
+};
+        var websocket_key = client.upgrade_context.sec_websocket_key;
+        _ = &websocket_key;
+        if (client.upgrade_context.request) |request| {
+            _ = &request;
+            websocket_key = ((request.header("sec-websocket-key")) orelse (""));
+        }
+        if (client.raw_response) |raw_response| {
+            _ = &raw_response;
+            client.raw_response = null;
+            client.flags.upgraded = true;
+            _ = client.poll_ref.unref(client.server.globalThis().bunVM());
+            if ((raw_response == .SSL)) {
+                _ = raw_response.SSL.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+            } else {
+                _ = raw_response.TCP.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+            }
+        }
+        return true;
+}
+
+pub fn maybeStopReadingBody(self: *NodeHTTPResponse, vm: *jsc.VirtualMachine, thisValue: jsc.JSValue) void {
+        _ = self.upgrade_context.deinit();
+        const tv = thisValue;
+        if (((((self.flags.upgraded or self.flags.socket_closed) or self.flags.ended) and (self.body_read_ref.has or (self.body_read_state == .pending))) and ((!self.flags.hasCustomOnData) or (js.onDataGetCached(tv) == null)))) {
+            const had_ref = self.body_read_ref.has;
+            if (((!self.flags.upgraded) and (!self.flags.socket_closed))) {
+                _ = log("clearOnData", .{});
+                if (self.raw_response) |raw_response| {
+                    _ = &raw_response;
+                    _ = raw_response.clearOnData();
+                }
+            }
+            _ = self.body_read_ref.unref(vm);
+            self.body_read_state = .done;
+            if (had_ref) {
+                _ = self.markRequestAsDoneIfNecessary();
+            }
+        }
+}
+
+pub fn shouldRequestBePending(client: *const NodeHTTPResponse) bool {
+        if (client.flags.socket_closed) {
+            return false;
+        }
+        if (client.flags.ended) {
+            return (client.body_read_state == .pending);
+        }
+        return true;
+}
+
+pub fn dumpRequestBody(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame, thisValue: jsc.JSValue) bun.JSError!jsc.JSValue {
+        if ((client.buffered_request_body_data_during_pause.cap > 0)) {
+            _ = client.buffered_request_body_data_during_pause.clearAndFree(bun.default_allocator);
+        }
+        if ((!client.flags.request_has_completed)) {
+            _ = client.clearOnDataCallback(thisValue, globalObject);
+        }
+        return .js_undefined;
+}
+
+pub fn markRequestAsDone(client: *NodeHTTPResponse) void {
+        _ = log("markRequestAsDone()", .{});
+        var _guard_deref = DerefGuard(NodeHTTPResponse){ .ptr = client };
+        _ = &_guard_deref;
+        var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+        defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
+        client.flags.is_request_pending = false;
+        _ = client.clearOnDataCallback(client.getThisValue(), jsc.VirtualMachine.get().global);
+        _ = client.upgrade_context.deinit();
+        _ = client.buffered_request_body_data_during_pause.clearAndFree(bun.default_allocator);
+        const server = client.server;
+        _ = client.poll_ref.unref(jsc.VirtualMachine.get());
+        _ = client.unregisterAutoFlush();
+        _ = server.onRequestComplete();
+}
+
+pub fn markRequestAsDoneIfNecessary(self: *NodeHTTPResponse) void {
+        if ((self.flags.is_request_pending and (!self.shouldRequestBePending()))) {
+            _ = self.markRequestAsDone();
+        }
+}
+
+pub fn create(any_server_tag: u64, globalObject: *jsc.JSGlobalObject, has_body: *bool, request: *uws.Request, is_ssl: i32, response_ptr: *anyopaque, upgrade_ctx: ?*uws.WebSocketUpgradeContext, node_response_ptr: *?*NodeHTTPResponse) callconv(std.builtin.CallingConvention.c) jsc.JSValue {
+        const vm = globalObject.bunVM();
+        const method = ((HTTP.Method.which(request.method())) orelse (HTTP.Method.OPTIONS));
+        if ((method.hasRequestBody() or (method == HTTP.Method.GET))) {
+            const req_len: usize = brk: {
+            if (request.header("content-length")) |content_length| {
+                _ = &content_length;
+                _ = log("content-length: {s}", .{ content_length });
+                break :brk (blk_catch_0: { break :blk_catch_0 ((std.fmt.parseInt(usize, content_length, 10)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 0; }); });
+            }
+            break :brk (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0));
+};
+            has_body.* = ((req_len > 0) or (request.header("transfer-encoding") != null));
+        }
+        const response = bun.new(NodeHTTPResponse, .{ .ref_count = .initExactRefs(3), .upgrade_context = .{ .context = (blk: {
+        break :blk @ptrCast(upgrade_ctx);
+
+}), .request = request }, .server = AnyServer{ .ptr = AnyServer.Ptr.@"from"((blk: {
+        break :blk @ptrFromInt(any_server_tag);
+
+})) }, .raw_response = (if ((is_ssl != 0)) uws.AnyResponse{ .SSL = (blk: {
+        break :blk @ptrCast(response_ptr);
+
+}) } else uws.AnyResponse{ .TCP = (blk: {
+        break :blk @ptrCast(response_ptr);
+
+}) }), .body_read_state = (if (has_body.*) .pending else .none) });
+        if (has_body.*) {
+            _ = response.body_read_ref.ref(vm);
+        }
+        _ = response.poll_ref.ref(vm);
+        const js_this = response.toJS(globalObject);
+        node_response_ptr.* = response;
+        return js_this;
+}
+
+pub fn isDone(client: *const NodeHTTPResponse) bool {
+        return client.flags.isDone();
+}
+
+pub fn isRequestedCompletedOrEnded(client: *const NodeHTTPResponse) bool {
+        return client.flags.isRequestedCompletedOrEnded();
+}
+
+pub fn setOnAbortedHandler(client: *NodeHTTPResponse) void {
+        if (client.flags.socket_closed) {
+            return;
+        }
+        if ((!client.flags.upgraded)) {
+            if (client.raw_response) |raw_response| {
+                _ = &raw_response;
+                _ = raw_response.onTimeout(*NodeHTTPResponse, onTimeout, client);
+            }
+        }
+        _ = client.upgrade_context.preserveWebSocketHeadersIfNeeded();
+}
+
+pub fn getEnded(client: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return jsc.JSValue.jsBoolean(client.flags.ended);
+}
+
+pub fn getFinished(client: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return jsc.JSValue.jsBoolean(client.flags.request_has_completed);
+}
+
+pub fn getFlags(client: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return jsc.JSValue.jsNumber(@as(u8, @bitCast(client.flags)));
+}
+
+pub fn getAborted(client: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return jsc.JSValue.jsBoolean(client.flags.socket_closed);
+}
+
+pub fn getHasBody(client: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        var result: i32 = 0;
+        _ = &result;
+        switch (client.body_read_state) {
+.none => {
+
+},
+.pending => {
+result = (result | cp_shl(1, 1));
+},
+.done => {
+result = (result | cp_shl(1, 2));
+},
+}
+        if ((client.buffered_request_body_data_during_pause.len > 0)) {
+            result = (result | cp_shl(1, 3));
+        }
+        if (client.flags.is_data_buffered_during_pause_last) {
+            result = (result | cp_shl(1, 2));
+        }
+        return jsc.JSValue.jsNumber(result);
+}
+
+pub fn getBufferedAmount(client: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        if ((client.flags.request_has_completed or client.flags.socket_closed)) {
+            return jsc.JSValue.jsNumber(0);
+        }
+        if (client.raw_response) |raw_response| {
+            _ = &raw_response;
+            return jsc.JSValue.jsNumber(raw_response.getBufferedAmount());
+        }
+        return jsc.JSValue.jsNumber(0);
+}
+
+pub fn jsRef(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        if ((!client.isDone())) {
+            _ = client.poll_ref.ref(globalObject.bunVM());
+        }
+        return .js_undefined;
+}
+
+pub fn jsUnref(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        if ((!client.isDone())) {
+            _ = client.poll_ref.unref(globalObject.bunVM());
+        }
+        return .js_undefined;
+}
+
+pub fn handleEndedIfNecessary(state: uws.State, globalObject: *jsc.JSGlobalObject) bun.JSError!void {
+        if ((!state.isResponsePending())) {
+            return globalObject.ERR(.HTTP_HEADERS_SENT, "Stream is already ended", .{}).throw();
+        }
+}
+
+pub fn writeHead(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const arguments = callframe.argumentsUndef(3).slice();
+        if (client.isRequestedCompletedOrEnded()) {
+            return globalObject.ERR(.STREAM_ALREADY_FINISHED, "Stream is already ended", .{}).throw();
+        }
+        if (((client.flags.socket_closed or client.flags.upgraded) or (client.raw_response == null))) {
+            return .js_undefined;
+        }
+        const state = client.raw_response.?.state();
+        _ = try handleEndedIfNecessary(state, globalObject);
+        const status_code_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
+        const status_message_value: JSValue = (if (((arguments.len > 1) and (arguments[1] != .@"null"))) arguments[1] else .js_undefined);
+        const headers_object_value: JSValue = (if (((arguments.len > 2) and (arguments[2] != .@"null"))) arguments[2] else .js_undefined);
+        const status_code: i32 = brk: {
+        if ((!status_code_value.isUndefined())) {
+            break :brk (blk_catch_1: { break :blk_catch_1 ((globalObject.validateIntegerRange(status_code_value, i32, 200, .{ .min = 100, .max = 999, .field_name = "statusCode" })) catch |__ce_1| { _ = &__ce_1; return error.JSError; }); });
+        }
+        break :brk 200;
+};
+        var stack_fallback = std.heap.stackFallback(256, bun.default_allocator);
+        _ = &stack_fallback;
+        const allocator = stack_fallback.get();
+        var status_message_slice = (if ((!status_message_value.isUndefined())) try status_message_value.toSlice(globalObject, allocator) else ZigString.Slice.empty);
+        _ = &status_message_slice;
+        var _guard_status_msg = DeinitGuard(ZigString.Slice){ .ptr = (&status_message_slice) };
+        _ = &_guard_status_msg;
+        var ___guard_status_msg_moved = false; _ = &___guard_status_msg_moved;
+        defer if (!___guard_status_msg_moved) { ___guard_status_msg_moved = true; const __T = @TypeOf(_guard_status_msg); if (@typeInfo(__T) == .optional) { if (_guard_status_msg) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_status_msg.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_status_msg; _drop_val.__cp_deinit(); } };
+        if (globalObject.hasException()) {
+            return error.JSError;
+        }
+        if (state.isHttpStatusCalled()) {
+            return globalObject.ERR(.HTTP_HEADERS_SENT, "Stream already started", .{}).throw();
+        }
+        if ((status_message_slice.len > 0)) {
+            for (cp_iter_slice(status_message_slice.slice())) |c| {
+                _ = &c;
+                if (((c != 9) and ((c < 32) or (c == 127)))) {
+                    return globalObject.ERR(.INVALID_CHAR, "Invalid character in statusMessage", .{}).throw();
+                }
+            }
+        }
+        _ = do_it: {
+        if ((status_message_slice.len == 0)) {
+            if (HTTPStatusText.get(@as(u16, @intCast(status_code)))) |status_message| {
+                _ = &status_message;
+                _ = writeHeadInternal(client.raw_response.?, globalObject, status_message, headers_object_value);
+                break :do_it;
+            }
+        }
+        const message = (if ((status_message_slice.len > 0)) status_message_slice.slice() else "HM");
+        const status_message = bun.handleOom(std.fmt.allocPrint(allocator, "{d} {s}", .{ status_code, message }));
+        var _guard_alloc_msg = FreeGuard(u8){ .allocator = allocator, .slice = status_message };
+        _ = &_guard_alloc_msg;
+        var ___guard_alloc_msg_moved = false; _ = &___guard_alloc_msg_moved;
+        defer if (!___guard_alloc_msg_moved) { ___guard_alloc_msg_moved = true; const __T = @TypeOf(_guard_alloc_msg); if (@typeInfo(__T) == .optional) { if (_guard_alloc_msg) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_alloc_msg.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_alloc_msg; _drop_val.__cp_deinit(); } };
+        _ = writeHeadInternal(client.raw_response.?, globalObject, status_message, headers_object_value);
+        break :do_it;
+};
+        return .js_undefined;
+}
+
+pub fn writeHeadInternal(response: uws.AnyResponse, globalObject: *jsc.JSGlobalObject, status_message: []const u8, headers: jsc.JSValue) void {
+        _ = log("writeHeadInternal({s})", .{ status_message });
+        switch (response) {
+.TCP => {
+_ = NodeHTTPServer__writeHead_http(globalObject, status_message.ptr, status_message.len, headers, (blk: {
+        break :blk @ptrCast(response.TCP);
+
+}));
+},
+.SSL => {
+_ = NodeHTTPServer__writeHead_https(globalObject, status_message.ptr, status_message.len, headers, (blk: {
+        break :blk @ptrCast(response.SSL);
+
+}));
+},
+.H3 => {
+_ = bun.Output.panic("node:http does not support HTTP/3 responses", .{});
+},
+}
+}
+
+pub fn writeContinue(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        if (client.isDone()) {
+            return .js_undefined;
+        }
+        const raw_response = ((client.raw_response) orelse { return .js_undefined; });
+        const state = raw_response.state();
+        _ = try handleEndedIfNecessary(state, globalObject);
+        _ = raw_response.writeContinue();
+        return .js_undefined;
+}
+
+pub fn handleAbortOrTimeout(self: *NodeHTTPResponse, comptime event: AbortEvent, js_value: jsc.JSValue) void {
+        defer {
+        {
+            if ((event == .abort)) {
+                self.raw_response = null;
+            }
+        }
+        }
+        if (self.flags.request_has_completed) {
+            return;
+        }
+        if ((event == .abort)) {
+            self.flags.socket_closed = true;
+        }
+        _ = self.ref();
+        var _guard_deref = DerefGuard(NodeHTTPResponse){ .ptr = self };
+        _ = &_guard_deref;
+        var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+        defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
+        defer {
+        if ((event == .abort)) {
+            _ = self.markRequestAsDoneIfNecessary();
+        }
+        }
+        const js_this: JSValue = (if ((js_value == .zero)) self.getThisValue() else js_value);
+        if (js.onAbortedGetCached(js_this)) |on_aborted| {
+            _ = &on_aborted;
+            const globalThis = jsc.VirtualMachine.get().global;
+            defer {
+            {
+                if ((event == .abort)) {
+                    _ = js.onAbortedSetCached(js_this, globalThis, .zero);
+                }
+            }
+            }
+            const vm = globalThis.bunVM();
+            const event_loop = vm.eventLoop();
+            _ = event_loop.runCallback(on_aborted, globalThis, js_this, (&.{ jsc.JSValue.jsNumber(@intFromEnum(event)) }));
+        }
+        if ((event == .abort)) {
+            _ = self.onDataOrAborted("", true, .abort, js_this);
+        }
+}
+
+pub fn onAbort(self: *NodeHTTPResponse, js_value: jsc.JSValue) void {
+        _ = log("onAbort", .{});
+        _ = self.handleAbortOrTimeout(.abort, js_value);
+}
+
+pub fn onTimeout(self: *NodeHTTPResponse, _: uws.AnyResponse) void {
+        _ = log("onTimeout", .{});
+        _ = self.handleAbortOrTimeout(.timeout, .zero);
+}
+
+pub fn doPause(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame, _: jsc.JSValue) bun.JSError!jsc.JSValue {
+        _ = log("doPause", .{});
+        if (((((client.flags.request_has_completed or client.flags.socket_closed) or client.flags.ended) or client.flags.upgraded) or (client.raw_response == null))) {
+            return .false;
+        }
+        client.flags.is_data_buffered_during_pause = true;
+        _ = client.raw_response.?.onData(*NodeHTTPResponse, onBufferRequestBodyWhilePaused, client);
+        if ((!Environment.isWindows)) {
+            _ = pauseSocket(client);
+        }
+        return .true;
+}
+
+pub fn drainRequestBody(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        return ((client.drainBufferedRequestBodyFromPause(globalObject)) orelse (.js_undefined));
+}
+
+pub fn drainBufferedRequestBodyFromPause(self: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+        _ = log("drainBufferedRequestBodyFromPause {d}", .{ self.buffered_request_body_data_during_pause.len });
+        if ((self.buffered_request_body_data_during_pause.len > 0)) {
+            const result = jsc.JSValue.createBuffer(globalObject, self.buffered_request_body_data_during_pause.slice());
+            self.buffered_request_body_data_during_pause = .{};
+            return result;
+        }
+        return null;
+}
+
+pub fn doResume(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) jsc.JSValue {
+        _ = log("doResume", .{});
+        if (((((client.flags.request_has_completed or client.flags.socket_closed) or client.flags.ended) or client.flags.upgraded) or (client.raw_response == null))) {
+            return .false;
+        }
+        _ = client.setOnAbortedHandler();
+        _ = client.raw_response.?.onData(*NodeHTTPResponse, onData, client);
+        client.flags.is_data_buffered_during_pause = false;
+        var result: jsc.JSValue = .true;
+        _ = &result;
+        if (client.drainBufferedRequestBodyFromPause(globalObject)) |buffered_data| {
+            _ = &buffered_data;
+            result = buffered_data;
+        }
+        _ = resumeSocket(client);
+        return result;
+}
+
+pub fn onRequestComplete(client: *NodeHTTPResponse) void {
+        if (client.flags.request_has_completed) {
+            return;
+        }
+        _ = log("onRequestComplete", .{});
+        client.flags.request_has_completed = true;
+        _ = client.poll_ref.unref(jsc.VirtualMachine.get());
+        _ = client.markRequestAsDoneIfNecessary();
+}
+
+pub fn abort(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        if (client.isDone()) {
+            return .js_undefined;
+        }
+        client.flags.socket_closed = true;
+        if (client.raw_response) |raw_response| {
+            _ = &raw_response;
+            const state = raw_response.state();
+            if (state.isHttpEndCalled()) {
+                return .js_undefined;
+            }
+            _ = resumeSocket(client);
+            _ = log("clearOnData", .{});
+            _ = raw_response.clearOnData();
+            _ = raw_response.clearOnWritable();
+            _ = raw_response.clearTimeout();
+            _ = raw_response.endWithoutBody(true);
+        }
+        _ = client.onRequestComplete();
+        return .js_undefined;
+}
+
+pub fn onBufferRequestBodyWhilePaused(client: *NodeHTTPResponse, chunk: []const u8, last: bool) void {
+        _ = log("onBufferRequestBodyWhilePaused({d}, {})", .{ chunk.len, last });
+        _ = bun.handleOom(client.buffered_request_body_data_during_pause.appendSlice(bun.default_allocator, chunk));
+        if (last) {
+            client.flags.is_data_buffered_during_pause_last = true;
+            if (client.body_read_ref.has) {
+                _ = client.body_read_ref.unref(jsc.VirtualMachine.get());
+                _ = client.markRequestAsDoneIfNecessary();
+            }
+        }
+}
+
+pub fn getBytes(self: *NodeHTTPResponse, globalThis: *jsc.JSGlobalObject, chunk: []const u8) jsc.JSValue {
+        const bytes: jsc.JSValue = brk: {
+        if (((chunk.len > 0) and (self.buffered_request_body_data_during_pause.len > 0))) {
+            const buffer = (blk_catch_2: { break :blk_catch_2 ((jsc.JSValue.createBufferFromLength(globalThis, (chunk.len + self.buffered_request_body_data_during_pause.len))) catch |e| { _ = &e; _ = globalThis.reportUncaughtExceptionFromError(e);
+            return .js_undefined; }); });
+            const array_buffer = (buffer.asArrayBuffer(globalThis)).?;
+            var _guard_clear_buf = ClearAndFreeGuard(bun.ByteList){ .ptr = (&self.buffered_request_body_data_during_pause), .allocator = bun.default_allocator };
+            _ = &_guard_clear_buf;
+            var ___guard_clear_buf_moved = false; _ = &___guard_clear_buf_moved;
+            defer if (!___guard_clear_buf_moved) { ___guard_clear_buf_moved = true; const __T = @TypeOf(_guard_clear_buf); if (@typeInfo(__T) == .optional) { if (_guard_clear_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_clear_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_clear_buf; _drop_val.__cp_deinit(); } };
+            var input = array_buffer.slice();
+            _ = &input;
+            _ = @memcpy(input[0..self.buffered_request_body_data_during_pause.len], self.buffered_request_body_data_during_pause.slice());
+            _ = @memcpy(input[self.buffered_request_body_data_during_pause.len..], chunk);
+            break :brk buffer;
+        }
+        if (self.drainBufferedRequestBodyFromPause(globalThis)) |buffered_data| {
+            _ = &buffered_data;
+            break :brk buffered_data;
+        }
+        if ((chunk.len > 0)) {
+            break :brk (blk_catch_3: { break :blk_catch_3 ((jsc.ArrayBuffer.createBuffer(globalThis, chunk)) catch |e| { _ = &e; _ = globalThis.reportUncaughtExceptionFromError(e);
+            return .js_undefined; }); });
+        }
+        break :brk .js_undefined;
+};
+        return bytes;
+}
+
+pub fn onDataOrAborted(self: *NodeHTTPResponse, chunk: []const u8, last: bool, event: AbortEvent, thisValue: jsc.JSValue) void {
+        _ = log("onDataOrAborted({d}, {})", .{ chunk.len, last });
+        if (last) {
+            _ = self.ref();
+            self.body_read_state = .done;
+        }
+        var _guard_on_data = OnDataLastGuard{ .resp = self, .last = last };
+        _ = &_guard_on_data;
+        var ___guard_on_data_moved = false; _ = &___guard_on_data_moved;
+        defer if (!___guard_on_data_moved) { ___guard_on_data_moved = true; const __T = @TypeOf(_guard_on_data); if (@typeInfo(__T) == .optional) { if (_guard_on_data) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_on_data.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_on_data; _drop_val.__cp_deinit(); } };
+        if (js.onDataGetCached(thisValue)) |callback| {
+            _ = &callback;
+            if (callback.isUndefined()) {
+                return;
+            }
+            const globalThis = jsc.VirtualMachine.get().global;
+            const event_loop = globalThis.bunVM().eventLoop();
+            const bytes = self.getBytes(globalThis, chunk);
+            _ = event_loop.runCallback(callback, globalThis, .js_undefined, (&.{ bytes, jsc.JSValue.jsBoolean(last), jsc.JSValue.jsNumber(@intFromEnum(event)) }));
+        }
+}
+
+pub fn onData(client: *NodeHTTPResponse, chunk: []const u8, last: bool) void {
+        _ = log("onData({d} bytes, is_last = {d})", .{ chunk.len, @intFromBool(last) });
+        _ = onDataOrAborted(client, chunk, last, .none, client.getThisValue());
+}
+
+pub fn onDrainCorked(client: *NodeHTTPResponse, offset: u64) void {
+        _ = log("onDrainCorked({d})", .{ offset });
+        _ = client.ref();
+        var _guard_deref = DerefGuard(NodeHTTPResponse){ .ptr = client };
+        _ = &_guard_deref;
+        var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+        defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
+        const thisValue = client.getThisValue();
+        const on_writable = ((js.onWritableGetCached(thisValue)) orelse { return; });
+        const globalThis = jsc.VirtualMachine.get().global;
+        _ = js.onWritableSetCached(thisValue, globalThis, .js_undefined);
+        const vm = globalThis.bunVM();
+        _ = vm.eventLoop().runCallback(on_writable, globalThis, .js_undefined, (&.{ jsc.JSValue.jsNumberFromUint64(offset) }));
+}
+
+pub fn onDrain(client: *NodeHTTPResponse, offset: u64, response: uws.AnyResponse) bool {
+        _ = log("onDrain({d})", .{ offset });
+        if (((client.flags.socket_closed or client.flags.request_has_completed) or client.flags.upgraded)) {
+            return false;
+        }
+        _ = response.corked(onDrainCorked, .{ client, offset });
+        return true;
+}
+
+pub fn writeOrEnd(self: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, arguments: []const jsc.JSValue, this_value: jsc.JSValue, comptime is_end: bool) bun.JSError!jsc.JSValue {
+        if (self.isRequestedCompletedOrEnded()) {
+            return globalObject.ERR(.STREAM_WRITE_AFTER_END, "Stream already ended", .{}).throw();
+        }
+        if ((self.flags.socket_closed or (self.raw_response == null))) {
+            return (if (is_end) .js_undefined else jsc.JSValue.jsNumber(0));
+        }
+        const raw_response = self.raw_response.?;
+        const state = raw_response.state();
+        if ((!state.isResponsePending())) {
+            return globalObject.ERR(.STREAM_WRITE_AFTER_END, "Stream already ended", .{}).throw();
+        }
+        const input_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
+        var encoding_value: JSValue = (if ((arguments.len > 1)) arguments[1] else .js_undefined);
+        _ = &encoding_value;
+        const callback_value: JSValue = brk: {
+        if (((!encoding_value.isUndefinedOrNull()) and encoding_value.isCallable())) {
+            encoding_value = .js_undefined;
+            break :brk arguments[1];
+        }
+        if (((arguments.len > 2) and (!arguments[2].isUndefined()))) {
+            if ((!arguments[2].isCallable())) {
+                return globalObject.throwInvalidArgumentTypeValue("callback", "function", arguments[2]);
+            }
+            break :brk arguments[2];
+        }
+        break :brk .js_undefined;
+};
+        const strict_content_length: ?u64 = brk: {
+        if (((arguments.len > 3) and arguments[3].isNumber())) {
+            break :brk @max(arguments[3].toInt64(), 0);
+        }
+        break :brk null;
+};
+        var string_or_buffer: jsc.Node.StringOrBuffer = brk: {
+        if (input_value.isUndefinedOrNull()) {
+            break :brk jsc.Node.StringOrBuffer.empty;
+        }
+        var encoding: jsc.Node.Encoding = .utf8;
+        _ = &encoding;
+        if ((!encoding_value.isUndefinedOrNull())) {
+            if ((!encoding_value.isString())) {
+                return globalObject.throwInvalidArgumentTypeValue("encoding", "string", encoding_value);
+            }
+            if (try jsc.Node.Encoding.fromJS(encoding_value, globalObject)) |enc| {
+                _ = &enc;
+                encoding = enc;
+            } else {
+                return globalObject.throwInvalidArguments("Invalid encoding", .{});
+            }
+        }
+        const result = try jsc.Node.StringOrBuffer.fromJSWithEncoding(globalObject, bun.default_allocator, input_value, encoding);
+        break :brk ((result) orelse {
+        return globalObject.throwInvalidArgumentTypeValue("input", "string or buffer", input_value);
+});
+};
+        _ = &string_or_buffer;
+        var _guard_sob = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (&string_or_buffer) };
+        _ = &_guard_sob;
+        var ___guard_sob_moved = false; _ = &___guard_sob_moved;
+        defer if (!___guard_sob_moved) { ___guard_sob_moved = true; const __T = @TypeOf(_guard_sob); if (@typeInfo(__T) == .optional) { if (_guard_sob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_sob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_sob; _drop_val.__cp_deinit(); } };
+        if (globalObject.hasException()) {
+            return error.JSError;
+        }
+        const bytes = string_or_buffer.slice();
+        if (comptime is_end) {
+            _ = log("end('{s}', {d})", .{ bytes[0..@min(bytes.len, 128)], bytes.len });
+        } else {
+            _ = log("write('{s}', {d})", .{ bytes[0..@min(bytes.len, 128)], bytes.len });
+        }
+        if (strict_content_length) |content_length| {
+            _ = &content_length;
+            const bytes_written = (self.bytes_written + bytes.len);
+            if (is_end) {
+                if ((bytes_written != content_length)) {
+                    return globalObject.ERR(.HTTP_CONTENT_LENGTH_MISMATCH, "Content-Length mismatch", .{}).throw();
+                }
+            } else {
+                if ((bytes_written > content_length)) {
+                    return globalObject.ERR(.HTTP_CONTENT_LENGTH_MISMATCH, "Content-Length mismatch", .{}).throw();
+                }
+            }
+            self.bytes_written = bytes_written;
+        } else {
+            self.bytes_written = (self.bytes_written +| bytes.len);
+        }
+        if (is_end) {
+            if (((self.body_read_ref.has and (self.body_read_state == .pending)) and ((!self.flags.hasCustomOnData) or (js.onDataGetCached(this_value) == null)))) {
+                _ = self.body_read_ref.unref(jsc.VirtualMachine.get());
+                self.body_read_state = .none;
+            }
+            if ((this_value != .zero)) {
+                _ = js.onAbortedSetCached(this_value, globalObject, .zero);
+            }
+            _ = raw_response.clearAborted();
+            _ = raw_response.clearOnWritable();
+            _ = raw_response.clearTimeout();
+            self.flags.ended = true;
+            if (((!state.isHttpWriteCalled()) or (bytes.len > 0))) {
+                _ = raw_response.end(bytes, state.isHttpConnectionClose());
+            } else {
+                _ = raw_response.endStream(state.isHttpConnectionClose());
+            }
+            _ = self.onRequestComplete();
+            return jsc.JSValue.jsNumberFromUint64(bytes.len);
+        } else {
+            const js_this = (if ((this_value != .zero)) this_value else self.getThisValue());
+            switch (raw_response.write(bytes)) {
+.want_more => |written| {
+_ = raw_response.clearOnWritable();
+            _ = js.onWritableSetCached(js_this, globalObject, .js_undefined);
+            return jsc.JSValue.jsNumberFromUint64(written);
+},
+.backpressure => |written| {
+if ((!callback_value.isUndefined())) {
+                _ = js.onWritableSetCached(js_this, globalObject, callback_value.withAsyncContextIfNeeded(globalObject));
+                _ = raw_response.onWritable(*NodeHTTPResponse, onDrain, self);
+            }
+            return jsc.JSValue.jsNumberFromInt64((0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64))))))));
+},
+}
+        }
+}
+
+pub fn setOnWritable(client: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
+        if ((client.isDone() or value.isUndefined())) {
+            _ = js.onWritableSetCached(thisValue, globalObject, .js_undefined);
+        } else {
+            _ = js.onWritableSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
+        }
+}
+
+pub fn getOnWritable(self: *NodeHTTPResponse, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
+    _ = self;
+        return ((js.onWritableGetCached(thisValue)) orelse (.js_undefined));
+}
+
+pub fn getOnAbort(client: *NodeHTTPResponse, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
+        if ((client.flags.socket_closed or client.flags.upgraded)) {
+            return .js_undefined;
+        }
+        return ((js.onAbortedGetCached(thisValue)) orelse (.js_undefined));
+}
+
+pub fn setOnAbort(client: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
+        if ((client.flags.socket_closed or client.flags.upgraded)) {
+            return;
+        }
+        if ((client.isRequestedCompletedOrEnded() or value.isUndefined())) {
+            _ = js.onAbortedSetCached(thisValue, globalObject, .zero);
+        } else {
+            _ = js.onAbortedSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
+        }
+}
+
+pub fn getOnData(self: *NodeHTTPResponse, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
+    _ = self;
+        return ((js.onDataGetCached(thisValue)) orelse (.js_undefined));
+}
+
+pub fn getHasCustomOnData(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return .jsBoolean(client.flags.hasCustomOnData);
+}
+
+pub fn getUpgraded(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
+        return .jsBoolean(client.flags.upgraded);
+}
+
+pub fn setHasCustomOnData(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject, value: JSValue) void {
+        client.flags.hasCustomOnData = value.toBoolean();
+}
+
+pub fn clearOnDataCallback(self: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) void {
+        _ = log("clearOnDataCallback", .{});
+        if ((self.body_read_state != .none)) {
+            if ((thisValue != .zero)) {
+                _ = js.onDataSetCached(thisValue, globalObject, .js_undefined);
+            }
+            if (((!self.flags.socket_closed) and (!self.flags.upgraded))) {
+                _ = log("clearOnData", .{});
+                if (self.raw_response) |raw_response| {
+                    _ = &raw_response;
+                    _ = raw_response.clearOnData();
+                }
+            }
+            if ((self.body_read_state != .done)) {
+                self.body_read_state = .done;
+            }
+        }
+}
+
+pub fn setOnData(client: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
+        if ((((((value.isUndefined() or client.flags.ended) or client.flags.socket_closed) or (client.body_read_state != .pending)) or client.flags.is_data_buffered_during_pause_last) or client.flags.upgraded)) {
+            _ = js.onDataSetCached(thisValue, globalObject, .js_undefined);
+            var _guard_unref = BodyReadUnrefGuard{ .resp = client, .vm = globalObject.bunVM() };
+            _ = &_guard_unref;
+            var ___guard_unref_moved = false; _ = &___guard_unref_moved;
+            defer if (!___guard_unref_moved) { ___guard_unref_moved = true; const __T = @TypeOf(_guard_unref); if (@typeInfo(__T) == .optional) { if (_guard_unref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_unref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_unref; _drop_val.__cp_deinit(); } };
+            switch (client.body_read_state) {
+.pending, .done => {
+if ((((!client.flags.request_has_completed) and (!client.flags.socket_closed)) and (!client.flags.upgraded))) {
+                _ = log("clearOnData", .{});
+                if (client.raw_response) |raw_response| {
+                    _ = &raw_response;
+                    _ = raw_response.clearOnData();
+                }
+            }
+            client.body_read_state = .done;
+},
+.none => {
+
+},
+}
+            return;
+        }
+        _ = js.onDataSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
+        client.flags.hasCustomOnData = true;
+        if (client.raw_response) |raw_response| {
+            _ = &raw_response;
+            _ = raw_response.onData(*NodeHTTPResponse, onData, client);
+        }
+        client.flags.is_data_buffered_during_pause = false;
+        _ = bun.debugAssert(client.body_read_ref.has);
+}
+
+pub fn write(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const arguments = callframe.arguments();
+        return writeOrEnd(client, globalObject, arguments, .zero, false);
+}
+
+pub fn onAutoFlush(client: *NodeHTTPResponse) bool {
+        var _guard_deref = DerefGuard(NodeHTTPResponse){ .ptr = client };
+        _ = &_guard_deref;
+        var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+        defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
+        if ((((!client.flags.socket_closed) and (!client.flags.upgraded)) and (client.raw_response != null))) {
+            _ = client.raw_response.?.uncork();
+        }
+        client.auto_flusher.registered = false;
+        return false;
+}
+
+pub fn registerAutoFlush(client: *NodeHTTPResponse) void {
+        if (client.auto_flusher.registered) {
+            return;
+        }
+        _ = client.ref();
+        _ = AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(NodeHTTPResponse, client, jsc.VirtualMachine.get());
+}
+
+pub fn unregisterAutoFlush(client: *NodeHTTPResponse) void {
+        if ((!client.auto_flusher.registered)) {
+            return;
+        }
+        _ = AutoFlusher.unregisterDeferredMicrotaskWithTypeUnchecked(NodeHTTPResponse, client, jsc.VirtualMachine.get());
+        _ = client.deref();
+}
+
+pub fn flushHeaders(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        if ((((!client.flags.socket_closed) and (!client.flags.upgraded)) and (client.raw_response != null))) {
+            const raw_response = client.raw_response.?;
+            _ = raw_response.flushHeaders(false);
+            if (raw_response.isCorked()) {
+                _ = client.registerAutoFlush();
+            }
+        }
+        return .js_undefined;
+}
+
+pub fn end(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const arguments = callframe.arguments();
+        _ = resumeSocket(client);
+        return writeOrEnd(client, globalObject, arguments, callframe.this(), true);
+}
+
+pub fn getBytesWritten(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) jsc.JSValue {
+        return jsc.JSValue.jsNumber(client.bytes_written);
+}
+
+pub fn handleCorked(globalObject: *jsc.JSGlobalObject, function: jsc.JSValue, result: *JSValue, is_exception: *bool) void {
+        result.* = (blk_catch_4: { break :blk_catch_4 ((function.call(globalObject, .js_undefined, &.{})) catch |e| { _ = &e; result.* = globalObject.takeException(e);
+        is_exception.* = true;
+        return; }); });
+}
+
+pub fn setTimeout(client: *NodeHTTPResponse, seconds: u8) void {
+        if ((((client.flags.request_has_completed or client.flags.socket_closed) or client.flags.upgraded) or (client.raw_response == null))) {
+            return;
+        }
+        _ = client.raw_response.?.timeout(seconds);
+}
+
+pub fn NodeHTTPResponse__setTimeout(client: *NodeHTTPResponse, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) callconv(.c) bool {
+        if ((!seconds.isNumber())) {
+            switch (globalThis.throwInvalidArgumentTypeValue("timeout", "number", seconds)) {
+else => {
+
+},
+}
+            return false;
+        }
+        if ((((client.flags.request_has_completed or client.flags.socket_closed) or client.flags.upgraded) or (client.raw_response == null))) {
+            return false;
+        }
+        _ = client.raw_response.?.timeout(@as(u8, @intCast(@min(seconds.to(c_uint), 255))));
+        return true;
+}
+
+pub fn cork(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const arguments = callframe.arguments_old(1).slice();
+        if ((arguments.len == 0)) {
+            return globalObject.throwNotEnoughArguments("cork", 1, 0);
+        }
+        if ((!arguments[0].isCallable())) {
+            return globalObject.throwInvalidArgumentTypeValue("cork", "function", arguments[0]);
+        }
+        if (((client.flags.request_has_completed or client.flags.socket_closed) or client.flags.upgraded)) {
+            return globalObject.ERR(.STREAM_ALREADY_FINISHED, "Stream is already ended", .{}).throw();
+        }
+        var result: jsc.JSValue = .zero;
+        _ = &result;
+        var is_exception: bool = false;
+        _ = &is_exception;
+        _ = client.ref();
+        var _guard_deref = DerefGuard(NodeHTTPResponse){ .ptr = client };
+        _ = &_guard_deref;
+        var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+        defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
+        if (client.raw_response) |raw_response| {
+            _ = &raw_response;
+            _ = raw_response.corked(handleCorked, .{ globalObject, arguments[0], (&result), (&is_exception) });
+        } else {
+            _ = handleCorked(globalObject, arguments[0], (&result), (&is_exception));
+        }
+        if (is_exception) {
+            if ((result != .zero)) {
+                return globalObject.throwValue(result);
+            } else {
+                return globalObject.throw("unknown error", .{});
+            }
+        }
+        if ((result == .zero)) {
+            return .js_undefined;
+        }
+        return result;
+}
+
+pub fn finalize(client: *NodeHTTPResponse) void {
+        _ = client.deref();
+}
+
+pub fn deinit(client: *NodeHTTPResponse) void {
+        _ = bun.debugAssert((!client.body_read_ref.has));
+        _ = bun.debugAssert((!client.poll_ref.has));
+        _ = bun.debugAssert((!client.flags.is_request_pending));
+        _ = bun.debugAssert((client.flags.socket_closed or client.flags.request_has_completed));
+        _ = client.buffered_request_body_data_during_pause.deinit(bun.default_allocator);
+        _ = client.poll_ref.unref(jsc.VirtualMachine.get());
+        _ = client.body_read_ref.unref(jsc.VirtualMachine.get());
+        _ = client.promise.deinit();
+        _ = bun.destroy(client);
+}
+
+pub fn Bun__NodeHTTPResponse_onClose(response: *NodeHTTPResponse, js_value: jsc.JSValue) callconv(.c) void {
+        _ = response.onAbort(js_value);
+}
+
+pub fn Bun__NodeHTTPResponse_setClosed(response: *NodeHTTPResponse) callconv(.c) void {
+        response.flags.socket_closed = true;
+}
+pub const js = jsc.Codegen.JSNodeHTTPResponse;
+pub const toJS = js.toJS;
+pub const fromJS = js.fromJS;
+pub const fromJSDirect = js.fromJSDirect;
+const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
+pub const ref = RefCount.ref;
+pub const deref = RefCount.deref;
+pub const BUN_DEBUG_REFCOUNT_NAME = "NodeHTTPServerResponse";
+comptime {
+    @export(&create, .{ .name = "NodeHTTPResponse__createForJS" });
+    @export(&NodeHTTPResponse__setTimeout, .{ .name = "NodeHTTPResponse__setTimeout" });
+    @export(&Bun__NodeHTTPResponse_onClose, .{ .name = "Bun__NodeHTTPResponse_onClose" });
+    @export(&Bun__NodeHTTPResponse_setClosed, .{ .name = "Bun__NodeHTTPResponse_setClosed" });
+}
 const Environment = bun.Environment;
 const HTTP = bun.http;
 const Output = bun.Output;
@@ -17,1253 +1312,74 @@ const ZigString = jsc.ZigString;
 const AutoFlusher = jsc.WebCore.AutoFlusher;
 const AnyServer = jsc.API.AnyServer;
 const ServerWebSocket = jsc.API.ServerWebSocket;
-pub const NodeHTTPResponse = struct {
-
 const log = bun.Output.scoped(.NodeHTTPResponse, .visible);
 
-pub const js = jsc.Codegen.JSNodeHTTPResponse;
-pub const toJS = js.toJS;
-pub const fromJS = js.fromJS;
-pub const fromJSDirect = js.fromJSDirect;
+extern "c" fn Bun__getNodeHTTPResponseThisValue(is_ssl: bool, socket: *anyopaque) callconv(.c) jsc.JSValue;
 
-const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-pub const ref = RefCount.ref;
-pub const deref = RefCount.deref;
+extern "c" fn Bun__getNodeHTTPServerSocketThisValue(is_ssl: bool, socket: *anyopaque) callconv(.c) jsc.JSValue;
 
-ref_count: RefCount,
+extern "c" fn NodeHTTPServer__writeHead_http(globalObject: *jsc.JSGlobalObject, statusMessage: [*]const u8, statusMessageLength: usize, headersObjectValue: jsc.JSValue, response: *anyopaque) callconv(.c) void;
 
-raw_response: ?uws.AnyResponse,
-
-flags: Flags = .{},
-
-poll_ref: jsc.Ref = .{},
-
-body_read_state: BodyReadState = .none,
-body_read_ref: jsc.Ref = .{},
-promise: jsc.Strong.Optional = .empty,
-server: AnyServer,
-
-/// When you call pause() on the node:http IncomingMessage
-/// We might've already read from the socket.
-/// So we need to buffer that data.
-/// This should be pretty uncommon though.
-buffered_request_body_data_during_pause: bun.ByteList = .{},
-bytes_written: usize = 0,
-
-upgrade_context: UpgradeCTX = .{},
-
-auto_flusher: AutoFlusher = .{},
-
-pub const Flags = packed struct(u8) {
-    socket_closed: bool = false,
-    request_has_completed: bool = false,
-    ended: bool = false,
-    upgraded: bool = false,
-    hasCustomOnData: bool = false,
-    is_request_pending: bool = true,
-    is_data_buffered_during_pause: bool = false,
-    /// Did we receive the last chunk of data during pause?
-    is_data_buffered_during_pause_last: bool = false,
-
-    /// Did the user end the request?
-    pub fn isRequestedCompletedOrEnded(this: *const Flags) bool {
-        return this.request_has_completed or this.ended;
-    }
-
-    pub fn isDone(this: *const Flags) bool {
-        return this.isRequestedCompletedOrEnded() or this.socket_closed;
-    }
-};
-
-pub const UpgradeCTX = struct {
-    context: ?*uws.WebSocketUpgradeContext = null,
-    // request will be detached when go async
-    request: ?*uws.Request = null,
-
-    // we need to store this, if we wanna to enable async upgrade
-    sec_websocket_key: []const u8 = "",
-    sec_websocket_protocol: []const u8 = "",
-    sec_websocket_extensions: []const u8 = "",
-
-    // this can be called multiple times
-    pub fn deinit(this: *UpgradeCTX) void {
-        const sec_websocket_key = this.sec_websocket_key;
-        const sec_websocket_protocol = this.sec_websocket_protocol;
-        const sec_websocket_extensions = this.sec_websocket_extensions;
-        this.* = .{};
-        if (sec_websocket_extensions.len > 0) bun.default_allocator.free(sec_websocket_extensions);
-        if (sec_websocket_protocol.len > 0) bun.default_allocator.free(sec_websocket_protocol);
-        if (sec_websocket_key.len > 0) bun.default_allocator.free(sec_websocket_key);
-    }
-
-    pub fn preserveWebSocketHeadersIfNeeded(this: *UpgradeCTX) void {
-        if (this.request) |request| {
-            this.request = null;
-
-            const sec_websocket_key = request.header("sec-websocket-key") orelse "";
-            const sec_websocket_protocol = request.header("sec-websocket-protocol") orelse "";
-            const sec_websocket_extensions = request.header("sec-websocket-extensions") orelse "";
-
-            if (sec_websocket_key.len > 0) {
-                this.sec_websocket_key = bun.handleOom(bun.default_allocator.dupe(u8, sec_websocket_key));
-            }
-            if (sec_websocket_protocol.len > 0) {
-                this.sec_websocket_protocol = bun.handleOom(bun.default_allocator.dupe(u8, sec_websocket_protocol));
-            }
-            if (sec_websocket_extensions.len > 0) {
-                this.sec_websocket_extensions = bun.handleOom(bun.default_allocator.dupe(u8, sec_websocket_extensions));
-            }
-        }
-    }
-};
-
-pub const BodyReadState = enum(u8) {
-    none = 0,
-    pending = 1,
-    done = 2,
-};
-
-extern "C" fn Bun__getNodeHTTPResponseThisValue(bool, *anyopaque) jsc.JSValue;
-pub fn getThisValue(this: *NodeHTTPResponse) jsc.JSValue {
-    if (this.flags.socket_closed or this.flags.upgraded or this.raw_response == null) {
-        return .zero;
-    }
-
-    return Bun__getNodeHTTPResponseThisValue(this.raw_response.? == .SSL, this.raw_response.?.socket());
-}
-
-extern "C" fn Bun__getNodeHTTPServerSocketThisValue(bool, *anyopaque) jsc.JSValue;
-pub fn getServerSocketValue(this: *NodeHTTPResponse) jsc.JSValue {
-    if (this.flags.socket_closed or this.flags.upgraded or this.raw_response == null) {
-        return .zero;
-    }
-    return Bun__getNodeHTTPServerSocketThisValue(this.raw_response.? == .SSL, this.raw_response.?.socket());
-}
-
-pub fn pauseSocket(this: *NodeHTTPResponse) void {
-    log("pauseSocket", .{});
-    if (this.flags.socket_closed or this.flags.upgraded or this.raw_response == null or this.raw_response.?.isConnectRequest()) {
-        return;
-    }
-
-    this.raw_response.?.pause();
-}
-
-pub fn resumeSocket(this: *NodeHTTPResponse) void {
-    log("resumeSocket", .{});
-    if (this.flags.socket_closed or this.flags.upgraded or this.raw_response == null or this.raw_response.?.isConnectRequest()) {
-        return;
-    }
-
-    this.raw_response.?.@"resume"();
-}
-
-pub fn upgrade(this: *NodeHTTPResponse, data_value: JSValue, sec_websocket_protocol: ZigString, sec_websocket_extensions: ZigString) bool {
-    const upgrade_ctx = this.upgrade_context.context orelse return false;
-    const ws_handler = this.server.webSocketHandler() orelse return false;
-    const socketValue = this.getServerSocketValue();
-    if (socketValue == .zero) {
-        return false;
-    }
-    resumeSocket(this);
-
-    defer {
-        this.setOnAbortedHandler();
-        this.upgrade_context.deinit();
-    }
-    data_value.ensureStillAlive();
-
-    const ws = ServerWebSocket.init(ws_handler, data_value, null);
-
-    var sec_websocket_protocol_str: ?ZigString.Slice = null;
-    defer if (sec_websocket_protocol_str) |*str| str.deinit();
-    var sec_websocket_extensions_str: ?ZigString.Slice = null;
-    defer if (sec_websocket_extensions_str) |*str| str.deinit();
-
-    const sec_websocket_protocol_value = brk: {
-        if (sec_websocket_protocol.isEmpty()) {
-            if (this.upgrade_context.request) |request| {
-                break :brk request.header("sec-websocket-protocol") orelse "";
-            } else {
-                break :brk this.upgrade_context.sec_websocket_protocol;
-            }
-        }
-        sec_websocket_protocol_str = sec_websocket_protocol.toSlice(bun.default_allocator);
-        break :brk sec_websocket_protocol_str.?.slice();
-    };
-
-    const sec_websocket_extensions_value = brk: {
-        if (sec_websocket_extensions.isEmpty()) {
-            if (this.upgrade_context.request) |request| {
-                break :brk request.header("sec-websocket-extensions") orelse "";
-            } else {
-                break :brk this.upgrade_context.sec_websocket_extensions;
-            }
-        }
-        sec_websocket_extensions_str = sec_websocket_extensions.toSlice(bun.default_allocator);
-        break :brk sec_websocket_extensions_str.?.slice();
-    };
-
-    var websocket_key = this.upgrade_context.sec_websocket_key;
-    if (this.upgrade_context.request != null) {
-        websocket_key = this.upgrade_context.request.?.header("sec-websocket-key") orelse "";
-    }
-
-    if (this.raw_response) |raw_response| {
-        this.raw_response = null;
-        this.flags.upgraded = true;
-        // Unref the poll_ref since the socket is now upgraded to WebSocket
-        // and will have its own lifecycle management
-        this.poll_ref.unref(this.server.globalThis().bunVM());
-        if (raw_response == .TCP) {
-            const _s = raw_response.TCP.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
-            bun.assert(@intFromPtr(_s) != 0);
-        } else if (raw_response == .SSL) {
-            const _s = raw_response.SSL.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
-            bun.assert(@intFromPtr(_s) != 0);
-        } else {
-            unreachable;
-        }
-    }
-    return true;
-}
-pub fn maybeStopReadingBody(this: *NodeHTTPResponse, vm: *jsc.VirtualMachine, thisValue: jsc.JSValue) void {
-    this.upgrade_context.deinit(); // we can discard the upgrade context now
-
-    if ((this.flags.upgraded or this.flags.socket_closed or this.flags.ended) and
-        (this.body_read_ref.has or this.body_read_state == .pending) and
-        (!this.flags.hasCustomOnData or js.onDataGetCached(thisValue) == null))
-    {
-        const had_ref = this.body_read_ref.has;
-        if (!this.flags.upgraded and !this.flags.socket_closed) {
-            log("clearOnData", .{});
-            if (this.raw_response) |raw_response| {
-                raw_response.clearOnData();
-            }
-        }
-
-        this.body_read_ref.unref(vm);
-        this.body_read_state = .done;
-
-        if (had_ref) {
-            this.markRequestAsDoneIfNecessary();
-        }
-    }
-}
-
-pub fn shouldRequestBePending(this: *const NodeHTTPResponse) bool {
-    if (this.flags.socket_closed) {
-        return false;
-    }
-
-    if (this.flags.ended) {
-        return this.body_read_state == .pending;
-    }
-
-    return true;
-}
-
-pub fn dumpRequestBody(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame, thisValue: jsc.JSValue) bun.JSError!jsc.JSValue {
-    if (this.buffered_request_body_data_during_pause.cap > 0) {
-        this.buffered_request_body_data_during_pause.clearAndFree(bun.default_allocator);
-    }
-    if (!this.flags.request_has_completed) {
-        this.clearOnDataCallback(thisValue, globalObject);
-    }
-
-    return JSValue.js_undefined;
-}
-
-fn markRequestAsDone(this: *NodeHTTPResponse) void {
-    log("markRequestAsDone()", .{});
-    defer this.deref();
-    this.flags.is_request_pending = false;
-
-    this.clearOnDataCallback(this.getThisValue(), jsc.VirtualMachine.get().global);
-    this.upgrade_context.deinit();
-
-    this.buffered_request_body_data_during_pause.clearAndFree(bun.default_allocator);
-    const server = this.server;
-    this.poll_ref.unref(jsc.VirtualMachine.get());
-    this.unregisterAutoFlush();
-
-    server.onRequestComplete();
-}
-
-fn markRequestAsDoneIfNecessary(this: *NodeHTTPResponse) void {
-    if (this.flags.is_request_pending and !this.shouldRequestBePending()) {
-        this.markRequestAsDone();
-    }
-}
-
-pub fn create(
-    any_server_tag: u64,
-    globalObject: *jsc.JSGlobalObject,
-    has_body: *bool,
-    request: *uws.Request,
-    is_ssl: i32,
-    response_ptr: *anyopaque,
-    upgrade_ctx: ?*uws.WebSocketUpgradeContext,
-    node_response_ptr: *?*NodeHTTPResponse,
-) callconv(.c) jsc.JSValue {
-    const vm = globalObject.bunVM();
-    const method = HTTP.Method.which(request.method()) orelse HTTP.Method.OPTIONS;
-    // GET in node.js can have a body
-    if (method.hasRequestBody() or method == HTTP.Method.GET) {
-        const req_len: usize = brk: {
-            if (request.header("content-length")) |content_length| {
-                log("content-length: {s}", .{content_length});
-                break :brk std.fmt.parseInt(usize, content_length, 10) catch 0;
-            }
-
-            break :brk 0;
-        };
-
-        has_body.* = req_len > 0 or request.header("transfer-encoding") != null;
-    }
-
-    const response = bun.new(NodeHTTPResponse, .{
-        // 1 - the HTTP response
-        // 1 - the JS object
-        // 1 - the Server handler.
-        .ref_count = .initExactRefs(3),
-        .upgrade_context = .{
-            .context = @ptrCast(upgrade_ctx),
-            .request = request,
-        },
-        .server = AnyServer{ .ptr = AnyServer.Ptr.from(@ptrFromInt(any_server_tag)) },
-        .raw_response = switch (is_ssl != 0) {
-            true => uws.AnyResponse{ .SSL = @ptrCast(response_ptr) },
-            false => uws.AnyResponse{ .TCP = @ptrCast(response_ptr) },
-        },
-        .body_read_state = if (has_body.*) .pending else .none,
-    });
-    if (has_body.*) {
-        response.body_read_ref.ref(vm);
-    }
-    response.poll_ref.ref(vm);
-    const js_this = response.toJS(globalObject);
-    node_response_ptr.* = response;
-    return js_this;
-}
-
-fn isDone(this: *const NodeHTTPResponse) bool {
-    return this.flags.isDone();
-}
-
-fn isRequestedCompletedOrEnded(this: *const NodeHTTPResponse) bool {
-    return this.flags.isRequestedCompletedOrEnded();
-}
-
-pub fn setOnAbortedHandler(this: *NodeHTTPResponse) void {
-    if (this.flags.socket_closed) {
-        return;
-    }
-    // Don't overwrite WebSocket user data
-    if (!this.flags.upgraded) {
-        if (this.raw_response) |raw_response| {
-            raw_response.onTimeout(*NodeHTTPResponse, onTimeout, this);
-        }
-    }
-    // detach and
-    this.upgrade_context.preserveWebSocketHeadersIfNeeded();
-}
-
-pub fn getEnded(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return jsc.JSValue.jsBoolean(this.flags.ended);
-}
-
-pub fn getFinished(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return jsc.JSValue.jsBoolean(this.flags.request_has_completed);
-}
-
-pub fn getFlags(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return jsc.JSValue.jsNumber(@as(u8, @bitCast(this.flags)));
-}
-
-pub fn getAborted(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return jsc.JSValue.jsBoolean(this.flags.socket_closed);
-}
-
-pub fn getHasBody(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    var result: i32 = 0;
-    switch (this.body_read_state) {
-        .none => {},
-        .pending => result |= 1 << 1,
-        .done => result |= 1 << 2,
-    }
-    if (this.buffered_request_body_data_during_pause.len > 0) {
-        result |= 1 << 3;
-    }
-    if (this.flags.is_data_buffered_during_pause_last) {
-        result |= 1 << 2;
-    }
-
-    return jsc.JSValue.jsNumber(result);
-}
-
-pub fn getBufferedAmount(this: *const NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    if (this.flags.request_has_completed or this.flags.socket_closed) {
-        return jsc.JSValue.jsNumber(0);
-    }
-    if (this.raw_response) |raw_response| {
-        return jsc.JSValue.jsNumber(raw_response.getBufferedAmount());
-    }
-    return jsc.JSValue.jsNumber(0);
-}
-
-pub fn jsRef(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    if (!this.isDone()) {
-        this.poll_ref.ref(globalObject.bunVM());
-    }
-    return JSValue.js_undefined;
-}
-
-pub fn jsUnref(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    if (!this.isDone()) {
-        this.poll_ref.unref(globalObject.bunVM());
-    }
-    return JSValue.js_undefined;
-}
-
-fn handleEndedIfNecessary(state: uws.State, globalObject: *jsc.JSGlobalObject) bun.JSError!void {
-    if (!state.isResponsePending()) {
-        return globalObject.ERR(.HTTP_HEADERS_SENT, "Stream is already ended", .{}).throw();
-    }
-}
-
-extern "C" fn NodeHTTPServer__writeHead_http(
-    globalObject: *jsc.JSGlobalObject,
-    statusMessage: [*]const u8,
-    statusMessageLength: usize,
-    headersObjectValue: jsc.JSValue,
-    response: *anyopaque,
-) void;
-
-extern "C" fn NodeHTTPServer__writeHead_https(
-    globalObject: *jsc.JSGlobalObject,
-    statusMessage: [*]const u8,
-    statusMessageLength: usize,
-    headersObjectValue: jsc.JSValue,
-    response: *anyopaque,
-) void;
-
-pub fn writeHead(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    const arguments = callframe.argumentsUndef(3).slice();
-
-    if (this.isRequestedCompletedOrEnded()) {
-        return globalObject.ERR(.STREAM_ALREADY_FINISHED, "Stream is already ended", .{}).throw();
-    }
-
-    if (this.flags.socket_closed or this.flags.upgraded or this.raw_response == null) {
-        // We haven't emitted the "close" event yet.
-        return JSValue.js_undefined;
-    }
-
-    const state = this.raw_response.?.state();
-    try handleEndedIfNecessary(state, globalObject);
-
-    const status_code_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
-    const status_message_value: JSValue = if (arguments.len > 1 and arguments[1] != .null) arguments[1] else .js_undefined;
-    const headers_object_value: JSValue = if (arguments.len > 2 and arguments[2] != .null) arguments[2] else .js_undefined;
-
-    const status_code: i32 = brk: {
-        if (!status_code_value.isUndefined()) {
-            break :brk globalObject.validateIntegerRange(status_code_value, i32, 200, .{
-                .min = 100,
-                .max = 999,
-                .field_name = "statusCode",
-            }) catch return error.JSError;
-        }
-
-        break :brk 200;
-    };
-
-    var stack_fallback = std.heap.stackFallback(256, bun.default_allocator);
-    const allocator = stack_fallback.get();
-    const status_message_slice = if (!status_message_value.isUndefined())
-        try status_message_value.toSlice(globalObject, allocator)
-    else
-        ZigString.Slice.empty;
-    defer status_message_slice.deinit();
-
-    if (globalObject.hasException()) {
-        return error.JSError;
-    }
-
-    if (state.isHttpStatusCalled()) {
-        return globalObject.ERR(.HTTP_HEADERS_SENT, "Stream already started", .{}).throw();
-    }
-
-    // Validate status message does not contain invalid characters (defense-in-depth
-    // against HTTP response splitting). Matches Node.js checkInvalidHeaderChar:
-    // rejects any char not in [\t\x20-\x7e\x80-\xff].
-    if (status_message_slice.len > 0) {
-        for (status_message_slice.slice()) |c| {
-            if (c != '\t' and (c < 0x20 or c == 0x7f)) {
-                return globalObject.ERR(.INVALID_CHAR, "Invalid character in statusMessage", .{}).throw();
-            }
-        }
-    }
-
-    do_it: {
-        if (status_message_slice.len == 0) {
-            if (HTTPStatusText.get(@intCast(status_code))) |status_message| {
-                writeHeadInternal(this.raw_response.?, globalObject, status_message, headers_object_value);
-                break :do_it;
-            }
-        }
-
-        const message = if (status_message_slice.len > 0) status_message_slice.slice() else "HM";
-        const status_message = bun.handleOom(std.fmt.allocPrint(allocator, "{d} {s}", .{ status_code, message }));
-        defer allocator.free(status_message);
-        writeHeadInternal(this.raw_response.?, globalObject, status_message, headers_object_value);
-        break :do_it;
-    }
-
-    return JSValue.js_undefined;
-}
-
-fn writeHeadInternal(response: uws.AnyResponse, globalObject: *jsc.JSGlobalObject, status_message: []const u8, headers: jsc.JSValue) void {
-    log("writeHeadInternal({s})", .{status_message});
-    switch (response) {
-        .TCP => NodeHTTPServer__writeHead_http(globalObject, status_message.ptr, status_message.len, headers, @ptrCast(response.TCP)),
-        .SSL => NodeHTTPServer__writeHead_https(globalObject, status_message.ptr, status_message.len, headers, @ptrCast(response.SSL)),
-        .H3 => bun.Output.panic("node:http does not support HTTP/3 responses", .{}),
-    }
-}
-
-pub fn writeContinue(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    if (this.isDone()) {
-        return JSValue.js_undefined;
-    }
-    const raw_response = this.raw_response orelse return JSValue.js_undefined;
-    const state = raw_response.state();
-    try handleEndedIfNecessary(state, globalObject);
-
-    raw_response.writeContinue();
-    return JSValue.js_undefined;
-}
-
-pub const AbortEvent = enum(u8) {
-    none = 0,
-    abort = 1,
-    timeout = 2,
-};
-
-fn handleAbortOrTimeout(this: *NodeHTTPResponse, comptime event: AbortEvent, js_value: jsc.JSValue) void {
-    defer {
-        if (event == .abort) this.raw_response = null;
-    }
-    if (this.flags.request_has_completed) {
-        return;
-    }
-
-    if (event == .abort) {
-        this.flags.socket_closed = true;
-    }
-
-    this.ref();
-    defer this.deref();
-    defer if (event == .abort) this.markRequestAsDoneIfNecessary();
-
-    const js_this: JSValue = if (js_value == .zero) this.getThisValue() else js_value;
-    if (js.onAbortedGetCached(js_this)) |on_aborted| {
-        const globalThis = jsc.VirtualMachine.get().global;
-        defer {
-            if (event == .abort) {
-                js.onAbortedSetCached(js_this, globalThis, .zero);
-            }
-        }
-
-        const vm = globalThis.bunVM();
-        const event_loop = vm.eventLoop();
-
-        event_loop.runCallback(on_aborted, globalThis, js_this, &.{
-            jsc.JSValue.jsNumber(@intFromEnum(event)),
-        });
-    }
-
-    if (event == .abort) {
-        this.onDataOrAborted("", true, .abort, js_this);
-    }
-}
-
-pub fn onAbort(this: *NodeHTTPResponse, js_value: jsc.JSValue) void {
-    log("onAbort", .{});
-    this.handleAbortOrTimeout(.abort, js_value);
-}
-
-pub fn onTimeout(this: *NodeHTTPResponse, _: uws.AnyResponse) void {
-    log("onTimeout", .{});
-    this.handleAbortOrTimeout(.timeout, .zero);
-}
-
-pub fn doPause(this: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame, _: jsc.JSValue) bun.JSError!jsc.JSValue {
-    log("doPause", .{});
-    if (this.flags.request_has_completed or this.flags.socket_closed or this.flags.ended or this.flags.upgraded or this.raw_response == null) {
-        return JSValue.false;
-    }
-    this.flags.is_data_buffered_during_pause = true;
-    this.raw_response.?.onData(*NodeHTTPResponse, onBufferRequestBodyWhilePaused, this);
-
-    // TODO: figure out why windows is not emitting EOF with UV_DISCONNECT
-    if (!Environment.isWindows) {
-        pauseSocket(this);
-    }
-    return JSValue.true;
-}
-
-pub fn drainRequestBody(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    return this.drainBufferedRequestBodyFromPause(globalObject) orelse .js_undefined;
-}
-
-fn drainBufferedRequestBodyFromPause(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
-    log("drainBufferedRequestBodyFromPause {d}", .{this.buffered_request_body_data_during_pause.len});
-    if (this.buffered_request_body_data_during_pause.len > 0) {
-        const result = jsc.JSValue.createBuffer(globalObject, this.buffered_request_body_data_during_pause.slice());
-        this.buffered_request_body_data_during_pause = .{};
-        return result;
-    }
-    return null;
-}
-
-pub fn doResume(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) jsc.JSValue {
-    log("doResume", .{});
-    if (this.flags.request_has_completed or this.flags.socket_closed or this.flags.ended or this.flags.upgraded or this.raw_response == null) {
-        return .false;
-    }
-    this.setOnAbortedHandler();
-    this.raw_response.?.onData(*NodeHTTPResponse, onData, this);
-    this.flags.is_data_buffered_during_pause = false;
-    var result: jsc.JSValue = .true;
-
-    if (this.drainBufferedRequestBodyFromPause(globalObject)) |buffered_data| {
-        result = buffered_data;
-    }
-
-    resumeSocket(this);
-    return result;
-}
-
-pub fn onRequestComplete(this: *NodeHTTPResponse) void {
-    if (this.flags.request_has_completed) {
-        return;
-    }
-    log("onRequestComplete", .{});
-    this.flags.request_has_completed = true;
-    this.poll_ref.unref(jsc.VirtualMachine.get());
-
-    this.markRequestAsDoneIfNecessary();
-}
+extern "c" fn NodeHTTPServer__writeHead_https(globalObject: *jsc.JSGlobalObject, statusMessage: [*]const u8, statusMessageLength: usize, headersObjectValue: jsc.JSValue, response: *anyopaque) callconv(.c) void;
 
 pub export fn Bun__NodeHTTPRequest__onResolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
-    log("onResolve", .{});
-    const arguments = callframe.arguments_old(2).slice();
-    const this: *NodeHTTPResponse = arguments[1].as(NodeHTTPResponse).?;
-    this.promise.deinit();
-    defer this.deref();
-    this.maybeStopReadingBody(globalObject.bunVM(), arguments[1]);
-
-    if (!this.flags.request_has_completed and !this.flags.socket_closed) {
-        const this_value = this.getThisValue();
-        if (this_value != .zero) {
-            js.onAbortedSetCached(this_value, globalObject, .zero);
-        }
-        log("clearOnData", .{});
-        if (this.raw_response) |raw_response| {
-            raw_response.clearOnData();
-            raw_response.clearOnWritable();
-            raw_response.clearTimeout();
-            if (raw_response.state().isResponsePending()) {
-                raw_response.endWithoutBody(raw_response.state().isHttpConnectionClose());
+        _ = log("onResolve", .{});
+        const arguments = callframe.arguments_old(2).slice();
+        const resp: *NodeHTTPResponse = (arguments[1].@"as"(NodeHTTPResponse)).?;
+        _ = resp.promise.deinit();
+        var _guard_deref = DerefGuard(NodeHTTPResponse){ .ptr = resp };
+        _ = &_guard_deref;
+        var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+        defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
+        _ = resp.maybeStopReadingBody(globalObject.bunVM(), arguments[1]);
+        if (((!resp.flags.request_has_completed) and (!resp.flags.socket_closed))) {
+            const this_value = resp.getThisValue();
+            if ((this_value != .zero)) {
+                _ = js.onAbortedSetCached(this_value, globalObject, .zero);
             }
+            _ = log("clearOnData", .{});
+            if (resp.raw_response) |raw_response| {
+                _ = &raw_response;
+                _ = raw_response.clearOnData();
+                _ = raw_response.clearOnWritable();
+                _ = raw_response.clearTimeout();
+                if (raw_response.state().isResponsePending()) {
+                    _ = raw_response.endWithoutBody(raw_response.state().isHttpConnectionClose());
+                }
+            }
+            _ = resp.onRequestComplete();
         }
-        this.onRequestComplete();
-    }
-
-    return .js_undefined;
+        return .js_undefined;
 }
 
 pub export fn Bun__NodeHTTPRequest__onReject(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) callconv(jsc.conv) jsc.JSValue {
-    const arguments = callframe.arguments_old(2).slice();
-    const err = arguments[0];
-    const this: *NodeHTTPResponse = arguments[1].as(NodeHTTPResponse).?;
-    this.promise.deinit();
-    this.maybeStopReadingBody(globalObject.bunVM(), arguments[1]);
-
-    defer this.deref();
-
-    if (!this.flags.request_has_completed and !this.flags.socket_closed and !this.flags.upgraded) {
-        const this_value = this.getThisValue();
-        if (this_value != .zero) {
-            js.onAbortedSetCached(this_value, globalObject, .zero);
-        }
-        log("clearOnData", .{});
-        if (this.raw_response) |raw_response| {
-            raw_response.clearOnData();
-            raw_response.clearOnWritable();
-            raw_response.clearTimeout();
-            if (!raw_response.state().isHttpStatusCalled()) {
-                raw_response.writeStatus("500 Internal Server Error");
+        const arguments = callframe.arguments_old(2).slice();
+        const e = arguments[0];
+        const resp: *NodeHTTPResponse = (arguments[1].@"as"(NodeHTTPResponse)).?;
+        _ = resp.promise.deinit();
+        _ = resp.maybeStopReadingBody(globalObject.bunVM(), arguments[1]);
+        var _guard_deref = DerefGuard(NodeHTTPResponse){ .ptr = resp };
+        _ = &_guard_deref;
+        var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+        defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
+        if ((((!resp.flags.request_has_completed) and (!resp.flags.socket_closed)) and (!resp.flags.upgraded))) {
+            const this_value = resp.getThisValue();
+            if ((this_value != .zero)) {
+                _ = js.onAbortedSetCached(this_value, globalObject, .zero);
             }
-            raw_response.endStream(raw_response.state().isHttpConnectionClose());
-        }
-
-        this.onRequestComplete();
-    }
-
-    _ = globalObject.bunVM().uncaughtException(globalObject, err, true);
-    return .js_undefined;
-}
-
-pub fn abort(this: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    if (this.isDone()) {
-        return JSValue.js_undefined;
-    }
-
-    this.flags.socket_closed = true;
-    if (this.raw_response) |raw_response| {
-        const state = raw_response.state();
-        if (state.isHttpEndCalled()) {
-            return JSValue.js_undefined;
-        }
-        resumeSocket(this);
-        log("clearOnData", .{});
-        raw_response.clearOnData();
-        raw_response.clearOnWritable();
-        raw_response.clearTimeout();
-        raw_response.endWithoutBody(true);
-    }
-    this.onRequestComplete();
-    return JSValue.js_undefined;
-}
-
-fn onBufferRequestBodyWhilePaused(this: *NodeHTTPResponse, chunk: []const u8, last: bool) void {
-    log("onBufferRequestBodyWhilePaused({d}, {})", .{ chunk.len, last });
-    bun.handleOom(this.buffered_request_body_data_during_pause.appendSlice(
-        bun.default_allocator,
-        chunk,
-    ));
-    if (last) {
-        this.flags.is_data_buffered_during_pause_last = true;
-        if (this.body_read_ref.has) {
-            this.body_read_ref.unref(jsc.VirtualMachine.get());
-            this.markRequestAsDoneIfNecessary();
-        }
-    }
-}
-
-fn getBytes(this: *NodeHTTPResponse, globalThis: *jsc.JSGlobalObject, chunk: []const u8) jsc.JSValue {
-    // TODO: we should have a error event for this but is better than ignoring it
-    // right now the socket instead of emitting an error event it will reportUncaughtException
-    // this makes the behavior aligned with current implementation, but not ideal
-    const bytes: jsc.JSValue = brk: {
-        if (chunk.len > 0 and this.buffered_request_body_data_during_pause.len > 0) {
-            const buffer = jsc.JSValue.createBufferFromLength(globalThis, chunk.len + this.buffered_request_body_data_during_pause.len) catch |err| {
-                globalThis.reportUncaughtExceptionFromError(err);
-                return .js_undefined;
-            };
-
-            const array_buffer = buffer.asArrayBuffer(globalThis).?;
-
-            defer this.buffered_request_body_data_during_pause.clearAndFree(bun.default_allocator);
-            var input = array_buffer.slice();
-            @memcpy(input[0..this.buffered_request_body_data_during_pause.len], this.buffered_request_body_data_during_pause.slice());
-            @memcpy(input[this.buffered_request_body_data_during_pause.len..], chunk);
-            break :brk buffer;
-        }
-
-        if (this.drainBufferedRequestBodyFromPause(globalThis)) |buffered_data| {
-            break :brk buffered_data;
-        }
-
-        if (chunk.len > 0) {
-            break :brk jsc.ArrayBuffer.createBuffer(globalThis, chunk) catch |err| {
-                globalThis.reportUncaughtExceptionFromError(err);
-                return .js_undefined;
-            };
-        }
-        break :brk .js_undefined;
-    };
-    return bytes;
-}
-
-fn onDataOrAborted(this: *NodeHTTPResponse, chunk: []const u8, last: bool, event: AbortEvent, thisValue: jsc.JSValue) void {
-    log("onDataOrAborted({d}, {})", .{ chunk.len, last });
-    if (last) {
-        this.ref();
-        this.body_read_state = .done;
-    }
-
-    defer {
-        if (last) {
-            if (this.body_read_ref.has) {
-                this.body_read_ref.unref(jsc.VirtualMachine.get());
-                this.markRequestAsDoneIfNecessary();
-            }
-
-            this.deref();
-        }
-    }
-
-    if (js.onDataGetCached(thisValue)) |callback| {
-        if (callback.isUndefined()) {
-            return;
-        }
-
-        const globalThis = jsc.VirtualMachine.get().global;
-        const event_loop = globalThis.bunVM().eventLoop();
-
-        const bytes = this.getBytes(globalThis, chunk);
-
-        event_loop.runCallback(callback, globalThis, .js_undefined, &.{
-            bytes,
-            jsc.JSValue.jsBoolean(last),
-            jsc.JSValue.jsNumber(@intFromEnum(event)),
-        });
-    }
-}
-pub const BUN_DEBUG_REFCOUNT_NAME = "NodeHTTPServerResponse";
-pub fn onData(this: *NodeHTTPResponse, chunk: []const u8, last: bool) void {
-    log("onData({d} bytes, is_last = {d})", .{ chunk.len, @intFromBool(last) });
-
-    onDataOrAborted(this, chunk, last, .none, this.getThisValue());
-}
-
-fn onDrainCorked(this: *NodeHTTPResponse, offset: u64) void {
-    log("onDrainCorked({d})", .{offset});
-    this.ref();
-    defer this.deref();
-
-    const thisValue = this.getThisValue();
-    const on_writable = js.onWritableGetCached(thisValue) orelse return;
-    const globalThis = jsc.VirtualMachine.get().global;
-    js.onWritableSetCached(thisValue, globalThis, .js_undefined); // TODO(@heimskr): is this necessary?
-    const vm = globalThis.bunVM();
-
-    vm.eventLoop().runCallback(on_writable, globalThis, .js_undefined, &.{jsc.JSValue.jsNumberFromUint64(offset)});
-}
-
-fn onDrain(this: *NodeHTTPResponse, offset: u64, response: uws.AnyResponse) bool {
-    log("onDrain({d})", .{offset});
-
-    if (this.flags.socket_closed or this.flags.request_has_completed or this.flags.upgraded) {
-        // return false means we don't have anything to drain
-        return false;
-    }
-
-    response.corked(onDrainCorked, .{ this, offset });
-    // return true means we may have something to drain
-    return true;
-}
-
-fn writeOrEnd(
-    this: *NodeHTTPResponse,
-    globalObject: *jsc.JSGlobalObject,
-    arguments: []const jsc.JSValue,
-    this_value: jsc.JSValue,
-    comptime is_end: bool,
-) bun.JSError!jsc.JSValue {
-    if (this.isRequestedCompletedOrEnded()) {
-        return globalObject.ERR(.STREAM_WRITE_AFTER_END, "Stream already ended", .{}).throw();
-    }
-
-    // Loosely mimicking this code:
-    //      function _writeRaw(data, encoding, callback, size) {
-    //        const conn = this[kSocket];
-    //        if (conn?.destroyed) {
-    //          // The socket was destroyed. If we're still trying to write to it,
-    //          // then we haven't gotten the 'close' event yet.
-    //          return false;
-    //        }
-    if (this.flags.socket_closed or this.raw_response == null) {
-        return if (is_end) .js_undefined else jsc.JSValue.jsNumber(0);
-    }
-
-    const raw_response = this.raw_response.?;
-
-    const state = raw_response.state();
-    if (!state.isResponsePending()) {
-        return globalObject.ERR(.STREAM_WRITE_AFTER_END, "Stream already ended", .{}).throw();
-    }
-
-    const input_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
-    var encoding_value: JSValue = if (arguments.len > 1) arguments[1] else .js_undefined;
-    const callback_value: JSValue = brk: {
-        if (!encoding_value.isUndefinedOrNull() and encoding_value.isCallable()) {
-            encoding_value = .js_undefined;
-            break :brk arguments[1];
-        }
-
-        if (arguments.len > 2 and !arguments[2].isUndefined()) {
-            if (!arguments[2].isCallable()) {
-                return globalObject.throwInvalidArgumentTypeValue("callback", "function", arguments[2]);
-            }
-
-            break :brk arguments[2];
-        }
-
-        break :brk .js_undefined;
-    };
-
-    const strict_content_length: ?u64 = brk: {
-        if (arguments.len > 3 and arguments[3].isNumber()) {
-            break :brk @max(arguments[3].toInt64(), 0);
-        }
-        break :brk null;
-    };
-
-    const string_or_buffer: jsc.Node.StringOrBuffer = brk: {
-        if (input_value.isUndefinedOrNull()) {
-            break :brk jsc.Node.StringOrBuffer.empty;
-        }
-
-        var encoding: jsc.Node.Encoding = .utf8;
-        if (!encoding_value.isUndefinedOrNull()) {
-            if (!encoding_value.isString()) {
-                return globalObject.throwInvalidArgumentTypeValue("encoding", "string", encoding_value);
-            }
-
-            encoding = try jsc.Node.Encoding.fromJS(encoding_value, globalObject) orelse {
-                return globalObject.throwInvalidArguments("Invalid encoding", .{});
-            };
-        }
-
-        const result = try jsc.Node.StringOrBuffer.fromJSWithEncoding(globalObject, bun.default_allocator, input_value, encoding);
-        break :brk result orelse {
-            return globalObject.throwInvalidArgumentTypeValue("input", "string or buffer", input_value);
-        };
-    };
-    defer string_or_buffer.deinit();
-
-    if (globalObject.hasException()) {
-        return error.JSError;
-    }
-
-    const bytes = string_or_buffer.slice();
-
-    if (comptime is_end) {
-        log("end('{s}', {d})", .{ bytes[0..@min(bytes.len, 128)], bytes.len });
-    } else {
-        log("write('{s}', {d})", .{ bytes[0..@min(bytes.len, 128)], bytes.len });
-    }
-    if (strict_content_length) |content_length| {
-        const bytes_written = this.bytes_written + bytes.len;
-
-        if (is_end) {
-            if (bytes_written != content_length) {
-                return globalObject.ERR(.HTTP_CONTENT_LENGTH_MISMATCH, "Content-Length mismatch", .{}).throw();
-            }
-        } else if (bytes_written > content_length) {
-            return globalObject.ERR(.HTTP_CONTENT_LENGTH_MISMATCH, "Content-Length mismatch", .{}).throw();
-        }
-        this.bytes_written = bytes_written;
-    } else {
-        this.bytes_written = this.bytes_written +| bytes.len;
-    }
-    if (is_end) {
-
-        // Discard the body read ref if it's pending and no onData callback is set at this point.
-        // This is the equivalent of req._dump().
-        if (this.body_read_ref.has and this.body_read_state == .pending and (!this.flags.hasCustomOnData or js.onDataGetCached(this_value) == null)) {
-            this.body_read_ref.unref(jsc.VirtualMachine.get());
-            this.body_read_state = .none;
-        }
-
-        if (this_value != .zero) {
-            js.onAbortedSetCached(this_value, globalObject, .zero);
-        }
-
-        raw_response.clearAborted();
-        raw_response.clearOnWritable();
-        raw_response.clearTimeout();
-        this.flags.ended = true;
-        if (!state.isHttpWriteCalled() or bytes.len > 0) {
-            raw_response.end(bytes, state.isHttpConnectionClose());
-        } else {
-            raw_response.endStream(state.isHttpConnectionClose());
-        }
-        this.onRequestComplete();
-
-        return jsc.JSValue.jsNumberFromUint64(bytes.len);
-    } else {
-        const js_this = if (this_value != .zero) this_value else this.getThisValue();
-        switch (raw_response.write(bytes)) {
-            .want_more => |written| {
-                raw_response.clearOnWritable();
-                js.onWritableSetCached(js_this, globalObject, .js_undefined);
-                return jsc.JSValue.jsNumberFromUint64(written);
-            },
-            .backpressure => |written| {
-                if (!callback_value.isUndefined()) {
-                    js.onWritableSetCached(js_this, globalObject, callback_value.withAsyncContextIfNeeded(globalObject));
-                    raw_response.onWritable(*NodeHTTPResponse, onDrain, this);
+            _ = log("clearOnData", .{});
+            if (resp.raw_response) |raw_response| {
+                _ = &raw_response;
+                _ = raw_response.clearOnData();
+                _ = raw_response.clearOnWritable();
+                _ = raw_response.clearTimeout();
+                if ((!raw_response.state().isHttpStatusCalled())) {
+                    _ = raw_response.writeStatus("500 Internal Server Error");
                 }
-
-                return jsc.JSValue.jsNumberFromInt64(-@as(i64, @intCast(@min(written, std.math.maxInt(i64)))));
-            },
+                _ = raw_response.endStream(raw_response.state().isHttpConnectionClose());
+            }
+            _ = resp.onRequestComplete();
         }
-    }
-}
-
-pub fn setOnWritable(this: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
-    if (this.isDone() or value.isUndefined()) {
-        js.onWritableSetCached(thisValue, globalObject, .js_undefined);
-    } else {
-        js.onWritableSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
-    }
-}
-
-pub fn getOnWritable(_: *NodeHTTPResponse, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return js.onWritableGetCached(thisValue) orelse .js_undefined;
-}
-
-pub fn getOnAbort(this: *NodeHTTPResponse, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
-    if (this.flags.socket_closed or this.flags.upgraded) {
+        _ = globalObject.bunVM().uncaughtException(globalObject, e, true);
         return .js_undefined;
-    }
-    return js.onAbortedGetCached(thisValue) orelse .js_undefined;
 }
-
-pub fn setOnAbort(this: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
-    if (this.flags.socket_closed or this.flags.upgraded) {
-        return;
-    }
-
-    if (this.isRequestedCompletedOrEnded() or value.isUndefined()) {
-        js.onAbortedSetCached(thisValue, globalObject, .zero);
-    } else {
-        js.onAbortedSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
-    }
-}
-
-pub fn getOnData(_: *NodeHTTPResponse, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return js.onDataGetCached(thisValue) orelse .js_undefined;
-}
-
-pub fn getHasCustomOnData(this: *NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return .jsBoolean(this.flags.hasCustomOnData);
-}
-
-pub fn getUpgraded(this: *NodeHTTPResponse, _: *jsc.JSGlobalObject) jsc.JSValue {
-    return .jsBoolean(this.flags.upgraded);
-}
-
-pub fn setHasCustomOnData(this: *NodeHTTPResponse, _: *jsc.JSGlobalObject, value: JSValue) void {
-    this.flags.hasCustomOnData = value.toBoolean();
-}
-
-fn clearOnDataCallback(this: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) void {
-    log("clearOnDataCallback", .{});
-    if (this.body_read_state != .none) {
-        if (thisValue != .zero) {
-            js.onDataSetCached(thisValue, globalObject, .js_undefined);
-        }
-        if (!this.flags.socket_closed and !this.flags.upgraded) {
-            log("clearOnData", .{});
-            if (this.raw_response) |raw_response| {
-                raw_response.clearOnData();
-            }
-        }
-        if (this.body_read_state != .done) {
-            this.body_read_state = .done;
-        }
-    }
-}
-
-pub fn setOnData(this: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
-    // Only `.pending` accepts a callback. `.done` means either uSockets delivered last=true or JS
-    // previously cleared `ondata` (which already called clearOnData()); either way, there is no
-    // more body to read, so don't re-register with uSockets or churn refs.
-    if (value.isUndefined() or this.flags.ended or this.flags.socket_closed or this.body_read_state != .pending or this.flags.is_data_buffered_during_pause_last or this.flags.upgraded) {
-        js.onDataSetCached(thisValue, globalObject, .js_undefined);
-        defer {
-            if (this.body_read_ref.has) {
-                this.body_read_ref.unref(globalObject.bunVM());
-            }
-        }
-        switch (this.body_read_state) {
-            .pending, .done => {
-                if (!this.flags.request_has_completed and !this.flags.socket_closed and !this.flags.upgraded) {
-                    log("clearOnData", .{});
-                    if (this.raw_response) |raw_response| {
-                        raw_response.clearOnData();
-                    }
-                }
-                this.body_read_state = .done;
-            },
-            .none => {},
-        }
-        return;
-    }
-
-    js.onDataSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
-    this.flags.hasCustomOnData = true;
-    if (this.raw_response) |raw_response| {
-        raw_response.onData(*NodeHTTPResponse, onData, this);
-    }
-    this.flags.is_data_buffered_during_pause = false;
-
-    // Every site that unrefs `body_read_ref` also transitions `body_read_state` out of `.pending`
-    // or sets `is_data_buffered_during_pause_last`, both of which are rejected by the guard above.
-    // So reaching here, `body_read_ref` is still held from create(). Do not re-acquire it or
-    // `this.ref()` — there would be no balancing release (PR #18564 removed the paired derefs).
-    bun.debugAssert(this.body_read_ref.has);
-}
-
-pub fn write(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    const arguments = callframe.arguments();
-
-    return writeOrEnd(this, globalObject, arguments, .zero, false);
-}
-
-pub fn onAutoFlush(this: *NodeHTTPResponse) bool {
-    defer this.deref();
-    if (!this.flags.socket_closed and !this.flags.upgraded and this.raw_response != null) {
-        this.raw_response.?.uncork();
-    }
-    this.auto_flusher.registered = false;
-    return false;
-}
-
-fn registerAutoFlush(this: *NodeHTTPResponse) void {
-    if (this.auto_flusher.registered) return;
-    this.ref();
-    AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(NodeHTTPResponse, this, jsc.VirtualMachine.get());
-}
-
-fn unregisterAutoFlush(this: *NodeHTTPResponse) void {
-    if (!this.auto_flusher.registered) return;
-    AutoFlusher.unregisterDeferredMicrotaskWithTypeUnchecked(NodeHTTPResponse, this, jsc.VirtualMachine.get());
-    this.deref();
-}
-
-pub fn flushHeaders(this: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    if (!this.flags.socket_closed and !this.flags.upgraded and this.raw_response != null) {
-        const raw_response = this.raw_response.?;
-        // Don’t flush immediately; queue a microtask to uncork the socket.
-        raw_response.flushHeaders(false);
-        if (raw_response.isCorked()) {
-            this.registerAutoFlush();
-        }
-    }
-
-    return JSValue.js_undefined;
-}
-
-pub fn end(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    const arguments = callframe.arguments();
-    //We dont wanna a paused socket when we call end, so is important to resume the socket
-    resumeSocket(this);
-    return writeOrEnd(this, globalObject, arguments, callframe.this(), true);
-}
-
-pub fn getBytesWritten(this: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) jsc.JSValue {
-    return jsc.JSValue.jsNumber(this.bytes_written);
-}
-
-fn handleCorked(globalObject: *jsc.JSGlobalObject, function: jsc.JSValue, result: *JSValue, is_exception: *bool) void {
-    result.* = function.call(globalObject, .js_undefined, &.{}) catch |err| {
-        result.* = globalObject.takeException(err);
-        is_exception.* = true;
-        return;
-    };
-}
-
-pub fn setTimeout(this: *NodeHTTPResponse, seconds: u8) void {
-    if (this.flags.request_has_completed or this.flags.socket_closed or this.flags.upgraded or this.raw_response == null) {
-        return;
-    }
-
-    this.raw_response.?.timeout(seconds);
-}
-
-pub export fn NodeHTTPResponse__setTimeout(this: *NodeHTTPResponse, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) bool {
-    if (!seconds.isNumber()) {
-        globalThis.throwInvalidArgumentTypeValue("timeout", "number", seconds) catch {};
-        return false;
-    }
-
-    if (this.flags.request_has_completed or this.flags.socket_closed or this.flags.upgraded or this.raw_response == null) {
-        return false;
-    }
-
-    this.raw_response.?.timeout(@intCast(@min(seconds.to(c_uint), 255)));
-    return true;
-}
-
-pub fn cork(this: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-    const arguments = callframe.arguments_old(1).slice();
-    if (arguments.len == 0) {
-        return globalObject.throwNotEnoughArguments("cork", 1, 0);
-    }
-
-    if (!arguments[0].isCallable()) {
-        return globalObject.throwInvalidArgumentTypeValue("cork", "function", arguments[0]);
-    }
-
-    if (this.flags.request_has_completed or this.flags.socket_closed or this.flags.upgraded) {
-        return globalObject.ERR(.STREAM_ALREADY_FINISHED, "Stream is already ended", .{}).throw();
-    }
-
-    var result: jsc.JSValue = .zero;
-    var is_exception: bool = false;
-    this.ref();
-    defer this.deref();
-
-    if (this.raw_response) |raw_response| {
-        raw_response.corked(handleCorked, .{ globalObject, arguments[0], &result, &is_exception });
-    } else {
-        handleCorked(globalObject, arguments[0], &result, &is_exception);
-    }
-    if (is_exception) {
-        if (result != .zero) {
-            return globalObject.throwValue(result);
-        } else {
-            return globalObject.throw("unknown error", .{});
-        }
-    }
-
-    if (result == .zero) {
-        return JSValue.js_undefined;
-    }
-
-    return result;
-}
-pub fn finalize(this: *NodeHTTPResponse) void {
-    this.deref();
-}
-
-fn deinit(this: *NodeHTTPResponse) void {
-    bun.debugAssert(!this.body_read_ref.has);
-    bun.debugAssert(!this.poll_ref.has);
-    bun.debugAssert(!this.flags.is_request_pending);
-    bun.debugAssert(this.flags.socket_closed or this.flags.request_has_completed);
-
-    this.buffered_request_body_data_during_pause.deinit(bun.default_allocator);
-    this.poll_ref.unref(jsc.VirtualMachine.get());
-    this.body_read_ref.unref(jsc.VirtualMachine.get());
-
-    this.promise.deinit();
-    bun.destroy(this);
-}
-
-comptime {
-    @export(&create, .{ .name = "NodeHTTPResponse__createForJS" });
-}
-
-pub export fn Bun__NodeHTTPResponse_onClose(response: *NodeHTTPResponse, js_value: jsc.JSValue) void {
-    response.onAbort(js_value);
-}
-
-pub export fn Bun__NodeHTTPResponse_setClosed(response: *NodeHTTPResponse) void {
-    response.flags.socket_closed = true;
-}
-
-const string = []const u8;
-
-
-
-
-};

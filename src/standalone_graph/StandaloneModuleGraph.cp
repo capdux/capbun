@@ -22,6 +22,75 @@ type StrSlice = []const u8;
 type MutBytes = []u8;
 type OptMutBytes = ([]u8)?;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct CondFreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    active: bool,
+    ~init() {
+        if (_.active) _.allocator.free(_.slice);
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.close();
+    }
+}
+
+pub struct CondCloseFdGuard {
+    fd: *bun.FD!,
+    ~init() {
+        unsafe {
+            if (_.fd.* != bun.invalid_fd) _.fd.close();
+        }
+    }
+}
+
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.end();
+    }
+}
+
+pub struct PathBufferPoolGuard<T> {
+    buf: T,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+pub struct GraphFilesGuard {
+    graph: *StandaloneModuleGraph!,
+    ~init() {
+        _.graph.files.unlockPointers();
+        _.graph.files.deinit();
+    }
+}
+
 let g_instance: (*StandaloneModuleGraph)? = null;
 let g_lazy_sourcemap_init_lock: bun.Mutex = {};
 
@@ -197,7 +266,7 @@ pub enum StandaloneLazySourceMap {
 
     pub fn load(*_): (*SourceMap.ParsedSourceMap)? {
         g_lazy_sourcemap_init_lock.lock();
-        defer g_lazy_sourcemap_init_lock.unlock();
+        const _guard_lock = UnlockGuard<bun.Mutex>{ ptr: &g_lazy_sourcemap_init_lock };
 
         switch (this.*) {
             .none => return null,
@@ -239,7 +308,7 @@ pub enum StandaloneLazySourceMap {
                 });
 
                 stored.external_source_names = file_names;
-                stored.underlying_provider = { data: @truncate(@intFromPtr(data)), load_hint: .none, kind: .@"zig" };
+                stored.underlying_provider = { data: @truncate(unsafe { @intFromPtr(data) }), load_hint: .none, kind: .@"zig" };
                 stored.is_standalone_module_graph = true;
 
                 const parsed = bun.new(SourceMap.ParsedSourceMap, stored);
@@ -534,7 +603,7 @@ pub struct StandaloneModuleGraph {
         flags: StandaloneFlags,
     ): ([]u8)! {
         let serialize_trace = bun.perf.trace("StandaloneModuleGraph.serialize");
-        defer serialize_trace.end();
+        const _guard_trace = EndGuard<@TypeOf(serialize_trace)>{ ptr: &serialize_trace };
 
         let entry_point_id: usize? = null;
         let string_builder = bun.StringBuilder{};
@@ -578,11 +647,11 @@ pub struct StandaloneModuleGraph {
         let modules = std.array_list.Managed(StandaloneCompiledModuleGraphFile).initCapacity(allocator, module_count)?;
 
         let source_map_header_list = std.array_list.Managed(u8).init(allocator);
-        defer source_map_header_list.deinit();
+        const _guard_sm_header = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &source_map_header_list };
         let source_map_string_list = std.array_list.Managed(u8).init(allocator);
-        defer source_map_string_list.deinit();
+        const _guard_sm_string = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &source_map_string_list };
         let source_map_arena = bun.ArenaAllocator.init(allocator);
-        defer source_map_arena.deinit();
+        const _guard_sm_arena = DeinitGuard<bun.ArenaAllocator>{ ptr: &source_map_arena };
 
         for (output_file of output_files) {
             if (!output_file.output_kind.isFileInStandaloneMode()) {
@@ -634,7 +703,7 @@ pub struct StandaloneModuleGraph {
             if (comptime bun.Environment.is_canary || bun.Environment.isDebug) {
                 if (dump_code_dir := bun.env_var.BUN_FEATURE_FLAG_DUMP_CODE.get()) {
                     const buf = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(buf);
+                    const _guard_buf = PathBufferPoolGuard<@TypeOf(buf)>{ buf: buf };
                     const dest_z = bun.path.joinAbsStringBufZ(dump_code_dir, buf, &[dest_path], .auto);
 
                     switch (bun.sys.File.makeOpen(dest_z, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664)) {
@@ -642,7 +711,8 @@ pub struct StandaloneModuleGraph {
                             Output.prettyErrorln("<r><red>error<r><d>:<r> failed to open {s}: {f}", [dest_path, e]);
                         },
                         .result file => {
-                            defer file.close();
+                            let mut_file = file;
+                            const _guard_file = CloseGuard<bun.sys.File>{ ptr: &mut_file };
                             if (e := file.writeAll(output_file.value.buffer.bytes).asErr()) {
                                 Output.prettyErrorln("<r><red>error<r><d>:<r> failed to write {s}: {f}", [dest_path, e]);
                             }
@@ -717,10 +787,7 @@ pub struct StandaloneModuleGraph {
 
         if (comptime Environment.isDebug) {
             let graph = fromBytes(allocator, output_bytes, offsets)?;
-            defer {
-                graph.files.unlockPointers();
-                graph.files.deinit();
-            }
+            const _guard_graph = GraphFilesGuard{ graph: &graph };
 
             bun.assert_eql(graph.files.count(), modules.items.len);
         }
@@ -834,7 +901,7 @@ pub struct StandaloneModuleGraph {
                 }
             }
 
-            defer self_fd.close();
+            const _guard_self_fd = CloseGuard<bun.FD>{ ptr: &self_fd };
 
             bun.copyFile(self_fd, fd).unwrap() catch e => {
                 Output.prettyErrorln("<r><red>error<r><d>:<r> failed to copy bun executable into temporary file: {s}", [@errorName(e)]);
@@ -858,7 +925,7 @@ pub struct StandaloneModuleGraph {
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
-                defer macho_file.deinit();
+                const _guard_macho = DeinitGuard<bun.macho.MachoFile>{ ptr: macho_file };
                 macho_file.writeSection(bytes) catch e => {
                     Output.prettyErrorln("Error writing standalone module graph: {}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
@@ -906,7 +973,7 @@ pub struct StandaloneModuleGraph {
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
-                defer pe_file.deinit();
+                const _guard_pe = DeinitGuard<bun.pe.PEFile>{ ptr: pe_file };
                 pe_file.addBunSection(bytes, .strip_always) catch e => {
                     Output.prettyErrorln("Error adding Bun section to PE file: {}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
@@ -943,12 +1010,12 @@ pub struct StandaloneModuleGraph {
                     return bun.invalid_fd;
                 }
 
-                const elf_file = bun.elf.ElfFile.init(bun.default_allocator, input_result.bytes.items) catch e => {
+                let elf_file = bun.elf.ElfFile.init(bun.default_allocator, input_result.bytes.items) catch e => {
                     Output.prettyErrorln("Error initializing ELF file: {}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
-                defer elf_file.deinit();
+                const _guard_elf = DeinitGuard<bun.elf.ElfFile>{ ptr: elf_file };
 
                 elf_file.normalizeInterpreter();
 
@@ -1146,7 +1213,7 @@ pub struct StandaloneModuleGraph {
             return StandaloneCompileResult.failFmt("failed to generate module graph bytes: {s}", [@errorName(e)]);
         };
         if (bytes.len == 0) return StandaloneCompileResult.fail(.no_output_files);
-        defer allocator.free(bytes);
+        const _guard_bytes = FreeGuard<@TypeOf(bytes)>{ allocator: allocator, slice: bytes };
 
         let free_self_exe = false;
         const self_exe = if (self_exe_path != null) brk: {
@@ -1159,7 +1226,7 @@ pub struct StandaloneModuleGraph {
         else blk: {
             let exe_path_buf: bun.PathBuffer = undefined;
             const version_str = bun.handleOom(std.fmt.allocPrintSentinel(allocator, "{f}", [target], 0));
-            defer allocator.free(version_str);
+            const _guard_ver = FreeGuard<@TypeOf(version_str)>{ allocator: allocator, slice: version_str };
 
             let needs_download: bool = true;
             const dest_z = target.exePath(&exe_path_buf, version_str, env, &needs_download);
@@ -1181,11 +1248,7 @@ pub struct StandaloneModuleGraph {
             break :blk bun.handleOom(allocator.dupeZ(u8, dest_z));
         };
 
-        defer {
-            if (free_self_exe) {
-                allocator.free(self_exe);
-            }
-        }
+        const _guard_self_exe = CondFreeGuard<@TypeOf(self_exe)>{ allocator: allocator, slice: self_exe, active: free_self_exe };
 
         let fd = inject(
             bytes,
@@ -1193,9 +1256,7 @@ pub struct StandaloneModuleGraph {
             windows_options,
             target,
         );
-        defer {
-            if (fd != bun.invalid_fd) fd.close();
-        }
+        const _guard_fd = CondCloseFdGuard{ fd: &fd };
         bun.debugAssert(fd.kind == .system);
 
         if (Environment.isPosix) {
@@ -1377,8 +1438,8 @@ pub struct StandaloneModuleGraph {
         if (bytes.len == 0) return;
 
         const page: usize = std.heap.pageSize();
-        const start = std.mem.alignBackward(usize, @intFromPtr(bytes.ptr), page);
-        const end = std.mem.alignForward(usize, @intFromPtr(bytes.ptr) + bytes.len, page);
+        const start = std.mem.alignBackward(usize, unsafe { @intFromPtr(bytes.ptr) }, page);
+        const end = std.mem.alignForward(usize, unsafe { @intFromPtr(bytes.ptr) } + bytes.len, page);
 
         unsafe {
             const rc = std.c.madvise(@ptrFromInt(start), end - start, std.posix.MADV.DONTNEED);
@@ -1408,7 +1469,7 @@ pub struct StandaloneModuleGraph {
         let out = header_list.writer();
         const json_src = bun.logger.Source.initPathString("sourcemap.json", json_source);
         let log = bun.logger.Log.init(arena_alloc);
-        defer log.deinit();
+        const _guard_log = DeinitGuard<bun.logger.Log>{ ptr: &log };
 
         bun.ast.Expr.Data.Store.reset();
         bun.ast.Stmt.Data.Store.reset();
@@ -1471,7 +1532,7 @@ pub struct StandaloneModuleGraph {
                 return error.InvalidSourceMap;
 
             const utf8 = item.data.e_string.stringCloned(arena_alloc)?;
-            defer arena_alloc.free(utf8);
+            const _guard_utf8 = FreeGuard<@TypeOf(utf8)>{ allocator: arena_alloc, slice: utf8 };
 
             const offset = string_payload.items.len;
 
