@@ -216,3 +216,24 @@
   - `src/jsc/VirtualMachine.cp`（54→0，ratio `1.072`）、`src/runtime/valkey_jsc/js_valkey.cp`（44→0，ratio `1.054`）、`src/runtime/valkey_jsc/js_valkey_functions.cp`（47→0，ratio `0.995`）、`src/sql_jsc/postgres/PostgresSQLConnection.cp`（44→0，ratio `1.061`）、`src/runtime/dns_jsc/dns.cp`（34→2，ratio `0.956` + 31 处 `E0209` `unsafe {}`）；
   - `src/runtime/server/RequestContext.cp`（顶层 `getContentType` 转 RAII，ratio `1.003`）、`src/test_runner/pretty_format.cp`（7 处资源释放→0 + 17 处 `unsafe {}`，ratio `1.034`）、`src/test_runner/expect.cp`（32 处资源释放→0，ratio `1.041`）、`src/runtime/api/JSTranspiler.cp`（34→0，ratio `1.122`）、`src/runtime/api/bun/process.cp`（25→0 + 9 处 `unsafe {}`，ratio `1.042`）；
   - 累计再消除 **322 处**手工资源释放 `defer`/`errdefer`，全部通过 `cpc_brief.py` 与 `bun run zig:check` **5/5**，`22712.test.ts` (6/6)、`BunObject.test.ts` (3/3)、`transpiler-cache.test.ts` (9/9) 共 **18/18**（368 expects）全绿。
+- **[2026-11-22 03:56] 收到并验收 `cp_agy` 结单通知 `task-bun-20261122-factory-struct-raii-lowering`（已完成 `ack`）**：
+  - 修复结论：comptime 工厂函数 `return struct { ... }` 现已接入完整 CP AST lowering 与 RAII `defer __cp_deinit()` 自动注入（同步完善了 `@tls`/`comptime`/`usingnamespace` 成员解析、`ErrorSet!PrimitiveType`、`TypeCall(...){...}` 等）；
+  - 复现验证：`/data/dev/cp/temp/repro_factory_struct_raii.cp` 通过 `cpc --lib` + `zig ast-check`，工厂内 `const g = Guard{ val: 1 };` 成功注入 `defer g.__cp_deinit()`（解封 `RequestContext.cp` / `diff_match_patch.cp` / `server.cp` 工厂模块 RAII 化）。
+- **2026-11-22 [上报 `cp_agy`]**: 提交工单 `task-bun-20261122-union-ptr-receiver-deref`（复现 `/data/dev/cp/temp/repro_union_readonly_receiver.cp`）：`union(enum)`/`enum` 只读方法返回指针或切片时，`cpc` 自动将接收者转为 `self: *const @This()`，但体内 `_ == .tag` / `_ != .tag` / `switch (_)` 未自动解引用为 `self.*`。
+- **2026-11-22 [上报 `cp_agy`]**: 提交工单 `task-bun-20261122-factory-test-decl-drop`（复现 `/data/dev/cp/temp/repro_factory_test_decl.cp`）：编译期工厂函数 `return struct { ... }` 内部包含 `test <ident> { ... }` 声明块时，`cpc` 静默跳过内部方法的 CP lowering 与 RAII `~init()` 注入。
+- **2026-11-22 [上报 `cp_agy`]**: 提交工单 `task-bun-20261122-arena-ident-silent-drop`（复现 `/data/dev/cp/temp/repro_arena_ident_drop.cp`）：工厂 `return struct` 内将局部变量命名为 `arena` 时，`cpc` 未报关键字错误反而静默吞掉 `let arena` 及其后续引用语句。
+- **2026-11-22 [结单验收 `cp_agy`]**: 已验收并 `ack` 3 条上游修复：
+  1. `task-bun-20261122-union-ptr-receiver-deref`（`repro_union_readonly_receiver.cp` `cpc --lib` + `zig build-obj` PASS：`*const @This()`/`*@This()` 方法体内 `switch(_)`、`_ == .tag`、`_ != .tag` 自动解引用为 `self.*`）。
+  2. `task-bun-20261122-factory-test-decl-drop`（`repro_factory_test_decl.cp` 工厂结构体内部方法 lowering 与 RAII defer 注入恢复正常）。
+  3. `task-bun-20261122-factory-err-orelse-return`（`repro_factory_err_orelse_return.cp` `cpc --lib` + `zig build-obj` PASS：原生 Zig 错误联合 `MyErr!T` 下 `orelse return val` 不再误包装为 `.{ .ok = val }`）。
+- **2026-11-22 [上报 `cp_agy`]**: 提交工单 `task-bun-20261122-generic-ptr-opt-paren`（复现 `/data/dev/cp/temp/repro_ptr_opt_paren_generic.cp`）：泛型结构体字段 `ptr: *(T?)!` 被 `cpc` 丢掉括号生成为 `?*T` 而非 `*?T`。
+- **2026-11-22 [结单验收 `cp_agy`]**: 已验收并 `ack` `task-bun-20261122-arena-ident-silent-drop`（`repro_arena_ident_drop.cp` `cpc --lib` + `zig build-obj` 0 错误通过；`arena` 已降级为上下文关键字，仅后接 `{` 时作为 `arena {}` 块，普通变量/字段/参数名不再静默吞掉）。
+- **2026-11-22 [上报 `cp_agy`]**: 提交工单 `task-bun-20261122-factory-inline-struct-param`（复现 `/data/dev/cp/temp/repro_factory_raii_lowering.cp`）：编译期工厂 `return struct` 内部含 `params: struct { ... }` 内联匿名结构体形参时，`cpc` 静默放弃整个 `return struct` 的 CP lowering 与 RAII `defer __cp_deinit()` 注入。
+- **2026-11-22 [上报 `cp_agy`]**: 提交工单 `task-bun-20261122-is-locked-arg-drop`（复现 `/data/dev/cp/temp/repro_is_locked_arg_drop.cp`）：`cpc` 将所有 `.isLocked(arg)` 方法调用静默丢弃参数并生成为 `.isLocked()`。
+- **2026-11-22 [上报 `cp_agy`]**: 提交工单 `task-bun-20261122-tuple-unpack-anyopaque`（复现 `/data/dev/cp/temp/repro_tuple_unpack_anyopaque.cp`）：元组解构 `const [a, b] = ...` 注入的 prelude 含 `const Message = anyopaque; ... ?Message`，在 Zig 0.15 下报 `opaque type 'anyopaque' cannot be optional`。
+- **2026-11-22 [结单验收 `cp_agy`]**: 已验收并 `ack` 4 条上游修复：
+  1. `task-bun-20261122-generic-ptr-opt-paren`（`repro_ptr_opt_paren_generic.cp` PASS：`*(T?)!` 正确生成 `*?T`）。
+  2. `task-bun-20261122-factory-inline-struct-param`（`repro_factory_raii_lowering.cp` PASS：工厂 `return struct` 含内联匿名结构体形参时完整走 lowering 与 RAII 注入）。
+  3. `task-bun-20261122-is-locked-arg-drop`（`s.isLocked(g)` 参数完整透传，仅无参时走同步原语重写）。
+  4. `task-bun-20261122-tuple-unpack-anyopaque`（`?Message` 的 `?anyopaque` 已替换为哨兵结构体；因 `vendor/zig` 0.15.2 不支持 `field_types`/`field_names`，另提交 `task-bun-20261122-unpack-prelude-zig015` 跟进）。
+- **2026-11-22 [RAII Wave #4 里程碑验收]**: 完成 17 个核心模块（`socket`、`js_printer`、`bun_test`、`sys`、`RequestContext`、`Blob`、`S3File`、`path`、`html_rewriter`、`ServerWebSocket`、`update_interactive_command`、`MySQLConnection`、`shell/interpreter`、`resolver`、`ModuleLoader`、`WebSocketUpgradeClient`、`repl`）`~init()` RAII 改造与 `E0209` `unsafe {}` 合规；`bun run zig:check` 5/5 通过，`bun bd test`（`28083`、`29181`、`bun-file`、`blob`）30/30 PASS（589 expects）。

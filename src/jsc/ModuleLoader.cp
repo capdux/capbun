@@ -11,6 +11,104 @@ pub const AsyncModule = @import("./AsyncModule.zig").AsyncModule;
 pub const RuntimeTranspilerStore = @import("./RuntimeTranspilerStore.zig").RuntimeTranspilerStore;
 pub const HardcodedModule = @import("../resolve_builtins/HardcodedModule.zig").HardcodedModule;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct DeinitValGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct OptDeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            if (*v := _.ptr.*) v.deinit();
+        }
+    }
+}
+
+struct PathBufferPoolGuard {
+    buf: *bun.PathBuffer!,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+struct CloseFdGuard {
+    fd: FD,
+    ~init() {
+        _.fd.close();
+    }
+}
+
+struct AstScopeGuard {
+    scope: *js_ast.ASTMemoryAllocator.Scope!,
+    ~init() {
+        _.scope.exit();
+    }
+}
+
+struct ArenaReturnGuard {
+    give_back: *bool!,
+    arena_ptr: (*bun.ArenaAllocator)?,
+    jsc_vm: *VirtualMachine!,
+    free_all: bool,
+    ~init() {
+        if (unsafe { _.give_back.* }) {
+            if (_.jsc_vm.module_loader.transpile_source_code_arena == null) {
+                if (_.free_all) {
+                    if (_.jsc_vm.smol) {
+                        * = _.arena_ptr.?.reset(.free_all);
+                    } else {
+                        * = _.arena_ptr.?.reset({ retain_with_limit: 8 * 1024 * 1024 });
+                    }
+                }
+                _.jsc_vm.module_loader.transpile_source_code_arena = _.arena_ptr;
+            } else {
+                _.arena_ptr.?.deinit();
+                _.jsc_vm.allocator.destroy(_.arena_ptr.?);
+            }
+        }
+    }
+}
+
+struct InputFdGuard {
+    should_close: bool,
+    fd: *FD!,
+    ~init() {
+        unsafe {
+            if (_.should_close && _.fd.* != bun.invalid_fd) {
+                _.fd.*.close();
+                _.fd.* = bun.invalid_fd;
+            }
+        }
+    }
+}
+
+struct ModuleInfoErrGuard {
+    mi: (*analyze_transpiled_module.ModuleInfo)?,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            if (m := _.mi) m.destroy();
+        }
+    }
+}
+
+struct ResetArenaGuard {
+    vm: *VirtualMachine!,
+    ~init() {
+        _.vm.module_loader.resetArena(_.vm);
+    }
+}
+
 @root struct ModuleLoader {
     transpile_source_code_arena: (*bun.ArenaAllocator)? = null,
     eval_source: (*logger.Source)? = null,
@@ -49,14 +147,14 @@ pub fn resolveEmbeddedFile(vm: *VirtualMachine, path_buf: *bun.PathBuffer, input
 
     // atomically write to a tmpfile and then move it to the final destination
     const tmpname_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(tmpname_buf);
+    const _guard_tmpname = PathBufferPoolGuard{ buf: tmpname_buf };
     const tmpfilename = bun.fs.FileSystem.tmpname(extname, tmpname_buf, bun.hash(file.name)) catch return null;
 
     const tmpdir: bun.FD = .fromStdDir(bun.fs.FileSystem.instance.tmpdir() catch return null);
 
     // First we open the tmpfile, to avoid any other work in the event of failure.
     const tmpfile = bun.Tmpfile.create(tmpdir, tmpfilename).unwrap() catch return null;
-    defer tmpfile.fd.close();
+    const _guard_tmpfile = CloseFdGuard{ fd: tmpfile.fd };
 
     switch (bun.api.node.fs.NodeFS.writeFileWithPathBuffer(
         tmpname_buf, // not used
@@ -81,7 +179,7 @@ pub fn resolveEmbeddedFile(vm: *VirtualMachine, path_buf: *bun.PathBuffer, input
 @export @c fn Bun__getDefaultLoader(global: *JSGlobalObject, str: *const bun.String): api.Loader {
     let jsc_vm = global.bunVM();
     const filename = str.toUTF8(jsc_vm.allocator);
-    defer filename.deinit();
+    const _guard_filename = DeinitValGuard<@TypeOf(filename)>{ val: filename };
     const loader = jsc_vm.transpiler.options.loader(Fs.PathName.init(filename.slice()).ext).toAPI();
     if (loader == .file) {
         return api.Loader.js;
@@ -124,7 +222,7 @@ pub fn transpileSourceCode(
             // Ensure that if there was an ASTMemoryAllocator in use, it's not used anymore.
             let ast_scope = js_ast.ASTMemoryAllocator.Scope{};
             ast_scope.enter();
-            defer ast_scope.exit();
+            const _guard_ast_scope = AstScopeGuard{ scope: &ast_scope };
 
             jsc_vm.transpiled_count += 1;
             jsc_vm.transpiler.resetStore();
@@ -151,26 +249,12 @@ pub fn transpileSourceCode(
             };
 
             let give_back_arena = true;
-            defer {
-                if (give_back_arena) {
-                    if (jsc_vm.module_loader.transpile_source_code_arena == null) {
-                        // when .print_source is used
-                        // caller is responsible for freeing the arena
-                        if (flags != .print_source) {
-                            if (jsc_vm.smol) {
-                                * = arena_.?.reset(.free_all);
-                            } else {
-                                * = arena_.?.reset({ retain_with_limit: 8 * 1024 * 1024 });
-                            }
-                        }
-
-                        jsc_vm.module_loader.transpile_source_code_arena = arena_;
-                    } else {
-                        arena_.?.deinit();
-                        jsc_vm.allocator.destroy(arena_.?);
-                    }
-                }
-            }
+            const _guard_arena = ArenaReturnGuard{
+                give_back: &give_back_arena,
+                arena_ptr: arena_,
+                jsc_vm: jsc_vm,
+                free_all: flags != .print_source,
+            };
 
             const current_arena = arena_.?;
             const allocator = current_arena.allocator();
@@ -257,12 +341,10 @@ pub fn transpileSourceCode(
                 runtime_transpiler_cache: if (!disable_transpilying && !jsc.RuntimeTranspilerCache.is_disabled) &cache else null,
                 remove_cjs_module_wrapper: is_main && jsc_vm.module_loader.eval_source != null,
             };
-            defer {
-                if (should_close_input_file_fd && input_file_fd != bun.invalid_fd) {
-                    input_file_fd.close();
-                    input_file_fd = bun.invalid_fd;
-                }
-            }
+            const _guard_input_fd = InputFdGuard{
+                should_close: should_close_input_file_fd,
+                fd: &input_file_fd,
+            };
 
             if (is_node_override) {
                 if (code := node_fallbacks.contentsFromPath(specifier)) {
@@ -430,7 +512,7 @@ pub fn transpileSourceCode(
 
             if (*entry := cache.entry) {
                 jsc_vm.source_mappings.putMappings(source, {
-                    list: { items: @constCast(entry.sourcemap), capacity: entry.sourcemap.len },
+                    list: { items: unsafe { @constCast(entry.sourcemap) }, capacity: entry.sourcemap.len },
                     allocator: bun.default_allocator,
                 }) catch {};
 
@@ -534,7 +616,7 @@ pub fn transpileSourceCode(
                     analyze_transpiled_module.ModuleInfo.create(bun.default_allocator, loader.isTypeScript()) catch null
                 else
                     null;
-            errdefer if (mi := module_info) mi.destroy();
+            let _guard_mi = ModuleInfoErrGuard{ mi: module_info };
             if (mi := module_info) mi.flags.has_tla = !parse_result.ast.top_level_await_keyword.isEmpty();
 
             let printer = source_code_printer.*;
@@ -565,8 +647,9 @@ pub fn transpileSourceCode(
 
             let module_info_deserialized: *!? = null;
             if (mi := module_info) {
-                module_info_deserialized = @ptrCast(mi.asDeserialized());
+                module_info_deserialized = unsafe { @ptrCast(mi.asDeserialized()) };
             }
+            _guard_mi.armed = false;
 
             if (jsc_vm.isWatcherEnabled()) {
                 let resolved_source = jsc_vm.refCountedResolvedSource(printer.ctx.written, input_specifier, path.text, null, false);
@@ -798,7 +881,7 @@ pub fn transpileSourceCode(
             const value = brk: {
                 if (!jsc_vm.origin.isEmpty()) {
                     let buf = bun.handleOom(MutableString.init2048(jsc_vm.allocator));
-                    defer buf.deinit();
+                    const _guard_buf = DeinitGuard<MutableString>{ ptr: &buf };
                     let writer = buf.writer();
                     jsc.API.Bun.getPublicPath(specifier, jsc_vm.origin, @TypeOf(&writer), &writer);
                     break :brk bun.String.createUTF8ForJS(globalObject.?, buf.slice())?;
@@ -825,7 +908,7 @@ pub fn transpileSourceCode(
 ): bool {
     jsc.markBinding(@src());
     let log = logger.Log.init(jsc_vm.transpiler.allocator);
-    defer log.deinit();
+    const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
 
     const alias = HardcodedModule.Alias.bun_aliases.getWithEql(specifier.*, bun.String.eqlComptime) orelse
         return false;
@@ -849,7 +932,7 @@ pub fn transpileSourceCode(
 ): bool {
     jsc.markBinding(@src());
     let log = logger.Log.init(jsc_vm.transpiler.allocator);
-    defer log.deinit();
+    const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
 
     if (builtin := ModuleLoader.fetchBuiltinModule(
         jsc_vm,
@@ -885,12 +968,12 @@ const always_sync_modules = [ "reflect-metadata" ];
     jsc.markBinding(@src());
     const force_loader_type: bun.options.Loader.Optional = .fromAPI(_force_loader_type);
     let log = logger.Log.init(jsc_vm.transpiler.allocator);
-    defer log.deinit();
+    const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
 
     let _specifier = specifier_ptr.toUTF8(jsc_vm.allocator);
     let referrer_slice = referrer.toUTF8(jsc_vm.allocator);
-    defer _specifier.deinit();
-    defer referrer_slice.deinit();
+    const _guard_spec = DeinitGuard<@TypeOf(_specifier)>{ ptr: &_specifier };
+    const _guard_ref = DeinitGuard<@TypeOf(referrer_slice)>{ ptr: &referrer_slice };
 
     let type_attribute_str: string? = null;
     if (attribute := type_attribute) {
@@ -905,7 +988,7 @@ const always_sync_modules = [ "reflect-metadata" ];
         ret.* = jsc.ErrorableResolvedSource.err(error.JSErrorObject, globalObject.ERR(.MODULE_NOT_FOUND, "Blob not found", {}).toJS());
         return null;
     };
-    defer if (*blob := blob_to_deinit) blob.deinit();
+    const _guard_blob = OptDeinitGuard<jsc.WebCore.Blob?>{ ptr: &blob_to_deinit };
 
     const opt_loader = force_loader_type.unwrap();
     if (opt_loader != null) {
@@ -1080,7 +1163,7 @@ const always_sync_modules = [ "reflect-metadata" ];
     if (comptime Environment.allow_assert)
         debug("transpile({s}, {s}, sync)", .{ lr.specifier, @tagName(synchronous_loader) });
 
-    defer jsc_vm.module_loader.resetArena(jsc_vm);
+    const _guard_arena = ResetArenaGuard{ vm: jsc_vm };
 
     let promise: (*jsc.JSInternalPromise)? = null;
     ret.* = jsc.ErrorableResolvedSource.ok(
@@ -1121,7 +1204,7 @@ const always_sync_modules = [ "reflect-metadata" ];
     if (globalObject.bunVM().plugin_runner == null) return JSValue.zero;
 
     const specifier_slice = specifier_ptr.toUTF8(bun.default_allocator);
-    defer specifier_slice.deinit();
+    const _guard_spec = DeinitValGuard<@TypeOf(specifier_slice)>{ val: specifier_slice };
     const specifier = specifier_slice.slice();
 
     if (!PluginRunner.couldBePlugin(specifier)) {
@@ -1175,7 +1258,7 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String): !Reso
 
     if (specifier.hasPrefixComptime(js_ast.Macro.namespaceWithColon)) {
         const spec = specifier.toUTF8(bun.default_allocator);
-        defer spec.deinit();
+        const _guard_spec = DeinitValGuard<@TypeOf(spec)>{ val: spec };
         if (entry := jsc_vm.macro_entry_points.get(MacroEntryPoint.generateIDFromSpecifier(spec.slice()))) {
             return ResolvedSource{
                 allocator: null,
@@ -1186,7 +1269,7 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String): !Reso
         }
     } else if (graph := jsc_vm.standalone_module_graph) {
         const specifier_utf8 = specifier.toUTF8(bun.default_allocator);
-        defer specifier_utf8.deinit();
+        const _guard_spec_utf8 = DeinitValGuard<@TypeOf(specifier_utf8)>{ val: specifier_utf8 };
         if (file := graph.files.getPtr(specifier_utf8.slice())) {
             if (file.loader == .sqlite || file.loader == .sqlite_embedded) {
                 const code: [:0]const u8 = "/* Generated code */\nimport {Database} from 'bun:sqlite';\nimport {readFileSync} from 'node:fs';\nexport const db = new Database(readFileSync(import.meta.path));\n\nexport const __esModule = true;\nexport default db;\n";
@@ -1236,11 +1319,11 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String): !Reso
 
     let specifier_slice = specifier_ptr.toUTF8(jsc_vm.allocator);
     const specifier = specifier_slice.slice();
-    defer specifier_slice.deinit();
+    const _guard_spec = DeinitGuard<@TypeOf(specifier_slice)>{ ptr: &specifier_slice };
     let source_code_slice = source_code.toSlice(jsc_vm.allocator);
-    defer source_code_slice.deinit();
+    const _guard_source = DeinitGuard<@TypeOf(source_code_slice)>{ ptr: &source_code_slice };
     let referrer_slice = referrer_ptr.toUTF8(jsc_vm.allocator);
-    defer referrer_slice.deinit();
+    const _guard_ref = DeinitGuard<@TypeOf(referrer_slice)>{ ptr: &referrer_slice };
 
     let virtual_source = logger.Source.initPathString(specifier, source_code_slice.slice());
     let log = logger.Log.init(jsc_vm.allocator);
@@ -1257,8 +1340,8 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String): !Reso
             break :brk options.Loader.file;
         };
 
-    defer log.deinit();
-    defer jsc_vm.module_loader.resetArena(jsc_vm);
+    const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
+    const _guard_arena = ResetArenaGuard{ vm: jsc_vm };
 
     ret.* = jsc.ErrorableResolvedSource.ok(
         transpileSourceCode(
@@ -1321,9 +1404,9 @@ pub enum FetchFlags {
     if (vm.standalone_module_graph == null) return false;
 
     const input_path = in_out_str.toUTF8(bun.default_allocator);
-    defer input_path.deinit();
+    const _guard_input = DeinitValGuard<@TypeOf(input_path)>{ val: input_path };
     const path_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(path_buf);
+    const _guard_path = PathBufferPoolGuard{ buf: path_buf };
     const result = resolveEmbeddedFile(vm, path_buf, input_path.slice(), "node") orelse return false;
     in_out_str.* = bun.String.cloneUTF8(result);
     return true;

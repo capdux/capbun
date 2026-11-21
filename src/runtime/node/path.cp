@@ -15,6 +15,40 @@ const validateString = validators.validateString;
 
 inline fn asT(comptime T: type, val: auto): T { return @as(T, val); }
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct OptDeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            let p = _.ptr;
+            if (p.* != null) {
+                p.*.?.deinit();
+            }
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
 @c {
     fn Process__getCachedCwd(globalObject: *jsc.JSGlobalObject): jsc.JSValue;
     fn PathParsedObject__create(
@@ -435,14 +469,14 @@ pub fn basenameJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, isWindo
 }
 
 pub fn basename(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const suffix_ptr: jsc.JSValue? = if (args_len > 1 && !args_ptr[1].isUndefined()) args_ptr[1] else null;
+    const suffix_ptr: jsc.JSValue? = if (args_len > 1 && unsafe { !args_ptr[1].isUndefined() }) unsafe { args_ptr[1] } else null;
 
     if (_suffix_ptr := suffix_ptr) {
         // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
         validateString(globalObject, _suffix_ptr, "ext", {})?;
     }
 
-    const path_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const path_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
     validateString(globalObject, path_ptr, "path", .{})?;
 
@@ -452,8 +486,8 @@ pub fn basename(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*
     let stack_fallback = std.heap.stackFallback(stack_fallback_size_small, bun.default_allocator);
     const allocator = stack_fallback.get();
 
-    const pathZSlice = pathZStr.toSlice(allocator);
-    defer pathZSlice.deinit();
+    let pathZSlice = pathZStr.toSlice(allocator);
+    const _guard_pathZSlice = DeinitGuard<@TypeOf(pathZSlice)>{ ptr: &pathZSlice };
 
     let suffixZSlice: jsc.ZigString.Slice? = null;
     if (_suffix_ptr := suffix_ptr) {
@@ -462,7 +496,7 @@ pub fn basename(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*
             suffixZSlice = suffixZStr.toSlice(allocator);
         }
     }
-    defer if (_s := suffixZSlice) _s.deinit();
+    const _guard_suffixZSlice = OptDeinitGuard<jsc.ZigString.Slice?>{ ptr: &suffixZSlice };
     return basenameJS_T(u8, globalObject, isWindows, pathZSlice.slice(), if (suffixZSlice != null) suffixZSlice.?.slice() else null);
 }
 
@@ -631,7 +665,7 @@ pub fn dirnameJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, isWindow
 }
 
 pub fn dirname(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const path_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const path_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
     validateString(globalObject, path_ptr, "path", .{})?;
 
@@ -641,8 +675,8 @@ pub fn dirname(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]
     let stack_fallback = std.heap.stackFallback(stack_fallback_size_small, bun.default_allocator);
     const allocator = stack_fallback.get();
 
-    const pathZSlice = pathZStr.toSlice(allocator);
-    defer pathZSlice.deinit();
+    let pathZSlice = pathZStr.toSlice(allocator);
+    const _guard_pathZSlice = DeinitGuard<@TypeOf(pathZSlice)>{ ptr: &pathZSlice };
     return dirnameJS_T(u8, globalObject, isWindows, pathZSlice.slice());
 }
 
@@ -827,7 +861,7 @@ pub fn extnameJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, isWindow
 }
 
 pub fn extname(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const path_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const path_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
     validateString(globalObject, path_ptr, "path", .{})?;
 
@@ -837,8 +871,8 @@ pub fn extname(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]
     let stack_fallback = std.heap.stackFallback(stack_fallback_size_small, bun.default_allocator);
     const allocator = stack_fallback.get();
 
-    const pathZSlice = pathZStr.toSlice(allocator);
-    defer pathZSlice.deinit();
+    let pathZSlice = pathZStr.toSlice(allocator);
+    const _guard_pathZSlice = DeinitGuard<@TypeOf(pathZSlice)>{ ptr: &pathZSlice };
     return extnameJS_T(u8, globalObject, isWindows, pathZSlice.slice());
 }
 
@@ -933,12 +967,12 @@ pub fn formatJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, allocator
         (if (dirLen > 0) dirLen else pathObject.root.len) +
         (if (baseLen > 0) baseLen else pathObject.name.len + pathObject.ext.len), PATH_SIZE(T));
     const buf = bun.handleOom(allocator.alloc(T, bufLen));
-    defer allocator.free(buf);
+    const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: allocator, slice: buf };
     return if (isWindows) formatWindowsJS_T(T, globalObject, pathObject, buf) else formatPosixJS_T(T, globalObject, pathObject, buf);
 }
 
 pub fn format(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const pathObject_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const pathObject_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
     validateObject(globalObject, pathObject_ptr, "pathObject", {}, {})?;
 
@@ -947,7 +981,7 @@ pub fn format(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]j
 
     let root: []const u8 = "";
     let root_slice: jsc.ZigString.Slice? = null;
-    defer if (slice := root_slice) slice.deinit();
+    const _guard_root_slice = OptDeinitGuard<jsc.ZigString.Slice?>{ ptr: &root_slice };
 
     if (jsValue := pathObject_ptr.getTruthy(globalObject, "root")?) {
         root_slice = jsValue.toSlice(globalObject, allocator)?;
@@ -955,7 +989,7 @@ pub fn format(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]j
     }
     let dir: []const u8 = "";
     let dir_slice: jsc.ZigString.Slice? = null;
-    defer if (slice := dir_slice) slice.deinit();
+    const _guard_dir_slice = OptDeinitGuard<jsc.ZigString.Slice?>{ ptr: &dir_slice };
 
     if (jsValue := pathObject_ptr.getTruthy(globalObject, "dir")?) {
         dir_slice = jsValue.toSlice(globalObject, allocator)?;
@@ -963,7 +997,7 @@ pub fn format(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]j
     }
     let base: []const u8 = "";
     let base_slice: jsc.ZigString.Slice? = null;
-    defer if (slice := base_slice) slice.deinit();
+    const _guard_base_slice = OptDeinitGuard<jsc.ZigString.Slice?>{ ptr: &base_slice };
 
     if (jsValue := pathObject_ptr.getTruthy(globalObject, "base")?) {
         base_slice = jsValue.toSlice(globalObject, allocator)?;
@@ -971,7 +1005,7 @@ pub fn format(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]j
     }
     let _name: []const u8 = "";
     let _name_slice: jsc.ZigString.Slice? = null;
-    defer if (slice := _name_slice) slice.deinit();
+    const _guard_name_slice = OptDeinitGuard<jsc.ZigString.Slice?>{ ptr: &_name_slice };
 
     if (jsValue := pathObject_ptr.getTruthy(globalObject, "name")?) {
         _name_slice = jsValue.toSlice(globalObject, allocator)?;
@@ -979,7 +1013,7 @@ pub fn format(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]j
     }
     let ext: []const u8 = "";
     let ext_slice: jsc.ZigString.Slice? = null;
-    defer if (slice := ext_slice) slice.deinit();
+    const _guard_ext_slice = OptDeinitGuard<jsc.ZigString.Slice?>{ ptr: &ext_slice };
 
     if (jsValue := pathObject_ptr.getTruthy(globalObject, "ext")?) {
         ext_slice = jsValue.toSlice(globalObject, allocator)?;
@@ -1022,13 +1056,13 @@ pub fn isAbsolutePosixZigString(pathZStr: jsc.ZigString): bool {
 
 pub fn isAbsoluteWindowsZigString(pathZStr: jsc.ZigString): bool {
     return if (pathZStr.len > 0 && pathZStr.is16Bit())
-        isAbsoluteWindowsT(u16, @alignCast(pathZStr.utf16Slice()))
+        isAbsoluteWindowsT(u16, unsafe { @alignCast(pathZStr.utf16Slice()) })
     else
         isAbsoluteWindowsT(u8, pathZStr.slice());
 }
 
 pub fn isAbsolute(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const path_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const path_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
     validateString(globalObject, path_ptr, "path", .{})?;
 
@@ -1100,7 +1134,7 @@ pub fn joinPosixT(comptime T: type, paths: []const []const T, buf: []T, buf2: []
     let buf: [path_size_u8]u8 = undefined;
     let buf2: [path_size_u8]u8 = undefined;
     let slice = lhs.toUTF8(bun.default_allocator);
-    defer slice.deinit();
+    const _guard_slice = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
     if (Environment.isWindows) {
         const win = joinWindowsT(u8, &.{ slice.slice(), rhs }, &buf, &buf2);
         result.* = bun.String.cloneUTF8(win);
@@ -1232,9 +1266,9 @@ pub fn joinJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, allocator: 
     for (path of paths) bufLen += if (path.len > 0) path.len + 1 else path.len;
     bufLen = @max(bufLen, PATH_SIZE(T));
     const buf = bun.handleOom(allocator.alloc(T, bufLen));
-    defer allocator.free(buf);
+    const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: allocator, slice: buf };
     const buf2 = bun.handleOom(allocator.alloc(T, bufLen));
-    defer allocator.free(buf2);
+    const _guard_buf2 = FreeGuard<@TypeOf(buf2)>{ alloc: allocator, slice: buf2 };
     return if (isWindows) joinWindowsJS_T(T, globalObject, paths, buf, buf2) else joinPosixJS_T(T, globalObject, paths, buf, buf2);
 }
 
@@ -1242,13 +1276,13 @@ fn joinImpl(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc
     if (args_len == 0) return bun.String.createUTF8ForJS(globalObject, CHAR_STR_DOT);
 
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    const _guard_arena = DeinitGuard<@TypeOf(arena_)>{ ptr: &arena_ };
 
     let stack_fallback = std.heap.stackFallback(stack_fallback_size_large, arena_.allocator());
     const allocator = stack_fallback.get();
 
     let paths = bun.handleOom(allocator.alloc(string, args_len));
-    defer allocator.free(paths);
+    const _guard_paths = FreeGuard<@TypeOf(paths)>{ alloc: allocator, slice: paths };
 
     const args = unsafe { args_ptr[0..args_len] };
     for (i of 0..args_len) {
@@ -1646,12 +1680,12 @@ pub fn normalizeJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, alloca
     const bufLen = @max(path.len, PATH_SIZE(T));
     // +1 for null terminator
     const buf = bun.handleOom(allocator.alloc(T, bufLen + 1));
-    defer allocator.free(buf);
+    const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: allocator, slice: buf };
     return if (isWindows) normalizeWindowsJS_T(T, globalObject, path, buf) else normalizePosixJS_T(T, globalObject, path, buf);
 }
 
 pub fn normalize(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const path_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const path_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
     validateString(globalObject, path_ptr, "path", .{})?;
     const pathZStr = path_ptr.getZigString(globalObject)?;
@@ -1661,8 +1695,8 @@ pub fn normalize(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [
     let stack_fallback = std.heap.stackFallback(stack_fallback_size_small, bun.default_allocator);
     const allocator = stack_fallback.get();
 
-    const pathZSlice = pathZStr.toSlice(allocator);
-    defer pathZSlice.deinit();
+    let pathZSlice = pathZStr.toSlice(allocator);
+    const _guard_pathZSlice = DeinitGuard<@TypeOf(pathZSlice)>{ ptr: &pathZSlice };
     return normalizeJS_T(u8, globalObject, allocator, isWindows, pathZSlice.slice());
 }
 
@@ -1971,7 +2005,7 @@ pub fn parseJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, isWindows:
 }
 
 pub fn parse(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const path_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const path_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     // Supress exeption in zig. It does globalThis.vm().throwError() in JS land.
     validateString(globalObject, path_ptr, "path", .{})?;
 
@@ -1985,8 +2019,8 @@ pub fn parse(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]js
     let stack_fallback = std.heap.stackFallback(stack_fallback_size_small, bun.default_allocator);
     const allocator = stack_fallback.get();
 
-    const pathZSlice = pathZStr.toSlice(allocator);
-    defer pathZSlice.deinit();
+    let pathZSlice = pathZStr.toSlice(allocator);
+    const _guard_pathZSlice = DeinitGuard<@TypeOf(pathZSlice)>{ ptr: &pathZSlice };
     return parseJS_T(u8, globalObject, isWindows, pathZSlice.slice());
 }
 
@@ -2330,18 +2364,18 @@ pub fn relativeJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, allocat
     const bufLen = @max((from_path.len + MAX_PATH_SIZE(T) + 1) * 2 + to.len + MAX_PATH_SIZE(T) + 1, PATH_SIZE(T));
     // +1 for null terminator
     const buf = bun.handleOom(allocator.alloc(T, bufLen + 1));
-    defer allocator.free(buf);
+    const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: allocator, slice: buf };
     const buf2 = bun.handleOom(allocator.alloc(T, bufLen + 1));
-    defer allocator.free(buf2);
+    const _guard_buf2 = FreeGuard<@TypeOf(buf2)>{ alloc: allocator, slice: buf2 };
     const buf3 = bun.handleOom(allocator.alloc(T, bufLen + 1));
-    defer allocator.free(buf3);
+    const _guard_buf3 = FreeGuard<@TypeOf(buf3)>{ alloc: allocator, slice: buf3 };
     return if (isWindows) relativeWindowsJS_T(T, globalObject, from_path, to, buf, buf2, buf3) else relativePosixJS_T(T, globalObject, from_path, to, buf, buf2, buf3);
 }
 
 pub fn relative(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
-    const from_ptr: jsc.JSValue = if (args_len > 0) args_ptr[0] else .js_undefined;
+    const from_ptr: jsc.JSValue = if (args_len > 0) unsafe { args_ptr[0] } else .js_undefined;
     validateString(globalObject, from_ptr, "from", .{})?;
-    const to_ptr: jsc.JSValue = if (args_len > 1) args_ptr[1] else .js_undefined;
+    const to_ptr: jsc.JSValue = if (args_len > 1) unsafe { args_ptr[1] } else .js_undefined;
     validateString(globalObject, to_ptr, "to", .{})?;
 
     const fromZigStr = from_ptr.getZigString(globalObject)?;
@@ -2354,10 +2388,10 @@ pub fn relative(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*
     );
     const allocator = sfa.get();
 
-    const fromZigSlice = fromZigStr.toSlice(allocator);
-    defer fromZigSlice.deinit();
-    const toZigSlice = toZigStr.toSlice(allocator);
-    defer toZigSlice.deinit();
+    let fromZigSlice = fromZigStr.toSlice(allocator);
+    const _guard_fromZigSlice = DeinitGuard<@TypeOf(fromZigSlice)>{ ptr: &fromZigSlice };
+    let toZigSlice = toZigStr.toSlice(allocator);
+    const _guard_toZigSlice = DeinitGuard<@TypeOf(toZigSlice)>{ ptr: &toZigSlice };
     return relativeJS_T(u8, globalObject, allocator, isWindows, fromZigSlice.slice(), toZigSlice.slice());
 }
 
@@ -2802,9 +2836,9 @@ pub fn resolveJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, allocato
     bufLen = @max(bufLen, PATH_SIZE(T));
     // +2 to account for separator and null terminator during path resolution
     const buf = allocator.alloc(T, bufLen + 2)?;
-    defer allocator.free(buf);
+    const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: allocator, slice: buf };
     const buf2 = allocator.alloc(T, bufLen + 2)?;
-    defer allocator.free(buf2);
+    const _guard_buf2 = FreeGuard<@TypeOf(buf2)>{ alloc: allocator, slice: buf2 };
     return if (isWindows) resolveWindowsJS_T(T, globalObject, paths, buf, buf2) else resolvePosixJS_T(T, globalObject, paths, buf, buf2);
 }
 
@@ -2812,13 +2846,13 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]
     // Lazily-allocated RareData buffer replaces the old stack_fallback_size_large on the stack.
     // The arena handles overflow for very long paths.
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    const _guard_arena = DeinitGuard<@TypeOf(arena_)>{ ptr: &arena_ };
 
     let sfa = globalObject.bunVM().rareData().path_buf.get(stack_fallback_size_large, arena_.allocator());
     const allocator = sfa.get();
 
     let paths_buf = allocator.alloc(string, args_len)?;
-    defer allocator.free(paths_buf);
+    const _guard_paths_buf = FreeGuard<@TypeOf(paths_buf)>{ alloc: allocator, slice: paths_buf };
     let paths_offset: usize = args_len;
     let resolved_root = false;
 
@@ -2830,10 +2864,10 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]
             break;
         }
 
-        const path = args_ptr[i];
+        const path = unsafe { args_ptr[i] };
         validateString(globalObject, path, "paths[{d}]", .{ i })?;
-        const path_str = path.toBunString(globalObject)?;
-        defer path_str.deref();
+        let path_str = path.toBunString(globalObject)?;
+        const _guard_path_str = DerefGuard<@TypeOf(path_str)>{ ptr: &path_str };
 
         if (path_str.length() == 0) {
             continue;
@@ -2957,15 +2991,15 @@ pub fn toNamespacedPathJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject,
     const bufLen = @max(path.len + MAX_PATH_SIZE(T) + 1, PATH_SIZE(T));
     // +8 for possible UNC prefix, +1 for null terminator
     const buf = allocator.alloc(T, bufLen + 8 + 1)?;
-    defer allocator.free(buf);
+    const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: allocator, slice: buf };
     const buf2 = allocator.alloc(T, bufLen + 8 + 1)?;
-    defer allocator.free(buf2);
+    const _guard_buf2 = FreeGuard<@TypeOf(buf2)>{ alloc: allocator, slice: buf2 };
     return toNamespacedPathWindowsJS_T(T, globalObject, path, buf, buf2);
 }
 
 pub fn toNamespacedPath(globalObject: *jsc.JSGlobalObject, isWindows: bool, args_ptr: [*]jsc.JSValue, args_len: u16): bun.JSError!jsc.JSValue {
     if (args_len == 0) return jsc.JSValue.js_undefined;
-    let path_ptr = args_ptr[0];
+    let path_ptr = unsafe { args_ptr[0] };
 
     // Based on Node v21.6.1 path.win32.toNamespacedPath and path.posix.toNamespacedPath:
     // https://github.com/nodejs/node/blob/6ae20aa63de78294b18d5015481485b7cd8fbb60/lib/path.js#L624
@@ -2983,8 +3017,8 @@ pub fn toNamespacedPath(globalObject: *jsc.JSGlobalObject, isWindows: bool, args
     );
     const allocator = sfa.get();
 
-    const pathZSlice = pathZStr.toSlice(allocator);
-    defer pathZSlice.deinit();
+    let pathZSlice = pathZStr.toSlice(allocator);
+    const _guard_pathZSlice = DeinitGuard<@TypeOf(pathZSlice)>{ ptr: &pathZSlice };
     return toNamespacedPathJS_T(u8, globalObject, allocator, isWindows, pathZSlice.slice());
 }
 

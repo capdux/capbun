@@ -1518,3 +1518,4 @@
 - **[2026-11-22] 10 大模块规模化泛型 RAII 化与 `E0209` `unsafe {}` 收窄**：
   - 全部 10 个模块统一采用顶层泛型/专用 `~init()` Guard 替换 322 处手工 `defer`/`errdefer` 并补全 57 处 `E0209` `unsafe {}`；
   - `VirtualMachine.cp` 拆分 `PrintInternalTraceGuard` 编译期 `allow_ansi_color` 分支与 `OptDeinitPtrGuard`；`process.cp` `PosixSpawnResult.toProcess()` 按值传 `_.*` 给 `Process.initPosix`；`JSTranspiler.cp` 抽离 `type OptBufferWriter` 规避结构体内 `*(T?)!` 解析与 `unsafe {}` 后缀调用问题。
+- **2026-11-22**: 工厂 `return struct` 内启用完整 CP lowering 后，`RequestContext.cp` 补齐 `static fn` 标注并通过 `&this.*` 避免借用所有权误转移；全仓 `OptDeinitGuard` 统一传入可空类型 `<T?>` 配合 `ptr: *T!` 规避泛型指针括号歧义（同步已上报并推动 `cp_agy` 修复 `*(T?)!`、`arena` 上下文关键字、`union` 指针接收者解引用及 `isLocked(arg)` 实参保留等 7 项编译器缺陷）。

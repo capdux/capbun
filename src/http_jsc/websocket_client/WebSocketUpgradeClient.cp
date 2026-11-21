@@ -31,6 +31,69 @@ const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
 const empty_zig_slices: [0]ZigSlice = undefined;
 const empty_byte_slices: []const []const u8 = [];
 
+struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    fn disarm(*_) {
+        _.ptr = null;
+    }
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct OptDeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        if (*v := unsafe { _.ptr.* }) v.deinit();
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]T)?,
+    fn disarm(*_) {
+        _.slice = null;
+    }
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+struct SlicesDecodeGuard {
+    slices: []ZigSlice,
+    count: usize = 0,
+    active: bool = true,
+    fn disarm(*_) {
+        _.active = false;
+    }
+    ~init() {
+        if (_.active) {
+            let j: usize = 0;
+            while (j < _.count) {
+                _.slices[j].deinit();
+                j += 1;
+            }
+        }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deref(); }
+    }
+}
+
+struct SSLCtxGuard {
+    ctx: (*BoringSSL.c.SSL_CTX!)?,
+    fn disarm(*_) {
+        _.ctx = null;
+    }
+    ~init() {
+        if (s := _.ctx) BoringSSL.c.SSL_CTX_free(s);
+    }
+}
+
 export struct TopDeflateNegotiationResult {
     enabled: bool = false,
     params: DeflateParams = DeflateParams{},
@@ -69,33 +132,30 @@ export struct Headers8Bit {
         const values_in = unsafe { values_ptr.?[0..len] };
 
         let slices = allocator.alloc(ZigSlice, len * 2)?;
-        errdefer allocator.free(slices);
+        let _guard_slices = FreeGuard<ZigSlice>{ allocator: allocator, slice: slices };
 
         let name_slices = allocator.alloc(string, len)?;
-        errdefer allocator.free(name_slices);
+        let _guard_name_slices = FreeGuard<string>{ allocator: allocator, slice: name_slices };
 
         let value_slices = allocator.alloc(string, len)?;
-        errdefer allocator.free(value_slices);
+        let _guard_value_slices = FreeGuard<string>{ allocator: allocator, slice: value_slices };
 
-        let decoded: usize = 0;
-        errdefer {
-            let j: usize = 0;
-            while (j < decoded) {
-                slices[j].deinit();
-                j += 1;
-            }
-        }
+        let _guard_decoded = SlicesDecodeGuard{ slices: slices };
         let i: usize = 0;
         while (i < len) {
             slices[i * 2] = names_in[i].toUTF8(allocator);
-            decoded += 1;
+            _guard_decoded.count += 1;
             slices[i * 2 + 1] = values_in[i].toUTF8(allocator);
-            decoded += 1;
+            _guard_decoded.count += 1;
             name_slices[i] = slices[i * 2].slice();
             value_slices[i] = slices[i * 2 + 1].slice();
             i += 1;
         }
 
+        _guard_decoded.disarm();
+        _guard_value_slices.disarm();
+        _guard_name_slices.disarm();
+        _guard_slices.disarm();
         return Headers8Bit{
             slices: slices,
             name_slices: name_slices,
@@ -126,7 +186,7 @@ export struct Headers8Bit {
         let headers = Headers{
             allocator: allocator,
         };
-        errdefer headers.deinit();
+        let _guard_headers = DeinitGuard<Headers>{ ptr: &headers };
 
         const n_slices = this.name_slices;
         const v_slices = this.value_slices;
@@ -134,6 +194,7 @@ export struct Headers8Bit {
             headers.append(n_slices[i], v_slices[i])?;
         }
 
+        _guard_headers.disarm();
         return headers;
     }
 }
@@ -152,7 +213,7 @@ fn buildConnectRequest(
     const allocator = bun.default_allocator;
 
     let buf = std.array_list.Managed(u8).init(allocator);
-    errdefer buf.deinit();
+    let _guard_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &buf };
     const writer = buf.writer();
 
     writer.print("CONNECT {s}:{d} HTTP/1.1\r\n", .{ target_host, target_port })?;
@@ -179,6 +240,7 @@ fn buildConnectRequest(
 
     writer.writeAll("\r\n")?;
 
+    _guard_buf.disarm();
     return buf.toOwnedSlice();
 }
 
@@ -265,7 +327,7 @@ fn buildRequestBody(
     const pico_headers = PicoHTTP.Headers{ headers: headers_ };
 
     let extra_headers_buf = std.array_list.Managed(u8).init(allocator);
-    defer extra_headers_buf.deinit();
+    const _guard_extra_headers_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &extra_headers_buf };
     const writer = extra_headers_buf.writer();
 
     if (!user_authorization) {
@@ -422,23 +484,23 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             let pathname_slice = pathname.toUTF8(allocator);
             let client_protocol_slice = client_protocol.toUTF8(allocator);
 
-            const extra_headers = Headers8Bit.init(allocator, header_names, header_values, header_count) catch |e| bun.handleOom(e);
-            defer extra_headers.deinit();
+            let extra_headers = Headers8Bit.init(allocator, header_names, header_values, header_count) catch |e| bun.handleOom(e);
+            const _guard_extra_headers = DeinitGuard<Headers8Bit>{ ptr: &extra_headers };
 
-            defer host_slice.deinit();
-            defer pathname_slice.deinit();
-            defer client_protocol_slice.deinit();
+            const _guard_host_slice = DeinitGuard<ZigSlice>{ ptr: &host_slice };
+            const _guard_pathname_slice = DeinitGuard<ZigSlice>{ ptr: &pathname_slice };
+            const _guard_client_protocol_slice = DeinitGuard<ZigSlice>{ ptr: &client_protocol_slice };
 
             let proxy_host_slice: ?ZigSlice = null;
-            defer if (s := proxy_host_slice) s.deinit();
+            const _guard_proxy_host_slice = OptDeinitGuard<ZigSlice?>{ ptr: &proxy_host_slice };
             if (ph := proxy_host) proxy_host_slice = ph.toUTF8(allocator);
 
             let target_authorization_slice: ?ZigSlice = null;
-            defer if (s := target_authorization_slice) s.deinit();
+            const _guard_target_auth_slice = OptDeinitGuard<ZigSlice?>{ ptr: &target_authorization_slice };
             if (ta := target_authorization) target_authorization_slice = ta.toUTF8(allocator);
 
             let unix_socket_path_slice: ?ZigSlice = null;
-            defer if (s := unix_socket_path_slice) s.deinit();
+            const _guard_unix_socket_slice = OptDeinitGuard<ZigSlice?>{ ptr: &unix_socket_path_slice };
             if (usp := unix_socket_path) unix_socket_path_slice = usp.toUTF8(allocator);
 
             const using_proxy = proxy_host != null;
@@ -474,7 +536,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             if (using_proxy) {
                 let proxy_auth_slice: ?[]const u8 = null;
                 let proxy_auth_decoded: ?ZigSlice = null;
-                defer if (s := proxy_auth_decoded) s.deinit();
+                const _guard_proxy_auth_decoded = OptDeinitGuard<ZigSlice?>{ ptr: &proxy_auth_decoded };
 
                 if (auth := proxy_authorization) {
                     proxy_auth_decoded = auth.toUTF8(allocator);
@@ -482,10 +544,10 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 }
 
                 let proxy_hdrs: ?Headers = null;
-                defer if (*hdrs := proxy_hdrs) hdrs.deinit();
+                const _guard_proxy_hdrs = OptDeinitGuard<Headers?>{ ptr: &proxy_hdrs };
 
-                const proxy_extra_headers = Headers8Bit.init(allocator, proxy_header_names, proxy_header_values, proxy_header_count) catch |e| bun.handleOom(e);
-                defer proxy_extra_headers.deinit();
+                let proxy_extra_headers = Headers8Bit.init(allocator, proxy_header_names, proxy_header_values, proxy_header_count) catch |e| bun.handleOom(e);
+                const _guard_proxy_extra_headers = DeinitGuard<Headers8Bit>{ ptr: &proxy_extra_headers };
 
                 if (proxy_header_count > 0) {
                     proxy_hdrs = proxy_extra_headers.toHeaders(allocator) catch |e| bun.handleOom(e);
@@ -666,7 +728,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             this.clearData();
 
             this.ref();
-            defer this.deref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
 
             if (this.outgoing_websocket != null) {
                 this.outgoing_websocket = null;
@@ -784,7 +846,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 if (*p := this.proxy) {
                     if (tunnel := p.getTunnel()) {
                         tunnel.ref();
-                        defer tunnel.deref();
+                        const _guard_tunnel = DerefGuard<WebSocketProxyTunnel>{ ptr: tunnel };
                         tunnel.receive(data);
                     }
                 }
@@ -798,7 +860,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 return;
             }
             this.ref();
-            defer this.deref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
 
             bun.assert(this.isSameSocket(socket));
 
@@ -1075,7 +1137,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
                                     if (ws := this.outgoing_websocket) {
                                         let protocol_str = bun.String.cloneLatin1(protocol);
-                                        defer protocol_str.deref();
+                                        const _guard_proto = DerefGuard<bun.String>{ ptr: &protocol_str };
                                         ws.setProtocol(&protocol_str);
                                     }
                                     break :brk true;
@@ -1196,7 +1258,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                         this.tcp.timeout(0);
                         log("onDidConnect (tunnel mode)", .{});
 
-                        defer this.deref();
+                        const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
                         const ws = bun.take(&this.outgoing_websocket).?;
 
                         ws.didConnectWithTunnel(tunnel, overflow.ptr, overflow.len, if (deflate_result.enabled) &deflate_result.params else null);
@@ -1211,24 +1273,23 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 }
             }
 
-            let saved_secure = this.secure;
+            let _guard_secure = SSLCtxGuard{ ctx: this.secure };
             this.secure = null;
-            defer if (s := saved_secure) bun.BoringSSL.c.SSL_CTX_free(s);
             this.clearData();
             jsc.markBinding(@src());
             if (!this.tcp.isClosed() && this.outgoing_websocket != null) {
                 this.tcp.timeout(0);
                 log("onDidConnect", .{});
 
-                defer this.deref();
+                const _guard_deref1 = DerefGuard<HTTPClient>{ ptr: this };
                 const ws = bun.take(&this.outgoing_websocket).?;
                 const socket = this.tcp;
 
                 this.tcp.detach();
-                defer this.deref();
+                const _guard_deref2 = DerefGuard<HTTPClient>{ ptr: this };
                 if (native_socket := socket.socket.get()) {
-                    ws.didConnect(native_socket, overflow.ptr, overflow.len, if (deflate_result.enabled) &deflate_result.params else null, saved_secure);
-                    saved_secure = null;
+                    ws.didConnect(native_socket, overflow.ptr, overflow.len, if (deflate_result.enabled) &deflate_result.params else null, _guard_secure.ctx);
+                    _guard_secure.disarm();
                 } else {
                     this.terminate(ErrorCode.failed_to_connect);
                 }
@@ -1256,7 +1317,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
                     if (this.to_send.len == 0) return;
                     this.ref();
-                    defer this.deref();
+                    const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
                     const wrote = tunnel.write(this.to_send) catch {
                         this.terminate(ErrorCode.failed_to_write);
                         return;
@@ -1270,7 +1331,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 return;
 
             this.ref();
-            defer this.deref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
 
             const wrote = socket.write(this.to_send);
             if (wrote < 0) {
@@ -1287,7 +1348,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
         pub fn handleConnectError(*this, _: Socket, _: c_int) void {
             this.tcp.detach();
 
-            defer this.deref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
 
             if (this.state == .reading) {
                 this.terminate(ErrorCode.failed_to_connect);

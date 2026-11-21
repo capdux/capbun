@@ -72,6 +72,70 @@ pub const stdin_no = 0;
 pub const stdout_no = 1;
 pub const stderr_no = 2;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+struct OptDeinitGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) v.deinit();
+    }
+}
+
+struct OptDerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (*v := _.val) v.deref();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct PathBufferGuard {
+    buf: *bun.PathBuffer,
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+struct ErrDeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct ErrCloseGuard {
+    fd: bun.FD?,
+    ~init() {
+        if (f := _.fd) f.close();
+    }
+}
+
+struct ErrDerefGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deref();
+    }
+}
+
 pub fn OOM(e: anyerror): noreturn {
     if (comptime bun.Environment.allow_assert) {
         if (e != error.OutOfMemory) bun.outOfMemory();
@@ -146,7 +210,7 @@ pub struct CowFd {
         cow.* = {
             __fd: fd,
         };
-        debug("init(0x{x}, fd={f})", .{ @intFromPtr(cow), fd });
+        debug("init(0x{x}, fd={f})", .{ unsafe { @intFromPtr(cow) }, fd });
         return cow;
     }
 
@@ -155,7 +219,7 @@ pub struct CowFd {
             fd: bun.sys.dup(_.fd),
             writercount: 1,
         });
-        debug("dup(0x{x}, fd={f}) = (0x{x}, fd={f})", .{ @intFromPtr(_), _.fd, new_cow, new_cow.fd });
+        debug("dup(0x{x}, fd={f}) = (0x{x}, fd={f})", .{ unsafe { @intFromPtr(_) }, _.fd, new_cow, new_cow.fd });
         return new_cow;
     }
 
@@ -522,7 +586,7 @@ pub struct Interpreter {
         /// 1. not free this *ShellExecEnv, because its on a field on the interpreter
         /// 2. don't free buffered_stdout and buffered_stderr, because that is used for output
         fn deinitImpl(*_, comptime destroy_this: bool, comptime free_buffered_io: bool) {
-            log("[ShellExecEnv] deinit {x}", .{@intFromPtr(_)});
+            log("[ShellExecEnv] deinit {x}", .{unsafe { @intFromPtr(_) }});
 
             if (comptime free_buffered_io) {
                 if (_._buffered_stdout == .owned) {
@@ -818,7 +882,7 @@ pub struct Interpreter {
 
         parsed_shell_script.take(
             globalThis,
-            @ptrCast(shargs_buf[0..1].ptr),
+            unsafe { @ptrCast(shargs_buf[0..1].ptr) },
             &jsobjs,
             &quiet,
             &cwd,
@@ -826,12 +890,12 @@ pub struct Interpreter {
         );
         const shargs = shargs_buf[0];
 
-        defer if (*cc := cwd) cc.deref();
+        const _guard_cwd = OptDerefGuard<bun.String>{ val: cwd };
         let cwd_string: bun.jsc.ZigString.Slice? = null;
         if (c := cwd) {
             cwd_string = c.toUTF8(bun.default_allocator);
         }
-        defer if (c := cwd_string) c.deinit();
+        const _guard_cwd_string = OptDeinitGuard<bun.jsc.ZigString.Slice>{ val: cwd_string };
 
         const cwd_slice = if (cwd_string != null) cwd_string.?.slice() else null;
 
@@ -909,14 +973,14 @@ pub struct Interpreter {
         if (comptime bun.Environment.isDebug) {
             const debug = bun.Output.scoped(.ShellTokens, .hidden);
             let test_tokens = std.array_list.Managed(shell.Test.TestToken).initCapacity(arena_allocator, lex_result.tokens.len) catch @panic("OOPS");
-            defer test_tokens.deinit();
+            const _guard_test_tokens = DeinitGuard<@TypeOf(test_tokens)>{ ptr: &test_tokens };
             for (tok of lex_result.tokens) {
                 const test_tok = shell.Test.TestToken.from_real(tok, lex_result.strpool);
                 test_tokens.append(test_tok) catch @panic("OOPS");
             }
 
             const str = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", .{std.json.fmt(test_tokens.items[0..], {})}));
-            defer bun.default_allocator.free(str);
+            const _guard_str = FreeGuard<@TypeOf(str)>{ alloc: bun.default_allocator, slice: str };
             debug("Tokens: {s}", .{str});
         }
 
@@ -940,7 +1004,7 @@ pub struct Interpreter {
         // Hoisted so the catch boundary's toShellSystemError() can read err.path
         // (which borrows from this buffer) before it's returned to the pool.
         const pathbuf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(pathbuf);
+        const _guard_pathbuf = PathBufferGuard{ buf: pathbuf };
 
         let sys: ShellCatch = {};
         const interpreter = initImpl(&sys, ctx, event_loop, allocator, shargs, jsobjs, export_env_, pathbuf) catch {
@@ -998,16 +1062,16 @@ pub struct Interpreter {
             break :brk export_env;
         };
         // init() consumes export_env_ regardless of outcome; callers must not free it.
-        errdefer export_env.deinit();
+        let _guard_export_env = ErrDeinitGuard<EnvMap>{ ptr: &export_env };
 
         const cwd: [:0]const u8 = sys.try_(Syscall.getcwdZ(pathbuf))?;
 
         const cwd_fd = sys.try_(Syscall.open(cwd, bun.O.DIRECTORY | bun.O.RDONLY, 0))?;
-        errdefer cwd_fd.close();
+        let _guard_cwd_fd = ErrCloseGuard{ fd: cwd_fd };
 
         let cwd_arr = bun.handleOom(std.array_list.Managed(u8).initCapacity(bun.default_allocator, cwd.len + 1));
         bun.handleOom(cwd_arr.appendSlice(cwd[0 .. cwd.len + 1]));
-        errdefer cwd_arr.deinit();
+        let _guard_cwd_arr = ErrDeinitGuard<@TypeOf(cwd_arr)>{ ptr: &cwd_arr };
 
         if (comptime bun.Environment.isDebug) {
             assert(cwd_arr.items[cwd_arr.items.len -| 1] == 0);
@@ -1017,7 +1081,7 @@ pub struct Interpreter {
         const stdin_fd = sys.try_(if (bun.Output.Source.Stdio.isStdinNull()) bun.sys.openNullDevice() else ShellSyscall.dup(shell.STDIN_FD))?;
 
         const stdin_reader = IOReader.init(stdin_fd, event_loop);
-        errdefer stdin_reader.deref();
+        let _guard_stdin_reader = ErrDerefGuard<IOReader>{ ptr: stdin_reader };
 
         const interpreter = bun.handleOom(allocator.create(ThisInterpreter));
         interpreter.* = {
@@ -1057,13 +1121,17 @@ pub struct Interpreter {
             globalThis: undefined,
         };
 
+        _guard_export_env.ptr = null;
+        _guard_cwd_fd.fd = null;
+        _guard_cwd_arr.ptr = null;
+        _guard_stdin_reader.ptr = null;
         return interpreter;
     }
 
     static fn initAndRunFromFile(ctx: bun.cli.Command.Context, mini: *jsc.MiniEventLoop, path: []const u8): bun.shell.ExitCode! {
         let shargs = ShellArgs.init();
         const src = std.fs.cwd().readFileAlloc(shargs.arena_allocator(), path, std.math.maxInt(u32))?;
-        defer shargs.deinit();
+        const _guard_shargs = DeinitGuard<ShellArgs>{ ptr: shargs };
 
         const jsobjs: []JSValue = [];
         let out_parser: bun.shell.Parser? = null;
@@ -1131,7 +1199,7 @@ pub struct Interpreter {
     static fn initAndRunFromSource(ctx: bun.cli.Command.Context, mini: *jsc.MiniEventLoop, path_for_errors: []const u8, src: []const u8, cwd: ([]const u8)?): ExitCode! {
         bun.analytics.Features.standalone_shell += 1;
         let shargs = ShellArgs.init();
-        defer shargs.deinit();
+        const _guard_shargs = DeinitGuard<ShellArgs>{ ptr: shargs };
 
         const jsobjs: []JSValue = [];
         let out_parser: bun.shell.Parser? = null;
@@ -1198,11 +1266,13 @@ pub struct Interpreter {
 
             log("Duping stdout", {});
             const stdout_fd = _.try_(if (bun.Output.Source.Stdio.isStdoutNull()) bun.sys.openNullDevice() else ShellSyscall.dup(.stdout()))?;
-            errdefer stdout_fd.close();
+            let _guard_stdout_fd = ErrCloseGuard{ fd: stdout_fd };
 
             log("Duping stderr", {});
             const stderr_fd = _.try_(if (bun.Output.Source.Stdio.isStderrNull()) bun.sys.openNullDevice() else ShellSyscall.dup(.stderr()))?;
-            errdefer stderr_fd.close();
+            let _guard_stderr_fd = ErrCloseGuard{ fd: stderr_fd };
+            _guard_stdout_fd.fd = null;
+            _guard_stderr_fd.fd = null;
 
             const stdout_writer = IOWriter.init(
                 stdout_fd,
@@ -1237,7 +1307,7 @@ pub struct Interpreter {
     }
 
     fn run(*_): !Maybe(void) {
-        log("Interpreter(0x{x}) run", .{@intFromPtr(_)});
+        log("Interpreter(0x{x}) run", .{unsafe { @intFromPtr(_) }});
         if (e := _.setupIOBeforeRun().asErr()) {
             return { err: e };
         }
@@ -1251,7 +1321,7 @@ pub struct Interpreter {
     }
 
     fn runFromJS(*_, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        log("Interpreter(0x{x}) runFromJS", .{@intFromPtr(_)});
+        log("Interpreter(0x{x}) runFromJS", .{unsafe { @intFromPtr(_) }});
         * = callframe; // autofix
 
         if (e := _.setupIOBeforeRun().asErr()) {
@@ -1275,7 +1345,7 @@ pub struct Interpreter {
         buf.* = {};
         const buffer: jsc.Node.Buffer = {
             allocator: bun.default_allocator,
-            buffer: jsc.ArrayBuffer.fromBytes(@constCast(bytelist.slice()), .Uint8Array),
+            buffer: jsc.ArrayBuffer.fromBytes(unsafe { @constCast(bytelist.slice()) }, .Uint8Array),
         };
         return buffer.toNodeBuffer(globalThis);
     }
@@ -1302,7 +1372,7 @@ pub struct Interpreter {
     }
 
     fn finish(*_, exit_code: ExitCode): Yield {
-        log("Interpreter(0x{x}) finish {d}", .{ @intFromPtr(_), exit_code });
+        log("Interpreter(0x{x}) finish {d}", .{ unsafe { @intFromPtr(_) }, exit_code });
         defer decrPendingActivityFlag(&_.has_pending_activity);
 
         if (_.event_loop == .js) {
@@ -1364,7 +1434,7 @@ pub struct Interpreter {
     }
 
     fn deinitFromFinalizer(*_) {
-        log("Interpreter(0x{x}) deinitFromFinalizer (cleanup_state={s})", .{ @intFromPtr(_), @tagName(_.cleanup_state) });
+        log("Interpreter(0x{x}) deinitFromFinalizer (cleanup_state={s})", .{ unsafe { @intFromPtr(_) }, @tagName(_.cleanup_state) });
 
         switch (_.cleanup_state) {
             .needs_full_cleanup => {
@@ -1403,7 +1473,7 @@ pub struct Interpreter {
     }
 
     fn setQuiet(*_, _: *JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        log("Interpreter(0x{x}) setQuiet()", .{@intFromPtr(_)});
+        log("Interpreter(0x{x}) setQuiet()", .{unsafe { @intFromPtr(_) }});
         _.flags.quiet = true;
         return JSValue.js_undefined;
     }
@@ -1411,10 +1481,10 @@ pub struct Interpreter {
     fn setCwd(*_, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const value = callframe.argument(0);
         const str = bun.String.fromJS(value, globalThis)?;
-        defer str.deref();
+        const _guard_str = DerefGuard<bun.String>{ ptr: &str };
 
         const slice = str.toUTF8(bun.default_allocator);
-        defer slice.deinit();
+        const _guard_slice = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &slice };
         switch (_.root_shell.changeCwd(_, slice.slice())) {
             .err => |e| {
                 return globalThis.throwValue(e.toJS(globalThis));
@@ -1434,7 +1504,7 @@ pub struct Interpreter {
             skip_empty_name: false,
             include_value: true,
         }).init(globalThis, value1);
-        defer object_iter.deinit();
+        const _guard_object_iter = DeinitGuard<@TypeOf(object_iter)>{ ptr: &object_iter };
 
         _.root_shell.export_env.clearRetainingCapacity();
         _.root_shell.export_env.ensureTotalCapacity(object_iter.len);
@@ -1450,9 +1520,9 @@ pub struct Interpreter {
             const value_str = value.getZigString(globalThis);
             const slice = bun.handleOom(value_str.toOwnedSlice(bun.default_allocator));
             const keyref = EnvStr.initRefCounted(keyslice);
-            defer keyref.deref();
+            const _guard_keyref = DerefGuard<EnvStr>{ ptr: keyref };
             const valueref = EnvStr.initRefCounted(slice);
-            defer valueref.deref();
+            const _guard_valueref = DerefGuard<EnvStr>{ ptr: valueref };
 
             _.root_shell.export_env.insert(keyref, valueref);
         }
@@ -1480,7 +1550,7 @@ pub struct Interpreter {
     }
 
     fn finalize(*_) {
-        log("Interpreter(0x{x}) finalize", .{@intFromPtr(_)});
+        log("Interpreter(0x{x}) finalize", .{unsafe { @intFromPtr(_) }});
         _.deinitFromFinalizer();
     }
 
@@ -1877,7 +1947,7 @@ pub struct ShellSyscall {
     static fn statat(dir: bun.FD, path_: [:0]const u8): Maybe(bun.Stat) {
         if (bun.Environment.isWindows) {
             const buf: *bun.PathBuffer = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(buf);
+            const _guard_buf = PathBufferGuard{ buf: buf };
             const path = switch (getPath(dir, path_, buf)) {
                 .err => |e| return { err: e },
                 .result => |p| p,
@@ -1900,7 +1970,7 @@ pub struct ShellSyscall {
             if ((flags & bun.O.DIRECTORY) != 0) {
                 if (ResolvePath.Platform.posix.isAbsolute(path[0..path.len])) {
                     const buf: *bun.PathBuffer = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(buf);
+                    const _guard_buf = PathBufferGuard{ buf: buf };
                     const p = switch (getPath(dir, path, buf)) {
                         .result => |p| p,
                         .err => |e| return { err: e },
@@ -1917,7 +1987,7 @@ pub struct ShellSyscall {
             }
 
             const buf: *bun.PathBuffer = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(buf);
+            const _guard_buf = PathBufferGuard{ buf: buf };
             const p = switch (getPath(dir, path, buf)) {
                 .result => |p| p,
                 .err => |e| return { err: e },

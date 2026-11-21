@@ -12,6 +12,27 @@ const jsc = bun.jsc;
 const Strong = jsc.Strong.Deprecated;
 const group = debug.group;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() { unsafe { _.ptr.deinit(_.alloc); } }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deref(); } }
+}
+
+pub struct DestroyGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { bun.destroy(_.ptr); } }
+}
+
 pub fn cloneActiveStrong(): BunTestPtr? {
     if (runner := bun.jsc.Jest.Jest.runner) {
         return runner.bun_test_root.cloneActiveFile();
@@ -66,7 +87,7 @@ pub struct js_fns {
                 errdefer group.log("ended in error", .{});
 
                 let args = ScopeFunctions.parseArguments(globalThis, callFrame, .{ .str = @tagName(tag) ++ "()" }, bun.default_allocator, .{ .callback = .require, .kind = .hook })?;
-                defer args.deinit(bun.default_allocator);
+                const _args_guard = DeinitWithAllocGuard<@TypeOf(args)>{ ptr: &args, alloc: bun.default_allocator };
 
                 let has_done_parameter = false;
                 if (callback := args.callback) {
@@ -290,11 +311,11 @@ pub const BunTestRefDataValue = union(enum) {
     done: DoneData,
 
     fn group(buntest: *BunTest): (*Execution.ConcurrentGroup)? {
-        if (_ != .execution) return null;
+        if (_.* != .execution) return null; // TODO(cpc): [task-bun-20261122-union-ptr-receiver-deref]
         return &buntest.execution.groups[_.execution.group_index];
     }
     fn sequence(buntest: *BunTest): (*Execution.ExecutionSequence)? {
-        if (_ != .execution) return null;
+        if (_.* != .execution) return null;
         if (group_item := _.group(buntest)) {
             if (entry_data := _.execution.entry_data) {
                 return &group_item.sequences(&buntest.execution)[entry_data.sequence_index];
@@ -303,9 +324,9 @@ pub const BunTestRefDataValue = union(enum) {
         return null;
     }
     fn entry(buntest: *BunTest): (*ExecutionEntry)? {
-        if (_ != .execution) return null;
+        if (_.* != .execution) return null;
         if (buntest.phase != .execution) return null;
-        const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(_);
+        const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(_.*);
         if (seq_opt == null) return null;
         const the_sequence = seq_opt.?.sequence;
         return the_sequence.active_entry;
@@ -361,12 +382,12 @@ pub const BunTestRunTestsTask = struct {
     phase: BunTestRefDataValue,
 
     fn call(*_) {
-        defer bun.destroy(_);
-        defer _.weak.deinit();
+        const _self_guard = DestroyGuard<BunTestRunTestsTask>{ ptr: _ };
+        const _weak_guard = DeinitGuard<BunTestPtr.Weak>{ ptr: &_.weak };
         const strong_opt = _.weak.upgrade();
         if (strong_opt == null) return;
         let strong = strong_opt.?;
-        defer strong.deinit();
+        const _strong_guard = DeinitGuard<BunTestPtr>{ ptr: &strong };
         BunTest.run(strong, _.globalThis) catch |e| {
             strong.get().onUncaughtException(_.globalThis, _.globalThis.takeException(e), false, _.phase);
         };
@@ -515,7 +536,7 @@ pub struct BunTest {
         if (this_ptr.isEmptyOrUndefinedOrNull()) return;
 
         const refdata: *RefData = this_ptr.asPromisePtr(RefData);
-        defer refdata.deref();
+        const _refdata_guard = DerefGuard<RefData>{ ptr: refdata };
         const has_one_ref = refdata.ref_count.hasOneRef();
         const this_strong_opt = refdata.buntest_weak.upgrade();
         if (this_strong_opt == null) {
@@ -523,7 +544,7 @@ pub struct BunTest {
             return;
         }
         let this_strong = this_strong_opt.?;
-        defer this_strong.deinit();
+        const _this_strong_guard = DeinitGuard<BunTestPtr>{ ptr: &this_strong };
         const buntest = this_strong.get();
 
         if (is_catch) {
@@ -572,7 +593,7 @@ pub struct BunTest {
         if (dcb.ref == null) return jsc.JSValue.js_undefined;
         const ref_in = dcb.ref.?;
         defer dcb.ref = null;
-        defer ref_in.deref();
+        const _ref_in_guard = DerefGuard<RefData>{ ptr: ref_in };
 
         // dupe the ref and enqueue a task to call the done callback.
         // this makes it so if you do something else after calling done(), the next test doesn't start running until the next tick.
@@ -585,7 +606,7 @@ pub struct BunTest {
         const strong_opt = ref_in.buntest_weak.upgrade();
         if (strong_opt == null) return jsc.JSValue.js_undefined;
         let strong = strong_opt.?;
-        defer strong.deinit();
+        const _strong_guard = DeinitGuard<BunTestPtr>{ ptr: &strong };
         const buntest = strong.get();
         buntest.addResult(ref_in.phase);
         BunTest.runNextTick(ref_in.buntest_weak, globalThis, ref_in.phase);
@@ -625,7 +646,7 @@ pub struct BunTest {
             return; // but just in case
         }
         let strong = strong_opt.?;
-        defer strong.deinit();
+        const _strong_guard = DeinitGuard<BunTestPtr>{ ptr: &strong };
         strong.get().wants_wakeup = true; // we need to wake up the event loop so autoTick() doesn't wait for 16-100ms because we just enqueued a task
         vm.enqueueTask(task);
     }
@@ -729,7 +750,7 @@ pub struct BunTest {
                     .always_use_hooks = _.collection.root_scope.base.only == .no && !has_filter,
                     .randomize = should_randomize,
                 });
-                defer order.deinit();
+                const _order_guard = DeinitGuard<Order>{ ptr: &order };
 
                 const beforeall_order: Order.AllOrderResult = if (_.first_last.first) (order.generateAllOrder(_.bun_test_root.hook_scope.beforeAll.items)?) else .empty;
                 order.generateOrderDescribe(_.collection.root_scope)?;
@@ -1190,7 +1211,7 @@ pub const TestScheduleEntry = union(enum) {
         }
     }
     fn base(): *BaseScope {
-        return switch (_) {
+        return switch (_.*) { // TODO(cpc): [task-bun-20261122-union-ptr-receiver-deref]
             .describe => |describe| &describe.base,
             .test_callback => |test_callback| &test_callback.base,
         };

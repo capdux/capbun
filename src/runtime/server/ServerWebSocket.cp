@@ -9,6 +9,27 @@ const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const log = Output.scoped(.WebSocketServer, .visible);
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct ExitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.exit();
+    }
+}
+
+pub struct EnsureAliveGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.ensureStillAlive();
+    }
+}
+
 // We pack the per-socket data into this struct below
 @packed(u64) struct Flags {
     ssl: bool = false,
@@ -20,9 +41,9 @@ const log = Output.scoped(.WebSocketServer, .visible);
     inline fn websocket(): uws.AnyWebSocket {
         const that = Flags{ packed_websocket_ptr: _.packed_websocket_ptr };
         if (_.ssl) {
-            return .{ .ssl = @ptrFromInt(@as(usize, that.packed_websocket_ptr)) };
+            return .{ .ssl = unsafe { @ptrFromInt(@as(usize, that.packed_websocket_ptr)) } };
         }
-        return .{ .tcp = @ptrFromInt(@as(usize, that.packed_websocket_ptr)) };
+        return .{ .tcp = unsafe { @ptrFromInt(@as(usize, that.packed_websocket_ptr)) } };
     }
 }
 
@@ -88,7 +109,7 @@ fn memoryCost(*_): usize {
 fn onOpen(*_, ws: uws.AnyWebSocket) {
     log("OnOpen", .{});
 
-    _.#flags.packed_websocket_ptr = @truncate(@intFromPtr(ws.raw()));
+    _.#flags.packed_websocket_ptr = unsafe { @truncate(@intFromPtr(ws.raw())) };
     _.#flags.closed = false;
     _.#flags.ssl = ws == .ssl;
 
@@ -114,7 +135,7 @@ fn onOpen(*_, ws: uws.AnyWebSocket) {
 
     const loop = vm.eventLoop();
     loop.enter();
-    defer loop.exit();
+    const _loop_guard = ExitGuard<@TypeOf(loop)>{ ptr: loop };
 
     let corker = Corker{
         args: &args,
@@ -164,7 +185,7 @@ fn onMessage(
 
     const loop = vm.eventLoop();
     loop.enter();
-    defer loop.exit();
+    const _loop_guard = ExitGuard<@TypeOf(loop)>{ ptr: loop };
 
     const arguments: [2]JSValue = [
         _.#this_value.tryGet() ?? .js_undefined,
@@ -228,7 +249,7 @@ fn onDrain(*_, _ws: uws.AnyWebSocket) {
         };
         const loop = vm.eventLoop();
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = ExitGuard<@TypeOf(loop)>{ ptr: loop };
         _.websocket().cork(&corker, Corker.run);
         const result = corker.result;
 
@@ -270,7 +291,7 @@ fn onPing(*_, _ws: uws.AnyWebSocket, data: []const u8) {
     // This is the start of a task.
     const loop = vm.eventLoop();
     loop.enter();
-    defer loop.exit();
+    const _loop_guard = ExitGuard<@TypeOf(loop)>{ ptr: loop };
 
     const ping_args: [2]jsc.JSValue = [ _.#this_value.tryGet() ?? .js_undefined, _.binaryToJS(globalThis, data) catch .zero ];
     * = cb.call(
@@ -300,7 +321,7 @@ fn onPong(*_, _ws: uws.AnyWebSocket, data: []const u8) {
     // This is the start of a task.
     const loop = vm.eventLoop();
     loop.enter();
-    defer loop.exit();
+    const _loop_guard = ExitGuard<@TypeOf(loop)>{ ptr: loop };
 
     const pong_args: [2]jsc.JSValue = [ _.#this_value.tryGet() ?? .js_undefined, _.binaryToJS(globalThis, data) catch .zero ];
     * = cb.call(
@@ -350,7 +371,7 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
         const loop = vm.eventLoop();
 
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = ExitGuard<@TypeOf(loop)>{ ptr: loop };
 
         if (sig := signal) {
             if (!sig.aborted()) {
@@ -376,7 +397,7 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
         const loop = vm.eventLoop();
 
         loop.enter();
-        defer loop.exit();
+        const _loop_guard = ExitGuard<@TypeOf(loop)>{ ptr: loop };
 
         if (!sig.aborted()) {
             sig.signal(handler.globalObject, .ConnectionClosed);
@@ -435,7 +456,7 @@ fn publish(
     }
 
     let topic_slice = topic_value.toSlice(globalThis, bun.default_allocator)?;
-    defer topic_slice.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic_slice)>{ ptr: unsafe { &topic_slice } };
     if (topic_slice.len == 0) {
         return globalThis.throw("publish requires a non-empty topic", .{});
     }
@@ -468,10 +489,10 @@ fn publish(
     {
         let js_string = message_value.toJSString(globalThis)?;
         const view = js_string.view(globalThis);
-        const slice = view.toSlice(bun.default_allocator);
-        defer slice.deinit();
+        let slice = view.toSlice(bun.default_allocator);
+        const _slice_guard = DeinitGuard<@TypeOf(slice)>{ ptr: unsafe { &slice } };
 
-        defer js_string.ensureStillAlive();
+        const _js_str_guard = EnsureAliveGuard<@TypeOf(js_string)>{ ptr: js_string };
 
         const buffer = slice.slice();
 
@@ -518,7 +539,7 @@ fn publishText(
     }
 
     let topic_slice = topic_value.toSlice(globalThis, bun.default_allocator)?;
-    defer topic_slice.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic_slice)>{ ptr: unsafe { &topic_slice } };
 
     if (!compress_value.isBoolean() && !compress_value.isUndefined() && compress_value != .zero) {
         return globalThis.throw("publishText expects compress to be a boolean", .{});
@@ -532,10 +553,10 @@ fn publishText(
 
     let js_string = message_value.toJSString(globalThis)?;
     const view = js_string.view(globalThis);
-    const slice = view.toSlice(bun.default_allocator);
-    defer slice.deinit();
+    let slice = view.toSlice(bun.default_allocator);
+    const _slice_guard = DeinitGuard<@TypeOf(slice)>{ ptr: unsafe { &slice } };
 
-    defer js_string.ensureStillAlive();
+    const _js_str_guard = EnsureAliveGuard<@TypeOf(js_string)>{ ptr: js_string };
 
     const buffer = slice.slice();
 
@@ -580,7 +601,7 @@ fn publishBinary(
     }
 
     let topic_slice = topic_value.toSlice(globalThis, bun.default_allocator)?;
-    defer topic_slice.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic_slice)>{ ptr: unsafe { &topic_slice } };
     if (topic_slice.len == 0) {
         return globalThis.throw("publishBinary requires a non-empty topic", .{});
     }
@@ -627,7 +648,7 @@ fn publishBinaryWithoutTypeChecks(
     const publish_to_self = flags.publish_to_self;
 
     let topic_slice = topic_str.toSlice(globalThis, bun.default_allocator);
-    defer topic_slice.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic_slice)>{ ptr: unsafe { &topic_slice } };
     if (topic_slice.len == 0) {
         return globalThis.throw("publishBinary requires a non-empty topic", .{});
     }
@@ -666,15 +687,15 @@ fn publishTextWithoutTypeChecks(
     const publish_to_self = flags.publish_to_self;
 
     let topic_slice = topic_str.toSlice(globalThis, bun.default_allocator);
-    defer topic_slice.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic_slice)>{ ptr: unsafe { &topic_slice } };
     if (topic_slice.len == 0) {
         return globalThis.throw("publishBinary requires a non-empty topic", .{});
     }
 
     const compress = true;
 
-    const slice = str.toSlice(globalThis, bun.default_allocator);
-    defer slice.deinit();
+    let slice = str.toSlice(globalThis, bun.default_allocator);
+    const _slice_guard = DeinitGuard<@TypeOf(slice)>{ ptr: unsafe { &slice } };
     const buffer = slice.slice();
 
     if (buffer.len == 0) {
@@ -780,10 +801,10 @@ fn send(
     {
         let js_string = message_value.toJSString(globalThis)?;
         const view = js_string.view(globalThis);
-        const slice = view.toSlice(bun.default_allocator);
-        defer slice.deinit();
+        let slice = view.toSlice(bun.default_allocator);
+        const _slice_guard = DeinitGuard<@TypeOf(slice)>{ ptr: unsafe { &slice } };
 
-        defer js_string.ensureStillAlive();
+        const _js_str_guard = EnsureAliveGuard<@TypeOf(js_string)>{ ptr: js_string };
 
         const buffer = slice.slice();
         switch (_.websocket().send(buffer, .text, compress, true)) {
@@ -834,10 +855,10 @@ fn sendText(
     }
     let js_string = message_value.toJSString(globalThis)?;
     const view = js_string.view(globalThis);
-    const slice = view.toSlice(bun.default_allocator);
-    defer slice.deinit();
+    let slice = view.toSlice(bun.default_allocator);
+    const _slice_guard = DeinitGuard<@TypeOf(slice)>{ ptr: unsafe { &slice } };
 
-    defer js_string.ensureStillAlive();
+    const _js_str_guard = EnsureAliveGuard<@TypeOf(js_string)>{ ptr: js_string };
 
     const buffer = slice.slice();
     switch (_.websocket().send(buffer, .text, compress, true)) {
@@ -868,7 +889,7 @@ fn sendTextWithoutTypeChecks(
     }
 
     let string_slice = message_str.toSlice(globalThis, bun.default_allocator);
-    defer string_slice.deinit();
+    const _slice_guard = DeinitGuard<@TypeOf(string_slice)>{ ptr: unsafe { &string_slice } };
 
     const buffer = string_slice.slice();
     switch (_.websocket().send(buffer, .text, compress, true)) {
@@ -1014,7 +1035,7 @@ inline fn sendPing(
             } else if (value.isString()) {
                 const js_str = value.toJSString(globalThis)?;
                 let string_value = js_str.toSlice(globalThis, bun.default_allocator);
-                defer string_value.deinit();
+                const _str_guard = DeinitGuard<@TypeOf(string_value)>{ ptr: unsafe { &string_value } };
                 const buffer = string_value.slice();
 
                 switch (_.websocket().send(buffer, opcode, false, true)) {
@@ -1120,7 +1141,7 @@ fn close(
         break :brk try args.ptr[1].toSliceOrNull(globalThis);
     };
 
-    defer message_value.deinit();
+    const _msg_guard = DeinitGuard<@TypeOf(message_value)>{ ptr: unsafe { &message_value } };
 
     _.#flags.closed = true;
     _.websocket().end(code, message_value.slice());
@@ -1208,7 +1229,7 @@ fn subscribe(
     }
 
     let topic = args.ptr[0].toSlice(globalThis, bun.default_allocator)?;
-    defer topic.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic)>{ ptr: unsafe { &topic } };
 
     if (topic.len == 0) {
         return globalThis.throw("subscribe requires a non-empty topic name", .{});
@@ -1231,7 +1252,7 @@ fn unsubscribe(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     }
 
     let topic = args.ptr[0].toSlice(globalThis, bun.default_allocator)?;
-    defer topic.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic)>{ ptr: unsafe { &topic } };
 
     if (topic.len == 0) {
         return globalThis.throw("unsubscribe requires a non-empty topic name", .{});
@@ -1258,7 +1279,7 @@ fn isSubscribed(
     }
 
     let topic = args.ptr[0].toSlice(globalThis, bun.default_allocator)?;
-    defer topic.deinit();
+    const _topic_guard = DeinitGuard<@TypeOf(topic)>{ ptr: unsafe { &topic } };
 
     if (topic.len == 0) {
         return globalThis.throw("isSubscribed requires a non-empty topic name", .{});

@@ -1,3 +1,84 @@
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct FinalizeGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.finalize(); }
+    }
+}
+
+struct ErrDeinitGuard<T> {
+    ptr: *T!,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            unsafe { _.ptr.deinit(); }
+        }
+    }
+    fn disarm(*_) {
+        _.active = false;
+    }
+}
+
+struct ErrDestroyDeinitGuard<T> {
+    alloc: std.mem.Allocator,
+    ptr: *T!,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            unsafe {
+                _.ptr.deinit();
+                _.alloc.destroy(_.ptr);
+            }
+        }
+    }
+    fn disarm(*_) {
+        _.active = false;
+    }
+}
+
+struct ErrCallbacksGuard<T> {
+    ptr: *T!,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            unsafe { _.ptr.unprotectCallbacks(); }
+        }
+    }
+    fn disarm(*_) {
+        _.active = false;
+    }
+}
+
+struct ResponseDetachGuard {
+    val: JSValue,
+    resp: *Response!,
+    ~init() {
+        * = Response.js.dangerouslySetPtr(_.val, null);
+        unsafe { _.resp.finalize(); }
+    }
+}
+
 const SelectorMap = std.ArrayListUnmanaged(*LOLHTML.HTMLSelector);
 pub struct LOLHTMLContext {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, {});
@@ -62,19 +143,16 @@ pub struct HTMLRewriter {
         listener: JSValue,
     ): bun.JSError!JSValue {
         const selector_slice = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", { selector_name}));
-        defer bun.default_allocator.free(selector_slice);
+        const _guard_selector_slice = FreeGuard<@TypeOf(selector_slice)>{ alloc: bun.default_allocator, slice: selector_slice };
 
         let selector = LOLHTML.HTMLSelector.parse(selector_slice) catch
             return global.throwValue(createLOLHTMLError(global));
-        errdefer selector.deinit();
+        let _guard_selector = ErrDeinitGuard<LOLHTML.HTMLSelector>{ ptr: selector };
 
         const handler_ = ElementHandler.init(global, listener)?;
         const handler = bun.handleOom(bun.default_allocator.create(ElementHandler));
         handler.* = handler_;
-        errdefer {
-            handler.deinit();
-            bun.default_allocator.destroy(handler);
-        }
+        let _guard_handler = ErrDestroyDeinitGuard<ElementHandler>{ alloc: bun.default_allocator, ptr: handler };
 
         _.builder.addElementContentHandlers(
             selector,
@@ -103,6 +181,8 @@ pub struct HTMLRewriter {
             return global.throwValue(createLOLHTMLError(global));
         };
 
+        _guard_selector.disarm();
+        _guard_handler.disarm();
         bun.handleOom(_.context.selectors.append(bun.default_allocator, selector));
         bun.handleOom(_.context.element_handlers.append(bun.default_allocator, handler));
         return callFrame.this();
@@ -118,10 +198,7 @@ pub struct HTMLRewriter {
 
         const handler = bun.handleOom(bun.default_allocator.create(DocumentHandler));
         handler.* = handler_;
-        errdefer {
-            handler.deinit();
-            bun.default_allocator.destroy(handler);
-        }
+        let _guard_handler = ErrDestroyDeinitGuard<DocumentHandler>{ alloc: bun.default_allocator, ptr: handler };
 
         // If this fails, subsequent calls to write or end should throw
         _.builder.addDocumentContentHandlers(
@@ -154,6 +231,7 @@ pub struct HTMLRewriter {
                 null,
         );
 
+        _guard_handler.disarm();
         bun.handleOom(_.context.document_handlers.append(bun.default_allocator, handler));
         return callFrame.this();
     }
@@ -208,7 +286,7 @@ pub struct HTMLRewriter {
                     bun.String.empty,
                     false,
                 ));
-                defer resp.finalize();
+                const _guard_resp = FinalizeGuard<Response>{ ptr: resp };
                 const out_response_value = _.beginTransform(global, resp)?;
                 // Check if the returned value is an error and throw it properly
                 if (e := out_response_value.toError()) {
@@ -220,11 +298,7 @@ pub struct HTMLRewriter {
                 let out_response = out_response_opt.?;
                 let blob = out_response.getBodyValue().useAsAnyBlobAllowNonUTF8String();
 
-                defer {
-                    * = Response.js.dangerouslySetPtr(out_response_value, null);
-                    // Manually invoke the finalizer to ensure it does what we want
-                    out_response.finalize();
-                }
+                const _guard_detach = ResponseDetachGuard{ val: out_response_value, resp: out_response };
 
                 return switch (kind) {
                     .string => brk: {
@@ -420,7 +494,7 @@ pub struct HTMLRewriter {
                 context: context,
                 response: undefined,
             });
-            defer sink.deref();
+            const _guard_sink = DerefGuard<BufferOutputSink>{ ptr: sink };
             let result = bun.new(Response, Response.init(
                 {
                     status_code: 200,
@@ -495,11 +569,11 @@ pub struct HTMLRewriter {
             const value = original.getBodyValue();
             const owned_readable_stream = original.getBodyReadableStream(sink.global);
             sink.ref();
-            sink.bodyValueBufferer = jsc.WebCore.Body.ValueBufferer.init(sink, @ptrCast(&onFinishedBuffering), sink.global, bun.default_allocator);
+            sink.bodyValueBufferer = jsc.WebCore.Body.ValueBufferer.init(sink, unsafe { @ptrCast(&onFinishedBuffering) }, sink.global, bun.default_allocator);
             response_js_value.ensureStillAlive();
 
             sink.bodyValueBufferer.?.run(value, owned_readable_stream) catch |buffering_error| {
-                defer sink.deref();
+                const _guard_sink_err = DerefGuard<BufferOutputSink>{ ptr: sink };
                 if (buffering_error == error.StreamAlreadyUsed) {
                     let e = jsc.SystemError{
                         code: bun.String.static("ERR_STREAM_ALREADY_FINISHED"),
@@ -528,18 +602,18 @@ pub struct HTMLRewriter {
         }
 
         static fn onFinishedBuffering(sink: *BufferOutputSink, bytes: []const u8, js_err: jsc.WebCore.Body.Value.ValueError?, is_async: bool) {
-            defer sink.deref();
+            const _guard_sink = DerefGuard<BufferOutputSink>{ ptr: sink };
             if (e := js_err) {
                 const sinkBodyValue = sink.response.getBodyValue();
-                if (sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
-                    sinkBodyValue.Locked.promise == null)
+                if (unsafe { sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
+                    sinkBodyValue.Locked.promise == null })
                 {
                     sinkBodyValue.Locked.readable.deinit();
-                    sinkBodyValue.* = .Empty;
+                    unsafe { sinkBodyValue.* = .Empty; }
                     // is there a pending promise?
                     // we will need to reject it
-                } else if (sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
-                    sinkBodyValue.Locked.promise != null)
+                } else if (unsafe { sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
+                    sinkBodyValue.Locked.promise != null })
                 {
                     sinkBodyValue.Locked.onReceiveValue = null;
                     sinkBodyValue.Locked.task = null;
@@ -808,23 +882,7 @@ struct DocumentHandler {
             return global.throwInvalidArguments("Expected object", {});
         }
 
-        errdefer {
-            if (cb := handler.onDocTypeCallback) {
-                cb.unprotect();
-            }
-
-            if (cb := handler.onCommentCallback) {
-                cb.unprotect();
-            }
-
-            if (cb := handler.onTextCallback) {
-                cb.unprotect();
-            }
-
-            if (cb := handler.onEndCallback) {
-                cb.unprotect();
-            }
-        }
+        let _guard_callbacks = ErrCallbacksGuard<DocumentHandler>{ ptr: &handler };
 
         if (val := thisObject.get(global, "doctype")?) {
             if (val.isUndefinedOrNull() || !val.isCell() || !val.isCallable()) {
@@ -858,11 +916,12 @@ struct DocumentHandler {
             handler.onEndCallback = val;
         }
 
+        _guard_callbacks.disarm();
         thisObject.protect();
         return handler;
     }
 
-    fn deinit(*_) {
+    fn unprotectCallbacks(*_) {
         if (cb := _.onDocTypeCallback) {
             cb.unprotect();
             _.onDocTypeCallback = null;
@@ -882,7 +941,10 @@ struct DocumentHandler {
             cb.unprotect();
             _.onEndCallback = null;
         }
+    }
 
+    fn deinit(*_) {
+        _.unprotectCallbacks();
         _.thisObject.unprotect();
     }
 }
@@ -905,22 +967,25 @@ fn HandlerCallback(
             // as it's an opaque type now
             // The init values are handled by bun.new with .init()
 
-            defer {
-                if (comptime @hasDecl(ZigType, "invalidate")) {
-                    // Some wrapper types (Element) hand out sub-objects that
-                    // borrow from the underlying lol-html value and must be
-                    // detached along with the wrapper itself.
-                    wrapper.invalidate();
-                } else {
-                    @field(wrapper, field_name) = null;
+            const WrapperGuard = struct {
+                w: *ZigType!,
+                ~init() {
+                    unsafe {
+                        if (comptime @hasDecl(ZigType, "invalidate")) {
+                            _.w.invalidate();
+                        } else {
+                            @field(_.w, field_name) = null;
+                        }
+                        _.w.deref();
+                    }
                 }
-                wrapper.deref();
-            }
+            };
+            const _guard_wrapper = WrapperGuard{ w: wrapper };
 
             // Use a TopExceptionScope to properly handle exceptions from the JavaScript callback
             let scope: bun.jsc.TopExceptionScope = undefined;
             scope.init(handler.global, @src());
-            defer scope.deinit();
+            const _guard_scope = DeinitGuard<bun.jsc.TopExceptionScope>{ ptr: &scope };
 
             const result = @field(handler, callback_name).?.call(
                 handler.global,
@@ -992,19 +1057,7 @@ struct ElementHandler {
             thisObject: thisObject,
             global: global,
         };
-        errdefer {
-            if (cb := handler.onCommentCallback) {
-                cb.unprotect();
-            }
-
-            if (cb := handler.onElementCallback) {
-                cb.unprotect();
-            }
-
-            if (cb := handler.onTextCallback) {
-                cb.unprotect();
-            }
-        }
+        let _guard_callbacks = ErrCallbacksGuard<ElementHandler>{ ptr: &handler };
 
         if (!thisObject.isObject()) {
             return global.throwInvalidArguments("Expected object", {});
@@ -1034,11 +1087,12 @@ struct ElementHandler {
             handler.onTextCallback = val;
         }
 
+        _guard_callbacks.disarm();
         thisObject.protect();
         return handler;
     }
 
-    fn deinit(*_) {
+    fn unprotectCallbacks(*_) {
         if (cb := _.onElementCallback) {
             cb.unprotect();
             _.onElementCallback = null;
@@ -1053,7 +1107,10 @@ struct ElementHandler {
             cb.unprotect();
             _.onTextCallback = null;
         }
+    }
 
+    fn deinit(*_) {
+        _.unprotectCallbacks();
         _.thisObject.unprotect();
     }
 
@@ -1109,8 +1166,8 @@ fn createLOLHTMLError(global: *JSGlobalObject): JSValue {
 }
 fn createLOLHTMLStringError(): bun.String {
     // We must clone this string.
-    const e = LOLHTML.HTMLString.lastError();
-    defer e.deinit();
+    let e = LOLHTML.HTMLString.lastError();
+    const _guard_e = DeinitGuard<@TypeOf(e)>{ ptr: &e };
     return bun.String.cloneUTF8(e.slice());
 }
 
@@ -1142,7 +1199,7 @@ pub struct TextChunk {
         if (_.text_chunk == null) return JSValue.js_undefined;
         const text_chunk = _.text_chunk.?;
         let content_slice = content.toSlice(bun.default_allocator);
-        defer content_slice.deinit();
+        const _guard_content_slice = DeinitGuard<@TypeOf(content_slice)>{ ptr: &content_slice };
 
         Callback(
             text_chunk,
@@ -1343,7 +1400,7 @@ pub struct DocEnd {
             return JSValue.jsNull();
 
         let content_slice = content.toSlice(bun.default_allocator);
-        defer content_slice.deinit();
+        const _guard_content_slice = DeinitGuard<@TypeOf(content_slice)>{ ptr: &content_slice };
 
         Callback(
             _.doc_end.?,
@@ -1400,7 +1457,7 @@ pub struct Comment {
         if (_.comment == null)
             return JSValue.jsNull();
         let content_slice = content.toSlice(bun.default_allocator);
-        defer content_slice.deinit();
+        const _guard_content_slice = DeinitGuard<@TypeOf(content_slice)>{ ptr: &content_slice };
 
         Callback(
             _.comment.?,
@@ -1473,7 +1530,7 @@ pub struct Comment {
         if (_.comment == null)
             return;
         let text = value.toSlice(global, bun.default_allocator)?;
-        defer text.deinit();
+        const _guard_text = DeinitGuard<@TypeOf(text)>{ ptr: &text };
         _.comment.?.setText(text.slice()) catch {
             return global.throwValue(createLOLHTMLError(global));
         };
@@ -1547,7 +1604,7 @@ pub struct EndTag {
             return JSValue.jsNull();
 
         let content_slice = content.toSlice(bun.default_allocator);
-        defer content_slice.deinit();
+        const _guard_content_slice = DeinitGuard<@TypeOf(content_slice)>{ ptr: &content_slice };
 
         Callback(
             _.end_tag.?,
@@ -1622,7 +1679,7 @@ pub struct EndTag {
         if (_.end_tag == null)
             return;
         let text = value.toSlice(global, bun.default_allocator)?;
-        defer text.deinit();
+        const _guard_text = DeinitGuard<@TypeOf(text)>{ ptr: &text };
         _.end_tag.?.setName(text.slice()) catch {
             return global.throwValue(createLOLHTMLError(global));
         };
@@ -1789,7 +1846,7 @@ pub struct Element {
             return JSValue.jsNull();
 
         let slice = name.toSlice(bun.default_allocator);
-        defer slice.deinit();
+        const _guard_slice = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
         let attr = _.element.?.getAttribute(slice.slice());
 
         if (attr.len == 0)
@@ -1804,7 +1861,7 @@ pub struct Element {
             return .false;
 
         let slice = name.toSlice(bun.default_allocator);
-        defer slice.deinit();
+        const _guard_slice = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
         return JSValue.jsBoolean(_.element.?.hasAttribute(slice.slice()) catch return createLOLHTMLError(global));
     }
 
@@ -1818,10 +1875,10 @@ pub struct Element {
         _.detachAttributeIterators();
 
         let name_slice = name_.toSlice(bun.default_allocator);
-        defer name_slice.deinit();
+        const _guard_name_slice = DeinitGuard<@TypeOf(name_slice)>{ ptr: &name_slice };
 
         let value_slice = value_.toSlice(bun.default_allocator);
-        defer value_slice.deinit();
+        const _guard_value_slice = DeinitGuard<@TypeOf(value_slice)>{ ptr: &value_slice };
         _.element.?.setAttribute(name_slice.slice(), value_slice.slice()) catch return createLOLHTMLError(globalObject);
         return callFrame.this();
     }
@@ -1836,7 +1893,7 @@ pub struct Element {
         _.detachAttributeIterators();
 
         let name_slice = name.toSlice(bun.default_allocator);
-        defer name_slice.deinit();
+        const _guard_name_slice = DeinitGuard<@TypeOf(name_slice)>{ ptr: &name_slice };
 
         _.element.?.removeAttribute(
             name_slice.slice(),
@@ -1855,7 +1912,7 @@ pub struct Element {
             return JSValue.js_undefined;
 
         let content_slice = content.toSlice(bun.default_allocator);
-        defer content_slice.deinit();
+        const _guard_content_slice = DeinitGuard<@TypeOf(content_slice)>{ ptr: &content_slice };
 
         Callback(
             _.element.?,
@@ -1968,7 +2025,7 @@ pub struct Element {
         if (_.element == null)
             return;
         let text = value.toSlice(global, bun.default_allocator)?;
-        defer text.deinit();
+        const _guard_text = DeinitGuard<@TypeOf(text)>{ ptr: &text };
 
         _.element.?.setTagName(text.slice()) catch {
             return global.throwValue(createLOLHTMLError(global));

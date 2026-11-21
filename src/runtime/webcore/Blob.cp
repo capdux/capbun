@@ -33,6 +33,105 @@ const write_permissions = 0o664;
 type WriteFilePromisePtr = *WriteFilePromise;
 type OpaquePtr = *!;
 
+struct DeinitGuard<T> {
+    ptr: *T!;
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
+struct ErrDeinitGuard<T> {
+    ptr: (*T!)?;
+    ~init() { if (p := _.ptr) unsafe { p.deinit(); } }
+    fn disarm(*_) { _.ptr = null; }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!;
+    ~init() { unsafe { _.ptr.deref(); } }
+}
+
+struct OptDerefGuard<T> {
+    ptr: (*T!)?;
+    ~init() { if (p := _.ptr) unsafe { p.deref(); } }
+    fn disarm(*_) { _.ptr = null; }
+}
+
+struct DetachGuard<T> {
+    ptr: *T!;
+    ~init() { unsafe { _.ptr.detach(); } }
+}
+
+struct CondDetachGuard<T> {
+    ptr: (*T!)?;
+    ~init() { if (p := _.ptr) unsafe { p.detach(); } }
+}
+
+struct DeinitUnprotectGuard<T> {
+    ptr: *T!;
+    ~init() { unsafe { _.ptr.deinitAndUnprotect(); } }
+}
+
+struct CloseGuard<T> {
+    ptr: (*T!)?;
+    ~init() { if (p := _.ptr) unsafe { p.close(); } }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: ([]const T)?,
+    ~init() { if (s := _.slice) _.alloc.free(s); }
+}
+
+struct OptSliceDeinitGuard<T> {
+    ptr: *T!;
+    ~init() { unsafe { if (_.ptr.* != null) _.ptr.*.?.deinit(); } }
+}
+
+struct FdTruncateCloseGuard {
+    fd: bun.FD,
+    written: *usize!,
+    truncate: bool,
+    needs_open: bool,
+    ~init() {
+        if (_.truncate) unsafe { * = _.fd.truncate(@intCast(_.written.*)); }
+        if (_.needs_open) _.fd.close();
+    }
+}
+
+struct S3ReadTaskGuard<T> {
+    ptr: (*T!)?;
+    ~init() {
+        if (t := _.ptr) unsafe {
+            t.poll.unref(t.vm);
+            t.blob.deinit();
+            bun.destroy(t);
+        }
+    }
+    fn disarm(*_) { _.ptr = null; }
+}
+
+struct PathOrFdResetGuard {
+    ptr: *jsc.Node.PathOrFileDescriptor!,
+    ~init() {
+        unsafe {
+            if (_.ptr.path != .@"string") {
+                _.ptr.deinit();
+                _.ptr.* = .{ .path = .{ .string = bun.PathString.empty } };
+            }
+        }
+    }
+}
+
+struct PathOrBlobGuard {
+    ptr: *PathOrBlob!,
+    ~init() { unsafe { if (_.ptr.* == .path) _.ptr.path.deinit(); } }
+}
+
+struct ThresholdDeinitGuard<T> {
+    ptr: *T!,
+    end_index: *usize!,
+    ~init() { unsafe { if (_.end_index.* >= 1024) _.ptr.deinit(); } }
+}
+
 pub enum Retry {
     @"continue",
     fail,
@@ -155,9 +254,9 @@ struct URLSearchParamsConverter {
 pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! JSError {
     let args = callframe.arguments_old(2);
     let wrapper = unsafe { args.ptr[args.len - 1] }.asPromisePtr(FileStreamWrapper);
-    defer wrapper.deinit();
+    const _guard_wrapper = DeinitGuard<FileStreamWrapper>{ ptr: wrapper };
     let strong = wrapper.readable_stream_ref;
-    defer strong.deinit();
+    const _guard_strong = DeinitGuard<jsc.WebCore.ReadableStream.Strong>{ ptr: &strong };
     wrapper.readable_stream_ref = .{};
     if (stream := strong.get(globalThis)) {
         stream.done(globalThis);
@@ -169,11 +268,11 @@ pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: 
 pub fn onFileStreamRejectRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! JSError {
     const args = callframe.arguments_old(2);
     let wrapper = unsafe { args.ptr[args.len - 1] }.asPromisePtr(FileStreamWrapper);
-    defer wrapper.deinit();
+    const _guard_wrapper = DeinitGuard<FileStreamWrapper>{ ptr: wrapper };
     const err_val = unsafe { args.ptr[0] };
 
     let strong = wrapper.readable_stream_ref;
-    defer strong.deinit();
+    const _guard_strong = DeinitGuard<jsc.WebCore.ReadableStream.Strong>{ ptr: &strong };
     wrapper.readable_stream_ref = .{};
 
     wrapper.promise.reject(globalThis, err_val)?;
@@ -222,7 +321,7 @@ pub noinline fn mkdirIfNotExists(ctx: auto, e: bun.sys.Error, path_string: [:0]c
 
 fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob: *Blob, options: WriteFileOptions): JSValue ! JSError {
     const destination_store = destination_blob.store.?;
-    defer destination_blob.detach();
+    const _guard_dest_blob = DetachGuard<Blob>{ ptr: &destination_blob };
 
     switch (destination_store.data) {
         .file file => {
@@ -288,7 +387,7 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
             let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch |e| {
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e));
             };
-            defer aws_options.deinit();
+            const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
 
             const Wrapper = struct {
                 promise: jsc.JSPromise.Strong,
@@ -299,7 +398,7 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
 
                 static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): void ! bun.JSTerminated {
                     const w: *@This() = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
-                    defer w.deinit();
+                    const _guard_w = DeinitGuard<@This()>{ ptr: w };
                     switch (result) {
                         .success => w.promise.resolve(w.global, .jsNumber(0))?,
                         .failure e => {
@@ -327,7 +426,7 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
                 .store = destination_store,
                 .global = ctx,
             });
-            errdefer wrapper.deinit();
+            let _guard_wrapper = ErrDeinitGuard<Wrapper>{ ptr: wrapper };
             S3.upload(
                 &aws_options.credentials,
                 s3.path(),
@@ -342,6 +441,7 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
                 Wrapper.resolve,
                 wrapper,
             )?;
+            _guard_wrapper.disarm();
             return promise_value;
         },
         .bytes => {},
@@ -450,7 +550,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
         let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch |e| {
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e));
         };
-        defer aws_options.deinit();
+        const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
         let proxy_url: ([]const u8)? = null;
         if (p := ctx.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
             proxy_url = p.href;
@@ -493,7 +593,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
 
                         static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): void ! bun.JSTerminated {
                             const w: *@This() = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
-                            defer w.deinit();
+                            const _guard_w = DeinitGuard<@This()>{ ptr: w };
                             switch (result) {
                                 .success => w.promise.resolve(w.global, .jsNumber(w.store.data.bytes.len))?,
                                 .failure e => {
@@ -516,7 +616,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         .promise = promise,
                         .global = ctx,
                     });
-                    errdefer wrapper.deinit();
+                    let _guard_wrapper = ErrDeinitGuard<Wrapper>{ ptr: wrapper };
 
                     S3.upload(
                         &aws_options.credentials,
@@ -532,6 +632,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         Wrapper.resolve,
                         wrapper,
                     )?;
+                    _guard_wrapper.disarm();
                     return promise_value;
                 }
             },
@@ -575,7 +676,7 @@ fn writeStringToFileFast(
     needs_async: *bool,
     comptime needs_open: bool,
 ): JSValue {
-    const fd: bun.FD = if (comptime !needs_open) pathlike.fd else brk: {
+    let fd: bun.FD = if (comptime !needs_open) pathlike.fd else brk: {
         let file_path: bun.PathBuffer = undefined;
         switch (bun.sys.open(
             pathlike.path.sliceZ(&file_path),
@@ -603,17 +704,10 @@ fn writeStringToFileFast(
     const jsc_vm = globalThis.bunVM();
     let written: usize = 0;
 
-    defer {
-        if (truncate) {
-            * = fd.truncate(@intCast(written));
-        }
-        if (needs_open) {
-            fd.close();
-        }
-    }
+    const _guard_fd = FdTruncateCloseGuard{ fd: fd, written: &written, truncate: truncate, needs_open: needs_open };
     if (!str.isEmpty()) {
         let decoded = str.toUTF8(jsc_vm.allocator);
-        defer decoded.deinit();
+        const _guard_decoded = DeinitGuard<ZigString.Slice>{ ptr: &decoded };
 
         let remain = decoded.slice();
         while (remain.len > 0) {
@@ -652,7 +746,7 @@ fn writeBytesToFileFast(
     needs_async: *bool,
     comptime needs_open: bool,
 ): JSValue {
-    const fd: bun.FD = if (comptime !needs_open) pathlike.fd else brk: {
+    let fd: bun.FD = if (comptime !needs_open) pathlike.fd else brk: {
         let file_path: bun.PathBuffer = undefined;
         switch (bun.sys.open(
             pathlike.path.sliceZ(&file_path),
@@ -683,7 +777,7 @@ fn writeBytesToFileFast(
 
     const truncate = needs_open || bytes.len == 0;
     let written: usize = 0;
-    defer if (needs_open) fd.close();
+    const _guard_fd = CloseGuard<bun.FD>{ ptr: if (needs_open) &fd else null };
 
     let remain = bytes;
     const end = remain.ptr + remain.len;
@@ -747,7 +841,7 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
 
     const input_store: (*BlobStore)? = if (path_or_blob == .blob) path_or_blob.blob.store else null;
     if (st := input_store) st.ref();
-    defer if (st := input_store) st.deref();
+    const _guard_input_store = OptDerefGuard<BlobStore>{ ptr: input_store };
 
     let needs_async = false;
 
@@ -774,8 +868,8 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
                 const len = data.getLength(globalThis)?;
 
                 if (len < 256 * 1024) {
-                    const str = data.toBunString(globalThis)?;
-                    defer str.deref();
+                    let str = data.toBunString(globalThis)?;
+                    const _guard_str = DerefGuard<String>{ ptr: &str };
 
                     const pathlike: jsc.Node.PathOrFileDescriptor = if (path_or_blob == .path)
                         path_or_blob.path
@@ -876,7 +970,7 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
                     if (destination_blob.isS3()) {
                         const s3 = &destination_blob.store.?.data.s3;
                         let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
-                        defer aws_options.deinit();
+                        const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
                         * = bodyValue.toReadableStream(globalThis)?;
 
                         if (readable := response.getBodyReadableStream(globalThis) ?? bodyValue.Locked.readable.get(globalThis)) {
@@ -942,7 +1036,7 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
                     if (destination_blob.isS3()) {
                         const s3 = &destination_blob.store.?.data.s3;
                         let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
-                        defer aws_options.deinit();
+                        const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
                         * = bodyValue.toReadableStream(globalThis)?;
                         if (readable := request.getBodyReadableStream(globalThis) ?? locked.readable.get(globalThis)) {
                             if (readable.isDisturbed(globalThis)) {
@@ -1000,18 +1094,14 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
             false,
         )?;
     };
-    defer source_blob.detach();
+    const _guard_src_blob = DetachGuard<Blob>{ ptr: &source_blob };
 
     const destination_store = destination_blob.store;
     if (store := destination_store) {
         store.ref();
     }
 
-    defer {
-        if (store := destination_store) {
-            store.deref();
-        }
-    }
+    const _guard_dest_store = OptDerefGuard<BlobStore>{ ptr: destination_store };
 
     return writeFileWithSourceDestination(globalThis, &source_blob, &destination_blob, options);
 }
@@ -1056,7 +1146,7 @@ pub fn FileOpener(comptime This: type): type {
                     static fn callback(req: *libuv.fs_t) callconv(.c) {
                         let target: *This = unsafe { @ptrCast(@alignCast(req.data.?)) };
                         {
-                            defer req.deinit();
+                            const _guard_req = DeinitGuard<libuv.fs_t>{ ptr: req };
                             if (errEnum := req.result.errEnum()) {
                                 let path_string_2 = if (@hasField(This, "file_store"))
                                     target.file_store.pathlike.path
@@ -1253,9 +1343,9 @@ pub struct BlobInternal {
             _.deinit();
             return return_value;
         } else if (bytes_without_bom.len != _.bytes.items.len) {
-            defer _.deinit();
+            const _guard_self = DeinitGuard<@This()>{ ptr: _ };
             let out = String.cloneLatin1(_.bytes.items[3..]);
-            defer out.deref();
+            const _guard_out = DerefGuard<String>{ ptr: &out };
             return out.toJS(globalThis);
         } else {
             let str = ZigString.init(_.toOwnedSlice());
@@ -1385,7 +1475,7 @@ pub union(enum) BlobAny {
             },
             .WTFStringImpl => {
                 let str = String.init(_.WTFStringImpl);
-                defer str.deref();
+                const _guard_str = DerefGuard<String>{ ptr: &str };
                 _.* = BlobAny{ Blob: Blob{} };
                 if (str.length() == 0) {
                     return JSValue.jsNull();
@@ -1408,7 +1498,7 @@ pub union(enum) BlobAny {
             },
             .WTFStringImpl => {
                 let str = String.init(_.WTFStringImpl);
-                defer str.deref();
+                const _guard_str = DerefGuard<String>{ ptr: &str };
                 _.* = BlobAny{ Blob: Blob{} };
                 return str.toJS(global);
             },
@@ -1432,8 +1522,8 @@ pub union(enum) BlobAny {
                 return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
             },
             .WTFStringImpl => {
-                const str = String.init(_.WTFStringImpl);
-                defer str.deref();
+                let str = String.init(_.WTFStringImpl);
+                const _guard_str = DerefGuard<String>{ ptr: &str };
                 _.* = BlobAny{ Blob: Blob{} };
                 const bytes = bun.handleOom(str.toOwnedSlice(bun.default_allocator));
                 return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
@@ -1501,7 +1591,7 @@ pub union(enum) BlobAny {
     fn toJSONShare(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
         const bytes = _.slice();
         let str = String.cloneUTF8(bytes);
-        defer str.deref();
+        const _guard_str = DerefGuard<String>{ ptr: &str };
         return str.toJSByParseJSON(globalObject);
     }
 
@@ -1788,11 +1878,7 @@ pub struct BlobExternalSharedDescriptor {
             };
             let t = bun.new(Task, .{ .ctx = ctx, .blob = _.dupe(), .vm = global.bunVM() });
             t.poll.ref(t.vm);
-            errdefer {
-                t.poll.unref(t.vm);
-                t.blob.deinit();
-                bun.destroy(t);
-            }
+            let _guard_task = S3ReadTaskGuard<Task>{ ptr: t };
             const env = t.vm.transpiler.env;
             const cred = t.blob.store.?.data.s3.getCredentials();
             const path = t.blob.store.?.data.s3.path();
@@ -1807,6 +1893,7 @@ pub struct BlobExternalSharedDescriptor {
             } else {
                 bun.S3.download(cred, path, unsafe { @ptrCast(&Task.cb) }, t, proxy, payer)?;
             }
+            _guard_task.disarm();
             return;
         }
         const view = _.sharedView();
@@ -1842,8 +1929,9 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn getFormDataEncoding(*_): (*FormData.AsyncFormData)? {
-        if (content_type_slice := _.getContentType()) {
-            defer content_type_slice.deinit();
+        if (ct_slice := _.getContentType()) {
+            let content_type_slice = ct_slice;
+            const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_slice };
             if (encoding := FormData.Encoding.get(content_type_slice.slice())) {
                 return bun.handleOom(FormData.AsyncFormData.init(default_allocator, encoding));
             }
@@ -2075,7 +2163,7 @@ pub struct BlobExternalSharedDescriptor {
         const vm = globalObject.bunVM();
         const arguments = callframe.arguments_old(2).slice();
         let args = CallFrame.ArgumentsSlice.init(vm, arguments);
-        defer args.deinit();
+        const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
         const path_opt = jsc.Node.PathOrFileDescriptor.fromJS(globalObject, &args, default_allocator)?;
         if (path_opt == null) {
@@ -2086,7 +2174,7 @@ pub struct BlobExternalSharedDescriptor {
 
         if (path == .path) {
             if (strings.hasPrefixComptime(path.path.slice(), "s3://")) {
-                defer path.deinitAndUnprotect();
+                const _guard_path = DeinitUnprotectGuard<jsc.Node.PathOrFileDescriptor>{ ptr: &path };
                 return jsc.WebCore.S3File.constructInternalJS(globalObject, path.path, options);
             }
         }
@@ -2098,7 +2186,7 @@ pub struct BlobExternalSharedDescriptor {
                 if (file_type := opts.getTruthy(globalObject, "type")?) {
                     if (file_type.isString()) {
                         let str = file_type.toSlice(globalObject, default_allocator)?;
-                        defer str.deinit();
+                        const _guard_str = DeinitGuard<ZigString.Slice>{ ptr: &str };
                         const slice = str.slice();
                         if (strings.isAllASCII(slice)) {
                             blob.content_type_was_set = true;
@@ -2132,7 +2220,7 @@ pub struct BlobExternalSharedDescriptor {
 
     static fn fromDOMFormData(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, form_data: *DOMFormData): Blob {
         let arena_alloc = bun.ArenaAllocator.init(allocator);
-        defer arena_alloc.deinit();
+        const _guard_arena = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_alloc };
         let stack_allocator = std.heap.stackFallback(1024, arena_alloc.allocator());
         const stack_mem_all = stack_allocator.get();
 
@@ -2212,12 +2300,7 @@ pub struct BlobExternalSharedDescriptor {
 
                 if (graph := vm.standalone_module_graph) {
                     if (file := graph.find(s)) {
-                        defer {
-                            if (path_or_fd.path != .@"string") {
-                                path_or_fd.deinit();
-                                path_or_fd.* = .{ .path = .{ .string = bun.PathString.empty } };
-                            }
-                        }
+                        const _guard_pofd = PathOrFdResetGuard{ ptr: path_or_fd };
 
                         return file.blob(globalThis).dupe();
                     }
@@ -2284,7 +2367,7 @@ pub struct BlobExternalSharedDescriptor {
                             inner: {
                                 if (content_type.isString()) {
                                     let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
-                                    defer content_type_str.deinit();
+                                    const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                                     const slice = content_type_str.slice();
                                     if (!strings.isAllASCII(slice)) {
                                         break :inner;
@@ -2332,7 +2415,7 @@ pub struct BlobExternalSharedDescriptor {
     fn doUnlink(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
         const arguments = callframe.arguments_old(1).slice();
         let args = CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-        defer args.deinit();
+        const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
         validateWritableBlob(globalThis, _)?;
 
@@ -2441,9 +2524,9 @@ pub struct BlobExternalSharedDescriptor {
         }
 
         if (bom == .utf16_le) {
-            defer if (lifetime == .temporary) default_allocator.free(raw_bytes);
+            const _guard_raw = FreeGuard<u8>{ alloc: default_allocator, slice: if (lifetime == .temporary) raw_bytes else null };
             let out = String.cloneUTF16(bun.reinterpretSlice(u16, buf));
-            defer out.deref();
+            const _guard_out = DerefGuard<String>{ ptr: &out };
             return out.toJS(global);
         }
 
@@ -2477,11 +2560,9 @@ pub struct BlobExternalSharedDescriptor {
             },
             .temporary => {
                 if (buf.len != raw_bytes.len) {
+                    const _guard_raw = FreeGuard<u8>{ alloc: default_allocator, slice: raw_bytes };
                     let out = String.cloneLatin1(buf);
-                    defer {
-                        default_allocator.free(raw_bytes);
-                        out.deref();
-                    }
+                    const _guard_out = DerefGuard<String>{ ptr: &out };
                     return out.toJS(global);
                 }
                 return ZigString.init(buf).toExternalValue(global);
@@ -2500,10 +2581,10 @@ pub struct BlobExternalSharedDescriptor {
         }
 
         if (bom == .utf16_le) {
+            const _guard_raw = FreeGuard<u8>{ alloc: default_allocator, slice: if (lifetime == .temporary) raw_bytes else null };
+            const _guard_blob = CondDetachGuard<Blob>{ ptr: if (lifetime == .transfer) blob else null };
             let out = String.cloneUTF16(bun.reinterpretSlice(u16, buf));
-            defer if (lifetime == .temporary) default_allocator.free(raw_bytes);
-            defer if (lifetime == .transfer) blob.detach();
-            defer out.deref();
+            const _guard_out = DerefGuard<String>{ ptr: &out };
             return out.toJSByParseJSON(global);
         }
 
@@ -2513,7 +2594,7 @@ pub struct BlobExternalSharedDescriptor {
             .unknown => null,
         };
         const could_be_all_ascii = blob_ascii ?? blob.store.?.is_all_ascii;
-        defer if (comptime lifetime == .temporary) default_allocator.free(raw_bytes);
+        const _guard_raw = FreeGuard<u8>{ alloc: default_allocator, slice: if (comptime lifetime == .temporary) raw_bytes else null };
 
         if (could_be_all_ascii == null || !could_be_all_ascii.?) {
             let stack_fallback = std.heap.stackFallback(4096, default_allocator);
@@ -2623,7 +2704,7 @@ pub struct BlobExternalSharedDescriptor {
         if (view.len == 0) {
             return jsc.ArrayBuffer.create(global, "", TypedArrayView);
         }
-        return toArrayBufferViewWithBytes(_, global, @constCast(view), lifetime, TypedArrayView);
+        return toArrayBufferViewWithBytes(_, global, unsafe { @constCast(view) }, lifetime, TypedArrayView);
     }
 
     fn getFileName(): ([]const u8)? {
@@ -2676,7 +2757,7 @@ pub struct BlobExternalSharedDescriptor {
             return _.doReadFile(toJSONWithBytes, globalThis);
         }
         let str = String.cloneUTF8(_.sharedView());
-        defer str.deref();
+        const _guard_str = DerefGuard<String>{ ptr: &str };
         return JSPromise.resolvedPromiseValue(globalThis, str.toJSByParseJSON(globalThis)?);
     }
 
@@ -2724,8 +2805,8 @@ pub struct BlobExternalSharedDescriptor {
             return;
         }
         if (value.isString()) {
-            const old_name = _.name;
-            defer old_name.deref();
+            let old_name = _.name;
+            const _guard_old_name = DerefGuard<String>{ ptr: &old_name };
             _.name = value.toBunString(globalThis)?;
             js.nameSetCached(jsThis, globalThis, value);
         }
@@ -2807,7 +2888,7 @@ pub struct BlobExternalSharedDescriptor {
             if (content_type_.isString()) {
                 let zig_str = content_type_.getZigString(globalThis)?;
                 let slicer = zig_str.toSlice(default_allocator);
-                defer slicer.deinit();
+                const _guard_slicer = DeinitGuard<ZigString.Slice>{ ptr: &slicer };
                 const s = slicer.slice();
                 if (strings.isAllASCII(s)) {
                     if (mime := globalThis.bunVM().mimeType(s)) {
@@ -2873,7 +2954,7 @@ pub struct BlobExternalSharedDescriptor {
     fn doWrite(*_, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
         const arguments = callframe.arguments_old(3).slice();
         let args = CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-        defer args.deinit();
+        const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
         validateWritableBlob(globalThis, _)?;
 
@@ -2898,7 +2979,7 @@ pub struct BlobExternalSharedDescriptor {
                         return globalThis.throwInvalidArgumentType("write", "options.type", "string");
                     }
                     let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
-                    defer content_type_str.deinit();
+                    const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                     const s = content_type_str.slice();
                     if (strings.isAllASCII(s)) {
                         if (_.content_type_allocated) {
@@ -2948,7 +3029,7 @@ pub struct BlobExternalSharedDescriptor {
                             return globalThis.throwInvalidArgumentType("write", "options.type", "string");
                         }
                         let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
-                        defer content_type_str.deinit();
+                        const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                         const slice = content_type_str.slice();
                         if (strings.isAllASCII(slice)) {
                             if (_.content_type_allocated) {
@@ -2967,7 +3048,7 @@ pub struct BlobExternalSharedDescriptor {
                         }
                     }
                     let content_disposition_str: ZigString.Slice? = null;
-                    defer if (cd := content_disposition_str) cd.deinit();
+                    const _guard_cd = OptSliceDeinitGuard<ZigString.Slice?>{ ptr: &content_disposition_str };
                     if (content_disposition := options.getTruthy(globalThis, "contentDisposition")?) {
                         if (!content_disposition.isString()) {
                             return globalThis.throwInvalidArgumentType("write", "options.contentDisposition", "string");
@@ -2975,7 +3056,7 @@ pub struct BlobExternalSharedDescriptor {
                         content_disposition_str = content_disposition.toSlice(globalThis, default_allocator)?;
                     }
                     let content_encoding_str: ZigString.Slice? = null;
-                    defer if (ce := content_encoding_str) ce.deinit();
+                    const _guard_ce = OptSliceDeinitGuard<ZigString.Slice?>{ ptr: &content_encoding_str };
                     if (content_encoding := options.getTruthy(globalThis, "contentEncoding")?) {
                         if (!content_encoding.isString()) {
                             return globalThis.throwInvalidArgumentType("write", "options.contentEncoding", "string");
@@ -2983,7 +3064,7 @@ pub struct BlobExternalSharedDescriptor {
                         content_encoding_str = content_encoding.toSlice(globalThis, default_allocator)?;
                     }
                     let credentialsWithOptions = s3.getCredentialsWithOptions(options, globalThis)?;
-                    defer credentialsWithOptions.deinit();
+                    const _guard_creds = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &credentialsWithOptions };
                     const cd_slice: ([]const u8)? = if (content_disposition_str != null) content_disposition_str.?.slice() else null;
                     const ce_slice: ([]const u8)? = if (content_encoding_str != null) content_encoding_str.?.slice() else null;
                     return S3.writableStream(
@@ -3081,7 +3162,7 @@ pub struct BlobExternalSharedDescriptor {
         }
 
         let sink = jsc.WebCore.FileSink.init(bun.invalid_fd, _.globalThis.bunVM().eventLoop());
-        errdefer sink.deref();
+        let _guard_sink = OptDerefGuard<jsc.WebCore.FileSink>{ ptr: sink };
 
         let input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
             if (store.data.file.pathlike == .fd) {
@@ -3095,7 +3176,7 @@ pub struct BlobExternalSharedDescriptor {
                 };
             }
         };
-        defer input_path.deinit();
+        const _guard_input_path = DeinitGuard<jsc.WebCore.PathOrFileDescriptor>{ ptr: &input_path };
 
         let stream_start: jsc.WebCore.streams.Start = .{
             .FileSink = .{
@@ -3115,6 +3196,7 @@ pub struct BlobExternalSharedDescriptor {
             else => {},
         }
 
+        _guard_sink.disarm();
         return sink.toJS(globalThis);
     }
 
@@ -3258,7 +3340,7 @@ pub struct BlobExternalSharedDescriptor {
                 .DerivedStringObject => {
                     if (!fail_if_top_value_is_not_typed_array_like) {
                         let str = top_value.toBunString(global)?;
-                        defer str.deref();
+                        const _guard_str = DerefGuard<String>{ ptr: &str };
                         const res_tuple = str.toOwnedSliceReturningAllASCII(bun.default_allocator)?;
                         const bytes = @field(res_tuple, "0");
                         const ascii = @field(res_tuple, "1");
@@ -3303,7 +3385,7 @@ pub struct BlobExternalSharedDescriptor {
                         } else {
                             const sliced = current.toSliceClone(global)?;
                             if (allocator := sliced.allocator.get()) {
-                                return Blob.initWithAllASCII(@constCast(sliced.slice()), allocator, global, false);
+                                return Blob.initWithAllASCII(unsafe { @constCast(sliced.slice()) }, allocator, global, false);
                             }
                         }
                     }
@@ -3323,7 +3405,10 @@ pub struct BlobExternalSharedDescriptor {
         let joiner = StringJoiner{ .allocator = stack_mem_all };
         let could_have_non_ascii = false;
 
-        defer if (stack_allocator.fixed_buffer_allocator.end_index >= 1024) stack.deinit();
+        const _guard_stack = ThresholdDeinitGuard<std.array_list.Managed(JSValue)>{
+            ptr: &stack,
+            end_index: &stack_allocator.fixed_buffer_allocator.end_index,
+        };
 
         while (true) {
             switch (current.jsTypeLoose()) {
@@ -3495,7 +3580,7 @@ pub struct BlobExternalSharedDescriptor {
             let aws_options = s3.getCredentialsWithOptions(extra_options, globalThis) catch |e| {
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e));
             };
-            defer aws_options.deinit();
+            const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
 
             const path = s3.path();
             let proxy_url: ([]const u8)? = null;
@@ -3606,7 +3691,7 @@ pub struct BlobExternalSharedDescriptor {
                     };
                 }
             };
-            defer input_path.deinit();
+            const _guard_input_path = DeinitGuard<jsc.WebCore.PathOrFileDescriptor>{ ptr: &input_path };
 
             const stream_start: jsc.WebCore.streams.Start = .{
                 .FileSink = .{
@@ -3692,14 +3777,10 @@ pub struct BlobExternalSharedDescriptor {
     static fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
         const arguments = callframe.arguments();
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-        defer args.deinit();
+        const _guard_args = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: &args };
 
         let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-        defer {
-            if (path_or_blob == .path) {
-                path_or_blob.path.deinit();
-            }
-        }
+        const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
         if (path_or_blob == .blob) {
             validateWritableBlob(globalThis, &path_or_blob.blob)?;
         }
@@ -3866,8 +3947,8 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
         return globalThis.throwInvalidArguments("new File(bits, name) expects at least 2 arguments", .{});
     }
     {
-        const name_value_str = String.fromJS(args[1], globalThis)?;
-        defer name_value_str.deref();
+        let name_value_str = String.fromJS(args[1], globalThis)?;
+        const _guard_name = DerefGuard<String>{ ptr: &name_value_str };
 
         blob = Blob.get(globalThis, args[0], false, true)?;
         if (*store_ := blob.store) {
@@ -3904,7 +3985,7 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
                 inner: {
                     if (content_type.isString()) {
                         let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
-                        defer content_type_str.deinit();
+                        const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                         const slice = content_type_str.slice();
                         if (!strings.isAllASCII(slice)) {
                             break :inner;

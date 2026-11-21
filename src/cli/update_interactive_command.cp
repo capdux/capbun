@@ -1,5 +1,93 @@
 type string = []const u8;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+pub struct OptFreeGuard {
+    alloc: std.mem.Allocator,
+    slice: []const u8,
+    ~init() {
+        if (_.slice.len > 0) _.alloc.free(_.slice);
+    }
+}
+
+pub struct MapDeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        let it = unsafe { _.ptr.iterator() };
+        while (entry := it.next()) {
+            entry.value_ptr.deinit();
+        }
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct OutdatedPackagesGuard {
+    alloc: std.mem.Allocator,
+    pkgs: []OutdatedPackage,
+    ~init() {
+        for (pkg of _.pkgs) {
+            _.alloc.free(pkg.name);
+            _.alloc.free(pkg.current_version);
+            _.alloc.free(pkg.latest_version);
+            _.alloc.free(pkg.update_version);
+            _.alloc.free(pkg.workspace_name);
+        }
+        _.alloc.free(_.pkgs);
+    }
+}
+
+pub struct CatalogUpdatesGuard {
+    alloc: std.mem.Allocator,
+    ptr: *bun.StringHashMap(CatalogUpdate)!,
+    ~init() {
+        let it = unsafe { _.ptr.iterator() };
+        while (entry := it.next()) {
+            _.alloc.free(entry.key_ptr.*);
+            _.alloc.free(entry.value_ptr.*.version);
+            _.alloc.free(entry.value_ptr.*.workspace_path);
+        }
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct WorkspaceFiltersGuard {
+    alloc: std.mem.Allocator,
+    filters: []WorkspaceFilter,
+    ~init() {
+        for (filter of _.filters) {
+            filter.deinit(_.alloc);
+        }
+        _.alloc.free(_.filters);
+    }
+}
+
 pub struct TerminalHyperlink {
     link: []const u8,
     text: []const u8,
@@ -161,12 +249,12 @@ pub struct UpdateInteractiveCommand {
         const new_package_json_source = manager.allocator.dupe(u8, package_json_writer.ctx.writtenWithoutTrailingZero())?;
 
         // Write the updated package.json
-        const write_file = std.fs.cwd().createFile(package_json_path, {}) catch |e| {
+        let write_file = std.fs.cwd().createFile(package_json_path, {}) catch |e| {
             manager.allocator.free(new_package_json_source);
             Output.errGeneric("Failed to write package.json at {s}: {s}", .{ package_json_path, @errorName(e) });
             return e;
         };
-        defer write_file.close();
+        const _write_file_guard = CloseGuard<@TypeOf(write_file)>{ ptr: unsafe { &write_file } };
 
         write_file.writeAll(new_package_json_source) catch |e| {
             manager.allocator.free(new_package_json_source);
@@ -197,7 +285,7 @@ pub struct UpdateInteractiveCommand {
         };
         const manager = init_res[0];
         const original_cwd = init_res[1];
-        defer ctx.allocator.free(original_cwd);
+        const _cwd_guard = FreeGuard<u8>{ alloc: ctx.allocator, slice: original_cwd };
 
         updateInteractive(ctx, original_cwd, manager)?;
     }
@@ -208,13 +296,7 @@ pub struct UpdateInteractiveCommand {
     )! {
         // Group updates by workspace
         let workspace_groups = bun.StringHashMap(std.array_list.Managed(PackageUpdate)).init(bun.default_allocator);
-        defer {
-            let it = workspace_groups.iterator();
-            while (entry := it.next()) {
-                entry.value_ptr.deinit();
-            }
-            workspace_groups.deinit();
-        }
+        const _wg_guard = MapDeinitGuard<@TypeOf(workspace_groups)>{ ptr: unsafe { &workspace_groups } };
 
         // Group updates by workspace path
         for (update of updates) {
@@ -300,13 +382,7 @@ pub struct UpdateInteractiveCommand {
 
         // Group catalog updates by workspace path
         let workspace_catalog_updates = bun.StringHashMap(std.array_list.Managed(CatalogUpdateRequest)).init(bun.default_allocator);
-        defer {
-            let it = workspace_catalog_updates.iterator();
-            while (entry := it.next()) {
-                entry.value_ptr.deinit();
-            }
-            workspace_catalog_updates.deinit();
-        }
+        const _wcu_guard = MapDeinitGuard<@TypeOf(workspace_catalog_updates)>{ ptr: unsafe { &workspace_catalog_updates } };
 
         // Group updates by workspace
         let catalog_it = catalog_updates.iterator();
@@ -435,22 +511,13 @@ pub struct UpdateInteractiveCommand {
             ids[0] = root_pkg_id;
             break :blk ids;
         };
-        defer bun.default_allocator.free(workspace_pkg_ids);
+        const _wpids_guard = FreeGuard<PackageID>{ alloc: bun.default_allocator, slice: workspace_pkg_ids };
 
         manager.populateManifestCache({ ids: workspace_pkg_ids })?;
 
         // Get outdated packages
         const outdated_packages = getOutdatedPackages(bun.default_allocator, manager, workspace_pkg_ids)?;
-        defer {
-            for (pkg of outdated_packages) {
-                bun.default_allocator.free(pkg.name);
-                bun.default_allocator.free(pkg.current_version);
-                bun.default_allocator.free(pkg.latest_version);
-                bun.default_allocator.free(pkg.update_version);
-                bun.default_allocator.free(pkg.workspace_name);
-            }
-            bun.default_allocator.free(outdated_packages);
-        }
+        const _outdated_guard = OutdatedPackagesGuard{ alloc: bun.default_allocator, pkgs: outdated_packages };
 
         if (outdated_packages.len == 0) {
             // No packages need updating - just exit silently
@@ -460,34 +527,20 @@ pub struct UpdateInteractiveCommand {
 
         // Prompt user to select packages
         const selected = promptForUpdates(bun.default_allocator, outdated_packages)?;
-        defer bun.default_allocator.free(selected);
+        const _selected_guard = FreeGuard<bool>{ alloc: bun.default_allocator, slice: selected };
 
         // Create package specifier array from selected packages
         // Group selected packages by workspace
         let workspace_updates = bun.StringHashMap(std.array_list.Managed(string)).init(bun.default_allocator);
-        defer {
-            let it = workspace_updates.iterator();
-            while (entry := it.next()) {
-                entry.value_ptr.deinit();
-            }
-            workspace_updates.deinit();
-        }
+        const _wu_guard = MapDeinitGuard<@TypeOf(workspace_updates)>{ ptr: unsafe { &workspace_updates } };
 
         // Track catalog updates separately (catalog_key -> {version, workspace_path})
         let catalog_updates = bun.StringHashMap(CatalogUpdate).init(bun.default_allocator);
-        defer {
-            let it = catalog_updates.iterator();
-            while (entry := it.next()) {
-                bun.default_allocator.free(entry.key_ptr.*);
-                bun.default_allocator.free(entry.value_ptr.*.version);
-                bun.default_allocator.free(entry.value_ptr.*.workspace_path);
-            }
-            catalog_updates.deinit();
-        }
+        const _cu_guard = CatalogUpdatesGuard{ alloc: bun.default_allocator, ptr: unsafe { &catalog_updates } };
 
         // Collect all package updates with full information
         let package_updates = std.array_list.Managed(PackageUpdate).init(bun.default_allocator);
-        defer package_updates.deinit();
+        const _pu_guard = DeinitGuard<@TypeOf(package_updates)>{ ptr: unsafe { &package_updates } };
 
         // Process selected packages
         for (i of 0..outdated_packages.len) {
@@ -644,12 +697,7 @@ pub struct UpdateInteractiveCommand {
             }
             break :converted_filters buf;
         };
-        defer {
-            for (filter of converted_filters) {
-                filter.deinit(allocator);
-            }
-            allocator.free(converted_filters);
-        }
+        const _filters_guard = WorkspaceFiltersGuard{ alloc: allocator, filters: converted_filters };
 
         // move all matched workspaces to front of array
         let i: usize = 0;
@@ -706,16 +754,10 @@ pub struct UpdateInteractiveCommand {
     ): []OutdatedPackage! {
         // Create a map to track catalog dependencies by name
         let catalog_map = bun.StringHashMap(std.array_list.Managed(OutdatedPackage)).init(allocator);
-        defer catalog_map.deinit();
-        defer {
-            let iter = catalog_map.iterator();
-            while (entry := iter.next()) {
-                entry.value_ptr.deinit();
-            }
-        }
+        const _cmap_guard = MapDeinitGuard<@TypeOf(catalog_map)>{ ptr: unsafe { &catalog_map } };
 
         let result = std.array_list.Managed(OutdatedPackage).init(allocator);
-        defer result.deinit();
+        const _res_guard = DeinitGuard<@TypeOf(result)>{ ptr: unsafe { &result } };
 
         // Group catalog dependencies
         for (pkg of packages) {
@@ -740,7 +782,7 @@ pub struct UpdateInteractiveCommand {
 
                 // Build combined workspace name
                 let workspace_names = std.array_list.Managed(u8).init(allocator);
-                defer workspace_names.deinit();
+                const _wn_guard = DeinitGuard<@TypeOf(workspace_names)>{ ptr: unsafe { &workspace_names } };
 
                 if (catalog_packages.len > 0) {
                     if (catalog_name := catalog_packages[0].catalog_name) {
@@ -793,10 +835,10 @@ pub struct UpdateInteractiveCommand {
         const pkg_dependencies = packages.items(.dependencies);
 
         let outdated_packages = std.array_list.Managed(OutdatedPackage).init(allocator);
-        defer outdated_packages.deinit();
+        const _outdated_guard = DeinitGuard<@TypeOf(outdated_packages)>{ ptr: unsafe { &outdated_packages } };
 
         let version_buf = std.array_list.Managed(u8).init(allocator);
-        defer version_buf.deinit();
+        const _vbuf_guard = DeinitGuard<@TypeOf(version_buf)>{ ptr: unsafe { &version_buf } };
         const version_writer = version_buf.writer();
 
         for (workspace_pkg_id of workspace_pkg_ids) {
@@ -1000,7 +1042,7 @@ pub struct UpdateInteractiveCommand {
         // Try to get terminal size
         if (comptime Environment.isPosix) {
             let size: std.posix.winsize = undefined;
-            if (std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, @intFromPtr(&size)) == 0) {
+            if (std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, unsafe { @intFromPtr(&size) }) == 0) {
                 // Reserve space for prompt (1 line) + scroll indicators (2 lines) + some buffer
                 const usable_height = if (size.row > 6) size.row - 4 else 20;
                 return {
@@ -1252,8 +1294,8 @@ pub struct UpdateInteractiveCommand {
 
             // The render body
             {
-                const synchronized = Output.synchronized();
-                defer synchronized.end();
+                let synchronized = Output.synchronized();
+                const _sync_guard = EndGuard<@TypeOf(synchronized)>{ ptr: unsafe { &synchronized } };
 
                 if (!initial_draw) {
                     Output.up(total_lines);
@@ -1264,7 +1306,7 @@ pub struct UpdateInteractiveCommand {
 
                 const help_text = "Space to toggle, Enter to confirm, a to select all, n to select none, i to invert, l to toggle latest";
                 const elipsised_help_text = truncateWithEllipsis(bun.default_allocator, help_text, current_size.width - "? Select packages to update - ".len, true)?;
-                defer bun.default_allocator.free(elipsised_help_text);
+                const _help_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: elipsised_help_text };
                 Output.prettyln("<r><cyan>?<r> Select packages to update<d> - {s}<r>", .{elipsised_help_text});
 
                 // Calculate how many lines the prompt will actually take due to terminal wrapping
@@ -1456,7 +1498,7 @@ pub struct UpdateInteractiveCommand {
                     // Calculate available space for name (accounting for dev/peer/optional tags)
                     const available_name_width = if (state.max_name_len > dev_tag_len) state.max_name_len - dev_tag_len else state.max_name_len;
                     const display_name = truncateWithEllipsis(bun.default_allocator, pkg.name, available_name_width, false)?;
-                    defer bun.default_allocator.free(display_name);
+                    const _dname_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: display_name };
 
                     const uses_default_registry = pkg.manager.options.scope.url_hash == Install.Npm.Registry.default_url_hash &&
                         pkg.manager.scopeForPackageName(pkg.name).url_hash == Install.Npm.Registry.default_url_hash;
@@ -1468,9 +1510,7 @@ pub struct UpdateInteractiveCommand {
                         std.fmt.allocPrint(bun.default_allocator, "https://npmjs.org/package/{s}/v/{s}", .{ pkg.name, url_version })?
                     else
                         "";
-                    defer {
-                        if (package_url.len > 0) bun.default_allocator.free(package_url);
-                    }
+                    const _url_guard = OptFreeGuard{ alloc: bun.default_allocator, slice: package_url };
 
                     const hyperlink = TerminalHyperlink.new(package_url, display_name, package_url.len > 0);
 
@@ -1503,7 +1543,7 @@ pub struct UpdateInteractiveCommand {
 
                     // Current version - truncate if needed
                     const truncated_current = truncateWithEllipsis(bun.default_allocator, pkg.current_version, state.max_current_len, false)?;
-                    defer bun.default_allocator.free(truncated_current);
+                    const _tcur_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: truncated_current };
                     Output.pretty("<r>{s}<r>", .{truncated_current});
 
                     // Print padding after current version (2 spaces)
@@ -1518,7 +1558,7 @@ pub struct UpdateInteractiveCommand {
 
                     // Truncate target version if needed
                     const truncated_target = truncateWithEllipsis(bun.default_allocator, pkg.update_version, state.max_update_len, false)?;
-                    defer bun.default_allocator.free(truncated_target);
+                    const _ttgt_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: truncated_target };
 
                     // For width calculation, use the truncated version string length
                     const target_width: usize = truncated_target.len;
@@ -1577,7 +1617,7 @@ pub struct UpdateInteractiveCommand {
 
                     // Truncate latest version if needed
                     const truncated_latest = truncateWithEllipsis(bun.default_allocator, pkg.latest_version, state.max_latest_len, false)?;
-                    defer bun.default_allocator.free(truncated_latest);
+                    const _tlat_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: truncated_latest };
                     if (current_ver_parsed.valid && latest_ver_parsed.valid) {
                         const current_full = Semver.Version{
                             major: current_ver_parsed.version.major ?? 0,
@@ -1646,7 +1686,7 @@ pub struct UpdateInteractiveCommand {
                         }
                         // Truncate workspace name if needed
                         const truncated_workspace = truncateWithEllipsis(bun.default_allocator, pkg.workspace_name, state.max_workspace_len, true)?;
-                        defer bun.default_allocator.free(truncated_workspace);
+                        const _tws_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: truncated_workspace };
                         Output.pretty("<r><d>{s}<r>", .{truncated_workspace});
                     }
 

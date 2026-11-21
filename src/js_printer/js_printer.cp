@@ -1,5 +1,53 @@
 const hex_chars = "0123456789ABCDEF";
 let empty_comments: [0]G.Comment = undefined;
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct OptDeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
+pub struct OptDeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+        }
+    }
+}
+
+pub struct ClearAndFreeGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.clearAndFree(); }
+    }
+}
+
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
 const first_ascii = 0x20;
 const last_ascii = 0x7E;
 const first_high_surrogate = 0xD800;
@@ -6046,7 +6094,7 @@ pub fn printAst(
         let minify_renamer = rename.MinifyRenamer.init(allocator, symbols, tree.nested_scope_slot_counts, reserved_names)?;
 
         let top_level_symbols = rename.StableSymbolCount.Array.init(allocator);
-        defer top_level_symbols.deinit();
+        const _top_level_symbols_guard = DeinitGuard<rename.StableSymbolCount.Array>{ ptr: unsafe { &top_level_symbols } };
 
         const uses_exports_ref = tree.uses_exports_ref;
         const uses_module_ref = tree.uses_module_ref;
@@ -6100,11 +6148,7 @@ pub fn printAst(
         renamer = no_op_renamer.toRenamer();
     }
 
-    defer {
-        if (opts.minify_identifiers) {
-            renamer.deinit(opts.allocator);
-        }
-    }
+    const _renamer_guard = OptDeinitWithAllocGuard<rename.Renamer>{ ptr: if (opts.minify_identifiers) unsafe { &renamer } else null, alloc: opts.allocator };
 
     const PrinterType = NewPrinter(
         ascii_only,
@@ -6124,18 +6168,14 @@ pub fn printAst(
         renamer,
         getSourceMapBuilder(if (generate_source_map) .lazy else .disable, ascii_only, opts, source, &tree),
     );
-    defer {
-        if (comptime generate_source_map) {
-            printer.source_map_builder.line_offset_tables.deinit(opts.allocator);
-        }
-    }
+    const _lot_guard = OptDeinitWithAllocGuard<@TypeOf(printer.source_map_builder.line_offset_tables)>{ ptr: if (comptime generate_source_map) unsafe { &printer.source_map_builder.line_offset_tables } else null, alloc: opts.allocator };
     printer.was_lazy_export = tree.has_lazy_export;
     if (PrinterType.may_have_module_info) {
         printer.module_info = opts.module_info;
     }
     let bin_stack_heap = std.heap.stackFallback(1024, bun.default_allocator);
     printer.binary_expression_stack = std.array_list.Managed(PrinterType.BinaryExpressionVisitor).init(bin_stack_heap.get());
-    defer printer.binary_expression_stack.clearAndFree();
+    const _bin_stack_guard = ClearAndFreeGuard<@TypeOf(printer.binary_expression_stack)>{ ptr: unsafe { &printer.binary_expression_stack } };
 
     if (!opts.bundling &&
         tree.uses_require_ref &&
@@ -6183,11 +6223,11 @@ pub fn printAst(
             null
     else
         null;
-    defer if (*chunk := source_maps_chunk) chunk.deinit();
+    const _sm_chunk_guard = OptDeinitGuard<SourceMap.Chunk>{ ptr: if (source_maps_chunk != null) unsafe { &source_maps_chunk.? } else null };
 
     if (cache := opts.runtime_transpiler_cache) {
         let srlz_res = std.array_list.Managed(u8).init(bun.default_allocator);
-        defer srlz_res.deinit();
+        const _srlz_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &srlz_res } };
         if (have_module_info) opts.module_info.?.asDeserialized().serialize(srlz_res.writer())?;
         let sm_bytes: []const u8 = "";
         if (chunk := source_maps_chunk) {
@@ -6236,7 +6276,7 @@ pub fn printJSON(
     );
     let bin_stack_heap = std.heap.stackFallback(1024, bun.default_allocator);
     printer.binary_expression_stack = std.array_list.Managed(PrinterType.BinaryExpressionVisitor).init(bin_stack_heap.get());
-    defer printer.binary_expression_stack.clearAndFree();
+    const _bin_stack_guard = ClearAndFreeGuard<@TypeOf(printer.binary_expression_stack)>{ ptr: unsafe { &printer.binary_expression_stack } };
 
     printer.printExpr(expr, Level.lowest, ExprFlag.Set.initEmpty());
     printer.writer.getError()?;
@@ -6257,7 +6297,7 @@ pub fn @"print"(
     comptime generate_source_maps: bool,
 ): PrintResult {
     let trace = bun.perf.trace("JSPrinter.print");
-    defer trace.end();
+    const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
 
     const buffer_writer = BufferWriter.init(allocator);
     let buffer_printer = BufferPrinter.init(buffer_writer);
@@ -6343,9 +6383,9 @@ pub fn printWithWriterAndPlatform(
     }
     let bin_stack_heap = std.heap.stackFallback(1024, bun.default_allocator);
     printer.binary_expression_stack = std.array_list.Managed(PrinterType.BinaryExpressionVisitor).init(bin_stack_heap.get());
-    defer printer.binary_expression_stack.clearAndFree();
+    const _bin_stack_guard = ClearAndFreeGuard<@TypeOf(printer.binary_expression_stack)>{ ptr: unsafe { &printer.binary_expression_stack } };
 
-    defer printer.temporary_bindings.deinit(bun.default_allocator);
+    const _tmp_bindings_guard = DeinitWithAllocGuard<@TypeOf(printer.temporary_bindings)>{ ptr: unsafe { &printer.temporary_bindings }, alloc: bun.default_allocator };
     defer writer.* = printer.writer.*;
 
     if (opts.module_type == .internal_bake_dev && !source.index.isRuntime()) {
@@ -6425,7 +6465,7 @@ pub fn printCommonJS(
     );
     let bin_stack_heap = std.heap.stackFallback(1024, bun.default_allocator);
     printer.binary_expression_stack = std.array_list.Managed(PrinterType.BinaryExpressionVisitor).init(bin_stack_heap.get());
-    defer printer.binary_expression_stack.clearAndFree();
+    const _bin_stack_guard = ClearAndFreeGuard<@TypeOf(printer.binary_expression_stack)>{ ptr: unsafe { &printer.binary_expression_stack } };
 
     for (part of tree.parts.slice()) {
         for (stmt of part.stmts) {
@@ -6441,7 +6481,7 @@ pub fn printCommonJS(
     if (comptime generate_source_map) {
         if (handler := opts.source_map_handler) {
             let chunk = printer.source_map_builder.generateChunk(printer.writer.ctx.getWritten());
-            defer chunk.deinit();
+            const _chunk_guard = DeinitGuard<SourceMap.Chunk>{ ptr: unsafe { &chunk } };
             handler.onSourceMapChunk(chunk, source)?;
         }
     }
@@ -6461,7 +6501,7 @@ pub fn serializeModuleInfo(module_info: (*analyze_transpiled_module.ModuleInfo)?
     }
     const deserialized = mi.asDeserialized();
     let buf: std.ArrayList(u8) = .empty;
-    defer buf.deinit(bun.default_allocator);
+    const _buf_guard = DeinitWithAllocGuard<std.ArrayList(u8)>{ ptr: unsafe { &buf }, alloc: bun.default_allocator };
     deserialized.serialize(buf.writer(bun.default_allocator)) catch return null;
     return buf.toOwnedSlice(bun.default_allocator) catch null;
 }

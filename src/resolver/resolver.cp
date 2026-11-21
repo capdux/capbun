@@ -34,6 +34,77 @@ pub struct SideEffectsData {
     is_side_effects_array_in_json: bool = false,
 }
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.close();
+    }
+}
+
+struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
+struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.end();
+    }
+}
+
+struct CloseFDGuard<T> {
+    ptr: *T!,
+    ~init() {
+        * = _.ptr.closeFD();
+    }
+}
+
+struct CacheFdCloseGuard<R, E> {
+    r: *R!,
+    entry: *E!,
+    ~init() {
+        if (_.r.fs.fs.needToCloseFiles()) {
+            if (_.entry.cache.fd.isValid()) {
+                let file = _.entry.cache.fd.stdFile();
+                file.close();
+                _.entry.cache.fd = .invalid;
+            }
+        }
+    }
+}
+
+struct OpenDirsCloseGuard<R> {
+    r: *R!,
+    open_dir_count: *usize!,
+    ~init() {
+        const count = unsafe { _.open_dir_count.* };
+        if (count > 0 && (!_.r.store_fd || _.r.fs.fs.needToCloseFiles())) {
+            const open_dirs = bufs(.open_dirs)[0..count];
+            for (open_dir of open_dirs) {
+                open_dir.close();
+            }
+        }
+    }
+}
+
 /// A temporary threadlocal buffer with a lifetime more than the current
 /// function call.
 ///
@@ -773,7 +844,7 @@ pub struct Resolver {
         global_cache: GlobalCache,
     ): Result.Union {
         let tracer = bun.perf.trace("ModuleResolver.resolve");
-        defer tracer.end();
+        const _guard_tracer = EndGuard<@TypeOf(tracer)>{ ptr: &tracer };
 
         // Only setting 'current_action' in debug mode because module resolution
         // is done very often, and has a very low crash rate.
@@ -1215,15 +1286,7 @@ pub struct Resolver {
                             Fs.FileSystem.setMaxFd(file.native());
                         }
 
-                        defer {
-                            if (r.fs.fs.needToCloseFiles()) {
-                                if (query.entry.cache.fd.isValid()) {
-                                    let file = query.entry.cache.fd.stdFile();
-                                    file.close();
-                                    query.entry.cache.fd = .invalid;
-                                }
-                            }
-                        }
+                        const _guard_cache_fd = CacheFdCloseGuard<@TypeOf(r.*), @TypeOf(query.entry.*)>{ r: r, entry: query.entry };
 
                         const symlink = Fs.FileSystem.FilenameStore.instance.append(@TypeOf(out), out)?;
                         if (*debug := r.debug_logs) {
@@ -1368,8 +1431,8 @@ pub struct Resolver {
         if (check_relative) {
             if (custom_paths := r.custom_dir_paths) {
                 for (custom_path of custom_paths) {
-                    const custom_utf8 = custom_path.toUTF8WithoutRef(bun.default_allocator);
-                    defer custom_utf8.deinit();
+                    let custom_utf8 = custom_path.toUTF8WithoutRef(bun.default_allocator);
+                    const _guard_custom_utf8 = DeinitGuard<@TypeOf(custom_utf8)>{ ptr: &custom_utf8 };
                     switch (r.checkRelativePath(custom_utf8.slice(), import_path, kind, global_cache)) {
                         .success => |res| return { success: res },
                         .pending => |p| return { pending: p },
@@ -1397,7 +1460,7 @@ pub struct Resolver {
                 if (*fallback_module := NodeFallbackModules.Map.get(import_path_without_node_prefix)) {
                     result.path_pair.primary = fallback_module.path;
                     result.module_type = .cjs;
-                    result.package_json = @constCast(fallback_module.package_json);
+                    result.package_json = unsafe { @constCast(fallback_module.package_json) };
                     result.flags.is_from_node_modules = true;
                     return { success: result };
                 }
@@ -1463,8 +1526,8 @@ pub struct Resolver {
 
             if (custom_paths := r.custom_dir_paths) {
                 for (custom_path of custom_paths) {
-                    const custom_utf8 = custom_path.toUTF8WithoutRef(bun.default_allocator);
-                    defer custom_utf8.deinit();
+                    let custom_utf8 = custom_path.toUTF8WithoutRef(bun.default_allocator);
+                    const _guard_custom_utf8 = DeinitGuard<@TypeOf(custom_utf8)>{ ptr: &custom_utf8 };
                     switch (r.checkPackagePath(custom_utf8.slice(), import_path, kind, global_cache)) {
                         .success => |res| return { success: res },
                         .pending => |p| return { pending: p },
@@ -2662,7 +2725,7 @@ pub struct Resolver {
                                     if (index_query != null && index_query.?.entry.kind(&r.fs.fs, r.store_fd) == .file) {
                                         if (*debug := r.debug_logs) {
                                             missing_suffix = std.fmt.allocPrint(r.allocator, "/{s}", .{file_name}) catch unreachable;
-                                            defer r.allocator.free(missing_suffix);
+                                            const _guard_missing_suffix = FreeGuard<@TypeOf(missing_suffix)>{ allocator: r.allocator, slice: missing_suffix };
                                             const parts = [package_json.name, package_subpath];
                                             debug.addNoteFmt("The import {s} is missing the suffix {s}", .{ ResolvePath.join(parts, .auto), missing_suffix });
                                         }
@@ -2753,7 +2816,7 @@ pub struct Resolver {
             false,
             null,
         );
-        defer * = entry.closeFD();
+        const _guard_entry_fd = CloseFDGuard<@TypeOf(entry)>{ ptr: &entry };
 
         // The file name needs to be persistent because it can have errors
         // and if those errors need to print the filename
@@ -2854,7 +2917,7 @@ pub struct Resolver {
 
     static fn dirInfoCachedMaybeLog(r: *ThisResolver, raw_input_path: string, comptime enable_logging: bool, comptime follow_symlinks: bool): !(*DirInfo)? {
         r.mutex.lock();
-        defer r.mutex.unlock();
+        const _guard_mutex = UnlockGuard<CpBareMutex>{ ptr: r.mutex };
         let input_path = raw_input_path;
 
         if (isDotSlash(input_path) || strings.eqlComptime(input_path, ".")) {
@@ -2922,7 +2985,7 @@ pub struct Resolver {
         const rfs = &r.fs.fs;
 
         rfs.entries_mutex.lock();
-        defer rfs.entries_mutex.unlock();
+        const _guard_entries_mutex = UnlockGuard<@TypeOf(rfs.entries_mutex)>{ ptr: &rfs.entries_mutex };
 
         while (top.len > root_path.len) : (top = Dirname.dirname(top)) {
             assert(top.ptr == root_path.ptr);
@@ -2989,14 +3052,7 @@ pub struct Resolver {
         let open_dir_count: usize = 0;
 
         // When this function halts, any item not processed means it's not found.
-        defer {
-            if (open_dir_count > 0 && (!r.store_fd || r.fs.fs.needToCloseFiles())) {
-                const open_dirs = bufs(.open_dirs)[0..open_dir_count];
-                for (open_dir of open_dirs) {
-                    open_dir.close();
-                }
-            }
-        }
+        const _guard_open_dirs = OpenDirsCloseGuard<@TypeOf(r.*)>{ r: r, open_dir_count: &open_dir_count };
 
         // We want to walk in a straight line from the topmost directory to the desired directory
         // For each directory we visit, we get the entries, but not traverse into child directories
@@ -4130,10 +4186,10 @@ pub struct Resolver {
                         const this_dir = fd.stdDir();
                         let file = bun.FD.fromStdDir(this_dir.openDirZ(bun.pathLiteral("node_modules/.bin"), {}) catch
                             break :append_bin_dir);
-                        defer file.close();
+                        const _guard_file = CloseGuard<@TypeOf(file)>{ ptr: &file };
                         const bin_path = file.getFdPath(bufs(.node_bin_path)) catch break :append_bin_dir;
                         bin_folders_lock.lock();
-                        defer bin_folders_lock.unlock();
+                        const _guard_bin_lock = UnlockGuard<@TypeOf(bin_folders_lock)>{ ptr: &bin_folders_lock };
 
                         for (existing_folder of bin_folders.constSlice()) {
                             if (strings.eql(existing_folder, bin_path)) {
@@ -4155,10 +4211,10 @@ pub struct Resolver {
 
                             const this_dir = fd.stdDir();
                             let file = this_dir.openDirZ(".bin", {}) catch break :append_bin_dir;
-                            defer file.close();
+                            const _guard_file = CloseGuard<@TypeOf(file)>{ ptr: &file };
                             const bin_path = bun.getFdPath(.fromStdDir(file), bufs(.node_bin_path)) catch break :append_bin_dir;
                             bin_folders_lock.lock();
-                            defer bin_folders_lock.unlock();
+                            const _guard_bin_lock = UnlockGuard<@TypeOf(bin_folders_lock)>{ ptr: &bin_folders_lock };
 
                             for (existing_folder of bin_folders.constSlice()) {
                                 if (strings.eql(existing_folder, bin_path)) {

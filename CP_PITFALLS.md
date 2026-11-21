@@ -174,4 +174,5 @@
   - 方法体内直接调用 `new(this)` 不再静默清空函数体（`task-bun-20261122-call-new-silently-empties-fn`）；
   - `[:0]const u8` / `[*]const u8` 等直接作为泛型实参传入不再丢失空格（`task-bun-20261122-sentinel-const-space`）；
   - 错误联合函数内 `return .variant;` 已区分枚举成功值与错误集，不再误降级为 `error.variant`（`task-bun-20261122-return-dot-enum-err`）；
-  - 泛型实参直接传入 `*Foo!` / `*const Foo!` / `[*:0]u8!` 等 CP 裸指针类型已正确剥离 `!` 并完整转译（`task-bun-20261122-generic-raw-ptr-arg`）。
+  - 泛型实参直接传入 `*Foo!` / `*const Foo!` / `[*:0]u8!` 等 CP 裸指针类型已正确剥离 `!` 并完整转译（`task-bun-20261122-generic-raw-ptr-arg`）；
+  - comptime 工厂函数 `return struct { ... }` 现已支持完整 CP lowering 与顶层 `~init()` Guard 自动注入 `defer __cp_deinit()`（`task-bun-20261122-factory-struct-raii-lowering`）。

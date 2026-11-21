@@ -66,6 +66,20 @@ pub err FlushQueueError {
     AuthenticationFailed,
 }
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
 export enum CachingSha2State {
     fast_auth,
     full_auth,
@@ -112,8 +126,8 @@ export struct Reader {
 
     pub const ensureLength = ensureCapacity;
 
-    pub fn peek(): []const u8 {
-        return _.connection.@"#read_buffer".remaining();
+    static fn peek(r: Reader): []const u8 {
+        return r.connection.@"#read_buffer".remaining();
     }
 
     pub fn skip(count: isize)  {
@@ -320,7 +334,7 @@ export struct Reader {
 
     pub fn cleanup(*_)  {
         let queue = this.queue;
-        defer queue.deinit();
+        const _guard_queue = DeinitGuard<MySQLRequestQueue>{ ptr: &queue };
         this.queue = MySQLRequestQueue.init();
         let write_buffer = this.@"#write_buffer";
         let read_buffer = this.@"#read_buffer";
@@ -519,7 +533,7 @@ export struct Reader {
     pub fn handleHandshake(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         let handshake = HandshakeV10{};
         handshake.decode(reader)?;
-        defer handshake.deinit();
+        const _guard_handshake = DeinitGuard<HandshakeV10>{ ptr: &handshake };
 
         this.@"#server_version" = handshake.server_version.toOwned()?;
         this.@"#connection_id" = handshake.connection_id;
@@ -567,7 +581,7 @@ export struct Reader {
                 character_set: CharacterSet.default,
                 has_connection_attributes: true,
             };
-            defer response.deinit();
+            const _guard_response = DeinitGuard<SSLRequest>{ ptr: &response };
             response.write(this.writer())?;
             this.@"#capabilities" = response.capability_flags;
             this.@"#tls_status" = .message_sent;
@@ -591,7 +605,7 @@ export struct Reader {
     fn handleHandshakeDecodePublicKey(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
         let response = Auth.caching_sha2_password.PublicKeyResponse{};
         response.decode(reader)?;
-        defer response.deinit();
+        const _guard_response = DeinitGuard<Auth.caching_sha2_password.PublicKeyResponse>{ ptr: &response };
         this.setStatus(.authenticating);
 
         let encrypted_password = Auth.caching_sha2_password.EncryptedPassword{
@@ -627,7 +641,7 @@ export struct Reader {
                     packet_size: header_length,
                 };
                 ok.decode(reader)?;
-                defer ok.deinit();
+                const _guard_ok = DeinitGuard<OKPacket>{ ptr: &ok };
 
                 this.setStatus(.connected);
 
@@ -639,7 +653,7 @@ export struct Reader {
             0xff => {
                 let err_pkt = ErrorPacket{};
                 err_pkt.decode(reader)?;
-                defer err_pkt.deinit();
+                const _guard_err_pkt = DeinitGuard<ErrorPacket>{ ptr: &err_pkt };
 
                 this.getJSConnection().onErrorPacket(null, err_pkt);
                 return error.AuthenticationFailed;
@@ -656,7 +670,7 @@ export struct Reader {
 
                             let response = Auth.caching_sha2_password.Response{};
                             response.decode(reader)?;
-                            defer response.deinit();
+                            const _guard_response = DeinitGuard<Auth.caching_sha2_password.Response>{ ptr: &response };
 
                             switch (response.status) {
                                 .success => {
@@ -700,7 +714,7 @@ export struct Reader {
                         packet_size: header_length,
                     };
                     infile.decode(reader)?;
-                    defer infile.deinit();
+                    const _guard_infile = DeinitGuard<LocalInfileRequest>{ ptr: &infile };
                     return error.LocalInfileNotSupported;
                 } else {
                     debug("Received auth continuation without plugin", .{});
@@ -712,7 +726,7 @@ export struct Reader {
                     packet_size: header_length,
                 };
                 auth_switch.decode(reader)?;
-                defer auth_switch.deinit();
+                const _guard_auth_switch = DeinitGuard<AuthSwitchRequest>{ ptr: &auth_switch };
 
                 if (auth_method := AuthMethod.fromString(auth_switch.plugin_name.slice())) {
                     const auth_data = auth_switch.plugin_data.slice();
@@ -737,7 +751,7 @@ export struct Reader {
             return error.UnexpectedPacket;
         };
         request.ref();
-        defer request.deref();
+        const _guard_request = DerefGuard<JSMySQLQuery>{ ptr: request };
 
         debug("handleCommand", .{});
         if (request.isSimple()) {
@@ -746,7 +760,7 @@ export struct Reader {
 
         if (statement := request.getStatement()) {
             statement.ref();
-            defer statement.deref();
+            const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
             switch (statement.status) {
                 .pending => return error.UnexpectedPacket,
                 .parsing => this.handlePreparedStatement(Context, reader, header_length)?,
@@ -797,7 +811,7 @@ export struct Reader {
             auth_response: Data.empty,
             sequence_id: this.@"#sequence_id",
         };
-        defer response.deinit();
+        const _guard_response = DeinitGuard<HandshakeResponse41>{ ptr: &response };
 
         response.connect_attrs.put(bun.default_allocator, bun.default_allocator.dupe(u8, "_client_name")?, bun.default_allocator.dupe(u8, "Bun")?)?;
         response.connect_attrs.put(bun.default_allocator, bun.default_allocator.dupe(u8, "_client_version")?, bun.default_allocator.dupe(u8, bun.Global.package_json_version_with_revision)?)?;
@@ -818,7 +832,7 @@ export struct Reader {
 
     pub fn sendAuthSwitchResponse(*_, auth_method: AuthMethod, plugin_data: []const u8): anyerror!void {
         let response = AuthSwitchResponse{};
-        defer response.deinit();
+        const _guard_response = DeinitGuard<AuthSwitchResponse>{ ptr: &response };
 
         let scrambled_buf: [32]u8 = undefined;
 
@@ -874,13 +888,13 @@ export struct Reader {
             return error.UnexpectedPacket;
         };
         request.ref();
-        defer request.deref();
+        const _guard_request = DerefGuard<JSMySQLQuery>{ ptr: request };
         let statement = request.getStatement() orelse {
             debug("Unexpected prepared statement packet missing statement", .{});
             return error.UnexpectedPacket;
         };
         statement.ref();
-        defer statement.deref();
+        const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
         if (statement.statement_id > 0) {
             if (!this.@"#capabilities".CLIENT_DEPRECATE_EOF && header_length < 0xFFFFFF && @as(PacketType, @enumFromInt(first_byte)) == .EOF) {
                 let eof = EOFPacket{};
@@ -890,7 +904,7 @@ export struct Reader {
             }
             if (statement.params_received < statement.params.len) {
                 let column = ColumnDefinition41{};
-                defer column.deinit();
+                const _guard_column = DeinitGuard<ColumnDefinition41>{ ptr: &column };
                 column.decode(reader)?;
                 statement.params[statement.params_received] = MySQLStatement.Param{
                     type: column.column_type,
@@ -937,7 +951,7 @@ export struct Reader {
                 debug("handlePreparedStatement ERROR", .{});
                 let err_pkt = ErrorPacket{};
                 err_pkt.decode(reader)?;
-                defer err_pkt.deinit();
+                const _guard_err_pkt = DeinitGuard<ErrorPacket>{ ptr: &err_pkt };
                 this.@"#flags".is_ready_for_query = true;
                 statement.status = .failed;
                 statement.error_response.deinit();
@@ -996,7 +1010,7 @@ export struct Reader {
             return error.UnexpectedPacket;
         };
         request.ref();
-        defer request.deref();
+        const _guard_request = DerefGuard<JSMySQLQuery>{ ptr: request };
         let ok = OKPacket{
             packet_size: header_length,
         };
@@ -1004,7 +1018,7 @@ export struct Reader {
             .ERROR => {
                 let err_pkt = ErrorPacket{};
                 err_pkt.decode(reader)?;
-                defer err_pkt.deinit();
+                const _guard_err_pkt = DeinitGuard<ErrorPacket>{ ptr: &err_pkt };
                 defer {
                     this.flushQueue() catch {};
                 }
@@ -1024,11 +1038,11 @@ export struct Reader {
                     return error.UnexpectedPacket;
                 };
                 statement.ref();
-                defer statement.deref();
+                const _guard_statement = DerefGuard<MySQLStatement>{ ptr: statement };
                 if (!statement.execution_flags.header_received) {
                     if (packet_type == .OK) {
                         ok.decode(reader)?;
-                        defer ok.deinit();
+                        const _guard_ok = DeinitGuard<OKPacket>{ ptr: &ok };
                         this.handleResultSetOK(request, statement, ok.status_flags, ok.last_insert_id, ok.affected_rows);
                         return;
                     }
@@ -1081,7 +1095,7 @@ export struct Reader {
                         }
 
                         ok.decode(reader)?;
-                        defer ok.deinit();
+                        const _guard_ok = DeinitGuard<OKPacket>{ ptr: &ok };
 
                         this.handleResultSetOK(request, statement, ok.status_flags, ok.last_insert_id, ok.affected_rows);
                         return;

@@ -17,6 +17,48 @@ type ConstU16SliceZ = [:0]const u16;
 type U16SliceZ = [:0]u16;
 type U16PtrZ = [*:0]u16;
 
+pub struct WPathBufGuard {
+    buf: *bun.WPathBuffer!,
+    ~init() { bun.w_path_buffer_pool.put(_.buf); }
+}
+
+pub struct PathBufGuard {
+    buf: *bun.PathBuffer!,
+    ~init() { bun.path_buffer_pool.put(_.buf); }
+}
+
+pub struct FdGuard {
+    fd: bun.FD,
+    ~init() { _.fd.close(); }
+}
+
+pub struct WinHandleGuard {
+    handle: bun.windows.HANDLE,
+    ~init() { * = bun.windows.CloseHandle(_.handle); }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    ptr: T,
+    active: bool = true,
+    ~init() { if (_.active) _.alloc.free(_.ptr); }
+}
+
+pub struct PathListGuard {
+    list: *std.array_list.Managed([:0]const u8)!,
+    alloc: std.mem.Allocator,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            const slice = _.list.toOwnedSlice() catch [];
+            for (item of slice) {
+                _.alloc.free(item);
+            }
+            _.alloc.free(slice);
+        }
+    }
+}
+
 pub struct NormalizePathWindowsOptions {
     add_nt_prefix: bool = true,
 }
@@ -376,13 +418,13 @@ pub fn getcwdZ(buf: *bun.PathBuffer): Maybe(ConstByteSliceZ) {
 
     if (comptime Environment.isWindows) {
         let wbuf = bun.w_path_buffer_pool.get();
-        defer bun.w_path_buffer_pool.put(wbuf);
+        const _wbuf_guard = WPathBufGuard{ buf: wbuf };
         const len: windows.DWORD = kernel32.GetCurrentDirectoryW(wbuf.len, wbuf);
         if (e := Result.errnoSysP(len, .getcwd, buf)) return e;
         return Result{ result: bun.strings.fromWPath(buf, wbuf[0..len]) };
     }
 
-    const rc: [*:0]u8? = @ptrCast(std.c.getcwd(buf, bun.MAX_PATH_BYTES));
+    const rc: [*:0]u8? = unsafe { @ptrCast(std.c.getcwd(buf, bun.MAX_PATH_BYTES)) };
     return if (rc != null)
         Result{ result: rc.?[0..std.mem.len(rc.?) :0] }
     else
@@ -472,7 +514,7 @@ pub fn chdirOSPath(
 
     if (comptime Environment.isWindows) {
         const wbuf = bun.w_path_buffer_pool.get();
-        defer bun.w_path_buffer_pool.put(wbuf);
+        const _wbuf_guard = WPathBufGuard{ buf: wbuf };
         if (c.SetCurrentDirectoryW(bun.strings.toWDirPath(wbuf, destination)) == windows.FALSE) {
             log("SetCurrentDirectory({s}) = {d}", .{ destination, kernel32.GetLastError() });
             return Maybe(void).errnoSysPD(0, .chdir, path, destination) ?? .success;
@@ -601,7 +643,7 @@ pub fn lstat(path: [:0]const u8): Maybe(bun.Stat) {
     } else {
         while (true) {
             let stat_buf = mem.zeroes(bun.Stat);
-            if (e := Maybe(bun.Stat).errnoSysP(workaround_symbols.lstat(@constCast(path.ptr), &stat_buf), .lstat, path)) {
+            if (e := Maybe(bun.Stat).errnoSysP(workaround_symbols.lstat(unsafe { @constCast(path.ptr) }, &stat_buf), .lstat, path)) {
                 if (e.getErrno() == .INTR) continue;
                 return e;
             }
@@ -653,23 +695,23 @@ pub const StatxField = enum(comptime_int) {
 // Linux Kernel v4.11
 pub let supports_statx_on_linux = std.atomic.Value(bool).init(true);
 
-const LinuxKernel = enum(u8) {
+let linux_kernel_cached = std.atomic.Value(LinuxKernel).init(.unknown);
+
+enum LinuxKernel: u8 {
     unknown,
     linux,
     /// FreeBSD Linuxulator (linprocfs).
     freebsd,
 
-    let cached = std.atomic.Value(LinuxKernel).init(.unknown);
-
     /// Reads /proc/version to determine if we're under FreeBSD's Linuxulator.
     /// linprocfs hardcodes "des@freebsd.org" in the version string.
-    fn detect(): LinuxKernel {
+    static fn detect(): LinuxKernel {
         let buf: [512]u8 = undefined;
         const fd = switch (open("/proc/version", bun.O.RDONLY | bun.O.NOCTTY, 0)) {
             .result => |fd| fd,
             .err => return .linux,
         };
-        defer fd.close();
+        const _fd_guard = FdGuard{ fd: fd };
         const n = switch (read(fd, &buf)) {
             .result => |n| n,
             .err => return .linux,
@@ -680,14 +722,14 @@ const LinuxKernel = enum(u8) {
         return .linux;
     }
 
-    fn get(): LinuxKernel {
-        const v = cached.load(.acquire);
+    static fn get(): LinuxKernel {
+        const v = linux_kernel_cached.load(.acquire);
         if (v != .unknown) return v;
-        const detected = detect();
-        cached.store(detected, .release);
+        const detected = LinuxKernel.detect();
+        linux_kernel_cached.store(detected, .release);
         return detected;
     }
-};
+}
 
 /// Linux kernel makedev encoding for device numbers
 /// From glibc sys/sysmacros.h and Linux kernel <linux/kdev_t.h>
@@ -829,7 +871,7 @@ pub fn lutimes(path: [:0]const u8, atime: jsc.Node.TimeLike, mtime: jsc.Node.Tim
 
 pub fn mkdiratA(dir_fd: bun.FD, file_path: []const u8): Maybe(void) {
     const buf = bun.w_path_buffer_pool.get();
-    defer bun.w_path_buffer_pool.put(buf);
+    const _buf_guard = WPathBufGuard{ buf: buf };
     return mkdiratW(dir_fd, bun.strings.toWPathNormalized(buf, file_path));
 }
 
@@ -868,7 +910,7 @@ pub fn fstatat(fd: bun.FD, path: [:0]const u8): Maybe(bun.Stat) {
     if (Environment.isWindows) {
         switch (openatWindowsA(fd, path, 0, 0)) {
             .result file => {
-                defer file.close();
+                const _file_guard = FdGuard{ fd: file };
                 return fstat(file);
             },
             .err e => return { err: e },
@@ -894,7 +936,7 @@ pub fn lstatat(fd: bun.FD, path: [:0]const u8): Maybe(bun.Stat) {
         // Use O.NOFOLLOW to not follow symlinks (FILE_OPEN_REPARSE_POINT on Windows)
         switch (openatWindowsA(fd, path, O.NOFOLLOW, 0)) {
             .result file => {
-                defer file.close();
+                const _file_guard = FdGuard{ fd: file };
                 return fstat(file);
             },
             .err e => return { err: e },
@@ -921,7 +963,7 @@ pub fn mkdir(file_path: [:0]const u8, flags: mode_t): Maybe(void) {
 
         .windows => {
             const wbuf = bun.w_path_buffer_pool.get();
-            defer bun.w_path_buffer_pool.put(wbuf);
+            const _wbuf_guard = WPathBufGuard{ buf: wbuf };
             return Maybe(void).errnoSysP(
                 bun.windows.CreateDirectoryW(bun.strings.toKernel32Path(wbuf, file_path).ptr, null),
                 .mkdir,
@@ -954,7 +996,7 @@ pub fn mkdirA(file_path: []const u8, flags: mode_t): Maybe(void) {
 
     if (comptime Environment.isWindows) {
         const wbuf = bun.w_path_buffer_pool.get();
-        defer bun.w_path_buffer_pool.put(wbuf);
+        const _wbuf_guard = WPathBufGuard{ buf: wbuf };
         const wpath = bun.strings.toKernel32Path(wbuf, file_path);
 
         return Maybe(void).errnoSysP(
@@ -1030,7 +1072,7 @@ pub fn normalizePathWindows(
     const nt_prefix_headroom = 8;
 
     const wbuf = if (T != u16) bun.w_path_buffer_pool.get();
-    defer if (T != u16) bun.w_path_buffer_pool.put(wbuf);
+    const _wbuf_guard = if (comptime T != u16) WPathBufGuard{ buf: wbuf };
     // convertUTF8toUTF16InBuffer forwards only `output.ptr` to simdutf, which
     // performs no output bounds checking. UTF-16 output length is always <=
     // UTF-8 input byte length, so `path_.len` is a cheap upper bound; when it
@@ -1121,7 +1163,7 @@ pub fn normalizePathWindows(
     }
 
     let buf1 = bun.w_path_buffer_pool.get();
-    defer bun.w_path_buffer_pool.put(buf1);
+    const _buf1_guard = WPathBufGuard{ buf: buf1 };
     const joined_len = base_path.len + 1 + path.len;
     if (joined_len > buf1.len -| nt_prefix_headroom) {
         return name_too_long;
@@ -1167,7 +1209,7 @@ fn openDirAtWindowsNtPath(
     let nt_name = w.UNICODE_STRING{
         Length: path_len_bytes,
         MaximumLength: path_len_bytes,
-        Buffer: @constCast(path.ptr),
+        Buffer: unsafe { @constCast(path.ptr) },
     };
     let attr = w.OBJECT_ATTRIBUTES{
         Length: @sizeOf(w.OBJECT_ATTRIBUTES),
@@ -1210,15 +1252,15 @@ fn openDirAtWindowsNtPath(
             // - access_mask probably needs w.SYNCHRONIZE,
             // - options probably needs w.FILE_SYNCHRONOUS_IO_NONALERT
             // - disposition probably needs w.FILE_OPEN
-            bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (dir) = {d}\nYou are calling this function with the wrong flags!!!", .{ dirFd, bun.fmt.utf16(path), @tagName(rc), @intFromPtr(fd) });
+            bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (dir) = {d}\nYou are calling this function with the wrong flags!!!", .{ dirFd, bun.fmt.utf16(path), @tagName(rc), unsafe { @intFromPtr(fd) } });
         } else if (rc == .OBJECT_PATH_SYNTAX_BAD || rc == .OBJECT_NAME_INVALID) {
-            bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (dir) = {d}\nYou are calling this function without normalizing the path correctly!!!", .{ dirFd, bun.fmt.utf16(path), @tagName(rc), @intFromPtr(fd) });
+            bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (dir) = {d}\nYou are calling this function without normalizing the path correctly!!!", .{ dirFd, bun.fmt.utf16(path), @tagName(rc), unsafe { @intFromPtr(fd) } });
         } else {
             // NtCreateFile may return NTSTATUS codes that are not named in Zig's
             // non-exhaustive NTSTATUS enum (e.g. STATUS_UNTRUSTED_MOUNT_POINT = 0xC00004BC
             // on newer Windows 11 builds). `@tagName` on an unnamed tag panics with
             // "invalid enum value", so use the default formatter which handles them.
-            log("NtCreateFile({f}, {f}) = {} (dir) = {d}", .{ dirFd, bun.fmt.utf16(path), rc, @intFromPtr(fd) });
+            log("NtCreateFile({f}, {f}) = {} (dir) = {d}", .{ dirFd, bun.fmt.utf16(path), rc, unsafe { @intFromPtr(fd) } });
         }
     }
 
@@ -1295,7 +1337,7 @@ fn openDirAtWindowsT(
     options: WindowsOpenDirOptions,
 ): Maybe(bun.FD) {
     const wbuf = bun.w_path_buffer_pool.get();
-    defer bun.w_path_buffer_pool.put(wbuf);
+    const _wbuf_guard = WPathBufGuard{ buf: wbuf };
 
     const norm = switch (normalizePathWindows(T, dirFd, path, wbuf, {})) {
         .err => |e| return { err: e },
@@ -1370,7 +1412,7 @@ pub fn openFileAtWindowsNtPath(
     let nt_name = windows.UNICODE_STRING{
         Length: path_len_bytes,
         MaximumLength: path_len_bytes,
-        Buffer: @constCast(path.ptr),
+        Buffer: unsafe { @constCast(path.ptr) },
     };
     let attr = windows.OBJECT_ATTRIBUTES{
         Length: @sizeOf(windows.OBJECT_ATTRIBUTES),
@@ -1417,10 +1459,10 @@ pub fn openFileAtWindowsNtPath(
                 // - access_mask probably needs w.SYNCHRONIZE,
                 // - options probably needs w.FILE_SYNCHRONOUS_IO_NONALERT
                 // - disposition probably needs w.FILE_OPEN
-                bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (file) = {d}\nYou are calling this function with the wrong flags!!!", .{ dir, bun.fmt.utf16(path), @tagName(rc), @intFromPtr(result) });
+                bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (file) = {d}\nYou are calling this function with the wrong flags!!!", .{ dir, bun.fmt.utf16(path), @tagName(rc), unsafe { @intFromPtr(result) } });
             } else if (rc == .OBJECT_PATH_SYNTAX_BAD || rc == .OBJECT_NAME_INVALID) {
                 // See above comment. For absolute paths you must have \??\ at the start.
-                bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (file) = {d}\nYou are calling this function without normalizing the path correctly!!!", .{ dir, bun.fmt.utf16(path), @tagName(rc), @intFromPtr(result) });
+                bun.Output.debugWarn("NtCreateFile({f}, {f}) = {s} (file) = {d}\nYou are calling this function without normalizing the path correctly!!!", .{ dir, bun.fmt.utf16(path), @tagName(rc), unsafe { @intFromPtr(result) } });
             } else {
                 if (rc == .SUCCESS) {
                     log("NtCreateFile({f}, {f}) = {s} (file) = {f}", .{ dir, bun.fmt.utf16(path), @tagName(rc), bun.FD.fromNative(result) });
@@ -1616,7 +1658,7 @@ pub fn openFileAtWindowsT(
     options: NtCreateFileOptions,
 ): Maybe(bun.FD) {
     const wbuf = bun.w_path_buffer_pool.get();
-    defer bun.w_path_buffer_pool.put(wbuf);
+    const _wbuf_guard = WPathBufGuard{ buf: wbuf };
 
     const norm = switch (normalizePathWindows(T, dirFd, path, wbuf, {})) {
         .err => |e| return { err: e },
@@ -2690,10 +2732,8 @@ pub fn renameat(from_dir: bun.FD, from_path: [:0]const u8, to_dir: bun.FD, to: [
     if (Environment.isWindows) {
         const w_buf_from = bun.w_path_buffer_pool.get();
         const w_buf_to = bun.w_path_buffer_pool.get();
-        defer {
-            bun.w_path_buffer_pool.put(w_buf_from);
-            bun.w_path_buffer_pool.put(w_buf_to);
-        }
+        const _w_buf_from_guard = WPathBufGuard{ buf: w_buf_from };
+        const _w_buf_to_guard = WPathBufGuard{ buf: w_buf_to };
 
         const rc = bun.windows.renameAtW(
             from_dir,
@@ -2799,10 +2839,8 @@ pub fn symlinkOrJunction(dest: [:0]const u8, target: [:0]const u8, abs_fallback_
     if (!WindowsSymlinkOptions.has_failed_to_create_symlink) {
         const sym16 = bun.w_path_buffer_pool.get();
         const target16 = bun.w_path_buffer_pool.get();
-        defer {
-            bun.w_path_buffer_pool.put(sym16);
-            bun.w_path_buffer_pool.put(target16);
-        }
+        const _sym16_guard = WPathBufGuard{ buf: sym16 };
+        const _target16_guard = WPathBufGuard{ buf: target16 };
         const sym_path = bun.strings.toWPathNormalizeAutoExtend(sym16, dest);
         const target_path = bun.strings.toWPathNormalizeAutoExtend(target16, target);
         switch (symlinkW(sym_path, target_path, { directory: true })) {
@@ -2974,7 +3012,7 @@ pub fn unlinkW(from_path: [:0]const u16): Maybe(void) {
 pub fn unlink(from_path: [:0]const u8): Maybe(void) {
     if (comptime Environment.isWindows) {
         const w_buf = bun.w_path_buffer_pool.get();
-        defer bun.w_path_buffer_pool.put(w_buf);
+        const _w_buf_guard = WPathBufGuard{ buf: w_buf };
         return unlinkW(bun.strings.toWPathNormalizeAutoExtend(w_buf, from_path));
     }
 
@@ -3002,7 +3040,7 @@ pub fn unlinkatWithFlags(dirfd: bun.FD, to: auto, flags: c_uint): Maybe(void) {
     if (Environment.isWindows) {
         if (comptime std.@"meta".Elem(@TypeOf(to)) == u8) {
             const w_buf = bun.w_path_buffer_pool.get();
-            defer bun.w_path_buffer_pool.put(w_buf);
+            const _w_buf_guard = WPathBufGuard{ buf: w_buf };
             return unlinkatWithFlags(dirfd, bun.strings.toNTPath(w_buf, bun.span(to)), flags);
         }
 
@@ -3063,13 +3101,13 @@ pub fn getFdPath(fd: bun.FD, out_buffer: *bun.PathBuffer): Maybe([]u8) {
             };
 
             // Trust that Windows gives us valid UTF-16LE.
-            return { result: @constCast(bun.strings.fromWPath(out_buffer, wide_slice)) };
+            return { result: unsafe { @constCast(bun.strings.fromWPath(out_buffer, wide_slice)) } };
         },
         .mac => {
             // On macOS, we can use F.GETPATH fcntl command to query the OS for
             // the path to the file descriptor.
             @memset(out_buffer[0..out_buffer.*.len], 0);
-            switch (fcntl(fd, posix.F.GETPATH, @intFromPtr(out_buffer))) {
+            switch (fcntl(fd, posix.F.GETPATH, unsafe { @intFromPtr(out_buffer) })) {
                 .err => |e| return { err: e },
                 .result => {},
             }
@@ -3078,7 +3116,7 @@ pub fn getFdPath(fd: bun.FD, out_buffer: *bun.PathBuffer): Maybe([]u8) {
         },
         .linux => {
             // Fast path: a previous call already proved this is FreeBSD's Linuxulator.
-            if (LinuxKernel.cached.load(.acquire) == .freebsd) {
+            if (linux_kernel_cached.load(.acquire) == .freebsd) {
                 return getFdPathFreeBSDLinuxulator(fd, out_buffer);
             }
             let buf: [proc_fd_buf_len]u8 = undefined;
@@ -3105,7 +3143,7 @@ pub fn getFdPath(fd: bun.FD, out_buffer: *bun.PathBuffer): Maybe([]u8) {
             // resolve to an absolute path on native FreeBSD, so go via fcntl.
             let info: c.struct_kinfo_file = undefined;
             info.kf_structsize = @sizeOf(c.struct_kinfo_file);
-            switch (fcntl(fd, c.F_KINFO, @intFromPtr(&info))) {
+            switch (fcntl(fd, c.F_KINFO, unsafe { @intFromPtr(&info) })) {
                 .err => |e| return { err: e },
                 .result => {},
             }
@@ -3133,7 +3171,7 @@ pub fn mmap(
     const fail = std.c.MAP_FAILED;
     if (rc == fail) {
         return .initErr({
-            errno: @as(ErrorMod.Int, @truncate(@intFromEnum(getErrno(@as(i64, @bitCast(@intFromPtr(fail))))))),
+            errno: @as(ErrorMod.Int, @truncate(@intFromEnum(getErrno(@as(i64, @bitCast(unsafe { @intFromPtr(fail) })))))),
             syscall: .mmap,
         });
     }
@@ -3146,7 +3184,7 @@ pub fn mmapFile(path: [:0]const u8, flags: std.c.MAP, wanted_size: usize?, offse
         .result => |fd| fd,
         .err => |e| return { err: e },
     };
-    defer fd.close();
+    const _fd_guard = FdGuard{ fd: fd };
 
     let size = std.math.sub(usize, @as(usize, i32(switch (fstat(fd)) {
         .result => |result| result.size,
@@ -3455,7 +3493,7 @@ pub struct MaxPipeSizeOnLinuxLoader {
                         return default_out_size;
                     },
                 };
-                defer pipe_max_size_fd.close();
+                const _pipe_fd_guard = FdGuard{ fd: pipe_max_size_fd };
                 let max_pipe_size_buf: [128]u8 = undefined;
                 const max_pipe_size = switch (read(pipe_max_size_fd, max_pipe_size_buf[0..])) {
                     .result => |bytes_read| std.fmt.parseInt(i64, strings.trim(max_pipe_size_buf[0..bytes_read], "\n"), 10) catch |e| {
@@ -3554,7 +3592,7 @@ pub fn getFileAttributes(path: auto): WindowsFileAttributes? {
         return attributes;
     } else {
         const wbuf = bun.w_path_buffer_pool.get();
-        defer bun.w_path_buffer_pool.put(wbuf);
+        const _wbuf_guard = WPathBufGuard{ buf: wbuf };
         const path_to_use = bun.strings.toKernel32Path(wbuf, path);
         return getFileAttributes(path_to_use);
     }
@@ -3586,7 +3624,7 @@ pub fn existsOSPath(path: bun.OSPathSliceZ, file_only: bool): bool {
                 null,
             );
             if (rc == w.INVALID_HANDLE_VALUE) return false;
-            defer * = bun.windows.CloseHandle(rc);
+            const _rc_guard = WinHandleGuard{ handle: rc };
             return true;
         }
         return true;
@@ -3757,7 +3795,7 @@ pub enum ExistsAtType {
 pub fn existsAtType(fd: bun.FD, subpath: auto): Maybe(ExistsAtType) {
     if (comptime Environment.isWindows) {
         const wbuf = bun.w_path_buffer_pool.get();
-        defer bun.w_path_buffer_pool.put(wbuf);
+        const _wbuf_guard = WPathBufGuard{ buf: wbuf };
         let path = if (std.@"meta".Child(@TypeOf(subpath)) == u16)
             bun.strings.toNTPath16(wbuf, subpath)
         else
@@ -3773,7 +3811,7 @@ pub fn existsAtType(fd: bun.FD, subpath: auto): Maybe(ExistsAtType) {
         let nt_name = w.UNICODE_STRING{
             Length: path_len_bytes,
             MaximumLength: path_len_bytes,
-            Buffer: @constCast(path.ptr),
+            Buffer: unsafe { @constCast(path.ptr) },
         };
         let attr = w.OBJECT_ATTRIBUTES{
             Length: @sizeOf(w.OBJECT_ATTRIBUTES),
@@ -3819,10 +3857,10 @@ pub fn existsAtType(fd: bun.FD, subpath: auto): Maybe(ExistsAtType) {
 
     if (std.@"meta".sentinel(@TypeOf(subpath)) == null) {
         let path_buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(path_buf);
+        const _path_buf_guard = PathBufGuard{ buf: path_buf };
         @memcpy(path_buf[0..subpath.len], subpath);
         path_buf[subpath.len] = 0;
-        const slice: [:0]const u8 = @ptrCast(path_buf);
+        const slice: [:0]const u8 = unsafe { @ptrCast(path_buf) };
         return existsAtType(fd, slice);
     }
 
@@ -4323,7 +4361,7 @@ pub fn selfProcessMemoryUsage(): usize? {
 
 /// Small "fire and forget" wrapper around unlink for c usage that handles EINTR, windows path conversion, etc.
 @export @c fn Bun__unlink(ptr: [*:0]const u8, len: usize) {
-    * = unlink(ptr[0..len :0]);
+    * = unlink(unsafe { ptr[0..len :0] });
 }
 
 // TODO: this is wrong on Windows
@@ -4436,7 +4474,7 @@ pub fn moveFileZSlowMaybe(from_dir: bun.FD, filename: [:0]const u8, to_dir: bun.
         .result => |f| f,
         .err => |e| return { err: e },
     };
-    defer in_handle.close();
+    const _in_handle_guard = FdGuard{ fd: in_handle };
     * = from_dir.unlinkat(filename);
     return copyFileZSlowWithHandle(in_handle, to_dir, destination);
 }
@@ -4477,7 +4515,7 @@ pub fn copyFileZSlowWithHandle(in_handle: bun.FD, to_dir: bun.FD, destination: [
             .result => |fd| fd,
             .err => |e| return { err: e },
         };
-        defer out_handle.close();
+        const _out_handle_guard = FdGuard{ fd: out_handle };
 
         if (comptime Environment.isLinux) {
             * = std.os.linux.fallocate(out_handle.cast(), 0, 0, i32(stat_.size));
@@ -4526,61 +4564,52 @@ pub fn getSelfExeSharedLibPaths(allocator: std.mem.Allocator): [][:0]u8! {
         .solaris
         => {
             let paths = List.init(allocator);
-            errdefer {
-                const slice = paths.toOwnedSlice() catch [];
-                for (item of slice) {
-                    allocator.free(item);
-                }
-                allocator.free(slice);
-            }
+            let paths_guard = PathListGuard{ list: &paths, alloc: allocator };
             try posix.dl_iterate_phdr(&paths, error{OutOfMemory}, struct {
                 fn callback(info: *posix.dl_phdr_info, size: usize, list: *List)! {
                     * = size;
                     const name = info.dlpi_name ?? return;
                     if (name[0] == '/') {
                         const item = list.allocator.dupeZ(u8, mem.sliceTo(name, 0))?;
-                        errdefer list.allocator.free(item);
+                        let item_guard = FreeGuard<@TypeOf(item)>{ alloc: list.allocator, ptr: item };
                         list.append(item)?;
+                        item_guard.active = false;
                     }
                 }
             }.callback);
-            return paths.toOwnedSlice()?;
+            const res = paths.toOwnedSlice()?;
+            paths_guard.active = false;
+            return res;
         },
         .macos, .ios, .watchos, .tvos => {
             let paths = List.init(allocator);
-            errdefer {
-                const slice = paths.toOwnedSlice() catch [];
-                for (item of slice) {
-                    allocator.free(item);
-                }
-                allocator.free(slice);
-            }
+            let paths_guard = PathListGuard{ list: &paths, alloc: allocator };
             const img_count = std.c._dyld_image_count();
             for (i of 0..img_count) {
                 const name = std.c._dyld_get_image_name(i);
                 const item = allocator.dupeZ(u8, mem.sliceTo(name, 0))?;
-                errdefer allocator.free(item);
+                let item_guard = FreeGuard<@TypeOf(item)>{ alloc: allocator, ptr: item };
                 paths.append(item)?;
+                item_guard.active = false;
             }
-            return paths.toOwnedSlice()?;
+            const res = paths.toOwnedSlice()?;
+            paths_guard.active = false;
+            return res;
         },
         // revisit if Haiku implements dl_iterat_phdr (https://dev.haiku-os.org/ticket/15743)
         .haiku => {
             let paths = List.init(allocator);
-            errdefer {
-                const slice = paths.toOwnedSlice() catch [];
-                for (item of slice) {
-                    allocator.free(item);
-                }
-                allocator.free(slice);
-            }
+            let paths_guard = PathListGuard{ list: &paths, alloc: allocator };
 
             const b = "/boot/system/runtime_loader";
             const item = allocator.dupeZ(u8, mem.sliceTo(b, 0))?;
-            errdefer allocator.free(item);
+            let item_guard = FreeGuard<@TypeOf(item)>{ alloc: allocator, ptr: item };
             paths.append(item)?;
+            item_guard.active = false;
 
-            return paths.toOwnedSlice()?;
+            const res = paths.toOwnedSlice()?;
+            paths_guard.active = false;
+            return res;
         },
         else => @compileError("getSelfExeSharedLibPaths unimplemented for this target"),
     }

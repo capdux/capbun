@@ -28,6 +28,91 @@ pub const SocketConfig = Handlers.SocketConfig;
 pub const Listener = @import("./Listener.zig");
 pub const WindowsNamedPipeContext = if (Environment.isWindows) @import("./WindowsNamedPipeContext.zig") else void;
 
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+pub struct OptDerefGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deref(); }
+        }
+    }
+}
+
+pub struct MarkInactiveGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.markInactive(); }
+    }
+}
+
+pub struct FreeSliceGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+pub struct HandlersScopeGuard<T, S> {
+    socket: *T!,
+    scope: S,
+    ~init() {
+        if (_.scope.exit()) {
+            unsafe { _.socket.handlers = null; }
+        }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct CondDeinitGuard<T> {
+    ptr: *T!,
+    active: bool = true,
+    ~init() {
+        if (_.active) {
+            unsafe { _.ptr.deinit(); }
+        }
+    }
+}
+
+pub struct OptValDeinitGuard<T> {
+    val: T? = null,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deinit();
+        }
+    }
+}
+
+pub struct SSLCTXGuard {
+    ctx: (*BoringSSL.SSL_CTX)? = null,
+    ~init() {
+        if (c := _.ctx) {
+            BoringSSL.SSL_CTX_free(c);
+        }
+    }
+}
+
+pub struct SSLErrClearGuard {
+    has_err: bool,
+    ~init() {
+        if (_.has_err) {
+            BoringSSL.ERR_clear_error();
+        }
+    }
+}
+
 pub fn NewSocket(comptime ssl: bool): type {
     return struct {
         const This = @This();
@@ -92,7 +177,7 @@ pub fn NewSocket(comptime ssl: bool): type {
 
         pub fn doConnect(this: *This, connection: Listener.UnixOrHost): !void {
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
 
             const vm = this.getHandlers().vm;
             const group = vm.rareData().bunConnectGroup(vm, ssl);
@@ -107,7 +192,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                     const raw = host.host;
                     const clean = if (raw.len > 1 and raw[0] == '[' and raw[raw.len - 1] == ']') raw[1 .. raw.len - 1] else raw;
                     const hostz = bun.handleOom(alloc.dupeZ(u8, clean));
-                    defer alloc.free(hostz);
+                    const _hostz_guard = FreeSliceGuard<u8>{ alloc: alloc, slice: hostz };
 
                     switch (group.connect(kind, ssl_ctx, hostz, host.port, flags, @sizeOf(OpaquePtr))) {
                         .failed => return error.FailedToOpenSocket,
@@ -125,7 +210,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                     let sf = std.heap.stackFallback(1024, bun.default_allocator);
                     const alloc = sf.get();
                     const pathz = bun.handleOom(alloc.dupeZ(u8, u));
-                    defer alloc.free(pathz);
+                    const _pathz_guard = FreeSliceGuard<u8>{ alloc: alloc, slice: pathz };
 
                     const s = group.connectUnix(kind, ssl_ctx, pathz, flags, @sizeOf(OpaquePtr)) orelse
                         return error.FailedToOpenSocket;
@@ -197,12 +282,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             if (vm.isShuttingDown()) {
                 return;
             }
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
             * = h.callErrorHandler(this_value, &.{ this_value, err_value });
@@ -221,17 +301,12 @@ pub fn NewSocket(comptime ssl: bool): type {
                 return;
             }
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
             this.internalFlush();
             log("onWritable buffered_data_for_node_net {d}", .{this.buffered_data_for_node_net.len});
             if (this.buffered_data_for_node_net.len > 0 or this.socket.isDetached()) return;
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
@@ -251,12 +326,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 return;
             }
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
@@ -273,13 +343,13 @@ pub fn NewSocket(comptime ssl: bool): type {
             const h = this.getHandlers();
             log("onConnectError {s} ({d}, {d})", .{ if (h.mode == .server) "S" else "C", errno, this.ref_count.get() });
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
             this.buffered_data_for_node_net.clearAndFree(bun.default_allocator);
 
             const needs_deref = !this.socket.isDetached();
             this.socket = Socket.detached;
-            defer this.markInactive();
-            defer if (needs_deref) this.deref();
+            const _inactive_guard = MarkInactiveGuard<This>{ ptr: this };
+            const _opt_deref_guard = OptDerefGuard<This>{ ptr: if (needs_deref) this else null };
 
             const vm = h.vm;
             this.poll_ref.unrefOnNextTick(vm);
@@ -302,12 +372,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 .code = code_,
             };
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
 
             if (callback == .zero) {
                 if (this.this_value != .finalized) {
@@ -398,7 +463,7 @@ pub fn NewSocket(comptime ssl: bool): type {
         pub fn onOpen(this: *This, socket: Socket) {
             log("onOpen {s} {*} {} {}", .{ if (this.isServer()) "S" else "C", this, this.socket.isDetached(), this.ref_count.get() });
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
 
             this.socket = socket;
             jsc.markBinding(@src());
@@ -410,7 +475,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                             const host = server_name;
                             if (host.len > 0) {
                                 const host__ = bun.handleOom(default_allocator.dupeZ(u8, host));
-                                defer default_allocator.free(host__);
+                                const _host_guard = FreeSliceGuard<u8>{ alloc: default_allocator, slice: host__ };
                                 ssl_ptr.setHostname(host__);
                             }
                         } else if (this.connection) |connection| {
@@ -418,7 +483,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                                 const host = connection.host.host;
                                 if (host.len > 0) {
                                     const host__ = bun.handleOom(default_allocator.dupeZ(u8, host));
-                                    defer default_allocator.free(host__);
+                                    const _host_guard = FreeSliceGuard<u8>{ alloc: default_allocator, slice: host__ };
                                     ssl_ptr.setHostname(host__);
                                 }
                             }
@@ -455,16 +520,11 @@ pub fn NewSocket(comptime ssl: bool): type {
                 if (callback == .zero) return;
             }
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
             const result = callback.call(globalObject, this_value, &.{this_value}) catch |err| globalObject.takeException(err);
 
             if (result.toError()) |err| {
-                defer this.markInactive();
+                const _inactive_guard = MarkInactiveGuard<This>{ ptr: this };
                 if (!this.socket.isClosed()) {
                     log("Closing due to error", .{});
                 } else {
@@ -493,7 +553,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             const h = this.getHandlers();
             log("onEnd {s}", .{if (h.mode == .server) "S" else "C"});
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
 
             const callback = h.onEnd;
             if (callback == .zero or h.vm.isShuttingDown()) {
@@ -502,12 +562,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 return;
             }
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
@@ -543,12 +598,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 is_open = true;
             }
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
@@ -589,8 +639,8 @@ pub fn NewSocket(comptime ssl: bool): type {
                 this.twin = null;
                 raw.onClose(socket, err, reason) catch {};
             }
-            defer this.deref();
-            defer this.markInactive();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
+            const _inactive_guard = MarkInactiveGuard<This>{ ptr: this };
 
             if (this.flags.finalizing) {
                 return;
@@ -608,12 +658,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 return;
             }
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
@@ -651,12 +696,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 return;
             };
 
-            let scope = h.enter();
-            defer {
-                if (scope.exit()) {
-                    this.handlers = null;
-                }
-            }
+            const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: this, scope: h.enter() };
 
             * = callback.call(globalObject, this_value, &.{
                 this_value,
@@ -891,7 +931,7 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             const args = callframe.argumentsUndef(2);
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
             switch (this.writeOrEndBuffered(globalObject, args.ptr[0], args.ptr[1], true)) {
                 .fail => return JSValue.zero,
                 .success => |result| {
@@ -911,7 +951,7 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             let stack_fallback = std.heap.stackFallback(16 * 1024, bun.default_allocator);
             const allow_string_object = true;
-            const buffer: jsc.Node.StringOrBuffer = if (data_value.isUndefined())
+            let buffer: jsc.Node.StringOrBuffer = if (data_value.isUndefined())
                 jsc.Node.StringOrBuffer.empty
             else
                 jsc.Node.StringOrBuffer.fromJSWithEncodingValueAllowStringObject(globalObject, stack_fallback.get(), data_value, encoding_value, allow_string_object) catch {
@@ -924,7 +964,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                     }
                     return .fail;
                 };
-            defer buffer.deinit();
+            const _buf_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &buffer } };
             if (!this.flags.end_after_flush and is_end) {
                 this.flags.end_after_flush = true;
             }
@@ -1051,7 +1091,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
 
             let stack_fallback = std.heap.stackFallback(16 * 1024, bun.default_allocator);
-            const buffer: jsc.Node.BlobOrStringOrBuffer = if (args[0].isUndefined())
+            let buffer: jsc.Node.BlobOrStringOrBuffer = if (args[0].isUndefined())
                 jsc.Node.BlobOrStringOrBuffer{ .string_or_buffer = jsc.Node.StringOrBuffer.empty }
             else
                 jsc.Node.BlobOrStringOrBuffer.fromJSWithEncodingValueAllowRequestResponse(globalObject, stack_fallback.get(), args[0], encoding_value, true) catch {
@@ -1065,7 +1105,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                     return .fail;
                 };
 
-            defer buffer.deinit();
+            const _buf_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &buffer } };
             if (buffer == .blob and buffer.blob.needsToReadFile()) {
                 const throw_err = globalObject.throw("File blob not supported yet in this function.", .{});
                 if (throw_err == error.JSError) return .fail;
@@ -1258,7 +1298,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
 
             this.ref();
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
 
             switch (this.writeOrEnd(globalObject, args.mut(), false, true)) {
                 .fail => return JSValue.zero,
@@ -1399,13 +1439,10 @@ pub fn NewSocket(comptime ssl: bool): type {
             if (globalObject.hasException()) return JSValue.zero;
             let h = try Handlers.fromJS(globalObject, socket_obj, false);
             if (globalObject.hasException()) return JSValue.zero;
-            let handlers_consumed = false;
-            errdefer if (!handlers_consumed) h.deinit();
+            let _h_guard = CondDeinitGuard<Handlers>{ ptr: unsafe { &h }, active: true };
 
-            let owned_ctx: ?*BoringSSL.SSL_CTX = null;
-            errdefer if (owned_ctx) |ctx_ref| BoringSSL.SSL_CTX_free(ctx_ref);
-            let ssl_opts: ?jsc.API.ServerConfig.SSLConfig = null;
-            defer if (ssl_opts) |*cfg| cfg.deinit();
+            let _ctx_guard = SSLCTXGuard{};
+            let _ssl_opts_guard = OptValDeinitGuard<jsc.API.ServerConfig.SSLConfig>{};
 
             let sc_js: JSValue = .zero;
             if (try opts.getTruthy(globalObject, "secureContext")) |v| {
@@ -1421,18 +1458,18 @@ pub fn NewSocket(comptime ssl: bool): type {
                 const sc = SecureContext.fromJS(sc_js) orelse {
                     return globalObject.throwInvalidArgumentTypeValue("secureContext", "SecureContext", sc_js);
                 };
-                owned_ctx = sc.borrow();
+                _ctx_guard.ctx = sc.borrow();
                 if (try opts.getTruthy(globalObject, "tls")) |t| {
-                    if (!t.isBoolean()) ssl_opts = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, t);
+                    if (!t.isBoolean()) _ssl_opts_guard.val = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, t);
                 }
             } else if (try opts.getTruthy(globalObject, "tls")) |tls_js| {
                 if (!tls_js.isBoolean()) {
-                    ssl_opts = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls_js);
+                    _ssl_opts_guard.val = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls_js);
                 } else if (tls_js.toBoolean()) {
-                    ssl_opts = jsc.API.ServerConfig.SSLConfig.zero;
+                    _ssl_opts_guard.val = jsc.API.ServerConfig.SSLConfig.zero;
                 }
-                if (ssl_opts == null) return globalObject.throw("Expected \"tls\" option", .{});
-                const cfg = &ssl_opts.?;
+                if (_ssl_opts_guard.val == null) return globalObject.throw("Expected \"tls\" option", .{});
+                const cfg = &_ssl_opts_guard.val.?;
                 let create_err: uws.create_bun_socket_error_t = .none;
                 const maybe_ctx = jsc.VirtualMachine.get().rareData().sslCtxCache().getOrCreate(cfg, &create_err);
                 if (maybe_ctx == null) {
@@ -1441,7 +1478,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                     const ssl_err = err_get_fn();
                     return globalObject.throwValue(bun.BoringSSL.ERR_toJS(globalObject, ssl_err));
                 }
-                owned_ctx = maybe_ctx.?;
+                _ctx_guard.ctx = maybe_ctx.?;
             } else {
                 return globalObject.throw("Expected \"tls\" option", .{});
             }
@@ -1456,12 +1493,12 @@ pub fn NewSocket(comptime ssl: bool): type {
             const vm = h.vm;
             const handlers_ptr = bun.handleOom(vm.allocator.create(Handlers));
             handlers_ptr.* = h;
-            handlers_consumed = true;
+            _h_guard.active = false;
 
             let duped_protos: ?[]const u8 = null;
             let duped_server_name: ?[]const u8 = null;
             let sni: ?[*:0]const u8 = null;
-            if (ssl_opts) |*cfg| {
+            if (_ssl_opts_guard.val) |*cfg| {
                 if (cfg.protos) |p| {
                     duped_protos = bun.handleOom(bun.default_allocator.dupe(u8, std.mem.span(p)));
                 }
@@ -1478,22 +1515,18 @@ pub fn NewSocket(comptime ssl: bool): type {
                 .connection = null,
                 .protos = duped_protos,
                 .server_name = duped_server_name,
-                .owned_ssl_ctx = owned_ctx,
+                .owned_ssl_ctx = _ctx_guard.ctx,
             });
             if (conn_ref := this.connection) {
                 tls.connection = conn_ref.clone();
             }
-            owned_ctx = null;
+            _ctx_guard.ctx = null;
 
             const group = vm.rareData().bunConnectGroup(vm, true);
             const new_raw = raw_socket.adoptTLS(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, @sizeOf(OpaquePtr), @sizeOf(OpaquePtr)) orelse {
                 const get_err_fn = BoringSSL.ERR_get_error;
                 const err = get_err_fn();
-                defer {
-                    if (err != 0) {
-                        BoringSSL.ERR_clear_error();
-                    }
-                }
+                const _err_clear_guard = SSLErrClearGuard{ has_err: err != 0 };
                 tls.deref();
                 handlers_ptr.deinit();
                 vm.allocator.destroy(handlers_ptr);
@@ -1516,7 +1549,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 this.flags.is_active = false;
                 this.this_value.downgrade();
             }
-            defer this.deref();
+            const _deref_guard = DerefGuard<This>{ ptr: this };
             this.detachNativeCallback();
             this.socket.detach();
 
@@ -1846,11 +1879,9 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         is_server = is_server_val.toBoolean();
     }
     let handlers = try Handlers.fromJS(globalObject, socket_obj, false);
-    let handlers_consumed = false;
-    errdefer if (!handlers_consumed) handlers.deinit();
+    let _handlers_guard = CondDeinitGuard<Handlers>{ ptr: unsafe { &handlers }, active: true };
 
-    let owned_ctx: (*BoringSSL.SSL_CTX)? = null;
-    errdefer if (owned_c := owned_ctx) BoringSSL.SSL_CTX_free(owned_c);
+    let _ctx_guard = SSLCTXGuard{};
     let sc_js: JSValue = .zero;
     if (v := try opts.getTruthy(globalObject, "secureContext")) {
         sc_js = v;
@@ -1865,24 +1896,23 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         const sc = SecureContext.fromJS(sc_js) orelse {
             return globalObject.throwInvalidArgumentTypeValue("secureContext", "SecureContext", sc_js);
         };
-        owned_ctx = sc.borrow();
+        _ctx_guard.ctx = sc.borrow();
     }
 
-    let ssl_opts: jsc.API.ServerConfig.SSLConfig? = null;
-    errdefer if (*opts_ref := ssl_opts) opts_ref.deinit();
+    let _ssl_opts_guard = OptValDeinitGuard<jsc.API.ServerConfig.SSLConfig>{};
     if (tls := try opts.getTruthy(globalObject, "tls")) {
         if (!tls.isBoolean()) {
-            ssl_opts = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls);
+            _ssl_opts_guard.val = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls);
         } else if (tls.toBoolean()) {
-            ssl_opts = jsc.API.ServerConfig.SSLConfig.zero;
+            _ssl_opts_guard.val = jsc.API.ServerConfig.SSLConfig.zero;
         }
     }
-    if (owned_ctx == null and ssl_opts == null) {
+    if (_ctx_guard.ctx == null and _ssl_opts_guard.val == null) {
         return globalObject.throw("Expected \"tls\" option", .{});
     }
     let socket_config: (*jsc.API.ServerConfig.SSLConfig)? = null;
-    if (ssl_opts != null) {
-        socket_config = bun.cast(OptSSLConfig, unsafe { &ssl_opts.? });
+    if (_ssl_opts_guard.val != null) {
+        socket_config = bun.cast(OptSSLConfig, unsafe { &_ssl_opts_guard.val.? });
     }
 
     let default_data = JSValue.zero;
@@ -1893,7 +1923,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
 
     let handlers_ptr = bun.handleOom(handlers.vm.allocator.create(Handlers));
     handlers_ptr.* = handlers;
-    handlers_consumed = true;
+    _handlers_guard.active = false;
     handlers_ptr.mode = if (is_server) .duplex_server else .client;
 
     let duped_protos: ([]const u8)? = null;
@@ -1919,7 +1949,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     TLSSocket.js.dataSetCached(tls_js_value, globalObject, default_data);
 
     let final_ssl_config: jsc.API.ServerConfig.SSLConfig? = null;
-    if (owned_ctx == null and socket_config != null) {
+    if (_ctx_guard.ctx == null and socket_config != null) {
         final_ssl_config = socket_config.?.*;
     }
 
@@ -1929,28 +1959,30 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         .vm = globalObject.bunVM(),
         .task = undefined,
         .ssl_config = final_ssl_config,
-        .owned_ctx = owned_ctx,
+        .owned_ctx = _ctx_guard.ctx,
         .mode = if (is_server) .duplex_server else .client,
     });
-    owned_ctx = null;
+    _ctx_guard.ctx = null;
     if (duplexContext.ssl_config == null) {
         if (cfg_cleanup := socket_config) cfg_cleanup.deinit();
     }
-    ssl_opts = null;
+    _ssl_opts_guard.val = null;
     tls.ref();
 
     duplexContext.task = jsc.AnyTask.New(DuplexUpgradeContext, DuplexUpgradeContext.runEvent).init(duplexContext);
-    duplexContext.upgrade = uws.UpgradedDuplex.from(globalObject, duplex, .{
-        .onOpen = @ptrCast(&DuplexUpgradeContext.onOpen),
-        .onData = @ptrCast(&DuplexUpgradeContext.onData),
-        .onHandshake = @ptrCast(&DuplexUpgradeContext.onHandshake),
-        .onClose = @ptrCast(&DuplexUpgradeContext.onClose),
-        .onEnd = @ptrCast(&DuplexUpgradeContext.onEnd),
-        .onWritable = @ptrCast(&DuplexUpgradeContext.onWritable),
-        .onError = @ptrCast(&DuplexUpgradeContext.onError),
-        .onTimeout = @ptrCast(&DuplexUpgradeContext.onTimeout),
-        .ctx = @ptrCast(duplexContext),
-    });
+    duplexContext.upgrade = unsafe {
+        uws.UpgradedDuplex.from(globalObject, duplex, .{
+            .onOpen = @ptrCast(&DuplexUpgradeContext.onOpen),
+            .onData = @ptrCast(&DuplexUpgradeContext.onData),
+            .onHandshake = @ptrCast(&DuplexUpgradeContext.onHandshake),
+            .onClose = @ptrCast(&DuplexUpgradeContext.onClose),
+            .onEnd = @ptrCast(&DuplexUpgradeContext.onEnd),
+            .onWritable = @ptrCast(&DuplexUpgradeContext.onWritable),
+            .onError = @ptrCast(&DuplexUpgradeContext.onError),
+            .onTimeout = @ptrCast(&DuplexUpgradeContext.onTimeout),
+            .ctx = @ptrCast(duplexContext),
+        })
+    };
 
     tls.socket = TLSSocket.Socket.fromDuplex(&duplexContext.upgrade);
     tls.markActive();

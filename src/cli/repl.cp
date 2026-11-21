@@ -44,6 +44,36 @@ const MAX_LINE_LENGTH: usize = 16384;
 const HISTORY_FILENAME = ".bun_repl_history";
 const TAB_WIDTH: usize = 2;
 
+struct DeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)?,
+    allocator: Allocator,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(_.allocator); }
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: Allocator,
+    slice: ([]const T)?,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) unsafe { p.close(); }
+    }
+}
+
 // ANSI escape codes
 const ESC = "\x1b";
 const CSI = ESC ++ "[";
@@ -202,7 +232,7 @@ struct History {
         const read_res = bun.sys.File.readFrom(bun.FD.cwd(), path, _.allocator);
         if (read_res == .err) return;
         const content = read_res.result;
-        defer _.allocator.free(content);
+        const _guard_content = FreeGuard<u8>{ allocator: _.allocator, slice: content };
 
         let lines = std.mem.splitScalar(u8, content, '\n');
         while (line := lines.next()) {
@@ -233,7 +263,7 @@ struct History {
             0;
 
         let content = ArrayList(u8).init(_.allocator);
-        defer content.deinit();
+        const _guard_content = DeinitGuard<ArrayList(u8)>{ ptr: &content };
         for (entry of _.entries.items[start..]) {
             content.appendSlice(entry) catch return;
             content.append('\n') catch return;
@@ -241,8 +271,8 @@ struct History {
 
         const open_res = bun.sys.openA(path, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o644);
         if (open_res == .err) return;
-        const file = bun.sys.File{ handle: open_res.result };
-        defer file.close();
+        let file = bun.sys.File{ handle: open_res.result };
+        const _guard_file = CloseGuard<bun.sys.File>{ ptr: &file };
         if (file.writeAll(content.items) == .err) return;
 
         _.modified = false;
@@ -601,7 +631,7 @@ fn cmdLoad(repl: *Repl, args: []const u8): ReplResult {
         return .skip_eval;
     }
     const content = read_res.result;
-    defer repl.allocator.free(content);
+    const _guard_content = FreeGuard<u8>{ allocator: repl.allocator, slice: content };
 
     repl.print("{s}Loading {s}...{s}\n", .{ Color.dim, filename, Color.reset });
     repl.evaluateAndPrint(content);
@@ -617,7 +647,7 @@ fn cmdSave(repl: *Repl, args: []const u8): ReplResult {
 
     // Build content
     let content = ArrayList(u8).init(repl.allocator);
-    defer content.deinit();
+    const _guard_content = DeinitGuard<ArrayList(u8)>{ ptr: &content };
     for (entry of repl.history.entries.items) {
         content.appendSlice(entry) catch return .skip_eval;
         content.append('\n') catch return .skip_eval;
@@ -628,8 +658,8 @@ fn cmdSave(repl: *Repl, args: []const u8): ReplResult {
         repl.printError("{f}\n", .{open_res.err});
         return .skip_eval;
     }
-    const file = bun.sys.File{ handle: open_res.result };
-    defer file.close();
+    let file = bun.sys.File{ handle: open_res.result };
+    const _guard_file = CloseGuard<bun.sys.File>{ ptr: &file };
     const write_res = file.writeAll(content.items);
     if (write_res == .err) {
         repl.printError("{f}\n", .{write_res.err});
@@ -1102,7 +1132,7 @@ fn evaluateAndPrint(*_, code: []const u8) {
         return;
     }
     const transformed_code = transformed_opt.?;
-    defer _.allocator.free(transformed_code);
+    const _guard_transformed = FreeGuard<u8>{ allocator: _.allocator, slice: transformed_code };
 
     // Evaluate the transformed code
     let exception: jsc.JSValue = .js_undefined;
@@ -1245,7 +1275,7 @@ fn evalScript(*_, code: []const u8, print_result: bool): bool {
         return true;
     }
     const transformed_code = transformed_opt.?;
-    defer _.allocator.free(transformed_code);
+    const _guard_transformed = FreeGuard<u8>{ allocator: _.allocator, slice: transformed_code };
 
     let exception: jsc.JSValue = .js_undefined;
     let resolved_result = Bun__REPL__evaluate(
@@ -1366,7 +1396,7 @@ fn evaluateAndCopy(*_, code: []const u8) {
         return;
     }
     const transformed_code = transformed_opt.?;
-    defer _.allocator.free(transformed_code);
+    const _guard_transformed = FreeGuard<u8>{ allocator: _.allocator, slice: transformed_code };
 
     let exception: jsc.JSValue = .js_undefined;
     let resolved_result = Bun__REPL__evaluate(
@@ -1445,15 +1475,15 @@ fn valueToClipboardString(*_, value: jsc.JSValue): bun.JSError!([]const u8)? {
 
     // For strings, copy the raw string value (not quoted/JSON-ified)
     if (value.isString()) {
-        const slice = value.toSlice(global, _.allocator)?;
-        defer slice.deinit();
+        let slice = value.toSlice(global, _.allocator)?;
+        const _guard_slice = DeinitGuard<jsc.ZigString.Slice>{ ptr: &slice };
         return _.allocator.dupe(u8, slice.slice()) catch null;
     }
 
     // For everything else, use Bun.inspect without colors
     let array = std.Io.Writer.Allocating.init(_.allocator);
-    defer array.deinit();
-    jsc.ConsoleObject.format2(.Log, global, @ptrCast(&value), 1, &array.writer, {
+    const _guard_array = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &array };
+    jsc.ConsoleObject.format2(.Log, global, unsafe { @ptrCast(&value) }, 1, &array.writer, {
         enable_colors: false,
         add_newline: false,
         flush: false,
@@ -1474,7 +1504,7 @@ fn copyValueToClipboard(*_, value: jsc.JSValue)! {
         return;
     }
     const text = text_opt.?;
-    defer _.allocator.free(text);
+    const _guard_text = FreeGuard<u8>{ allocator: _.allocator, slice: text };
 
     _.copyToClipboardOSC52(text) catch {
         _.printError("Failed to write to clipboard\n", {});
@@ -1497,21 +1527,21 @@ fn copyToClipboardOSC52(*_, text: []const u8)! {
     if (first.len == text.len) {
         // No ANSI sequences - encode the original directly
         let encoded = bun.base64.encodeAlloc(_.allocator, text)?;
-        defer encoded.deinit(_.allocator);
+        const _guard_encoded = DeinitWithAllocGuard<@TypeOf(encoded)>{ ptr: &encoded, allocator: _.allocator };
         _.write("\x1b]52;c;");
         _.write(encoded.slice());
         _.write("\x07");
     } else {
         // Has ANSI sequences - collect clean slices then encode
         let clean = ArrayList(u8).init(_.allocator);
-        defer clean.deinit();
+        const _guard_clean = DeinitGuard<ArrayList(u8)>{ ptr: &clean };
         clean.ensureTotalCapacity(text.len)?;
         clean.appendSliceAssumeCapacity(first);
         while (slice := it.next()) {
             clean.appendSliceAssumeCapacity(slice);
         }
         let encoded = bun.base64.encodeAlloc(_.allocator, clean.items)?;
-        defer encoded.deinit(_.allocator);
+        const _guard_encoded = DeinitWithAllocGuard<@TypeOf(encoded)>{ ptr: &encoded, allocator: _.allocator };
         _.write("\x1b]52;c;");
         _.write(encoded.slice());
         _.write("\x07");
@@ -1535,13 +1565,11 @@ fn transformForRepl(*_, code: []const u8): ([]const u8)? {
         std.fmt.allocPrint(_.allocator, "({s})", .{code}) catch return null
     else
         code;
-    defer {
-        if (is_object_literal) _.allocator.free(processed_code);
-    }
+    const _guard_processed = FreeGuard<u8>{ allocator: _.allocator, slice: if (is_object_literal) processed_code else null };
 
     // Create arena for parsing
     let arena_ = MimallocArena.init();
-    defer arena_.deinit();
+    const _guard_arena = DeinitGuard<MimallocArena>{ ptr: &arena_ };
     const allocator = arena_.allocator();
 
     // Set up parser options with repl_mode enabled
@@ -1565,7 +1593,7 @@ fn transformForRepl(*_, code: []const u8): ([]const u8)? {
 
     // Create log for errors
     let log = logger.Log.init(arena_.backingAllocator());
-    defer log.deinit();
+    const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
 
     // Create source
     const source = logger.Source.initPathString("[repl]", processed_code);
@@ -1589,7 +1617,7 @@ fn transformForRepl(*_, code: []const u8): ([]const u8)? {
     // Print the transformed AST back to JavaScript
     const buffer_writer = js_printer.BufferWriter.init(_.allocator);
     let buffer_printer = js_printer.BufferPrinter.init(buffer_writer);
-    defer buffer_printer.ctx.buffer.deinit();
+    const _guard_buf_printer = DeinitGuard<@TypeOf(buffer_printer.ctx.buffer)>{ ptr: &buffer_printer.ctx.buffer };
 
     // Create symbol map from ast.symbols
     const symbols_nested = bun.ast.Symbol.NestedList.fromBorrowedSliceDangerous(&.{ast.symbols});
@@ -1653,7 +1681,7 @@ fn printJSErrorTo(*_, error_value: jsc.JSValue, writer: *std.Io.Writer, enable_c
     if (_.global == null) return;
     const global = _.global.?;
     // Use .Error level for proper error formatting with Bun.inspect
-    jsc.ConsoleObject.format2(.Error, global, @ptrCast(&error_value), 1, writer, {
+    jsc.ConsoleObject.format2(.Error, global, unsafe { @ptrCast(&error_value) }, 1, writer, {
         enable_colors: enable_colors,
         add_newline: true,
         flush: false,
@@ -1672,7 +1700,7 @@ fn printFormattedValue(*_, value: jsc.JSValue) {
     if (_.global == null) return;
     const global = _.global.?;
     const writer = Output.writer();
-    jsc.ConsoleObject.format2(.Log, global, @ptrCast(&value), 1, writer, {
+    jsc.ConsoleObject.format2(.Log, global, unsafe { @ptrCast(&value) }, 1, writer, {
         enable_colors: _.use_colors,
         add_newline: true,
         flush: false,
@@ -1918,7 +1946,7 @@ fn handleEnter(*_)! {
         _.allocator.dupe(u8, _.multiline_buffer.items) catch unreachable
     else
         _.allocator.dupe(u8, line) catch unreachable;
-    defer _.allocator.free(code_to_eval);
+    const _guard_code_to_eval = FreeGuard<u8>{ allocator: _.allocator, slice: code_to_eval };
 
     _.history.add(strings.trim(code_to_eval, "\n"))?;
 
@@ -1963,7 +1991,7 @@ fn handleTab(*_) {
     // Complete REPL commands
     if (line.len > 0 && line[0] == '.') {
         let matches = ArrayList(string).init(_.allocator);
-        defer matches.deinit();
+        const _guard_matches = DeinitGuard<ArrayList(string)>{ ptr: &matches };
 
         for (cmd of ReplCommand.all) {
             if (strings.startsWith(cmd.name, line)) {
@@ -2039,11 +2067,11 @@ fn handleTab(*_) {
             break :brk .js_undefined;
         };
         if (item.isString()) {
-            const slice = item.toSlice(global, _.allocator) catch {
+            let slice = item.toSlice(global, _.allocator) catch {
                 global.clearException();
                 return;
             };
-            defer slice.deinit();
+            const _guard_slice = DeinitGuard<jsc.ZigString.Slice>{ ptr: &slice };
             const completion = slice.slice();
             // Replace the prefix with the completion
             while (_.line_editor.cursor > word_start) {
@@ -2062,11 +2090,11 @@ fn handleTab(*_) {
                 break :brk .js_undefined;
             };
             if (item.isString()) {
-                const slice = item.toSlice(global, _.allocator) catch {
+                let slice = item.toSlice(global, _.allocator) catch {
                     global.clearException();
                     continue;
                 };
-                defer slice.deinit();
+                const _guard_slice = DeinitGuard<jsc.ZigString.Slice>{ ptr: &slice };
                 _.print("  {s}{s}{s}\n", .{ Color.cyan, slice.slice(), Color.reset });
             }
         }
@@ -2083,7 +2111,7 @@ fn handleTab(*_) {
 
 static fn exec(ctx: bun.cli.Command.Context)! {
     let repl = Repl.init(ctx.allocator);
-    defer repl.deinit();
+    const _guard_repl = DeinitGuard<Repl>{ ptr: &repl };
 
     repl.run()?;
 }
