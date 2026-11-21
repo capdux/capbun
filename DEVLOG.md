@@ -1539,3 +1539,7 @@
 ## [2026-11-22 Wave #11] RAII 改造与 `unsafe {}` 经验
 - `RuntimeTranspilerStore.cp`：`mappings` 已是指针类型时，`DerefGuard` 类型参数使用 `std.@"meta".Child(@TypeOf(mappings))` 避免二次取址 `**T` 导致单层解引用报错。
 - `cares_jsc.cp` / `path_watcher.cp`：`unsafe {}` 外层块标签使用具名 `inet_blk:`/`name_blk:` 避免标签名冲突；`fs.cp` 中 `readdir` 的 `errdefer dir.deinit(allocator)` 通过在 `return` 前置空 `dir_guard.ptr = null` 保持仅出错释放语义。
+
+## [2026-11-22 Wave #12] RAII 改造与 `unsafe {}` 经验
+- `http.cp`：`OptFreeZGuard`、`TerminateSocketGuard<Ctx, Sock>` 与 `DerefGuard<T>`/`DeinitGuard<T>` 统一接管连接与缓冲析构，裸指针下标与 `@ptrCast`/`@constCast` 全部收窄入 `unsafe {}`。
+- `lockfile.cp`：`LogDeinitGuard` 统一处理 `log` 与 `msgs` 析构，保留 `clamp()`/`assert` 控制流 `defer`。

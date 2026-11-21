@@ -67,6 +67,41 @@ const invalid_package_id = Install.invalid_package_id;
 const PackageManager = Install.PackageManager;
 const WorkspaceFilter = PackageManager.WorkspaceFilter;
 
+struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    allocator: Allocator,
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit(_.allocator);
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: Allocator,
+    slice: ([]T)? = null,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+struct LogDeinitGuard {
+    ptr: (*logger.Log)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            for (*item of p.msgs.items) {
+                item.deinit(bun.default_allocator);
+            }
+            p.deinit();
+        }
+    }
+}
+
 
 @c pub struct PatchedDep {
     /// e.g. "patches/is-even@1.0.0.patch"
@@ -854,7 +889,7 @@ pub fn loadFromDir(
                 // parse it back into a binary lockfile.
 
                 let writer_allocating = std.Io.Writer.Allocating.init(allocator);
-                defer writer_allocating.deinit();
+                const _writer_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &writer_allocating };
                 const writer = &writer_allocating.writer;
 
                 TextLockfile.Stringifier.saveFromBinary(allocator, result.ok.lockfile, &result, &manager.?.options, writer) catch |e| {
@@ -1081,12 +1116,7 @@ pub fn clean(
 ): !*Lockfile {
     // This is wasteful, but we rarely log anything so it's fine.
     let log = logger.Log.init(bun.default_allocator);
-    defer {
-        for (*item of log.msgs.items) {
-            item.deinit(bun.default_allocator);
-        }
-        log.deinit();
-    }
+    const _log_guard = LogDeinitGuard{ ptr: &log };
 
     return cleanWithLogger(old, manager, updates, &log, exact_versions, log_level);
 }
@@ -1194,7 +1224,7 @@ pub fn cleanWithLogger(
     manager.ensurePreinstallStateListCapacity(old.packages.len);
     let preinstall_state = manager.preinstall_state;
     let old_preinstall_state = bun.handleOom(preinstall_state.clone(old.allocator));
-    defer old_preinstall_state.deinit(old.allocator);
+    const _old_preinstall_guard = DeinitWithAllocGuard<@TypeOf(old_preinstall_state)>{ allocator: old.allocator, ptr: &old_preinstall_state };
     @memset(preinstall_state.items, .unknown);
 
     if (updates.len > 0) {
@@ -1603,7 +1633,7 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
     const bytes = bytes: {
         if (save_format == .text) {
             let writer_allocating = std.Io.Writer.Allocating.init(bun.default_allocator);
-            defer writer_allocating.deinit();
+            const _writer_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &writer_allocating };
             const writer = &writer_allocating.writer;
 
             TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer) catch |e| switch (e) {
@@ -1629,7 +1659,7 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
             bytes.items[end_pos..][0..@sizeOf(usize)].* = @bitCast(total_size);
         break :bytes bytes.items;
     };
-    defer bun.default_allocator.free(bytes);
+    const _bytes_guard = FreeGuard<u8>{ allocator: bun.default_allocator, slice: bytes };
 
     let tmpname_buf: [512]u8 = undefined;
     let base64_bytes: [8]u8 = undefined;
@@ -1989,7 +2019,7 @@ pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, alloca
     if (l_len != r_len) return false;
 
     const sort_buf = allocator.alloc(EqlSorter.PathToId, l_len + r_len)?;
-    defer l.allocator.free(sort_buf);
+    const _sort_buf_guard = FreeGuard<EqlSorter.PathToId>{ allocator: l.allocator, slice: sort_buf };
     let l_buf = sort_buf[0..l_len];
     let r_buf = sort_buf[r_len..];
 
@@ -2119,12 +2149,12 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
         return zero_hash;
 
     let string_builder = GlobalStringBuilder{};
-    defer string_builder.deinit(client.allocator);
+    const _sb_guard = DeinitWithAllocGuard<GlobalStringBuilder>{ allocator: client.allocator, ptr: &string_builder };
     const names: []const String = client.packages.items(.name)[0..packages_len];
     const resolutions: []const Resolution = client.packages.items(.resolution)[0..packages_len];
     const bytes = client.buffers.string_bytes.items;
     let alphabetized_names = client.allocator.alloc(PackageID, packages_len -| 1)?;
-    defer client.allocator.free(alphabetized_names);
+    const _names_guard = FreeGuard<PackageID>{ allocator: client.allocator, slice: alphabetized_names };
 
     const hash_prefix = "\n-- BEGIN SHA512/256(`${alphabetize(name)}@${order(version)}`) --\n";
     const hash_suffix = "-- END HASH--\n";

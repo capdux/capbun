@@ -10,6 +10,28 @@ const strings = bun.strings;
 const jsc = bun.jsc;
 const ZigString = bun.jsc.ZigString;
 
+struct DeinitGuard<T> {
+    ptr: (*T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: (*const T)? = null,
+    ~init() {
+        if (p := _.ptr) p.deref();
+    }
+}
+
+struct FreeZGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([:0]T)? = null,
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
 // ── extern decls ────────────────────────────────────────────────────────────
 @c {
     fn BunString__transferToJS(client: *String, globalThis: *jsc.JSGlobalObject): jsc.JSValue;
@@ -29,24 +51,24 @@ pub fn transferToJS(client: *String, globalThis: *jsc.JSGlobalObject): bun.JSErr
 }
 
 pub fn toErrorInstance(client: *const String, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-    defer client.deref();
+    const _client_guard = DerefGuard<String>{ ptr: client };
     return JSC__createError(globalObject, client);
 }
 
 pub fn toTypeErrorInstance(client: *const String, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-    defer client.deref();
+    const _client_guard = DerefGuard<String>{ ptr: client };
     return JSC__createTypeError(globalObject, client);
 }
 
 pub fn toRangeErrorInstance(client: *const String, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-    defer client.deref();
+    const _client_guard = DerefGuard<String>{ ptr: client };
     return JSC__createRangeError(globalObject, client);
 }
 
 pub fn fromJS(value: bun.jsc.JSValue, globalObject: *jsc.JSGlobalObject): bun.JSError!String {
     let scope: jsc.ExceptionValidationScope = undefined;
     scope.init(globalObject, @src());
-    defer scope.deinit();
+    const _scope_guard = DeinitGuard<jsc.ExceptionValidationScope>{ ptr: &scope };
     let out: String = String.dead;
     const ok = bun.cpp.BunString__fromJS(globalObject, value, &out);
 
@@ -90,7 +112,7 @@ pub fn createUTF8ForJS(globalObject: *jsc.JSGlobalObject, utf8_slice: []const u8
 pub fn createFormatForJS(globalObject: *jsc.JSGlobalObject, comptime fmt: [:0]const u8, args: auto): bun.JSError!jsc.JSValue {
     jsc.markBinding(@src());
     let builder = std.array_list.Managed(u8).init(bun.default_allocator);
-    defer builder.deinit();
+    const _builder_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &builder };
     bun.handleOom(builder.writer().print(fmt, args));
     return bun.cpp.BunString__createUTF8ForJS(globalObject, builder.items.ptr, builder.items.len);
 }
@@ -198,10 +220,10 @@ pub fn jsEscapeRegExp(global: *jsc.JSGlobalObject, call_frame: *jsc.CallFrame): 
     }
 
     let input = input_value.toSlice(global, bun.default_allocator)?;
-    defer input.deinit();
+    const _input_guard = DeinitGuard<@TypeOf(input)>{ ptr: &input };
 
     let buf = std.Io.Writer.Allocating.init(bun.default_allocator);
-    defer buf.deinit();
+    const _buf_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &buf };
 
     bun.strings.escapeRegExp(input.slice(), &buf.writer) catch {
         return error.OutOfMemory;
@@ -220,10 +242,10 @@ pub fn jsEscapeRegExpForPackageNameMatching(global: *jsc.JSGlobalObject, call_fr
     }
 
     let input = input_value.toSlice(global, bun.default_allocator)?;
-    defer input.deinit();
+    const _input_guard = DeinitGuard<@TypeOf(input)>{ ptr: &input };
 
     let buf = std.Io.Writer.Allocating.init(bun.default_allocator);
-    defer buf.deinit();
+    const _buf_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &buf };
 
     bun.strings.escapeRegExpForPackageNameMatching(input.slice(), &buf.writer) catch {
         return error.OutOfMemory;
@@ -256,12 +278,12 @@ pub const UnicodeTestingAPIs = struct {
         const result = strings.toUTF16AllocForReal(allocator, bytes, false, true) catch |e| {
             return globalThis.throwError(e, "toUTF16AllocForReal failed");
         };
-        defer allocator.free(result);
+        const _result_guard = FreeZGuard<u16>{ allocator: allocator, slice: result };
 
         bun.assert(result.ptr[result.len] == 0);
 
         let out = bun.String.cloneUTF16(result);
-        defer out.deref();
+        const _out_guard = DerefGuard<bun.String>{ ptr: &out };
         return out.toJS(globalThis);
     }
 };

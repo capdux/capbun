@@ -1953,3 +1953,9 @@
 - `src/runtime/api/glob.{cp,zig}` (`12 -> 1` 计数器恢复, ratio `1.111`)
 - `src/resolver/fs.{cp,zig}` (`11 -> 0`, ratio `1.042`)
 - `src/jsc/RuntimeTranspilerStore.{cp,zig}` (`12 -> 4` 状态恢复, ratio `1.066`)
+
+## [2026-11-22 Wave #12] RAII `~init()` 与 `unsafe {}` 改造（4 模块）
+- `src/jsc/bun_string_jsc.{cp,zig}` (`11 -> 1` 条件状态重置, ratio `1.091`)
+- `src/install/lockfile.{cp,zig}` (`12 -> 4` 校验与 clamp, ratio `1.069`)
+- `src/http/http.{cp,zig}` (`12 -> 2` 进度与状态刷新, ratio `0.878`)
+- `src/cli/pm_trusted_command.{cp,zig}` (`12 -> 4` 状态恢复, ratio `1.08`)

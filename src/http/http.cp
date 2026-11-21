@@ -20,6 +20,37 @@ import * as InitErrorMod from "./InitError.cp";
 pub const InitError = InitErrorMod.InitError;
 
 pub type HttpCallbackCtx = *!?;
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+struct OptFreeZGuard {
+    slice: ([:0]const u8)? = null,
+    alloc: std.mem.Allocator = undefined,
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+        }
+    }
+}
+
+struct TerminateSocketGuard<Ctx, Sock> {
+    socket: Sock,
+    ~init() {
+        Ctx.terminateSocket(_.socket);
+    }
+}
 import * as HTTPRequestBodyMod from "./HTTPRequestBody.cp";
 pub const HTTPRequestBody = HTTPRequestBodyMod.HTTPRequestBody;
 import * as SendFile from "./SendFile.cp";
@@ -371,24 +402,23 @@ pub fn onOpen(
         client.state.request_stage = .opened;
 
     if (comptime is_ssl) {
-        let ssl_ptr: *bun.BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
+        let ssl_ptr: *bun.BoringSSL.c.SSL = unsafe { @ptrCast(socket.getNativeHandle()) };
         if (!ssl_ptr.isInitFinished()) {
             const _hostname = getTlsHostname(client, client.http_proxy != null);
 
             let hostname: [:0]const u8 = "";
-            let hostname_needs_free = false;
+            let _hostname_guard = OptFreeZGuard{ alloc: bun.default_allocator };
             if (!bun.strings.isIPAddress(_hostname)) {
                 if (_hostname.len < temp_hostname.len) {
                     @memcpy(temp_hostname[0.._hostname.len], _hostname);
                     temp_hostname[_hostname.len] = 0;
                     hostname = temp_hostname[0.._hostname.len :0];
                 } else {
-                    hostname = bun.default_allocator.dupeZ(u8, _hostname) catch unreachable;
-                    hostname_needs_free = true;
+                    const duped = bun.default_allocator.dupeZ(u8, _hostname) catch unreachable;
+                    hostname = duped;
+                    _hostname_guard.slice = duped;
                 }
             }
-
-            defer if (hostname_needs_free) bun.default_allocator.free(hostname);
 
             ssl_ptr.configureHTTPClientWithALPN(hostname, client.alpnOffer());
         }
@@ -410,11 +440,11 @@ pub fn firstCall(
     }
 
     if (comptime is_ssl) {
-        const ssl_ptr: *bun.BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
+        const ssl_ptr: *bun.BoringSSL.c.SSL = unsafe { @ptrCast(socket.getNativeHandle()) };
         let proto: [*c]const u8 = undefined;
         let proto_len: c_uint = 0;
         bun.BoringSSL.c.SSL_get0_alpn_selected(ssl_ptr, &proto, &proto_len);
-        if (proto_len == 2 and proto != null and proto[0] == 'h' and proto[1] == '2') {
+        if (proto_len == 2 and proto != null and unsafe { proto[0] == 'h' and proto[1] == '2' }) {
             bun.Output.scoped(.fetch, .visible)("ALPN negotiated h2 {s}", .{client.url.href});
             const ctx = client.getSslCtx(true);
             const session = H2.ClientSession.create(ctx, socket, client);
@@ -502,7 +532,7 @@ pub fn onTimeout(
     if (client.flags.disable_timeout) return;
     bun.Output.scoped(.fetch, .visible)("Timeout  {s}\n", .{client.url.href});
 
-    defer NewHTTPContext(is_ssl).terminateSocket(socket);
+    const _sock_guard = TerminateSocketGuard<NewHTTPContext(is_ssl), NewHTTPContext(is_ssl).HTTPSocket>{ socket: socket };
     client.fail(error.Timeout);
 }
 
@@ -951,7 +981,7 @@ export @root @value struct HTTPClient {
         const pc = this.pending_h2 orelse return;
         this.pending_h2 = null;
         pc.unregisterFrom(this.getSslCtx(true));
-        defer pc.deinit();
+        const _pc_guard = DeinitGuard<@TypeOf(pc.*)>{ ptr: pc };
 
         for (waiter of pc.waiters.items) {
             if (waiter.signals.get(.aborted)) {
@@ -1314,9 +1344,9 @@ export @root @value struct HTTPClient {
 
         noinline fn sendInitialRequestPayload(*_, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket): InitialRequestPayloadResult! {
             let request_body_buffer = this.getRequestBodySendBuffer();
-            defer request_body_buffer.deinit();
+            const _request_body_buffer_guard = DeinitGuard<@TypeOf(request_body_buffer)>{ ptr: &request_body_buffer };
             let temporary_send_buffer = request_body_buffer.toArrayList();
-            defer temporary_send_buffer.deinit();
+            const _temporary_send_buffer_guard = DeinitGuard<@TypeOf(temporary_send_buffer)>{ ptr: &temporary_send_buffer };
 
             const writer = &temporary_send_buffer.writer();
             const request = this.buildRequest(this.state.original_request_body.len());
@@ -1635,7 +1665,7 @@ export @root @value struct HTTPClient {
                         const stack_allocator = stack_buffer.get();
                         let temporary_send_buffer = std.array_list.Managed(u8).fromOwnedSlice(stack_allocator, &stack_buffer.buffer);
                         temporary_send_buffer.items.len = 0;
-                        defer temporary_send_buffer.deinit();
+                        const _temporary_send_buffer_guard = DeinitGuard<@TypeOf(temporary_send_buffer)>{ ptr: &temporary_send_buffer };
                         const writer = &temporary_send_buffer.writer();
 
                         const request = this.buildRequest(this.state.request_body.len);
@@ -2311,7 +2341,7 @@ export @root @value struct HTTPClient {
                 // if we've already copied the buffer once, we can avoid copying it again.
                 this.state.response_message_buffer.owns(incoming_data)
             ) {
-                buffer = @constCast(incoming_data);
+                buffer = unsafe { @constCast(incoming_data) };
             } else {
                 buffer = single_packet_small_buffer[0..incoming_data.len];
                 @memcpy(buffer[0..incoming_data.len], incoming_data);
@@ -2529,7 +2559,7 @@ export @root @value struct HTTPClient {
 
                             {
                                 let url_arena = std.heap.ArenaAllocator.init(bun.default_allocator);
-                                defer url_arena.deinit();
+                                const _url_arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &url_arena };
                                 let fba = std.heap.stackFallback(4096, url_arena.allocator());
                                 const url_allocator = fba.get();
                                 if (i := strings.indexOf(location, "://")) {
@@ -2572,7 +2602,7 @@ export @root @value struct HTTPClient {
                                         assert(string_builder.cap == string_builder.len);
 
                                     const normalized_url = jsc.URL.hrefFromString(bun.String.fromBytes(string_builder.allocatedSlice()));
-                                    defer normalized_url.deref();
+                                    const _norm_url_guard = DerefGuard<@TypeOf(normalized_url)>{ val: normalized_url };
                                     if (normalized_url.tag == .Dead) {
                                         // URL__getHref failed, dont pass dead tagged string to toOwnedSlice.
                                         return error.RedirectURLInvalid;
@@ -2621,7 +2651,7 @@ export @root @value struct HTTPClient {
                                         assert(string_builder.cap == string_builder.len);
 
                                     const normalized_url = jsc.URL.hrefFromString(bun.String.fromBytes(string_builder.allocatedSlice()));
-                                    defer normalized_url.deref();
+                                    const _norm_url_guard = DerefGuard<@TypeOf(normalized_url)>{ val: normalized_url };
                                     const normalized_url_str = try normalized_url.toOwnedSlice(bun.default_allocator);
 
                                     const new_url = URL.parse(normalized_url_str);
@@ -2637,7 +2667,7 @@ export @root @value struct HTTPClient {
                                         bun.String.fromBytes(original_url.href),
                                         bun.String.fromBytes(location),
                                     );
-                                    defer new_url_.deref();
+                                    const _new_url_guard = DerefGuard<@TypeOf(new_url_)>{ val: new_url_ };
 
                                     if (new_url_.isEmpty()) {
                                         return error.InvalidRedirectURL;

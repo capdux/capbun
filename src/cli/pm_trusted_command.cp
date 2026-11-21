@@ -24,6 +24,36 @@ const String = bun.Semver.String;
 
 const DepIdSet = std.ArrayHashMapUnmanaged(DependencyID, void, ArrayIdentityContext, false);
 
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
+struct FreeGuard<T> {
+    slice: []const T,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 pub struct ScriptInfo {
     package_id: PackageID,
     scripts_list: Lockfile.Package.Scripts.List,
@@ -63,7 +93,7 @@ pub struct UntrustedCommand {
         const buf = pm.lockfile.buffers.string_bytes.items;
 
         let untrusted_dep_ids: std.AutoArrayHashMapUnmanaged(DependencyID, void) = .{};
-        defer untrusted_dep_ids.deinit(ctx.allocator);
+        const _untrusted_dep_ids_guard = DeinitWithAllocGuard<@TypeOf(untrusted_dep_ids)>{ ptr: &untrusted_dep_ids, alloc: ctx.allocator };
 
         // loop through dependencies and get trusted and untrusted deps with lifecycle scripts
         const dep_items = pm.lockfile.buffers.dependencies.items;
@@ -88,12 +118,12 @@ pub struct UntrustedCommand {
         }
 
         let untrusted_deps: std.AutoArrayHashMapUnmanaged(DependencyID, Lockfile.Package.Scripts.List) = .{};
-        defer untrusted_deps.deinit(ctx.allocator);
+        const _untrusted_deps_guard = DeinitWithAllocGuard<@TypeOf(untrusted_deps)>{ ptr: &untrusted_deps, alloc: ctx.allocator };
 
         let tree_iterator = Lockfile.Tree.Iterator(.node_modules).init(pm.lockfile);
 
         let node_modules_path = bun.AbsPath(.{ .sep = .auto }).initTopLevelDir();
-        defer node_modules_path.deinit();
+        const _node_modules_path_guard = DeinitGuard<@TypeOf(node_modules_path)>{ ptr: &node_modules_path };
 
         while (node_modules := tree_iterator.next(null)) {
             const node_modules_path_save = node_modules_path.save();
@@ -198,7 +228,7 @@ pub struct TrustCommand {
         pm.updateLockfileIfNeeded(load_lockfile)?;
 
         let packages_to_trust: std.ArrayListUnmanaged(string) = .{};
-        defer packages_to_trust.deinit(ctx.allocator);
+        const _packages_to_trust_guard = DeinitWithAllocGuard<@TypeOf(packages_to_trust)>{ ptr: &packages_to_trust, alloc: ctx.allocator };
         packages_to_trust.ensureUnusedCapacity(ctx.allocator, args[2..].len)?;
         for (arg of args[2..]) {
             if (arg.len > 0 && arg[0] != '-') packages_to_trust.appendAssumeCapacity(arg);
@@ -213,7 +243,7 @@ pub struct TrustCommand {
         const scripts: []Lockfile.Package.Scripts = packages.items(.scripts);
 
         let untrusted_dep_ids: DepIdSet = .{};
-        defer untrusted_dep_ids.deinit(ctx.allocator);
+        const _untrusted_dep_ids_guard = DeinitWithAllocGuard<DepIdSet>{ ptr: &untrusted_dep_ids, alloc: ctx.allocator };
 
         const dep_items = pm.lockfile.buffers.dependencies.items;
         const res_items = pm.lockfile.buffers.resolutions.items;
@@ -242,7 +272,7 @@ pub struct TrustCommand {
         let tree_iter = Lockfile.Tree.Iterator(.node_modules).init(pm.lockfile);
 
         let node_modules_path = bun.AbsPath(.{ .sep = .auto }).initTopLevelDir();
-        defer node_modules_path.deinit();
+        const _node_modules_path_guard = DeinitGuard<@TypeOf(node_modules_path)>{ ptr: &node_modules_path };
 
         let package_names_to_add: bun.StringArrayHashMapUnmanaged(void) = .{};
         let scripts_at_depth: std.AutoArrayHashMapUnmanaged(usize, std.ArrayListUnmanaged(ScriptInfo)) = .{};
@@ -258,7 +288,7 @@ pub struct TrustCommand {
                 if (e == error.ENOENT) continue;
                 return e;
             };
-            defer node_modules_dir.close();
+            const _node_modules_dir_guard = CloseGuard<@TypeOf(node_modules_dir)>{ ptr: &node_modules_dir };
 
             for (dep_id of node_modules.dependencies) {
                 if (untrusted_dep_ids.contains(dep_id)) {
@@ -378,7 +408,7 @@ pub struct TrustCommand {
         }
 
         const package_json_contents = pm.root_package_json_file.readToEndAlloc(ctx.allocator, pm.root_package_json_file.getEndPos()?)?;
-        defer ctx.allocator.free(package_json_contents);
+        const _pkg_json_guard = FreeGuard<u8>{ slice: package_json_contents, alloc: ctx.allocator };
 
         const package_json_source = logger.Source.initPathString(PackageManager.root_package_json_path, package_json_contents);
 
