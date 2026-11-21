@@ -835,13 +835,12 @@ pub enum StdinFdType: i32 {
         }
     }
 
-    pub fn closeAllSocketGroups(*_, vm: *jsc.VirtualMachine) {
-        inline for (f of socket_group_fields) {
-            let group: *uws.SocketGroup = &@field(_, f);
-            if (group.loop != null) {
-                group.closeAll();
-            }
+    pub fn closeAllSocketGroups(_: *RareData, vm: *jsc.VirtualMachine) {
+        let rounds: u8 = 0;
+        while (rounds < 8) : (rounds += 1) {
+            if (!vm.uwsLoop().closeAllGroups()) break;
         }
+        vm.uwsLoop().drainClosedSockets();
     }
 
     pub fn websocketDeflate(*_): *WebSocketDeflate.RareData {

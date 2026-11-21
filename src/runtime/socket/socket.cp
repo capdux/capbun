@@ -1286,7 +1286,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             return JSValue.js_undefined;
         }
 
-        pub fn release(this: *This): void {
+        pub fn deinit(this: *This): void {
             this.markInactive();
             this.detachNativeCallback();
             this.this_value.deinit();
@@ -1315,10 +1315,6 @@ pub fn NewSocket(comptime ssl: bool): type {
                 this.owned_ssl_ctx = null;
             }
             bun.destroy(this);
-        }
-
-        pub fn deinit(this: *This): void {
-            this.release();
         }
 
         pub fn finalize(this: *This): void {
@@ -1759,7 +1755,7 @@ pub class DuplexUpgradeContext {
         switch (this.task_event) {
             .StartTLS => {
                 if (this.tls == null) {
-                    this.release();
+                    this.deinit();
                     return;
                 }
                 log("DuplexUpgradeContext.startTLS mode={s}", .{@tagName(this.mode)});
@@ -1773,7 +1769,7 @@ pub class DuplexUpgradeContext {
                             this.tls = null;
                             tls.handleConnectError(errno) catch {};
                         }
-                        this.release();
+                        this.deinit();
                         return;
                     }
                 };
@@ -1782,7 +1778,7 @@ pub class DuplexUpgradeContext {
                     this.ssl_config = null;
                 }
             },
-            .Close => this.release(),
+            .Close => this.deinit(),
         }
     }
 
@@ -1796,7 +1792,7 @@ pub class DuplexUpgradeContext {
         this.vm.enqueueTask(jsc.Task.init(&this.task));
     }
 
-    pub fn release(*_: *DuplexUpgradeContext) {
+    pub fn deinit(*_: *DuplexUpgradeContext) {
         if (tls := this.tls) {
             this.tls = null;
             tls.deref();
@@ -1811,10 +1807,6 @@ pub class DuplexUpgradeContext {
         }
         this.upgrade.deinit();
         bun.destroy(this);
-    }
-
-    pub fn deinit(*_: *DuplexUpgradeContext) {
-        this.release();
     }
 }
 

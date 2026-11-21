@@ -792,23 +792,59 @@ pub fn getContentType(self: *Blob) ?ZigString.Slice {
         return null;
 }
 
-pub fn getSizeForBindings(self: Blob) usize {
+pub fn getSizeForBindings(self: *Blob) usize {
+        if ((self.size == Blob.max_size)) {
+            _ = self.resolveSize();
+        }
+        if (self.store) |store| {
+            _ = &store;
+            if (((store.data == .file) and (!((store.data.file.seekable) orelse (false))))) {
+                return std.math.maxInt(u64);
+            }
+        }
+        if ((self.size == Blob.max_size)) {
+            return std.math.maxInt(u64);
+        }
         return @as(usize, @intCast(self.size));
 }
 
 pub fn sharedView(self: Blob) []const u8 {
+        if ((self.size == 0)) {
+            return "";
+        }
         if (self.store) |store| {
             _ = &store;
+            var slice_ = store.sharedView();
+            _ = &slice_;
+            if ((slice_.len == 0)) {
+                return "";
+            }
+            slice_ = slice_[@min((if (comptime @typeInfo(@TypeOf(self.offset)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.offset)) else cp_cast_int(usize, self.offset)), slice_.len)..];
+            return slice_[0..@min(slice_.len, (if (comptime @typeInfo(@TypeOf(self.size)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.size)) else cp_cast_int(usize, self.size)))];
+        }
+        return "";
+}
+
+pub fn calculateEstimatedByteSize(self: *Blob) void {
+        var size: usize = @sizeOf(Blob);
+        _ = &size;
+        if (self.store) |store| {
+            _ = &store;
+            size = (size + @sizeOf(BlobStore));
             switch (store.data) {
-.bytes => |b| {
-return b.slice();
+.bytes => {
+size = (size + store.data.bytes.stored_name.estimatedSize());
+            size = (size + (if ((self.size != Blob.max_size)) (if (comptime @typeInfo(@TypeOf(self.size)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.size)) else cp_cast_int(usize, self.size)) else (if (comptime @typeInfo(@TypeOf(store.data.bytes.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(store.data.bytes.len)) else cp_cast_int(usize, store.data.bytes.len))));
 },
-else => {
-return "";
+.file => {
+size = (size + store.data.file.pathlike.estimatedSize());
+},
+.s3 => {
+size = (size + store.data.s3.estimatedSize());
 },
 }
         }
-        return "";
+        self.reported_estimated_size = ((size + (self.content_type.len * @intFromBool(self.content_type_allocated))) + self.name.byteSlice().len);
 }
 
 pub fn resolveFileStat(store: *BlobStore) void {
@@ -921,7 +957,10 @@ pub fn init(data: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObjec
 }
 
 pub fn initWithStore(store: *BlobStore, globalThis: *JSGlobalObject) Blob {
-        return Blob{ .size = store.size(), .store = store, .content_type = (if ((store.data == .file)) (if (@typeInfo(@TypeOf(store.data.file.mime_type)) == .@"enum") @intFromEnum(store.data.file.mime_type) else store.data.file.mime_type.value) else ""), .globalThis = globalThis };
+        var blob = Blob{ .size = store.size(), .store = store, .content_type = (if ((store.data == .file)) (if (@typeInfo(@TypeOf(store.data.file.mime_type)) == .@"enum") @intFromEnum(store.data.file.mime_type) else store.data.file.mime_type.value) else ""), .globalThis = globalThis };
+        _ = &blob;
+        _ = blob.calculateEstimatedByteSize();
+        return blob;
 }
 
 pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
@@ -1060,6 +1099,10 @@ pub fn findOrCreateFileFromPath(path_or_fd: *jsc.Node.PathOrFileDescriptor, glob
 }
 
 pub fn toJS(self: *Blob, globalThis: *JSGlobalObject) JSValue {
+        _ = self.calculateEstimatedByteSize();
+        if (self.isS3()) {
+            return jsc.WebCore.S3File.toJSUnchecked(globalThis, self);
+        }
         return jsc.Codegen.JSBlob.toJSUnchecked(globalThis, self);
 }
 
@@ -1072,8 +1115,59 @@ pub fn finalize(self: *Blob) void {
         _ = bun.destroy(self);
 }
 
-pub fn constructor(globalThis: *JSGlobalObject, _: *CallFrame) JSError!*Blob {
-        return Blob.new(Blob.initEmpty(globalThis));
+pub fn constructor(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!*Blob {
+        const allocator = default_allocator;
+        var blob: Blob = undefined;
+        _ = &blob;
+        var arguments = callframe.arguments_old(2);
+        _ = &arguments;
+        const args = arguments.slice();
+        switch (args.len) {
+0 => {
+var empty: [0]u8 = undefined;
+        _ = &empty;
+        blob = Blob.init(empty[0..0], allocator, globalThis);
+},
+else => {
+blob = try Blob.get(globalThis, args[0], false, true);
+        if ((args.len > 1)) {
+            const options = args[1];
+            if (options.isObject()) {
+                if (try options.get(globalThis, "type")) |content_type| {
+                    _ = &content_type;
+                    _ = inner: {
+                    if (content_type.isString()) {
+                        var content_type_str = try content_type.toSlice(globalThis, default_allocator);
+                        _ = &content_type_str;
+                        defer {
+                        _ = content_type_str.deinit();
+                        }
+                        const slice = content_type_str.slice();
+                        if ((!strings.isAllASCII(slice))) {
+                            break :inner;
+                        }
+                        blob.content_type_was_set = true;
+                        if (globalThis.bunVM().mimeType(slice)) |mime| {
+                            _ = &mime;
+                            blob.content_type = (if (@typeInfo(@TypeOf(mime)) == .@"enum") @intFromEnum(mime) else mime.value);
+                            break :inner;
+                        }
+                        const content_type_buf = bun.handleOom(allocator.alloc(u8, slice.len));
+                        blob.content_type = strings.copyLowercase(slice, content_type_buf);
+                        blob.content_type_allocated = true;
+                    }
+};
+                }
+            }
+        }
+        if ((blob.content_type.len == 0)) {
+            blob.content_type = "";
+            blob.content_type_was_set = false;
+        }
+},
+}
+        _ = blob.calculateEstimatedByteSize();
+        return Blob.new(blob);
 }
 
 pub fn getArrayBuffer(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
@@ -1475,14 +1569,39 @@ pub fn getJSON(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!
 }
 
 pub fn getLastModified(self: *Blob, _: *JSGlobalObject) JSValue {
-        return JSValue.jsNumber(self.last_modified);
+        if (self.store) |store| {
+            _ = &store;
+            if ((store.data == .file)) {
+                if (((store.data.file.last_modified == jsc.init_timestamp) and (!self.isS3()))) {
+                    _ = Blob.resolveFileStat(store);
+                }
+                return JSValue.jsNumber(store.data.file.last_modified);
+            }
+        }
+        if (self.is_jsdom_file) {
+            return JSValue.jsNumber(self.last_modified);
+        }
+        return JSValue.jsNumber(jsc.init_timestamp);
+}
+
+pub fn getNameString(self: *Blob) ?String {
+        if ((self.name.tag != .Dead)) {
+            return self.name;
+        }
+        if (self.getFileName()) |path| {
+            _ = &path;
+            self.name = String.cloneUTF8(path);
+            return self.name;
+        }
+        return null;
 }
 
 pub fn getName(self: *Blob, _: JSValue, globalThis: *JSGlobalObject) JSError!JSValue {
-        if (self.name.isEmpty()) {
-            return JSValue.js_undefined;
+        if (self.getNameString()) |name| {
+            _ = &name;
+            return name.toJS(globalThis);
         }
-        return self.name.toJS(globalThis);
+        return JSValue.js_undefined;
 }
 
 pub fn setName(self: *Blob, jsThis: JSValue, globalThis: *JSGlobalObject, value: JSValue) JSError!void {

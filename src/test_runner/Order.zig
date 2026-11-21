@@ -124,70 +124,80 @@ pub fn generateAllOrder(self: *Order, entries: []const *ExecutionEntry) bun.JSEr
             entry.next = null;
             entry.failure_skip_past = null;
             const sequences_start = self.sequences.items.len;
-            _ = try self.sequences.append(.init(.{ .first_entry = entry, .test_entry = entry, .retry_count = entry.retry_count, .repeat_count = entry.repeat_count }));
+            _ = try self.sequences.append(.init(.{ .first_entry = entry, .test_entry = null }));
             const sequences_end = self.sequences.items.len;
-            _ = try self.appendOrExtendConcurrentGroup(entry.base.concurrent, sequences_start, sequences_end);
+            _ = try self.groups.append(.init(sequences_start, sequences_end, (self.groups.items.len + 1)));
+            self.previous_group_was_concurrent = false;
         }
         const end = self.groups.items.len;
         return AllOrderResult{ .start = start, .end = end };
 }
 
-pub fn generateOrderDescribe(self: *Order, describe: *DescribeScope) bun.JSError!void {
-        var before_all = AllOrderResult.empty;
-        _ = &before_all;
-        var before_each = AllOrderResult.empty;
-        _ = &before_each;
-        var after_each = AllOrderResult.empty;
-        _ = &after_each;
-        var after_all = AllOrderResult.empty;
-        _ = &after_all;
-        if ((describe.beforeAll.items.len > 0)) {
-            before_all = try self.generateAllOrder(describe.beforeAll.items);
+pub fn generateOrderDescribe(self: *Order, current: *DescribeScope) bun.JSError!void {
+        if (current.failed) {
+            return;
         }
-        if ((describe.beforeEach.items.len > 0)) {
-            before_each = try self.generateAllOrder(describe.beforeEach.items);
+        const use_hooks = (self.cfg.always_use_hooks or current.base.has_callback);
+        var beforeall_order = AllOrderResult.empty;
+        _ = &beforeall_order;
+        if (use_hooks) {
+            beforeall_order = try self.generateAllOrder(current.beforeAll.items);
         }
-        if ((describe.afterEach.items.len > 0)) {
-            after_each = try self.generateAllOrder(describe.afterEach.items);
+        if (self.cfg.randomize) |random| {
+            _ = &random;
+            _ = random.shuffle(TestScheduleEntry, current.entries.items);
         }
-        if ((describe.afterAll.items.len > 0)) {
-            after_all = try self.generateAllOrder(describe.afterAll.items);
-        }
-        _ = before_all.setFailureSkipTo(self);
-        _ = before_each.setFailureSkipTo(self);
-        _ = after_each.setFailureSkipTo(self);
-        _ = after_all.setFailureSkipTo(self);
-        for (describe.entries.items) |entry| {
+        for (current.entries.items) |entry| {
             _ = &entry;
+            if (((current.base.only == .contains) and (entry.base().only == .no))) {
+                continue;
+            }
             _ = try self.generateOrderSub(entry);
         }
+        _ = beforeall_order.setFailureSkipTo(self);
+        var afterall_order = AllOrderResult.empty;
+        _ = &afterall_order;
+        if (use_hooks) {
+            afterall_order = try self.generateAllOrder(current.afterAll.items);
+        }
+        _ = afterall_order.setFailureSkipTo(self);
 }
 
 pub fn generateOrderTest(self: *Order, current: *ExecutionEntry) bun.JSError!void {
+        _ = bun.assert((current.base.has_callback == (current.callback != null)));
+        const use_each_hooks = current.base.has_callback;
         var list: EntryList = .{};
         _ = &list;
-        current.next = null;
-        current.failure_skip_past = null;
-        if (self.cfg.always_use_hooks) {
-            var scope: ?*DescribeScope = current.base.parent;
-            _ = &scope;
-            while (scope) |sc| : (scope = sc.base.parent) {
-                var i: usize = sc.beforeEach.items.len;
+        if (use_each_hooks) {
+            var parent: ?*DescribeScope = current.base.parent;
+            _ = &parent;
+            while (parent) |p| : (parent = p.base.parent) {
+                var i: usize = p.beforeEach.items.len;
                 _ = &i;
                 while ((i > 0)) : (i = (i - 1)) {
-                    _ = list.prepend(bun.create(self.@"arena", ExecutionEntry, (sc.beforeEach.items[@as(usize, @intCast((i - 1)))]).*));
+                    _ = list.prepend(bun.create(self.@"arena", ExecutionEntry, (p.beforeEach.items[@as(usize, @intCast((i - 1)))]).*));
                 }
             }
         }
         _ = list.append(current);
-        if (self.cfg.always_use_hooks) {
-            var scope: ?*DescribeScope = current.base.parent;
-            _ = &scope;
-            while (scope) |sc| : (scope = sc.base.parent) {
-                for (sc.afterEach.items) |entry| {
+        if (use_each_hooks) {
+            var parent: ?*DescribeScope = current.base.parent;
+            _ = &parent;
+            while (parent) |p| : (parent = p.base.parent) {
+                for (p.afterEach.items) |entry| {
                     _ = &entry;
                     _ = list.append(bun.create(self.@"arena", ExecutionEntry, entry.*));
                 }
+            }
+        }
+        var index = list.first;
+        _ = &index;
+        var failure_skip_past: ?*ExecutionEntry = current;
+        _ = &failure_skip_past;
+        while (index) |entry| : (index = entry.next) {
+            entry.failure_skip_past = failure_skip_past;
+            if ((entry == failure_skip_past)) {
+                failure_skip_past = null;
             }
         }
         const sequences_start = self.sequences.items.len;

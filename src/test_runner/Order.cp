@@ -88,64 +88,90 @@ pub struct AllOrderResult {
             const sequences_start = _.sequences.items.len;
             _.sequences.append(.init({
                 first_entry: entry,
-                test_entry: entry,
-                retry_count: entry.retry_count,
-                repeat_count: entry.repeat_count,
+                test_entry: null,
             }))?;
             const sequences_end = _.sequences.items.len;
-            _.appendOrExtendConcurrentGroup(entry.base.concurrent, sequences_start, sequences_end)?;
+            _.groups.append(.init(sequences_start, sequences_end, _.groups.items.len + 1))?;
+            _.previous_group_was_concurrent = false;
         }
         const end = _.groups.items.len;
         return AllOrderResult{ start: start, end: end };
     }
 
-    pub fn generateOrderDescribe(*_, describe: *DescribeScope): bun.JSError!void {
-        let before_all = AllOrderResult.empty;
-        let before_each = AllOrderResult.empty;
-        let after_each = AllOrderResult.empty;
-        let after_all = AllOrderResult.empty;
+    pub fn generateOrderDescribe(*_, current: *DescribeScope): bun.JSError!void {
+        if (current.failed) return;
+        const use_hooks = _.cfg.always_use_hooks || current.base.has_callback;
 
-        if (describe.beforeAll.items.len > 0) before_all = _.generateAllOrder(describe.beforeAll.items)?;
-        if (describe.beforeEach.items.len > 0) before_each = _.generateAllOrder(describe.beforeEach.items)?;
-        if (describe.afterEach.items.len > 0) after_each = _.generateAllOrder(describe.afterEach.items)?;
-        if (describe.afterAll.items.len > 0) after_all = _.generateAllOrder(describe.afterAll.items)?;
+        // gather beforeAll
+        let beforeall_order = AllOrderResult.empty;
+        if (use_hooks) {
+            beforeall_order = _.generateAllOrder(current.beforeAll.items)?;
+        }
 
-        before_all.setFailureSkipTo(_);
-        before_each.setFailureSkipTo(_);
-        after_each.setFailureSkipTo(_);
-        after_all.setFailureSkipTo(_);
+        // shuffle entries if randomize flag is set
+        if (random := _.cfg.randomize) {
+            random.shuffle(TestScheduleEntry, current.entries.items);
+        }
 
-        for (entry of describe.entries.items) {
+        // gather children
+        for (entry of current.entries.items) {
+            if (current.base.only == .contains && entry.base().only == .no) continue;
             _.generateOrderSub(entry)?;
         }
+
+        // update skip_to values for beforeAll to skip to the first afterAll
+        beforeall_order.setFailureSkipTo(_);
+
+        // gather afterAll
+        let afterall_order = AllOrderResult.empty;
+        if (use_hooks) {
+            afterall_order = _.generateAllOrder(current.afterAll.items)?;
+        }
+
+        // update skip_to values for afterAll to skip the remaining afterAll items
+        afterall_order.setFailureSkipTo(_);
     }
 
     pub fn generateOrderTest(*_, current: *ExecutionEntry): bun.JSError!void {
-        let list: EntryList = .{};
-        current.next = null;
-        current.failure_skip_past = null;
+        bun.assert(current.base.has_callback == (current.callback != null));
+        const use_each_hooks = current.base.has_callback;
 
-        if (_.cfg.always_use_hooks) {
-            let scope: (*DescribeScope)? = current.base.parent;
-            while (sc := scope) : (scope = sc.base.parent) {
-                let i: usize = sc.beforeEach.items.len;
+        let list: EntryList = .{};
+
+        // gather beforeEach
+        if (use_each_hooks) {
+            let parent: (*DescribeScope)? = current.base.parent;
+            while (p := parent) : (parent = p.base.parent) {
+                // prepend in reverse so they end up in forwards order
+                let i: usize = p.beforeEach.items.len;
                 while (i > 0) : (i -= 1) {
-                    list.prepend(bun.create(_.@"arena", ExecutionEntry, sc.beforeEach.items[i - 1].*));
+                    list.prepend(bun.create(_.@"arena", ExecutionEntry, p.beforeEach.items[i - 1].*));
                 }
             }
         }
 
+        // append test
         list.append(current);
 
-        if (_.cfg.always_use_hooks) {
-            let scope: (*DescribeScope)? = current.base.parent;
-            while (sc := scope) : (scope = sc.base.parent) {
-                for (entry of sc.afterEach.items) {
+        // gather afterEach
+        if (use_each_hooks) {
+            let parent: (*DescribeScope)? = current.base.parent;
+            while (p := parent) : (parent = p.base.parent) {
+                for (entry of p.afterEach.items) {
                     list.append(bun.create(_.@"arena", ExecutionEntry, entry.*));
                 }
             }
         }
 
+        // set skip_to values
+        let index = list.first;
+        let failure_skip_past: (*ExecutionEntry)? = current;
+        while (entry := index) : (index = entry.next) {
+            entry.failure_skip_past = failure_skip_past;
+            if (entry == failure_skip_past) failure_skip_past = null;
+        }
+
+        // add these as a single sequence
         const sequences_start = _.sequences.items.len;
         _.sequences.append(.init({
             first_entry: list.first,

@@ -1144,13 +1144,15 @@ pub struct JSValkeyClient {
                     // Per-VM weak cache: a `duplicate()`'d client (or any
                     // other client with the same config) hits the same
                     // `SSL_CTX*` instead of rebuilding.
-                    this._secure = vm.rareData().sslCtxCache().getOrCreate(custom, &err) orelse {
+                    if (ctx := vm.rareData().sslCtxCache().getOrCreate(custom, &err)) {
+                        this._secure = ctx;
+                    } else {
                         this.client.flags.enable_auto_reconnect = false;
                         try this.clientFail("Failed to create TLS context", protocol.RedisError.ConnectionClosed);
                         try this.client.onValkeyClose();
                         this.client.status = .disconnected;
                         return;
-                    };
+                    }
                 }
                 break :brk this._secure.?;
             },

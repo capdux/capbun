@@ -939,10 +939,13 @@ else => {
         lockfile.text_lockfile_version = lockfile_version;
         if (root.get("configVersion")) |config_version_expr| {
             _ = &config_version_expr;
-            if (lockfile.saved_config_version == null) { lockfile.saved_config_version = ({
-            _ = try log.addError(source, config_version_expr.loc, "Invalid \"configVersion\". Expected a number");
-            return error.InvalidConfigVersion;
-}); }
+            if (bun.ConfigVersion.fromExpr(config_version_expr)) |ver| {
+                _ = &ver;
+                lockfile.saved_config_version = ver;
+            } else {
+                _ = try log.addError(source, config_version_expr.loc, "Invalid \"configVersion\". Expected a number");
+                return error.InvalidConfigVersion;
+            }
         }
         var string_buf = lockfile.stringBuf();
         _ = &string_buf;

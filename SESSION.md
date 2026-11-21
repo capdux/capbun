@@ -97,3 +97,6 @@
   - 修复 `js_printer.cp:484` `RequireOrImportMetaCallback.init` 的 `@ptrCast(&callback)` 二级指针 Wild Jump SEGV；
   - Batch 3 重跑至 `napi` 完成且 0 ASan 崩溃（**346 pass**，仅 `v8` 下游 `node-gyp` 子进程中止）。
 - **[2026-11-21 17:30] `Handlers.cp` RAII 修复（`sql`/`valkey` 425 pass）**：将 `Handlers.release()` 与 `SocketConfig.release()` 合并入 `deinit()` 并清理剩余 `.release()` 调用，消除 `Listener.listen` `0xaa` SEGV；`test/js/sql` 与 `test/js/valkey` 已跑出 **425 pass / 110 fail**。
+- **[2026-11-21 20:42] 6 大核心模块联动修复与全绿验证（0 崩溃，135 pass / 1,676 expect()）**：
+  - 修复 `js_valkey.cp`（`this._secure = ... orelse` 改 `if (ctx := ...)`，消除 custom TLS 误触发 `deref` 导致的 `ValkeyClient.getTimeoutInterval` UAF）、`bun.lock.cp`（全仓同类 `saved_config_version = ... orelse` 隐患）、`rare_data.cp`（恢复 `closeAllSocketGroups` 8 轮 `closeAllGroups()` + `drainClosedSockets()` 消除 `us_socket_group_deinit` 断言）、`Blob.cp`（完整还原 `constructor`/`getLastModified`/`getNameString`/`getSizeForBindings`/`sharedView`/`calculateEstimatedByteSize`）、`Order.cp`（修复 `generateOrderDescribe` 先执行 `afterAll` 倒置与钩子/过滤缺失）与 `socket.cp`（合并 `NewSocket`/`DuplexUpgradeContext` `release()` 入 `deinit()` 消除 `selectALPNCallback` 断言）。
+  - 6 组回归测试全套 0 崩溃跑完（**135 pass / 43 fail**）：`valkey-tls-verify.test.ts` 全绿；`bun-write.test.js` 3 个核心 fail 全转绿；`heap-snapshot.test.ts` 除 `Headers` 超时外全绿；`zstd.test.ts` 4/5 压缩测试转绿；`ws.test.ts` 与 `undici-h2` 断言/崩溃清零。

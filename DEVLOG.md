@@ -1475,3 +1475,6 @@
   - **`if (...) |_|` 捕获吞掉函数体**：`HTTPContext.cp` 的 `if (client.onOpen(...)) |_|` 被 `cpc` 静默忽略，改用 `catch` 后 `HTTPThread` 104-byte UAF 彻底消失；
   - **错误联合返回值中的 `.tag` 枚举返回**：`JSError!JSValue` 函数中写 `return .js_undefined;` 会被 `cpc` 误降级为 `error.js_undefined`，必须显式写 `return JSValue.js_undefined;`；
   - **`[*]u8!` C 回调参数**：`SocketGroup.cp` 中 `OnOpenFn`/`OnDataFn` 必须用 `[*c]u8`（不可用非空 `[*]u8!`）以避免 `us_dispatch_open` 空指针 panic。
+- **[2026-11-21] `cpc` `orelse` 赋值吞右值与 `release()` RAII 排查经验**：
+  - **`lhs.field = expr orelse { ... }` 静默吞掉 `expr`**：`cpc` 会将其降级为 `if (lhs.field == null) { lhs.field = ({ ... }); }`，导致 `expr` 从未执行（已修复 `js_valkey.cp` 与 `bun.lock.cp`），统一改写为语句级 `if (v := expr) { lhs.field = v; } else { ... }`；
+  - **非词法 RAII 对象禁定义 `release()`**：`cpc` 会对任何定义单参 `release(*_)` 的结构体（含 `*T` 指针与浅拷贝局部变量）自动注入 `defer release()`，跨作用域异步任务/堆指针/借用对象（`ServerConfig`/`SSLConfig`/`Handlers`/`PasswordObject`/`NewSocket`）统一合并入 `deinit()` 显式管理。

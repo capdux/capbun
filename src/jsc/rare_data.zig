@@ -810,14 +810,15 @@ pub fn deinit(self: *RareData) void {
 }
 
 pub fn closeAllSocketGroups(self: *RareData, vm: *jsc.VirtualMachine) void {
-    _ = vm;
-        inline for (socket_group_fields) |f| {
-            var group: *uws.SocketGroup = (&@field(self, f));
-            _ = &group;
-            if ((group.loop != null)) {
-                _ = group.closeAll();
+    _ = self;
+        var rounds: u8 = 0;
+        _ = &rounds;
+        while ((rounds < 8)) : (rounds = (rounds + 1)) {
+            if ((!vm.uwsLoop().closeAllGroups())) {
+                break;
             }
         }
+        _ = vm.uwsLoop().drainClosedSockets();
 }
 
 pub fn websocketDeflate(self: *RareData) *WebSocketDeflate.RareData {

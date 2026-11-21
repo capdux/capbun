@@ -901,13 +901,16 @@ pub fn connect(self: *JSValkeyClient) !void {
             if ((self._secure == null)) {
                 var err: uws.create_bun_socket_error_t = .none;
                 _ = &err;
-                if (self._secure == null) { self._secure = ({
-                self.client.flags.enable_auto_reconnect = false;
-                _ = try self.clientFail("Failed to create TLS context", protocol.RedisError.ConnectionClosed);
-                _ = try self.client.onValkeyClose();
-                self.client.status = .disconnected;
-                return;
-}); }
+                if (vm.rareData().sslCtxCache().getOrCreate(custom, (&err))) |ctx| {
+                    _ = &ctx;
+                    self._secure = ctx;
+                } else {
+                    self.client.flags.enable_auto_reconnect = false;
+                    _ = try self.clientFail("Failed to create TLS context", protocol.RedisError.ConnectionClosed);
+                    _ = try self.client.onValkeyClose();
+                    self.client.status = .disconnected;
+                    return;
+                }
             }
             break :brk self._secure.?;
 },

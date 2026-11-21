@@ -1756,18 +1756,60 @@ pub struct BlobExternalSharedDescriptor {
         return null;
     }
 
-    fn getSizeForBindings(): usize {
+    fn getSizeForBindings(*_): usize {
+        if (_.size == Blob.max_size) {
+            _.resolveSize();
+        }
+
+        // If the file doesn't exist or is not seekable
+        // signal that the size is unknown.
+        if (store := _.store) {
+            if (store.data == .file && !(store.data.file.seekable ?? false)) {
+                return std.math.maxInt(u64);
+            }
+        }
+
+        if (_.size == Blob.max_size) {
+            return std.math.maxInt(u64);
+        }
+
         return @as(usize, @intCast(_.size));
     }
 
     fn sharedView(): []const u8 {
+        if (_.size == 0) return "";
         if (store := _.store) {
-            switch (store.data) {
-                .bytes b => return b.slice(),
-                else => return "",
-            }
+            let slice_ = store.sharedView();
+            if (slice_.len == 0) return "";
+            // Defensive: `offset` may originate from untrusted structured-clone data.
+            // Never index past the store's actual length regardless of caller state.
+            slice_ = slice_[@min(@as(usize, _.offset), slice_.len)..];
+
+            return slice_[0..@min(slice_.len, @as(usize, _.size))];
         }
         return "";
+    }
+
+    fn calculateEstimatedByteSize(*_) {
+        // in-memory size. not the size on disk.
+        let size: usize = @sizeOf(Blob);
+
+        if (store := _.store) {
+            size += @sizeOf(BlobStore);
+            switch (store.data) {
+                .bytes => {
+                    size += store.data.bytes.stored_name.estimatedSize();
+                    size += if (_.size != Blob.max_size)
+                        @as(usize, _.size)
+                    else
+                        @as(usize, store.data.bytes.len);
+                },
+                .file => size += store.data.file.pathlike.estimatedSize(),
+                .s3 => size += store.data.s3.estimatedSize(),
+            }
+        }
+
+        _.reported_estimated_size = size + (_.content_type.len * @intFromBool(_.content_type_allocated)) + _.name.byteSlice().len;
     }
 
     static fn resolveFileStat(store: *BlobStore) {
@@ -1909,12 +1951,14 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     static fn initWithStore(store: *BlobStore, globalThis: *JSGlobalObject): Blob {
-        return Blob{
+        let blob = Blob{
             size: store.size(),
             store: store,
             content_type: if (store.data == .file) store.data.file.mime_type.value else "",
             globalThis: globalThis,
         };
+        blob.calculateEstimatedByteSize();
+        return blob;
     }
 
     static fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
@@ -2051,6 +2095,10 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn toJS(*_, globalThis: *JSGlobalObject): JSValue {
+        _.calculateEstimatedByteSize();
+        if (_.isS3()) {
+            return jsc.WebCore.S3File.toJSUnchecked(globalThis, _);
+        }
         return jsc.Codegen.JSBlob.toJSUnchecked(globalThis, _);
     }
 
@@ -2063,8 +2111,58 @@ pub struct BlobExternalSharedDescriptor {
         bun.destroy(_);
     }
 
-    static fn constructor(globalThis: *JSGlobalObject, _: *CallFrame): JSError!*Blob {
-        return Blob.new(Blob.initEmpty(globalThis));
+    static fn constructor(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!*Blob {
+        const allocator = default_allocator;
+        let blob: Blob = undefined;
+        let arguments = callframe.arguments_old(2);
+        const args = arguments.slice();
+
+        switch (args.len) {
+            0 => {
+                let empty: [0]u8 = undefined;
+                blob = Blob.init(empty[0..0], allocator, globalThis);
+            },
+            else => {
+                blob = Blob.get(globalThis, args[0], false, true)?;
+
+                if (args.len > 1) {
+                    const options = args[1];
+                    if (options.isObject()) {
+                        // type, the ASCII-encoded string in lower case
+                        // representing the media type of the Blob.
+                        if (content_type := options.get(globalThis, "type")?) {
+                            inner: {
+                                if (content_type.isString()) {
+                                    let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
+                                    defer content_type_str.deinit();
+                                    const slice = content_type_str.slice();
+                                    if (!strings.isAllASCII(slice)) {
+                                        break :inner;
+                                    }
+                                    blob.content_type_was_set = true;
+
+                                    if (mime := globalThis.bunVM().mimeType(slice)) {
+                                        blob.content_type = mime.value;
+                                        break :inner;
+                                    }
+                                    const content_type_buf = bun.handleOom(allocator.alloc(u8, slice.len));
+                                    blob.content_type = strings.copyLowercase(slice, content_type_buf);
+                                    blob.content_type_allocated = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (blob.content_type.len == 0) {
+                    blob.content_type = "";
+                    blob.content_type_was_set = false;
+                }
+            },
+        }
+
+        blob.calculateEstimatedByteSize();
+        return Blob.new(blob);
     }
 
     fn getArrayBuffer(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
@@ -2433,12 +2531,39 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn getLastModified(*_, _: *JSGlobalObject): JSValue {
-        return JSValue.jsNumber(_.last_modified);
+        if (store := _.store) {
+            if (store.data == .file) {
+                // last_modified can be already set during read.
+                if (store.data.file.last_modified == jsc.init_timestamp && !_.isS3()) {
+                    resolveFileStat(store);
+                }
+                return JSValue.jsNumber(store.data.file.last_modified);
+            }
+        }
+
+        if (_.is_jsdom_file) {
+            return JSValue.jsNumber(_.last_modified);
+        }
+
+        return JSValue.jsNumber(jsc.init_timestamp);
+    }
+
+    fn getNameString(*_): String? {
+        if (_.name.tag != .Dead) return _.name;
+
+        if (path := _.getFileName()) {
+            _.name = String.cloneUTF8(path);
+            return _.name;
+        }
+
+        return null;
     }
 
     fn getName(*_, _: JSValue, globalThis: *JSGlobalObject): JSError!JSValue {
-        if (_.name.isEmpty()) return JSValue.js_undefined;
-        return _.name.toJS(globalThis);
+        if (name := _.getNameString()) {
+            return name.toJS(globalThis);
+        }
+        return JSValue.js_undefined;
     }
 
     fn setName(*_, jsThis: JSValue, globalThis: *JSGlobalObject, value: JSValue): JSError!void {

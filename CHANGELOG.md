@@ -1883,3 +1883,4 @@
 - **[2026-11-21] `extract_tarball.cp` 悬垂栈切片修复**：更新 `src/install/extract_tarball.{cp,zig}`。
 - **[2026-11-21] `resolution.cp` 与 `js_printer.cp` 指针修复 (`Batch 3` 零 ASan 崩溃)**：更新 `src/install/resolution.{cp,zig}`、`src/js_printer/js_printer.{cp,zig}`。
 - **[2026-11-21] `Handlers.cp` RAII 提前释放修复 (`sql`/`valkey` 425 pass)**：更新 `src/runtime/socket/Handlers.{cp,zig}`。
+- **[2026-11-21] Valkey/Lockfile/RareData/Blob/Order/Socket 6 模块修复（0 崩溃，135 pass）**：更新 `src/runtime/valkey_jsc/js_valkey.{cp,zig}`、`src/install/lockfile/bun.lock.{cp,zig}`、`src/jsc/rare_data.{cp,zig}`、`src/runtime/webcore/Blob.{cp,zig}`、`src/test_runner/Order.{cp,zig}`、`src/runtime/socket/socket.{cp,zig}`。

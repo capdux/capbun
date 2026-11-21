@@ -1154,10 +1154,12 @@ pub fn parseIntoBinaryLockfile(
 
     // configVersion is not required
     if (config_version_expr := root.get("configVersion")) {
-        lockfile.saved_config_version = bun.ConfigVersion.fromExpr(config_version_expr) orelse {
+        if (ver := bun.ConfigVersion.fromExpr(config_version_expr)) {
+            lockfile.saved_config_version = ver;
+        } else {
             log.addError(source, config_version_expr.loc, "Invalid \"configVersion\". Expected a number")?;
             return error.InvalidConfigVersion;
-        };
+        }
     }
 
     let string_buf = lockfile.stringBuf();
