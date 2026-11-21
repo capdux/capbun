@@ -48,6 +48,21 @@ const Chunk = bundler.Chunk;
 const Graph = bundler.Graph;
 const LinkerGraph = bundler.LinkerGraph;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
 fn writeEntryItem(
     writer: auto,
     input: []const u8,
@@ -96,7 +111,7 @@ pub fn writeEscapedJSON(index: u32, graph: *const Graph, linker_graph: *const Li
     let stack = std.heap.stackFallback(4096, bun.default_allocator);
     const allocator = stack.get();
     let bytes = std.array_list.Managed(u8).init(allocator);
-    defer bytes.deinit();
+    const bytes_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &bytes } };
     write(index, graph, linker_graph, chunks, bytes.writer())?;
     bun.js_printer.writePreQuotedString(bytes.items, @TypeOf(writer), writer, '"', false, true, .utf8)?;
 }
@@ -130,9 +145,9 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
     const browser_source_index = graph.html_imports.html_source_indices.slice()[index];
     const server_source_index = graph.html_imports.server_source_indices.slice()[index];
     const sources: []const bun.logger.Source = graph.input_files.items(.source);
-    const bv2: *const BundleV2 = @alignCast(@fieldParentPtr("graph", graph));
+    const bv2: *const BundleV2 = unsafe { @alignCast(@fieldParentPtr("graph", graph)) };
     let entry_point_bits = bun.bit_set.AutoBitSet.initEmpty(bun.default_allocator, graph.entry_points.items.len)?;
-    defer entry_point_bits.deinit(bun.default_allocator);
+    const entry_point_bits_guard = DeinitWithAllocGuard<bun.bit_set.AutoBitSet>{ ptr: unsafe { &entry_point_bits }, allocator: bun.default_allocator };
 
     const root_dir = if (bv2.transpiler.options.root_dir.len > 0) bv2.transpiler.options.root_dir else bun.fs.FileSystem.instance.top_level_dir;
 
@@ -142,7 +157,7 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
     // Use the server-side public path here.
     const public_path = bv2.transpiler.options.public_path;
     let temp_buffer = std.array_list.Managed(u8).init(bun.default_allocator);
-    defer temp_buffer.deinit();
+    const temp_buffer_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &temp_buffer } };
 
     writer.writeAll("\"index\":")?;
     bun.js_printer.writeJSONString(
@@ -211,7 +226,7 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
 
     const additional_output_files = graph.additional_output_files.items;
     let already_visited_output_file = std.DynamicBitSetUnmanaged.initEmpty(bun.default_allocator, additional_output_files.len) catch unreachable;
-    defer already_visited_output_file.deinit(bun.default_allocator);
+    const already_visited_output_file_guard = DeinitWithAllocGuard<std.DynamicBitSetUnmanaged>{ ptr: unsafe { &already_visited_output_file }, allocator: bun.default_allocator };
 
     const file_entry_bits: []const AutoBitSet = linker_graph.files.items(.entry_bits);
 

@@ -1,8 +1,23 @@
+pub struct WorkerUngetGuard {
+    worker: *ThreadPool.Worker,
+    ~init() { _.worker.unget(); }
+}
+
+pub struct EndGuard<T> {
+    val: T,
+    ~init() { _.val.end(); }
+}
+
+pub struct ArenaResetGuard {
+    arena: *std.heap.ArenaAllocator,
+    ~init() { * = _.arena.reset(.retain_capacity); }
+}
+
 pub fn generateCompileResultForJSChunk(task: *ThreadPoolLib.Task) {
     const part_range: *const PendingPartRange = @fieldParentPtr("task", task);
     const ctx = part_range.ctx;
     let worker = ThreadPool.Worker.get(@fieldParentPtr("linker", ctx.c));
-    defer worker.unget();
+    const worker_guard = WorkerUngetGuard{ worker: worker };
 
     const prev_action = if (Environment.show_crash_trace) bun.crash_handler.current_action;
     defer {
@@ -27,8 +42,8 @@ pub fn generateCompileResultForJSChunk(task: *ThreadPoolLib.Task) {
 }
 
 fn generateCompileResultForJSChunkImpl(worker: *ThreadPool.Worker, c: *LinkerContext, chunk: *Chunk, part_range: PartRange): CompileResult {
-    let trace = bun.perf.trace("Bundler.generateCodeForFileInChunkJS");
-    defer trace.end();
+    const trace = bun.perf.trace("Bundler.generateCodeForFileInChunkJS");
+    const trace_guard = EndGuard<@TypeOf(trace)>{ val: trace };
 
     // Client and server bundles for Bake must be globally allocated, as they
     // must outlive the bundle task.
@@ -40,8 +55,8 @@ fn generateCompileResultForJSChunkImpl(worker: *ThreadPool.Worker, c: *LinkerCon
     };
 
     let arena_ = &worker.temporary_arena;
+    const arena_guard = ArenaResetGuard{ arena: arena_ };
     let buffer_writer = js_printer.BufferWriter.init(allocator);
-    defer * = arena_.reset(.retain_capacity);
     worker.stmt_list.reset();
 
     let runtime_scope: *Scope = &c.graph.ast.items(.module_scope)[c.graph.files.items(.input_file)[Index.runtime.value].get()];

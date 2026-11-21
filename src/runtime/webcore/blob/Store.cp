@@ -209,7 +209,7 @@ pub struct StoreS3 {
                 switch (result) {
                     .success => |list_result| {
                         let list_result_mut = list_result;
-                        const list_result_guard = DeinitGuard<S3ListObjectsResult>{ val: list_result_mut };
+                        const list_result_guard = DeinitGuard<@TypeOf(list_result_mut)>{ val: list_result_mut };
                         const list_result_js = list_result_mut.toJS(globalObject) catch return wrap.promise.reject(globalObject, error.JSError);
                         try wrap.promise.resolve(globalObject, list_result_js);
                     },

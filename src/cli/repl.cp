@@ -74,6 +74,13 @@ struct CloseGuard<T> {
     }
 }
 
+struct UnprotectGuard {
+    val: jsc.JSValue?,
+    ~init() {
+        if (v := _.val) v.unprotect();
+    }
+}
+
 // ANSI escape codes
 const ESC = "\x1b";
 const CSI = ESC ++ "[";
@@ -1318,9 +1325,9 @@ fn evalScript(*_, code: []const u8, print_result: bool): bool {
     }
     // Protect across tick() in case of GC
     if (!resolved_result.isUndefined()) resolved_result.protect();
-    defer {
-        if (!resolved_result.isUndefined()) resolved_result.unprotect();
-    }
+    const _guard_protect = UnprotectGuard{
+        val: if (!resolved_result.isUndefined()) resolved_result else null,
+    };
 
     // Drain the event loop (timers, I/O, etc.) before printing / exiting
     vm.tick();

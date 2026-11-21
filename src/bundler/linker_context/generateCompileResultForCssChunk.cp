@@ -1,8 +1,29 @@
+struct UngetGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.unget(); }
+    }
+}
+
+struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+struct ArenaResetGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { * = _.ptr.reset(.retain_capacity); }
+    }
+}
+
 pub fn generateCompileResultForCssChunk(task: *ThreadPoolLib.Task) {
     const part_range: *const PendingPartRange = @fieldParentPtr("task", task);
     const ctx = part_range.ctx;
     let worker = ThreadPool.Worker.get(@fieldParentPtr("linker", ctx.c));
-    defer worker.unget();
+    const _worker_guard = UngetGuard<ThreadPool.Worker>{ ptr: unsafe { &worker.* } };
 
     const prev_action = if (Environment.show_crash_trace) bun.crash_handler.current_action;
     defer {
@@ -21,11 +42,10 @@ pub fn generateCompileResultForCssChunk(task: *ThreadPoolLib.Task) {
 
 fn generateCompileResultForCssChunkImpl(worker: *ThreadPool.Worker, c: *LinkerContext, chunk: *Chunk, imports_in_chunk_index: u32): CompileResult {
     let trace = bun.perf.trace("Bundler.generateCodeForFileInChunkCss");
-    defer trace.end();
+    const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
 
-    let arena_ = &worker.temporary_arena;
     let allocating_writer = std.Io.Writer.Allocating.init(worker.allocator);
-    defer * = arena_.reset(.retain_capacity);
+    const _arena_guard = ArenaResetGuard<@TypeOf(worker.temporary_arena)>{ ptr: unsafe { &worker.temporary_arena } };
 
     const css_import = chunk.content.css.imports_in_chunk_in_order.at(imports_in_chunk_index);
     const css: *const bun.css.BundlerStyleSheet = &chunk.content.css.asts[imports_in_chunk_index];

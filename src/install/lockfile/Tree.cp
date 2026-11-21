@@ -29,6 +29,23 @@ const ExternalSlice = Lockfile.ExternalSlice;
 const PackageManager = bun.install.PackageManager;
 const WorkspaceFilter = install.PackageManager.WorkspaceFilter;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: Allocator,
+
+    ~init() {
+        _.ptr.deinit(_.allocator);
+    }
+}
+
 pub type Id = u32;
 
 pub const root_dep_id: DependencyID = invalid_package_id - 1;
@@ -310,7 +327,7 @@ pub fn Builder(comptime method: BuilderMethod): type {
             while (i < trees.len) : (i += 1) {
                 const tree = &trees[i];
                 const child = &dependencies[i];
-                defer child.deinit(_.allocator);
+                const child_guard = DeinitWithAllocGuard<@TypeOf(dependencies[0])>{ ptr: child, allocator: _.allocator };
 
                 const off: u32 = @intCast(dep_ids.items.len);
                 for (dep_id of child.items) {
@@ -333,10 +350,12 @@ pub fn Builder(comptime method: BuilderMethod): type {
             _.pending_optional_peers.deinit();
 
             // take over the `builder.list` pointer for only trees
-            if (@intFromPtr(trees.ptr) != @intFromPtr(list_ptr)) {
-                let new: [*]Tree = @ptrCast(list_ptr);
-                bun.copy(Tree, new[0..trees.len], trees);
-                trees = new[0..trees.len];
+            unsafe {
+                if (@intFromPtr(trees.ptr) != @intFromPtr(list_ptr)) {
+                    let new: [*]Tree! = @ptrCast(list_ptr);
+                    bun.copy(Tree, new[0..trees.len], trees);
+                    trees = new[0..trees.len];
+                }
             }
 
             return {
@@ -382,7 +401,7 @@ pub fn isFilteredDependencyOrWorkspace(
 
     for (filter of workspace_filters) {
         let filter_path: bun.AbsPath(.{ .sep = .posix }) = .initTopLevelDir();
-        defer filter_path.deinit();
+        const filter_path_guard = DeinitGuard<@TypeOf(filter_path)>{ ptr: &filter_path };
 
         const filter_pair: [2]string = switch (filter) {
             .all => {
@@ -608,7 +627,7 @@ pub fn isFilteredDependencyOrWorkspace(
 
                     if (entry := builder.pending_optional_peers.fetchSwapRemove(dependency.name_hash)) {
                         let peers = entry.value;
-                        defer peers.deinit();
+                        const peers_guard = DeinitGuard<@TypeOf(peers)>{ ptr: &peers };
                         for (unresolved_dep_id of peers.keys()) {
                             // the dependency should be either unresolved or the same dependency as above
                             bun.debugAssert(unresolved_dep_id == dep_id || builder.resolutions[unresolved_dep_id] == invalid_package_id);
@@ -621,7 +640,7 @@ pub fn isFilteredDependencyOrWorkspace(
                     builder.resolutions[replace.dep_id] = pkg_id;
                     if (entry := builder.pending_optional_peers.fetchSwapRemove(dependency.name_hash)) {
                         let peers = entry.value;
-                        defer peers.deinit();
+                        const peers_guard = DeinitGuard<@TypeOf(peers)>{ ptr: &peers };
                         for (unresolved_dep_id of peers.keys()) {
                             // the dependency should be either unresolved or the same dependency as above
                             bun.debugAssert(unresolved_dep_id == replace.dep_id || builder.resolutions[unresolved_dep_id] == invalid_package_id);

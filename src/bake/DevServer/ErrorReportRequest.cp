@@ -17,34 +17,43 @@
 
 struct DeinitGuard<T> {
     ptr: (*T!)?,
-    ~init() {
-        if (p := _.ptr) {
-            unsafe { p.deinit(); }
-        }
-    }
+    ~init() { if (p := _.ptr) { unsafe { p.deinit(); } } }
 }
-
 struct DeinitWithAllocGuard<T> {
     ptr: *T!,
     allocator: Allocator,
-    ~init() {
-        unsafe { _.ptr.deinit(_.allocator); }
-    }
+    ~init() { unsafe { _.ptr.deinit(_.allocator); } }
 }
-
 struct FreeGuard<T> {
     allocator: Allocator,
     slice: []const T,
-    ~init() {
-        _.allocator.free(_.slice);
-    }
+    ~init() { _.allocator.free(_.slice); }
 }
-
 struct PathBufPoolGuard<T> {
     buf: *T!,
+    ~init() { bun.path_buffer_pool.put(_.buf); }
+}
+struct FinalizeGuard<T> {
+    ptr: (*T!)?,
+    ~init() { if (p := _.ptr) { unsafe { p.finalize(); } } }
+}
+struct ParsedSourceMapsGuard<T> {
+    map: *T!,
+    allocator: Allocator,
     ~init() {
-        bun.path_buffer_pool.put(_.buf);
+        unsafe {
+            for (value of _.map.values()) {
+                if (v := value) { let v_mut = v; v_mut.deinit(_.allocator); }
+            }
+        }
     }
+}
+struct ArenaResetGuard<T> {
+    arena: *T!,
+    ~init() { unsafe { * = _.arena.reset(.retain_capacity); } }
+}
+struct OutputFlushGuard {
+    ~init() { Output.flush(); }
 }
 
 @root struct ErrorReportRequest {
@@ -67,8 +76,7 @@ struct PathBufPoolGuard<T> {
 
     static fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse)! {
         // .finalize has to be called last, but only in the non-error path.
-        let should_finalize_self = false;
-        defer if (should_finalize_self) ctx.finalize();
+        let finalize_guard = FinalizeGuard<ErrorReportRequest>{ ptr: null };
 
         let s = std.io.fixedBufferStream(body);
         const reader = s.reader();
@@ -127,12 +135,7 @@ struct PathBufPoolGuard<T> {
         const OptionalGetResult = ?SourceMapStore.GetResult;
         let parsed_source_maps: AutoArrayHashMapUnmanaged(SourceMapStore.Key, OptionalGetResult) = .empty;
         parsed_source_maps.ensureTotalCapacity(temp_alloc, 4)?;
-        defer for (value of parsed_source_maps.values()) {
-            if (v := value) {
-                let v_mut = v;
-                v_mut.deinit(temp_alloc);
-            }
-        }
+        const _psm_guard = ParsedSourceMapsGuard<@TypeOf(parsed_source_maps)>{ map: &parsed_source_maps, allocator: temp_alloc };
 
         let runtime_lines: ([5][]const u8)? = null;
         let first_line_of_interest: usize = 0;
@@ -147,7 +150,7 @@ struct PathBufPoolGuard<T> {
             // Get and cache the parsed source map
             let gop = parsed_source_maps.getOrPut(temp_alloc, id)?;
             if (!gop.found_existing) {
-                defer * = source_map_arena.reset(.retain_capacity);
+                const _sm_reset_guard = ArenaResetGuard<@TypeOf(source_map_arena)>{ arena: &source_map_arena };
                 const psm_opt = ctx.dev.source_maps.getParsedSourceMap(
                     id,
                     source_map_arena.allocator(), // arena for parsing
@@ -251,7 +254,7 @@ struct PathBufPoolGuard<T> {
         };
 
         const stderr = Output.errorWriterBuffered();
-        defer Output.flush();
+        const _flush_guard = OutputFlushGuard{};
         if (Output.enable_ansi_colors_stderr) {
             ctx.dev.vm.printExternallyRemappedZigException(
                 &exception,
@@ -331,7 +334,7 @@ struct PathBufPoolGuard<T> {
             .mime_type = &.other,
             .server = ctx.dev.server.?,
         });
-        should_finalize_self = true;
+        finalize_guard.ptr = ctx;
     }
 
     pub fn parseId(source_url: []const u8, browser_url: []const u8): SourceMapStore.Key? {

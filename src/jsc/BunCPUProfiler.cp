@@ -1,3 +1,24 @@
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitPtrGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 pub struct CPUProfilerConfig {
     name: []const u8,
     dir: []const u8,
@@ -31,8 +52,8 @@ pub fn stopAndWriteProfile(vm: *jsc.VM, config: CPUProfilerConfig)! {
         if (config.json_format) &json_string else null,
         if (config.md_format) &text_string else null,
     );
-    defer json_string.deref();
-    defer text_string.deref();
+    const _json_guard = DerefGuard<bun.String>{ val: json_string };
+    const _text_guard = DerefGuard<bun.String>{ val: text_string };
 
     // Write JSON format if requested and not empty
     if (config.json_format && !json_string.isEmpty()) {
@@ -47,11 +68,11 @@ pub fn stopAndWriteProfile(vm: *jsc.VM, config: CPUProfilerConfig)! {
 
 fn writeProfileToFile(profile_string: bun.String, config: CPUProfilerConfig, is_md_format: bool)! {
     const profile_slice = profile_string.toUTF8(bun.default_allocator);
-    defer profile_slice.deinit();
+    const _profile_guard = DeinitGuard<@TypeOf(profile_slice)>{ val: profile_slice };
 
     // Determine the output path using AutoAbsPath
     let path_buf: bun.AutoAbsPath = .initTopLevelDir();
-    defer path_buf.deinit();
+    const _path_guard = DeinitPtrGuard<bun.AutoAbsPath>{ ptr: unsafe { &path_buf } };
 
     buildOutputPath(&path_buf, config, is_md_format)?;
 

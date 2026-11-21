@@ -30,6 +30,20 @@ pub struct DedupeMapEntry {
 }
 pub const DedupeMap = std.HashMap(Task.Id, DedupeMapEntry, IdentityContext(Task.Id), 80);
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 pub enum Authorization {
     no_authorization,
     allow_authorization,
@@ -233,19 +247,22 @@ pub const ForTarballError = OOM || error{
             // registry.npmjs.org supports both "@storybook%2Faddons" and "@storybook/addons"
             // Other registries like AWS codeartifact only support the former.
             // "npm" CLI requests the manifest with the encoded name.
-            let arena_allocator = std.heap.ArenaAllocator.init(bun.default_allocator);
-            defer arena_allocator.deinit();
-            let stack_fallback_allocator = std.heap.stackFallback(512, arena_allocator.allocator());
+            let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{
+                val: std.heap.ArenaAllocator.init(bun.default_allocator),
+            };
+            let stack_fallback_allocator = std.heap.stackFallback(512, arena_guard.val.allocator());
             let encoded_name = name;
             if (strings.containsChar(name, '/')) {
                 encoded_name = std.mem.replaceOwned(u8, stack_fallback_allocator.get(), name, "/", "%2f")?;
             }
 
-            const tmp = bun.jsc.URL.join(
-                bun.String.borrowUTF8(scope.url.href),
-                bun.String.borrowUTF8(encoded_name),
-            );
-            defer tmp.deref();
+            const tmp_guard = DerefGuard<bun.String>{
+                val: bun.jsc.URL.join(
+                    bun.String.borrowUTF8(scope.url.href),
+                    bun.String.borrowUTF8(encoded_name),
+                ),
+            };
+            const tmp = tmp_guard.val;
 
             if (tmp.tag == .Dead) {
                 if (!is_optional) {

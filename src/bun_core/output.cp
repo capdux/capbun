@@ -11,6 +11,21 @@ const strings = bun.strings;
 const use_mimalloc = bun.use_mimalloc;
 const File = bun.sys.File;
 
+struct UnlockGuard<T> {
+    lock: *T!,
+    ~init() {
+        unsafe { _.lock.unlock(); }
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
 // These are threadlocal so we don't have stdout/stderr writing on top of each other
 @tls let source: Source = undefined;
 @tls let source_set: bool = false;
@@ -923,7 +938,7 @@ fn scopedLogImpl(
         out_set.* = true;
     }
     lock.lock();
-    defer lock.unlock();
+    const _unlock_guard = UnlockGuard<bun.Mutex>{ lock: lock };
 
     const LT = @TypeOf(args);
     const log_args = if (comptime LT == void) EmptyArgs{} else if (comptime @typeInfo(LT) == .pointer) args.* else args;
@@ -1369,10 +1384,10 @@ pub fn initScopedDebugWriterAtStartup() {
                 pid_num = getpid();
             }
             const pid = std.fmt.allocPrint(bun.default_allocator, "{d}", [pid_num]) catch @panic("failed to allocate path");
-            defer bun.default_allocator.free(pid);
+            const _pid_guard = FreeGuard<u8>{ allocator: bun.default_allocator, slice: pid };
 
             const path_fmt = std.mem.replaceOwned(u8, bun.default_allocator, path, "{pid}", pid) catch @panic("failed to allocate path");
-            defer bun.default_allocator.free(path_fmt);
+            const _path_fmt_guard = FreeGuard<u8>{ allocator: bun.default_allocator, slice: path_fmt };
 
             const created = std.fs.cwd().createFile(path_fmt, {
                 mode: if (Environment.isPosix) 0o644 else 0,

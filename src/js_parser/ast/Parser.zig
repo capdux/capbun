@@ -465,9 +465,10 @@ var sliced = try ListManaged(Stmt).initCapacity(p.allocator, 1);
             }
             var postvisit_tracer = bun.perf.trace("JSParser.postvisit");
             _ = &postvisit_tracer;
-            defer {
-            _ = postvisit_tracer.end();
-            }
+            var _postvisit_guard = EndGuard(@TypeOf(postvisit_tracer)){ .ptr = (&postvisit_tracer) };
+            _ = &_postvisit_guard;
+            var ___postvisit_guard_moved = false; _ = &___postvisit_guard_moved;
+            defer if (!___postvisit_guard_moved) { ___postvisit_guard_moved = true; const __T = @TypeOf(_postvisit_guard); if (@typeInfo(__T) == .optional) { if (_postvisit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _postvisit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _postvisit_guard; _drop_val.__cp_deinit(); } };
             var uses_dirname = (p.symbols.items[@as(usize, @intCast(p.dirname_ref.innerIndex()))].use_count_estimate > 0);
             _ = &uses_dirname;
             var uses_filename = (p.symbols.items[@as(usize, @intCast(p.filename_ref.innerIndex()))].use_count_estimate > 0);
@@ -1149,6 +1150,22 @@ pub fn __cp_deinit(self: *@This()) void {
                 if (self.ptr) |p| {
                     _ = &p;
                     _ = p.clearAndFree();
+                }
+        }
+    };
+}
+
+pub fn EndGuard(comptime Elem: type) type {
+    return struct {
+        ptr: ?*Elem,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.end();
                 }
         }
     };

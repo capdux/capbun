@@ -28,6 +28,15 @@ type OptString = string?;
 const scripts_len = Lockfile.Scripts.names.len;
 const debug = Output.scoped(.Lockfile, .hidden);
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe {
+            p.deinit();
+        }
+    }
+}
+
 pub enum FormatType {
     completed,
     info,
@@ -355,7 +364,7 @@ pub struct ScriptsList {
     ): !Package.Scripts.List? {
         let tmp: Lockfile = undefined;
         tmp.initEmpty(lockfile.allocator);
-        defer tmp.deinit();
+        let _tmp_guard = DeinitGuard<Lockfile>{ ptr: unsafe { &tmp } };
         let builder = tmp.stringBuilder();
         _.fillFromPackageJSON(lockfile.allocator, &builder, log, folder_path)?;
 

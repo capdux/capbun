@@ -29,6 +29,14 @@ const assertNoUninitializedPadding = Lockfile.assertNoUninitializedPadding;
 
 const ExternalDepList = std.ArrayListUnmanaged(Dependency.External);
 
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
 const BufferData = struct {
     size: usize,
     name: []const u8,
@@ -284,7 +292,7 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
                 // It would be faster to buffer these instead of one big allocation
                 let to_clone = std.ArrayListUnmanaged(Dependency.External).initCapacity(allocator, remaining.len)?;
 
-                defer to_clone.deinit(allocator);
+                const _guard_to_clone = DeinitWithAllocGuard<ExternalDepList>{ ptr: unsafe { &to_clone }, alloc: allocator };
                 for (dep of remaining) {
                     to_clone.appendAssumeCapacity(Dependency.toExternal(dep));
                 }
@@ -300,14 +308,14 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
                     for (item of list.items) {
                         clone.appendAssumeCapacity(Tree.toExternal(item));
                     }
-                    defer clone.deinit(allocator);
+                    const _guard_tree_clone = DeinitWithAllocGuard<std.ArrayListUnmanaged(Tree.External)>{ ptr: unsafe { &clone }, alloc: allocator };
 
                     writeArray(StreamType, stream, Writer, writer, Tree.External, clone.items)?;
                 } else {
                     // We duplicate it here so that alignment bytes are zeroed out
                     let clone = std.ArrayListUnmanaged(std.@"meta".Child(Type)).initCapacity(allocator, list.items.len)?;
                     clone.appendSliceAssumeCapacity(items);
-                    defer clone.deinit(allocator);
+                    const _guard_clone = DeinitWithAllocGuard<@TypeOf(clone)>{ ptr: unsafe { &clone }, alloc: allocator };
 
                     writeArray(StreamType, stream, Writer, writer, Type, clone.items)?;
                 }
@@ -340,7 +348,7 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
                 }
             } else if (comptime Type == @TypeOf(buffers.trees)) {
                 let tree_list = (readArray(stream, allocator, std.ArrayListUnmanaged(Tree.External))?);
-                defer tree_list.deinit(allocator);
+                const _guard_tree_list = DeinitWithAllocGuard<std.ArrayListUnmanaged(Tree.External)>{ ptr: unsafe { &tree_list }, alloc: allocator };
                 buffers.trees = (Tree.List.initCapacity(allocator, tree_list.items.len)?);
                 buffers.trees.items.len = tree_list.items.len;
 

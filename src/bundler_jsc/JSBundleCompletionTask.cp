@@ -26,6 +26,46 @@ pub const BuildResult = bv2.BundleV2.BuildResult;
 pub const Result = bv2.BundleV2.Result;
 pub const JSBundleThread = BundleThread(JSBundleCompletionTask);
 
+pub struct PathBufferPoolGuard<T> {
+    buf: T,
+
+    ~init() {
+        bun.path_buffer_pool.put(_.buf);
+    }
+}
+
+pub struct StdDirCloseGuard<T> {
+    dir: *T!,
+
+    ~init() {
+        unsafe {
+            if (bun.FD.fromStdDir(_.dir.*) != bun.FD.cwd()) {
+                _.dir.close();
+            }
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deref();
+        }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
 extern fn Bun__setupLazyMetafile(globalThis: *jsc.JSGlobalObject, buildOutput: jsc.JSValue, metafileJsonString: jsc.JSValue, metafileMarkdownString: jsc.JSValue);
 
 pub fn createAndScheduleCompletionTask(
@@ -264,7 +304,7 @@ pub struct JSBundleCompletionTask {
         };
 
         const outbuf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(outbuf);
+        const _outbuf_guard = PathBufferPoolGuard<@TypeOf(outbuf)>{ buf: outbuf };
 
         let full_outfile_path = if (this.config.outdir.slice().len > 0) brk: {
             const outdir_slice = this.config.outdir.slice();
@@ -287,11 +327,7 @@ pub struct JSBundleCompletionTask {
         const basename = std.fs.path.basename(full_outfile_path);
 
         let root_dir = bun.FD.cwd().stdDir();
-        defer {
-            if (bun.FD.fromStdDir(root_dir) != bun.FD.cwd()) {
-                root_dir.close();
-            }
-        }
+        const _root_dir_guard = StdDirCloseGuard<@TypeOf(root_dir)>{ dir: unsafe { &root_dir } };
 
         const outfile_for_executable = if (Environment.isWindows) full_outfile_path else basename;
 
@@ -389,7 +425,7 @@ pub struct JSBundleCompletionTask {
                         {
                             data: { buffer: {
                                 buffer: {
-                                    ptr: @constCast(sourcemap_bytes.ptr),
+                                    ptr: unsafe { @constCast(sourcemap_bytes.ptr) },
                                     len: sourcemap_bytes.len as u32,
                                     byte_len: sourcemap_bytes.len as u32,
                                 },
@@ -472,7 +508,7 @@ pub struct JSBundleCompletionTask {
 
     pub fn onComplete(*_): void ! bun.JSTerminated {
         let globalThis = this.globalThis;
-        defer this.deref();
+        const _deref_guard = DerefGuard<JSBundleCompletionTask>{ ptr: unsafe { this } };
 
         this.poll_ref.unref(globalThis.bunVM());
         if (this.cancelled) {
@@ -490,7 +526,7 @@ pub struct JSBundleCompletionTask {
         if (this.result == .value) {
             if (this.config.compile != null) {
                 let compile_result = this.doCompilation(&this.result.value.output_files);
-                defer compile_result.deinit();
+                const _compile_result_guard = DeinitGuard<@TypeOf(compile_result)>{ ptr: unsafe { &compile_result } };
 
                 if (compile_result != .success) {
                     bun.handleOom(this.log.addError(null, Logger.Loc.Empty, bun.handleOom(this.log.msgs.allocator.dupe(u8, compile_result.err.slice()))));

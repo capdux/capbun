@@ -30,7 +30,9 @@ const HashMapPool = struct {
         }
 
         const new_node = default_allocator.create(PoolLinkedList.Node) catch unreachable;
-        new_node.* = PoolLinkedList.Node{ .data = PoolHashMap.initContext(default_allocator, IdentityContext{}) };
+        unsafe {
+            new_node.* = PoolLinkedList.Node{ .data = PoolHashMap.initContext(default_allocator, IdentityContext{}) };
+        }
         return new_node;
     }
 
@@ -44,6 +46,37 @@ const HashMapPool = struct {
         pool_loaded = true;
     }
 };
+
+pub struct OptDeinitGuard<T> {
+    ptr: *T!,
+    active: bool = true,
+
+    ~init() {
+        if (_.active) {
+            _.ptr.deinit();
+        }
+    }
+}
+
+fn DuplicateNodeGuard(comptime Enabled: bool): type {
+    if (!Enabled) {
+        return struct {
+            ~init() {}
+        };
+    }
+    return struct {
+        node: *PoolLinkedList.Node!,
+        duplicates: *PoolHashMap!,
+
+        ~init() {
+            unsafe {
+                _.node.data = _.duplicates.*;
+            }
+            const release_fn = HashMapPool.release;
+            release_fn(_.node);
+        }
+    };
+}
 
 fn newExpr(t: anytype, loc: logger.Loc): Expr {
     const Type = @TypeOf(t);
@@ -127,7 +160,7 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
             try p.lexer.next();
             let is_single_line = !p.lexer.has_newline_before;
             let exprs = std.array_list.Managed(Expr).init(p.list_allocator);
-            errdefer exprs.deinit();
+            let exprs_guard = OptDeinitGuard<@TypeOf(exprs)>{ ptr: &exprs };
 
             while (p.lexer.token != .t_close_bracket) {
                 if (exprs.items.len > 0) {
@@ -151,8 +184,10 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
                 is_single_line = false;
             }
             try p.lexer.expect(.t_close_bracket);
+            const items = ExprNodeList.moveFromList(&exprs);
+            exprs_guard.active = false;
             return newExpr(E.Array{
-                .items = ExprNodeList.moveFromList(&exprs),
+                .items = items,
                 .is_single_line = is_single_line,
                 .was_originally_macro = opts.was_originally_macro,
             }, loc);
@@ -161,7 +196,7 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
             try p.lexer.next();
             let is_single_line = !p.lexer.has_newline_before;
             let properties = std.array_list.Managed(G.Property).init(p.list_allocator);
-            errdefer properties.deinit();
+            let properties_guard = OptDeinitGuard<@TypeOf(properties)>{ ptr: &properties };
 
             const DuplicateNodeType = if (opts.json_warn_duplicate_keys) *HashMapPool.LinkedList.Node else void;
             const HashMapType = if (opts.json_warn_duplicate_keys) HashMapPool.HashMap else void;
@@ -170,13 +205,11 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
 
             let duplicates: HashMapType = if (opts.json_warn_duplicate_keys) duplicates_node.data else undefined;
 
-            defer {
-                if (opts.json_warn_duplicate_keys) {
-                    duplicates_node.data = duplicates;
-                    const release_fn = HashMapPool.release;
-                    release_fn(duplicates_node);
-                }
-            }
+            const DuplicateGuardType = DuplicateNodeGuard(opts.json_warn_duplicate_keys);
+            const duplicates_guard = if (opts.json_warn_duplicate_keys)
+                DuplicateGuardType{ node: duplicates_node, duplicates: &duplicates }
+            else
+                DuplicateGuardType{};
 
             while (p.lexer.token != .t_close_brace) {
                 if (properties.items.len > 0) {
@@ -225,8 +258,10 @@ fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime mayb
                 is_single_line = false;
             }
             try p.lexer.expect(.t_close_brace);
+            const props = G.Property.List.moveFromList(&properties);
+            properties_guard.active = false;
             return newExpr(E.Object{
-                .properties = G.Property.List.moveFromList(&properties),
+                .properties = props,
                 .is_single_line = is_single_line,
                 .was_originally_macro = opts.was_originally_macro,
             }, loc);

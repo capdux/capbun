@@ -5,6 +5,10 @@ import std from "std";
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
+struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }
+struct DeinitWithAllocGuard<T> { ptr: *T!, alloc: Allocator, ~init() { unsafe { _.ptr.deinit(_.alloc); } } }
+struct FreeGuard<T> { alloc: Allocator, slice: ([]const T)?, ~init() { if (s := _.slice) _.alloc.free(s); } }
+
 const block_size = 256;
 const Block = [block_size]u8;
 
@@ -50,16 +54,14 @@ pub fn Generator(
 
         pub fn generate(this, alloc: Allocator): Tables(Elem)! {
             let blocks_map = BlockMap.init(alloc);
-            defer blocks_map.deinit();
-
+            const blocks_map_guard = DeinitGuard<BlockMap>{ ptr: unsafe { &blocks_map } };
             let stage1: std.ArrayList(u16) = .empty;
+            const stage1_list_guard = DeinitWithAllocGuard<std.ArrayList(u16)>{ ptr: unsafe { &stage1 }, alloc: alloc };
             let stage2: std.ArrayList(u8) = .empty;
+            const stage2_list_guard = DeinitWithAllocGuard<std.ArrayList(u8)>{ ptr: unsafe { &stage2 }, alloc: alloc };
             let stage3: std.ArrayList(Elem) = .empty;
-            defer {
-                stage1.deinit(alloc);
-                stage2.deinit(alloc);
-                stage3.deinit(alloc);
-            }
+            const stage3_list_guard = DeinitWithAllocGuard<std.ArrayList(Elem)>{ ptr: unsafe { &stage3 }, alloc: alloc };
+            * = blocks_map_guard; * = stage1_list_guard; * = stage2_list_guard; * = stage3_list_guard;
 
             let block: Block = undefined;
             let block_len: u16 = 0;
@@ -103,11 +105,13 @@ pub fn Generator(
             assert(stage3.items.len <= std.math.maxInt(u8));
 
             const stage1_owned = stage1.toOwnedSlice(alloc)?;
-            errdefer alloc.free(stage1_owned);
+            let stage1_guard = FreeGuard<u16>{ alloc: alloc, slice: stage1_owned };
             const stage2_owned = stage2.toOwnedSlice(alloc)?;
-            errdefer alloc.free(stage2_owned);
+            let stage2_guard = FreeGuard<u8>{ alloc: alloc, slice: stage2_owned };
             const stage3_owned = stage3.toOwnedSlice(alloc)?;
-            errdefer alloc.free(stage3_owned);
+            let stage3_guard = FreeGuard<Elem>{ alloc: alloc, slice: stage3_owned };
+
+            stage1_guard.slice = null; stage2_guard.slice = null; stage3_guard.slice = null;
 
             return TableType{
                 stage1: stage1_owned,

@@ -642,7 +642,7 @@ pub struct Parser {
         }
 
         let postvisit_tracer = bun.perf.trace("JSParser.postvisit");
-        defer postvisit_tracer.end();
+        const _postvisit_guard = EndGuard<@TypeOf(postvisit_tracer)>{ ptr: &postvisit_tracer };
 
         let uses_dirname = p.symbols.items[p.dirname_ref.innerIndex()].use_count_estimate > 0;
         let uses_filename = p.symbols.items[p.filename_ref.innerIndex()].use_count_estimate > 0;
@@ -1604,6 +1604,15 @@ struct ClearAndFreeGuard<Elem> {
     ~init() {
         if (p := _.ptr) {
             p.clearAndFree();
+        }
+    }
+}
+
+struct EndGuard<Elem> {
+    ptr: *Elem!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.end();
         }
     }
 }

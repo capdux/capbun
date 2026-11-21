@@ -2969,7 +2969,7 @@ pub fn printErrorlikeObject(
                 iterator(vm, globalObject, nextValue, ctx.?, false);
             }
             static fn iterator(_: *VM, _: *JSGlobalObject, nextValue: JSValue, ctx: *!?, comptime color: bool) {
-                const this_: *@This() = @ptrCast(@alignCast(ctx));
+                const this_: *@This() = unsafe { @ptrCast(@alignCast(ctx)) };
                 VirtualMachine.get().printErrorlikeObject(nextValue, null, this_.current_exception_list, this_.formatter, Writer, this_.writer, color, allow_side_effects);
             }
         };

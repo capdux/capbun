@@ -111,6 +111,73 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn FinalizeGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.finalize();
+                    }
+                }
+        }
+    };
+}
+
+pub fn ParsedSourceMapsGuard(comptime T: type) type {
+    return struct {
+        map: *T,
+        allocator: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    for (self.map.values()) |value| {
+                        _ = &value;
+                        if (value) |v| {
+                            _ = &v;
+                            var v_mut = v;
+                            _ = &v_mut;
+                            _ = v_mut.deinit(self.allocator);
+                        }
+                    }
+                }
+        }
+    };
+}
+
+pub fn ArenaResetGuard(comptime T: type) type {
+    return struct {
+        arena: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.arena.reset(.retain_capacity);
+                }
+        }
+    };
+}
+
+pub const OutputFlushGuard = struct {
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *OutputFlushGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = Output.flush();
+    }
+};
+
 pub const ErrorReportRequest = @This();
 
 dev: *DevServer,
@@ -128,13 +195,10 @@ pub fn finalize(ctx: *ErrorReportRequest) void {
 }
 
 pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !void {
-        var should_finalize_self = false;
-        _ = &should_finalize_self;
-        defer {
-        if (should_finalize_self) {
-            _ = ctx.finalize();
-        }
-        }
+        var finalize_guard = FinalizeGuard(ErrorReportRequest){ .ptr = null };
+        _ = &finalize_guard;
+        var __finalize_guard_moved = false; _ = &__finalize_guard_moved;
+        defer if (!__finalize_guard_moved) { __finalize_guard_moved = true; const __T = @TypeOf(finalize_guard); if (@typeInfo(__T) == .optional) { if (finalize_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { finalize_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = finalize_guard; _drop_val.__cp_deinit(); } };
         var s = std.io.fixedBufferStream(body);
         _ = &s;
         const reader = s.reader();
@@ -181,8 +245,8 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         {
             var frame_idx: i32 = 0;
             _ = &frame_idx;
-            const __end_0 = stack_count;
-            while (frame_idx < __end_0) : (frame_idx += 1) {
+            const __end_1 = stack_count;
+            while (frame_idx < __end_1) : (frame_idx += 1) {
                 const line = try reader.readInt(i32, .little);
                 const column = try reader.readInt(i32, .little);
                 const function_name = try readString32(reader, temp_alloc);
@@ -197,17 +261,10 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         var parsed_source_maps: AutoArrayHashMapUnmanaged(SourceMapStore.Key, OptionalGetResult) = .empty;
         _ = &parsed_source_maps;
         _ = try parsed_source_maps.ensureTotalCapacity(temp_alloc, 4);
-        defer {
-        for (parsed_source_maps.values()) |value| {
-            _ = &value;
-            if (value) |v| {
-                _ = &v;
-                var v_mut = v;
-                _ = &v_mut;
-                _ = v_mut.deinit(temp_alloc);
-            }
-        }
-        }
+        var _psm_guard = ParsedSourceMapsGuard(@TypeOf(parsed_source_maps)){ .map = (&parsed_source_maps), .allocator = temp_alloc };
+        _ = &_psm_guard;
+        var ___psm_guard_moved = false; _ = &___psm_guard_moved;
+        defer if (!___psm_guard_moved) { ___psm_guard_moved = true; const __T = @TypeOf(_psm_guard); if (@typeInfo(__T) == .optional) { if (_psm_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _psm_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _psm_guard; _drop_val.__cp_deinit(); } };
         var runtime_lines: ?[5][]const u8 = null;
         _ = &runtime_lines;
         var first_line_of_interest: usize = 0;
@@ -223,9 +280,10 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
             var gop = try parsed_source_maps.getOrPut(temp_alloc, id);
             _ = &gop;
             if ((!gop.found_existing)) {
-                defer {
-                _ = source_map_arena.reset(.retain_capacity);
-                }
+                var _sm_reset_guard = ArenaResetGuard(@TypeOf(source_map_arena)){ .arena = (&source_map_arena) };
+                _ = &_sm_reset_guard;
+                var ___sm_reset_guard_moved = false; _ = &___sm_reset_guard_moved;
+                defer if (!___sm_reset_guard_moved) { ___sm_reset_guard_moved = true; const __T = @TypeOf(_sm_reset_guard); if (@typeInfo(__T) == .optional) { if (_sm_reset_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sm_reset_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sm_reset_guard; _drop_val.__cp_deinit(); } };
                 const psm_opt = ctx.dev.source_maps.getParsedSourceMap(id, source_map_arena.allocator(), temp_alloc);
                 if ((psm_opt == null)) {
                     _ = Output.debugWarn("Failed to find mapping for {s}, {d}", .{ source_url, id.get() });
@@ -307,9 +365,10 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         var exception = jsc.ZigException{ .type = .Error, .runtime_type = .Nothing, .name = .init(name), .message = .init(message), .stack = .fromFrames(frames.items), .exception = null, .remapped = false, .browser_url = .init(browser_url) };
         _ = &exception;
         const stderr = Output.errorWriterBuffered();
-        defer {
-        _ = Output.flush();
-        }
+        var _flush_guard = OutputFlushGuard{  };
+        _ = &_flush_guard;
+        var ___flush_guard_moved = false; _ = &___flush_guard_moved;
+        defer if (!___flush_guard_moved) { ___flush_guard_moved = true; const __T = @TypeOf(_flush_guard); if (@typeInfo(__T) == .optional) { if (_flush_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _flush_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _flush_guard; _drop_val.__cp_deinit(); } };
         if (Output.enable_ansi_colors_stderr) {
             _ = (blk_catch_0: { break :blk_catch_0 ((ctx.dev.vm.printExternallyRemappedZigException((&exception), null, @TypeOf(stderr), stderr, true, true)) catch |__ce_0| { _ = &__ce_0;  }); });
         } else {
@@ -378,7 +437,7 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         }
         out_guard.ptr = null;
         _ = StaticRoute.sendBlobThenDeinit(r, (&.fromArrayList(out)), .{ .mime_type = (&.other), .server = ctx.dev.server.? });
-        should_finalize_self = true;
+        finalize_guard.ptr = ctx;
 }
 
 pub fn parseId(source_url: []const u8, browser_url: []const u8) ?SourceMapStore.Key {

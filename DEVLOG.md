@@ -1604,3 +1604,7 @@
 - `lexer.cp`：将局部别名 `const ClearGuard = ClearRetainingCapacityGuard(...);` 改为直接构造非泛型 `TempBufferU16ClearGuard{ ptr: ... }`，确保 `cpc` 为全部 4 处作用域正确注入 `defer __cp_deinit()`（修复 `NewLexer_.restore` 中的 `temp_buffer_u16.items.len == 0` 断言）。
 - `bun.cp`：`SelfExePathMemo.lock` 显式使用 `threading.Mutex` 避免 `cpc` 将 `Mutex` 降级为内置 `CpBareMutex`。
 - `JSPromise.cp` / `tsconfig_json.cp` / `Path.cp`：顶层错误联合返回类型写为 `T!E`（`JSValue!bun.JSTerminated`）；`PathsMapFreeGuard` 改用 `p.deinit()`；嵌套 `.{ ... }` 泛型参数提取为顶层常量 `PoolPath` 避免 `<` 比较符歧义。
+
+## [2026-11-22 Wave #29] RAII 改造与 `unsafe {}` 经验
+- `Store.cp`：`switch (result)` 中 `.success => |list_result|` 解包载荷类型应以 `DeinitGuard<@TypeOf(list_result_mut)>` 实例化，避免将外层联合体 `S3ListObjectsResult` 误传给内部 `S3ListObjectsV2Result`。
+- `threading/ThreadPool.cp`：位掩码比较须加括号 `(new_stack & ~PTR_MASK) == 0`；在 `*_` 方法中 `_` 已是指针接收者，比较指针相等直接写 `target == unsafe { _ }`。

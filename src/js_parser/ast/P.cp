@@ -3796,9 +3796,13 @@ pub fn NewParser_(
                 }
             }
 
-            if (@intFromPtr(p.source.contents.ptr) <= @intFromPtr(name.ptr) && (@intFromPtr(name.ptr) + name.len) <= (@intFromPtr(p.source.contents.ptr) + p.source.contents.len)) {
+            const in_source_contents = unsafe {
+                @intFromPtr(p.source.contents.ptr) <= @intFromPtr(name.ptr) && (@intFromPtr(name.ptr) + name.len) <= (@intFromPtr(p.source.contents.ptr) + p.source.contents.len)
+            };
+            if (in_source_contents) {
+                const source_index: u32 = unsafe { @intCast(@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)) };
                 return Ref.initSourceEnd({
-                    source_index: @intCast(@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)),
+                    source_index: source_index,
                     inner_index: @intCast(name.len),
                     tag: .source_contents_slice,
                 });

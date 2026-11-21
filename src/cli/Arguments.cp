@@ -1,3 +1,29 @@
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct CloseGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.close();
+    }
+}
+
+struct AstStoreResetGuard {
+    _dummy: u8 = 0,
+
+    ~init() {
+        js_ast.Stmt.Data.Store.reset();
+        js_ast.Expr.Data.Store.reset();
+    }
+}
+
 pub fn loader_resolver(input: string): !Api.Loader {
     if (option_loader := options.Loader.fromString(input)) {
         return option_loader.toAPI();
@@ -20,12 +46,15 @@ pub fn readFile(
     filename: string,
 ): ![]u8 {
     let paths: [2]string = [ cwd, filename ];
-    const outpath = std.fs.path.resolve(allocator, &paths)?;
-    defer allocator.free(outpath);
-    let file = try bun.openFileZ(&try std.posix.toPosixPath(outpath), std.fs.File.OpenFlags{ mode: .read_only });
-    defer file.close();
-    const size = file.getEndPos()?;
-    return file.readToEndAlloc(allocator, size)?;
+    const outpath_guard = FreeGuard<u8>{
+        allocator: allocator,
+        slice: std.fs.path.resolve(allocator, &paths)?,
+    };
+    let file_guard = CloseGuard<std.fs.File>{
+        val: try bun.openFileZ(&try std.posix.toPosixPath(outpath_guard.slice), std.fs.File.OpenFlags{ mode: .read_only }),
+    };
+    const size = file_guard.val.getEndPos()?;
+    return file_guard.val.readToEndAlloc(allocator, size)?;
 }
 
 pub fn resolve_jsx_runtime(str: string): !Api.JsxRuntime {
@@ -300,10 +329,8 @@ fn loadBunfig(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]
     };
     js_ast.Stmt.Data.Store.create();
     js_ast.Expr.Data.Store.create();
-    defer {
-        js_ast.Stmt.Data.Store.reset();
-        js_ast.Expr.Data.Store.reset();
-    }
+    const _store_guard = AstStoreResetGuard{};
+    * = _store_guard;
     const original_level = ctx.log.level;
     defer {
         ctx.log.level = original_level;
@@ -624,7 +651,9 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
                 );
                 Global.exit(1);
             };
-            ctx.test_options.test_filter_regex = @ptrCast(regex);
+            unsafe {
+                ctx.test_options.test_filter_regex = @ptrCast(regex);
+            }
         }
         if (since := args.option("--changed")) {
             ctx.test_options.changed = since;

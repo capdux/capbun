@@ -21,6 +21,13 @@ import RunCommandMod from "../cli/run_command.zig";
 type string = []const u8;
 type stringZ = [:0]const u8;
 
+struct ClampGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.clamp(); }
+    }
+}
+
 const Crypto = ShaHmac.Hashers;
 const Resolution = ResolutionMod.Resolution;
 const StaticHashMap = StaticHashMapMod.StaticHashMap;
@@ -602,7 +609,7 @@ pub struct StringBuilder {
 
     fn allocatedSlice(*_): []const u8 {
         if (ptr := _.ptr) {
-            return ptr[0.._.cap];
+            return unsafe { ptr[0.._.cap] };
         }
         return "";
     }
@@ -625,8 +632,8 @@ pub struct StringBuilder {
         string_bytes.ensureUnusedCapacity(_.lockfile.allocator, _.cap)?;
         const prev_len = string_bytes.items.len;
         _.off = prev_len;
-        string_bytes.items = string_bytes.items.ptr[0 .. string_bytes.items.len + _.cap];
-        _.ptr = string_bytes.items.ptr[prev_len .. prev_len + _.cap].ptr;
+        string_bytes.items = unsafe { string_bytes.items.ptr[0 .. string_bytes.items.len + _.cap] };
+        _.ptr = unsafe { string_bytes.items.ptr[prev_len .. prev_len + _.cap].ptr };
         _.len = 0;
     }
 
@@ -648,8 +655,8 @@ pub struct StringBuilder {
             assert(_.ptr != null); // must call allocate first
         }
 
-        bun.copy(u8, _.ptr.?[_.len.._.cap], slice);
-        const final_slice = _.ptr.?[_.len.._.cap][0..slice.len];
+        bun.copy(u8, unsafe { _.ptr.?[_.len.._.cap] }, slice);
+        const final_slice = unsafe { _.ptr.?[_.len.._.cap][0..slice.len] };
         _.len += slice.len;
 
         if (comptime Environment.allow_assert) assert(_.len <= _.cap);
@@ -677,8 +684,8 @@ pub struct StringBuilder {
 
         const string_entry = _.lockfile.string_pool.getOrPut(hash) catch unreachable;
         if (!string_entry.found_existing) {
-            bun.copy(u8, _.ptr.?[_.len.._.cap], slice);
-            const final_slice = _.ptr.?[_.len.._.cap][0..slice.len];
+            bun.copy(u8, unsafe { _.ptr.?[_.len.._.cap] }, slice);
+            const final_slice = unsafe { _.ptr.?[_.len.._.cap][0..slice.len] };
             _.len += slice.len;
 
             string_entry.value_ptr.* = String.init(_.lockfile.buffers.string_bytes.items, final_slice);
@@ -1054,7 +1061,7 @@ fn preprocessUpdateRequests(old: *Lockfile, manager: *PackageManager, updates: [
         }
 
         string_builder.allocate()?;
-        defer string_builder.clamp();
+        const _guard_sb = ClampGuard<StringBuilder>{ ptr: unsafe { &string_builder } };
 
         {
             let temp_buf: [513]u8 = undefined;
@@ -1532,7 +1539,7 @@ pub fn fetchNecessaryPackageMetadataAfterYarnOrPnpmMigration(client: *Lockfile, 
                     bin_extern_strings_count += pkg.package.bin.count(manifest.string_buf, manifest.extern_strings_bin_entries, @TypeOf(&builder), &builder);
 
                     builder.allocate()?;
-                    defer builder.clamp();
+                    const _guard_builder = ClampGuard<StringBuilder>{ ptr: unsafe { &builder } };
 
                     let extern_strings_list = &manager.lockfile.buffers.extern_strings;
                     extern_strings_list.ensureUnusedCapacity(manager.lockfile.allocator, bin_extern_strings_count)?;
@@ -1586,7 +1593,7 @@ pub fn fetchNecessaryPackageMetadataAfterYarnOrPnpmMigration(client: *Lockfile, 
                     bin_extern_strings_count += pkg.package.bin.count(manifest.string_buf, manifest.extern_strings_bin_entries, @TypeOf(&builder), &builder);
 
                     builder.allocate()?;
-                    defer builder.clamp();
+                    const _guard_builder = ClampGuard<StringBuilder>{ ptr: unsafe { &builder } };
 
                     let extern_strings_list = &manager.lockfile.buffers.extern_strings;
                     extern_strings_list.ensureUnusedCapacity(manager.lockfile.allocator, bin_extern_strings_count)?;

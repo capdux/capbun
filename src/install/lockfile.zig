@@ -125,6 +125,21 @@ pub const LoadResultMigrated = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub fn ClampGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.clamp();
+                }
+        }
+    };
+}
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -609,7 +624,10 @@ pub inline fn _countWithHash(self: *StringBuilder, slice: []const u8, hash: u64)
 pub fn allocatedSlice(self: *StringBuilder) []const u8 {
             if (self.ptr) |ptr| {
                 _ = &ptr;
-                return ptr[0..self.cap];
+                return (blk: {
+                break :blk ptr[0..self.cap];
+
+});
             }
             return "";
     }
@@ -631,8 +649,14 @@ pub fn allocate(self: *StringBuilder) !void {
             _ = try string_bytes.ensureUnusedCapacity(self.lockfile.allocator, self.cap);
             const prev_len = string_bytes.items.len;
             self.off = prev_len;
-            string_bytes.items = string_bytes.items.ptr[0..(string_bytes.items.len + self.cap)];
-            self.ptr = string_bytes.items.ptr[prev_len..(prev_len + self.cap)].ptr;
+            string_bytes.items = (blk: {
+            break :blk string_bytes.items.ptr[0..(string_bytes.items.len + self.cap)];
+
+});
+            self.ptr = (blk: {
+            break :blk string_bytes.items.ptr[prev_len..(prev_len + self.cap)].ptr;
+
+});
             self.len = 0;
     }
 
@@ -648,8 +672,14 @@ pub fn appendWithoutPool(self: *StringBuilder, comptime Type: type, slice: []con
                 _ = assert((self.len <= self.cap));
                 _ = assert((self.ptr != null));
             }
-            _ = bun.copy(u8, self.ptr.?[self.len..self.cap], slice);
-            const final_slice = self.ptr.?[self.len..self.cap][0..slice.len];
+            _ = bun.copy(u8, (blk: {
+            break :blk self.ptr.?[self.len..self.cap];
+
+}), slice);
+            const final_slice = (blk: {
+            break :blk self.ptr.?[self.len..self.cap][0..slice.len];
+
+});
             self.len = (self.len + slice.len);
             if (comptime Environment.allow_assert) {
                 _ = assert((self.len <= self.cap));
@@ -667,8 +697,14 @@ pub fn appendWithHash(self: *StringBuilder, comptime Type: type, slice: []const 
             }
             const string_entry = ((self.lockfile.string_pool.getOrPut(hash)) catch unreachable);
             if ((!string_entry.found_existing)) {
-                _ = bun.copy(u8, self.ptr.?[self.len..self.cap], slice);
-                const final_slice = self.ptr.?[self.len..self.cap][0..slice.len];
+                _ = bun.copy(u8, (blk: {
+                break :blk self.ptr.?[self.len..self.cap];
+
+}), slice);
+                const final_slice = (blk: {
+                break :blk self.ptr.?[self.len..self.cap][0..slice.len];
+
+});
                 self.len = (self.len + slice.len);
                 string_entry.value_ptr.* = String.init(self.lockfile.buffers.string_bytes.items, final_slice);
             }
@@ -901,9 +937,13 @@ pub fn preprocessUpdateRequests(old: *Lockfile, manager: *PackageManager, update
                 }
             }
             _ = try string_builder.allocate();
-            defer {
-            _ = string_builder.clamp();
-            }
+            var _guard_sb = ClampGuard(StringBuilder){ .ptr = (blk: {
+            break :blk (&string_builder);
+
+}) };
+            _ = &_guard_sb;
+            var ___guard_sb_moved = false; _ = &___guard_sb_moved;
+            defer if (!___guard_sb_moved) { ___guard_sb_moved = true; const __T = @TypeOf(_guard_sb); if (@typeInfo(__T) == .optional) { if (_guard_sb) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_sb.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_sb; _drop_val.__cp_deinit(); } };
             {
                 var temp_buf: [513]u8 = undefined;
                 _ = &temp_buf;
@@ -1241,9 +1281,13 @@ const manifest_opt = manager.manifests.byNameHash(manager, manager.scopeForPacka
                 _ = &bin_extern_strings_count;
                 bin_extern_strings_count = (bin_extern_strings_count + pkg.package.bin.count(manifest.string_buf, manifest.extern_strings_bin_entries, @TypeOf((&builder)), (&builder)));
                 _ = try builder.allocate();
-                defer {
-                _ = builder.clamp();
-                }
+                var _guard_builder = ClampGuard(StringBuilder){ .ptr = (blk: {
+                break :blk (&builder);
+
+}) };
+                _ = &_guard_builder;
+                var ___guard_builder_moved = false; _ = &___guard_builder_moved;
+                defer if (!___guard_builder_moved) { ___guard_builder_moved = true; const __T = @TypeOf(_guard_builder); if (@typeInfo(__T) == .optional) { if (_guard_builder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_builder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_builder; _drop_val.__cp_deinit(); } };
                 var extern_strings_list = (&manager.lockfile.buffers.extern_strings);
                 _ = &extern_strings_list;
                 _ = try extern_strings_list.ensureUnusedCapacity(manager.lockfile.allocator, bin_extern_strings_count);
@@ -1288,9 +1332,13 @@ const manifest_opt = manager.manifests.byNameHash(manager, manager.scopeForPacka
                 _ = &bin_extern_strings_count;
                 bin_extern_strings_count = (bin_extern_strings_count + pkg.package.bin.count(manifest.string_buf, manifest.extern_strings_bin_entries, @TypeOf((&builder)), (&builder)));
                 _ = try builder.allocate();
-                defer {
-                _ = builder.clamp();
-                }
+                var _guard_builder = ClampGuard(StringBuilder){ .ptr = (blk: {
+                break :blk (&builder);
+
+}) };
+                _ = &_guard_builder;
+                var ___guard_builder_moved = false; _ = &___guard_builder_moved;
+                defer if (!___guard_builder_moved) { ___guard_builder_moved = true; const __T = @TypeOf(_guard_builder); if (@typeInfo(__T) == .optional) { if (_guard_builder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_builder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_builder; _drop_val.__cp_deinit(); } };
                 var extern_strings_list = (&manager.lockfile.buffers.extern_strings);
                 _ = &extern_strings_list;
                 _ = try extern_strings_list.ensureUnusedCapacity(manager.lockfile.allocator, bin_extern_strings_count);

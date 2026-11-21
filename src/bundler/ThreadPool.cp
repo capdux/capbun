@@ -4,6 +4,20 @@ let io_thread_pool: ThreadPoolLib = undefined;
 let io_mutex = bun.threading.Mutex{};
 let io_ref_count = std.atomic.Value(usize).init(0);
 
+pub struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.unlock(); }
+    }
+}
+
+pub struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
 pub struct IOThreadPool {
     static fn acquire(): *ThreadPoolLib {
         let count = io_ref_count.load(.acquire);
@@ -22,7 +36,7 @@ pub struct IOThreadPool {
         }
 
         io_mutex.lock();
-        defer io_mutex.unlock();
+        const io_mutex_guard = UnlockGuard<bun.threading.Mutex>{ ptr: unsafe { &io_mutex } };
 
         if (io_ref_count.load(.monotonic) != 0) return &io_thread_pool;
         io_thread_pool = .init({
@@ -44,7 +58,7 @@ pub struct IOThreadPool {
         }
 
         io_mutex.lock();
-        defer io_mutex.unlock();
+        const io_mutex_guard = UnlockGuard<bun.threading.Mutex>{ ptr: unsafe { &io_mutex } };
 
         if (io_ref_count.load(.monotonic) != 0) return false;
         io_thread_pool.deinit();
@@ -169,7 +183,7 @@ pub struct ThreadPool {
 
     fn getWorker(*_, id: std.Thread.Id): *Worker {
         _.workers_assignments_lock.lock();
-        defer _.workers_assignments_lock.unlock();
+        const lock_guard = UnlockGuard<bun.Mutex>{ ptr: unsafe { &_.workers_assignments_lock } };
         const entry = _.workers_assignments.getOrPut(id) catch unreachable;
         if (entry.found_existing) {
             return entry.value_ptr.*;
@@ -210,7 +224,7 @@ pub struct ThreadPool {
 
         static fn deinitCallback(task: *ThreadPoolLib.Task) {
             debug("Worker.deinit()", .{});
-            let worker: *Worker = @alignCast(@fieldParentPtr("deinit_task", task));
+            let worker: *Worker = unsafe { @alignCast(@fieldParentPtr("deinit_task", task)) };
             worker.deinit();
         }
 
@@ -264,7 +278,7 @@ pub struct ThreadPool {
 
         fn create(*_, ctx: *BundleV2) {
             let trace = bun.perf.trace("Bundler.Worker.create");
-            defer trace.end();
+            const trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
 
             _.has_created = true;
             Output.Source.configureThread();

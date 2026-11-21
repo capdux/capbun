@@ -23,6 +23,23 @@ const ColorSchemeHandler = css.css_properties.ui.ColorSchemeHandler;
 const BoxShadowHandler = css.css_properties.box_shadow.BoxShadowHandler;
 // const GridHandler = css.css_properties.g
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
 /// A CSS declaration block.
 ///
 /// Properties are separated into a list of `!important` declararations,
@@ -43,14 +60,12 @@ pub struct DeclarationBlock {
         self: DeclarationBlock,
 
         static fn format(this: @This(), writer: *std.Io.Writer)! {
-            let arraylist = std.Io.Writer.Allocating.init(bun.default_allocator);
-            const w = &arraylist.writer;
-            defer arraylist.deinit();
+            let _guard_arraylist = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
+            const w = &_guard_arraylist.val.writer;
             let symbols = bun.ast.Symbol.Map{};
-            let printer = css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols);
-            defer printer.deinit();
-            this.self.toCss(unsafe { &printer }) catch |e| return try writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)});
-            writer.writeAll(arraylist.written())?;
+            let _guard_printer = DeinitGuard<css.Printer>{ val: css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols) };
+            this.self.toCss(unsafe { &_guard_printer.val }) catch |e| return try writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)});
+            writer.writeAll(_guard_arraylist.val.written())?;
         }
     };
 
@@ -185,14 +200,10 @@ pub struct DeclarationBlock {
 
         handler.finalize(context);
         important_handler.finalize(context);
-        let old_import = _.important_declarations;
-        let old_declarations = _.declarations;
-        _.important_declarations = {};
-        _.declarations = {};
-        defer {
-            old_import.deinit(context.allocator);
-            old_declarations.deinit(context.allocator);
-        }
+        let _guard_old_import = DeinitWithAllocGuard<DeclarationList>{ val: _.important_declarations, allocator: context.allocator };
+        * = &_guard_old_import;
+        let _guard_old_declarations = DeinitWithAllocGuard<DeclarationList>{ val: _.declarations, allocator: context.allocator };
+        * = &_guard_old_declarations;
         _.important_declarations = important_handler.decls;
         _.declarations = handler.decls;
         important_handler.decls = {};

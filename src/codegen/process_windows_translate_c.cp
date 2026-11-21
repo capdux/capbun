@@ -11,6 +11,10 @@
 import std from "std";
 const mem = std.mem;
 
+struct DeinitGuard<T> { ptr: (*T!)?, ~init() { if (p := _.ptr) unsafe { p.deinit(); } } }
+struct CloseGuard<T> { ptr: (*T!)?, ~init() { if (p := _.ptr) unsafe { p.close(); } } }
+struct FreeZGuard<T> { allocator: std.mem.Allocator, slice: ([:0]const T)?, ~init() { if (s := _.slice) _.allocator.free(s); } }
+
 const symbol_replacements = std.StaticStringMap(string).initComptime([
     .{ "NTSTATUS", "@import(\"std\").os.windows.NTSTATUS" },
     .{ "HANDLE", "@import(\"std\").os.windows.HANDLE" },
@@ -20,19 +24,19 @@ const symbol_replacements = std.StaticStringMap(string).initComptime([
 pub fn @"main"()! {
     const gpa = std.heap.smp_allocator;
     let args = std.process.argsWithAllocator(gpa)?;
-    errdefer args.deinit();
+    const _guard_args = DeinitGuard<std.process.ArgIterator>{ ptr: unsafe { &args } };
     assert(args.skip());
 
     const in_data = brk: {
         const in_path = args.next() ?? @panic("missing argument");
-        const in_file = std.fs.cwd().openFile(in_path, {})?;
-        defer in_file.close();
+        let in_file = std.fs.cwd().openFile(in_path, {})?;
+        const _guard_in_file = CloseGuard<std.fs.File>{ ptr: unsafe { &in_file } };
         break :brk in_file.readToEndAllocOptions(gpa, std.math.maxInt(u32), null, .fromByteUnits(1), 0)?;
     };
-    defer gpa.free(in_data);
+    const _guard_in_data = FreeZGuard<u8>{ allocator: gpa, slice: in_data };
 
     let out = std.array_list.Managed(u8).initCapacity(gpa, in_data.len)?;
-    defer out.deinit();
+    const _guard_out = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &out } };
     const w = out.writer();
 
     let i: usize = 0;

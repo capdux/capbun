@@ -1,3 +1,23 @@
+pub struct EndGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.end();
+        }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
 /// TODO: investigate if we need to parallelize this function
 /// esbuild does parallelize it.
 pub fn renameSymbolsInChunk(
@@ -7,7 +27,7 @@ pub fn renameSymbolsInChunk(
     files_in_order: []const u32,
 ): renamer.Renamer! {
     let trace = bun.perf.trace("Bundler.renameSymbolsInChunk");
-    defer trace.end();
+    const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
     const all_module_scopes = c.graph.ast.items(.module_scope);
     const all_flags: []const JSMeta.Flags = c.graph.@"meta".items(.flags);
     const all_parts: []const Part.List = c.graph.ast.items(.parts);
@@ -45,7 +65,7 @@ pub fn renameSymbolsInChunk(
         std.sort.pdq(StableRef, list.items, void_ctx, StableRef.isLessThan);
         break :brk list;
     };
-    defer sorted_imports_from_other_chunks.deinit();
+    const _sorted_imports_guard = DeinitGuard<std.array_list.Managed(StableRef)>{ ptr: unsafe { &sorted_imports_from_other_chunks } };
 
     if (c.options.minify_identifiers) {
         const first_top_level_slots: js_ast.SlotCounts = brk: {
@@ -60,7 +80,7 @@ pub fn renameSymbolsInChunk(
         let minify_renamer = MinifyRenamer.init(allocator, c.graph.symbols, first_top_level_slots, reserved_names)?;
 
         let top_level_symbols = renamer.StableSymbolCount.Array.init(allocator);
-        defer top_level_symbols.deinit();
+        const _top_level_symbols_guard = DeinitGuard<renamer.StableSymbolCount.Array>{ ptr: unsafe { &top_level_symbols } };
 
         let top_level_symbols_all = renamer.StableSymbolCount.Array.init(allocator);
 
@@ -146,7 +166,7 @@ pub fn renameSymbolsInChunk(
 
     let sorted_ = std.array_list.Managed(u32).init(r.temp_allocator);
     let sorted = &sorted_;
-    defer sorted.deinit();
+    const _sorted_guard = DeinitGuard<std.array_list.Managed(u32)>{ ptr: unsafe { &sorted_ } };
 
     for (source_index of files_in_order) {
         const wrap = all_flags[source_index].wrap;

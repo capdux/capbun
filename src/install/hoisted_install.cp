@@ -1,3 +1,18 @@
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    val: T,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
 pub fn installHoistedPackages(
     *_: *PackageManager,
     ctx: Command.Context,
@@ -97,19 +112,21 @@ pub fn installHoistedPackages(
                 {
                     // For each tree id, traverse through it's parents and mark all visited tree
                     // ids as dependents for the current tree parent
-                    let deps = Bitset.initEmpty(this.allocator, trees.len)?;
-                    defer deps.deinit(this.allocator);
+                    let deps_guard = DeinitWithAllocGuard<Bitset>{
+                        val: Bitset.initEmpty(this.allocator, trees.len)?,
+                        allocator: this.allocator,
+                    };
                     for (_curr of trees) {
                         let curr = _curr;
                         tree_ids_to_trees_the_id_depends_on.set(curr.id, curr.id);
 
                         while (curr.parent != Lockfile.Tree.invalid_id) {
-                            deps.set(curr.id);
-                            tree_ids_to_trees_the_id_depends_on.setUnion(curr.parent, deps);
+                            deps_guard.val.set(curr.id);
+                            tree_ids_to_trees_the_id_depends_on.setUnion(curr.parent, deps_guard.val);
                             curr = trees[curr.parent];
                         }
 
-                        deps.setAll(false);
+                        deps_guard.val.setAll(false);
                     }
                 }
 
@@ -197,14 +214,14 @@ pub fn installHoistedPackages(
 
         installer.node_modules.path.append(std.fs.path.sep)?;
 
-        defer installer.deinit();
+        let installer_guard = DeinitGuard<PackageInstaller>{ val: installer };
 
-        while (node_modules := iterator.next(&installer.completed_trees)) {
-            installer.node_modules.path.items.len = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1;
-            installer.node_modules.path.appendSlice(node_modules.relative_path)?;
-            installer.node_modules.tree_id = node_modules.tree_id;
+        while (node_modules := iterator.next(&installer_guard.val.completed_trees)) {
+            installer_guard.val.node_modules.path.items.len = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1;
+            installer_guard.val.node_modules.path.appendSlice(node_modules.relative_path)?;
+            installer_guard.val.node_modules.tree_id = node_modules.tree_id;
             let remaining = node_modules.dependencies;
-            installer.current_tree_id = node_modules.tree_id;
+            installer_guard.val.current_tree_id = node_modules.tree_id;
 
             // cache line is 64 bytes on ARM64 and x64
             // PackageIDs are 4 bytes
@@ -214,7 +231,7 @@ pub fn installHoistedPackages(
             while (remaining.len > unroll_count) {
                 comptime let i: usize = 0;
                 inline while (i < unroll_count) : (i += 1) {
-                    installer.installPackage(remaining[i], log_level);
+                    installer_guard.val.installPackage(remaining[i], log_level);
                 }
                 remaining = remaining[unroll_count..];
 
@@ -223,7 +240,7 @@ pub fn installHoistedPackages(
                 if (this.pendingTaskCount() > 0) {
                     try this.runTasks(
                         *PackageInstaller,
-                        &installer,
+                        &installer_guard.val,
                         {
                             onExtract: PackageInstaller.installEnqueuedPackagesAfterExtraction,
                             onResolve: {},
@@ -233,19 +250,19 @@ pub fn installHoistedPackages(
                         true,
                         log_level,
                     );
-                    if (!installer.options.do.install_packages) return error.InstallFailed;
+                    if (!installer_guard.val.options.do.install_packages) return error.InstallFailed;
                 }
                 this.tickLifecycleScripts();
                 this.reportSlowLifecycleScripts();
             }
 
             for (dependency_id of remaining) {
-                installer.installPackage(dependency_id, log_level);
+                installer_guard.val.installPackage(dependency_id, log_level);
             }
 
             try this.runTasks(
                 *PackageInstaller,
-                &installer,
+                &installer_guard.val,
                 {
                     onExtract: PackageInstaller.installEnqueuedPackagesAfterExtraction,
                     onResolve: {},
@@ -255,13 +272,13 @@ pub fn installHoistedPackages(
                 true,
                 log_level,
             );
-            if (!installer.options.do.install_packages) return error.InstallFailed;
+            if (!installer_guard.val.options.do.install_packages) return error.InstallFailed;
 
             this.tickLifecycleScripts();
             this.reportSlowLifecycleScripts();
         }
 
-        while (this.pendingTaskCount() > 0 && installer.options.do.install_packages) {
+        while (this.pendingTaskCount() > 0 && installer_guard.val.options.do.install_packages) {
             const Closure = struct {
                 installer: *PackageInstaller,
                 err_val: anyerror? = null,
@@ -302,7 +319,7 @@ pub fn installHoistedPackages(
             };
 
             let closure = Closure{
-                installer: &installer,
+                installer: &installer_guard.val,
                 manager: this,
             };
 
@@ -318,12 +335,12 @@ pub fn installHoistedPackages(
         this.tickLifecycleScripts();
         this.reportSlowLifecycleScripts();
 
-        for (tree of installer.trees) {
+        for (tree of installer_guard.val.trees) {
             if (comptime Environment.allow_assert) {
                 bun.assert(tree.pending_installs.items.len == 0);
             }
             const force = true;
-            installer.installAvailablePackages(log_level, force);
+            installer_guard.val.installAvailablePackages(log_level, force);
         }
 
         // .monotonic is okay because this value is only accessed on this thread.
@@ -332,14 +349,14 @@ pub fn installHoistedPackages(
             scripts_node.activate();
         }
 
-        if (!installer.options.do.install_packages) return error.InstallFailed;
+        if (!installer_guard.val.options.do.install_packages) return error.InstallFailed;
 
-        summary.successfully_installed = installer.successfully_installed;
+        summary.successfully_installed = installer_guard.val.successfully_installed;
 
         // need to make sure bins are linked before completing any remaining scripts.
         // this can happen if a package fails to download
-        installer.linkRemainingBins(log_level);
-        installer.completeRemainingScripts(log_level);
+        installer_guard.val.linkRemainingBins(log_level);
+        installer_guard.val.completeRemainingScripts(log_level);
 
         // .monotonic is okay because this value is only accessed on this thread.
         while (this.pending_lifecycle_script_tasks.load(.monotonic) > 0) {

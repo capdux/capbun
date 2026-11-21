@@ -2713,8 +2713,16 @@ pub fn storeNameInRef(p: *P, name: []const u8) !Ref {
                     res.used = true;
                 }
             }
-            if (((@intFromPtr(p.source.contents.ptr) <= @intFromPtr(name.ptr)) and ((@intFromPtr(name.ptr) + name.len) <= (@intFromPtr(p.source.contents.ptr) + p.source.contents.len)))) {
-                return Ref.initSourceEnd(.{ .source_index = @intCast((@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr))), .inner_index = @intCast(name.len), .tag = .source_contents_slice });
+            const in_source_contents = (blk: {
+            break :blk ((@intFromPtr(p.source.contents.ptr) <= @intFromPtr(name.ptr)) and ((@intFromPtr(name.ptr) + name.len) <= (@intFromPtr(p.source.contents.ptr) + p.source.contents.len)));
+
+});
+            if (in_source_contents) {
+                const source_index: u32 = (blk: {
+                break :blk @intCast((@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)));
+
+});
+                return Ref.initSourceEnd(.{ .source_index = source_index, .inner_index = @intCast(name.len), .tag = .source_contents_slice });
             } else {
                 const inner_index: u31 = @intCast(p.allocated_names.items.len);
                 _ = try p.allocated_names.append(p.allocator, name);

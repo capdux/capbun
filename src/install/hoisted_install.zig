@@ -62,9 +62,36 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        allocator: std.mem.Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit(self.allocator);
+        }
+    };
+}
+
 const Environment = bun.Environment;
 const Global = bun.Global;
 const Output = bun.Output;
@@ -169,22 +196,21 @@ break :brk std.fs.Dir{ .fd = fd.cast() };
             var tree_ids_to_trees_the_id_depends_on = try Bitset.List.initEmpty(self.allocator, trees.len, trees.len);
             _ = &tree_ids_to_trees_the_id_depends_on;
             {
-                var deps = try Bitset.initEmpty(self.allocator, trees.len);
-                _ = &deps;
-                defer {
-                _ = deps.deinit(self.allocator);
-                }
+                var deps_guard = DeinitWithAllocGuard(Bitset){ .val = try Bitset.initEmpty(self.allocator, trees.len), .allocator = self.allocator };
+                _ = &deps_guard;
+                var __deps_guard_moved = false; _ = &__deps_guard_moved;
+                defer if (!__deps_guard_moved) { __deps_guard_moved = true; const __T = @TypeOf(deps_guard); if (@typeInfo(__T) == .optional) { if (deps_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { deps_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = deps_guard; _drop_val.__cp_deinit(); } };
                 for (cp_iter_slice(trees)) |_curr| {
                     _ = &_curr;
                     var curr = _curr;
                     _ = &curr;
                     _ = tree_ids_to_trees_the_id_depends_on.set(curr.id, curr.id);
                     while ((curr.parent != Lockfile.Tree.invalid_id)) {
-                        _ = deps.set(curr.id);
-                        _ = tree_ids_to_trees_the_id_depends_on.setUnion(curr.parent, deps);
+                        _ = deps_guard.val.set(curr.id);
+                        _ = tree_ids_to_trees_the_id_depends_on.setUnion(curr.parent, deps_guard.val);
                         curr = trees[@as(usize, @intCast(curr.parent))];
                     }
-                    _ = deps.setAll(false);
+                    _ = deps_guard.val.setAll(false);
                 }
             }
             if (comptime Environment.allow_assert) {
@@ -221,27 +247,28 @@ break :brk std.fs.Dir{ .fd = fd.cast() };
 };
             _ = &installer;
             _ = try installer.node_modules.path.append(std.fs.path.sep);
-            defer {
-            _ = installer.deinit();
-            }
-            while (iterator.next((&installer.completed_trees))) |node_modules| {
-                installer.node_modules.path.items.len = (strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1);
-                _ = try installer.node_modules.path.appendSlice(node_modules.relative_path);
-                installer.node_modules.tree_id = node_modules.tree_id;
+            var installer_guard = DeinitGuard(PackageInstaller){ .val = installer };
+            _ = &installer_guard;
+            var __installer_guard_moved = false; _ = &__installer_guard_moved;
+            defer if (!__installer_guard_moved) { __installer_guard_moved = true; const __T = @TypeOf(installer_guard); if (@typeInfo(__T) == .optional) { if (installer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { installer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = installer_guard; _drop_val.__cp_deinit(); } };
+            while (iterator.next((&installer_guard.val.completed_trees))) |node_modules| {
+                installer_guard.val.node_modules.path.items.len = (strings.withoutTrailingSlash(FileSystem.instance.top_level_dir).len + 1);
+                _ = try installer_guard.val.node_modules.path.appendSlice(node_modules.relative_path);
+                installer_guard.val.node_modules.tree_id = node_modules.tree_id;
                 var remaining = node_modules.dependencies;
                 _ = &remaining;
-                installer.current_tree_id = node_modules.tree_id;
+                installer_guard.val.current_tree_id = node_modules.tree_id;
                 const unroll_count = (comptime (64 / @sizeOf(PackageID)));
                 while ((remaining.len > unroll_count)) {
                     comptime var i: usize = 0;
                     _ = &i;
                     inline while ((i < unroll_count)) : (i = (i + 1)) {
-                        _ = installer.installPackage(remaining[@as(usize, @intCast(i))], log_level);
+                        _ = installer_guard.val.installPackage(remaining[@as(usize, @intCast(i))], log_level);
                     }
                     remaining = remaining[unroll_count..];
                     if ((self.pendingTaskCount() > 0)) {
-                        _ = try self.runTasks(*PackageInstaller, (&installer), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
-                        if ((!installer.options.do.install_packages)) {
+                        _ = try self.runTasks(*PackageInstaller, (&installer_guard.val), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
+                        if ((!installer_guard.val.options.do.install_packages)) {
                             return error.InstallFailed;
                         }
                     }
@@ -250,16 +277,16 @@ break :brk std.fs.Dir{ .fd = fd.cast() };
                 }
                 for (cp_iter_slice(remaining)) |dependency_id| {
                     _ = &dependency_id;
-                    _ = installer.installPackage(dependency_id, log_level);
+                    _ = installer_guard.val.installPackage(dependency_id, log_level);
                 }
-                _ = try self.runTasks(*PackageInstaller, (&installer), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
-                if ((!installer.options.do.install_packages)) {
+                _ = try self.runTasks(*PackageInstaller, (&installer_guard.val), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
+                if ((!installer_guard.val.options.do.install_packages)) {
                     return error.InstallFailed;
                 }
                 _ = self.tickLifecycleScripts();
                 _ = self.reportSlowLifecycleScripts();
             }
-            while (((self.pendingTaskCount() > 0) and installer.options.do.install_packages)) {
+            while (((self.pendingTaskCount() > 0) and installer_guard.val.options.do.install_packages)) {
                 const Closure = struct {
     installer: *PackageInstaller,
     err_val: ?anyerror = null,
@@ -282,7 +309,7 @@ pub fn isDone(closure: *@This()) bool {
             return ((closure.manager.pendingTaskCount() == 0) and closure.manager.hasNoMorePendingLifecycleScripts());
     }
 };
-                var closure = Closure{ .installer = (&installer), .manager = self };
+                var closure = Closure{ .installer = (&installer_guard.val), .manager = self };
                 _ = &closure;
                 _ = self.sleepUntil((&closure), (&Closure.isDone));
                 if (closure.err_val) |e| {
@@ -292,24 +319,24 @@ pub fn isDone(closure: *@This()) bool {
             }
             _ = self.tickLifecycleScripts();
             _ = self.reportSlowLifecycleScripts();
-            for (cp_iter_slice(installer.trees)) |tree| {
+            for (cp_iter_slice(installer_guard.val.trees)) |tree| {
                 _ = &tree;
                 if (comptime Environment.allow_assert) {
                     _ = bun.assert((tree.pending_installs.items.len == 0));
                 }
                 const force = true;
-                _ = installer.installAvailablePackages(log_level, force);
+                _ = installer_guard.val.installAvailablePackages(log_level, force);
             }
             _ = self.finished_installing.store(true, .monotonic);
             if (log_level.showProgress()) {
                 _ = scripts_node.activate();
             }
-            if ((!installer.options.do.install_packages)) {
+            if ((!installer_guard.val.options.do.install_packages)) {
                 return error.InstallFailed;
             }
-            summary.successfully_installed = installer.successfully_installed;
-            _ = installer.linkRemainingBins(log_level);
-            _ = installer.completeRemainingScripts(log_level);
+            summary.successfully_installed = installer_guard.val.successfully_installed;
+            _ = installer_guard.val.linkRemainingBins(log_level);
+            _ = installer_guard.val.completeRemainingScripts(log_level);
             while ((self.pending_lifecycle_script_tasks.load(.monotonic) > 0)) {
                 _ = self.reportSlowLifecycleScripts();
                 _ = self.sleep();

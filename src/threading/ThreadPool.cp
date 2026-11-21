@@ -9,6 +9,447 @@ const assert = bun.assert;
 const Futex = bun.threading.Futex;
 const WaitGroup = bun.threading.WaitGroup;
 
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() { _.alloc.free(_.slice); }
+}
+
+struct UnregisterThreadGuard {
+    thread_pool: *ThreadPool!,
+    thread: *TopThread!,
+    ~init() { unsafe { _.thread_pool.unregister(_.thread); } }
+}
+
+struct ReleaseConsumerGuard {
+    queue: *NodeQueue!,
+    consumer: (*TopNode!)?,
+    ~init() { unsafe { _.queue.releaseConsumer(_.consumer); } }
+}
+
+struct Event {
+    state: Atomic(u32) = .init(EMPTY),
+
+    const EMPTY = 0;
+    const WAITING = 1;
+    const NOTIFIED = 2;
+    const SHUTDOWN = 3;
+
+    @noinline fn wait(*_) {
+        let acquire_with: u32 = EMPTY;
+        let state = _.state.load(.monotonic);
+        let has_shrunk_memory: bool = false;
+
+        while (true) {
+            if (state == SHUTDOWN) {
+                return;
+            }
+            if (state == NOTIFIED) {
+                if (next := _.state.cmpxchgWeak(state, acquire_with, .acquire, .monotonic)) {
+                    state = next;
+                    continue;
+                }
+                return;
+            }
+            if (state != WAITING) {
+                if (next := _.state.cmpxchgWeak(state, WAITING, .monotonic, .monotonic)) {
+                    state = next;
+                    continue;
+                }
+            }
+            Futex.wait(unsafe { &_.state }, WAITING, if (!has_shrunk_memory) std.time.ns_per_s * 10 else null) catch {
+                has_shrunk_memory = true;
+                bun.Global.mimalloc_cleanup(false);
+                bun.jsc.wtf.releaseFastMallocFreeMemoryForThisThread();
+            };
+            state = _.state.load(.monotonic);
+            acquire_with = WAITING;
+        }
+    }
+
+    fn notify(*_) {
+        return _.wake(NOTIFIED, 1);
+    }
+
+    fn shutdown(*_) {
+        return _.wake(SHUTDOWN, std.math.maxInt(u32));
+    }
+
+    fn wake(*_, release_with: u32, wake_threads: u32) {
+        const state = _.state.swap(release_with, .release);
+        if (state == WAITING) {
+            Futex.wake(unsafe { &_.state }, wake_threads);
+        }
+    }
+}
+
+struct TopNode {
+    next: (*TopNode!)? = null,
+    const List = NodeList;
+    const Queue = NodeQueue;
+    const Buffer = NodeBuffer;
+}
+
+type TopNodePtr = *TopNode!;
+
+struct NodeList {
+    head: *TopNode!,
+    tail: *TopNode!,
+}
+
+err QueueError { Empty, Contended }
+err BufferError { Overflow }
+
+struct NodeQueue {
+    stack: Atomic(usize) = .init(0),
+    cache: (*TopNode!)? = null,
+
+    const HAS_CACHE: usize = 0b01;
+    const IS_CONSUMING: usize = 0b10;
+    const PTR_MASK: usize = ~(HAS_CACHE | IS_CONSUMING);
+
+    comptime {
+        assert(@alignOf(TopNode) >= ((IS_CONSUMING | HAS_CACHE) + 1));
+    }
+
+    fn push(*_, list: NodeList) {
+        let stack = _.stack.load(.monotonic);
+        while (true) {
+            unsafe {
+                list.tail.next = @as((*TopNode!)?, @ptrFromInt(stack & PTR_MASK));
+                let new_stack = @intFromPtr(list.head);
+                assert((new_stack & ~PTR_MASK) == 0);
+                new_stack |= (stack & ~PTR_MASK);
+
+                stack = _.stack.cmpxchgWeak(stack, new_stack, .release, .monotonic) ?? break;
+            }
+        }
+    }
+
+    fn tryAcquireConsumer(*_): (*TopNode!)? ! QueueError {
+        let stack = _.stack.load(.monotonic);
+        while (true) {
+            if ((stack & IS_CONSUMING) != 0)
+                return error.Contended;
+            if ((stack & (HAS_CACHE | PTR_MASK)) == 0)
+                return error.Empty;
+
+            let new_stack = stack | HAS_CACHE | IS_CONSUMING;
+            if ((stack & HAS_CACHE) == 0) {
+                assert((stack & PTR_MASK) != 0);
+                new_stack &= ~PTR_MASK;
+            }
+
+            stack = _.stack.cmpxchgWeak(stack, new_stack, .acquire, .monotonic) ?? {
+                if (c := _.cache) return c;
+                const node: *TopNode! = unsafe { @ptrFromInt(stack & PTR_MASK) };
+                return node;
+            };
+        }
+    }
+
+    fn releaseConsumer(*_, consumer: (*TopNode!)?) {
+        let remove = IS_CONSUMING;
+        if (consumer == null)
+            remove |= HAS_CACHE;
+
+        _.cache = consumer;
+        const stack = _.stack.fetchSub(remove, .release);
+        assert((stack & remove) != 0);
+    }
+
+    fn pop(*_, consumer_ref: *((*TopNode!)?)!): (*TopNode!)? {
+        unsafe {
+            if (node := consumer_ref.*) {
+                consumer_ref.* = node.next;
+                return node;
+            }
+        }
+
+        let stack = _.stack.load(.monotonic);
+        assert((stack & IS_CONSUMING) != 0);
+        if ((stack & PTR_MASK) == 0) {
+            return null;
+        }
+
+        stack = _.stack.swap(HAS_CACHE | IS_CONSUMING, .acquire);
+        assert((stack & IS_CONSUMING) != 0);
+        assert((stack & PTR_MASK) != 0);
+
+        unsafe {
+            const node: *TopNode! = @ptrFromInt(stack & PTR_MASK);
+            consumer_ref.* = node.next;
+            return node;
+        }
+    }
+}
+
+struct NodeStole {
+    node: *TopNode!,
+    pushed: bool,
+}
+
+struct NodeBuffer {
+    head: Atomic(Index) = .init(0),
+    tail: Atomic(Index) = .init(0),
+    array: [capacity]Atomic(TopNodePtr) = undefined,
+
+    const Index = u32;
+    const capacity: u32 = 256;
+    const Stole = NodeStole;
+    comptime {
+        assert(std.math.maxInt(Index) >= capacity);
+        assert(std.math.isPowerOfTwo(capacity));
+    }
+
+    fn push(*_, list: *NodeList): void ! BufferError {
+        let head = _.head.load(.monotonic);
+        let tail = _.tail.raw;
+
+        while (true) {
+            let size = tail -% head;
+            assert(size <= capacity);
+
+            if (size < capacity) {
+                let nodes: (*TopNode!)? = list.head;
+                while (size < capacity) : (size += 1) {
+                    const node = nodes ?? break;
+                    nodes = unsafe { node.next };
+                    _.array[tail % capacity].store(node, .unordered);
+                    tail +%= 1;
+                }
+
+                _.tail.store(tail, .release);
+                list.head = nodes ?? return;
+                std.atomic.spinLoopHint();
+                head = _.head.load(.monotonic);
+                continue;
+            }
+
+            let migrate = size / 2;
+            head = _.head.cmpxchgWeak(head, head +% migrate, .acquire, .monotonic) ?? {
+                const first = _.array[head % capacity].raw;
+                while (migrate > 0) : (migrate -= 1) {
+                    const prev = _.array[head % capacity].raw;
+                    head +%= 1;
+                    unsafe { prev.next = _.array[head % capacity].raw; }
+                }
+
+                const last = _.array[(head -% 1) % capacity].raw;
+                unsafe {
+                    last.next = list.head;
+                    list.tail.next = null;
+                }
+                list.head = first;
+                return error.Overflow;
+            };
+        }
+    }
+
+    fn pop(*_): (*TopNode!)? {
+        let head = _.head.load(.monotonic);
+        const tail = _.tail.raw;
+
+        while (true) {
+            const size = tail -% head;
+            assert(size <= capacity);
+            if (size == 0) {
+                return null;
+            }
+            head = _.head.cmpxchgWeak(head, head +% 1, .acquire, .monotonic) ??
+                return _.array[head % capacity].raw;
+        }
+    }
+
+    fn consume(*_, queue: *NodeQueue): NodeStole? {
+        const consumer = queue.tryAcquireConsumer() catch return null;
+        let consumer_guard = ReleaseConsumerGuard{
+            queue: queue,
+            consumer: consumer,
+        };
+
+        const head = _.head.load(.monotonic);
+        const tail = _.tail.raw;
+
+        const size = tail -% head;
+        assert(size <= capacity);
+        assert(size == 0);
+
+        let pushed: u32 = 0;
+        while (pushed < capacity) : (pushed += 1) {
+            const node = queue.pop(unsafe { &consumer_guard.consumer }) ?? break;
+            _.array[(tail +% pushed) % capacity].store(node, .unordered);
+        }
+
+        const node = queue.pop(unsafe { &consumer_guard.consumer }) ?? blk: {
+            if (pushed == 0) return null;
+            pushed -= 1;
+            break :blk _.array[(tail +% pushed) % capacity].raw;
+        };
+
+        if (pushed > 0) _.tail.store(tail +% pushed, .release);
+        return NodeStole{
+            node: node,
+            pushed: pushed > 0,
+        };
+    }
+
+    fn steal(*_, buffer: *NodeBuffer): NodeStole? {
+        const head = _.head.load(.monotonic);
+        const tail = _.tail.raw;
+
+        const size = tail -% head;
+        assert(size <= capacity);
+        assert(size == 0);
+
+        while (true) : (std.atomic.spinLoopHint()) {
+            const buffer_head = buffer.head.load(.acquire);
+            const buffer_tail = buffer.tail.load(.acquire);
+
+            const buffer_size = buffer_tail -% buffer_head;
+            if (buffer_size > capacity) {
+                continue;
+            }
+
+            const steal_size = buffer_size - (buffer_size / 2);
+            if (steal_size == 0) {
+                return null;
+            }
+
+            let i: usize = 0;
+            while (i < steal_size) : (i += 1) {
+                const node = buffer.array[(buffer_head +% i) % capacity].load(.unordered);
+                _.array[(tail +% i) % capacity].store(node, .unordered);
+            }
+
+            * = buffer.head.cmpxchgStrong(
+                buffer_head,
+                buffer_head +% steal_size,
+                .acq_rel,
+                .monotonic,
+            ) ?? {
+                const pushed = steal_size - 1;
+                const node = _.array[(tail +% pushed) % capacity].raw;
+
+                if (pushed > 0) _.tail.store(tail +% pushed, .release);
+                return NodeStole{
+                    node: node,
+                    pushed: pushed > 0,
+                };
+            };
+        }
+    }
+}
+
+struct TopThread {
+    next: (*TopThread!)? = null,
+    target: (*TopThread!)? = null,
+    join_event: Event = .{},
+    run_queue: NodeQueue = .{},
+    idle_queue: NodeQueue = .{},
+    run_buffer: NodeBuffer = .{},
+    thread_pool: *ThreadPool!,
+
+    @tls let current: (*TopThread!)? = null;
+
+    fn pushIdleTask(*_, task: *ThreadPool.Task!) {
+        const list = NodeList{
+            head: unsafe { &task.node },
+            tail: unsafe { &task.node },
+        };
+        _.idle_queue.push(list);
+    }
+
+    static let counter: std.atomic.Value(u32) = .init(0);
+
+    static fn run(thread_pool: *ThreadPool) {
+        bun.mimalloc.mi_thread_set_in_threadpool();
+
+        {
+            let counter_buf: [100]u8 = undefined;
+            const int = counter.fetchAdd(1, .seq_cst);
+            const named = std.fmt.bufPrintZ(&counter_buf, "Bun Pool {d}", .{int}) catch "Bun Pool";
+            Output.Source.configureNamedThread(named);
+        }
+
+        let self = TopThread{ thread_pool: thread_pool };
+        current = unsafe { &self };
+        defer current = null;
+
+        unsafe { thread_pool.register(&self); }
+        const unregister_guard = UnregisterThreadGuard{ thread_pool: thread_pool, thread: unsafe { &self } };
+        * = unregister_guard;
+
+        let is_waking = false;
+        while (true) {
+            is_waking = unsafe { thread_pool.wait(is_waking) } catch return;
+
+            while (result := self.pop(thread_pool)) {
+                if (result.pushed || is_waking)
+                    unsafe { thread_pool.notify(is_waking); }
+                is_waking = false;
+
+                const task: *ThreadPool.Task! = unsafe { @fieldParentPtr("node", result.node) };
+                unsafe { (task.callback)(task); }
+                unsafe { thread_pool.wait_group.finish(); }
+            }
+
+            Output.flush();
+            self.drainIdleEvents();
+        }
+    }
+
+    fn drainIdleEvents(*_) {
+        const consumer = _.idle_queue.tryAcquireConsumer() catch return;
+        let consumer_guard = ReleaseConsumerGuard{
+            queue: unsafe { &_.idle_queue },
+            consumer: consumer,
+        };
+        const consumer_ptr = unsafe { &consumer_guard.consumer };
+        while (node := _.idle_queue.pop(consumer_ptr)) {
+            const task: *ThreadPool.Task! = unsafe { @fieldParentPtr("node", node) };
+            unsafe { (task.callback)(task); }
+        }
+    }
+
+    fn pop(*_, thread_pool: *ThreadPool): NodeStole? {
+        if (node := _.run_buffer.pop()) {
+            return NodeStole{
+                node: node,
+                pushed: false,
+            };
+        }
+
+        if (stole := _.run_buffer.consume(&_.run_queue)) {
+            return stole;
+        }
+
+        if (stole := _.run_buffer.consume(unsafe { &thread_pool.run_queue })) {
+            return stole;
+        }
+
+        let num_threads = thread_pool.sync.load(.monotonic).spawned;
+        while (num_threads > 0) : (num_threads -= 1) {
+            const target = _.target ?? thread_pool.threads.load(.acquire) ?? unreachable;
+            _.target = unsafe { target.next };
+
+            if (stole := _.run_buffer.consume(unsafe { &target.run_queue })) {
+                return stole;
+            }
+
+            if (target == unsafe { _ }) {
+                continue;
+            }
+
+            if (stole := _.run_buffer.steal(unsafe { &target.run_buffer })) {
+                return stole;
+            }
+        }
+
+        return null;
+    }
+}
+
 export @root struct ThreadPool {
 // Thank you @kprotty.
 //
@@ -225,7 +666,8 @@ fn eachImpl(
     };
 
     const tasks = allocator.alloc(RunnerTask, values.len) catch unreachable;
-    defer allocator.free(tasks);
+    const tasks_guard = FreeGuard<RunnerTask>{ alloc: allocator, slice: tasks };
+    * = tasks_guard;
     let batch: Batch = .{};
     let offset = tasks.len;
 
@@ -499,7 +941,7 @@ pub fn warm(*_, count: u14) {
     }
 }
 
-fn register(*_, worker: *Thread) {
+fn register(*_, worker: *Thread!) {
     // Push the thread onto the threads stack in a lock-free manner.
     let threads = this.threads.load(.monotonic);
     while (true) {
@@ -559,522 +1001,6 @@ fn join(*_) {
     thread.join_event.notify();
 }
 
-pub const Thread = struct {
-    next: ?*Thread = null,
-    target: ?*Thread = null,
-    join_event: Event = .{},
-    run_queue: Node.Queue = .{},
-    idle_queue: Node.Queue = .{},
-    run_buffer: Node.Buffer = .{},
-    thread_pool: *ThreadPool,
-
-    pub threadlocal let current: ?*Thread = null;
-
-    pub fn pushIdleTask(self: *Thread, task: *Task) void {
-        const list = Node.List{
-            .head = &task.node,
-            .tail = &task.node,
-        };
-        self.idle_queue.push(list);
-    }
-    let counter: std.atomic.Value(u32) = .init(0);
-
-    /// Thread entry point which runs a worker for the ThreadPool
-    fn run(thread_pool: *ThreadPool) void {
-        bun.mimalloc.mi_thread_set_in_threadpool();
-
-        {
-            let counter_buf: [100]u8 = undefined;
-            const int = counter.fetchAdd(1, .seq_cst);
-            const named = std.fmt.bufPrintZ(&counter_buf, "Bun Pool {d}", .{int}) catch "Bun Pool";
-            Output.Source.configureNamedThread(named);
-        }
-
-        let self_ = Thread{ .thread_pool = thread_pool };
-        let self = &self_;
-        current = self;
-        defer current = null;
-
-        thread_pool.register(self);
-        defer thread_pool.unregister(self);
-
-        let is_waking = false;
-        while (true) {
-            is_waking = thread_pool.wait(is_waking) catch return;
-
-            while (self.pop(thread_pool)) |result| {
-                if (result.pushed or is_waking)
-                    thread_pool.notify(is_waking);
-                is_waking = false;
-
-                const task: *Task = @fieldParentPtr("node", result.node);
-                (task.callback)(task);
-                thread_pool.wait_group.finish();
-            }
-
-            Output.flush();
-            self.drainIdleEvents();
-        }
-    }
-
-    pub fn drainIdleEvents(noalias self: *Thread) void {
-        let consumer = self.idle_queue.tryAcquireConsumer() catch return;
-        defer self.idle_queue.releaseConsumer(consumer);
-        while (self.idle_queue.pop(&consumer)) |node| {
-            const task: *Task = @fieldParentPtr("node", node);
-            (task.callback)(task);
-        }
-    }
-
-    /// Try to dequeue a Node/Task from the ThreadPool.
-    /// Spurious reports of dequeue() returning empty are allowed.
-    pub fn pop(noalias self: *Thread, noalias thread_pool: *ThreadPool) ?Node.Buffer.Stole {
-        // Check our local buffer first
-        if (self.run_buffer.pop()) |node| {
-            return Node.Buffer.Stole{
-                .node = node,
-                .pushed = false,
-            };
-        }
-
-        // Then check our local queue
-        if (self.run_buffer.consume(&self.run_queue)) |stole| {
-            return stole;
-        }
-
-        // Then the global queue
-        if (self.run_buffer.consume(&thread_pool.run_queue)) |stole| {
-            return stole;
-        }
-
-        // Then try work stealing from other threads
-        let num_threads = thread_pool.sync.load(.monotonic).spawned;
-        while (num_threads > 0) : (num_threads -= 1) {
-            // Traverse the stack of registered threads on the thread pool
-            const target = self.target orelse thread_pool.threads.load(.acquire) orelse unreachable;
-            self.target = target.next;
-
-            // Try to steal from their queue first to avoid contention (the target steal's from queue last).
-            if (self.run_buffer.consume(&target.run_queue)) |stole| {
-                return stole;
-            }
-
-            // Skip stealing from the buffer if we're the target.
-            // We still steal from our own queue above given it may have just been locked the first time we tried.
-            if (target == self) {
-                continue;
-            }
-
-            // Steal from the buffer of a remote thread as a last resort
-            if (self.run_buffer.steal(&target.run_buffer)) |stole| {
-                return stole;
-            }
-        }
-
-        return null;
-    }
-};
-
-/// An event which stores 1 semaphore token and is multi-threaded safe.
-/// The event can be shutdown(), waking up all wait()ing threads and
-/// making subsequent wait()'s return immediately.
-const Event = struct {
-    state: Atomic(u32) = .init(EMPTY),
-
-    const EMPTY = 0;
-    const WAITING = 1;
-    pub const NOTIFIED = 2;
-    const SHUTDOWN = 3;
-
-    /// Wait for and consume a notification
-    /// or wait for the event to be shutdown entirely
-    noinline fn wait(self: *Event) void {
-        let acquire_with: u32 = EMPTY;
-        let state = self.state.load(.monotonic);
-        let has_shrunk_memory: bool = false;
-
-        while (true) {
-            // If we're shutdown then exit early.
-            // Acquire barrier to ensure operations before the shutdown() are seen after the wait().
-            // Shutdown is rare so it's better to have an Acquire barrier here instead of on CAS failure + load which are common.
-            if (state == SHUTDOWN) {
-                return;
-            }
-
-            // Consume a notification when it pops up.
-            // Acquire barrier to ensure operations before the notify() appear after the wait().
-            if (state == NOTIFIED) {
-                if (next := self.state.cmpxchgWeak(
-                    state,
-                    acquire_with,
-                    .acquire,
-                    .monotonic,
-                )) {
-                    state = next;
-                    continue;
-                }
-                return;
-            }
-
-            // There is no notification to consume, we should wait on the event by ensuring its WAITING.
-            if (state != WAITING) {
-                if (next := self.state.cmpxchgWeak(
-                    state,
-                    WAITING,
-                    .monotonic,
-                    .monotonic,
-                )) {
-                    state = next;
-                    continue;
-                }
-            }
-
-            // Wait on the event until a notify() or shutdown().
-            // If we wake up to a notification, we must acquire it with WAITING instead of EMPTY
-            // since there may be other threads sleeping on the Futex who haven't been woken up yet.
-            //
-            // Acquiring to WAITING will make the next notify() or shutdown() wake a sleeping futex thread
-            // who will either exit on SHUTDOWN or acquire with WAITING again, ensuring all threads are awoken.
-            // This unfortunately results in the last notify() or shutdown() doing an extra futex wake but that's fine.
-            Futex.wait(&self.state, WAITING, if (!has_shrunk_memory) std.time.ns_per_s * 10 else null) catch {
-                has_shrunk_memory = true;
-                bun.Global.mimalloc_cleanup(false);
-                bun.jsc.wtf.releaseFastMallocFreeMemoryForThisThread();
-            };
-            state = self.state.load(.monotonic);
-            acquire_with = WAITING;
-        }
-    }
-
-    /// Post a notification to the event if it doesn't have one already
-    /// then wake up a waiting thread if there is one as well.
-    fn notify(self: *Event) void {
-        return self.wake(NOTIFIED, 1);
-    }
-
-    /// Marks the event as shutdown, making all future wait()'s return immediately.
-    /// Then wakes up any threads currently waiting on the Event.
-    fn shutdown(self: *Event) void {
-        return self.wake(SHUTDOWN, std.math.maxInt(u32));
-    }
-
-    fn wake(self: *Event, release_with: u32, wake_threads: u32) void {
-        // Update the Event to notify it with the new `release_with` state (either NOTIFIED or SHUTDOWN).
-        // Release barrier to ensure any operations before this are this to happen before the wait() in the other threads.
-        const state = self.state.swap(release_with, .release);
-
-        // Only wake threads sleeping in futex if the state is WAITING.
-        // Avoids unnecessary wake ups.
-        if (state == WAITING) {
-            Futex.wake(&self.state, wake_threads);
-        }
-    }
-};
-
-/// Linked list intrusive memory node and lock-free data structures to operate with it
-pub const Node = struct {
-    next: ?*Node = null,
-
-    /// A linked list of Nodes
-    const List = struct {
-        head: *Node,
-        tail: *Node,
-    };
-
-    /// An unbounded multi-producer-(non blocking)-multi-consumer queue of Node pointers.
-    const Queue = struct {
-        stack: Atomic(usize) = .init(0),
-        cache: ?*Node = null,
-
-        const HAS_CACHE: usize = 0b01;
-        const IS_CONSUMING: usize = 0b10;
-        const PTR_MASK: usize = ~(HAS_CACHE | IS_CONSUMING);
-
-        comptime {
-            assert(@alignOf(Node) >= ((IS_CONSUMING | HAS_CACHE) + 1));
-        }
-
-        fn push(noalias self: *Queue, list: List) void {
-            let stack = self.stack.load(.monotonic);
-            while (true) {
-                // Attach the list to the stack (pt. 1)
-                list.tail.next = @as(?*Node, @ptrFromInt(stack & PTR_MASK));
-
-                // Update the stack with the list (pt. 2).
-                // Don't change the HAS_CACHE and IS_CONSUMING bits of the consumer.
-                let new_stack = @intFromPtr(list.head);
-                assert(new_stack & ~PTR_MASK == 0);
-                new_stack |= (stack & ~PTR_MASK);
-
-                // Push to the stack with a release barrier for the consumer to see the proper list links.
-                stack = self.stack.cmpxchgWeak(
-                    stack,
-                    new_stack,
-                    .release,
-                    .monotonic,
-                ) orelse break;
-            }
-        }
-
-        fn tryAcquireConsumer(self: *Queue) error{ Empty, Contended }!?*Node {
-            let stack = self.stack.load(.monotonic);
-            while (true) {
-                if (stack & IS_CONSUMING != 0)
-                    return error.Contended; // The queue already has a consumer.
-                if (stack & (HAS_CACHE | PTR_MASK) == 0)
-                    return error.Empty; // The queue is empty when there's nothing cached and nothing in the stack.
-
-                // When we acquire the consumer, also consume the pushed stack if the cache is empty.
-                let new_stack = stack | HAS_CACHE | IS_CONSUMING;
-                if (stack & HAS_CACHE == 0) {
-                    assert(stack & PTR_MASK != 0);
-                    new_stack &= ~PTR_MASK;
-                }
-
-                // Acquire barrier on getting the consumer to see cache/Node updates done by previous consumers
-                // and to ensure our cache/Node updates in pop() happen after that of previous consumers.
-                stack = self.stack.cmpxchgWeak(
-                    stack,
-                    new_stack,
-                    .acquire,
-                    .monotonic,
-                ) orelse return self.cache orelse @as(*Node, @ptrFromInt(stack & PTR_MASK));
-            }
-        }
-
-        fn releaseConsumer(noalias self: *Queue, noalias consumer: ?*Node) void {
-            // Stop consuming and remove the HAS_CACHE bit as well if the consumer's cache is empty.
-            // When HAS_CACHE bit is zeroed, the next consumer will acquire the pushed stack nodes.
-            let remove = IS_CONSUMING;
-            if (consumer == null)
-                remove |= HAS_CACHE;
-
-            // Release the consumer with a release barrier to ensure cache/node accesses
-            // happen before the consumer was released and before the next consumer starts using the cache.
-            self.cache = consumer;
-            const stack = self.stack.fetchSub(remove, .release);
-            assert(stack & remove != 0);
-        }
-
-        fn pop(noalias self: *Queue, noalias consumer_ref: *?*Node) ?*Node {
-            // Check the consumer cache (fast path)
-            if (consumer_ref.*) |node| {
-                consumer_ref.* = node.next;
-                return node;
-            }
-
-            // Load the stack to see if there was anything pushed that we could grab.
-            let stack = self.stack.load(.monotonic);
-            assert(stack & IS_CONSUMING != 0);
-            if (stack & PTR_MASK == 0) {
-                return null;
-            }
-
-            // Nodes have been pushed to the stack, grab then with an Acquire barrier to see the Node links.
-            stack = self.stack.swap(HAS_CACHE | IS_CONSUMING, .acquire);
-            assert(stack & IS_CONSUMING != 0);
-            assert(stack & PTR_MASK != 0);
-
-            const node = @as(*Node, @ptrFromInt(stack & PTR_MASK));
-            consumer_ref.* = node.next;
-            return node;
-        }
-    };
-
-    /// A bounded single-producer, multi-consumer ring buffer for node pointers.
-    const Buffer = struct {
-        head: Atomic(Index) = .init(0),
-        tail: Atomic(Index) = .init(0),
-        array: [capacity]Atomic(*Node) = undefined,
-
-        const Index = u32;
-        const capacity = 256; // Appears to be a pretty good trade-off in space vs contended throughput
-        comptime {
-            assert(std.math.maxInt(Index) >= capacity);
-            assert(std.math.isPowerOfTwo(capacity));
-        }
-
-        fn push(noalias self: *Buffer, noalias list: *List) error{Overflow}!void {
-            let head = self.head.load(.monotonic);
-            let tail = self.tail.raw; // we're the only thread that can change this
-
-            while (true) {
-                let size = tail -% head;
-                assert(size <= capacity);
-
-                // Push nodes from the list to the buffer if it's not empty.
-                if (size < capacity) {
-                    let nodes: ?*Node = list.head;
-                    while (size < capacity) : (size += 1) {
-                        const node = nodes orelse break;
-                        nodes = node.next;
-
-                        // Array written atomically with weakest ordering since it could be getting atomically read by steal().
-                        self.array[tail % capacity].store(node, .unordered);
-                        tail +%= 1;
-                    }
-
-                    // Release barrier synchronizes with Acquire loads for steal()ers to see the array writes.
-                    self.tail.store(tail, .release);
-
-                    // Update the list with the nodes we pushed to the buffer and try again if there's more.
-                    list.head = nodes orelse return;
-                    std.atomic.spinLoopHint();
-                    head = self.head.load(.monotonic);
-                    continue;
-                }
-
-                // Try to steal/overflow half of the tasks in the buffer to make room for future push()es.
-                // Migrating half amortizes the cost of stealing while requiring future pops to still use the buffer.
-                // Acquire barrier to ensure the linked list creation after the steal only happens after we successfully steal.
-                let migrate = size / 2;
-                head = self.head.cmpxchgWeak(
-                    head,
-                    head +% migrate,
-                    .acquire,
-                    .monotonic,
-                ) orelse {
-                    // Link the migrated Nodes together
-                    const first = self.array[head % capacity].raw;
-                    while (migrate > 0) : (migrate -= 1) {
-                        const prev = self.array[head % capacity].raw;
-                        head +%= 1;
-                        prev.next = self.array[head % capacity].raw;
-                    }
-
-                    // Append the list that was supposed to be pushed to the end of the migrated Nodes
-                    const last = self.array[(head -% 1) % capacity].raw;
-                    last.next = list.head;
-                    list.tail.next = null;
-
-                    // Return the migrated nodes + the original list as overflowed
-                    list.head = first;
-                    return error.Overflow;
-                };
-            }
-        }
-
-        fn pop(self: *Buffer) ?*Node {
-            let head = self.head.load(.monotonic);
-            const tail = self.tail.raw; // we're the only thread that can change this
-
-            while (true) {
-                // Quick sanity check and return null when not empty
-                const size = tail -% head;
-                assert(size <= capacity);
-                if (size == 0) {
-                    return null;
-                }
-
-                // Dequeue with an acquire barrier to ensure any writes done to the Node
-                // only happens after we successfully claim it from the array.
-                head = self.head.cmpxchgWeak(
-                    head,
-                    head +% 1,
-                    .acquire,
-                    .monotonic,
-                ) orelse return self.array[head % capacity].raw;
-            }
-        }
-
-        const Stole = struct {
-            node: *Node,
-            pushed: bool,
-        };
-
-        fn consume(noalias self: *Buffer, noalias queue: *Queue) ?Stole {
-            let consumer = queue.tryAcquireConsumer() catch return null;
-            defer queue.releaseConsumer(consumer);
-
-            const head = self.head.load(.monotonic);
-            const tail = self.tail.raw; // we're the only thread that can change this
-
-            const size = tail -% head;
-            assert(size <= capacity);
-            assert(size == 0); // we should only be consuming if our array is empty
-
-            // Pop nodes from the queue and push them to our array.
-            // Atomic stores to the array as steal() threads may be atomically reading from it.
-            let pushed: Index = 0;
-            while (pushed < capacity) : (pushed += 1) {
-                const node = queue.pop(&consumer) orelse break;
-                self.array[(tail +% pushed) % capacity].store(node, .unordered);
-            }
-
-            // We will be returning one node that we stole from the queue.
-            // Get an extra, and if that's not possible, take one from our array.
-            const node = queue.pop(&consumer) orelse blk: {
-                if (pushed == 0) return null;
-                pushed -= 1;
-                break :blk self.array[(tail +% pushed) % capacity].raw;
-            };
-
-            // Update the array tail with the nodes we pushed to it.
-            // Release barrier to synchronize with Acquire barrier in steal()'s to see the written array Nodes.
-            if (pushed > 0) self.tail.store(tail +% pushed, .release);
-            return Stole{
-                .node = node,
-                .pushed = pushed > 0,
-            };
-        }
-
-        fn steal(noalias self: *Buffer, noalias buffer: *Buffer) ?Stole {
-            const head = self.head.load(.monotonic);
-            const tail = self.tail.raw; // we're the only thread that can change this
-
-            const size = tail -% head;
-            assert(size <= capacity);
-            assert(size == 0); // we should only be stealing if our array is empty
-
-            while (true) : (std.atomic.spinLoopHint()) {
-                const buffer_head = buffer.head.load(.acquire);
-                const buffer_tail = buffer.tail.load(.acquire);
-
-                // Overly large size indicates the tail was updated a lot after the head was loaded.
-                // Reload both and try again.
-                const buffer_size = buffer_tail -% buffer_head;
-                if (buffer_size > capacity) {
-                    continue;
-                }
-
-                // Try to steal half (divCeil) to amortize the cost of stealing from other threads.
-                const steal_size = buffer_size - (buffer_size / 2);
-                if (steal_size == 0) {
-                    return null;
-                }
-
-                // Copy the nodes we will steal from the target's array to our own.
-                // Atomically load from the target buffer array as it may be pushing and atomically storing to it.
-                // Atomic store to our array as other steal() threads may be atomically loading from it as above.
-                for (0..steal_size) |i| {
-                    const node = buffer.array[(buffer_head +% i) % capacity].load(.unordered);
-                    self.array[(tail +% i) % capacity].store(node, .unordered);
-                }
-
-                // Try to commit the steal from the target buffer using:
-                // - an Acquire barrier to ensure that we only interact with the stolen Nodes after the steal was committed.
-                // - a Release barrier to ensure that the Nodes are copied above prior to the committing of the steal
-                //   because if they're copied after the steal, the could be getting rewritten by the target's push().
-                _ = buffer.head.cmpxchgStrong(
-                    buffer_head,
-                    buffer_head +% steal_size,
-                    .acq_rel,
-                    .monotonic,
-                ) orelse {
-                    // Pop one from the nodes we stole as we'll be returning it
-                    const pushed = steal_size - 1;
-                    const node = self.array[(tail +% pushed) % capacity].raw;
-
-                    // Update the array tail with the nodes we pushed to it.
-                    // Release barrier to synchronize with Acquire barrier in steal()'s to see the written array Nodes.
-                    if (pushed > 0) self.tail.store(tail +% pushed, .release);
-                    return Stole{
-                        .node = node,
-                        .pushed = pushed > 0,
-                    };
-                };
-            }
-        }
-    };
-};
+pub const Thread = TopThread;
+pub const Node = TopNode;
 }

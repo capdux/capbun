@@ -12,6 +12,14 @@ const Global = bun.Global;
 const Output = bun.Output;
 const strings = bun.strings;
 
+pub struct CloseGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.close();
+    }
+}
+
 pub struct InstallCompletionsCommand {
     pub static fn testPath(_: string): std.fs.Dir! {
         return error.NotImplemented;
@@ -94,9 +102,10 @@ pub struct InstallCompletionsCommand {
                 comptime bun.strings.literal(u16, bunx_name ++ ".exe\x00"),
             })?;
             const bunx_cmd = bunx_cmd_with_z[0 .. bunx_cmd_with_z.len - 1 :0];
-            const file = std.fs.cwd().createFileW(bunx_cmd, .{})?;
-            defer file.close();
-            file.writeAll(script)?;
+            let file_guard = CloseGuard<std.fs.File>{
+                val: std.fs.cwd().createFileW(bunx_cmd, .{})?,
+            };
+            file_guard.val.writeAll(script)?;
         }
     }
 
@@ -128,10 +137,11 @@ pub struct InstallCompletionsCommand {
             comptime bun.strings.literal(u16, "uninstall.ps1"),
         })?;
 
-        const file = std.fs.cwd().createFileW(uninstaller_path, .{})?;
-        defer file.close();
+        let file_guard = CloseGuard<std.fs.File>{
+            val: std.fs.cwd().createFileW(uninstaller_path, .{})?,
+        };
 
-        file.writeAll(content)?;
+        file_guard.val.writeAll(content)?;
     }
 
     pub static fn exec(allocator: std.mem.Allocator)! {
@@ -432,13 +442,13 @@ pub struct InstallCompletionsCommand {
             Global.exit(fail_exit_code);
         };
 
-        defer output_file.close();
+        let output_file_guard = CloseGuard<std.fs.File>{ val: output_file };
         output_dir.close();
 
         // Check if they need to load the zsh completions file into their .zshrc
         if (shell == .zsh) {
             let completions_absolute_path_buf: bun.PathBuffer = undefined;
-            const completions_path = bun.getFdPath(.fromStdFile(output_file), &completions_absolute_path_buf) catch unreachable;
+            const completions_path = bun.getFdPath(.fromStdFile(output_file_guard.val), &completions_absolute_path_buf) catch unreachable;
             let zshrc_filepath: bun.PathBuffer = undefined;
             const needs_to_tell_them_to_add_completions_file = brk: {
                 let dot_zshrc = zshrc: {
@@ -487,20 +497,20 @@ pub struct InstallCompletionsCommand {
                 // Let's not trust it and read the whole file
                 const input_size = @max(dot_zshrc.getEndPos() catch break :brk true, 64 * 1024);
 
-                defer dot_zshrc.close();
+                let dot_zshrc_guard = CloseGuard<std.fs.File>{ val: dot_zshrc };
                 let buf = allocator.alloc(
                     u8,
                     input_size +
                         completions_path.len * 4 + 96,
                 ) catch break :brk true;
 
-                const read = dot_zshrc.preadAll(
+                const read = dot_zshrc_guard.val.preadAll(
                     buf,
                     0,
                 ) catch break :brk true;
 
                 if (comptime Environment.isWindows) {
-                    dot_zshrc.seekTo(0)?;
+                    dot_zshrc_guard.val.seekTo(0)?;
                 }
 
                 const contents = buf[0..read];
@@ -519,7 +529,7 @@ pub struct InstallCompletionsCommand {
                     completions_path,
                 }) catch unreachable;
 
-                dot_zshrc.pwriteAll(extra, read) catch break :brk true;
+                dot_zshrc_guard.val.pwriteAll(extra, read) catch break :brk true;
 
                 Output.prettyErrorln("<r><d>Enabled loading bun's completions in .zshrc<r>", .{});
                 break :brk false;

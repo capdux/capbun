@@ -22,6 +22,16 @@ const options = js_parser.options;
 type string = []const u8;
 const empty_stmts: [0]Stmt = undefined;
 
+pub struct FreeSliceGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]T)?,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
 @root struct ImportScanner {
     stmts: []Stmt = empty_stmts[0..0],
     kept_import_equals: bool = false,
@@ -241,7 +251,7 @@ const empty_stmts: [0]Stmt = undefined;
                     if (p.options.bundle) {
                         if (st.star_name_loc != null && existing_items.count() > 0) {
                             let sorted = allocator.alloc(string, existing_items.count())?;
-                            defer allocator.free(sorted);
+                            const _sorted_guard = FreeSliceGuard<string>{ allocator: allocator, slice: sorted };
                             const existing_keys = existing_items.keys();
                             let k_i: usize = 0;
                             while (k_i < sorted.len) : (k_i += 1) {

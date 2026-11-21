@@ -65,19 +65,55 @@ struct ChunkSortContext {
     }
 }
 
+struct EndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
+struct UniqueKeyBuilderErrGuard {
+    builder: *bun.StringBuilder!?,
+    ctx: *LinkerContext!?,
+    ~init() {
+        if (b := _.builder) {
+            if (c := _.ctx) {
+                unsafe {
+                    b.deinit(c.allocator());
+                    c.unique_key_buf = "";
+                }
+            }
+        }
+    }
+}
+
 pub noinline fn computeChunks(
     ctx: *LinkerContext,
     unique_key: u64,
 ): []Chunk! {
     let trace = bun.perf.trace("Bundler.computeChunks");
-    defer trace.end();
+    const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
 
     bun.assert(ctx.dev_server == null);
 
     let stack_fallback = std.heap.stackFallback(4096, ctx.allocator());
     const stack_all = stack_fallback.get();
     let arena_alloc = bun.ArenaAllocator.init(stack_all);
-    defer arena_alloc.deinit();
+    const _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
 
     let temp_allocator = arena_alloc.allocator();
     let js_chunks = bun.StringArrayHashMap(Chunk).init(temp_allocator);
@@ -372,10 +408,10 @@ pub noinline fn computeChunks(
     let unique_key_builder = bun.StringBuilder.initCapacity(ctx.allocator(), unique_key_item_len * chunks.len)?;
     ctx.unique_key_buf = unique_key_builder.allocatedSlice();
 
-    errdefer {
-        unique_key_builder.deinit(ctx.allocator());
-        ctx.unique_key_buf = "";
-    }
+    let unique_key_guard = UniqueKeyBuilderErrGuard{
+        builder: unsafe { &unique_key_builder },
+        ctx: unsafe { &ctx.* },
+    };
 
     const kinds = ctx.graph.files.items(.entry_point_kind);
     const output_paths = ctx.graph.entry_points.items(.output_path);
@@ -436,7 +472,7 @@ pub noinline fn computeChunks(
                 dir = bun.path.normalizeBuf(dir_path, &real_path_buf, .auto);
             } else {
                 let opened_dir = open_res.?;
-                defer opened_dir.close();
+                const _dir_guard = CloseGuard<@TypeOf(opened_dir)>{ ptr: unsafe { &opened_dir } };
 
                 let fd_res = opened_dir.getFdPath(&real_path_buf) catch |e| {
                     ctx.log.addErrorFmt(null, .Empty, ctx.allocator(), "{s}: Failed to get full path for directory '{s}'", .{ @errorName(e), dir_path })?;
@@ -449,5 +485,6 @@ pub noinline fn computeChunks(
         }
     }
 
+    unique_key_guard.builder = null;
     return chunks;
 }

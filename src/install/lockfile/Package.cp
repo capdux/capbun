@@ -2049,6 +2049,55 @@ pub fn Package(comptime SemverIntType: type): type {
 
         pub const List = bun.MultiArrayList(PackageType);
 
+        pub static fn migrateListFromV2(
+            stream: *Stream,
+            end_at: u64,
+            allocator: Allocator,
+            list: *List,
+            list_len: u64,
+            needs_update: *bool,
+        )! {
+            const OldPackageV2 = Package(u32);
+            let list_for_migrating_from_v2: OldPackageV2.List = .{};
+            const list_guard = DeinitWithAllocGuard<@TypeOf(list_for_migrating_from_v2)>{ ptr: &list_for_migrating_from_v2, alloc: allocator };
+
+            list_for_migrating_from_v2.ensureTotalCapacity(allocator, list_len)?;
+            list_for_migrating_from_v2.len = list_len;
+
+            Serializer.loadFields(stream, end_at, OldPackageV2.List, &list_for_migrating_from_v2, needs_update)?;
+
+            let _pkg_id: usize = 0;
+            while (_pkg_id < list_for_migrating_from_v2.len) : (_pkg_id += 1) {
+                const pkg_id: PackageID = @intCast(_pkg_id);
+                const old = list_for_migrating_from_v2.get(pkg_id);
+                const new: PackageType = PackageType{
+                    name: old.name,
+                    name_hash: old.name_hash,
+                    @"meta": old.@"meta",
+                    bin: old.bin,
+                    dependencies: old.dependencies,
+                    resolutions: old.resolutions,
+                    scripts: old.scripts,
+                    resolution: switch (old.resolution.tag) {
+                        .uninitialized => .init({ uninitialized: old.resolution.value.uninitialized }),
+                        .root => .init({ root: old.resolution.value.root }),
+                        .npm => .init({ npm: old.resolution.value.npm.migrate() }),
+                        .folder => .init({ folder: old.resolution.value.folder }),
+                        .local_tarball => .init({ local_tarball: old.resolution.value.local_tarball }),
+                        .github => .init({ github: old.resolution.value.github }),
+                        .git => .init({ git: old.resolution.value.git }),
+                        .symlink => .init({ symlink: old.resolution.value.symlink }),
+                        .workspace => .init({ workspace: old.resolution.value.workspace }),
+                        .remote_tarball => .init({ remote_tarball: old.resolution.value.remote_tarball }),
+                        .single_file_module => .init({ single_file_module: old.resolution.value.single_file_module }),
+                        else => .init({ uninitialized: {} }),
+                    },
+                };
+
+                list.appendAssumeCapacity(new);
+            }
+        }
+
         pub const Serializer = struct {
             pub const sizes = blk: {
                 const fields = std.@"meta".fields(PackageType);
@@ -2196,44 +2245,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
                 let needs_update = false;
                 if (migrate_from_v2) {
-                    const OldPackageV2 = Package(u32);
-                    let list_for_migrating_from_v2 = OldPackageV2.List{};
-                    defer list_for_migrating_from_v2.deinit(allocator);
-
-                    try list_for_migrating_from_v2.ensureTotalCapacity(allocator, list_len);
-                    list_for_migrating_from_v2.len = list_len;
-
-                    try loadFields(stream, end_at, OldPackageV2.List, &list_for_migrating_from_v2, &needs_update);
-
-                    for (0..list_for_migrating_from_v2.len) |_pkg_id| {
-                        const pkg_id: PackageID = @intCast(_pkg_id);
-                        const old = list_for_migrating_from_v2.get(pkg_id);
-                        const new: PackageType = .{
-                            .name = old.name,
-                            .name_hash = old.name_hash,
-                            .meta = old.meta,
-                            .bin = old.bin,
-                            .dependencies = old.dependencies,
-                            .resolutions = old.resolutions,
-                            .scripts = old.scripts,
-                            .resolution = switch (old.resolution.tag) {
-                                .uninitialized => .init(.{ .uninitialized = old.resolution.value.uninitialized }),
-                                .root => .init(.{ .root = old.resolution.value.root }),
-                                .npm => .init(.{ .npm = old.resolution.value.npm.migrate() }),
-                                .folder => .init(.{ .folder = old.resolution.value.folder }),
-                                .local_tarball => .init(.{ .local_tarball = old.resolution.value.local_tarball }),
-                                .github => .init(.{ .github = old.resolution.value.github }),
-                                .git => .init(.{ .git = old.resolution.value.git }),
-                                .symlink => .init(.{ .symlink = old.resolution.value.symlink }),
-                                .workspace => .init(.{ .workspace = old.resolution.value.workspace }),
-                                .remote_tarball => .init(.{ .remote_tarball = old.resolution.value.remote_tarball }),
-                                .single_file_module => .init(.{ .single_file_module = old.resolution.value.single_file_module }),
-                                else => .init(.{ .uninitialized = {} }),
-                            },
-                        };
-
-                        list.appendAssumeCapacity(new);
-                    }
+                    try migrateListFromV2(stream, end_at, allocator, &list, list_len, &needs_update);
                 } else {
                     list.len = list_len;
                     try loadFields(stream, end_at, List, &list, &needs_update);
@@ -2245,7 +2257,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 };
             }
 
-            fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *ListType, needs_update: *bool) !void {
+            pub fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *ListType, needs_update: *bool) !void {
                 let sliced = list.slice();
 
                 inline for (FieldsEnum.fields) |field| {

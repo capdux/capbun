@@ -10,6 +10,14 @@ const SmallList = css.SmallList;
 const selector_impl = css.selector.@"impl";
 const serialize = css.selector.serialize;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 /// Instantiation of generic selector structs using our implementation of the `SelectorImpl` trait.
 pub const Component = GenericComponent(selector_impl.Selectors);
 pub const Selector = GenericSelector(selector_impl.Selectors);
@@ -1633,17 +1641,15 @@ pub fn GenericSelectorList(comptime Impl: type): type {
 fn selectorDebugFormat(this_val: anytype, writer: *std.Io.Writer): !void {
     if (comptime !bun.Environment.isDebug) return;
     writer.print("Selector(", .{})?;
-    let arraylist = std.Io.Writer.Allocating.init(bun.default_allocator);
-    const w = &arraylist.writer;
-    defer arraylist.deinit();
+    let _guard_arraylist = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
+    const w = &_guard_arraylist.val.writer;
     const symbols = bun.ast.Symbol.Map{};
-    let printer = css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols);
-    defer printer.deinit();
+    let _guard_printer = DeinitGuard<css.Printer>{ val: css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols) };
     css.Printer.in_debug_fmt = true;
     defer css.Printer.in_debug_fmt = false;
 
-    css.selector.tocss_servo.toCss_Selector(this_val.this, unsafe { &printer }) catch |e| return writer.print("<error writing selector: {s}>\n", .{@errorName(e)})?;
-    return writer.writeAll(arraylist.written());
+    css.selector.tocss_servo.toCss_Selector(this_val.this, unsafe { &_guard_printer.val }) catch |e| return writer.print("<error writing selector: {s}>\n", .{@errorName(e)})?;
+    return writer.writeAll(_guard_arraylist.val.written());
 }
 
 /// This reordering doesn't change the semantics of selector matching, && we

@@ -50,7 +50,529 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
+pub const QueueError = error{
+    Empty,
+    Contended,
+};
+
+pub const BufferError = error{
+    Overflow,
+};
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        alloc: std.mem.Allocator,
+        slice: []const T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.alloc.free(self.slice);
+        }
+    };
+}
+
+pub const UnregisterThreadGuard = struct {
+    thread_pool: *ThreadPool,
+    thread: *TopThread,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *UnregisterThreadGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.thread_pool.unregister(self.thread);
+            }
+    }
+};
+
+pub const ReleaseConsumerGuard = struct {
+    queue: *NodeQueue,
+    consumer: ?*TopNode,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ReleaseConsumerGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.queue.releaseConsumer(self.consumer);
+            }
+    }
+};
+
+pub const Event = struct {
+    state: Atomic(u32) = .init(EMPTY),
+
+pub noinline fn wait(self: *Event) void {
+            var acquire_with: u32 = EMPTY;
+            _ = &acquire_with;
+            var state = self.state.load(.monotonic);
+            _ = &state;
+            var has_shrunk_memory: bool = false;
+            _ = &has_shrunk_memory;
+            while (true) {
+                if ((state == SHUTDOWN)) {
+                    return;
+                }
+                if ((state == NOTIFIED)) {
+                    if (self.state.cmpxchgWeak(state, acquire_with, .acquire, .monotonic)) |next| {
+                        _ = &next;
+                        state = next;
+                        continue;
+                    }
+                    return;
+                }
+                if ((state != WAITING)) {
+                    if (self.state.cmpxchgWeak(state, WAITING, .monotonic, .monotonic)) |next| {
+                        _ = &next;
+                        state = next;
+                        continue;
+                    }
+                }
+                _ = (blk_catch_0: { break :blk_catch_0 ((Futex.wait((blk: {
+                break :blk (&self.state);
+
+}), WAITING, (if ((!has_shrunk_memory)) (std.time.ns_per_s * 10) else null))) catch |__ce_0| { _ = &__ce_0; has_shrunk_memory = true;
+                _ = bun.Global.mimalloc_cleanup(false);
+                break :blk_catch_0 bun.jsc.wtf.releaseFastMallocFreeMemoryForThisThread(); }); });
+                state = self.state.load(.monotonic);
+                acquire_with = WAITING;
+            }
+    }
+
+pub fn notify(self: *Event) void {
+            return self.wake(NOTIFIED, 1);
+    }
+
+pub fn shutdown(self: *Event) void {
+            return self.wake(SHUTDOWN, std.math.maxInt(u32));
+    }
+
+pub fn wake(self: *Event, release_with: u32, wake_threads: u32) void {
+            const state = self.state.swap(release_with, .release);
+            if ((state == WAITING)) {
+                _ = Futex.wake((blk: {
+                break :blk (&self.state);
+
+}), wake_threads);
+            }
+    }
+    const EMPTY = 0;
+    const WAITING = 1;
+    const NOTIFIED = 2;
+    const SHUTDOWN = 3;
+};
+
+pub const TopNode = struct {
+    next: ?*TopNode = null,
+    const List = NodeList;
+    const Queue = NodeQueue;
+    const Buffer = NodeBuffer;
+};
+
+pub const NodeList = struct {
+    head: *TopNode,
+    tail: *TopNode,
+};
+
+pub const NodeQueue = struct {
+    stack: Atomic(usize) = .init(0),
+    cache: ?*TopNode = null,
+
+pub fn push(self: *NodeQueue, list: NodeList) void {
+            var stack = self.stack.load(.monotonic);
+            _ = &stack;
+            while (true) {
+                {
+                    list.tail.next = @as(?*TopNode, @ptrFromInt((stack & PTR_MASK)));
+                    var new_stack = @intFromPtr(list.head);
+                    _ = &new_stack;
+                    _ = assert(((new_stack & (~PTR_MASK)) == 0));
+                    new_stack = (new_stack | (stack & (~PTR_MASK)));
+                    stack = ((self.stack.cmpxchgWeak(stack, new_stack, .release, .monotonic)) orelse break);
+                }
+            }
+    }
+
+pub fn tryAcquireConsumer(self: *NodeQueue) QueueError!?*TopNode {
+            var stack = self.stack.load(.monotonic);
+            _ = &stack;
+            while (true) {
+                if (((stack & IS_CONSUMING) != 0)) {
+                    return error.Contended;
+                }
+                if (((stack & (HAS_CACHE | PTR_MASK)) == 0)) {
+                    return error.Empty;
+                }
+                var new_stack = ((stack | HAS_CACHE) | IS_CONSUMING);
+                _ = &new_stack;
+                if (((stack & HAS_CACHE) == 0)) {
+                    _ = assert(((stack & PTR_MASK) != 0));
+                    new_stack = (new_stack & (~PTR_MASK));
+                }
+                stack = ((self.stack.cmpxchgWeak(stack, new_stack, .acquire, .monotonic)) orelse {
+                if (self.cache) |c| {
+                    _ = &c;
+                    return c;
+                }
+                const node: *TopNode = (blk: {
+                break :blk @ptrFromInt((stack & PTR_MASK));
+
+});
+                return node;
+});
+            }
+    }
+
+pub fn releaseConsumer(self: *NodeQueue, consumer: ?*TopNode) void {
+            var remove = IS_CONSUMING;
+            _ = &remove;
+            if ((consumer == null)) {
+                remove = (remove | HAS_CACHE);
+            }
+            self.cache = consumer;
+            const stack = self.stack.fetchSub(remove, .release);
+            _ = assert(((stack & remove) != 0));
+    }
+
+pub fn pop(self: *NodeQueue, consumer_ref: *?*TopNode) ?*TopNode {
+            {
+                if (consumer_ref.*) |node| {
+                    _ = &node;
+                    consumer_ref.* = node.next;
+                    return node;
+                }
+            }
+            var stack = self.stack.load(.monotonic);
+            _ = &stack;
+            _ = assert(((stack & IS_CONSUMING) != 0));
+            if (((stack & PTR_MASK) == 0)) {
+                return null;
+            }
+            stack = self.stack.swap((HAS_CACHE | IS_CONSUMING), .acquire);
+            _ = assert(((stack & IS_CONSUMING) != 0));
+            _ = assert(((stack & PTR_MASK) != 0));
+            {
+                const node: *TopNode = @ptrFromInt((stack & PTR_MASK));
+                consumer_ref.* = node.next;
+                return node;
+            }
+    }
+    const HAS_CACHE: usize = 1;
+    const IS_CONSUMING: usize = 2;
+    const PTR_MASK: usize = (~(HAS_CACHE | IS_CONSUMING));
+    comptime {
+            assert(@alignOf(TopNode) >= ((IS_CONSUMING | HAS_CACHE) + 1));
+        }
+};
+
+pub const NodeStole = struct {
+    node: *TopNode,
+    pushed: bool,
+};
+
+pub const NodeBuffer = struct {
+    head: Atomic(Index) = .init(0),
+    tail: Atomic(Index) = .init(0),
+    array: [capacity]Atomic(TopNodePtr) = undefined,
+
+pub fn push(self: *NodeBuffer, list: *NodeList) BufferError!void {
+            var head = self.head.load(.monotonic);
+            _ = &head;
+            var tail = self.tail.raw;
+            _ = &tail;
+            while (true) {
+                var size = (tail -% head);
+                _ = &size;
+                _ = assert((size <= capacity));
+                if ((size < capacity)) {
+                    var nodes: ?*TopNode = list.head;
+                    _ = &nodes;
+                    while ((size < capacity)) : (size = (size + 1)) {
+                        const node = ((nodes) orelse break);
+                        nodes = (blk: {
+                        break :blk node.next;
+
+});
+                        _ = self.array[@as(usize, @intCast((tail % capacity)))].store(node, .unordered);
+                        tail = (tail +% 1);
+                    }
+                    _ = self.tail.store(tail, .release);
+                    list.head = ((nodes) orelse { return; });
+                    _ = std.atomic.spinLoopHint();
+                    head = self.head.load(.monotonic);
+                    continue;
+                }
+                var migrate = (size / 2);
+                _ = &migrate;
+                head = ((self.head.cmpxchgWeak(head, (head +% migrate), .acquire, .monotonic)) orelse {
+                const first = self.array[@as(usize, @intCast((head % capacity)))].raw;
+                while ((migrate > 0)) : (migrate = (migrate - 1)) {
+                    const prev = self.array[@as(usize, @intCast((head % capacity)))].raw;
+                    head = (head +% 1);
+                    {
+                        prev.next = self.array[@as(usize, @intCast((head % capacity)))].raw;
+                    }
+                }
+                const last = self.array[@as(usize, @intCast(((head -% 1) % capacity)))].raw;
+                {
+                    last.next = list.head;
+                    list.tail.next = null;
+                }
+                list.head = first;
+                return error.Overflow;
+});
+            }
+    }
+
+pub fn pop(self: *NodeBuffer) ?*TopNode {
+            var head = self.head.load(.monotonic);
+            _ = &head;
+            const tail = self.tail.raw;
+            while (true) {
+                const size = (tail -% head);
+                _ = assert((size <= capacity));
+                if ((size == 0)) {
+                    return null;
+                }
+                head = ((self.head.cmpxchgWeak(head, (head +% 1), .acquire, .monotonic)) orelse { return self.array[@as(usize, @intCast((head % capacity)))].raw; });
+            }
+    }
+
+pub fn consume(self: *NodeBuffer, queue: *NodeQueue) ?NodeStole {
+            const consumer = (blk_catch_1: { break :blk_catch_1 ((queue.tryAcquireConsumer()) catch |__ce_1| { _ = &__ce_1; return null; }); });
+            var consumer_guard = ReleaseConsumerGuard{ .queue = queue, .consumer = consumer };
+            _ = &consumer_guard;
+            var __consumer_guard_moved = false; _ = &__consumer_guard_moved;
+            defer if (!__consumer_guard_moved) { __consumer_guard_moved = true; const __T = @TypeOf(consumer_guard); if (@typeInfo(__T) == .optional) { if (consumer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { consumer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = consumer_guard; _drop_val.__cp_deinit(); } };
+            const head = self.head.load(.monotonic);
+            const tail = self.tail.raw;
+            const size = (tail -% head);
+            _ = assert((size <= capacity));
+            _ = assert((size == 0));
+            var pushed: u32 = 0;
+            _ = &pushed;
+            while ((pushed < capacity)) : (pushed = (pushed + 1)) {
+                const node = ((queue.pop((blk: {
+                break :blk (&consumer_guard.consumer);
+
+}))) orelse break);
+                _ = self.array[@as(usize, @intCast(((tail +% pushed) % capacity)))].store(node, .unordered);
+            }
+            const node = ((queue.pop((blk: {
+            break :blk (&consumer_guard.consumer);
+
+}))) orelse (blk: {
+            if ((pushed == 0)) {
+                return null;
+            }
+            pushed = (pushed - 1);
+            break :blk self.array[@as(usize, @intCast(((tail +% pushed) % capacity)))].raw;
+}));
+            if ((pushed > 0)) {
+                _ = self.tail.store((tail +% pushed), .release);
+            }
+            return NodeStole{ .node = node, .pushed = (pushed > 0) };
+    }
+
+pub fn steal(self: *NodeBuffer, buffer: *NodeBuffer) ?NodeStole {
+            const head = self.head.load(.monotonic);
+            const tail = self.tail.raw;
+            const size = (tail -% head);
+            _ = assert((size <= capacity));
+            _ = assert((size == 0));
+            while (true) : (std.atomic.spinLoopHint()) {
+                const buffer_head = buffer.head.load(.acquire);
+                const buffer_tail = buffer.tail.load(.acquire);
+                const buffer_size = (buffer_tail -% buffer_head);
+                if ((buffer_size > capacity)) {
+                    continue;
+                }
+                const steal_size = (buffer_size - (buffer_size / 2));
+                if ((steal_size == 0)) {
+                    return null;
+                }
+                var i: usize = 0;
+                _ = &i;
+                while ((i < steal_size)) : (i = (i + 1)) {
+                    const node = buffer.array[@as(usize, @intCast(((buffer_head +% i) % capacity)))].load(.unordered);
+                    _ = self.array[@as(usize, @intCast(((tail +% i) % capacity)))].store(node, .unordered);
+                }
+                _ = ((buffer.head.cmpxchgStrong(buffer_head, (buffer_head +% steal_size), .acq_rel, .monotonic)) orelse {
+                const pushed = (steal_size - 1);
+                const node = self.array[@as(usize, @intCast(((tail +% pushed) % capacity)))].raw;
+                if ((pushed > 0)) {
+                    _ = self.tail.store((tail +% pushed), .release);
+                }
+                return NodeStole{ .node = node, .pushed = (pushed > 0) };
+});
+            }
+    }
+    const Index = u32;
+    const capacity: u32 = 256;
+    const Stole = NodeStole;
+    comptime {
+            assert(std.math.maxInt(Index) >= capacity);
+            assert(std.math.isPowerOfTwo(capacity));
+        }
+};
+
+pub const TopThread = struct {
+    next: ?*TopThread = null,
+    target: ?*TopThread = null,
+    join_event: Event = .{},
+    run_queue: NodeQueue = .{},
+    idle_queue: NodeQueue = .{},
+    run_buffer: NodeBuffer = .{},
+    thread_pool: *ThreadPool,
+    pub threadlocal var current: ?*TopThread = null;
+    pub var counter: std.atomic.Value(u32) = .init(0);
+
+pub fn pushIdleTask(self: *TopThread, task: *ThreadPool.Task) void {
+            const list = NodeList{ .head = (blk: {
+            break :blk (&task.node);
+
+}), .tail = (blk: {
+            break :blk (&task.node);
+
+}) };
+            _ = self.idle_queue.push(list);
+    }
+
+pub fn run(thread_pool: *ThreadPool) void {
+            _ = bun.mimalloc.mi_thread_set_in_threadpool();
+            {
+                var counter_buf: [100]u8 = undefined;
+                _ = &counter_buf;
+                const int = counter.fetchAdd(1, .seq_cst);
+                const named = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrintZ((&counter_buf), "Bun Pool {d}", .{ int })) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 "Bun Pool"; }); });
+                _ = Output.Source.configureNamedThread(named);
+            }
+            var self = TopThread{ .thread_pool = thread_pool };
+            _ = &self;
+            current = (blk: {
+            break :blk (&self);
+
+});
+            defer {
+            current = null;
+            }
+            {
+                _ = thread_pool.register((&self));
+            }
+            var unregister_guard = UnregisterThreadGuard{ .thread_pool = thread_pool, .thread = (blk: {
+            break :blk (&self);
+
+}) };
+            _ = &unregister_guard;
+            var __unregister_guard_moved = false; _ = &__unregister_guard_moved;
+            defer if (!__unregister_guard_moved) { __unregister_guard_moved = true; const __T = @TypeOf(unregister_guard); if (@typeInfo(__T) == .optional) { if (unregister_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { unregister_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = unregister_guard; _drop_val.__cp_deinit(); } };
+            _ = &unregister_guard;
+            var is_waking = false;
+            _ = &is_waking;
+            while (true) {
+                is_waking = (blk_catch_3: { break :blk_catch_3 (((blk: {
+                break :blk thread_pool.wait(is_waking);
+
+})) catch |__ce_3| { _ = &__ce_3; return; }); });
+                while (self.pop(thread_pool)) |result| {
+                    if ((result.pushed or is_waking)) {
+                        {
+                            _ = thread_pool.notify(is_waking);
+                        }
+                    }
+                    is_waking = false;
+                    const task: *ThreadPool.Task = (blk: {
+                    break :blk @fieldParentPtr("node", result.node);
+
+});
+                    {
+                        _ = task.callback(task);
+                    }
+                    {
+                        _ = thread_pool.wait_group.finish();
+                    }
+                }
+                _ = Output.flush();
+                _ = self.drainIdleEvents();
+            }
+    }
+
+pub fn drainIdleEvents(self: *TopThread) void {
+            const consumer = (blk_catch_4: { break :blk_catch_4 ((self.idle_queue.tryAcquireConsumer()) catch |__ce_4| { _ = &__ce_4; return; }); });
+            var consumer_guard = ReleaseConsumerGuard{ .queue = (blk: {
+            break :blk (&self.idle_queue);
+
+}), .consumer = consumer };
+            _ = &consumer_guard;
+            var __consumer_guard_moved = false; _ = &__consumer_guard_moved;
+            defer if (!__consumer_guard_moved) { __consumer_guard_moved = true; const __T = @TypeOf(consumer_guard); if (@typeInfo(__T) == .optional) { if (consumer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { consumer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = consumer_guard; _drop_val.__cp_deinit(); } };
+            const consumer_ptr = (blk: {
+            break :blk (&consumer_guard.consumer);
+
+});
+            while (self.idle_queue.pop(consumer_ptr)) |node| {
+                const task: *ThreadPool.Task = (blk: {
+                break :blk @fieldParentPtr("node", node);
+
+});
+                {
+                    _ = task.callback(task);
+                }
+            }
+    }
+
+pub fn pop(self: *TopThread, thread_pool: *ThreadPool) ?NodeStole {
+            if (self.run_buffer.pop()) |node| {
+                _ = &node;
+                return NodeStole{ .node = node, .pushed = false };
+            }
+            if (self.run_buffer.consume((&self.run_queue))) |stole| {
+                _ = &stole;
+                return stole;
+            }
+            if (self.run_buffer.consume((blk: {
+            break :blk (&thread_pool.run_queue);
+
+}))) |stole| {
+                _ = &stole;
+                return stole;
+            }
+            var num_threads = thread_pool.sync.load(.monotonic).spawned;
+            _ = &num_threads;
+            while ((num_threads > 0)) : (num_threads = (num_threads - 1)) {
+                const target = ((self.target) orelse (((thread_pool.threads.load(.acquire)) orelse (unreachable))));
+                self.target = (blk: {
+                break :blk target.next;
+
+});
+                if (self.run_buffer.consume((blk: {
+                break :blk (&target.run_queue);
+
+}))) |stole| {
+                    _ = &stole;
+                    return stole;
+                }
+                if ((target == (blk: {
+                break :blk self;
+
+}))) {
+                    continue;
+                }
+                if (self.run_buffer.steal((blk: {
+                break :blk (&target.run_buffer);
+
+}))) |stole| {
+                    _ = &stole;
+                    return stole;
+                }
+            }
+            return null;
+    }
+};
 
 pub const ThreadPool = @This();
 
@@ -115,9 +637,11 @@ pub fn call(task: *Task) void {
         var wait_context = WaitContext{ .ctx = ctx, .values = values };
         _ = &wait_context;
         const tasks = ((allocator.alloc(RunnerTask, values.len)) catch unreachable);
-        defer {
-        _ = allocator.free(tasks);
-        }
+        var tasks_guard = FreeGuard(RunnerTask){ .alloc = allocator, .slice = tasks };
+        _ = &tasks_guard;
+        var __tasks_guard_moved = false; _ = &__tasks_guard_moved;
+        defer if (!__tasks_guard_moved) { __tasks_guard_moved = true; const __T = @TypeOf(tasks_guard); if (@typeInfo(__T) == .optional) { if (tasks_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { tasks_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = tasks_guard; _drop_val.__cp_deinit(); } };
+        _ = &tasks_guard;
         var batch: Batch = .{};
         _ = &batch;
         var offset = tasks.len;
@@ -155,7 +679,7 @@ pub fn scheduleImpl(self: *ThreadPool, batch: Batch, try_current: bool) void {
 };
         if (current) |thread| {
             _ = &thread;
-            _ = (blk_catch_1: { break :blk_catch_1 ((thread.run_buffer.push((&list))) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 thread.run_queue.push(list); }); });
+            _ = (blk_catch_6: { break :blk_catch_6 ((thread.run_buffer.push((&list))) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 thread.run_queue.push(list); }); });
         } else {
             _ = self.run_queue.push(list);
         }
@@ -209,7 +733,7 @@ pub fn warm(self: *ThreadPool, count: u14) void {
                 continue;
             }
             const spawn_config = std.Thread.SpawnConfig{ .stack_size = self.stack_size };
-            var spawned_thread = (blk_catch_2: { break :blk_catch_2 ((std.Thread.spawn(spawn_config, Thread.run, .{ self })) catch |__ce_2| { _ = &__ce_2; return self.unregister(null); }); });
+            var spawned_thread = (blk_catch_7: { break :blk_catch_7 ((std.Thread.spawn(spawn_config, Thread.run, .{ self })) catch |__ce_7| { _ = &__ce_7; return self.unregister(null); }); });
             _ = &spawned_thread;
             _ = spawned_thread.detach();
             sync = new_sync;
@@ -254,7 +778,7 @@ pub noinline fn notifySlow(self: *ThreadPool, is_waking: bool) void {
             }
             if ((can_wake and (sync.spawned < self.max_threads))) {
                 const spawn_config = std.Thread.SpawnConfig{ .stack_size = self.stack_size };
-                var spawned_thread = (blk_catch_3: { break :blk_catch_3 ((std.Thread.spawn(spawn_config, Thread.run, .{ self })) catch |__ce_3| { _ = &__ce_3; return self.unregister(null); }); });
+                var spawned_thread = (blk_catch_8: { break :blk_catch_8 ((std.Thread.spawn(spawn_config, Thread.run, .{ self })) catch |__ce_8| { _ = &__ce_8; return self.unregister(null); }); });
                 _ = &spawned_thread;
                 return spawned_thread.detach();
             }
@@ -478,476 +1002,9 @@ pub const default_thread_stack_size = brk: {
     }
     break :brk size;
 };
-pub const Thread = struct {
-    next: ?*Thread = null,
-    target: ?*Thread = null,
-    join_event: Event = .{},
-    run_queue: Node.Queue = .{},
-    idle_queue: Node.Queue = .{},
-    run_buffer: Node.Buffer = .{},
-    thread_pool: *ThreadPool,
-
-    pub threadlocal var current: ?*Thread = null;
-
-    pub fn pushIdleTask(self: *Thread, task: *Task) void {
-        const list = Node.List{
-            .head = &task.node,
-            .tail = &task.node,
-        };
-        self.idle_queue.push(list);
-    }
-    var counter: std.atomic.Value(u32) = .init(0);
-
-    /// Thread entry point which runs a worker for the ThreadPool
-    fn run(thread_pool: *ThreadPool) void {
-        bun.mimalloc.mi_thread_set_in_threadpool();
-
-        {
-            var counter_buf: [100]u8 = undefined;
-            const int = counter.fetchAdd(1, .seq_cst);
-            const named = std.fmt.bufPrintZ(&counter_buf, "Bun Pool {d}", .{int}) catch "Bun Pool";
-            Output.Source.configureNamedThread(named);
-        }
-
-        var self_ = Thread{ .thread_pool = thread_pool };
-        var self = &self_;
-        current = self;
-        defer current = null;
-
-        thread_pool.register(self);
-        defer thread_pool.unregister(self);
-
-        var is_waking = false;
-        while (true) {
-            is_waking = thread_pool.wait(is_waking) catch return;
-
-            while (self.pop(thread_pool)) |result| {
-                if (result.pushed or is_waking)
-                    thread_pool.notify(is_waking);
-                is_waking = false;
-
-                const task: *Task = @fieldParentPtr("node", result.node);
-                (task.callback)(task);
-                thread_pool.wait_group.finish();
-            }
-
-            Output.flush();
-            self.drainIdleEvents();
-        }
-    }
-
-    pub fn drainIdleEvents(noalias self: *Thread) void {
-        var consumer = self.idle_queue.tryAcquireConsumer() catch return;
-        defer self.idle_queue.releaseConsumer(consumer);
-        while (self.idle_queue.pop(&consumer)) |node| {
-            const task: *Task = @fieldParentPtr("node", node);
-            (task.callback)(task);
-        }
-    }
-
-    /// Try to dequeue a Node/Task from the ThreadPool.
-    /// Spurious reports of dequeue() returning empty are allowed.
-    pub fn pop(noalias self: *Thread, noalias thread_pool: *ThreadPool) ?Node.Buffer.Stole {
-        // Check our local buffer first
-        if (self.run_buffer.pop()) |node| {
-            return Node.Buffer.Stole{
-                .node = node,
-                .pushed = false,
-            };
-        }
-
-        // Then check our local queue
-        if (self.run_buffer.consume(&self.run_queue)) |stole| {
-            return stole;
-        }
-
-        // Then the global queue
-        if (self.run_buffer.consume(&thread_pool.run_queue)) |stole| {
-            return stole;
-        }
-
-        // Then try work stealing from other threads
-        var num_threads = thread_pool.sync.load(.monotonic).spawned;
-        while (num_threads > 0) : (num_threads -= 1) {
-            // Traverse the stack of registered threads on the thread pool
-            const target = self.target orelse thread_pool.threads.load(.acquire) orelse unreachable;
-            self.target = target.next;
-
-            // Try to steal from their queue first to avoid contention (the target steal's from queue last).
-            if (self.run_buffer.consume(&target.run_queue)) |stole| {
-                return stole;
-            }
-
-            // Skip stealing from the buffer if we're the target.
-            // We still steal from our own queue above given it may have just been locked the first time we tried.
-            if (target == self) {
-                continue;
-            }
-
-            // Steal from the buffer of a remote thread as a last resort
-            if (self.run_buffer.steal(&target.run_buffer)) |stole| {
-                return stole;
-            }
-        }
-
-        return null;
-    }
-};
-const Event = struct {
-    state: Atomic(u32) = .init(EMPTY),
-
-pub noinline fn wait(self: *@This()) void {
-            var acquire_with: u32 = EMPTY;
-            _ = &acquire_with;
-            var state = self.state.load(.monotonic);
-            _ = &state;
-            var has_shrunk_memory: bool = false;
-            _ = &has_shrunk_memory;
-            while (true) {
-                if ((state == SHUTDOWN)) {
-                    return;
-                }
-                if ((state == NOTIFIED)) {
-                    if (self.state.cmpxchgWeak(state, acquire_with, .acquire, .monotonic)) |next| {
-                        _ = &next;
-                        state = next;
-                        continue;
-                    }
-                    return;
-                }
-                if ((state != WAITING)) {
-                    if (self.state.cmpxchgWeak(state, WAITING, .monotonic, .monotonic)) |next| {
-                        _ = &next;
-                        state = next;
-                        continue;
-                    }
-                }
-                _ = (blk_catch_0: { break :blk_catch_0 ((Futex.wait((&self.state), WAITING, (if ((!has_shrunk_memory)) (std.time.ns_per_s * 10) else null))) catch |__ce_0| { _ = &__ce_0; has_shrunk_memory = true;
-                _ = bun.Global.mimalloc_cleanup(false);
-                break :blk_catch_0 bun.jsc.wtf.releaseFastMallocFreeMemoryForThisThread(); }); });
-                state = self.state.load(.monotonic);
-                acquire_with = WAITING;
-            }
-    }
-
-pub fn notify(self: *@This()) void {
-            return self.wake(NOTIFIED, 1);
-    }
-
-pub fn shutdown(self: *@This()) void {
-            return self.wake(SHUTDOWN, std.math.maxInt(u32));
-    }
-
-pub fn wake(self: *@This(), release_with: u32, wake_threads: u32) void {
-            const state = self.state.swap(release_with, .release);
-            if ((state == WAITING)) {
-                _ = Futex.wake((&self.state), wake_threads);
-            }
-    }
-    const EMPTY = 0;
-    const WAITING = 1;
-    pub const NOTIFIED = 2;
-    const SHUTDOWN = 3;
-};
-pub const Node = struct {
-    next: ?*Node = null,
-    const List = struct {
-        head: *Node,
-        tail: *Node,
-    };
-    const Queue = struct {
-            stack: Atomic(usize) = .init(0),
-            cache: ?*Node = null,
-    
-            const HAS_CACHE: usize = 0b01;
-            const IS_CONSUMING: usize = 0b10;
-            const PTR_MASK: usize = ~(HAS_CACHE | IS_CONSUMING);
-    
-            comptime {
-                assert(@alignOf(Node) >= ((IS_CONSUMING | HAS_CACHE) + 1));
-            }
-    
-            fn push(noalias self: *Queue, list: List) void {
-                var stack = self.stack.load(.monotonic);
-                while (true) {
-                    // Attach the list to the stack (pt. 1)
-                    list.tail.next = @as(?*Node, @ptrFromInt(stack & PTR_MASK));
-    
-                    // Update the stack with the list (pt. 2).
-                    // Don't change the HAS_CACHE and IS_CONSUMING bits of the consumer.
-                    var new_stack = @intFromPtr(list.head);
-                    assert(new_stack & ~PTR_MASK == 0);
-                    new_stack |= (stack & ~PTR_MASK);
-    
-                    // Push to the stack with a release barrier for the consumer to see the proper list links.
-                    stack = self.stack.cmpxchgWeak(
-                        stack,
-                        new_stack,
-                        .release,
-                        .monotonic,
-                    ) orelse break;
-                }
-            }
-    
-            fn tryAcquireConsumer(self: *Queue) error{ Empty, Contended }!?*Node {
-                var stack = self.stack.load(.monotonic);
-                while (true) {
-                    if (stack & IS_CONSUMING != 0)
-                        return error.Contended; // The queue already has a consumer.
-                    if (stack & (HAS_CACHE | PTR_MASK) == 0)
-                        return error.Empty; // The queue is empty when there's nothing cached and nothing in the stack.
-    
-                    // When we acquire the consumer, also consume the pushed stack if the cache is empty.
-                    var new_stack = stack | HAS_CACHE | IS_CONSUMING;
-                    if (stack & HAS_CACHE == 0) {
-                        assert(stack & PTR_MASK != 0);
-                        new_stack &= ~PTR_MASK;
-                    }
-    
-                    // Acquire barrier on getting the consumer to see cache/Node updates done by previous consumers
-                    // and to ensure our cache/Node updates in pop() happen after that of previous consumers.
-                    stack = self.stack.cmpxchgWeak(
-                        stack,
-                        new_stack,
-                        .acquire,
-                        .monotonic,
-                    ) orelse return self.cache orelse @as(*Node, @ptrFromInt(stack & PTR_MASK));
-                }
-            }
-    
-            fn releaseConsumer(noalias self: *Queue, noalias consumer: ?*Node) void {
-                // Stop consuming and remove the HAS_CACHE bit as well if the consumer's cache is empty.
-                // When HAS_CACHE bit is zeroed, the next consumer will acquire the pushed stack nodes.
-                var remove = IS_CONSUMING;
-                if (consumer == null)
-                    remove |= HAS_CACHE;
-    
-                // Release the consumer with a release barrier to ensure cache/node accesses
-                // happen before the consumer was released and before the next consumer starts using the cache.
-                self.cache = consumer;
-                const stack = self.stack.fetchSub(remove, .release);
-                assert(stack & remove != 0);
-            }
-    
-            fn pop(noalias self: *Queue, noalias consumer_ref: *?*Node) ?*Node {
-                // Check the consumer cache (fast path)
-                if (consumer_ref.*) |node| {
-                    consumer_ref.* = node.next;
-                    return node;
-                }
-    
-                // Load the stack to see if there was anything pushed that we could grab.
-                var stack = self.stack.load(.monotonic);
-                assert(stack & IS_CONSUMING != 0);
-                if (stack & PTR_MASK == 0) {
-                    return null;
-                }
-    
-                // Nodes have been pushed to the stack, grab then with an Acquire barrier to see the Node links.
-                stack = self.stack.swap(HAS_CACHE | IS_CONSUMING, .acquire);
-                assert(stack & IS_CONSUMING != 0);
-                assert(stack & PTR_MASK != 0);
-    
-                const node = @as(*Node, @ptrFromInt(stack & PTR_MASK));
-                consumer_ref.* = node.next;
-                return node;
-            }
-        };
-    const Buffer = struct {
-            head: Atomic(Index) = .init(0),
-            tail: Atomic(Index) = .init(0),
-            array: [capacity]Atomic(*Node) = undefined,
-    
-            const Index = u32;
-            const capacity = 256; // Appears to be a pretty good trade-off in space vs contended throughput
-            comptime {
-                assert(std.math.maxInt(Index) >= capacity);
-                assert(std.math.isPowerOfTwo(capacity));
-            }
-    
-            fn push(noalias self: *Buffer, noalias list: *List) error{Overflow}!void {
-                var head = self.head.load(.monotonic);
-                var tail = self.tail.raw; // we're the only thread that can change this
-    
-                while (true) {
-                    var size = tail -% head;
-                    assert(size <= capacity);
-    
-                    // Push nodes from the list to the buffer if it's not empty.
-                    if (size < capacity) {
-                        var nodes: ?*Node = list.head;
-                        while (size < capacity) : (size += 1) {
-                            const node = nodes orelse break;
-                            nodes = node.next;
-    
-                            // Array written atomically with weakest ordering since it could be getting atomically read by steal().
-                            self.array[tail % capacity].store(node, .unordered);
-                            tail +%= 1;
-                        }
-    
-                        // Release barrier synchronizes with Acquire loads for steal()ers to see the array writes.
-                        self.tail.store(tail, .release);
-    
-                        // Update the list with the nodes we pushed to the buffer and try again if there's more.
-                        list.head = nodes orelse return;
-                        std.atomic.spinLoopHint();
-                        head = self.head.load(.monotonic);
-                        continue;
-                    }
-    
-                    // Try to steal/overflow half of the tasks in the buffer to make room for future push()es.
-                    // Migrating half amortizes the cost of stealing while requiring future pops to still use the buffer.
-                    // Acquire barrier to ensure the linked list creation after the steal only happens after we successfully steal.
-                    var migrate = size / 2;
-                    head = self.head.cmpxchgWeak(
-                        head,
-                        head +% migrate,
-                        .acquire,
-                        .monotonic,
-                    ) orelse {
-                        // Link the migrated Nodes together
-                        const first = self.array[head % capacity].raw;
-                        while (migrate > 0) : (migrate -= 1) {
-                            const prev = self.array[head % capacity].raw;
-                            head +%= 1;
-                            prev.next = self.array[head % capacity].raw;
-                        }
-    
-                        // Append the list that was supposed to be pushed to the end of the migrated Nodes
-                        const last = self.array[(head -% 1) % capacity].raw;
-                        last.next = list.head;
-                        list.tail.next = null;
-    
-                        // Return the migrated nodes + the original list as overflowed
-                        list.head = first;
-                        return error.Overflow;
-                    };
-                }
-            }
-    
-            fn pop(self: *Buffer) ?*Node {
-                var head = self.head.load(.monotonic);
-                const tail = self.tail.raw; // we're the only thread that can change this
-    
-                while (true) {
-                    // Quick sanity check and return null when not empty
-                    const size = tail -% head;
-                    assert(size <= capacity);
-                    if (size == 0) {
-                        return null;
-                    }
-    
-                    // Dequeue with an acquire barrier to ensure any writes done to the Node
-                    // only happens after we successfully claim it from the array.
-                    head = self.head.cmpxchgWeak(
-                        head,
-                        head +% 1,
-                        .acquire,
-                        .monotonic,
-                    ) orelse return self.array[head % capacity].raw;
-                }
-            }
-    
-            const Stole = struct {
-                node: *Node,
-                pushed: bool,
-            };
-    
-            fn consume(noalias self: *Buffer, noalias queue: *Queue) ?Stole {
-                var consumer = queue.tryAcquireConsumer() catch return null;
-                defer queue.releaseConsumer(consumer);
-    
-                const head = self.head.load(.monotonic);
-                const tail = self.tail.raw; // we're the only thread that can change this
-    
-                const size = tail -% head;
-                assert(size <= capacity);
-                assert(size == 0); // we should only be consuming if our array is empty
-    
-                // Pop nodes from the queue and push them to our array.
-                // Atomic stores to the array as steal() threads may be atomically reading from it.
-                var pushed: Index = 0;
-                while (pushed < capacity) : (pushed += 1) {
-                    const node = queue.pop(&consumer) orelse break;
-                    self.array[(tail +% pushed) % capacity].store(node, .unordered);
-                }
-    
-                // We will be returning one node that we stole from the queue.
-                // Get an extra, and if that's not possible, take one from our array.
-                const node = queue.pop(&consumer) orelse blk: {
-                    if (pushed == 0) return null;
-                    pushed -= 1;
-                    break :blk self.array[(tail +% pushed) % capacity].raw;
-                };
-    
-                // Update the array tail with the nodes we pushed to it.
-                // Release barrier to synchronize with Acquire barrier in steal()'s to see the written array Nodes.
-                if (pushed > 0) self.tail.store(tail +% pushed, .release);
-                return Stole{
-                    .node = node,
-                    .pushed = pushed > 0,
-                };
-            }
-    
-            fn steal(noalias self: *Buffer, noalias buffer: *Buffer) ?Stole {
-                const head = self.head.load(.monotonic);
-                const tail = self.tail.raw; // we're the only thread that can change this
-    
-                const size = tail -% head;
-                assert(size <= capacity);
-                assert(size == 0); // we should only be stealing if our array is empty
-    
-                while (true) : (std.atomic.spinLoopHint()) {
-                    const buffer_head = buffer.head.load(.acquire);
-                    const buffer_tail = buffer.tail.load(.acquire);
-    
-                    // Overly large size indicates the tail was updated a lot after the head was loaded.
-                    // Reload both and try again.
-                    const buffer_size = buffer_tail -% buffer_head;
-                    if (buffer_size > capacity) {
-                        continue;
-                    }
-    
-                    // Try to steal half (divCeil) to amortize the cost of stealing from other threads.
-                    const steal_size = buffer_size - (buffer_size / 2);
-                    if (steal_size == 0) {
-                        return null;
-                    }
-    
-                    // Copy the nodes we will steal from the target's array to our own.
-                    // Atomically load from the target buffer array as it may be pushing and atomically storing to it.
-                    // Atomic store to our array as other steal() threads may be atomically loading from it as above.
-                    for (0..steal_size) |i| {
-                        const node = buffer.array[(buffer_head +% i) % capacity].load(.unordered);
-                        self.array[(tail +% i) % capacity].store(node, .unordered);
-                    }
-    
-                    // Try to commit the steal from the target buffer using:
-                    // - an Acquire barrier to ensure that we only interact with the stolen Nodes after the steal was committed.
-                    // - a Release barrier to ensure that the Nodes are copied above prior to the committing of the steal
-                    //   because if they're copied after the steal, the could be getting rewritten by the target's push().
-                    _ = buffer.head.cmpxchgStrong(
-                        buffer_head,
-                        buffer_head +% steal_size,
-                        .acq_rel,
-                        .monotonic,
-                    ) orelse {
-                        // Pop one from the nodes we stole as we'll be returning it
-                        const pushed = steal_size - 1;
-                        const node = self.array[(tail +% pushed) % capacity].raw;
-    
-                        // Update the array tail with the nodes we pushed to it.
-                        // Release barrier to synchronize with Acquire barrier in steal()'s to see the written array Nodes.
-                        if (pushed > 0) self.tail.store(tail +% pushed, .release);
-                        return Stole{
-                            .node = node,
-                            .pushed = pushed > 0,
-                        };
-                    };
-                }
-            }
-        };
-};
+pub const Thread = TopThread;
+pub const Node = TopNode;
+const TopNodePtr = *TopNode;
 const Atomic = std.atomic.Value;
 const bun = @import("bun");
 const Environment = bun.Environment;

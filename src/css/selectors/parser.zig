@@ -82,10 +82,23 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deinit();
+        }
+    };
+}
+
 const CSSStringFns = css.CSSStringFns;
 pub const Printer = css.Printer;
 pub const PrintErr = css.PrintErr;
@@ -1535,7 +1548,7 @@ any_whitespace = true;
 .delim => |d| {
 switch (d) {
 '>' => {
-if ((parser.deepCombinatorEnabled() and input.tryParse(struct {
+if ((parser.deepCombinatorEnabled() and input.tryParse((struct {
 
 pub fn parseFn(i: *css.Parser) Result(void) {
             if (i.expectDelim(62).asErr()) |e| {
@@ -1544,7 +1557,7 @@ pub fn parseFn(i: *css.Parser) Result(void) {
             }
             return i.expectDelim(62);
     }
-}.parseFn, .{}).isOk())) {
+}).parseFn, .{}).isOk())) {
                     combinator = Combinator.deep_descendant;
                 } else {
                     combinator = Combinator.child;
@@ -1561,7 +1574,7 @@ combinator = .later_sibling;
 },
 '/' => {
 if (parser.deepCombinatorEnabled()) {
-                    if (input.tryParse(struct {
+                    if (input.tryParse((struct {
 
 pub fn parseFn(i: *css.Parser) Result(void) {
             if (i.expectIdentMatching("deep").asErr()) |e| {
@@ -1570,7 +1583,7 @@ pub fn parseFn(i: *css.Parser) Result(void) {
             }
             return i.expectDelim(47);
     }
-}.parseFn, .{}).isOk()) {
+}).parseFn, .{}).isOk()) {
                         combinator = .deep;
                         break;
                     } else {
@@ -1816,7 +1829,7 @@ pub fn GenericSelectorList(comptime Impl: type) type {
         _ = ValidSelectorImpl(Impl);
         const SelectorT = GenericSelector(Impl);
         return struct {
-    v: css.SmallList(SelectorT,1) = .{},
+    v: css.SmallList(SelectorT, 1) = .{},
 
 pub fn debug(self: *const @This()) DebugFmt {
             return DebugFmt{ .this = self };
@@ -1855,8 +1868,7 @@ pub fn specifitiesAllEqual(self: *const @This()) bool {
             return true;
     }
 
-pub fn toCss(self: *const @This(), _: *Printer) PrintErr!void {
-        _ = self;
+pub fn toCss(_: *const This, _: *Printer) PrintErr!void {
             _ = @compileError("Do not call this! Use `serializer.serializeSelectorList()` or `tocss_servo.toCss_SelectorList()` instead.");
     }
 
@@ -1880,7 +1892,7 @@ pub fn parseRelative(parser: *SelectorParser, input: *css.Parser, error_recovery
 
 pub fn parseWithState(parser: *SelectorParser, input: *css.Parser, state: *SelectorParsingState, recovery: ParseErrorRecovery, nesting_requirement: NestingRequirement) Result(This) {
             const original_state = state.*;
-            var values: SmallList(SelectorT,1) = .{};
+            var values: SmallList(SelectorT, 1) = .{};
             _ = &values;
             while (true) {
                 const Closure = struct {
@@ -1933,7 +1945,7 @@ return .{ .err = e };
 
 pub fn parseRelativeWithState(parser: *SelectorParser, input: *css.Parser, state: *SelectorParsingState, recovery: ParseErrorRecovery, nesting_requirement: NestingRequirement) Result(This) {
             const original_state = state.*;
-            var values: SmallList(SelectorT,1) = .{};
+            var values: SmallList(SelectorT, 1) = .{};
             _ = &values;
             while (true) {
                 const Closure = struct {
@@ -2015,27 +2027,25 @@ pub fn selectorDebugFormat(this_val: anytype, writer: *std.Io.Writer) !void {
             return;
         }
         _ = try writer.print("Selector(", .{});
-        var arraylist = std.Io.Writer.Allocating.init(bun.default_allocator);
-        _ = &arraylist;
-        const w = (&arraylist.writer);
-        defer {
-        _ = arraylist.deinit();
-        }
+        var _guard_arraylist = DeinitGuard(std.Io.Writer.Allocating){ .val = std.Io.Writer.Allocating.init(bun.default_allocator) };
+        _ = &_guard_arraylist;
+        var ___guard_arraylist_moved = false; _ = &___guard_arraylist_moved;
+        defer if (!___guard_arraylist_moved) { ___guard_arraylist_moved = true; const __T = @TypeOf(_guard_arraylist); if (@typeInfo(__T) == .optional) { if (_guard_arraylist) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arraylist.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arraylist; _drop_val.__cp_deinit(); } };
+        const w = (&_guard_arraylist.val.writer);
         const symbols = bun.ast.Symbol.Map{  };
-        var printer = css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, (&symbols));
-        _ = &printer;
-        defer {
-        _ = printer.deinit();
-        }
+        var _guard_printer = DeinitGuard(css.Printer){ .val = css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, (&symbols)) };
+        _ = &_guard_printer;
+        var ___guard_printer_moved = false; _ = &___guard_printer_moved;
+        defer if (!___guard_printer_moved) { ___guard_printer_moved = true; const __T = @TypeOf(_guard_printer); if (@typeInfo(__T) == .optional) { if (_guard_printer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_printer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_printer; _drop_val.__cp_deinit(); } };
         css.Printer.in_debug_fmt = true;
         defer {
         css.Printer.in_debug_fmt = false;
         }
         _ = (blk_catch_2: { break :blk_catch_2 ((css.selector.tocss_servo.toCss_Selector(this_val.this, (blk: {
-        break :blk (&printer);
+        break :blk (&_guard_printer.val);
 
 }))) catch |e| { _ = &e; return try writer.print("<error writing selector: {s}>\n", .{ @errorName(e) }); }); });
-        return writer.writeAll(arraylist.written());
+        return writer.writeAll(_guard_arraylist.val.written());
 }
 
 pub fn GenericSelector(comptime Impl: type) type {
@@ -2054,8 +2064,7 @@ pub fn parse(parser: *SelectorParser, input: *css.Parser) Result(This) {
             return parse_selector(Impl, parser, input, (&state), .none);
     }
 
-pub fn toCss(self: *const @This(), _: *Printer) PrintErr!void {
-        _ = self;
+pub fn toCss(_: *const This, _: *Printer) PrintErr!void {
             _ = @compileError("Do not call this! Use `serializer.serializeSelector()` or `tocss_servo.toCss_Selector()` instead.");
     }
 
@@ -2559,12 +2568,12 @@ if (state.afterAnyPseudo()) {
 };
         var closure = Closure{ .parser = parser };
         _ = &closure;
-        const attr = (switch (input.parseNestedBlock(GenericComponent(Impl), (&closure), struct {
+        const attr = (switch (input.parseNestedBlock(GenericComponent(Impl), (&closure), (struct {
 
 pub fn parsefn(self: *Closure, input2: *css.Parser) Result(GenericComponent(Impl)) {
             return parse_attribute_selector(Impl, self.parser, input2);
     }
-}.parsefn)) {
+}).parsefn)) {
 .err => |e| {
 return .{ .err = e };
 },
@@ -2687,12 +2696,12 @@ return .{ .err = e };
     state: *SelectorParsingState,
     name: []const u8,
 };
-            break :pseudo_element (switch (input.parseNestedBlock(Impl.SelectorImpl.PseudoElement, (&Closure{ .parser = parser, .state = state, .name = name }), struct {
+            break :pseudo_element (switch (input.parseNestedBlock(Impl.SelectorImpl.PseudoElement, (&Closure{ .parser = parser, .state = state, .name = name }), (struct {
 
 pub fn parseFn(closure: *const Closure, i: *css.Parser) Result(Impl.SelectorImpl.PseudoElement) {
             return closure.parser.parseFunctionalPseudoElement((if (@typeInfo(@TypeOf(closure)) == .@"enum" or @typeInfo(@TypeOf(closure)) == .@"union") @tagName(closure) else closure.name), i);
     }
-}.parseFn)) {
+}).parseFn)) {
 .result => |v| v,
 .err => |e| {
 return .{ .err = e };
@@ -3219,9 +3228,9 @@ return .{ .err = e };
 pub fn OptionalQName(comptime Impl: type) type {
         _ = &Impl;
         return union(enum) {
-        some: struct { QNamePrefix(Impl), ?[]const u8 },
-        none: css.Token,
-    };
+    some: struct { QNamePrefix(Impl), ?[]const u8 },
+    none: css.Token,
+};
 }
 
 pub fn QNamePrefix(comptime Impl: type) type {

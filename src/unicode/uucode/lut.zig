@@ -67,7 +67,55 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        alloc: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit(self.alloc);
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        alloc: Allocator,
+        slice: ?[]const T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.alloc.free(s);
+                }
+        }
+    };
+}
 
 pub const BlockContext = struct {
 
@@ -100,22 +148,44 @@ pub fn Generator(comptime Elem: type, comptime Context: type) type {
 pub fn generate(self: @This(), alloc: Allocator) !Tables(Elem) {
             var blocks_map = BlockMap.init(alloc);
             _ = &blocks_map;
-            defer {
-            _ = blocks_map.deinit();
-            }
+            var blocks_map_guard = DeinitGuard(BlockMap){ .ptr = (blk: {
+            break :blk (&blocks_map);
+
+}) };
+            _ = &blocks_map_guard;
+            var __blocks_map_guard_moved = false; _ = &__blocks_map_guard_moved;
+            defer if (!__blocks_map_guard_moved) { __blocks_map_guard_moved = true; const __T = @TypeOf(blocks_map_guard); if (@typeInfo(__T) == .optional) { if (blocks_map_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { blocks_map_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = blocks_map_guard; _drop_val.__cp_deinit(); } };
             var stage1: std.ArrayList(u16) = .empty;
             _ = &stage1;
+            var stage1_list_guard = DeinitWithAllocGuard(std.ArrayList(u16)){ .ptr = (blk: {
+            break :blk (&stage1);
+
+}), .alloc = alloc };
+            _ = &stage1_list_guard;
+            var __stage1_list_guard_moved = false; _ = &__stage1_list_guard_moved;
+            defer if (!__stage1_list_guard_moved) { __stage1_list_guard_moved = true; const __T = @TypeOf(stage1_list_guard); if (@typeInfo(__T) == .optional) { if (stage1_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stage1_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stage1_list_guard; _drop_val.__cp_deinit(); } };
             var stage2: std.ArrayList(u8) = .empty;
             _ = &stage2;
+            var stage2_list_guard = DeinitWithAllocGuard(std.ArrayList(u8)){ .ptr = (blk: {
+            break :blk (&stage2);
+
+}), .alloc = alloc };
+            _ = &stage2_list_guard;
+            var __stage2_list_guard_moved = false; _ = &__stage2_list_guard_moved;
+            defer if (!__stage2_list_guard_moved) { __stage2_list_guard_moved = true; const __T = @TypeOf(stage2_list_guard); if (@typeInfo(__T) == .optional) { if (stage2_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stage2_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stage2_list_guard; _drop_val.__cp_deinit(); } };
             var stage3: std.ArrayList(Elem) = .empty;
             _ = &stage3;
-            defer {
-            {
-                _ = stage1.deinit(alloc);
-                _ = stage2.deinit(alloc);
-                _ = stage3.deinit(alloc);
-            }
-            }
+            var stage3_list_guard = DeinitWithAllocGuard(std.ArrayList(Elem)){ .ptr = (blk: {
+            break :blk (&stage3);
+
+}), .alloc = alloc };
+            _ = &stage3_list_guard;
+            var __stage3_list_guard_moved = false; _ = &__stage3_list_guard_moved;
+            defer if (!__stage3_list_guard_moved) { __stage3_list_guard_moved = true; const __T = @TypeOf(stage3_list_guard); if (@typeInfo(__T) == .optional) { if (stage3_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stage3_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stage3_list_guard; _drop_val.__cp_deinit(); } };
+            _ = &blocks_map_guard;
+            _ = &stage1_list_guard;
+            _ = &stage2_list_guard;
+            _ = &stage3_list_guard;
             var block: Block = undefined;
             _ = &block;
             var block_len: u16 = 0;
@@ -146,7 +216,7 @@ pub fn generate(self: @This(), alloc: Allocator) !Tables(Elem) {
                 const gop = try blocks_map.getOrPut(block);
                 if ((!gop.found_existing)) {
                     {
-                        if (gop.value_ptr.* == null) { gop.value_ptr.* = return error.Stage2TooLarge; }
+                        gop.value_ptr.* = ((std.math.cast(u16, stage2.items.len)) orelse { return error.Stage2TooLarge; });
                     }
                     for (block[0..block_len]) |entry| {
                         _ = &entry;
@@ -162,17 +232,23 @@ pub fn generate(self: @This(), alloc: Allocator) !Tables(Elem) {
             _ = assert((stage2.items.len <= std.math.maxInt(u16)));
             _ = assert((stage3.items.len <= std.math.maxInt(u8)));
             const stage1_owned = try stage1.toOwnedSlice(alloc);
-            errdefer {
-            _ = alloc.free(stage1_owned);
-            }
+            var stage1_guard = FreeGuard(u16){ .alloc = alloc, .slice = stage1_owned };
+            _ = &stage1_guard;
+            var __stage1_guard_moved = false; _ = &__stage1_guard_moved;
+            defer if (!__stage1_guard_moved) { __stage1_guard_moved = true; const __T = @TypeOf(stage1_guard); if (@typeInfo(__T) == .optional) { if (stage1_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stage1_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stage1_guard; _drop_val.__cp_deinit(); } };
             const stage2_owned = try stage2.toOwnedSlice(alloc);
-            errdefer {
-            _ = alloc.free(stage2_owned);
-            }
+            var stage2_guard = FreeGuard(u8){ .alloc = alloc, .slice = stage2_owned };
+            _ = &stage2_guard;
+            var __stage2_guard_moved = false; _ = &__stage2_guard_moved;
+            defer if (!__stage2_guard_moved) { __stage2_guard_moved = true; const __T = @TypeOf(stage2_guard); if (@typeInfo(__T) == .optional) { if (stage2_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stage2_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stage2_guard; _drop_val.__cp_deinit(); } };
             const stage3_owned = try stage3.toOwnedSlice(alloc);
-            errdefer {
-            _ = alloc.free(stage3_owned);
-            }
+            var stage3_guard = FreeGuard(Elem){ .alloc = alloc, .slice = stage3_owned };
+            _ = &stage3_guard;
+            var __stage3_guard_moved = false; _ = &__stage3_guard_moved;
+            defer if (!__stage3_guard_moved) { __stage3_guard_moved = true; const __T = @TypeOf(stage3_guard); if (@typeInfo(__T) == .optional) { if (stage3_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stage3_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stage3_guard; _drop_val.__cp_deinit(); } };
+            stage1_guard.slice = null;
+            stage2_guard.slice = null;
+            stage3_guard.slice = null;
             return TableType{ .stage1 = stage1_owned, .stage2 = stage2_owned, .stage3 = stage3_owned };
     }
     const Self = @This();

@@ -19,6 +19,29 @@
 ///    browser to preload the user's code.
 type string = []const u8;
 
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: T,
+    ~init() {
+        _.allocator.free(_.ptr);
+    }
+}
+
+pub struct SlicesFreeGuard {
+    allocator: std.mem.Allocator,
+    slices: bun.BoundedArray(string, 2),
+    ~init() {
+        for (slice of _.slices.slice()) _.allocator.free(slice);
+    }
+}
+
+pub struct WorkerUngetGuard {
+    worker: *ThreadPool.Worker,
+    ~init() {
+        _.worker.unget();
+    }
+}
+
 pub struct EndTagIndices {
     head: u32? = 0,
     body: u32? = 0,
@@ -138,9 +161,11 @@ pub struct HTMLLoader {
 
         let html_appender = std.heap.stackFallback(256, bun.default_allocator);
         const allocator = html_appender.get();
-        const slices = _.getHeadTags(allocator);
-        defer for (slice of slices.slice()) allocator.free(slice);
-        for (slice of slices.slice())
+        const slices_guard = SlicesFreeGuard{
+            allocator: allocator,
+            slices: _.getHeadTags(allocator),
+        };
+        for (slice of slices_guard.slices.slice())
             endTag.before(slice, true)?;
     }
 
@@ -152,9 +177,11 @@ pub struct HTMLLoader {
         let html_appender = std.heap.stackFallback(256, bun.default_allocator);
         const allocator = html_appender.get();
         if (js_chunk := _.chunk.getJSChunkForHTML(_.chunks)) {
-            const script = bun.handleOom(std.fmt.allocPrintSentinel(allocator, "<script type=\"module\">{s}</script>", .{ js_chunk.unique_key }, 0));
-            defer allocator.free(script);
-            endTag.before(script, true)?;
+            const script_guard = FreeGuard<[:0]u8>{
+                allocator: allocator,
+                ptr: bun.handleOom(std.fmt.allocPrintSentinel(allocator, "<script type=\"module\">{s}</script>", .{ js_chunk.unique_key }, 0)),
+            };
+            endTag.before(script_guard.ptr, true)?;
         }
     }
 
@@ -230,7 +257,7 @@ pub fn generateCompileResultForHtmlChunk(task: *ThreadPoolLib.Task) {
     const part_range: *const PendingPartRange = @fieldParentPtr("task", task);
     const ctx = part_range.ctx;
     let worker = ThreadPool.Worker.get(@fieldParentPtr("linker", ctx.c));
-    defer worker.unget();
+    const worker_guard = WorkerUngetGuard{ worker: worker };
 
     ctx.chunk.compile_results_for_chunk[part_range.i] = generateCompileResultForHTMLChunkImpl(worker, ctx.c, ctx.chunk, ctx.chunks);
 }
@@ -305,9 +332,11 @@ fn generateCompileResultForHTMLChunkImpl(worker: *ThreadPool.Worker, c: *LinkerC
             if (!html_loader.added_body_script) {
                 if (html_loader.compile_to_standalone_html) {
                     if (js_chunk := html_loader.chunk.getJSChunkForHTML(html_loader.chunks)) {
-                        const script = bun.handleOom(std.fmt.allocPrintSentinel(allocator, "<script type=\"module\">{s}</script>", .{ js_chunk.unique_key }, 0));
-                        defer allocator.free(script);
-                        bun.handleOom(html_loader.output.appendSlice(script));
+                        const script_guard = FreeGuard<[:0]u8>{
+                            allocator: allocator,
+                            ptr: bun.handleOom(std.fmt.allocPrintSentinel(allocator, "<script type=\"module\">{s}</script>", .{ js_chunk.unique_key }, 0)),
+                        };
+                        bun.handleOom(html_loader.output.appendSlice(script_guard.ptr));
                     }
                 }
                 html_loader.added_body_script = true;
