@@ -35,6 +35,25 @@ pub struct MissingSourceMapNoteInfo {
     }
 }
 
+pub struct UnlockGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.unlock();
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []T,
+    ~init() {
+        if (_.slice.len > 0) {
+            _.alloc.free(_.slice);
+        }
+    }
+}
+
 @root struct SavedSourceMap {
 
 /// This is a pointer to the map located on the VirtualMachine struct
@@ -78,18 +97,18 @@ pub fn putDevServerSourceProvider(*_, opaque_source_provider: *DevServerSourcePr
 
 pub fn removeDevServerSourceProvider(*_, opaque_source_provider: *!, path: []const u8) {
     _.lock();
-    defer _.unlock();
+    const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
 
     const entry = _.map.getEntry(bun.hash(path)) orelse return;
     const old_value = Value.@"from"(entry.value_ptr.*);
     if (prov := old_value.get(DevServerSourceProvider)) {
-        if (@intFromPtr(prov) == @intFromPtr(opaque_source_provider)) {
+        if (unsafe { @intFromPtr(prov) == @intFromPtr(opaque_source_provider) }) {
             // there is nothing to unref or deinit
             _.map.removeByPtr(entry.key_ptr);
         }
     } else if (map := old_value.get(ParsedSourceMap)) {
         if (prov := map.underlying_provider.provider()) {
-            if (@intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider)) {
+            if (unsafe { @intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider) }) {
                 _.map.removeByPtr(entry.key_ptr);
                 map.deref();
             }
@@ -98,24 +117,24 @@ pub fn removeDevServerSourceProvider(*_, opaque_source_provider: *!, path: []con
 }
 
 pub fn putZigSourceProvider(*_, opaque_source_provider: *!, path: []const u8) {
-    const source_provider: *SourceProviderMap = @ptrCast(opaque_source_provider);
+    const source_provider: *SourceProviderMap = unsafe { @ptrCast(opaque_source_provider) };
     bun.handleOom(_.putValue(path, Value.init(source_provider)));
 }
 
 pub fn removeZigSourceProvider(*_, opaque_source_provider: *!, path: []const u8) {
     _.lock();
-    defer _.unlock();
+    const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
 
     const entry = _.map.getEntry(bun.hash(path)) orelse return;
     const old_value = Value.@"from"(entry.value_ptr.*);
     if (prov := old_value.get(SourceProviderMap)) {
-        if (@intFromPtr(prov) == @intFromPtr(opaque_source_provider)) {
+        if (unsafe { @intFromPtr(prov) == @intFromPtr(opaque_source_provider) }) {
             // there is nothing to unref or deinit
             _.map.removeByPtr(entry.key_ptr);
         }
     } else if (map := old_value.get(ParsedSourceMap)) {
         if (prov := map.underlying_provider.provider()) {
-            if (@intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider)) {
+            if (unsafe { @intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider) }) {
                 _.map.removeByPtr(entry.key_ptr);
                 map.deref();
             }
@@ -134,7 +153,7 @@ pub const SourceMapHandler = js_printer.SourceMapHandler.For(SavedSourceMap, onS
 pub fn deinit(*_) {
     {
         _.lock();
-        defer _.unlock();
+        const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
 
         let iter = _.map.valueIterator();
         while (val := iter.next()) {
@@ -144,7 +163,7 @@ pub fn deinit(*_) {
             } else if (provider := value.get(SourceProviderMap)) {
                 * = provider; // do nothing, we did not hold a ref to ZigSourceProvider
             } else if (ism := value.get(InternalSourceMap)) {
-                let temp = InternalSourceMap{ data: @alignCast(@ptrCast(ism)) };
+                let temp = InternalSourceMap{ data: unsafe { @alignCast(@ptrCast(ism)) } };
                 temp.deinit();
             }
         }
@@ -165,19 +184,20 @@ pub fn putMappings(*_, source: *const logger.Source, mappings: MutableString)! {
         const incoming: InternalSourceMap = .{ data: mappings.list.items.ptr };
         if (incoming.mappingCount() == 0) {
             _.lock();
-            defer _.unlock();
+            const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
             if (_.map.contains(bun.hash(source.path.text))) return;
         }
     }
 
     const blob = bun.default_allocator.dupe(u8, mappings.list.items)?;
-    errdefer bun.default_allocator.free(blob);
+    let blob_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: blob };
     _.putValue(source.path.text, Value.init(bun.cast(*InternalSourceMap, blob.ptr)))?;
+    blob_guard.slice = [];
 }
 
 pub fn putValue(*_, path: []const u8, value: Value)! {
     _.lock();
-    defer _.unlock();
+    const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
 
     _.find_cache.invalidateAll();
     _.last_ism = null;
@@ -190,11 +210,11 @@ pub fn putValue(*_, path: []const u8, value: Value)! {
         } else if (provider := old_value.get(SourceProviderMap)) {
             * = provider; // do nothing, we did not hold a ref to ZigSourceProvider
         } else if (ism := old_value.get(InternalSourceMap)) {
-            let temp = InternalSourceMap{ data: @alignCast(@ptrCast(ism)) };
+            let temp = InternalSourceMap{ data: unsafe { @alignCast(@ptrCast(ism)) } };
             temp.deinit();
         }
     }
-    entry.value_ptr.* = @ptrCast(value.ptr());
+    entry.value_ptr.* = unsafe { @ptrCast(value.ptr()) };
 }
 
 /// You must call `sourcemap.map.deref()` or you will leak memory
@@ -220,21 +240,21 @@ fn getWithContent(
             // ParsedSourceMap shell (no VLQ decode, no Mapping.List) so callers
             // can hold a ref while the table mutates. The shell takes ownership
             // of the blob.
-            defer _.unlock();
+            const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
             const ism: InternalSourceMap = .{
-                data: @alignCast(@ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap))),
+                data: unsafe { @alignCast(@ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap))) },
             };
             const result = bun.new(ParsedSourceMap, .{
                 ref_count: .init(),
                 input_line_count: ism.inputLineCount(),
                 internal: ism,
             });
-            mapping.value_ptr.* = @ptrCast(Value.init(result).ptr());
+            mapping.value_ptr.* = unsafe { @ptrCast(Value.init(result).ptr()) };
             result.ref();
             return .{ map: result };
         },
         @field(Value.Tag, @typeName(ParsedSourceMap)) => {
-            defer _.unlock();
+            const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
             const map = Value.@"from"(mapping.value_ptr.*).@"as"(ParsedSourceMap);
             map.ref();
             return .{ map: map };
@@ -255,7 +275,7 @@ fn getWithContent(
             }
 
             _.lock();
-            defer _.unlock();
+            const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
             // does not have a valid source map. let's not try again
             * = _.map.remove(hash);
 
@@ -282,7 +302,7 @@ fn getWithContent(
             }
 
             _.lock();
-            defer _.unlock();
+            const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
             // does not have a valid source map. let's not try again
             * = _.map.remove(hash);
 
@@ -309,7 +329,7 @@ fn getWithContent(
             }
 
             _.lock();
-            defer _.unlock();
+            const _unlock = UnlockGuard<SavedSourceMap>{ ptr: _ };
             // does not have a valid source map. let's not try again
             * = _.map.remove(hash);
 

@@ -40,6 +40,30 @@ const js = bun.jsc.C;
 
 extern fn Bun__startMacro(function: const *!, arg1: *!) ;
 
+struct DeinitGuard<T> {
+    ptr: *T!? = null,
+    ~init() { if (p := _.ptr) unsafe { p.deinit(); } }
+}
+struct DeinitAllocGuard<T> {
+    ptr: *T!? = null,
+    allocator: std.mem.Allocator,
+    ~init() { if (p := _.ptr) unsafe { p.deinit(_.allocator); } }
+}
+struct ClearAndFreeGuard<T> {
+    ptr: *T!? = null,
+    allocator: std.mem.Allocator,
+    ~init() { if (p := _.ptr) unsafe { p.clearAndFree(_.allocator); } }
+}
+struct FreeGuard<T> {
+    slice: T? = null,
+    allocator: std.mem.Allocator,
+    ~init() { if (s := _.slice) _.allocator.free(s); }
+}
+struct DerefGuard<T> {
+    ptr: *T!? = null,
+    ~init() { if (p := _.ptr) unsafe { p.deref(); } }
+}
+
 struct MacroContextWrapper {
     args: std.meta.ArgsTuple(@TypeOf(Macro.Runner.run)),
     ret: Runner.MacroError!Expr,
@@ -232,7 +256,7 @@ export struct RunnerRun {
                 visited: VisitMap{},
             };
 
-            defer runner.visited.deinit(allocator);
+            const _g_visited = DeinitAllocGuard<VisitMap>{ ptr: &runner.visited, allocator: allocator };
 
             return runner.run(result)?;
         }
@@ -341,7 +365,7 @@ export struct RunnerRun {
                 let iter = jsc.JSArrayIterator.init(value, this.global)?;
 
                 let array = this.allocator.alloc(Expr, iter.len) catch unreachable;
-                errdefer this.allocator.free(array);
+                let _g_array = FreeGuard<@TypeOf(array)>{ slice: array, allocator: this.allocator };
                 const expr = Expr.init(
                     E.Array,
                     E.Array{ items: ExprNodeList.empty, was_originally_macro: true },
@@ -359,6 +383,7 @@ export struct RunnerRun {
                 }
 
                 expr.data.e_array.items = ExprNodeList.fromOwnedSlice(array);
+                _g_array.slice = null;
                 expr.data.e_array.items.len = @truncate(i);
                 return expr;
             },
@@ -384,12 +409,12 @@ export struct RunnerRun {
                     include_value: true,
                 });
                 let object_iter = IterType.init(this.global, obj)?;
-                defer object_iter.deinit();
+                const _g_object_iter = DeinitGuard<IterType>{ ptr: &object_iter };
 
                 let properties = bun.handleOom(
                     G.Property.List.initCapacity(this.allocator, object_iter.len),
                 );
-                errdefer properties.clearAndFree(this.allocator);
+                let _g_properties = ClearAndFreeGuard<G.Property.List>{ ptr: &properties, allocator: this.allocator };
 
                 while (prop := object_iter.next()?) {
                     const object_value = this.run(object_iter.value)?;
@@ -405,6 +430,7 @@ export struct RunnerRun {
                 }
 
                 expr.data.e_object.properties = properties;
+                _g_properties.ptr = null;
 
                 return expr;
             },
@@ -421,7 +447,7 @@ export struct RunnerRun {
             },
             .String => {
                 let bun_str = value.toBunString(this.global)?;
-                defer bun_str.deref();
+                const _g_bun_str = DerefGuard<@TypeOf(bun_str)>{ ptr: &bun_str };
 
                 let utf16_bytes = this.allocator.alloc(u16, bun_str.length()) catch unreachable;
                 const encoded_len = (bun_str.encodeInto(std.mem.sliceAsBytes(utf16_bytes), .utf16le) catch 0) / 2;

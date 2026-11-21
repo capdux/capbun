@@ -3186,7 +3186,7 @@ pub fn userUniqueId(): u32 {
     // UNLEN + 1
     let buf: [257]u16 = undefined;
     let size: u32 = @intCast(buf.len);
-    if (GetUserNameW(@ptrCast(&buf), &size) == 0) {
+    if (unsafe { GetUserNameW(@ptrCast(&buf), &size) } == 0) {
         if (Environment.isDebug) std.debug.panic("GetUserNameW failed: {}", .{bun.windows.GetLastError()});
         return 0;
     }
@@ -3355,17 +3355,19 @@ const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS = 0x00000004;
 
 pub fn getModuleHandleFromAddress(addr: usize): HMODULE? {
     let module: HMODULE = undefined;
-    const rc = GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        @ptrFromInt(addr),
-        &module,
-    );
+    const rc = unsafe {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            @ptrFromInt(addr),
+            &module,
+        )
+    };
     // If the function succeeds, the return value is nonzero.
     return if (rc != 0) module else null;
 }
 
 pub fn getModuleNameW(module: HMODULE, buf: []u16): ([]const u16)? {
-    const rc = GetModuleFileNameW(module, @ptrCast(buf.ptr), @intCast(buf.len));
+    const rc = unsafe { GetModuleFileNameW(module, @ptrCast(buf.ptr), @intCast(buf.len)) };
     if (rc == 0) return null;
     return buf[0..@intCast(rc)];
 }
@@ -3407,7 +3409,7 @@ pub fn DeleteFileBun(sub_path_w: []const u16, options: DeleteFileOptions): bun.s
         Length: path_len_bytes,
         MaximumLength: path_len_bytes,
         // The Windows API makes this mutable, but it will not mutate here.
-        Buffer: @constCast(sub_path_w.ptr),
+        Buffer: unsafe { @constCast(sub_path_w.ptr) },
     };
 
     if (sub_path_w[0] == '.' && sub_path_w[1] == 0) {
@@ -3442,7 +3444,7 @@ pub fn DeleteFileBun(sub_path_w: []const u16, options: DeleteFileOptions): bun.s
     if (e := bun.sys.Maybe(void).errnoSys(rc, .open)) {
         return e;
     }
-    defer * = bun.windows.CloseHandle(tmp_handle);
+    const _handle_guard = CloseHandleGuard{ handle: tmp_handle };
 
     // FileDispositionInformationEx (and therefore FILE_DISPOSITION_POSIX_SEMANTICS and FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE)
     // are only supported on NTFS filesystems, so the version check on its own is only a partial solution. To support non-NTFS filesystems
@@ -3620,41 +3622,31 @@ pub struct rescle {
         if (t := title) {
             title_w = bun.strings.toUTF16AllocForReal(allocator, t, false, true)?;
         }
-        defer {
-            if (tw := title_w) allocator.free(tw);
-        }
+        const _title_guard = FreeSliceGuard<[:0]u16>{ allocator: allocator, slice: title_w };
 
         let publisher_w: ([:0]u16)? = null;
         if (p := publisher) {
             publisher_w = bun.strings.toUTF16AllocForReal(allocator, p, false, true)?;
         }
-        defer {
-            if (pw := publisher_w) allocator.free(pw);
-        }
+        const _publisher_guard = FreeSliceGuard<[:0]u16>{ allocator: allocator, slice: publisher_w };
 
         let version_w: ([:0]u16)? = null;
         if (v := version) {
             version_w = bun.strings.toUTF16AllocForReal(allocator, v, false, true)?;
         }
-        defer {
-            if (vw := version_w) allocator.free(vw);
-        }
+        const _version_guard = FreeSliceGuard<[:0]u16>{ allocator: allocator, slice: version_w };
 
         let description_w: ([:0]u16)? = null;
         if (d := description) {
             description_w = bun.strings.toUTF16AllocForReal(allocator, d, false, true)?;
         }
-        defer {
-            if (dw := description_w) allocator.free(dw);
-        }
+        const _description_guard = FreeSliceGuard<[:0]u16>{ allocator: allocator, slice: description_w };
 
         let copyright_w: ([:0]u16)? = null;
         if (cr := copyright) {
             copyright_w = bun.strings.toUTF16AllocForReal(allocator, cr, false, true)?;
         }
-        defer {
-            if (cw := copyright_w) allocator.free(cw);
-        }
+        const _copyright_guard = FreeSliceGuard<[:0]u16>{ allocator: allocator, slice: copyright_w };
 
         let title_ptr: ([*:0]const u16)? = null;
         if (tw := title_w) title_ptr = tw.ptr;
@@ -3732,7 +3724,7 @@ pub const spawn = spawn_mod.PosixSpawn;
 
 pub fn isWatcherChild(): bool {
     let buf: [1]u16 = undefined;
-    return c.GetEnvironmentVariableW(@constCast(watcherChildEnv.ptr), &buf, 1) > 0;
+    return unsafe { c.GetEnvironmentVariableW(@constCast(watcherChildEnv.ptr), &buf, 1) } > 0;
 }
 
 pub fn becomeWatcherManager(allocator: std.mem.Allocator): noreturn {
@@ -3798,7 +3790,7 @@ pub fn spawnWatcherChild(
     let attr_size: usize = undefined;
     * = InitializeProcThreadAttributeList(null, 1, 0, &attr_size);
     const p = allocator.alloc(u8, attr_size)?;
-    defer allocator.free(p);
+    const _p_guard = FreeSliceGuard<[]u8>{ allocator: allocator, slice: p };
     if (InitializeProcThreadAttributeList(p.ptr, 1, 0, &attr_size) == 0) {
         return error.Win32Error;
     }
@@ -3806,7 +3798,7 @@ pub fn spawnWatcherChild(
         p.ptr,
         0,
         c.PROC_THREAD_ATTRIBUTE_JOB_LIST,
-        @ptrCast(&job),
+        unsafe { @ptrCast(&job) },
         @sizeOf(HANDLE),
         null,
         null,
@@ -3824,11 +3816,7 @@ pub fn spawnWatcherChild(
     const image_pathZ = wbuf[0..image_path.len :0];
 
     const kernelenv = kernel32_2.GetEnvironmentStringsW();
-    defer {
-        if (envptr := kernelenv) {
-            * = kernel32_2.FreeEnvironmentStringsW(envptr);
-        }
-    }
+    const _env_guard = EnvStringsGuard{ ptr: kernelenv };
 
     let size: usize = 0;
     if (pointer := kernelenv) {
@@ -3842,7 +3830,7 @@ pub fn spawnWatcherChild(
     // now pointer[size] is the first null
 
     let envbuf = allocator.alloc(u16, size + watcherChildEnv.len + 4)?;
-    defer allocator.free(envbuf);
+    const _envbuf_guard = FreeSliceGuard<[]u16>{ allocator: allocator, slice: envbuf };
     if (pointer := kernelenv) {
         @memcpy(envbuf[0..size], pointer);
     }
@@ -3885,7 +3873,7 @@ pub fn spawnWatcherChild(
         flags,
         envbuf.ptr,
         null,
-        @ptrCast(&startupinfo),
+        unsafe { @ptrCast(&startupinfo) },
         procinfo,
     );
     if (rc == 0) {
@@ -3985,7 +3973,7 @@ pub fn moveOpenedFileAt(
     const struct_len = @sizeOf(w.FILE_RENAME_INFORMATION_EX) - 1 + new_file_name.len * 2;
     if (struct_len > struct_buf_len) return Maybe(void).errno(bun.sys.E.NAMETOOLONG, .NtSetInformationFile);
 
-    const rename_info: *w.FILE_RENAME_INFORMATION_EX = @ptrCast(&rename_info_buf);
+    const rename_info: *w.FILE_RENAME_INFORMATION_EX = unsafe { @ptrCast(&rename_info_buf) };
     let io_status_block: w.IO_STATUS_BLOCK = undefined;
 
     let flags: w.ULONG = w.FILE_RENAME_POSIX_SEMANTICS | w.FILE_RENAME_IGNORE_READONLY_ATTRIBUTE;
@@ -3996,7 +3984,7 @@ pub fn moveOpenedFileAt(
         FileNameLength: @intCast(new_file_name.len * 2), // already checked error.NameTooLong
         FileName: undefined,
     };
-    @memcpy(@as([*]u16, &rename_info.FileName)[0..new_file_name.len], new_file_name);
+    unsafe { @memcpy(@as([*]u16, &rename_info.FileName)[0..new_file_name.len], new_file_name); }
     const rc = w.ntdll.NtSetInformationFile(
         src_fd.cast(),
         &io_status_block,
@@ -4036,11 +4024,11 @@ pub fn moveOpenedFileAtLoose(
 
     if (last_slash := std.mem.lastIndexOfScalar(u16, new_path, '\\')) {
         const dirname = new_path[0..last_slash];
-        const fd = switch (bun.sys.openDirAtWindows(new_dir_fd, dirname, { can_rename_or_delete: true, iterable: false })) {
+        let fd = switch (bun.sys.openDirAtWindows(new_dir_fd, dirname, { can_rename_or_delete: true, iterable: false })) {
             .err e => return { err: e },
             .result fd => fd,
         };
-        defer fd.close();
+        const _fd_guard = CloseGuard<bun.FD>{ ptr: &fd };
 
         const basename = new_path[last_slash + 1 ..];
         return moveOpenedFileAt(src_fd, fd, basename, replace_if_exists);
@@ -4059,7 +4047,7 @@ pub fn renameAtW(
     new_path_w: []const u16,
     replace_if_exists: bool,
 ): Maybe(void) {
-    const src_fd = brk: {
+    let src_fd = brk: {
         switch (bun.sys.openFileAtWindows(
             old_dir_fd,
             old_path_w,
@@ -4087,7 +4075,7 @@ pub fn renameAtW(
             .result fd => break :brk fd,
         }
     };
-    defer src_fd.close();
+    const _src_fd_guard = CloseGuard<bun.FD>{ ptr: &src_fd };
 
     return moveOpenedFileAt(src_fd, new_dir_fd, new_path_w, replace_if_exists);
 }
@@ -4140,6 +4128,43 @@ pub fn GetEnvironmentVariableW(lpName: LPWSTR, lpBuffer: [*]u16, nSize: DWORD): 
     }
 
     return rc;
+}
+
+struct CloseHandleGuard {
+    handle: HANDLE?,
+    ~init() {
+        if (h := _.handle) {
+            * = bun.windows.CloseHandle(h);
+        }
+    }
+}
+
+struct FreeSliceGuard<Elem> {
+    allocator: std.mem.Allocator,
+    slice: Elem?,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
+struct EnvStringsGuard {
+    ptr: LPWSTR?,
+    ~init() {
+        if (p := _.ptr) {
+            * = kernel32_2.FreeEnvironmentStringsW(p);
+        }
+    }
+}
+
+struct CloseGuard<Elem> {
+    ptr: *Elem!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.close();
+        }
+    }
 }
 
 import env from "./env.zig";

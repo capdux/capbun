@@ -183,7 +183,7 @@ pub struct Parser {
     fn toLazyExportAST(*_, expr: Expr, comptime runtime_api_call: []const u8, symbols: Symbol.List): js_ast.Result! {
         let p: JavaScriptParser = undefined;
         JavaScriptParser.init(_.allocator, _.log, _.source, _.define, _.lexer, _.options, &p)?;
-        defer p.lexer.deinit();
+        const _lexer_guard = DeinitGuard<js_lexer.Lexer>{ ptr: &p.lexer };
 
         p.lexer.track_comments = _.options.features.minify_identifiers;
         // Instead of doing "should_fold_typescript_constant_expressions or features.minify_syntax"
@@ -266,7 +266,7 @@ pub struct Parser {
         let p: TSXParser = undefined;
         TSXParser.init(_.allocator, _.log, _.source, _.define, _.lexer, _.options, &p)?;
 
-        defer p.lexer.deinit();
+        const _lexer_guard = DeinitGuard<js_lexer.Lexer>{ ptr: &p.lexer };
 
         // Consume a leading hashbang comment
         let hashbang: string = "";
@@ -312,7 +312,7 @@ pub struct Parser {
         p.prepareForVisitPass()?;
 
         let parts = ListManaged(js_ast.Part).init(p.allocator);
-        defer parts.deinit();
+        const _parts_guard = DeinitGuard<ListManaged(js_ast.Part)>{ ptr: &parts };
 
         p.appendPart(&parts, stmts)?;
         visit_tracer.end();
@@ -343,25 +343,27 @@ pub struct Parser {
             p.should_fold_typescript_constant_expressions = true;
         }
 
-        defer p.lexer.deinit();
+        const _lexer_guard = DeinitGuard<js_lexer.Lexer>{ ptr: &p.lexer };
 
         let binary_expression_stack_heap = std.heap.stackFallback(42 * @sizeOf(ParserType.BinaryExpressionVisitor), bun.default_allocator);
         p.binary_expression_stack = std.array_list.Managed(ParserType.BinaryExpressionVisitor).initCapacity(
             binary_expression_stack_heap.get(),
             41, // one less in case of unlikely alignment between the stack buffer and reality
         ) catch unreachable; // stack allocation cannot fail
-        defer p.binary_expression_stack.clearAndFree();
+        const _bin_expr_guard = ClearAndFreeGuard<std.array_list.Managed(ParserType.BinaryExpressionVisitor)>{ ptr: &p.binary_expression_stack };
 
         let binary_expression_simplify_stack_heap = std.heap.stackFallback(48 * @sizeOf(SideEffects.BinaryExpressionSimplifyVisitor), bun.default_allocator);
         p.binary_expression_simplify_stack = std.array_list.Managed(SideEffects.BinaryExpressionSimplifyVisitor).initCapacity(
             binary_expression_simplify_stack_heap.get(),
             47,
         ) catch unreachable; // stack allocation cannot fail
-        defer p.binary_expression_simplify_stack.clearAndFree();
+        const _bin_expr_simplify_guard = ClearAndFreeGuard<std.array_list.Managed(SideEffects.BinaryExpressionSimplifyVisitor)>{ ptr: &p.binary_expression_simplify_stack };
 
         if (Environment.allow_assert) {
-            bun.assert(binary_expression_stack_heap.fixed_buffer_allocator.ownsPtr(@ptrCast(p.binary_expression_stack.items)));
-            bun.assert(binary_expression_simplify_stack_heap.fixed_buffer_allocator.ownsPtr(@ptrCast(p.binary_expression_simplify_stack.items)));
+            unsafe {
+                bun.assert(binary_expression_stack_heap.fixed_buffer_allocator.ownsPtr(@ptrCast(p.binary_expression_stack.items)));
+                bun.assert(binary_expression_simplify_stack_heap.fixed_buffer_allocator.ownsPtr(@ptrCast(p.binary_expression_simplify_stack.items)));
+            }
         }
 
         // defer {
@@ -439,12 +441,10 @@ pub struct Parser {
         p.prepareForVisitPass()?;
 
         let before = ListManaged(js_ast.Part).init(p.allocator);
+        const _before_guard = DeinitGuard<ListManaged(js_ast.Part)>{ ptr: &before };
         let after = ListManaged(js_ast.Part).init(p.allocator);
+        const _after_guard = DeinitGuard<ListManaged(js_ast.Part)>{ ptr: &after };
         let parts = ListManaged(js_ast.Part).init(p.allocator);
-        defer {
-            after.deinit();
-            before.deinit();
-        }
 
         if (p.options.bundle) {
             // The bundler requires a part for generated module wrappers. This
@@ -1587,6 +1587,24 @@ struct FakeWriter {
         if (data.len == 0) return 0;
         Output.print("{s}", .{data});
         return data.len;
+    }
+}
+
+struct DeinitGuard<Elem> {
+    ptr: *Elem!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+}
+
+struct ClearAndFreeGuard<Elem> {
+    ptr: *Elem!?,
+    ~init() {
+        if (p := _.ptr) {
+            p.clearAndFree();
+        }
     }
 }
 

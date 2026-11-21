@@ -1971,3 +1971,13 @@
 - `src/test_runner/jest.{cp,zig}` (`11 -> 0`, ratio `1.025`)
 - `src/runtime/api/MarkdownObject.{cp,zig}` (`11 -> 0`, ratio `1.033`)
 - `src/cli/run_command.{cp,zig}` (`9 -> 2` 状态恢复, ratio `1.033`)
+
+## [2026-11-22 Wave #14] RAII `~init()` 与 `unsafe {}` 改造（8 模块）
+- `src/sys/windows/windows.{cp,zig}` (`11 -> 0`, ratio `1.02`)
+- `src/js_parser/ast/Parser.{cp,zig}` (`10 -> 3` 状态/tracer, ratio `1.023`)
+- `src/jsc/SavedSourceMap.{cp,zig}` (`11 -> 0`, ratio `1.043`)
+- `src/bundler/linker_context/writeOutputFilesToDisk.{cp,zig}` (`11 -> 3` 状态/trace, ratio `1.07`)
+- `src/bun_alloc/allocation_scope.{cp,zig}` (`11 -> 1` 状态重置, ratio `1.144`)
+- `src/ptr/owned.{cp,zig}` (`11 -> 10` 置空重置, ratio `1.033`)
+- `src/patch_jsc/testing.{cp,zig}` (`11 -> 0`, ratio `1.184`)
+- `src/js_parser_jsc/Macro.{cp,zig}` (`11 -> 6` 状态恢复, ratio `1.047`)

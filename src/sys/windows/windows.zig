@@ -45,7 +45,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -66,15 +66,15 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-const Message = anyopaque;
+const Message = struct { __cp_no_message_sentinel: void = {} };
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const libuv = @import("../../libuv_sys/libuv.zig");
 pub const env = @import("./env.zig");
@@ -1567,7 +1567,7 @@ pub const KEY_EVENT_RECORD = extern struct {
     wRepeatCount: WORD,
     wVirtualKeyCode: WORD,
     wVirtualScanCode: WORD,
-    uChar: *KEY_EVENT_RECORD_uChar,
+    uChar: KEY_EVENT_RECORD_uChar,
     dwControlKeyState: DWORD,
 };
 
@@ -1600,7 +1600,7 @@ pub const INPUT_RECORD_Event = extern union {
 
 pub const INPUT_RECORD = extern struct {
     EventType: WORD,
-    Event: *INPUT_RECORD_Event,
+    Event: INPUT_RECORD_Event,
 };
 
 pub const DeleteFileOptions = struct {
@@ -1615,7 +1615,7 @@ pub const STARTUPINFOEXW = extern struct {
 
 pub const rescle = struct {
 
-pub fn setIcon(exe_path: [*:0]u16, icon: [*:0]u16) !void {
+pub fn setIcon(exe_path: [*:0]const u16, icon: [*:0]const u16) !void {
             _ = (comptime bun.assert(bun.Environment.isWindows));
             const status = rescle__setIcon(exe_path, icon);
             return (switch (status) {
@@ -1627,7 +1627,7 @@ else => error.IconEditError,
 });
     }
 
-pub fn setWindowsMetadata(exe_path: [*:0]u16, icon: ?[]const u8, title: ?[]const u8, publisher: ?[]const u8, version: ?[]const u8, description: ?[]const u8, copyright: ?[]const u8) !void {
+pub fn setWindowsMetadata(exe_path: [*:0]const u16, icon: ?[]const u8, title: ?[]const u8, publisher: ?[]const u8, version: ?[]const u8, description: ?[]const u8, copyright: ?[]const u8) !void {
             _ = (comptime bun.assert(bun.Environment.isWindows));
             if (version) |v| {
                 _ = &v;
@@ -1652,7 +1652,7 @@ pub fn setWindowsMetadata(exe_path: [*:0]u16, icon: ?[]const u8, title: ?[]const
             const allocator = bun.default_allocator;
             var icon_buf: bun.OSPathBuffer = undefined;
             _ = &icon_buf;
-            var icon_ptr: ?[*:0]u16 = null;
+            var icon_ptr: ?[*:0]const u16 = null;
             _ = &icon_ptr;
             if (icon) |i| {
                 _ = &i;
@@ -1668,95 +1668,75 @@ pub fn setWindowsMetadata(exe_path: [*:0]u16, icon: ?[]const u8, title: ?[]const
                 _ = &t;
                 title_w = try bun.strings.toUTF16AllocForReal(allocator, t, false, true);
             }
-            defer {
-            {
-                if (title_w) |tw| {
-                    _ = &tw;
-                    _ = allocator.free(tw);
-                }
-            }
-            }
+            var _title_guard = FreeSliceGuard([:0]u16){ .allocator = allocator, .slice = title_w };
+            _ = &_title_guard;
+            var ___title_guard_moved = false; _ = &___title_guard_moved;
+            defer if (!___title_guard_moved) { ___title_guard_moved = true; const __T = @TypeOf(_title_guard); if (@typeInfo(__T) == .optional) { if (_title_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _title_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _title_guard; _drop_val.__cp_deinit(); } };
             var publisher_w: ?[:0]u16 = null;
             _ = &publisher_w;
             if (publisher) |p| {
                 _ = &p;
                 publisher_w = try bun.strings.toUTF16AllocForReal(allocator, p, false, true);
             }
-            defer {
-            {
-                if (publisher_w) |pw| {
-                    _ = &pw;
-                    _ = allocator.free(pw);
-                }
-            }
-            }
+            var _publisher_guard = FreeSliceGuard([:0]u16){ .allocator = allocator, .slice = publisher_w };
+            _ = &_publisher_guard;
+            var ___publisher_guard_moved = false; _ = &___publisher_guard_moved;
+            defer if (!___publisher_guard_moved) { ___publisher_guard_moved = true; const __T = @TypeOf(_publisher_guard); if (@typeInfo(__T) == .optional) { if (_publisher_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _publisher_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _publisher_guard; _drop_val.__cp_deinit(); } };
             var version_w: ?[:0]u16 = null;
             _ = &version_w;
             if (version) |v| {
                 _ = &v;
                 version_w = try bun.strings.toUTF16AllocForReal(allocator, v, false, true);
             }
-            defer {
-            {
-                if (version_w) |vw| {
-                    _ = &vw;
-                    _ = allocator.free(vw);
-                }
-            }
-            }
+            var _version_guard = FreeSliceGuard([:0]u16){ .allocator = allocator, .slice = version_w };
+            _ = &_version_guard;
+            var ___version_guard_moved = false; _ = &___version_guard_moved;
+            defer if (!___version_guard_moved) { ___version_guard_moved = true; const __T = @TypeOf(_version_guard); if (@typeInfo(__T) == .optional) { if (_version_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _version_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _version_guard; _drop_val.__cp_deinit(); } };
             var description_w: ?[:0]u16 = null;
             _ = &description_w;
             if (description) |d| {
                 _ = &d;
                 description_w = try bun.strings.toUTF16AllocForReal(allocator, d, false, true);
             }
-            defer {
-            {
-                if (description_w) |dw| {
-                    _ = &dw;
-                    _ = allocator.free(dw);
-                }
-            }
-            }
+            var _description_guard = FreeSliceGuard([:0]u16){ .allocator = allocator, .slice = description_w };
+            _ = &_description_guard;
+            var ___description_guard_moved = false; _ = &___description_guard_moved;
+            defer if (!___description_guard_moved) { ___description_guard_moved = true; const __T = @TypeOf(_description_guard); if (@typeInfo(__T) == .optional) { if (_description_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _description_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _description_guard; _drop_val.__cp_deinit(); } };
             var copyright_w: ?[:0]u16 = null;
             _ = &copyright_w;
             if (copyright) |cr| {
                 _ = &cr;
                 copyright_w = try bun.strings.toUTF16AllocForReal(allocator, cr, false, true);
             }
-            defer {
-            {
-                if (copyright_w) |cw| {
-                    _ = &cw;
-                    _ = allocator.free(cw);
-                }
-            }
-            }
-            var title_ptr: ?[*:0]u16 = null;
+            var _copyright_guard = FreeSliceGuard([:0]u16){ .allocator = allocator, .slice = copyright_w };
+            _ = &_copyright_guard;
+            var ___copyright_guard_moved = false; _ = &___copyright_guard_moved;
+            defer if (!___copyright_guard_moved) { ___copyright_guard_moved = true; const __T = @TypeOf(_copyright_guard); if (@typeInfo(__T) == .optional) { if (_copyright_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _copyright_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _copyright_guard; _drop_val.__cp_deinit(); } };
+            var title_ptr: ?[*:0]const u16 = null;
             _ = &title_ptr;
             if (title_w) |tw| {
                 _ = &tw;
                 title_ptr = tw.ptr;
             }
-            var publisher_ptr: ?[*:0]u16 = null;
+            var publisher_ptr: ?[*:0]const u16 = null;
             _ = &publisher_ptr;
             if (publisher_w) |pw| {
                 _ = &pw;
                 publisher_ptr = pw.ptr;
             }
-            var version_ptr: ?[*:0]u16 = null;
+            var version_ptr: ?[*:0]const u16 = null;
             _ = &version_ptr;
             if (version_w) |vw| {
                 _ = &vw;
                 version_ptr = vw.ptr;
             }
-            var description_ptr: ?[*:0]u16 = null;
+            var description_ptr: ?[*:0]const u16 = null;
             _ = &description_ptr;
             if (description_w) |dw| {
                 _ = &dw;
                 description_ptr = dw.ptr;
             }
-            var copyright_ptr: ?[*:0]u16 = null;
+            var copyright_ptr: ?[*:0]const u16 = null;
             _ = &copyright_ptr;
             if (copyright_w) |cw| {
                 _ = &cw;
@@ -1798,6 +1778,67 @@ pub extern "c" fn FreeEnvironmentStringsW(penv: LPWSTR) callconv(.winapi) BOOL;
 
 pub extern "c" fn GetEnvironmentVariableW(lpName: ?LPCWSTR, lpBuffer: ?[*]WCHAR, nSize: DWORD) callconv(.winapi) DWORD;
 };
+
+pub const CloseHandleGuard = struct {
+    handle: ?HANDLE,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *CloseHandleGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.handle) |h| {
+                _ = &h;
+                _ = bun.windows.CloseHandle(h);
+            }
+    }
+};
+
+pub fn FreeSliceGuard(comptime Elem: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: ?Elem,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.allocator.free(s);
+                }
+        }
+    };
+}
+
+pub const EnvStringsGuard = struct {
+    ptr: ?LPWSTR,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *EnvStringsGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.ptr) |p| {
+                _ = &p;
+                _ = kernel32_2.FreeEnvironmentStringsW(p);
+            }
+    }
+};
+
+pub fn CloseGuard(comptime Elem: type) type {
+    return struct {
+        ptr: ?*Elem,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.close();
+                }
+        }
+    };
+}
 
 const WStrZ = [*:0]u16;
 pub const ntdll = windows.ntdll;
@@ -2049,7 +2090,10 @@ pub fn userUniqueId() u32 {
         _ = &buf;
         var size: u32 = @intCast(buf.len);
         _ = &size;
-        if ((GetUserNameW(@ptrCast((&buf)), (&size)) == 0)) {
+        if (((blk: {
+        break :blk GetUserNameW(@ptrCast((&buf)), (&size));
+
+}) == 0)) {
             if (Environment.isDebug) {
                 _ = std.debug.panic("GetUserNameW failed: {}", .{ bun.windows.GetLastError() });
             }
@@ -2200,12 +2244,18 @@ pub fn GetFinalPathNameByHandle(hFile: HANDLE, fmt: std.os.windows.GetFinalPathN
 pub fn getModuleHandleFromAddress(addr: usize) ?HMODULE {
         var module: HMODULE = undefined;
         _ = &module;
-        const rc = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, @ptrFromInt(addr), (&module));
+        const rc = (blk: {
+        break :blk GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, @ptrFromInt(addr), (&module));
+
+});
         return (if ((rc != 0)) module else null);
 }
 
 pub fn getModuleNameW(module: HMODULE, buf: []u16) ?[]const u16 {
-        const rc = GetModuleFileNameW(module, @ptrCast(buf.ptr), @intCast(buf.len));
+        const rc = (blk: {
+        break :blk GetModuleFileNameW(module, @ptrCast(buf.ptr), @intCast(buf.len));
+
+});
         if ((rc == 0)) {
             return null;
         }
@@ -2215,7 +2265,10 @@ pub fn getModuleNameW(module: HMODULE, buf: []u16) ?[]const u16 {
 pub fn DeleteFileBun(sub_path_w: []const u16, options: DeleteFileOptions) bun.sys.Maybe(void) {
         const create_options_flags: ULONG = (if (options.remove_dir) (FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT) else (windows.FILE_NON_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT));
         const path_len_bytes = @as(u16, @intCast((sub_path_w.len * 2)));
-        var nt_name = UNICODE_STRING{ .Length = path_len_bytes, .MaximumLength = path_len_bytes, .Buffer = @constCast(sub_path_w.ptr) };
+        var nt_name = UNICODE_STRING{ .Length = path_len_bytes, .MaximumLength = path_len_bytes, .Buffer = (blk: {
+        break :blk @constCast(sub_path_w.ptr);
+
+}) };
         _ = &nt_name;
         if (((sub_path_w[0] == 46) and (sub_path_w[1] == 0))) {
             nt_name.Length = 0;
@@ -2233,9 +2286,10 @@ pub fn DeleteFileBun(sub_path_w: []const u16, options: DeleteFileOptions) bun.sy
             _ = &e;
             return e;
         }
-        defer {
-        _ = bun.windows.CloseHandle(tmp_handle);
-        }
+        var _handle_guard = CloseHandleGuard{ .handle = tmp_handle };
+        _ = &_handle_guard;
+        var ___handle_guard_moved = false; _ = &___handle_guard_moved;
+        defer if (!___handle_guard_moved) { ___handle_guard_moved = true; const __T = @TypeOf(_handle_guard); if (@typeInfo(__T) == .optional) { if (_handle_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _handle_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _handle_guard; _drop_val.__cp_deinit(); } };
         var need_fallback = true;
         _ = &need_fallback;
         var info = windows.FILE_DISPOSITION_INFORMATION_EX{ .Flags = ((FILE_DISPOSITION_DELETE | FILE_DISPOSITION_POSIX_SEMANTICS) | FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE) };
@@ -2278,9 +2332,9 @@ pub fn editWin32BinarySubsystem(fd: bun.sys.File, subsystem: Subsystem) !void {
         _ = try fd.writer().writeInt(u16, @intFromEnum(subsystem), .little);
 }
 
-extern "c" fn rescle__setIcon(exe_path: [*:0]u16, icon: [*:0]u16) callconv(.c) c_int;
+extern "c" fn rescle__setIcon(exe_path: [*:0]const u16, icon: [*:0]const u16) callconv(.c) c_int;
 
-extern "c" fn rescle__setWindowsMetadata(exe_path: [*:0]u16, icon_path: ?[*:0]u16, title: ?[*:0]u16, publisher: ?[*:0]u16, version: ?[*:0]u16, description: ?[*:0]u16, copyright: ?[*:0]u16) callconv(.c) c_int;
+extern "c" fn rescle__setWindowsMetadata(exe_path: [*:0]const u16, icon_path: ?[*:0]const u16, title: ?[*:0]const u16, publisher: ?[*:0]const u16, version: ?[*:0]const u16, description: ?[*:0]const u16, copyright: ?[*:0]const u16) callconv(.c) c_int;
 
 pub fn updateStdioModeFlags(i: bun.FD.Stdio, opts: UpdateStdioModeFlagsOptions) !DWORD {
         const fd = i.fd();
@@ -2299,7 +2353,10 @@ pub fn updateStdioModeFlags(i: bun.FD.Stdio, opts: UpdateStdioModeFlagsOptions) 
 pub fn isWatcherChild() bool {
         var buf: [1]u16 = undefined;
         _ = &buf;
-        return (c.GetEnvironmentVariableW(@constCast(watcherChildEnv.ptr), (&buf), 1) > 0);
+        return ((blk: {
+        break :blk c.GetEnvironmentVariableW(@constCast(watcherChildEnv.ptr), (&buf), 1);
+
+}) > 0);
 }
 
 pub fn becomeWatcherManager(allocator: std.mem.Allocator) noreturn {
@@ -2341,13 +2398,17 @@ pub fn spawnWatcherChild(allocator: std.mem.Allocator, procinfo: *std.os.windows
         _ = &attr_size;
         _ = InitializeProcThreadAttributeList(null, 1, 0, (&attr_size));
         const p = try allocator.alloc(u8, attr_size);
-        defer {
-        _ = allocator.free(p);
-        }
+        var _p_guard = FreeSliceGuard([]u8){ .allocator = allocator, .slice = p };
+        _ = &_p_guard;
+        var ___p_guard_moved = false; _ = &___p_guard_moved;
+        defer if (!___p_guard_moved) { ___p_guard_moved = true; const __T = @TypeOf(_p_guard); if (@typeInfo(__T) == .optional) { if (_p_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _p_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _p_guard; _drop_val.__cp_deinit(); } };
         if ((InitializeProcThreadAttributeList(p.ptr, 1, 0, (&attr_size)) == 0)) {
             return error.Win32Error;
         }
-        if ((UpdateProcThreadAttribute(p.ptr, 0, c.PROC_THREAD_ATTRIBUTE_JOB_LIST, @ptrCast((&job)), @sizeOf(HANDLE), null, null) == 0)) {
+        if ((UpdateProcThreadAttribute(p.ptr, 0, c.PROC_THREAD_ATTRIBUTE_JOB_LIST, (blk: {
+        break :blk @ptrCast((&job));
+
+}), @sizeOf(HANDLE), null, null) == 0)) {
             return error.Win32Error;
         }
         const flags: std.os.windows.CreateProcessFlags = .{ .create_unicode_environment = true, .extended_startupinfo_present = true };
@@ -2358,14 +2419,10 @@ pub fn spawnWatcherChild(allocator: std.mem.Allocator, procinfo: *std.os.windows
         wbuf[cp_cast_int(usize, image_path.len)] = 0;
         const image_pathZ = wbuf[0..image_path.len :0];
         const kernelenv = kernel32_2.GetEnvironmentStringsW();
-        defer {
-        {
-            if (kernelenv) |envptr| {
-                _ = &envptr;
-                _ = kernel32_2.FreeEnvironmentStringsW(envptr);
-            }
-        }
-        }
+        var _env_guard = EnvStringsGuard{ .ptr = kernelenv };
+        _ = &_env_guard;
+        var ___env_guard_moved = false; _ = &___env_guard_moved;
+        defer if (!___env_guard_moved) { ___env_guard_moved = true; const __T = @TypeOf(_env_guard); if (@typeInfo(__T) == .optional) { if (_env_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _env_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _env_guard; _drop_val.__cp_deinit(); } };
         var size: usize = 0;
         _ = &size;
         if (kernelenv) |pointer| {
@@ -2379,9 +2436,10 @@ pub fn spawnWatcherChild(allocator: std.mem.Allocator, procinfo: *std.os.windows
         }
         var envbuf = try allocator.alloc(u16, ((size + watcherChildEnv.len) + 4));
         _ = &envbuf;
-        defer {
-        _ = allocator.free(envbuf);
-        }
+        var _envbuf_guard = FreeSliceGuard([]u16){ .allocator = allocator, .slice = envbuf };
+        _ = &_envbuf_guard;
+        var ___envbuf_guard_moved = false; _ = &___envbuf_guard_moved;
+        defer if (!___envbuf_guard_moved) { ___envbuf_guard_moved = true; const __T = @TypeOf(_envbuf_guard); if (@typeInfo(__T) == .optional) { if (_envbuf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _envbuf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _envbuf_guard; _drop_val.__cp_deinit(); } };
         if (kernelenv) |pointer| {
             _ = &pointer;
             _ = @memcpy(envbuf[0..size], pointer);
@@ -2394,7 +2452,10 @@ pub fn spawnWatcherChild(allocator: std.mem.Allocator, procinfo: *std.os.windows
         var startupinfo = STARTUPINFOEXW{ .StartupInfo = .{ .cb = @sizeOf(STARTUPINFOEXW), .lpReserved = null, .lpDesktop = null, .lpTitle = null, .dwX = 0, .dwY = 0, .dwXSize = 0, .dwYSize = 0, .dwXCountChars = 0, .dwYCountChars = 0, .dwFillAttribute = 0, .dwFlags = c.STARTF_USESTDHANDLES, .wShowWindow = 0, .cbReserved2 = 0, .lpReserved2 = null, .hStdInput = std.fs.File.stdin().handle, .hStdOutput = std.fs.File.stdout().handle, .hStdError = std.fs.File.stderr().handle }, .lpAttributeList = p.ptr };
         _ = &startupinfo;
         _ = @memset(std.mem.asBytes(procinfo), 0);
-        const rc = kernel32.CreateProcessW(image_pathZ.ptr, c.GetCommandLineW(), null, null, 1, flags, envbuf.ptr, null, @ptrCast((&startupinfo)), procinfo);
+        const rc = kernel32.CreateProcessW(image_pathZ.ptr, c.GetCommandLineW(), null, null, 1, flags, envbuf.ptr, null, (blk: {
+        break :blk @ptrCast((&startupinfo));
+
+}), procinfo);
         if ((rc == 0)) {
             return error.Win32Error;
         }
@@ -2450,7 +2511,10 @@ pub fn moveOpenedFileAt(src_fd: bun.FD, new_dir_fd: bun.FD, new_file_name: []con
         if ((struct_len > struct_buf_len)) {
             return Maybe(void).errno(bun.sys.E.NAMETOOLONG, .NtSetInformationFile);
         }
-        const rename_info: *w.FILE_RENAME_INFORMATION_EX = @ptrCast((&rename_info_buf));
+        const rename_info: *w.FILE_RENAME_INFORMATION_EX = (blk: {
+        break :blk @ptrCast((&rename_info_buf));
+
+});
         var io_status_block: w.IO_STATUS_BLOCK = undefined;
         _ = &io_status_block;
         var flags: w.ULONG = (w.FILE_RENAME_POSIX_SEMANTICS | w.FILE_RENAME_IGNORE_READONLY_ATTRIBUTE);
@@ -2459,7 +2523,9 @@ pub fn moveOpenedFileAt(src_fd: bun.FD, new_dir_fd: bun.FD, new_file_name: []con
             flags = (flags | w.FILE_RENAME_REPLACE_IF_EXISTS);
         }
         rename_info.* = .{ .Flags = flags, .RootDirectory = (if (std.fs.path.isAbsoluteWindowsWTF16(new_file_name)) null else new_dir_fd.cast()), .FileNameLength = @intCast((new_file_name.len * 2)), .FileName = undefined };
-        _ = @memcpy(@as([*]u16, @ptrCast(@alignCast(&(rename_info.FileName))))[0..new_file_name.len], new_file_name);
+        {
+            _ = @memcpy(@as([*]u16, @ptrCast(@alignCast(&(rename_info.FileName))))[0..new_file_name.len], new_file_name);
+        }
         const rc = w.ntdll.NtSetInformationFile(src_fd.cast(), (&io_status_block), rename_info, @intCast(struct_len), .FileRenameInformationEx);
         _ = log("moveOpenedFileAt({f} ->> {f} '{f}', {s}) = {s}", .{ src_fd, new_dir_fd, bun.fmt.utf16(new_file_name), (if (replace_if_exists) "replace_if_exists" else "no flag"), @tagName(rc) });
         if (bun.Environment.isDebug) {
@@ -2476,15 +2542,17 @@ pub fn moveOpenedFileAtLoose(src_fd: bun.FD, new_dir_fd: bun.FD, new_path: []con
         if (std.mem.lastIndexOfScalar(u16, new_path, 92)) |last_slash| {
             _ = &last_slash;
             const dirname = new_path[0..last_slash];
-            const fd = (switch (bun.sys.openDirAtWindows(new_dir_fd, dirname, .{ .can_rename_or_delete = true, .iterable = false })) {
+            var fd = (switch (bun.sys.openDirAtWindows(new_dir_fd, dirname, .{ .can_rename_or_delete = true, .iterable = false })) {
 .err => |e| {
 return .{ .err = e };
 },
 .result => |fd| fd,
 });
-            defer {
-            _ = fd.close();
-            }
+            _ = &fd;
+            var _fd_guard = CloseGuard(bun.FD){ .ptr = (&fd) };
+            _ = &_fd_guard;
+            var ___fd_guard_moved = false; _ = &___fd_guard_moved;
+            defer if (!___fd_guard_moved) { ___fd_guard_moved = true; const __T = @TypeOf(_fd_guard); if (@typeInfo(__T) == .optional) { if (_fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fd_guard; _drop_val.__cp_deinit(); } };
             const basename = new_path[(last_slash + 1)..];
             return moveOpenedFileAt(src_fd, fd, basename, replace_if_exists);
         }
@@ -2492,7 +2560,7 @@ return .{ .err = e };
 }
 
 pub fn renameAtW(old_dir_fd: bun.FD, old_path_w: []const u16, new_dir_fd: bun.FD, new_path_w: []const u16, replace_if_exists: bool) Maybe(void) {
-        const src_fd = brk: {
+        var src_fd = brk: {
         break :brk (switch (bun.sys.openFileAtWindows(old_dir_fd, old_path_w, .{ .access_mask = (((w.SYNCHRONIZE | w.GENERIC_WRITE) | w.DELETE) | w.FILE_TRAVERSE), .disposition = w.FILE_OPEN, .options = (w.FILE_SYNCHRONOUS_IO_NONALERT | w.FILE_OPEN_REPARSE_POINT) })) {
 .err => (switch (bun.sys.openFileAtWindows(old_dir_fd, old_path_w, .{ .access_mask = ((w.SYNCHRONIZE | w.GENERIC_WRITE) | w.DELETE), .disposition = w.FILE_OPEN, .options = (w.FILE_SYNCHRONOUS_IO_NONALERT | w.FILE_OPEN_REPARSE_POINT) })) {
 .err => |err2| {
@@ -2504,9 +2572,11 @@ return .{ .err = err2 };
 });
 
 };
-        defer {
-        _ = src_fd.close();
-        }
+        _ = &src_fd;
+        var _src_fd_guard = CloseGuard(bun.FD){ .ptr = (&src_fd) };
+        _ = &_src_fd_guard;
+        var ___src_fd_guard_moved = false; _ = &___src_fd_guard_moved;
+        defer if (!___src_fd_guard_moved) { ___src_fd_guard_moved = true; const __T = @TypeOf(_src_fd_guard); if (@typeInfo(__T) == .optional) { if (_src_fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_fd_guard; _drop_val.__cp_deinit(); } };
         return moveOpenedFileAt(src_fd, new_dir_fd, new_path_w, replace_if_exists);
 }
 

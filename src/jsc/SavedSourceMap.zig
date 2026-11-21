@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const MissingSourceMapNoteInfo = struct {
@@ -78,6 +78,38 @@ pub fn print() void {
             }
     }
 };
+
+pub fn UnlockGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    _ = p.unlock();
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        alloc: std.mem.Allocator,
+        slice: []T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if ((self.slice.len > 0)) {
+                    _ = self.alloc.free(self.slice);
+                }
+        }
+    };
+}
 
 pub const SavedSourceMap = @This();
 
@@ -112,14 +144,18 @@ pub fn putDevServerSourceProvider(self: *SavedSourceMap, opaque_source_provider:
 
 pub fn removeDevServerSourceProvider(self: *SavedSourceMap, opaque_source_provider: *anyopaque, path: []const u8) void {
         _ = self.lock();
-        defer {
-        _ = self.unlock();
-        }
+        var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
         const entry = ((self.map.getEntry(bun.hash(path))) orelse { return; });
         const old_value = Value.@"from"(entry.value_ptr.*);
         if (old_value.get(DevServerSourceProvider)) |prov| {
             _ = &prov;
-            if ((@intFromPtr(prov) == @intFromPtr(opaque_source_provider))) {
+            if ((blk: {
+            break :blk (@intFromPtr(prov) == @intFromPtr(opaque_source_provider));
+
+})) {
                 _ = self.map.removeByPtr(entry.key_ptr);
             }
         } else {
@@ -127,7 +163,10 @@ pub fn removeDevServerSourceProvider(self: *SavedSourceMap, opaque_source_provid
                 _ = &map;
                 if (map.underlying_provider.provider()) |prov| {
                     _ = &prov;
-                    if ((@intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider))) {
+                    if ((blk: {
+                    break :blk (@intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider));
+
+})) {
                         _ = self.map.removeByPtr(entry.key_ptr);
                         _ = map.deref();
                     }
@@ -137,20 +176,27 @@ pub fn removeDevServerSourceProvider(self: *SavedSourceMap, opaque_source_provid
 }
 
 pub fn putZigSourceProvider(self: *SavedSourceMap, opaque_source_provider: *anyopaque, path: []const u8) void {
-        const source_provider: *SourceProviderMap = @ptrCast(opaque_source_provider);
+        const source_provider: *SourceProviderMap = (blk: {
+        break :blk @ptrCast(opaque_source_provider);
+
+});
         _ = bun.handleOom(self.putValue(path, Value.init(source_provider)));
 }
 
 pub fn removeZigSourceProvider(self: *SavedSourceMap, opaque_source_provider: *anyopaque, path: []const u8) void {
         _ = self.lock();
-        defer {
-        _ = self.unlock();
-        }
+        var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
         const entry = ((self.map.getEntry(bun.hash(path))) orelse { return; });
         const old_value = Value.@"from"(entry.value_ptr.*);
         if (old_value.get(SourceProviderMap)) |prov| {
             _ = &prov;
-            if ((@intFromPtr(prov) == @intFromPtr(opaque_source_provider))) {
+            if ((blk: {
+            break :blk (@intFromPtr(prov) == @intFromPtr(opaque_source_provider));
+
+})) {
                 _ = self.map.removeByPtr(entry.key_ptr);
             }
         } else {
@@ -158,7 +204,10 @@ pub fn removeZigSourceProvider(self: *SavedSourceMap, opaque_source_provider: *a
                 _ = &map;
                 if (map.underlying_provider.provider()) |prov| {
                     _ = &prov;
-                    if ((@intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider))) {
+                    if ((blk: {
+                    break :blk (@intFromPtr(prov.ptr()) == @intFromPtr(opaque_source_provider));
+
+})) {
                         _ = self.map.removeByPtr(entry.key_ptr);
                         _ = map.deref();
                     }
@@ -174,9 +223,10 @@ pub fn onSourceMapChunk(self: *SavedSourceMap, chunk: SourceMap.Chunk, source: *
 pub fn deinit(self: *SavedSourceMap) void {
         {
             _ = self.lock();
-            defer {
-            _ = self.unlock();
-            }
+            var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+            _ = &_unlock;
+            var ___unlock_moved = false; _ = &___unlock_moved;
+            defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
             var iter = self.map.valueIterator();
             _ = &iter;
             while (iter.next()) |val| {
@@ -192,7 +242,10 @@ pub fn deinit(self: *SavedSourceMap) void {
                     } else {
                         if (value.get(InternalSourceMap)) |ism| {
                             _ = &ism;
-                            var temp = InternalSourceMap{ .data = @alignCast(@ptrCast(ism)) };
+                            var temp = InternalSourceMap{ .data = (blk: {
+                            break :blk @alignCast(@ptrCast(ism));
+
+}) };
                             _ = &temp;
                             _ = temp.deinit();
                         }
@@ -209,26 +262,30 @@ pub fn putMappings(self: *SavedSourceMap, source: *const logger.Source, mappings
             const incoming: InternalSourceMap = .{ .data = mappings.list.items.ptr };
             if ((incoming.mappingCount() == 0)) {
                 _ = self.lock();
-                defer {
-                _ = self.unlock();
-                }
+                var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+                _ = &_unlock;
+                var ___unlock_moved = false; _ = &___unlock_moved;
+                defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
                 if (self.map.contains(bun.hash(source.path.text))) {
                     return;
                 }
             }
         }
         const blob = try bun.default_allocator.dupe(u8, mappings.list.items);
-        errdefer {
-        _ = bun.default_allocator.free(blob);
-        }
+        var blob_guard = FreeGuard(u8){ .alloc = bun.default_allocator, .slice = blob };
+        _ = &blob_guard;
+        var __blob_guard_moved = false; _ = &__blob_guard_moved;
+        defer if (!__blob_guard_moved) { __blob_guard_moved = true; const __T = @TypeOf(blob_guard); if (@typeInfo(__T) == .optional) { if (blob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { blob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = blob_guard; _drop_val.__cp_deinit(); } };
         _ = try self.putValue(source.path.text, Value.init(bun.cast(*InternalSourceMap, blob.ptr)));
+        blob_guard.slice = &.{};
 }
 
 pub fn putValue(self: *SavedSourceMap, path: []const u8, value: Value) !void {
         _ = self.lock();
-        defer {
-        _ = self.unlock();
-        }
+        var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
         _ = self.find_cache.invalidateAll();
         self.last_ism = null;
         const entry = try self.map.getOrPut(bun.hash(path));
@@ -247,14 +304,20 @@ pub fn putValue(self: *SavedSourceMap, path: []const u8, value: Value) !void {
                 } else {
                     if (old_value.get(InternalSourceMap)) |ism| {
                         _ = &ism;
-                        var temp = InternalSourceMap{ .data = @alignCast(@ptrCast(ism)) };
+                        var temp = InternalSourceMap{ .data = (blk: {
+                        break :blk @alignCast(@ptrCast(ism));
+
+}) };
                         _ = &temp;
                         _ = temp.deinit();
                     }
                 }
             }
         }
-        entry.value_ptr.* = @ptrCast(value.ptr());
+        entry.value_ptr.* = (blk: {
+        break :blk @ptrCast(value.ptr());
+
+});
 }
 
 pub fn getWithContent(self: *SavedSourceMap, path: []const u8, hint: SourceMap.ParseUrlResultHint) SourceMap.ParseUrl {
@@ -266,19 +329,27 @@ pub fn getWithContent(self: *SavedSourceMap, path: []const u8, hint: SourceMap.P
 });
         switch (Value.@"from"(mapping.value_ptr.*).tag()) {
 @field(Value.Tag, @typeName(InternalSourceMap)) => {
-defer {
-        _ = self.unlock();
-        }
-        const ism: InternalSourceMap = .{ .data = @alignCast(@ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap))) };
+var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
+        const ism: InternalSourceMap = .{ .data = (blk: {
+        break :blk @alignCast(@ptrCast(Value.@"from"(mapping.value_ptr.*).@"as"(InternalSourceMap)));
+
+}) };
         const result = bun.new(ParsedSourceMap, .{ .ref_count = .init(), .input_line_count = ism.inputLineCount(), .internal = ism });
-        mapping.value_ptr.* = @ptrCast(Value.init(result).ptr());
+        mapping.value_ptr.* = (blk: {
+        break :blk @ptrCast(Value.init(result).ptr());
+
+});
         _ = result.ref();
         return .{ .map = result };
 },
 @field(Value.Tag, @typeName(ParsedSourceMap)) => {
-defer {
-        _ = self.unlock();
-        }
+var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
         const map = Value.@"from"(mapping.value_ptr.*).@"as"(ParsedSourceMap);
         _ = map.ref();
         return .{ .map = map };
@@ -296,9 +367,10 @@ const ptr: *SourceProviderMap = Value.@"from"(mapping.value_ptr.*).@"as"(SourceP
             }
         }
         _ = self.lock();
-        defer {
-        _ = self.unlock();
-        }
+        var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
         _ = self.map.remove(hash);
         const storage = MissingSourceMapNoteInfo.storage[0..path.len];
         _ = @memcpy(storage, path);
@@ -318,9 +390,10 @@ const ptr: *BakeSourceProvider = Value.@"from"(mapping.value_ptr.*).@"as"(BakeSo
             }
         }
         _ = self.lock();
-        defer {
-        _ = self.unlock();
-        }
+        var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
         _ = self.map.remove(hash);
         const storage = MissingSourceMapNoteInfo.storage[0..path.len];
         _ = @memcpy(storage, path);
@@ -340,9 +413,10 @@ const ptr: *DevServerSourceProvider = Value.@"from"(mapping.value_ptr.*).@"as"(D
             }
         }
         _ = self.lock();
-        defer {
-        _ = self.unlock();
-        }
+        var _unlock = UnlockGuard(SavedSourceMap){ .ptr = self };
+        _ = &_unlock;
+        var ___unlock_moved = false; _ = &___unlock_moved;
+        defer if (!___unlock_moved) { ___unlock_moved = true; const __T = @TypeOf(_unlock); if (@typeInfo(__T) == .optional) { if (_unlock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock; _drop_val.__cp_deinit(); } };
         _ = self.map.remove(hash);
         const storage = MissingSourceMapNoteInfo.storage[0..path.len];
         _ = @memcpy(storage, path);

@@ -25,6 +25,35 @@ pub const ParseTask = bun.bundle_v2.ParseTask;
 type string = []const u8;
 type MaybeByteSlice = ([]const u8)?;
 
+pub struct CloseGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) { p.close(); }
+    }
+}
+
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) { p.deinit(); }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) { p.deref(); }
+    }
+}
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        if (_.slice.len > 0) { _.alloc.free(_.slice); }
+    }
+}
+
 pub fn writeOutputFilesToDisk(
     c: *LinkerContext,
     root_path: string,
@@ -49,22 +78,19 @@ pub fn writeOutputFilesToDisk(
 
         return e;
     };
-    defer root_dir.close();
+    const _root_dir_guard = CloseGuard<std.fs.Dir>{ ptr: &root_dir };
     // Optimization: when writing to disk, we can re-use the memory
     let max_heap_allocator: bun.MaxHeapAllocator = undefined;
-    defer max_heap_allocator.deinit();
-
     const code_allocator = max_heap_allocator.init(bun.default_allocator);
+    const _max_heap_guard = DeinitGuard<bun.MaxHeapAllocator>{ ptr: &max_heap_allocator };
 
     let max_heap_allocator_source_map: bun.MaxHeapAllocator = undefined;
-    defer max_heap_allocator_source_map.deinit();
-
     const source_map_allocator = max_heap_allocator_source_map.init(bun.default_allocator);
+    const _sm_heap_guard = DeinitGuard<bun.MaxHeapAllocator>{ ptr: &max_heap_allocator_source_map };
 
     let max_heap_allocator_inline_source_map: bun.MaxHeapAllocator = undefined;
-    defer max_heap_allocator_inline_source_map.deinit();
-
     const code_with_inline_source_map_allocator = max_heap_allocator_inline_source_map.init(bun.default_allocator);
+    const _ism_heap_guard = DeinitGuard<bun.MaxHeapAllocator>{ ptr: &max_heap_allocator_inline_source_map };
 
     let pathbuf: bun.PathBuffer = undefined;
     const bv2: *bundler.BundleV2 = @fieldParentPtr("linker", c);
@@ -191,7 +217,7 @@ pub fn writeOutputFilesToDisk(
                         data: jsc.Node.StringOrBuffer{
                             buffer: bun.api.node.Buffer{
                                 buffer: {
-                                    ptr: @constCast(output_source_map.ptr),
+                                    ptr: unsafe { @constCast(output_source_map.ptr) },
                                     // TODO: handle > 4 GB files
                                     len: @as(u32, @truncate(output_source_map.len)),
                                     byte_len: @as(u32, @truncate(output_source_map.len)),
@@ -267,24 +293,24 @@ pub fn writeOutputFilesToDisk(
                 let source_provider_url = bun.String.createFormat("{s}" ++ bun.bytecode_extension, [chunk.final_rel_path])?;
                 source_provider_url.ref();
 
-                defer source_provider_url.deref();
+                const _sp_url_guard = DerefGuard<bun.String>{ ptr: &source_provider_url };
 
                 if (result := jsc.CachedBytecode.generate(c.options.output_format, code_result.buffer, &source_provider_url)) {
-                    const source_provider_url_str = source_provider_url.toSlice(bun.default_allocator);
-                    defer source_provider_url_str.deinit();
+                    let source_provider_url_str = source_provider_url.toSlice(bun.default_allocator);
+                    const _sp_url_str_guard = DeinitGuard<@TypeOf(source_provider_url_str)>{ ptr: &source_provider_url_str };
                     const bytecode = result[0];
                     const cached_bytecode = result[1];
                     debug("Bytecode cache generated {s}: {f}", [source_provider_url_str.slice(), bun.fmt.size(bytecode.len, { space_between_number_and_unit: true })]);
                     @memcpy(fdpath[0..chunk.final_rel_path.len], chunk.final_rel_path);
                     fdpath[chunk.final_rel_path.len..][0..bun.bytecode_extension.len].* = bun.bytecode_extension.*;
-                    defer cached_bytecode.deref();
+                    const _cb_guard = DerefGuard<jsc.CachedBytecode>{ ptr: cached_bytecode };
                     switch (jsc.Node.fs.NodeFS.writeFileWithPathBuffer(
                         &pathbuf,
                         {
                             data: {
                                 buffer: {
                                     buffer: {
-                                        ptr: @constCast(bytecode.ptr),
+                                        ptr: unsafe { @constCast(bytecode.ptr) },
                                         len: @as(u32, @truncate(bytecode.len)),
                                         byte_len: @as(u32, @truncate(bytecode.len)),
                                     },
@@ -337,7 +363,7 @@ pub fn writeOutputFilesToDisk(
                 data: {
                     buffer: {
                         buffer: {
-                            ptr: @constCast(code_result.buffer.ptr),
+                            ptr: unsafe { @constCast(code_result.buffer.ptr) },
                             // TODO: handle > 4 GB files
                             len: @as(u32, @truncate(code_result.buffer.len)),
                             byte_len: @as(u32, @truncate(code_result.buffer.len)),
@@ -436,9 +462,7 @@ pub fn writeOutputFilesToDisk(
             const bytes = src.value.buffer.bytes;
             src.value.buffer.bytes.len = 0;
 
-            defer {
-                src.value.buffer.allocator.free(bytes);
-            }
+            const _bytes_guard = FreeGuard<u8>{ alloc: src.value.buffer.allocator, slice: bytes };
 
             if (rel_parent := std.fs.path.dirname(src.dest_path)) {
                 if (rel_parent.len > 0) {
@@ -459,7 +483,7 @@ pub fn writeOutputFilesToDisk(
                     data: {
                         buffer: {
                             buffer: {
-                                ptr: @constCast(bytes.ptr),
+                                ptr: unsafe { @constCast(bytes.ptr) },
                                 len: @as(u32, @truncate(bytes.len)),
                                 byte_len: @as(u32, @truncate(bytes.len)),
                             },

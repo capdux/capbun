@@ -271,3 +271,7 @@
 ### [2026-11-22 Wave #13] RAII `~init()` + `unsafe {}` 专项改造（10 模块，全仓 `zig:check` + `bun bd test` 进行中）
 - 完成 `init_command`, `scanImportsAndExports`, `sourcemap`, `tls_socket_functions`, `SSLConfig`, `node_process`, `bake`, `jest`, `MarkdownObject`, `run_command` 共 10 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.937 ~ 1.092 <= 1.2x`）；`bun run zig:check` 5/5 PASS。
+
+### [2026-11-22 Wave #14] RAII `~init()` + `unsafe {}` 专项改造（8 模块，全仓 `zig:check` + `bun bd test` 进行中）
+- 完成 `windows`, `Parser`, `SavedSourceMap`, `writeOutputFilesToDisk`, `allocation_scope`, `owned`, `testing`, `Macro` 共 8 个核心模块的 `~init()` RAII 析构与 `unsafe {}` (E0209) 合规化。
+- 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `1.02 ~ 1.184 <= 1.2x`）；`bun run zig:check` 5/5 PASS。

@@ -8,6 +8,16 @@ const PointerInfo = ptr_meta.PointerInfo;
 
 const owned = @This();
 
+struct MemoryDeinitGuard<T> {
+    ptr: (*T!)? = null,
+
+    ~init() {
+        if (p := _.ptr) {
+            bun.memory.deinit(p);
+        }
+    }
+}
+
 fn OptionalPtr(comptime P: type): type {
     return @Type(.{ .optional = .{ .child = P } });
 }
@@ -340,7 +350,8 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
                 this.#pointer ?? return owned.Dynamic(Pointer).initNull()
             else
                 this.#pointer;
-            defer bun.memory.deinit(&this.#allocator);
+            const alloc_guard = MemoryDeinitGuard<Allocator>{ ptr: unsafe { &this.#allocator } };
+            * = alloc_guard;
             return owned.Dynamic(Pointer).fromRawIn(data, this.getStdAllocator());
         }
 

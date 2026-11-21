@@ -1547,3 +1547,7 @@
 ## [2026-11-22 Wave #13] RAII 改造与 `unsafe {}` 经验
 - `bake.cp`：补全 `BakeServerComponents` 全部字段、`parsePluginArray: void!bun.JSError`、`react/auto/resolve: !Framework`、定长 `[8][]const u8` 数组字面量，以及 `if (fsr.entry_client != null)` 直接取址避开 `*entry_client :=` 二次解引用。
 - `scanImportsAndExports.cp`：`ExportStarCtxDeinitGuard` 仅在 `export_star_ctx` 初始化后挂载非空指针 `&export_star_ctx.?`，避开 `*ExportStarContext?` 双重可选指针校验差异。
+
+## [2026-11-22 Wave #14] RAII 改造与 `unsafe {}` 经验
+- `writeOutputFilesToDisk.cp`：`FreeGuard<T>` 切片字段采用 `[]const T` 以同时兼容可变与只读切片释放。
+- `allocation_scope.cp` / `Macro.cp`：`RawFreeGuard` 与 `ClearAndFreeGuard` 在成功移交所有权路径显式解除武装，避免重复释放。

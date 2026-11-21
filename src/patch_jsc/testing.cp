@@ -9,6 +9,25 @@ const PatchFile = bun.patch.PatchFile;
 const gitDiffInternal = bun.patch.gitDiffInternal;
 const parsePatchFile = bun.patch.parsePatchFile;
 
+struct DerefGuard<T> {
+    ptr: *T!? = null,
+    ~init() { if (p := _.ptr) unsafe { p.deref(); } }
+}
+struct DeinitGuard<T> {
+    ptr: *T!? = null,
+    ~init() { if (p := _.ptr) unsafe { p.deinit(); } }
+}
+struct DeinitAllocGuard<T> {
+    ptr: *T!? = null,
+    allocator: std.mem.Allocator,
+    ~init() { if (p := _.ptr) unsafe { p.deinit(_.allocator); } }
+}
+struct FreeGuard<T> {
+    slice: T? = null,
+    allocator: std.mem.Allocator,
+    ~init() { if (s := _.slice) _.allocator.free(s); }
+}
+
 struct ApplyArgs {
     patchfile_txt: jsc.ZigString.Slice,
     patchfile: PatchFile,
@@ -32,31 +51,33 @@ pub struct TestingAPIs {
         const old_folder_jsval = arguments.nextEat() orelse {
             return globalThis.throw("expected 2 strings", {});
         };
-        const old_folder_bunstr = old_folder_jsval.toBunString(globalThis)?;
-        defer old_folder_bunstr.deref();
+        let old_folder_bunstr = old_folder_jsval.toBunString(globalThis)?;
+        const _g_old_bunstr = DerefGuard<@TypeOf(old_folder_bunstr)>{ ptr: &old_folder_bunstr };
 
         const new_folder_jsval = arguments.nextEat() orelse {
             return globalThis.throw("expected 2 strings", {});
         };
-        const new_folder_bunstr = new_folder_jsval.toBunString(globalThis)?;
-        defer new_folder_bunstr.deref();
+        let new_folder_bunstr = new_folder_jsval.toBunString(globalThis)?;
+        const _g_new_bunstr = DerefGuard<@TypeOf(new_folder_bunstr)>{ ptr: &new_folder_bunstr };
 
-        const old_folder = old_folder_bunstr.toUTF8(bun.default_allocator);
-        defer old_folder.deinit();
+        let old_folder = old_folder_bunstr.toUTF8(bun.default_allocator);
+        const _g_old_folder = DeinitGuard<@TypeOf(old_folder)>{ ptr: &old_folder };
 
-        const new_folder = new_folder_bunstr.toUTF8(bun.default_allocator);
-        defer new_folder.deinit();
+        let new_folder = new_folder_bunstr.toUTF8(bun.default_allocator);
+        const _g_new_folder = DeinitGuard<@TypeOf(new_folder)>{ ptr: &new_folder };
 
         return switch (gitDiffInternal(bun.default_allocator, old_folder.slice(), new_folder.slice()) catch e => {
             return globalThis.throwError(e, "failed to make diff");
         }) {
             .result s => {
-                defer s.deinit();
-                return bun.String.fromBytes(s.items).toJS(globalThis);
+                let s_mut = s;
+                const _g_s = DeinitGuard<@TypeOf(s_mut)>{ ptr: &s_mut };
+                return bun.String.fromBytes(s_mut.items).toJS(globalThis);
             },
             .err e => {
-                defer e.deinit();
-                return globalThis.throw("failed to make diff: {s}", [e.items]);
+                let e_mut = e;
+                const _g_e = DeinitGuard<@TypeOf(e_mut)>{ ptr: &e_mut };
+                return globalThis.throw("failed to make diff: {s}", [e_mut.items]);
             },
         };
     }
@@ -66,7 +87,7 @@ pub struct TestingAPIs {
             .err e => return e,
             .result a => a,
         };
-        defer args.deinit();
+        const _g_args = DeinitGuard<ApplyArgs>{ ptr: &args };
 
         if (err := args.patchfile.apply(bun.default_allocator, args.dirfd)) {
             return globalThis.throwValue(err.toJS(globalThis)?);
@@ -93,7 +114,7 @@ pub struct TestingAPIs {
                 return globalThis.throwError(e, "failed to parse patch file");
             }
         };
-        defer patchfile.deinit(bun.default_allocator);
+        const _g_patchfile = DeinitAllocGuard<PatchFile>{ ptr: &patchfile, allocator: bun.default_allocator };
 
         const str = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", [std.json.fmt(patchfile, {})]));
         const outstr = bun.String.borrowUTF8(str);
@@ -114,9 +135,9 @@ pub struct TestingAPIs {
         let dir_fd = bun.FD.cwd();
         if (dir_js := arguments.nextEat()) {
             let bunstr = dir_js.toBunString(globalThis) catch return .initErr(.js_undefined);
-            defer bunstr.deref();
+            const _g_bunstr = DerefGuard<@TypeOf(bunstr)>{ ptr: &bunstr };
             const path = bunstr.toOwnedSliceZ(bun.default_allocator) catch unreachable;
-            defer bun.default_allocator.free(path);
+            const _g_path = FreeGuard<@TypeOf(path)>{ slice: path, allocator: bun.default_allocator };
 
             dir_fd = switch (bun.sys.open(path, bun.O.DIRECTORY | bun.O.RDONLY, 0)) {
                 .err e => {
@@ -127,8 +148,8 @@ pub struct TestingAPIs {
             };
         }
 
-        const patchfile_bunstr = patchfile_js.toBunString(globalThis) catch return .initErr(.js_undefined);
-        defer patchfile_bunstr.deref();
+        let patchfile_bunstr = patchfile_js.toBunString(globalThis) catch return .initErr(.js_undefined);
+        const _g_patchfile_bunstr = DerefGuard<@TypeOf(patchfile_bunstr)>{ ptr: &patchfile_bunstr };
         const patchfile_src = patchfile_bunstr.toUTF8(bun.default_allocator);
 
         const patch_file = parsePatchFile(patchfile_src.slice()) catch e => {
