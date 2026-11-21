@@ -61,30 +61,26 @@ export @root struct ClientSession {
     conn_unacked_bytes: u32 = 0,
     registry_index: u32 = 4294967295,
 
-    fn release(*_) {
+    fn deinit(*_) {
         bun.http.H2.live_sessions.fetchSub(1, .monotonic);
-        bun.debugAssert(this.registry_index == std.math.maxInt(u32));
-        this.hpack.deinit();
-        this.write_buffer.deinit();
-        this.read_buffer.deinit(bun.default_allocator);
-        let it = this.streams.iterator();
+        bun.debugAssert(_.registry_index == std.math.maxInt(u32));
+        _.hpack.deinit();
+        _.write_buffer.deinit();
+        _.read_buffer.deinit(bun.default_allocator);
+        let it = _.streams.iterator();
         while (e := it.next()) {
             let s = e.value_ptr.*;
             s.deinit();
         }
-        this.streams.deinit(bun.default_allocator);
-        this.pending_attach.deinit(bun.default_allocator);
-        this.orphan_header_block.deinit(bun.default_allocator);
-        this.encode_scratch.deinit(bun.default_allocator);
-        bun.default_allocator.free(this.hostname);
-        if (this.ssl_config != null) {
-            this.ssl_config.?.deinit();
+        _.streams.deinit(bun.default_allocator);
+        _.pending_attach.deinit(bun.default_allocator);
+        _.orphan_header_block.deinit(bun.default_allocator);
+        _.encode_scratch.deinit(bun.default_allocator);
+        bun.default_allocator.free(_.hostname);
+        if (_.ssl_config != null) {
+            _.ssl_config.?.deinit();
         }
-        bun.destroy(this);
-    }
-
-    fn deinit(*_) {
-        this.release();
+        bun.destroy(_);
     }
 
     static fn create(ctx: *HTTPContextTLS, socket: Socket, client: *HTTPClient): *ClientSession {

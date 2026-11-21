@@ -28,14 +28,10 @@ pub fn unregisterFrom(self: *PendingConnect, ctx: *HTTPContextTLS) void {
         }
 }
 
-pub fn release(self: *PendingConnect) void {
+pub fn deinit(self: *PendingConnect) void {
         _ = bun.default_allocator.free(self.hostname);
         _ = self.waiters.deinit(bun.default_allocator);
         _ = bun.destroy(self);
-}
-
-pub fn deinit(self: *PendingConnect) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
 }
 pub const new = bun.TrivialNew(@This());
 const bun = @import("bun");

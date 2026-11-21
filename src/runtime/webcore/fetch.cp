@@ -320,15 +320,226 @@ fn fetchImpl(
         }
     }
 
+    // decompress
+    const decompress_objs: [2]JSValue = [ options_object ?? JSValue.zero, request_init_object ?? JSValue.zero ];
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (decompression_value := try obj.get(globalThis, "decompress")) {
+            if (decompression_value.isBoolean()) {
+                disable_decompression = !decompression_value.asBoolean();
+                break;
+            } else if (decompression_value.isNumber()) {
+                disable_decompression = decompression_value.to(i32) == 0;
+                break;
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // tls: TLSConfig
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (tls := try obj.get(globalThis, "tls")) {
+            if (tls.isObject()) {
+                if (reject := try tls.get(globalThis, "rejectUnauthorized")) {
+                    if (reject.isBoolean()) {
+                        reject_unauthorized = reject.asBoolean();
+                    } else if (reject.isNumber()) {
+                        reject_unauthorized = reject.to(i32) != 0;
+                    }
+                }
+                if (globalThis.hasException()) return JSValue.zero;
+
+                if (csi := try tls.get(globalThis, "checkServerIdentity")) {
+                    if (csi.isCell() and csi.isCallable()) {
+                        check_server_identity = csi;
+                    }
+                }
+                if (globalThis.hasException()) return JSValue.zero;
+
+                let maybe_ssl = ServerConfig.SSLConfig.fromJS(vm, globalThis, tls) catch {
+                    return JSValue.zero;
+                };
+                if (config := maybe_ssl) {
+                    ssl_config = ServerConfig.SSLConfig.GlobalRegistry.intern(config);
+                    break;
+                }
+            }
+        }
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // unix: string | undefined
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (socket_path := try obj.get(globalThis, "unix")) {
+            if (socket_path.isString() and try socket_path.getLength(globalThis) > 0) {
+                unix_socket_path = try socket_path.toSliceCloneWithAllocator(globalThis, allocator);
+                break;
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // protocol: "http2" | "h2" | "http3" | "h3" | "http1.1" | "h1" | undefined
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (protocol_val := try obj.get(globalThis, "protocol")) {
+            if (protocol_val.isString()) {
+                let pstr = try protocol_val.toBunString(globalThis);
+                defer pstr.deref();
+                if (pstr.eqlComptime("http2") or pstr.eqlComptime("h2")) {
+                    force_http2 = true;
+                } else if (pstr.eqlComptime("http3") or pstr.eqlComptime("h3")) {
+                    force_http3 = true;
+                } else if (pstr.eqlComptime("http1.1") or pstr.eqlComptime("h1")) {
+                    force_http1 = true;
+                } else {
+                    return globalThis.throwInvalidArguments("fetch: 'protocol' must be \"http2\", \"h2\", \"http3\", \"h3\", \"http1.1\", or \"h1\"", .{});
+                }
+                break;
+            }
+        }
+    }
+
+    // timeout: false | number | undefined
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (timeout_value := try obj.get(globalThis, "timeout")) {
+            if (timeout_value.isBoolean()) {
+                disable_timeout = !timeout_value.asBoolean();
+                break;
+            } else if (timeout_value.isNumber()) {
+                disable_timeout = timeout_value.to(i32) == 0;
+                break;
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
     // redirect
     if (req := request) {
         redirect_type = req.flags.redirect;
     }
-    if (opts := options_object) {
-        if (red := opts.getOptionalEnum(globalThis, "redirect", FetchRedirect) catch null) {
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        let maybe_red = obj.getOptionalEnum(globalThis, "redirect", FetchRedirect) catch {
+            return JSValue.zero;
+        };
+        if (red := maybe_red) {
             redirect_type = red;
+            break;
         }
     }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // keepalive: boolean | undefined
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (keepalive_value := try obj.get(globalThis, "keepalive")) {
+            if (keepalive_value.isBoolean()) {
+                disable_keepalive = !keepalive_value.asBoolean();
+                break;
+            } else if (keepalive_value.isNumber()) {
+                disable_keepalive = keepalive_value.to(i32) == 0;
+                break;
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // verbose: boolean | "curl" | undefined
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (verb := try obj.get(globalThis, "verbose")) {
+            if (verb.isString()) {
+                const vstr = verb.getZigString(globalThis)?;
+                if (vstr.eqlComptime("curl")) {
+                    verbose = .curl;
+                    break;
+                }
+            } else if (verb.isBoolean()) {
+                verbose = if (verb.toBoolean()) .headers else .none;
+                break;
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+
+    // proxy: string | { url: string, headers?: Headers } | undefined
+    let proxy_headers: Headers? = null;
+    defer if (*hdrs := proxy_headers) {
+        hdrs.deinit();
+    }
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (proxy_arg := try obj.get(globalThis, "proxy")) {
+            if (proxy_arg.isString() and try proxy_arg.getLength(globalThis) > 0) {
+                let href = try jsc.URL.hrefFromJS(proxy_arg, globalThis);
+                if (href.tag == .Dead) {
+                    let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                }
+                defer href.deref();
+                let buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href });
+                url = ZigURL.parse(buffer[0..url.href.len]);
+                if (url.isFile()) {
+                    url_type = URLType.file;
+                } else if (url.isBlob()) {
+                    url_type = URLType.blob;
+                }
+                proxy = ZigURL.parse(buffer[url.href.len..]);
+                allocator.free(url_proxy_buffer);
+                url_proxy_buffer = buffer;
+                break;
+            }
+            if (proxy_arg.isObject()) {
+                if (proxy_url_arg := try proxy_arg.get(globalThis, "url")) {
+                    if (!proxy_url_arg.isUndefinedOrNull()) {
+                        if (proxy_url_arg.isString() and try proxy_url_arg.getLength(globalThis) > 0) {
+                            let href = try jsc.URL.hrefFromJS(proxy_url_arg, globalThis);
+                            if (href.tag == .Dead) {
+                                let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
+                                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                            }
+                            defer href.deref();
+                            let buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href });
+                            url = ZigURL.parse(buffer[0..url.href.len]);
+                            if (url.isFile()) {
+                                url_type = URLType.file;
+                            } else if (url.isBlob()) {
+                                url_type = URLType.blob;
+                            }
+                            proxy = ZigURL.parse(buffer[url.href.len..]);
+                            allocator.free(url_proxy_buffer);
+                            url_proxy_buffer = buffer;
+
+                            if (headers_value := try proxy_arg.get(globalThis, "headers")) {
+                                if (!headers_value.isUndefinedOrNull()) {
+                                    if (fetch_hdrs := headers_value.as(FetchHeaders)) {
+                                        proxy_headers = Headers.from(fetch_hdrs, allocator, .{}) catch |e| bun.handleOom(e);
+                                    } else if (fetch_hdrs := try FetchHeaders.createFromJS(globalThis, headers_value)) {
+                                        defer fetch_hdrs.deref();
+                                        proxy_headers = Headers.from(fetch_hdrs, allocator, .{}) catch |e| bun.handleOom(e);
+                                    }
+                                }
+                            }
+                            break;
+                        } else {
+                            let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy.url must be a non-empty string", .{});
+                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                        }
+                    }
+                }
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (globalThis.hasException()) return JSValue.zero;
 
     // signal
     if (opts := options_object) {
@@ -339,43 +550,135 @@ fn fetchImpl(
                 }
             }
         }
-    } else if (req := request) {
-        if (s := req.signal) {
-            signal = s.ref();
-        }
+        if (globalThis.hasException()) return JSValue.zero;
     }
-
-    // body
-    if (opts := options_object) {
-        if (b := try opts.fastGet(globalThis, .body)) {
-            if (!b.isUndefined()) {
-                body = try FetchTasklet.HTTPRequestBody.fromJS(globalThis, b);
+    if (signal == null) {
+        if (req := request) {
+            if (s := req.signal) {
+                signal = s.ref();
             }
-        }
-    } else if (req := request) {
-        let bodyValue = req.getBodyValue();
-        if (bodyValue.* == .Used) {
-            return globalThis.ERR(.BODY_ALREADY_USED, "Request body already used", .{}).throw();
-        }
-        body = .{ .AnyBlob = bodyValue.useAsAnyBlob() };
-    }
-
-    // headers
-    if (opts := options_object) {
-        if (h_val := try opts.fastGet(globalThis, .headers)) {
-            if (!h_val.isUndefined()) {
-                if (fh := h_val.as(FetchHeaders)) {
-                    if (!fh.isEmpty()) {
-                        headers = Headers.from(fh, allocator, .{ .body = body.getAnyBlob() }) catch |e| bun.handleOom(e);
+        } else if (req_init := request_init_object) {
+            if (sig := try req_init.get(globalThis, "signal")) {
+                if (!sig.isUndefined()) {
+                    if (s := sig.as(webcore.AbortSignal)) {
+                        signal = s.ref();
                     }
                 }
             }
         }
-    } else if (req := request) {
-        if (head := req.getFetchHeadersUnlessEmpty()) {
-            headers = Headers.from(head, allocator, .{ .body = body.getAnyBlob() }) catch |e| bun.handleOom(e);
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // body
+    let has_body = false;
+    if (opts := options_object) {
+        if (b := try opts.fastGet(globalThis, .body)) {
+            if (!b.isUndefined()) {
+                body = FetchTasklet.HTTPRequestBody.fromJS(globalThis, b)?;
+                has_body = true;
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (!has_body) {
+        if (req := request) {
+            let bodyValue = req.getBodyValue();
+            if (bodyValue.* == .Used) {
+                return globalThis.ERR(.BODY_ALREADY_USED, "Request body already used", .{}).throw();
+            }
+            body = .{ .AnyBlob = bodyValue.useAsAnyBlob() };
+            has_body = true;
+        } else if (req_init := request_init_object) {
+            if (b := try req_init.fastGet(globalThis, .body)) {
+                if (!b.isUndefined()) {
+                    body = FetchTasklet.HTTPRequestBody.fromJS(globalThis, b)?;
+                }
+            }
         }
     }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // headers: Headers | undefined
+    let fetch_headers_to_deref: (*FetchHeaders)? = null;
+    defer if (fh_deref := fetch_headers_to_deref) {
+        fh_deref.deref();
+    }
+    let fetch_headers: (*FetchHeaders)? = null;
+    let headers_resolved = false;
+
+    if (opts := options_object) {
+        if (h_val := try opts.fastGet(globalThis, .headers)) {
+            if (!h_val.isUndefined()) {
+                headers_resolved = true;
+                if (fh := h_val.as(FetchHeaders)) {
+                    if (!fh.isEmpty()) {
+                        fetch_headers = fh;
+                    }
+                } else if (fh := try FetchHeaders.createFromJS(globalThis, h_val)) {
+                    fetch_headers_to_deref = fh;
+                    fetch_headers = fh;
+                }
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (!headers_resolved) {
+        if (req := request) {
+            headers_resolved = true;
+            if (head := req.getFetchHeadersUnlessEmpty()) {
+                fetch_headers = head;
+            }
+        } else if (req_init := request_init_object) {
+            if (h_val := try req_init.fastGet(globalThis, .headers)) {
+                if (!h_val.isUndefined()) {
+                    if (fh := h_val.as(FetchHeaders)) {
+                        if (!fh.isEmpty()) {
+                            fetch_headers = fh;
+                        }
+                    } else if (fh := try FetchHeaders.createFromJS(globalThis, h_val)) {
+                        fetch_headers_to_deref = fh;
+                        fetch_headers = fh;
+                    }
+                }
+            }
+        }
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    if (fh := fetch_headers) {
+        if (_hostname := fh.fastGet(FetchHeaders.HTTPHeaderName.Host)) {
+            if (host := hostname) {
+                hostname = null;
+                allocator.free(host);
+            }
+            hostname = bun.handleOom(_hostname.toOwnedSliceZ(allocator));
+        }
+        if (url.isS3()) {
+            if (_range := fh.fastGet(FetchHeaders.HTTPHeaderName.Range)) {
+                if (r := range) {
+                    range = null;
+                    allocator.free(r);
+                }
+                range = bun.handleOom(_range.toOwnedSliceZ(allocator));
+            }
+        }
+        if (_upgrade := fh.fastGet(FetchHeaders.HTTPHeaderName.Upgrade)) {
+            let upgrade = _upgrade.toSlice(default_allocator);
+            defer upgrade.deinit();
+            let slice = upgrade.slice();
+            if (!bun.strings.eqlComptime(slice, "h2") and !bun.strings.eqlComptime(slice, "h2c")) {
+                upgraded_connection = true;
+            }
+        }
+        headers = Headers.from(fh, allocator, .{ .body = body.getAnyBlob() }) catch |e| bun.handleOom(e);
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    if (proxy != null and unix_socket_path.length() > 0) {
+        let err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_proxy_unix, .{});
+        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+    }
+    if (globalThis.hasException()) return JSValue.zero;
 
     if (!allow_get_body and !method.hasRequestBody() and body.hasBody() and !upgraded_connection) {
         let err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_unexpected_body, .{});
@@ -391,7 +694,7 @@ fn fetchImpl(
         &.{
             .method = method,
             .url = url,
-            .headers = headers orelse Headers { .allocator = allocator },
+            .headers = headers ?? Headers { .allocator = allocator },
             .body = body,
             .disable_keepalive = disable_keepalive,
             .disable_timeout = disable_timeout,
@@ -400,7 +703,7 @@ fn fetchImpl(
             .redirect_type = redirect_type,
             .verbose = verbose,
             .proxy = proxy,
-            .proxy_headers = null,
+            .proxy_headers = proxy_headers,
             .url_proxy_buffer = url_proxy_buffer,
             .signal = signal,
             .globalThis = globalThis,
@@ -418,12 +721,14 @@ fn fetchImpl(
 
     url = .{};
     headers = null;
+    proxy_headers = null;
     body = FetchTasklet.HTTPRequestBody.Empty;
     proxy = null;
     url_proxy_buffer = "";
     signal = null;
     ssl_config = null;
     hostname = null;
+    range = null;
     unix_socket_path = ZigString.Slice.empty;
 
     return promise_val;

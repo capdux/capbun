@@ -50,12 +50,14 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
@@ -407,16 +409,317 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                 }
             }
         }
+        const decompress_objs: [2]JSValue = .{ ((options_object) orelse (JSValue.zero)), ((request_init_object) orelse (JSValue.zero)) };
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "decompress")) |decompression_value| {
+                _ = &decompression_value;
+                if (decompression_value.isBoolean()) {
+                    disable_decompression = (!decompression_value.asBoolean());
+                    break;
+                } else {
+                    if (decompression_value.isNumber()) {
+                        disable_decompression = (decompression_value.to(i32) == 0);
+                        break;
+                    }
+                }
+            }
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "tls")) |tls| {
+                _ = &tls;
+                if (tls.isObject()) {
+                    if (try tls.get(globalThis, "rejectUnauthorized")) |reject| {
+                        _ = &reject;
+                        if (reject.isBoolean()) {
+                            reject_unauthorized = reject.asBoolean();
+                        } else {
+                            if (reject.isNumber()) {
+                                reject_unauthorized = (reject.to(i32) != 0);
+                            }
+                        }
+                    }
+                    if (globalThis.hasException()) {
+                        return JSValue.zero;
+                    }
+                    if (try tls.get(globalThis, "checkServerIdentity")) |csi| {
+                        _ = &csi;
+                        if ((csi.isCell() and csi.isCallable())) {
+                            check_server_identity = csi;
+                        }
+                    }
+                    if (globalThis.hasException()) {
+                        return JSValue.zero;
+                    }
+                    var maybe_ssl = (blk_catch_3: { break :blk_catch_3 ((ServerConfig.SSLConfig.fromJS(vm, globalThis, tls)) catch |__ce_3| { _ = &__ce_3; return JSValue.zero; }); });
+                    _ = &maybe_ssl;
+                    if (maybe_ssl) |config| {
+                        _ = &config;
+                        ssl_config = ServerConfig.SSLConfig.GlobalRegistry.intern(config);
+                        break;
+                    }
+                }
+            }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "unix")) |socket_path| {
+                _ = &socket_path;
+                if ((socket_path.isString() and (try socket_path.getLength(globalThis) > 0))) {
+                    unix_socket_path = try socket_path.toSliceCloneWithAllocator(globalThis, allocator);
+                    break;
+                }
+            }
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "protocol")) |protocol_val| {
+                _ = &protocol_val;
+                if (protocol_val.isString()) {
+                    var pstr = try protocol_val.toBunString(globalThis);
+                    _ = &pstr;
+                    defer {
+                    _ = pstr.deref();
+                    }
+                    if ((pstr.eqlComptime("http2") or pstr.eqlComptime("h2"))) {
+                        force_http2 = true;
+                    } else {
+                        if ((pstr.eqlComptime("http3") or pstr.eqlComptime("h3"))) {
+                            force_http3 = true;
+                        } else {
+                            if ((pstr.eqlComptime("http1.1") or pstr.eqlComptime("h1"))) {
+                                force_http1 = true;
+                            } else {
+                                return globalThis.throwInvalidArguments("fetch: 'protocol' must be \"http2\", \"h2\", \"http3\", \"h3\", \"http1.1\", or \"h1\"", .{});
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "timeout")) |timeout_value| {
+                _ = &timeout_value;
+                if (timeout_value.isBoolean()) {
+                    disable_timeout = (!timeout_value.asBoolean());
+                    break;
+                } else {
+                    if (timeout_value.isNumber()) {
+                        disable_timeout = (timeout_value.to(i32) == 0);
+                        break;
+                    }
+                }
+            }
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
         if (request) |req| {
             _ = &req;
             redirect_type = req.flags.redirect;
         }
-        if (options_object) |opts| {
-            _ = &opts;
-            if ((blk_catch_3: { break :blk_catch_3 ((opts.getOptionalEnum(globalThis, "redirect", FetchRedirect)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); })) |red| {
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            var maybe_red = (blk_catch_4: { break :blk_catch_4 ((obj.getOptionalEnum(globalThis, "redirect", FetchRedirect)) catch |__ce_4| { _ = &__ce_4; return JSValue.zero; }); });
+            _ = &maybe_red;
+            if (maybe_red) |red| {
                 _ = &red;
                 redirect_type = red;
+                break;
             }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "keepalive")) |keepalive_value| {
+                _ = &keepalive_value;
+                if (keepalive_value.isBoolean()) {
+                    disable_keepalive = (!keepalive_value.asBoolean());
+                    break;
+                } else {
+                    if (keepalive_value.isNumber()) {
+                        disable_keepalive = (keepalive_value.to(i32) == 0);
+                        break;
+                    }
+                }
+            }
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "verbose")) |verb| {
+                _ = &verb;
+                if (verb.isString()) {
+                    const vstr = try verb.getZigString(globalThis);
+                    if (vstr.eqlComptime("curl")) {
+                        verbose = .curl;
+                        break;
+                    }
+                } else {
+                    if (verb.isBoolean()) {
+                        verbose = (if (verb.toBoolean()) .headers else .none);
+                        break;
+                    }
+                }
+            }
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        var proxy_headers: ?Headers = null;
+        _ = &proxy_headers;
+        defer {
+        if (proxy_headers) |*hdrs| {
+            _ = &hdrs;
+            _ = (hdrs.*).deinit();
+        }
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "proxy")) |proxy_arg| {
+                _ = &proxy_arg;
+                if ((proxy_arg.isString() and (try proxy_arg.getLength(globalThis) > 0))) {
+                    var href = try jsc.URL.hrefFromJS(proxy_arg, globalThis);
+                    _ = &href;
+                    if ((href.tag == .Dead)) {
+                        var err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
+                        _ = &err;
+                        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                    }
+                    defer {
+                    _ = href.deref();
+                    }
+                    var buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href });
+                    _ = &buffer;
+                    url = ZigURL.parse(buffer[0..url.href.len]);
+                    if (url.isFile()) {
+                        url_type = URLType.file;
+                    } else {
+                        if (url.isBlob()) {
+                            url_type = URLType.blob;
+                        }
+                    }
+                    proxy = ZigURL.parse(buffer[url.href.len..]);
+                    _ = allocator.free(url_proxy_buffer);
+                    url_proxy_buffer = buffer;
+                    break;
+                }
+                if (proxy_arg.isObject()) {
+                    if (try proxy_arg.get(globalThis, "url")) |proxy_url_arg| {
+                        _ = &proxy_url_arg;
+                        if ((!proxy_url_arg.isUndefinedOrNull())) {
+                            if ((proxy_url_arg.isString() and (try proxy_url_arg.getLength(globalThis) > 0))) {
+                                var href = try jsc.URL.hrefFromJS(proxy_url_arg, globalThis);
+                                _ = &href;
+                                if ((href.tag == .Dead)) {
+                                    var err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
+                                    _ = &err;
+                                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                                }
+                                defer {
+                                _ = href.deref();
+                                }
+                                var buffer = try std.fmt.allocPrint(allocator, "{s}{f}", .{ url_proxy_buffer, href });
+                                _ = &buffer;
+                                url = ZigURL.parse(buffer[0..url.href.len]);
+                                if (url.isFile()) {
+                                    url_type = URLType.file;
+                                } else {
+                                    if (url.isBlob()) {
+                                        url_type = URLType.blob;
+                                    }
+                                }
+                                proxy = ZigURL.parse(buffer[url.href.len..]);
+                                _ = allocator.free(url_proxy_buffer);
+                                url_proxy_buffer = buffer;
+                                if (try proxy_arg.get(globalThis, "headers")) |headers_value| {
+                                    _ = &headers_value;
+                                    if ((!headers_value.isUndefinedOrNull())) {
+                                        if (headers_value.as(FetchHeaders)) |fetch_hdrs| {
+                                            _ = &fetch_hdrs;
+                                            proxy_headers = (blk_catch_5: { break :blk_catch_5 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
+                                        } else {
+                                            if (try FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_hdrs| {
+                                                _ = &fetch_hdrs;
+                                                defer {
+                                                _ = fetch_hdrs.deref();
+                                                }
+                                                proxy_headers = (blk_catch_6: { break :blk_catch_6 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
+                                            }
+                                        }
+                                    }
+                                }
+                                break;
+                            } else {
+                                var err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy.url must be a non-empty string", .{});
+                                _ = &err;
+                                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                            }
+                        }
+                    }
+                }
+            }
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
         }
         if (options_object) |opts| {
             _ = &opts;
@@ -429,24 +732,51 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                     }
                 }
             }
-        } else {
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if ((signal == null)) {
             if (request) |req| {
                 _ = &req;
                 if (req.signal) |s| {
                     _ = &s;
                     signal = s.ref();
                 }
+            } else {
+                if (request_init_object) |req_init| {
+                    _ = &req_init;
+                    if (try req_init.get(globalThis, "signal")) |sig| {
+                        _ = &sig;
+                        if ((!sig.isUndefined())) {
+                            if (sig.as(webcore.AbortSignal)) |s| {
+                                _ = &s;
+                                signal = s.ref();
+                            }
+                        }
+                    }
+                }
             }
         }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        var has_body = false;
+        _ = &has_body;
         if (options_object) |opts| {
             _ = &opts;
             if (try opts.fastGet(globalThis, .body)) |b| {
                 _ = &b;
                 if ((!b.isUndefined())) {
                     body = try FetchTasklet.HTTPRequestBody.fromJS(globalThis, b);
+                    has_body = true;
                 }
             }
-        } else {
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if ((!has_body)) {
             if (request) |req| {
                 _ = &req;
                 var bodyValue = req.getBodyValue();
@@ -455,29 +785,139 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                     return globalThis.ERR(.BODY_ALREADY_USED, "Request body already used", .{}).throw();
                 }
                 body = .{ .AnyBlob = bodyValue.useAsAnyBlob() };
+                has_body = true;
+            } else {
+                if (request_init_object) |req_init| {
+                    _ = &req_init;
+                    if (try req_init.fastGet(globalThis, .body)) |b| {
+                        _ = &b;
+                        if ((!b.isUndefined())) {
+                            body = try FetchTasklet.HTTPRequestBody.fromJS(globalThis, b);
+                        }
+                    }
+                }
             }
         }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        var fetch_headers_to_deref: ?*FetchHeaders = null;
+        _ = &fetch_headers_to_deref;
+        defer {
+        if (fetch_headers_to_deref) |fh_deref| {
+            _ = &fh_deref;
+            _ = fh_deref.deref();
+        }
+        }
+        var fetch_headers: ?*FetchHeaders = null;
+        _ = &fetch_headers;
+        var headers_resolved = false;
+        _ = &headers_resolved;
         if (options_object) |opts| {
             _ = &opts;
             if (try opts.fastGet(globalThis, .headers)) |h_val| {
                 _ = &h_val;
                 if ((!h_val.isUndefined())) {
+                    headers_resolved = true;
                     if (h_val.as(FetchHeaders)) |fh| {
                         _ = &fh;
                         if ((!fh.isEmpty())) {
-                            headers = (blk_catch_4: { break :blk_catch_4 ((Headers.from(fh, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+                            fetch_headers = fh;
+                        }
+                    } else {
+                        if (try FetchHeaders.createFromJS(globalThis, h_val)) |fh| {
+                            _ = &fh;
+                            fetch_headers_to_deref = fh;
+                            fetch_headers = fh;
                         }
                     }
                 }
             }
-        } else {
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if ((!headers_resolved)) {
             if (request) |req| {
                 _ = &req;
+                headers_resolved = true;
                 if (req.getFetchHeadersUnlessEmpty()) |head| {
                     _ = &head;
-                    headers = (blk_catch_5: { break :blk_catch_5 ((Headers.from(head, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
+                    fetch_headers = head;
+                }
+            } else {
+                if (request_init_object) |req_init| {
+                    _ = &req_init;
+                    if (try req_init.fastGet(globalThis, .headers)) |h_val| {
+                        _ = &h_val;
+                        if ((!h_val.isUndefined())) {
+                            if (h_val.as(FetchHeaders)) |fh| {
+                                _ = &fh;
+                                if ((!fh.isEmpty())) {
+                                    fetch_headers = fh;
+                                }
+                            } else {
+                                if (try FetchHeaders.createFromJS(globalThis, h_val)) |fh| {
+                                    _ = &fh;
+                                    fetch_headers_to_deref = fh;
+                                    fetch_headers = fh;
+                                }
+                            }
+                        }
+                    }
                 }
             }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        if (fetch_headers) |fh| {
+            _ = &fh;
+            if (fh.fastGet(FetchHeaders.HTTPHeaderName.Host)) |_hostname| {
+                _ = &_hostname;
+                if (hostname) |host| {
+                    _ = &host;
+                    hostname = null;
+                    _ = allocator.free(host);
+                }
+                hostname = bun.handleOom(_hostname.toOwnedSliceZ(allocator));
+            }
+            if (url.isS3()) {
+                if (fh.fastGet(FetchHeaders.HTTPHeaderName.Range)) |_range| {
+                    _ = &_range;
+                    if (range) |r| {
+                        _ = &r;
+                        range = null;
+                        _ = allocator.free(r);
+                    }
+                    range = bun.handleOom(_range.toOwnedSliceZ(allocator));
+                }
+            }
+            if (fh.fastGet(FetchHeaders.HTTPHeaderName.Upgrade)) |_upgrade| {
+                _ = &_upgrade;
+                var upgrade = _upgrade.toSlice(default_allocator);
+                _ = &upgrade;
+                defer {
+                _ = upgrade.deinit();
+                }
+                var slice = upgrade.slice();
+                _ = &slice;
+                if (((!bun.strings.eqlComptime(slice, "h2")) and (!bun.strings.eqlComptime(slice, "h2c")))) {
+                    upgraded_connection = true;
+                }
+            }
+            headers = (blk_catch_7: { break :blk_catch_7 ((Headers.from(fh, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        if (((proxy != null) and (unix_socket_path.length() > 0))) {
+            var err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_proxy_unix, .{});
+            _ = &err;
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
         }
         if (((((!allow_get_body) and (!method.hasRequestBody())) and body.hasBody()) and (!upgraded_connection))) {
             var err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_unexpected_body, .{});
@@ -488,15 +928,17 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         _ = &promise;
         var promise_val = promise.value();
         _ = &promise_val;
-        _ = (blk_catch_6: { break :blk_catch_6 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = null, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
+        _ = (blk_catch_8: { break :blk_catch_8 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
         url = .{};
         headers = null;
+        proxy_headers = null;
         body = FetchTasklet.HTTPRequestBody.Empty;
         proxy = null;
         url_proxy_buffer = "";
         signal = null;
         ssl_config = null;
         hostname = null;
+        range = null;
         unix_socket_path = ZigString.Slice.empty;
         return promise_val;
 }

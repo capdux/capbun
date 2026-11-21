@@ -1478,3 +1478,7 @@
 - **[2026-11-21] `cpc` `orelse` 赋值吞右值与 `release()` RAII 排查经验**：
   - **`lhs.field = expr orelse { ... }` 静默吞掉 `expr`**：`cpc` 会将其降级为 `if (lhs.field == null) { lhs.field = ({ ... }); }`，导致 `expr` 从未执行（已修复 `js_valkey.cp` 与 `bun.lock.cp`），统一改写为语句级 `if (v := expr) { lhs.field = v; } else { ... }`；
   - **非词法 RAII 对象禁定义 `release()`**：`cpc` 会对任何定义单参 `release(*_)` 的结构体（含 `*T` 指针与浅拷贝局部变量）自动注入 `defer release()`，跨作用域异步任务/堆指针/借用对象（`ServerConfig`/`SSLConfig`/`Handlers`/`PasswordObject`/`NewSocket`）统一合并入 `deinit()` 显式管理。
+
+- **[2026-11-21] `fetch` 选项与 HTTP/2 `h2_client` `release()` 误析构修复**：
+  - 还原 `fetch.cp` `fetchImpl` 缺失选项解析逻辑并修复 `verb.getZigString(globalThis).eqlComptime("curl")` 错误传播后，`zstd` HTTP 压缩测试全部通过；
+  - `Stream`/`ClientSession`/`PendingConnect` 定义 `release(*_)` 导致 `cpc` 在持有指针的局部变量作用域退出时自动注入 `defer ...release()` 提前销毁 `Stream`，合并入 `deinit()` 后 `undici-h2/run.test.ts` 11/11 全绿且 0 ASan 崩溃。

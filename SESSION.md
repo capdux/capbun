@@ -100,3 +100,9 @@
 - **[2026-11-21 20:42] 6 大核心模块联动修复与全绿验证（0 崩溃，135 pass / 1,676 expect()）**：
   - 修复 `js_valkey.cp`（`this._secure = ... orelse` 改 `if (ctx := ...)`，消除 custom TLS 误触发 `deref` 导致的 `ValkeyClient.getTimeoutInterval` UAF）、`bun.lock.cp`（全仓同类 `saved_config_version = ... orelse` 隐患）、`rare_data.cp`（恢复 `closeAllSocketGroups` 8 轮 `closeAllGroups()` + `drainClosedSockets()` 消除 `us_socket_group_deinit` 断言）、`Blob.cp`（完整还原 `constructor`/`getLastModified`/`getNameString`/`getSizeForBindings`/`sharedView`/`calculateEstimatedByteSize`）、`Order.cp`（修复 `generateOrderDescribe` 先执行 `afterAll` 倒置与钩子/过滤缺失）与 `socket.cp`（合并 `NewSocket`/`DuplexUpgradeContext` `release()` 入 `deinit()` 消除 `selectALPNCallback` 断言）。
   - 6 组回归测试全套 0 崩溃跑完（**135 pass / 43 fail**）：`valkey-tls-verify.test.ts` 全绿；`bun-write.test.js` 3 个核心 fail 全转绿；`heap-snapshot.test.ts` 除 `Headers` 超时外全绿；`zstd.test.ts` 4/5 压缩测试转绿；`ws.test.ts` 与 `undici-h2` 断言/崩溃清零。
+
+- **[2026-11-21 21:24] `fetch.cp` 与 `h2_client` 3 模块修复里程碑（`zstd` 与 `undici-h2` 100% 全绿、0 崩溃）**：
+  - 还原 `src/runtime/webcore/fetch.cp` `fetchImpl()` 完整选项解析（`decompress`/`tls`/`unix`/`protocol`/`timeout`/`redirect`/`keepalive`/`verbose`/`proxy`/`signal`/`body`/`headers` 等）与 `FetchTasklet.HTTPRequestBody.fromJS` 非空赋值；
+  - 将 `src/http/h2_client/{Stream,ClientSession,PendingConnect}.cp` 中的 `release(*_)` 合并入 `deinit(*_)` 并清理 `this` 写法，消除 `encode.drainSendBodies` `use-after-poison` 崩溃；
+  - 核查 `FileSink.cp` 已有 `Bun__ForceFileSinkToBeSynchronousForProcessObjectStdio`；
+  - 实测验证：`zstd.test.ts` 与 `undici-h2/run.test.ts` **100% 全绿通过**，`bun-write.test.js` 仅剩 1 项 `Bun.file -> Response` 超时（共 117 pass / 1 fail / 0 崩溃）；`test/config` + `test/snippets` + `test/internal`（除全仓静态扫 `ban-words` 外）0 fail / 0 crash。
