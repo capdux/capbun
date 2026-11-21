@@ -15,33 +15,33 @@ import std from "std";
         stat_hasher.update(std.mem.asBytes(&stat.ino));
         stat_hasher.update(path);
 
-        const prev = this.value;
-        this.value = stat_hasher.final();
+        const prev = _.value;
+        _.value = stat_hasher.final();
 
-        if (prev != this.value && bun.S.ISREG(@intCast(stat.mode))) {
+        if (prev != _.value && bun.S.ISREG(@intCast(stat.mode))) {
             const mtime_timespec = stat.mtime();
             const mtime: bun.timespec = {
                 nsec: @intCast(@max(mtime_timespec.nsec, 0)),
                 sec: @intCast(@max(mtime_timespec.sec, 0)),
             };
             if (mtime.ms() > 0) {
-                this.last_modified_buffer_len = @intCast(bun.jsc.wtf.writeHTTPDate(&this.last_modified_buffer, mtime.msUnsigned()).len);
-                this.last_modified_u64 = mtime.msUnsigned();
+                _.last_modified_buffer_len = @intCast(bun.jsc.wtf.writeHTTPDate(&_.last_modified_buffer, mtime.msUnsigned()).len);
+                _.last_modified_u64 = mtime.msUnsigned();
             } else {
-                this.last_modified_buffer_len = 0;
-                this.last_modified_u64 = 0;
+                _.last_modified_buffer_len = 0;
+                _.last_modified_u64 = 0;
             }
         } else if (!bun.S.ISREG(@intCast(stat.mode))) {
-            this.last_modified_buffer_len = 0;
-            this.last_modified_u64 = 0;
+            _.last_modified_buffer_len = 0;
+            _.last_modified_u64 = 0;
         }
     }
 
-    pub fn lastModified(): ([]const u8)? {
+    pub fn lastModified(_: *const StatHash): ([]const u8)? {
         if (_.last_modified_buffer_len == 0) {
             return null;
         }
 
-        return this.last_modified_buffer[0..this.last_modified_buffer_len];
+        return _.last_modified_buffer[0.._.last_modified_buffer_len];
     }
 }

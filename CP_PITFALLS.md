@@ -160,3 +160,16 @@
   1. **唯一双重幂等析构 `~init()`，`release` 彻底退回普通方法**：`init(...)` 为 `class` 构造函数；`~init() { ... }` 为 `struct`/`class` 唯一析构函数；提前手动释放用 `drop(x)`（消耗所有权防误用）或 `x.~init()`（双重幂等防 Double-Free）。**无论是否带参，`release` 均不再作为析构函数、绝不触发自动析构且绝不截断参数**；裸指针 `*T!` 与字段读取 `const h = _.handlers;` 均绝不误析构。
   2. **三态赋值与五态解构**：直接赋值默认只读（RAII 零析构，不再隐式 move），转移必须显式写 `move`；对象解构支持整体可变 `= *_`、局部成员分离可变 `{ *a: ma, *b: mb } = obj`、整体/单字段 `move`；`&v` 回收为纯取址符可直接初始化 `*T!` / `*const T!`。
   3. **已修复工单**：饱和/环绕复合赋值（`+|=`, `-|=`, `*|=` , `<<|=`, `+%=`, `-%=`, `*%=`）、`?? break :label` / `?? continue :label` 与带标签 `for` 循环均已修复并发布 Release `cpc`。
+- **[2026-11-22 已修复工单 6 项（Release `cpc`）]**：
+  - `lhs.field = expr orelse { ... }` / `??` 不再吞掉 `expr`（`task-bun-20261122-orelse-assign-drop`）；
+  - `for (*v of _.v)` 循环变量与 struct 字段同名已正确遮蔽 `self.v`（`task-bun-20261122-loop-field-shadow`）；
+  - `if/else` 表达式内支持 `return` / `return expr` 分支（`task-bun-20261122-if-else-return-drop`）；
+  - 函数实参等表达式位支持 `if (v := opt) ...` / `if (*v := opt) ...`（`task-bun-20261122-expr-walrus-drop`）；
+  - `([*:0]u8)?` 正确生成 `?[*:0]u8`（不再误作 `try`），`string("")` 正常由 `cp_string_from` 处理（`task-bun-20261122-ptr-opt-and-string-from`）；
+  - `*Foo?` / `(*Foo)?` / `*Foo?!` 统一映射为 `?*Foo`（显式 `*(*Foo?)` 仍为 `*?*Foo`）（`task-bun-20261122-ptr-postfix-opt`）。
+  - 省略只读接收者且返回借用视图（切片/字符串/指针）的非枚举 struct 方法已自动生成 `self: *const T`（`task-bun-20261122-val-receiver-dangling-slice`）；
+  - 泛型函数返回的匿名结构体 `~init()` 已正确生成 `pub fn __cp_deinit(self: *@This()) void`（`task-bun-20261122-generic-anon-raii`）；
+  - `unsafe {}` 外部的裸指针下标、切片及 `@ptrCast`/`@alignCast`/`@intFromPtr`/`@ptrFromInt`/`@constCast` 已全量纳入 `E0209` 拦截（`task-bun-20261122-unsafe-e0209-gaps`）。
+  - 泛型结构体 `pub struct Box<T> { ... ~init() }` 实例化 `Box<Type>{ ... }` 已自动注入 `defer __cp_deinit()`，可直接用于泛型 RAII Guard 封装（`task-bun-20261122-generic-struct-raii-defer`）；
+  - 方法体内直接调用 `new(this)` 不再静默清空函数体（`task-bun-20261122-call-new-silently-empties-fn`）；
+  - `[:0]const u8` / `[*]const u8` 等直接作为泛型实参传入不再丢失空格（`task-bun-20261122-sentinel-const-space`）。

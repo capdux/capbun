@@ -106,6 +106,272 @@ pub const HTMLRouter_empty: HTMLRouter = .{
 };
 pub const TestingBatch_empty: TestingBatch = .{ entry_points: .empty };
 
+pub struct GraphSafetyLockGuard {
+    lock: *bun.safety.ThreadLock!,
+    ~init() {
+        unsafe { _.lock.unlock(); }
+    }
+}
+
+pub struct GraphSafetyRelockGuard {
+    lock: *bun.safety.ThreadLock!,
+    ~init() {
+        unsafe { _.lock.lock(); }
+    }
+}
+
+pub struct PathBufferGuard {
+    buf: *bun.PathBuffer!,
+    ~init() {
+        unsafe { bun.path_buffer_pool.put(_.buf); }
+    }
+}
+
+pub struct GraphTraceStateGuard {
+    state: GraphTraceState,
+    alloc: Allocator,
+    ~init() {
+        _.state.deinit(_.alloc);
+    }
+}
+
+pub struct ArenaGuard {
+    @"arena": std.heap.ArenaAllocator,
+    ~init() {
+        _.@"arena".deinit();
+    }
+}
+
+pub struct BunStringGuard {
+    str: bun.String,
+    ~init() {
+        _.str.deref();
+    }
+}
+
+pub struct ZigStringSliceGuard {
+    slice: bun.ZigString.Slice,
+    ~init() {
+        _.slice.deinit();
+    }
+}
+
+pub struct ManagedByteListGuard {
+    list: std.array_list.Managed(u8),
+    active: bool = true,
+    ~init() {
+        if (_.active) _.list.deinit();
+    }
+}
+
+pub struct DeferredRequestGuard {
+    req: *DeferredRequest!,
+    ~init() {
+        unsafe { _.req.deref(); }
+    }
+}
+
+pub struct EventLoopExitGuard {
+    vm: *VirtualMachine!,
+    ~init() {
+        unsafe { _.vm.eventLoop().exit(); }
+    }
+}
+
+pub struct FileCloseGuard {
+    file: std.fs.File,
+    ~init() {
+        _.file.close();
+    }
+}
+
+pub struct DirCloseGuard {
+    dir: std.fs.Dir,
+    ~init() {
+        _.dir.close();
+    }
+}
+
+pub struct DynamicBitSetGuard {
+    bits: DynamicBitSetUnmanaged,
+    alloc: Allocator,
+    active: bool = true,
+    ~init() {
+        if (_.active) _.bits.deinit(_.alloc);
+    }
+}
+
+pub struct EntryPointListGuard {
+    list: EntryPointList,
+    alloc: Allocator,
+    ~init() {
+        _.list.deinit(_.alloc);
+    }
+}
+
+pub struct AllocSliceU8Guard {
+    slice: []const u8,
+    alloc: Allocator,
+    active: bool = true,
+    ~init() {
+        if (_.active) _.alloc.free(_.slice);
+    }
+}
+
+pub struct ArrayListU8Guard {
+    list: std.ArrayListUnmanaged(u8),
+    alloc: Allocator,
+    active: bool = true,
+    ~init() {
+        if (_.active) _.list.deinit(_.alloc);
+    }
+}
+
+pub struct HeadersGuard {
+    headers: bun.http.Headers,
+    ~init() {
+        _.headers.deinit();
+    }
+}
+
+pub struct RouterTypeListGuard {
+    list: std.ArrayListUnmanaged(FrameworkRouter.Type),
+    alloc: Allocator,
+    ~init() {
+        _.list.deinit(_.alloc);
+    }
+}
+
+pub struct HmrSocketSliceGuard {
+    sockets: []*HmrSocket,
+    alloc: Allocator,
+    ~init() {
+        _.alloc.free(_.sockets);
+    }
+}
+
+pub struct ThreadLocalArenaGuard {
+    heap: *ThreadLocalArena!,
+    active: bool = true,
+    ~init() {
+        if (_.active) unsafe { _.heap.deinit(); }
+    }
+}
+
+pub struct ClientGraphResetGuard {
+    graph: *IncrementalGraph(.client)!,
+    ~init() {
+        unsafe { _.graph.reset(); }
+    }
+}
+
+pub struct SourceMapUnrefGuard {
+    store: *SourceMapStore!,
+    script_id: SourceMapStore.Key,
+    active: bool = true,
+    ~init() {
+        if (_.active) unsafe { _.store.unref(_.script_id); }
+    }
+}
+
+pub struct FailuresAddedClearGuard {
+    list: *ArrayListUnmanaged(SerializedFailure)!,
+    ~init() {
+        unsafe { _.list.clearRetainingCapacity(); }
+    }
+}
+
+pub struct StaticRouteDerefGuard {
+    route: *StaticRoute!,
+    ~init() {
+        unsafe { _.route.deref(); }
+    }
+}
+
+pub struct DumpDirGuard {
+    dir: OptDir = null,
+    active: bool = true,
+    ~init() {
+        if (_.active && comptime bun.FeatureFlags.bake_debugging_features) {
+            if (*d := _.dir) d.close();
+        }
+    }
+}
+
+pub struct PromiseResetGuard {
+    promise: *DeferredPromise!,
+    ~init() {
+        unsafe { _.promise.reset(); }
+    }
+}
+
+pub struct PromiseDeinitGuard {
+    promise: *DeferredPromise!,
+    ~init() {
+        unsafe { _.promise.deinitIdempotently(); }
+    }
+}
+
+pub struct WatcherUpdateGuard {
+    dev: *DevServer!,
+    ev: *HotReloadEvent,
+    ~init() {
+        unsafe {
+            _.dev.bun_watcher.flushEvictions();
+            _.dev.watcher_atomics.watcherReleaseAndSubmitEvent(_.ev);
+            debug.log("onFileUpdate end", {});
+        }
+    }
+}
+
+pub struct MemoryVisualizerGuard {
+    dev: *DevServer!,
+    ~init() {
+        unsafe { _.dev.emitMemoryVisualizerMessageIfNeeded(); }
+    }
+}
+
+pub struct TriggerFilesGuard {
+    list: std.array_list.Managed(bun.String),
+    ~init() {
+        for (*str of _.list.items) {
+            str.deref();
+        }
+        _.list.deinit();
+    }
+}
+
+pub struct SourceMapEntryGuard {
+    entry: SourceMapStore.Entry,
+    ~init() {
+        _.entry.ref_count = 0;
+        _.entry.deinit();
+    }
+}
+
+pub struct DevServerInitGuard {
+    dev: *DevServer!,
+    alloc: Allocator,
+    destroy_dev: bool = true,
+    deinit_watcher: bool = false,
+    deinit_graphs: bool = false,
+    ~init() {
+        unsafe {
+            if (_.deinit_graphs) {
+                _.dev.server_graph.deinit();
+                _.dev.client_graph.deinit();
+                _.dev.route_lookup.clearAndFree(_.alloc);
+            }
+            if (_.deinit_watcher) {
+                _.dev.bun_watcher.deinit(false);
+            }
+            if (_.destroy_dev) {
+                bun.destroy(_.dev);
+            }
+        }
+    }
+}
+
 @root struct DevServer {
 magic: Magic = .valid,
 
@@ -319,7 +585,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
             };
         }
     }
-    errdefer if (bun.FeatureFlags.bake_debugging_features) if (*dir := dump_dir) dir.close();
+    let dump_dir_guard = DumpDirGuard{ dir: dump_dir };
 
     let separate_ssr_graph = false;
     if (sc := options.framework.server_components) {
@@ -382,7 +648,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
         log: undefined,
         deferred_request_pool: undefined,
     });
-    errdefer bun.destroy(dev);
+    let init_guard = DevServerInitGuard{ dev: dev, alloc: dev.allocator() };
     const alloc = dev.allocator();
     dev.log = .init(alloc);
     dev.deferred_request_pool = .init(alloc);
@@ -394,7 +660,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
     assert(dev.directory_watchers.owner() == dev);
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     const generic_action: [:0]const u8 = "while initializing development server";
     const fs = bun.fs.FileSystem.init(options.root) catch |e|
@@ -403,7 +669,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
     dev.bun_watcher = Watcher.init(DevServer, dev, fs, bun.default_allocator) catch |e|
         return global.throwError(e, "while initializing file watcher for development server");
 
-    errdefer dev.bun_watcher.deinit(false);
+    init_guard.deinit_watcher = true;
     dev.bun_watcher.start() catch |e|
         return global.throwError(e, "while initializing file watcher thread for development server");
 
@@ -445,9 +711,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
         return global.throwValue(try dev.log.toJSAggregateError(global, bun.String.static("Framework is missing required files!")));
     };
 
-    errdefer dev.route_lookup.clearAndFree(alloc);
-    errdefer dev.client_graph.deinit();
-    errdefer dev.server_graph.deinit();
+    init_guard.deinit_graphs = true;
 
     dev.configuration_hash_key = hash_key: {
         let hash = std.hash.Wyhash.init(128);
@@ -538,14 +802,14 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
 
     // Initialize FrameworkRouter
     dev.router = router: {
-        let types = std.ArrayListUnmanaged(FrameworkRouter.Type).initCapacity(alloc, options.framework.file_system_router_types.len)?;
-        errdefer types.deinit(alloc);
+        let types_guard = RouterTypeListGuard{ list: std.ArrayListUnmanaged(FrameworkRouter.Type).initCapacity(alloc, options.framework.file_system_router_types.len)?, alloc: alloc };
+        let types = *types_guard.list;
 
         const fsr_types = options.framework.file_system_router_types;
         for (i of 0..fsr_types.len) {
             const fsr = fsr_types[i];
-            const buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(buf);
+            const buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+            const buf = buf_guard.buf;
             const joined_root = bun.path.joinAbsStringBuf(dev.root, buf, &.{fsr.root}, .auto);
             const entry = dev.server_transpiler.resolver.readDirInfoIgnoreError(joined_root) ??
                 continue;
@@ -590,6 +854,11 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
 
     bun.assert(dev.magic == .valid);
 
+    init_guard.deinit_graphs = false;
+    init_guard.deinit_watcher = false;
+    init_guard.destroy_dev = false;
+    dump_dir_guard.active = false;
+
     return dev;
 }
 
@@ -599,11 +868,12 @@ pub fn deinit(dev: *DevServer) {
 
     const alloc = dev.allocator();
         // WebSockets should be deinitialized before other parts.
+    // Initialize FrameworkRouter
     {
         const count = dev.active_websocket_connections.count();
         if (count > 0) {
-            let sockets = bun.handleOom(alloc.alloc(*HmrSocket, count));
-            defer alloc.free(sockets);
+            let sockets_guard = HmrSocketSliceGuard{ sockets: bun.handleOom(alloc.alloc(*HmrSocket, count)), alloc: alloc };
+            let sockets = sockets_guard.sockets;
             {
                 let it = dev.active_websocket_connections.keyIterator();
                 let i: usize = 0;
@@ -702,7 +972,7 @@ pub fn deinit(dev: *DevServer) {
         let r = dev.next_bundle.requests.first;
         while (request := r) {
             bun.debugAssert(request.data.handler != .server_handler);
-            defer request.data.deref();
+            const req_guard = DeferredRequestGuard{ req: unsafe { &request.data } };
             r = request.next;
         }
         dev.next_bundle.route_queue.deinit(alloc);
@@ -833,7 +1103,7 @@ fn initServerRuntime(dev: *DevServer) {
         separate_ssr_graph = sc.separate_ssr_graph;
     }
     const hmr_interface = c.BakeLoadInitialServerCode(
-        @ptrCast(dev.vm.global),
+        unsafe { @ptrCast(dev.vm.global) },
         runtime,
         separate_ssr_graph,
     ) catch |e| {
@@ -966,21 +1236,21 @@ fn onJsRequest(dev: *DevServer, req: *Request, resp: AnyResponse) {
         const source_id: SourceMapStore.SourceId = @bitCast(id);
         const entry = dev.source_maps.entries.getPtr(.init(id)) ??
             return notFound(resp);
-        let arena_ = std.heap.ArenaAllocator.init(dev.allocator());
-        defer arena_.deinit();
+        let arena_guard = ArenaGuard{ @"arena": std.heap.ArenaAllocator.init(dev.allocator()) };
         const json_bytes: []u8 = entry.renderJSON(
             dev,
-            arena_.allocator(),
+            arena_guard.@"arena".allocator(),
             source_id.kind,
             dev.allocator(),
             .client,
         ) catch |e| if (e == error.OutOfMemory) bun.outOfMemory() else unreachable;
-        const response = StaticRoute.initFromAnyBlob(&.fromOwnedSlice(dev.allocator(), json_bytes), {
-            server: dev.server,
-            mime_type: &.json,
-        });
-        defer response.deref();
-        response.onRequest({ h1: req }, resp);
+        const response_guard = StaticRouteDerefGuard{
+            route: StaticRoute.initFromAnyBlob(&.fromOwnedSlice(dev.allocator(), json_bytes), {
+                server: dev.server,
+                mime_type: &.json,
+            }),
+        };
+        response_guard.route.onRequest({ h1: req }, resp);
         return;
     }
 
@@ -1211,9 +1481,9 @@ fn ensureRouteIsBundled(
             let sfa = std.heap.stackFallback(4096, dev.allocator());
             const temp_alloc = sfa.get();
 
-            let entry_points: EntryPointList = .empty;
-            defer entry_points.deinit(temp_alloc);
-            dev.appendRouteEntryPointsIfNotStale(&entry_points, temp_alloc, route_bundle_index)?;
+            let entry_points_guard = EntryPointListGuard{ list: .empty, alloc: temp_alloc };
+            let entry_points = *entry_points_guard.list;
+            dev.appendRouteEntryPointsIfNotStale(entry_points, temp_alloc, route_bundle_index)?;
 
             // If all files were already bundled (possible with layouts),
             // then no entry points will be queued up here. That does
@@ -1233,7 +1503,7 @@ fn ensureRouteIsBundled(
             dev.routeBundlePtr(route_bundle_index).server_state = .bundling;
 
             dev.startAsyncBundle(
-                entry_points,
+                entry_points.*,
                 false,
                 std.time.Timer.start() catch @panic("timers unsupported"),
             ) catch |e| bun.handleOom(e);
@@ -1296,7 +1566,7 @@ fn deferRequest(
     resp: AnyResponse,
 )! {
     let deferred = dev.deferred_request_pool.get();
-    debug.log("DeferredRequest(0x{x}).init", .{@intFromPtr(&deferred.data)});
+    debug.log("DeferredRequest(0x{x}).init", .{unsafe { @intFromPtr(&deferred.data) }});
 
     const method = switch (req) {
         .req => |r| bun.http.Method.which(r.method()) ?? .GET,
@@ -1332,7 +1602,7 @@ fn deferRequest(
                     data: &deferred.data,
                     deref_fn: struct {
                         static fn deref_fn(ptr: *!) {
-                            let deferred_req: *DeferredRequest = @ptrCast(@alignCast(ptr));
+                            let deferred_req: *DeferredRequest = unsafe { @ptrCast(@alignCast(ptr)) };
                             deferred_req.weakDeref();
                         }
                     }.deref_fn,
@@ -1360,12 +1630,12 @@ fn checkRouteFailures(
 ): !CheckRouteFailuresResult {
     let sfa_state = std.heap.stackFallback(65536, dev.allocator());
     const sfa = sfa_state.get();
-    let gts = dev.initGraphTraceState(sfa, 0)?;
-    defer gts.deinit(sfa);
-    defer dev.incremental_result.failures_added.clearRetainingCapacity();
+    let gts_guard = GraphTraceStateGuard{ state: dev.initGraphTraceState(sfa, 0)?, alloc: sfa };
+    let gts = *gts_guard.state;
+    const failures_clear_guard = FailuresAddedClearGuard{ list: unsafe { &dev.incremental_result.failures_added } };
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
-    dev.traceAllRouteImports(dev.routeBundlePtr(route_bundle_index), &gts, .find_errors)?;
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
+    dev.traceAllRouteImports(dev.routeBundlePtr(route_bundle_index), gts, .find_errors)?;
     if (dev.incremental_result.failures_added.items.len > 0) {
         // See comment on this field for information
         if (!dev.assume_perfect_incremental_bundling) {
@@ -1461,9 +1731,8 @@ fn computeArgumentsForFrameworkRequest(
         // routerTypeMain
         router_type_main: router_type.server_file_string.get() ?? str: {
             const name = dev.server_graph.bundled_files.keys()[fromOpaqueFileId(.server, router_type.server_file).get()];
-            const relative_path_buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(relative_path_buf);
-            const str = bun.String.createUTF8ForJS(dev.vm.global, dev.relativePath(relative_path_buf, name))?;
+            const relative_path_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+            const str = bun.String.createUTF8ForJS(dev.vm.global, dev.relativePath(relative_path_guard.buf, name))?;
             router_type.server_file_string = .create(str, dev.vm.global);
             break :str str;
         },
@@ -1482,18 +1751,16 @@ fn computeArgumentsForFrameworkRequest(
             const arr = JSValue.createEmptyArray(global, n)?;
             route = dev.router.routePtr(framework_bundle.route_index);
             {
-                const relative_path_buf = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(relative_path_buf);
-                let route_name = bun.String.cloneUTF8(dev.relativePath(relative_path_buf, keys[fromOpaqueFileId(.server, route.file_page.unwrap().?).get()]));
+                const relative_path_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+                let route_name = bun.String.cloneUTF8(dev.relativePath(relative_path_guard.buf, keys[fromOpaqueFileId(.server, route.file_page.unwrap().?).get()]));
                 try arr.putIndex(global, 0, try route_name.transferToJS(global));
             }
             n = 1;
             while (true) {
                 if (layout := route.file_layout.unwrap()) {
-                    const relative_path_buf = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(relative_path_buf);
+                    const relative_path_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
                     let layout_name = bun.String.cloneUTF8(dev.relativePath(
-                        relative_path_buf,
+                        relative_path_guard.buf,
                         keys[fromOpaqueFileId(.server, layout).get()],
                     ));
                     try arr.putIndex(global, @intCast(n), try layout_name.transferToJS(global));
@@ -1510,12 +1777,13 @@ fn computeArgumentsForFrameworkRequest(
         client_id: framework_bundle.cached_client_bundle_url.get() ?? str: {
             const bundle_index: u32 = route_bundle_index.get();
             const generation: u32 = route_bundle.client_script_generation;
-            const str = bun.String.createFormat(client_prefix ++ "/route-{x}{x}.js", .{
-                std.mem.asBytes(&bundle_index),
-                std.mem.asBytes(&generation),
-            }) catch |e| bun.handleOom(e);
-            defer str.deref();
-            const js = str.toJS(dev.vm.global)?;
+            const str_guard = BunStringGuard{
+                str: bun.String.createFormat(client_prefix ++ "/route-{x}{x}.js", .{
+                    std.mem.asBytes(&bundle_index),
+                    std.mem.asBytes(&generation),
+                }) catch |e| bun.handleOom(e),
+            };
+            const js = str_guard.str.toJS(dev.vm.global)?;
             framework_bundle.cached_client_bundle_url = .create(js, dev.vm.global);
             break :str js;
         },
@@ -1548,20 +1816,21 @@ fn onFrameworkRequestWithBundle(
 
     // Extract route params by re-matching the URL
     let params: FrameworkRouter.MatchedParams = undefined;
-    const url_bunstr = switch (req) {
-        .stack => |r| bun.String{
-            tag: .ZigString,
-            value: { ZigString: bun.ZigString.fromUTF8(r.url()) },
-        },
-        .saved => |data| brk: {
-            const url = data.request.url;
-            url.ref();
-            break :brk url;
+    const url_bunstr_guard = BunStringGuard{
+        str: switch (req) {
+            .stack => |r| bun.String{
+                tag: .ZigString,
+                value: { ZigString: bun.ZigString.fromUTF8(r.url()) },
+            },
+            .saved => |data| brk: {
+                const url = data.request.url;
+                url.ref();
+                break :brk url;
+            },
         },
     };
-    defer url_bunstr.deref();
-    const url = url_bunstr.toUTF8(bun.default_allocator);
-    defer url.deinit();
+    const url_guard = ZigStringSliceGuard{ slice: url_bunstr_guard.str.toUTF8(bun.default_allocator) };
+    const url = url_guard.slice;
 
     // Extract pathname from URL (remove protocol, host, query, hash)
     let pathname = extractPathnameFromUrl(url.byteSlice());
@@ -1603,7 +1872,7 @@ fn onHtmlRequestWithBundle(dev: *DevServer, route_bundle_index: RouteBundle.Inde
 
     const blob = html.cached_response ?? generate: {
         const payload = bun.handleOom(generateHTMLPayload(dev, route_bundle_index, route_bundle, html));
-        errdefer dev.allocator().free(payload);
+        let payload_guard = AllocSliceU8Guard{ slice: payload, alloc: dev.allocator() };
 
         html.cached_response = StaticRoute.initFromAnyBlob(
             &.fromOwnedSlice(dev.allocator(), payload),
@@ -1612,6 +1881,7 @@ fn onHtmlRequestWithBundle(dev: *DevServer, route_bundle_index: RouteBundle.Inde
                 server: dev.server ?? unreachable,
             },
         );
+        payload_guard.active = false;
         break :generate html.cached_response.?;
     };
     blob.onWithMethod(method, resp);
@@ -1659,16 +1929,16 @@ fn generateHTMLPayload(dev: *DevServer, route_bundle_index: RouteBundle.Index, r
     if (!bun.strings.isAllASCII(display_name)) display_name = "page";
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     // Prepare bitsets for tracing
     let sfa_state = std.heap.stackFallback(65536, dev.allocator());
     const sfa = sfa_state.get();
-    let gts = dev.initGraphTraceState(sfa, 0)?;
-    defer gts.deinit(sfa);
+    let gts_guard = GraphTraceStateGuard{ state: dev.initGraphTraceState(sfa, 0)?, alloc: sfa };
+    let gts = *gts_guard.state;
     // Run tracing
     dev.client_graph.reset();
-    dev.traceAllRouteImports(route_bundle, &gts, .find_css)?;
+    dev.traceAllRouteImports(route_bundle, gts, .find_css)?;
 
     const css_ids = dev.client_graph.current_css_files.items;
 
@@ -1680,8 +1950,8 @@ fn generateHTMLPayload(dev: *DevServer, route_bundle_index: RouteBundle.Index, r
         "-0000000000000000.js".len +
         script_unref_payload.len;
 
-    let array: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8).initCapacity(dev.allocator(), payload_size)?;
-    errdefer array.deinit(dev.allocator());
+    let array_guard = ArrayListU8Guard{ list: std.ArrayListUnmanaged(u8).initCapacity(dev.allocator(), payload_size)?, alloc: dev.allocator() };
+    let array = *array_guard.list;
     array.appendSliceAssumeCapacity(before_head_end);
 
     // Insert all link tags before "</head>"
@@ -1716,8 +1986,8 @@ fn generateJavaScriptCodeForHTMLFile(
 ): bun.OOM![]const u8 {
     let sfa_state = std.heap.stackFallback(65536, dev.allocator());
     const sfa = sfa_state.get();
-    let array = bun.handleOom(std.ArrayListUnmanaged(u8).initCapacity(sfa, 65536));
-    defer array.deinit(sfa);
+    let array_guard = ArrayListU8Guard{ list: bun.handleOom(std.ArrayListUnmanaged(u8).initCapacity(sfa, 65536)), alloc: sfa };
+    let array = *array_guard.list;
     const w = array.writer(sfa);
 
     w.writeAll("  ")?;
@@ -1763,7 +2033,7 @@ pub fn onJsRequestWithBundle(dev: *DevServer, bundle_index: RouteBundle.Index, r
         client_bundle = cb;
     } else {
         const payload = bun.handleOom(dev.generateClientBundle(route_bundle));
-        errdefer dev.allocator().free(payload);
+        let payload_guard = AllocSliceU8Guard{ slice: payload, alloc: dev.allocator() };
         route_bundle.client_bundle = StaticRoute.initFromAnyBlob(
             &.fromOwnedSlice(dev.allocator(), payload),
             .{
@@ -1771,6 +2041,7 @@ pub fn onJsRequestWithBundle(dev: *DevServer, bundle_index: RouteBundle.Index, r
                 server: dev.server ?? unreachable,
             },
         );
+        payload_guard.active = false;
         client_bundle = route_bundle.client_bundle.?;
     }
     dev.source_maps.addWeakRef(route_bundle.sourceMapId());
@@ -1898,7 +2169,7 @@ pub struct DeferredRequest {
     };
 
     static fn onAbortWrapper(opaque_ptr: *!) {
-        const self: *DeferredRequest = @ptrCast(@alignCast(opaque_ptr));
+        const self: *DeferredRequest = unsafe { @ptrCast(@alignCast(opaque_ptr)) };
         if (!self.isAlive()) return;
         self.onAbortImpl();
     }
@@ -1908,7 +2179,7 @@ pub struct DeferredRequest {
     }
 
     fn onAbortImpl(*_) {
-        debugLog("DeferredRequest(0x{x}) onAbort", .{@intFromPtr(_)});
+        debugLog("DeferredRequest(0x{x}) onAbort", .{unsafe { @intFromPtr(_) }});
 
         _.abort();
         assert(_.handler == .aborted);
@@ -1925,7 +2196,7 @@ pub struct DeferredRequest {
     /// such as for bundling failures or aborting the server.
     /// Does not free the underlying `DeferredRequest.Node`
     fn __deinit(*_) {
-        debugLog("DeferredRequest(0x{x}) deinitImpl", .{@intFromPtr(_)});
+        debugLog("DeferredRequest(0x{x}) deinitImpl", .{unsafe { @intFromPtr(_) }});
 
         switch (_.handler) {
             .server_handler => |*saved| saved.deinit(),
@@ -1935,7 +2206,7 @@ pub struct DeferredRequest {
 
     /// Deinitializes state by aborting the connection.
     fn abort(*_) {
-        debugLog("DeferredRequest(0x{x}) abort", .{@intFromPtr(_)});
+        debugLog("DeferredRequest(0x{x}) abort", .{unsafe { @intFromPtr(_) }});
         let handler = _.handler;
         _.handler = .aborted;
         switch (handler) {
@@ -1971,18 +2242,12 @@ pub fn startAsyncBundle(
     if (agent := dev.inspector()) {
         let sfa_state = std.heap.stackFallback(256, dev.allocator());
         const sfa = sfa_state.get();
-        let trigger_files = std.array_list.Managed(bun.String).initCapacity(sfa, entry_points.set.count())?;
-        defer trigger_files.deinit();
-        defer {
-            for (*str of trigger_files.items) {
-                str.deref();
-            }
-        }
+        let trigger_files_guard = TriggerFilesGuard{ list: std.array_list.Managed(bun.String).initCapacity(sfa, entry_points.set.count())? };
         for (key of entry_points.set.keys()) {
-            trigger_files.append(bun.String.cloneUTF8(key))?;
+            trigger_files_guard.list.append(bun.String.cloneUTF8(key))?;
         }
 
-        agent.notifyBundleStart(dev.inspector_server_id, trigger_files.items);
+        agent.notifyBundleStart(dev.inspector_server_id, trigger_files_guard.list.items);
     }
 
     dev.incremental_result.reset();
@@ -2016,7 +2281,7 @@ pub fn startAsyncBundle(
 
     {
         dev.graph_safety_lock.lock();
-        defer dev.graph_safety_lock.unlock();
+        const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
         dev.client_graph.reset();
         dev.server_graph.reset();
@@ -2082,13 +2347,12 @@ fn indexFailures(dev: *DevServer)! {
 
         total_len += dev.incremental_result.failures_removed.items.len * @sizeOf(u32);
 
-        let gts = dev.initGraphTraceState(sfa, 0)?;
-        defer gts.deinit(sfa);
+        let gts_guard = GraphTraceStateGuard{ state: dev.initGraphTraceState(sfa, 0)?, alloc: sfa };
+        let gts = *gts_guard.state;
 
-        let payload = std.array_list.Managed(u8).initCapacity(sfa, total_len)?;
-        defer payload.deinit();
-        payload.appendAssumeCapacity(MessageId.errors.char());
-        const w = payload.writer();
+        let payload_guard = ManagedByteListGuard{ list: std.array_list.Managed(u8).initCapacity(sfa, total_len)? };
+        payload_guard.list.appendAssumeCapacity(MessageId.errors.char());
+        const w = payload_guard.list.writer();
 
         w.writeInt(u32, @intCast(dev.incremental_result.failures_removed.items.len), .little)?;
 
@@ -2102,8 +2366,8 @@ fn indexFailures(dev: *DevServer)! {
 
             switch (added.getOwner()) {
                 .none, .route => unreachable,
-                .server => |index| try dev.server_graph.traceDependencies(index, &gts, .no_stop, index),
-                .client => |index| try dev.client_graph.traceDependencies(index, &gts, .no_stop, index),
+                .server => |index| try dev.server_graph.traceDependencies(index, gts, .no_stop, index),
+                .client => |index| try dev.client_graph.traceDependencies(index, gts, .no_stop, index),
             }
         }
 
@@ -2123,12 +2387,11 @@ fn indexFailures(dev: *DevServer)! {
             dev.routeBundlePtr(index).server_state = .possible_bundling_failures;
         }
 
-        dev.publish(.errors, payload.items, .binary);
+        dev.publish(.errors, payload_guard.list.items, .binary);
     } else if (dev.incremental_result.failures_removed.items.len > 0) {
-        let payload = std.array_list.Managed(u8).initCapacity(sfa, @sizeOf(MessageId) + @sizeOf(u32) + dev.incremental_result.failures_removed.items.len * @sizeOf(u32))?;
-        defer payload.deinit();
-        payload.appendAssumeCapacity(MessageId.errors.char());
-        const w = payload.writer();
+        let payload_guard = ManagedByteListGuard{ list: std.array_list.Managed(u8).initCapacity(sfa, @sizeOf(MessageId) + @sizeOf(u32) + dev.incremental_result.failures_removed.items.len * @sizeOf(u32))? };
+        payload_guard.list.appendAssumeCapacity(MessageId.errors.char());
+        const w = payload_guard.list.writer();
 
         w.writeInt(u32, @intCast(dev.incremental_result.failures_removed.items.len), .little)?;
 
@@ -2137,7 +2400,7 @@ fn indexFailures(dev: *DevServer)! {
             removed.deinit(dev);
         }
 
-        dev.publish(.errors, payload.items, .binary);
+        dev.publish(.errors, payload_guard.list.items, .binary);
     }
 
     dev.incremental_result.failures_removed.clearRetainingCapacity();
@@ -2150,13 +2413,13 @@ fn generateClientBundle(dev: *DevServer, route_bundle: *RouteBundle): bun.OOM![]
     assert(route_bundle.server_state == .loaded); // page is unfit to trace/load
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     // Prepare bitsets
     let sfa_state = std.heap.stackFallback(65536, dev.allocator());
     const sfa = sfa_state.get();
-    let gts = dev.initGraphTraceState(sfa, 0)?;
-    defer gts.deinit(sfa);
+    let gts_guard = GraphTraceStateGuard{ state: dev.initGraphTraceState(sfa, 0)?, alloc: sfa };
+    let gts = *gts_guard.state;
 
     // Run tracing
     dev.client_graph.reset();
@@ -2167,14 +2430,14 @@ fn generateClientBundle(dev: *DevServer, route_bundle: *RouteBundle): bun.OOM![]
     // already `.loaded` so it does not go through `ensureRouteIsBundled`),
     // we must leave the buffers cleared on every exit path so the next
     // hot-update does not pick up the files we traced here.
-    defer dev.client_graph.reset();
-    dev.traceAllRouteImports(route_bundle, &gts, .find_client_modules)?;
+    const client_reset_guard = ClientGraphResetGuard{ graph: unsafe { &dev.client_graph } };
+    dev.traceAllRouteImports(route_bundle, gts, .find_client_modules)?;
 
     let react_fast_refresh_id: []const u8 = "";
     if (rfr := dev.framework.react_fast_refresh) {
         if (rfr_index := dev.client_graph.getFileIndex(rfr.import_source)) {
             if (!dev.client_graph.stale_files.isSet(rfr_index.get())) {
-                dev.client_graph.traceImports(rfr_index, &gts, .find_client_modules)?;
+                dev.client_graph.traceImports(rfr_index, gts, .find_client_modules)?;
                 react_fast_refresh_id = rfr.import_source;
             }
         }
@@ -2197,11 +2460,11 @@ fn generateClientBundle(dev: *DevServer, route_bundle: *RouteBundle): bun.OOM![]
     mapLog("inc {x}, 1 for generateClientBundle", .{script_id.get()});
     switch (try dev.source_maps.putOrIncrementRefCount(script_id, 1)) {
         .uninitialized => |entry| {
-            errdefer dev.source_maps.unref(script_id);
-            gts.clearAndFree(sfa);
-            let arena_ = std.heap.ArenaAllocator.init(sfa);
-            defer arena_.deinit();
-            dev.client_graph.takeSourceMap(arena_.allocator(), dev.allocator(), entry)?;
+            let unref_guard = SourceMapUnrefGuard{ store: unsafe { &dev.source_maps }, script_id: script_id };
+            gts_guard.state.clearAndFree(sfa);
+            let arena_guard = ArenaGuard{ @"arena": std.heap.ArenaAllocator.init(sfa) };
+            dev.client_graph.takeSourceMap(arena_guard.@"arena".allocator(), dev.allocator(), entry)?;
+            unref_guard.active = false;
         },
         .shared => {},
     }
@@ -2227,18 +2490,17 @@ fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle): bun.JSError!
     assert(route_bundle.server_state == .loaded); // page is unfit to load
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     // Prepare bitsets
     let sfa_state = std.heap.stackFallback(65536, dev.allocator());
 
     const sfa = sfa_state.get();
-    let gts = dev.initGraphTraceState(sfa, 0)?;
-    defer gts.deinit(sfa);
+    let gts_guard = GraphTraceStateGuard{ state: dev.initGraphTraceState(sfa, 0)?, alloc: sfa };
 
     // Run tracing
     dev.client_graph.reset();
-    dev.traceAllRouteImports(route_bundle, &gts, .find_css)?;
+    dev.traceAllRouteImports(route_bundle, &gts_guard.state, .find_css)?;
 
     const names = dev.client_graph.current_css_files.items;
     const arr = jsc.JSArray.createEmpty(dev.vm.global, names.len)?;
@@ -2249,9 +2511,8 @@ fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle): bun.JSError!
         const path = std.fmt.bufPrint(&buf, asset_prefix ++ "/{s}.css", .{
             &std.fmt.bytesToHex(std.mem.asBytes(&item), .lower),
         }) catch unreachable;
-        const str = bun.String.cloneUTF8(path);
-        defer str.deref();
-        try arr.putIndex(dev.vm.global, @intCast(i), try str.toJS(dev.vm.global));
+        const str_guard = BunStringGuard{ str: bun.String.cloneUTF8(path) };
+        try arr.putIndex(dev.vm.global, @intCast(i), try str_guard.str.toJS(dev.vm.global));
     }
     return arr;
 }
@@ -2295,11 +2556,9 @@ fn makeArrayForServerComponentsPatch(dev: *DevServer, global: *jsc.JSGlobalObjec
     const names = dev.server_graph.bundled_files.keys();
     for (i of 0..items.len) {
         const item = items[i];
-        const relative_path_buf = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(relative_path_buf);
-        const str = bun.String.cloneUTF8(dev.relativePath(relative_path_buf, names[item.get()]));
-        defer str.deref();
-        try arr.putIndex(global, @intCast(i), try str.toJS(global));
+        const relative_path_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+        const str_guard = BunStringGuard{ str: bun.String.cloneUTF8(dev.relativePath(relative_path_guard.buf, names[item.get()])) };
+        try arr.putIndex(global, @intCast(i), try str_guard.str.toJS(global));
     }
     return arr;
 }
@@ -2341,7 +2600,7 @@ pub struct HotUpdateContext {
 
         comptime assert(@alignOf(IncrementalGraph(side).FileIndex.Optional) == @alignOf(u32));
         comptime assert(@sizeOf(IncrementalGraph(side).FileIndex.Optional) == @sizeOf(u32));
-        return @ptrCast(&subslice[i.get()]);
+        return unsafe { @ptrCast(&subslice[i.get()]) };
     }
 }
 
@@ -2393,14 +2652,14 @@ pub fn finalizeBundle(
             Output.debug("current_bundle.requests.first != null. this leaves pending requests without an error page!", {});
         }
         while (node := current_bundle.requests.popFirst()) {
-            const req = &node.data;
-            defer req.deref();
+            const req_guard = DeferredRequestGuard{ req: unsafe { &node.data } };
+            const req = req_guard.req;
             req.abort();
         }
     }
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     const js_chunk = result.jsPseudoChunk();
     const input_file_sources = bv2.graph.input_files.items(.source);
@@ -2592,12 +2851,14 @@ pub fn finalizeBundle(
         chunk.entry_point.entry_point_id = @intCast(route_bundle_index.get());
     }
 
-    let gts = try dev.initGraphTraceState(
-        bv2.allocator(),
-        if (result.cssChunks().len > 0) bv2.graph.input_files.len else 0,
-    );
-    defer gts.deinit(bv2.allocator());
-    ctx.gts = &gts;
+    let gts_guard = GraphTraceStateGuard{
+        state: try dev.initGraphTraceState(
+            bv2.allocator(),
+            if (result.cssChunks().len > 0) bv2.graph.input_files.len else 0,
+        ),
+        alloc: bv2.allocator(),
+    };
+    ctx.gts = &gts_guard.state;
     ctx.server_seen_bit_set = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(bv2.allocator(), dev.server_graph.bundled_files.count())?;
 
     dev.incremental_result.had_adjusted_edges = false;
@@ -2652,26 +2913,23 @@ pub fn finalizeBundle(
         // Get the source map if available and render to JSON
         let source_map_json = if (dev.server_graph.current_chunk_source_maps.items.len > 0) json: {
             // Create a temporary source map entry to render
-            let source_map_entry = SourceMapStore.Entry{
-                ref_count: 1,
-                paths: [],
-                files: .empty,
-                overlapping_memory_cost: 0,
-                dev_allocator: dev.dev_allocator(),
+            let source_map_entry_guard = SourceMapEntryGuard{
+                entry: {
+                    ref_count: 1,
+                    paths: [],
+                    files: .empty,
+                    overlapping_memory_cost: 0,
+                    dev_allocator: dev.dev_allocator(),
+                },
             };
 
             // Fill the source map entry
-            let arena_ = std.heap.ArenaAllocator.init(dev.allocator());
-            defer arena_.deinit();
-            dev.server_graph.takeSourceMap(arena_.allocator(), dev.allocator(), &source_map_entry)?;
-            defer {
-                source_map_entry.ref_count = 0;
-                source_map_entry.deinit();
-            }
+            let arena_guard = ArenaGuard{ @"arena": std.heap.ArenaAllocator.init(dev.allocator()) };
+            dev.server_graph.takeSourceMap(arena_guard.@"arena".allocator(), dev.allocator(), &source_map_entry_guard.entry)?;
 
-            const json_data = source_map_entry.renderJSON(
+            const json_data = source_map_entry_guard.entry.renderJSON(
                 dev,
-                arena_.allocator(),
+                arena_guard.@"arena".allocator(),
                 .hmr_chunk,
                 dev.allocator(),
                 .server,
@@ -2680,19 +2938,20 @@ pub fn finalizeBundle(
             };
             break :json json_data;
         } else null;
-        defer if (json := source_map_json) dev.allocator().free(json);
+        let source_map_json_guard = AllocSliceU8Guard{ slice: source_map_json ?? "", alloc: dev.allocator(), active: source_map_json != null };
 
         const server_bundle = try dev.server_graph.takeJSBundle(&{
             kind: .hmr_chunk,
             script_id: server_script_id,
         });
-        defer dev.allocator().free(server_bundle);
+        const server_bundle_guard = AllocSliceU8Guard{ slice: server_bundle, alloc: dev.allocator() };
 
         let server_modules: JSValue = undefined;
         if (json := bun.take(&source_map_json)) {
+            source_map_json_guard.active = false;
             if (comptime AllocationScope.enabled) dev.allocation_scope.leakSlice(json);
             server_modules = c.BakeLoadServerHmrPatchWithSourceMap(
-                @ptrCast(dev.vm.global),
+                unsafe { @ptrCast(dev.vm.global) },
                 bun.String.cloneUTF8(server_bundle),
                 json.ptr,
                 json.len,
@@ -2702,7 +2961,7 @@ pub fn finalizeBundle(
             };
         } else {
             server_modules = c.BakeLoadServerHmrPatch(
-                @ptrCast(dev.vm.global),
+                unsafe { @ptrCast(dev.vm.global) },
                 bun.String.cloneLatin1(server_bundle),
             ) catch |e| {
                 dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
@@ -2727,17 +2986,19 @@ pub fn finalizeBundle(
         };
     }
 
-    let route_bits = DynamicBitSetUnmanaged.initEmpty(stack_alloc, dev.route_bundles.items.len)?;
-    defer route_bits.deinit(stack_alloc);
-    let route_bits_client = DynamicBitSetUnmanaged.initEmpty(stack_alloc, dev.route_bundles.items.len)?;
-    defer route_bits_client.deinit(stack_alloc);
+    let route_bits_guard = DynamicBitSetGuard{ bits: DynamicBitSetUnmanaged.initEmpty(stack_alloc, dev.route_bundles.items.len)?, alloc: stack_alloc };
+    let route_bits = &route_bits_guard.bits;
+    let route_bits_client_guard = DynamicBitSetGuard{ bits: DynamicBitSetUnmanaged.initEmpty(stack_alloc, dev.route_bundles.items.len)?, alloc: stack_alloc };
+    let route_bits_client = &route_bits_client_guard.bits;
 
     let has_route_bits_set = false;
 
     let hot_update_payload_sfa = std.heap.stackFallback(65536, dev.allocator());
-    let hot_update_payload = std.array_list.Managed(u8).initCapacity(hot_update_payload_sfa.get(), 65536) catch
-        unreachable; // enough space
-    defer hot_update_payload.deinit();
+    let hot_update_payload_guard = ManagedByteListGuard{
+        list: std.array_list.Managed(u8).initCapacity(hot_update_payload_sfa.get(), 65536) catch
+            unreachable, // enough space
+    };
+    let hot_update_payload = *hot_update_payload_guard.list;
     hot_update_payload.appendAssumeCapacity(MessageId.hot_update.char());
 
     // The writer used for the hot_update payload
@@ -2797,10 +3058,10 @@ pub fn finalizeBundle(
         dev.incremental_result.framework_routes_affected.clearRetainingCapacity();
         dev.incremental_result.html_routes_hard_affected.clearRetainingCapacity();
         dev.incremental_result.html_routes_soft_affected.clearRetainingCapacity();
-        gts.clear();
+        gts_guard.state.clear();
 
         for (index of dev.incremental_result.client_components_affected.items) {
-            dev.server_graph.traceDependencies(index, &gts, .no_stop, index)?;
+            dev.server_graph.traceDependencies(index, &gts_guard.state, .no_stop, index)?;
         }
 
         // A bit-set is used to avoid duplicate entries. This is not a problem
@@ -2873,9 +3134,9 @@ pub fn finalizeBundle(
             // If no edges were changed, then it is impossible to
             // change the list of CSS files.
             if (dev.incremental_result.had_adjusted_edges) {
-                gts.clear();
+                gts_guard.state.clear();
                 dev.client_graph.current_css_files.clearRetainingCapacity();
-                dev.traceAllRouteImports(route_bundle, &gts, .find_css)?;
+                dev.traceAllRouteImports(route_bundle, &gts_guard.state, .find_css)?;
                 const css_ids = dev.client_graph.current_css_files.items;
 
                 w.writeInt(i32, @intCast(css_ids.len), .little)?;
@@ -2965,7 +3226,7 @@ pub fn finalizeBundle(
 
         let inspector_agent = dev.inspector();
         if (current_bundle.promise.strong.hasValue()) {
-            defer current_bundle.promise.reset();
+            const promise_guard = PromiseResetGuard{ promise: unsafe { &current_bundle.promise } };
             current_bundle.promise.setRouteBundleState(dev, .possible_bundling_failures);
             try dev.sendSerializedFailures(
                 DevResponse{
@@ -2981,8 +3242,8 @@ pub fn finalizeBundle(
         }
 
         while (node := current_bundle.requests.popFirst()) {
-            const req = &node.data;
-            defer req.deref();
+            const req_guard = DeferredRequestGuard{ req: unsafe { &node.data } };
+            const req = req_guard.req;
 
             let rb = dev.routeBundlePtr(req.route_bundle_index);
             rb.server_state = .possible_bundling_failures;
@@ -3006,9 +3267,8 @@ pub fn finalizeBundle(
             inspector_agent = null;
         }
         if (agent := inspector_agent) {
-            let buf = std.array_list.Managed(u8).init(bun.default_allocator);
-            defer buf.deinit();
-            dev.encodeSerializedFailures(dev.bundling_failures.keys(), &buf, agent)?;
+            let buf_guard = ManagedByteListGuard{ list: std.array_list.Managed(u8).init(bun.default_allocator) };
+            dev.encodeSerializedFailures(dev.bundling_failures.keys(), &buf_guard.list, agent)?;
         }
 
         return;
@@ -3047,15 +3307,14 @@ pub fn finalizeBundle(
         // Intentionally creating a new scope here so we can limit the lifetime
         // of the `relative_path_buf`
         {
-            const relative_path_buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(relative_path_buf);
+            const relative_path_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
 
             // Compute a file name to display
             let file_name: ([]const u8)? = null;
             if (current_bundle.had_reload_event) {
                 if (bv2.graph.entry_points.items.len > 0) {
                     file_name = dev.relativePath(
-                        relative_path_buf,
+                        relative_path_guard.buf,
                         bv2.graph.input_files.items(.source)[bv2.graph.entry_points.items[0].get()].path.text,
                     );
                 }
@@ -3072,7 +3331,7 @@ pub fn finalizeBundle(
                 if (rbi := opt_rbi) {
                     switch (dev.routeBundlePtr(rbi).data) {
                         .html => |html| {
-                            file_name = dev.relativePath(relative_path_buf, html.html_bundle.data.bundle.data.path);
+                            file_name = dev.relativePath(relative_path_guard.buf, html.html_bundle.data.bundle.data.path);
                         },
                         .framework => |fw| {
                             const route = dev.router.routePtr(fw.route_index);
@@ -3080,7 +3339,7 @@ pub fn finalizeBundle(
                             if (opaque_id := opt_id) {
                                 const server_index = fromOpaqueFileId(.server, opaque_id);
                                 const abs_path = dev.server_graph.bundled_files.keys()[server_index.get()];
-                                file_name = dev.relativePath(relative_path_buf, abs_path);
+                                file_name = dev.relativePath(relative_path_guard.buf, abs_path);
                             }
                         },
                     }
@@ -3105,7 +3364,7 @@ pub fn finalizeBundle(
 
     // Release the lock because the underlying handler may acquire one.
     dev.graph_safety_lock.unlock();
-    defer dev.graph_safety_lock.lock();
+    const relock_guard = GraphSafetyRelockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     // Set all the deferred routes to the .loaded state up front
     {
@@ -3118,16 +3377,16 @@ pub fn finalizeBundle(
     }
 
     if (current_bundle.promise.strong.hasValue()) {
-        defer current_bundle.promise.deinitIdempotently();
+        const promise_guard = PromiseDeinitGuard{ promise: unsafe { &current_bundle.promise } };
         current_bundle.promise.setRouteBundleState(dev, .loaded);
         dev.vm.eventLoop().enter();
-        defer dev.vm.eventLoop().exit();
+        const el_guard = EventLoopExitGuard{ vm: unsafe { dev.vm } };
         current_bundle.promise.strong.resolve(dev.vm.global, .true)?;
     }
 
     while (node := current_bundle.requests.popFirst()) {
-        const req = &node.data;
-        defer req.deref();
+        const req_guard = DeferredRequestGuard{ req: unsafe { &node.data } };
+        const req = req_guard.req;
 
         let rb = dev.routeBundlePtr(req.route_bundle_index);
         rb.server_state = .loaded;
@@ -3150,8 +3409,8 @@ fn startNextBundleIfPresent(dev: *DevServer) {
     if (dev.next_bundle.reload_event != null || dev.next_bundle.requests.first != null || dev.next_bundle.promise.strong.hasValue()) {
         let sfb = std.heap.stackFallback(4096, dev.allocator());
         const temp_alloc = sfb.get();
-        let entry_points: EntryPointList = .empty;
-        defer entry_points.deinit(temp_alloc);
+        let entry_points_guard = EntryPointListGuard{ list: .empty, alloc: temp_alloc };
+        let entry_points = *entry_points_guard.list;
 
         let is_reload = false;
         let timer = std.time.Timer.start() catch @panic("timers unsupported");
@@ -3177,11 +3436,11 @@ fn startNextBundleIfPresent(dev: *DevServer) {
         for (route_bundle_index of dev.next_bundle.route_queue.keys()) {
             let rb = dev.routeBundlePtr(route_bundle_index);
             rb.server_state = .bundling;
-            bun.handleOom(dev.appendRouteEntryPointsIfNotStale(&entry_points, temp_alloc, route_bundle_index));
+            bun.handleOom(dev.appendRouteEntryPointsIfNotStale(entry_points, temp_alloc, route_bundle_index));
         }
 
         if (entry_points.set.count() > 0) {
-            bun.handleOom(dev.startAsyncBundle(entry_points, is_reload, timer));
+            bun.handleOom(dev.startAsyncBundle(entry_points.*, is_reload, timer));
         }
 
         dev.next_bundle.route_queue.clearRetainingCapacity();
@@ -3198,7 +3457,7 @@ pub fn handleParseTaskFailure(
     bv2: *BundleV2,
 ): bun.OOM!void {
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     debug.log("handleParseTaskFailure({}, .{s}, {f}, {d} messages)", .{
         e,
@@ -3229,7 +3488,7 @@ pub fn getLogForResolutionFailures(dev: *DevServer, abs_path: []const u8, graph:
     const current_bundle = &dev.current_bundle.?;
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     const owner = switch (graph == .client) {
         inline else => |is_client| @unionInit(
@@ -3257,7 +3516,7 @@ pub fn isFileCached(dev: *DevServer, path: []const u8, side: bake.Graph): CacheE
         return null;
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     switch (side) {
         inline else => |side_comptime| {
@@ -3398,7 +3657,7 @@ fn getOrPutRouteBundle(dev: *DevServer, route: RouteBundle.UnresolvedIndex): !Ro
     }
 
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     const bundle_index = RouteBundle.Index.init(@intCast(dev.route_bundles.items.len));
 
@@ -3462,8 +3721,8 @@ fn encodeSerializedFailures(
 ): bun.OOM!void {
     let all_failures_len: usize = 0;
     for (fail of failures) all_failures_len += fail.data.len;
-    let all_failures = std.ArrayListUnmanaged(u8).initCapacity(dev.allocator(), all_failures_len)?;
-    defer all_failures.deinit(dev.allocator());
+    let all_failures_guard = ArrayListU8Guard{ list: std.ArrayListUnmanaged(u8).initCapacity(dev.allocator(), all_failures_len)?, alloc: dev.allocator() };
+    let all_failures = *all_failures_guard.list;
     for (fail of failures) all_failures.appendSliceAssumeCapacity(fail.data);
 
     const failures_start_buf_pos = buf.items.len;
@@ -3477,9 +3736,8 @@ fn encodeSerializedFailures(
     if (agent := inspector_agent) {
         assert(agent.isEnabled());
         const failures_encoded = buf.items[failures_start_buf_pos..];
-        let str = bun.String.initLatin1OrASCIIView(failures_encoded);
-        defer str.deref();
-        agent.notifyBundleFailed(dev.inspector_server_id, &str);
+        let str_guard = BunStringGuard{ str: bun.String.initLatin1OrASCIIView(failures_encoded) };
+        agent.notifyBundleFailed(dev.inspector_server_id, &str_guard.str);
     }
 }
 
@@ -3490,8 +3748,8 @@ fn sendSerializedFailures(
     kind: ErrorPageKind,
     inspector_agent: (*BunFrontendDevServerAgent)?,
 )! {
-    let buf: std.array_list.Managed(u8) = .initCapacity(dev.allocator(), 2048)?;
-    errdefer buf.deinit();
+    let buf_guard = ManagedByteListGuard{ list: .initCapacity(dev.allocator(), 2048)? };
+    let buf = *buf_guard.list;
 
     try buf.appendSlice(switch (kind) {
         inline else => |k| std.fmt.comptimePrint(
@@ -3528,20 +3786,24 @@ fn sendSerializedFailures(
     }
 
     switch (resp) {
-        .http => |r| StaticRoute.sendBlobThenDeinit(r, &.fromArrayList(buf), {
-            mime_type: &.html,
-            server: dev.server.?,
-            status_code: 500,
-        }),
+        .http => |r| {
+            buf_guard.active = false;
+            StaticRoute.sendBlobThenDeinit(r, &.fromArrayList(buf_guard.list), {
+                mime_type: &.html,
+                server: dev.server.?,
+                status_code: 500,
+            });
+        },
         .promise => |_r| {
             let r = _r;
-            let any_blob = bun.webcore.Blob.Any.fromArrayList(buf);
-            let headers = bun.http.Headers.@"from"(null, bun.default_allocator, { body: &any_blob })?;
-            defer headers.deinit();
+            buf_guard.active = false;
+            let any_blob = bun.webcore.Blob.Any.fromArrayList(buf_guard.list);
+            let headers_guard = HeadersGuard{ headers: bun.http.Headers.@"from"(null, bun.default_allocator, { body: &any_blob })? };
+            let headers = *headers_guard.headers;
             bun.handleOom(headers.append("Content-Type", MimeType.html.value));
             if (headers.get("etag") == null) {
                 if (any_blob.slice().len > 0) {
-                    bun.handleOom(bun.http.ETag.appendToHeaders(any_blob.slice(), &headers));
+                    bun.handleOom(bun.http.ETag.appendToHeaders(any_blob.slice(), headers));
                 }
             }
             const fetch_headers = headers.toFetchHeaders(r.global)?;
@@ -3555,7 +3817,7 @@ fn sendSerializedFailures(
                 false,
             );
             dev.vm.eventLoop().enter();
-            defer dev.vm.eventLoop().exit();
+            const el_guard = EventLoopExitGuard{ vm: unsafe { dev.vm } };
             r.promise.reject(r.global, response.toJS(r.global))?;
         },
     }
@@ -3717,10 +3979,10 @@ pub enum TraceImportGoal {
 /// increase in size while the bits are being used. This happens with CSS files,
 /// though [TODO] might not actually be necessary.
 fn initGraphTraceState(dev: *const DevServer, sfa: Allocator, extra_client_bits: usize): !GraphTraceState {
-    let server_bits = DynamicBitSetUnmanaged.initEmpty(sfa, dev.server_graph.bundled_files.count())?;
-    errdefer server_bits.deinit(sfa);
+    let server_bits_guard = DynamicBitSetGuard{ bits: DynamicBitSetUnmanaged.initEmpty(sfa, dev.server_graph.bundled_files.count())?, alloc: sfa };
     const client_bits = DynamicBitSetUnmanaged.initEmpty(sfa, dev.client_graph.bundled_files.count() + extra_client_bits)?;
-    return { server_bits: server_bits, client_bits: client_bits };
+    server_bits_guard.active = false;
+    return { server_bits: server_bits_guard.bits, client_bits: client_bits };
 }
 
 
@@ -3732,19 +3994,16 @@ pub const ChunkKind = enum(u1) {
 
 // For debugging, it is helpful to be able to see bundles.
 pub fn dumpBundle(dump_dir: std.fs.Dir, graph: bake.Graph, rel_path: []const u8, chunk: []const u8, wrap: bool)! {
-    const buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(buf);
-    const name = bun.path.joinAbsStringBuf("/", buf, &.{
+    const buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+    const name = bun.path.joinAbsStringBuf("/", buf_guard.buf, &.{
         @tagName(graph),
         rel_path,
     }, .auto)[1..];
-    let inner_dir = dump_dir.makeOpenPath(bun.Dirname.dirname(u8, name).?, {})?;
-    defer inner_dir.close();
+    const inner_dir_guard = DirCloseGuard{ dir: dump_dir.makeOpenPath(bun.Dirname.dirname(u8, name).?, {})? };
 
-    const file = inner_dir.createFile(bun.path.basename(name), {})?;
-    defer file.close();
+    const file_guard = FileCloseGuard{ file: inner_dir_guard.dir.createFile(bun.path.basename(name), {})? };
     let file_buffer: [1024]u8 = undefined;
-    let file_writer = file.writerStreaming(&file_buffer);
+    let file_writer = file_guard.file.writerStreaming(&file_buffer);
     const bufw = &file_writer.interface;
 
     if (!bun.strings.hasSuffixComptime(rel_path, ".map")) {
@@ -3791,22 +4050,24 @@ pub noinline fn dumpBundleForChunk(dev: *DevServer, dump_dir: std.fs.Dir, side: 
 
 pub fn emitVisualizerMessageIfNeeded(dev: *DevServer) {
     if (!bun.FeatureFlags.bake_debugging_features) return;
-    defer dev.emitMemoryVisualizerMessageIfNeeded();
+    const mem_vis_guard = MemoryVisualizerGuard{ dev: dev };
     if (dev.emit_incremental_visualizer_events == 0) return;
 
     let sfb = std.heap.stackFallback(65536, dev.allocator());
-    let payload = std.array_list.Managed(u8).initCapacity(sfb.get(), 65536) catch
-        unreachable; // enough capacity on the stack
-    defer payload.deinit();
+    let payload_guard = ManagedByteListGuard{
+        list: std.array_list.Managed(u8).initCapacity(sfb.get(), 65536) catch
+            unreachable, // enough space on the stack
+    };
+    let payload = *payload_guard.list;
 
-    dev.writeVisualizerMessage(&payload) catch return; // visualizer does not get an update if it OOMs
+    dev.writeVisualizerMessage(payload) catch return; // visualizer does not get an update if it OOMs
 
     dev.publish(.incremental_visualizer, payload.items, .binary);
 }
 
 pub fn emitMemoryVisualizerMessageTimer(timer: *EventLoopTimer, _: *const bun.timespec) {
     if (!bun.FeatureFlags.bake_debugging_features) return;
-    const dev: *DevServer = @alignCast(@fieldParentPtr("memory_visualizer_timer", timer));
+    const dev: *DevServer = unsafe { @alignCast(@fieldParentPtr("memory_visualizer_timer", timer)) };
     assert(dev.magic == .valid);
     dev.emitMemoryVisualizerMessage();
     timer.state = .FIRED;
@@ -3824,11 +4085,13 @@ pub fn emitMemoryVisualizerMessage(dev: *DevServer) {
     bun.debugAssert(dev.emit_memory_visualizer_events > 0);
 
     let sfb = std.heap.stackFallback(65536, dev.allocator());
-    let payload = std.array_list.Managed(u8).initCapacity(sfb.get(), 65536) catch
-        unreachable; // enough capacity on the stack
-    defer payload.deinit();
+    let payload_guard = ManagedByteListGuard{
+        list: std.array_list.Managed(u8).initCapacity(sfb.get(), 65536) catch
+            unreachable, // enough capacity on the stack
+    };
+    let payload = *payload_guard.list;
     payload.appendAssumeCapacity(MessageId.memory_visualizer.char());
-    writeMemoryVisualizerMessage(dev, &payload) catch return; // drop packet
+    writeMemoryVisualizerMessage(dev, payload) catch return; // drop packet
     dev.publish(.memory_visualizer, payload.items, .binary);
 }
 
@@ -3902,9 +4165,8 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             const k = bf_keys[i];
             const v = bf_vals[i];
             const file = v.unpack();
-            const relative_path_buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(relative_path_buf);
-            const normalized_key = dev.relativePath(relative_path_buf, k);
+            const relative_path_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+            const normalized_key = dev.relativePath(relative_path_guard.buf, k);
             w.writeInt(u32, @intCast(normalized_key.len), .little)?;
             if (k.len == 0) continue;
             w.writeAll(normalized_key)?;
@@ -4205,7 +4467,6 @@ pub fn inspector(dev: *const DevServer): (*BunFrontendDevServerAgent)? {
 pub fn onFileUpdate(dev: *DevServer, events: []Watcher.Event, changed_files: []Watcher.ChangedFilePath, watchlist: Watcher.ItemList) {
     assert(dev.magic == .valid);
     debug.log("onFileUpdate start", {});
-    defer debug.log("onFileUpdate end", {});
 
     const slice = watchlist.slice();
     const file_paths = slice.items(.file_path);
@@ -4213,9 +4474,7 @@ pub fn onFileUpdate(dev: *DevServer, events: []Watcher.Event, changed_files: []W
     const kinds = slice.items(.kind);
 
     const ev = dev.watcher_atomics.watcherAcquireEvent();
-    defer dev.watcher_atomics.watcherReleaseAndSubmitEvent(ev);
-
-    defer dev.bun_watcher.flushEvictions();
+    const watcher_guard = WatcherUpdateGuard{ dev: dev, ev: ev };
 
     for (event of events) {
         // TODO: why does this out of bounds when you delete every file in the directory?
@@ -4313,10 +4572,9 @@ pub fn onRouterCollisionError(dev: *DevServer, rel_path: []const u8, other_id: O
         },
     });
     Output.prettyErrorln("  - <blue>{s}<r>", .{rel_path});
-    const relative_path_buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(relative_path_buf);
+    const relative_path_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
     Output.prettyErrorln("  - <blue>{s}<r>", .{
-        dev.relativePath(relative_path_buf, dev.server_graph.bundled_files.keys()[fromOpaqueFileId(.server, other_id).get()]),
+        dev.relativePath(relative_path_guard.buf, dev.server_graph.bundled_files.keys()[fromOpaqueFileId(.server, other_id).get()]),
     });
     Output.flush();
 }
@@ -4360,7 +4618,7 @@ pub fn relativePath(dev: *DevServer, relative_path_buf: *bun.PathBuffer, path: [
 
     const rel = bun.path.relativePlatformBuf(relative_path_buf, dev.root, path, .auto, true);
     // @constCast: `rel` is owned by a buffer on `dev`, which is mutable
-    bun.path.platformToPosixInPlace(u8, @constCast(rel));
+    bun.path.platformToPosixInPlace(u8, unsafe { @constCast(rel) });
     return rel;
 }
 
@@ -4386,8 +4644,7 @@ fn dumpStateDueToCrash(dev: *DevServer)! {
         Output.warn("Could not open file for dumping incremental graph: {}", .{e});
         return;
     };
-    defer file.close();
-
+    let file_guard = FileCloseGuard{ file: file };
     const visualizer_parts = comptime brk: {
         @setEvalBranchQuota(5000);
         const visualizer = @embedFile("incremental_visualizer.html");
@@ -4396,23 +4653,22 @@ fn dumpStateDueToCrash(dev: *DevServer)! {
     };
     const start = visualizer_parts[0];
     const end = visualizer_parts[1];
-    file.writeAll(start)?;
-    file.writeAll("\nlet inlinedData = Uint8Array.from(atob(\"")?;
+    file_guard.file.writeAll(start)?;
+    file_guard.file.writeAll("\nlet inlinedData = Uint8Array.from(atob(\"")?;
 
     let sfb = std.heap.stackFallback(4096, dev.allocator());
-    let payload = std.array_list.Managed(u8).initCapacity(sfb.get(), 4096)?;
-    defer payload.deinit();
-    dev.writeVisualizerMessage(&payload)?;
+    let payload_guard = ManagedByteListGuard{ list: std.array_list.Managed(u8).initCapacity(sfb.get(), 4096)? };
+    dev.writeVisualizerMessage(&payload_guard.list)?;
 
     const buf_len = comptime bun.base64.encodeLenFromSize(4096);
     let buf: [buf_len]u8 = undefined;
-    let it = std.mem.window(u8, payload.items, 4096, 4096);
+    let it = std.mem.window(u8, payload_guard.list.items, 4096, 4096);
     while (chunk := it.next()) {
-        file.writeAll(buf[0..bun.base64.encode(&buf, chunk)])?;
+        file_guard.file.writeAll(buf[0..bun.base64.encode(&buf, chunk)])?;
     }
 
-    try file.writeAll("\"), c => c.charCodeAt(0));\n");
-    file.writeAll(end)?;
+    try file_guard.file.writeAll("\"), c => c.charCodeAt(0));\n");
+    file_guard.file.writeAll(end)?;
 
     Output.note("Dumped incremental bundler graph to {f}", .{bun.fmt.quote(filepath)});
 }
@@ -4518,7 +4774,7 @@ pub fn putOrOverwriteAsset(
     content_hash: u64,
 )! {
     dev.graph_safety_lock.lock();
-    defer dev.graph_safety_lock.unlock();
+    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
     * = try dev.assets.replacePath(path.text, contents, &.byExtension(path.name.extWithoutLeadingDot()), content_hash);
 }
 
@@ -4533,8 +4789,8 @@ pub fn onPluginsResolved(dev: *DevServer, plugins: (*Plugin)?)! {
 pub fn onPluginsRejected(dev: *DevServer)! {
     dev.plugin_state = .err;
     while (item := dev.next_bundle.requests.popFirst()) {
-        defer item.data.deref();
-        item.data.abort();
+        const req_guard = DeferredRequestGuard{ req: unsafe { &item.data } };
+        req_guard.req.abort();
     }
     dev.next_bundle.route_queue.clearRetainingCapacity();
     // TODO: allow recovery from this state
@@ -4576,8 +4832,9 @@ struct UnrefSourceMapRequest {
 pub fn readString32(reader: auto, alloc: Allocator): ![]const u8 {
     const len = reader.readInt(u32, .little)?;
     const memory = alloc.alloc(u8, len)?;
-    errdefer alloc.free(memory);
+    let mem_guard = AllocSliceU8Guard{ slice: memory, alloc: alloc };
     reader.readNoEof(memory)?;
+    mem_guard.active = false;
     return memory;
 }
 
@@ -4700,10 +4957,10 @@ pub fn Bake__bundleNewRouteJSFunctionImpl(global: *bun.jsc.JSGlobalObject, reque
 }
 
 fn bundleNewRouteJSFunctionImpl(global: *bun.jsc.JSGlobalObject, request_ptr: *!, url_bunstr: bun.String): bun.JSError!bun.jsc.JSValue {
-    const url = url_bunstr.toUTF8(bun.default_allocator);
-    defer url.deinit();
+    const url_guard = ZigStringSliceGuard{ slice: url_bunstr.toUTF8(bun.default_allocator) };
+    const url = url_guard.slice;
 
-    const request: *bun.webcore.Request = @ptrCast(@alignCast(request_ptr));
+    const request: *bun.webcore.Request = unsafe { @ptrCast(@alignCast(request_ptr)) };
     const dev_opt = request.request_context.devServer();
     if (dev_opt == null) {
         return global.throw("Request context does not belong to dev server", {});
@@ -4722,7 +4979,7 @@ fn bundleNewRouteJSFunctionImpl(global: *bun.jsc.JSGlobalObject, request_ptr: *!
     const route_index = route_opt.?;
 
     dev.vm.eventLoop().enter();
-    defer dev.vm.eventLoop().exit();
+    const el_guard = EventLoopExitGuard{ vm: unsafe { dev.vm } };
 
     let ctx = PromiseEnsureRouteBundledCtx{
         dev: dev,
@@ -4806,12 +5063,10 @@ fn newRouteParamsForBundlePromiseForJS(global: *bun.jsc.JSGlobalObject, callfram
 
     const route_bundle_index = RouteBundle.Index.init(@intCast(route_bundle_index_js.toInt32()));
 
-    const url = url_js.toBunString(global)?;
-    defer url.deref();
-    const url_utf8 = url.toUTF8(bun.default_allocator);
-    defer url_utf8.deinit();
+    const url_guard = BunStringGuard{ str: url_js.toBunString(global)? };
+    const url_utf8_guard = ZigStringSliceGuard{ slice: url_guard.str.toUTF8(bun.default_allocator) };
 
-    return newRouteParamsForBundlePromise(dev, route_bundle_index, url_utf8.byteSlice());
+    return newRouteParamsForBundlePromise(dev, route_bundle_index, url_utf8_guard.slice.byteSlice());
 }
 
 fn newRouteParamsForBundlePromise(

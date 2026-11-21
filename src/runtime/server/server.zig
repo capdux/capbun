@@ -67,7 +67,38 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub const ServerAllConnectionsClosedTask = struct {
+    globalObject: *jsc.JSGlobalObject,
+    promise: jsc.JSPromise.Strong,
+    tracker: jsc.Debugger.AsyncTaskTracker,
+
+pub fn schedule(task: ServerAllConnectionsClosedTask, vm: *VirtualMachine) void {
+            const ptr = ServerAllConnectionsClosedTask.new(task);
+            _ = vm.eventLoop().enqueueTask(jsc.Task.init(ptr));
+    }
+
+pub fn runFromJSThread(self: *ServerAllConnectionsClosedTask, vm: *jsc.VirtualMachine) bun.JSTerminated!void {
+            _ = httplog("ServerAllConnectionsClosedTask runFromJSThread", .{});
+            const globalObject = self.globalObject;
+            const tracker = self.tracker;
+            _ = tracker.willDispatch(globalObject);
+            defer {
+            _ = tracker.didDispatch(globalObject);
+            }
+            var promise = self.promise;
+            _ = &promise;
+            defer {
+            _ = promise.deinit();
+            }
+            _ = bun.destroy(self);
+            if ((!vm.isShuttingDown())) {
+                _ = try promise.resolve(globalObject, .js_undefined);
+            }
+    }
+    pub const new = bun.TrivialNew(@This());
+};
 
 pub const ProtocolEnum = enum { http, https };
 pub const DevelopmentKind = enum { debug, production };
@@ -595,36 +626,6 @@ pub fn deinit(sr: *SavedRequest) void {
         saved: bun.jsc.API.SavedRequest,
     };
 };
-pub const ServerAllConnectionsClosedTask = struct {
-    globalObject: *jsc.JSGlobalObject,
-    promise: jsc.JSPromise.Strong,
-    tracker: jsc.Debugger.AsyncTaskTracker,
-
-pub fn schedule(self: @This(), vm: *VirtualMachine) void {
-        _ = self;
-        _ = vm;
-    }
-
-pub fn runFromJSThread(self: *@This(), vm: *jsc.VirtualMachine) bun.JSTerminated!void {
-            _ = httplog("ServerAllConnectionsClosedTask runFromJSThread", .{});
-            const globalObject = self.globalObject;
-            const tracker = self.tracker;
-            _ = tracker.willDispatch(globalObject);
-            defer {
-            _ = tracker.didDispatch(globalObject);
-            }
-            var promise = self.promise;
-            _ = &promise;
-            defer {
-            _ = promise.deinit();
-            }
-            _ = bun.destroy(self);
-            if ((!vm.isShuttingDown())) {
-                _ = try promise.resolve(globalObject, .js_undefined);
-            }
-    }
-    pub const new = bun.TrivialNew(@This());
-};
 pub const HTTPServer = NewServer(.http, .production);
 pub const HTTPSServer = NewServer(.https, .production);
 pub const DebugHTTPServer = NewServer(.http, .debug);
@@ -672,7 +673,7 @@ pub fn getURLAsString(self: @This()) bun.OOM!bun.String {
             }
     }
 
-pub fn vm(self: @This()) *jsc.VirtualMachine {
+pub fn vm(self: *const @This()) *jsc.VirtualMachine {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).vm;
             } else {
@@ -692,7 +693,7 @@ pub fn vm(self: @This()) *jsc.VirtualMachine {
             }
     }
 
-pub fn h3AltSvc(self: @This()) ?[]const u8 {
+pub fn h3AltSvc(self: *const @This()) ?[]const u8 {
             if ((self.ptr.tag() == case_https)) {
                 return self.ptr.as(HTTPSServer).h3AltSvc();
             } else {
@@ -760,7 +761,7 @@ pub fn inspectorServerID(self: @This()) jsc.Debugger.DebuggerId {
             }
     }
 
-pub fn plugins(self: @This()) ?*ServePlugins {
+pub fn plugins(self: *const @This()) ?*ServePlugins {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).plugins;
             } else {
@@ -880,7 +881,7 @@ pub fn appendStaticRoute(self: @This(), path: []const u8, route: AnyRoute, metho
             }
     }
 
-pub fn globalThis(self: @This()) *jsc.JSGlobalObject {
+pub fn globalThis(self: *const @This()) *jsc.JSGlobalObject {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).globalThis;
             } else {
@@ -900,7 +901,7 @@ pub fn globalThis(self: @This()) *jsc.JSGlobalObject {
             }
     }
 
-pub fn config(self: @This()) *const ServerConfig {
+pub fn config(self: *const @This()) *const ServerConfig {
             if ((self.ptr.tag() == case_http)) {
                 return (&self.ptr.as(HTTPServer).config);
             } else {
@@ -920,7 +921,7 @@ pub fn config(self: @This()) *const ServerConfig {
             }
     }
 
-pub fn webSocketHandler(self: @This()) ?*WebSocketServerContext.Handler {
+pub fn webSocketHandler(self: *const @This()) ?*WebSocketServerContext.Handler {
             const server_config: *ServerConfig = (if ((self.ptr.tag() == case_http)) (&self.ptr.as(HTTPServer).config) else (if ((self.ptr.tag() == case_https)) (&self.ptr.as(HTTPSServer).config) else (if ((self.ptr.tag() == case_debug_http)) (&self.ptr.as(DebugHTTPServer).config) else (if ((self.ptr.tag() == case_debug_https)) (&self.ptr.as(DebugHTTPSServer).config) else bun.unreachablePanic("Invalid pointer tag", .{})))));
             if ((server_config.websocket == null)) {
                 return null;
@@ -1108,7 +1109,7 @@ pub fn numSubscribers(self: @This(), topic: []const u8) u32 {
             }
     }
 
-pub fn devServer(self: @This()) ?*bun.bake.DevServer {
+pub fn devServer(self: *const @This()) ?*bun.bake.DevServer {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).dev_server;
             } else {

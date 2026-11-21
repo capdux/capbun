@@ -916,7 +916,7 @@ pub fn Path(comptime opts: Options): type {
             }
         }
 
-        const ResetScope = struct {
+        pub const ResetScope = struct {
             path: *Path(opts),
             saved_len: usize,
 

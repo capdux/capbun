@@ -1509,3 +1509,6 @@
   - `Blob.cp` 与 `fetch.cp` 修复历史迁移遗漏：`fromDOMFormData`/`fromURLSearchParams` 原为空桩导致 `Response(FormData)` 丢失 `multipart/form-data` `Content-Type`，`fetchImpl` 缺失 `url_type != .remote` 导致 `fetch("blob:...")` 走远程连接报 `ConnectionRefused`；同时补齐 `DOMFormData.cp` `FormDataEntry` 导出与 `URLSearchParams.cp`/`DOMFormData.cp` `callconv(.c)` 回调；
   - `http.cp` `isHTTPS()` 增加代理判断解决 HTTPS 代理隧道被当 HTTP 走 `onOpen` unreachable panic；`Blob.dupe*` 深拷贝 `content_type` 根除 ASan `use-after-poison`；
   - `Archive.cp` / `pack_command.cp` / `RuntimeTranspilerCache.cp` 集中将 80+ 处手工 `defer`/`errdefer` 收敛为顶层 `~init()` RAII Guard（`bun.perf.trace` 因编译期字符串字面量约束保留 `defer _trace.end()`）。
+- **[2026-11-22] `29181` 悬垂切片与空函数体根治 + 6 大核心模块 `~init()` RAII 化**：
+  - `stat_hash.cp` 省略只读接收者导致 `lastModified()` 返回栈拷贝悬垂切片（`Last-Modified` 乱码），`server.cp` 中 `new(this)` 被 `cpc` 静默清空 `ServerAllConnectionsClosedTask.schedule` 函数体导致 `server.stop()` 永不 resolve；两项均已修复并提报上游 `cp_agy` 在编译器层面根治；
+  - `JSBundler.cp` / `cron.cp` / `isolated_install.cp` / `env_loader.cp` / `node_fs.cp` / `DevServer.cp` 批量以非泛型顶层 `~init()` RAII Guard 替代 329 处手工 `defer`/`errdefer` 并补全 33 处 `E0209` `unsafe {}` 包裹（`DevServer.cp` `EntryPointList` 按值传参 `entry_points.*` 保留所有权语义）。

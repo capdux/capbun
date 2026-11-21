@@ -20,6 +20,74 @@ const dummy_zero: [1]i32 = [0];
 
 @tls let crontab_buf: bun.PathBuffer = undefined;
 
+struct EventLoopGuard {
+    ev: *jsc.EventLoop!,
+    ~init() { unsafe { _.ev.exit(); } }
+}
+
+struct ManagedU8Guard {
+    list: std.array_list.Managed(u8),
+    armed: bool = true,
+    ~init() { if (_.armed) _.list.deinit(); }
+}
+
+struct ManagedI32Guard {
+    list: std.array_list.Managed(i32),
+    armed: bool = true,
+    ~init() { if (_.armed) _.list.deinit(); }
+}
+
+struct OwnedSliceGuard {
+    slice: []const u8,
+    allocator: std.mem.Allocator = bun.default_allocator,
+    ~init() { _.allocator.free(_.slice); }
+}
+
+struct OwnedZSliceGuard {
+    slice: [:0]const u8,
+    allocator: std.mem.Allocator = bun.default_allocator,
+    ~init() { _.allocator.free(_.slice); }
+}
+
+struct SysFileGuard {
+    file: bun.sys.File,
+    ~init() { _.file.close(); }
+}
+
+struct BunStringGuard {
+    str: bun.String,
+    ~init() { _.str.deref(); }
+}
+
+struct ZigSliceGuard {
+    slice: jsc.ZigString.Slice,
+    ~init() { _.slice.deinit(); }
+}
+
+struct CronJobRefGuard {
+    job: *CronJob!,
+    ~init() { unsafe { _.job.deref(); } }
+}
+
+struct CronJobPendingRefGuard {
+    job: *CronJob!,
+    ~init() { unsafe { _.job.releasePendingRef(); } }
+}
+
+struct ArenaGuard {
+    @"arena": std.heap.ArenaAllocator,
+    ~init() { _.@"arena".deinit(); }
+}
+
+struct FieldValuesGuard {
+    values: [5]([]const i32)? = [ null, null, null, null, null ],
+    ~init() {
+        for (fv of _.values) {
+            if (v := fv) bun.default_allocator.free(v);
+        }
+    }
+}
+
 /// Shared base for CronRegisterJob and CronRemoveJob.
 fn CronJobBase(comptime Self: type): type {
     return struct {
@@ -187,7 +255,7 @@ pub struct CronRegisterJob {
         _.poll.unref(jsc.VirtualMachine.get());
         const ev = jsc.VirtualMachine.get().eventLoop();
         ev.enter();
-        defer ev.exit();
+        const ev_guard = EventLoopGuard{ ev: ev };
         if (msg := _.err_msg) {
             _.promise.rejectWithAsyncStack(_.global, _.global.createErrorInstance("{s}", .{ msg})) catch {};
         } else _.promise.resolve(_.global, .js_undefined) catch {};
@@ -235,25 +303,25 @@ pub struct CronRegisterJob {
 
     fn processCrontabAndInstall(*_) {
         const existing_content = _.stdout_reader.finalBuffer().items;
-        let result = std.array_list.Managed(u8).init(bun.default_allocator);
-        defer result.deinit();
+        let result_guard = ManagedU8Guard{ list: std.array_list.Managed(u8).init(bun.default_allocator) };
 
-        filterCrontab(existing_content, _.title, &result) catch {
+        filterCrontab(existing_content, _.title, &result_guard.list) catch {
             _.setErr("Out of memory building crontab", .{});
             _.finish();
             return;
         };
 
         // Build new entry with single-quoted paths to prevent shell injection
-        const new_entry = std.fmt.allocPrint(bun.default_allocator, "# bun-cron: {s}\n{s} '{s}' run --cron-title={s} --cron-period='{s}' '{s}'\n", .{ 
-            _.title, _.schedule, _.bun_exe, _.title, _.schedule, _.abs_path,
-        }) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const new_entry_guard = OwnedSliceGuard{
+            slice: std.fmt.allocPrint(bun.default_allocator, "# bun-cron: {s}\n{s} '{s}' run --cron-title={s} --cron-period='{s}' '{s}'\n", .{
+                _.title, _.schedule, _.bun_exe, _.title, _.schedule, _.abs_path,
+            }) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(new_entry);
-        result.appendSlice(new_entry) catch {
+        result_guard.list.appendSlice(new_entry_guard.slice) catch {
             _.setErr("Out of memory", .{});
             _.finish();
             return;
@@ -266,13 +334,14 @@ pub struct CronRegisterJob {
         };
         _.tmp_path = tmp_path;
 
-        const file = bun.sys.File.openat(bun.FD.cwd(), tmp_path, bun.O.WRONLY | bun.O.CREAT | bun.O.EXCL, 0o600).unwrap() catch {
-            _.setErr("Failed to create temp file", .{});
-            _.finish();
-            return;
+        const file_guard = SysFileGuard{
+            file: bun.sys.File.openat(bun.FD.cwd(), tmp_path, bun.O.WRONLY | bun.O.CREAT | bun.O.EXCL, 0o600).unwrap() catch {
+                _.setErr("Failed to create temp file", .{});
+                _.finish();
+                return;
+            },
         };
-        defer file.close();
-        * = file.writeAll(result.items).unwrap() catch {
+        * = file_guard.file.writeAll(result_guard.list.items).unwrap() catch {
             _.setErr("Failed to write temp file", .{});
             _.finish();
             return;
@@ -297,12 +366,13 @@ pub struct CronRegisterJob {
     fn startMac(*_) {
         _.state = .writing_plist;
 
-        const calendar_xml = cronToCalendarInterval(_.schedule) catch {
-            _.setErr("Invalid cron expression", .{});
-            _.finish();
-            return;
+        const calendar_xml_guard = OwnedSliceGuard{
+            slice: cronToCalendarInterval(_.schedule) catch {
+                _.setErr("Invalid cron expression", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(calendar_xml);
 
         const home_opt = bun.env_var.HOME.get();
         if (home_opt == null) {
@@ -312,13 +382,14 @@ pub struct CronRegisterJob {
         }
         const home = home_opt.?;
 
-        const launch_agents_dir = std.fmt.allocPrint(bun.default_allocator, "{s}/Library/LaunchAgents", .{ home}) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const launch_agents_dir_guard = OwnedSliceGuard{
+            slice: std.fmt.allocPrint(bun.default_allocator, "{s}/Library/LaunchAgents", .{ home}) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(launch_agents_dir);
-        bun.FD.cwd().makePath(u8, launch_agents_dir) catch {
+        bun.FD.cwd().makePath(u8, launch_agents_dir_guard.slice) catch {
             _.setErr("Failed to create ~/Library/LaunchAgents directory", .{});
             _.finish();
             return;
@@ -332,69 +403,75 @@ pub struct CronRegisterJob {
         _.tmp_path = plist_path;
 
         // XML-escape all dynamic values
-        const xml_title = xmlEscape(_.title) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const xml_title_guard = OwnedSliceGuard{
+            slice: xmlEscape(_.title) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(xml_title);
-        const xml_bun = xmlEscape(_.bun_exe) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const xml_bun_guard = OwnedSliceGuard{
+            slice: xmlEscape(_.bun_exe) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(xml_bun);
-        const xml_path = xmlEscape(_.abs_path) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const xml_path_guard = OwnedSliceGuard{
+            slice: xmlEscape(_.abs_path) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(xml_path);
-        const xml_sched = xmlEscape(_.schedule) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const xml_sched_guard = OwnedSliceGuard{
+            slice: xmlEscape(_.schedule) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(xml_sched);
 
-        const plist = std.fmt.allocPrint(bun.default_allocator,
-            \\<?xml version="1.0" encoding="UTF-8"?>
-            \\<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            \\<plist version="1.0">
-            \\<dict>
-            \\    <key>Label</key>
-            \\    <string>bun.cron.{s}</string>
-            \\    <key>ProgramArguments</key>
-            \\    <array>
-            \\        <string>{s}</string>
-            \\        <string>run</string>
-            \\        <string>--cron-title={s}</string>
-            \\        <string>--cron-period={s}</string>
-            \\        <string>{s}</string>
-            \\    </array>
-            \\    <key>StartCalendarInterval</key>
-            \\{s}
-            \\    <key>StandardOutPath</key>
-            \\    <string>/tmp/bun.cron.{s}.stdout.log</string>
-            \\    <key>StandardErrorPath</key>
-            \\    <string>/tmp/bun.cron.{s}.stderr.log</string>
-            \\</dict>
-            \\</plist>
-            \\
-        , .{ xml_title, xml_bun, xml_title, xml_sched, xml_path, calendar_xml, xml_title, xml_title }) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const plist_guard = OwnedSliceGuard{
+            slice: std.fmt.allocPrint(bun.default_allocator,
+                \\<?xml version="1.0" encoding="UTF-8"?>
+                \\<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                \\<plist version="1.0">
+                \\<dict>
+                \\    <key>Label</key>
+                \\    <string>bun.cron.{s}</string>
+                \\    <key>ProgramArguments</key>
+                \\    <array>
+                \\        <string>{s}</string>
+                \\        <string>run</string>
+                \\        <string>--cron-title={s}</string>
+                \\        <string>--cron-period={s}</string>
+                \\        <string>{s}</string>
+                \\    </array>
+                \\    <key>StartCalendarInterval</key>
+                \\{s}
+                \\    <key>StandardOutPath</key>
+                \\    <string>/tmp/bun.cron.{s}.stdout.log</string>
+                \\    <key>StandardErrorPath</key>
+                \\    <string>/tmp/bun.cron.{s}.stderr.log</string>
+                \\</dict>
+                \\</plist>
+                \\
+            , .{ xml_title_guard.slice, xml_bun_guard.slice, xml_title_guard.slice, xml_sched_guard.slice, xml_path_guard.slice, calendar_xml_guard.slice, xml_title_guard.slice, xml_title_guard.slice }) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(plist);
 
-        const file = bun.sys.File.openat(bun.FD.cwd(), plist_path, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o644).unwrap() catch {
-            _.setErr("Failed to create plist file", .{});
-            _.finish();
-            return;
+        const file_guard = SysFileGuard{
+            file: bun.sys.File.openat(bun.FD.cwd(), plist_path, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o644).unwrap() catch {
+                _.setErr("Failed to create plist file", .{});
+                _.finish();
+                return;
+            },
         };
-        defer file.close();
-        * = file.writeAll(plist).unwrap() catch {
+        * = file_guard.file.writeAll(plist_guard.slice).unwrap() catch {
             _.setErr("Failed to write plist", .{});
             _.finish();
             return;
@@ -405,13 +482,14 @@ pub struct CronRegisterJob {
 
     fn spawnBootout(*_) {
         _.state = .booting_out;
-        const uid_str = allocPrintZ(bun.default_allocator, "gui/{d}/bun.cron.{s}", .{ getUid(), _.title }) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const uid_str_guard = OwnedZSliceGuard{
+            slice: allocPrintZ(bun.default_allocator, "gui/{d}/bun.cron.{s}", .{ getUid(), _.title }) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(uid_str);
-        const argv: [4]ConstCString? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null ];
+        const argv: [4]ConstCString? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str_guard.slice.ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 
@@ -424,13 +502,14 @@ pub struct CronRegisterJob {
             return;
         }
         const plist_path = plist_path_opt.?;
-        const uid_str = allocPrintZ(bun.default_allocator, "gui/{d}", .{ getUid()}) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const uid_str_guard = OwnedZSliceGuard{
+            slice: allocPrintZ(bun.default_allocator, "gui/{d}", .{ getUid()}) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(uid_str);
-        const argv: [5]ConstCString? = [ "/bin/launchctl".ptr, "bootstrap".ptr, uid_str.ptr, plist_path.ptr, null ];
+        const argv: [5]ConstCString? = [ "/bin/launchctl".ptr, "bootstrap".ptr, uid_str_guard.slice.ptr, plist_path.ptr, null ];
         _.tmp_path = null; // don't delete the installed plist
         _.spawnCmd(&argv, .ignore, .ignore);
     }
@@ -450,19 +529,16 @@ pub struct CronRegisterJob {
         if (!args[1].isString()) return globalObject.throwInvalidArguments("Bun.cron() expects a string schedule as the second argument", .{});
         if (!args[2].isString()) return globalObject.throwInvalidArguments("Bun.cron() expects a string title as the third argument", .{});
 
-        const path_str = args[0].toBunString(globalObject)?;
-        defer path_str.deref();
-        const schedule_str = args[1].toBunString(globalObject)?;
-        defer schedule_str.deref();
-        const title_str = args[2].toBunString(globalObject)?;
-        defer title_str.deref();
+        const path_str_guard = BunStringGuard{ str: args[0].toBunString(globalObject)? };
+        const schedule_str_guard = BunStringGuard{ str: args[1].toBunString(globalObject)? };
+        const title_str_guard = BunStringGuard{ str: args[2].toBunString(globalObject)? };
 
-        const path_slice = path_str.toUTF8(bun.default_allocator);
-        defer path_slice.deinit();
-        const schedule_slice = schedule_str.toUTF8(bun.default_allocator);
-        defer schedule_slice.deinit();
-        const title_slice = title_str.toUTF8(bun.default_allocator);
-        defer title_slice.deinit();
+        const path_slice_guard = ZigSliceGuard{ slice: path_str_guard.str.toUTF8(bun.default_allocator) };
+        const schedule_slice_guard = ZigSliceGuard{ slice: schedule_str_guard.str.toUTF8(bun.default_allocator) };
+        const title_slice_guard = ZigSliceGuard{ slice: title_str_guard.str.toUTF8(bun.default_allocator) };
+        const path_slice = path_slice_guard.slice;
+        const schedule_slice = schedule_slice_guard.slice;
+        const title_slice = title_slice_guard.slice;
 
         // Validate title: only [a-zA-Z0-9_-]
         if (!validateTitle(title_slice.slice()))
@@ -528,23 +604,25 @@ pub struct CronRegisterJob {
     fn startWindows(*_) {
         _.state = .installing_crontab;
 
-        const task_name = allocPrintZ(bun.default_allocator, "bun-cron-{s}", .{ _.title}) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const task_name_guard = OwnedZSliceGuard{
+            slice: allocPrintZ(bun.default_allocator, "bun-cron-{s}", .{ _.title}) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(task_name);
 
-        const xml = cronToTaskXml(_.parsed_cron, _.bun_exe, _.title, _.schedule, _.abs_path) catch |e| {
-            if (e == error.TooManyTriggers) {
-                _.setErr("This cron expression requires too many triggers for Windows Task Scheduler (max 48). Simplify the expression or use fewer restricted fields.", .{});
-            } else {
-                _.setErr("Failed to build task XML", .{});
-            }
-            _.finish();
-            return;
+        const xml_guard = OwnedSliceGuard{
+            slice: cronToTaskXml(_.parsed_cron, _.bun_exe, _.title, _.schedule, _.abs_path) catch |e| {
+                if (e == error.TooManyTriggers) {
+                    _.setErr("This cron expression requires too many triggers for Windows Task Scheduler (max 48). Simplify the expression or use fewer restricted fields.", .{});
+                } else {
+                    _.setErr("Failed to build task XML", .{});
+                }
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(xml);
 
         const xml_path = makeTempPath("bun-cron-xml-") catch {
             _.setErr("Out of memory", .{});
@@ -553,19 +631,20 @@ pub struct CronRegisterJob {
         };
         _.tmp_path = xml_path;
 
-        const file = bun.sys.File.openat(bun.FD.cwd(), xml_path, bun.O.WRONLY | bun.O.CREAT | bun.O.EXCL, 0o600).unwrap() catch {
-            _.setErr("Failed to create temp XML file", .{});
-            _.finish();
-            return;
+        const file_guard = SysFileGuard{
+            file: bun.sys.File.openat(bun.FD.cwd(), xml_path, bun.O.WRONLY | bun.O.CREAT | bun.O.EXCL, 0o600).unwrap() catch {
+                _.setErr("Failed to create temp XML file", .{});
+                _.finish();
+                return;
+            },
         };
-        defer file.close();
-        * = file.writeAll(xml).unwrap() catch {
+        * = file_guard.file.writeAll(xml_guard.slice).unwrap() catch {
             _.setErr("Failed to write temp XML file", .{});
             _.finish();
             return;
         };
 
-        const argv: [9]ConstCString? = [ "schtasks".ptr, "/create".ptr, "/xml".ptr, xml_path.ptr, "/tn".ptr, task_name.ptr, "/np".ptr, "/f".ptr, null ];
+        const argv: [9]ConstCString? = [ "schtasks".ptr, "/create".ptr, "/xml".ptr, xml_path.ptr, "/tn".ptr, task_name_guard.slice.ptr, "/np".ptr, "/f".ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 }
@@ -696,7 +775,7 @@ pub struct CronRemoveJob {
         _.poll.unref(jsc.VirtualMachine.get());
         const ev = jsc.VirtualMachine.get().eventLoop();
         ev.enter();
-        defer ev.exit();
+        const ev_guard = EventLoopGuard{ ev: ev };
         if (msg := _.err_msg) {
             _.promise.rejectWithAsyncStack(_.global, _.global.createErrorInstance("{s}", .{ msg})) catch {};
         } else _.promise.resolve(_.global, .js_undefined) catch {};
@@ -740,10 +819,9 @@ pub struct CronRemoveJob {
 
     fn removeCrontabEntry(*_) {
         const existing_content = _.stdout_reader.finalBuffer().items;
-        let result = std.array_list.Managed(u8).init(bun.default_allocator);
-        defer result.deinit();
+        let result_guard = ManagedU8Guard{ list: std.array_list.Managed(u8).init(bun.default_allocator) };
 
-        filterCrontab(existing_content, _.title, &result) catch {
+        filterCrontab(existing_content, _.title, &result_guard.list) catch {
             _.setErr("Out of memory", .{});
             _.finish();
             return;
@@ -756,13 +834,14 @@ pub struct CronRemoveJob {
         };
         _.tmp_path = tmp_path;
 
-        const file = bun.sys.File.openat(bun.FD.cwd(), tmp_path, bun.O.WRONLY | bun.O.CREAT | bun.O.EXCL, 0o600).unwrap() catch {
-            _.setErr("Failed to create temp file", .{});
-            _.finish();
-            return;
+        const file_guard = SysFileGuard{
+            file: bun.sys.File.openat(bun.FD.cwd(), tmp_path, bun.O.WRONLY | bun.O.CREAT | bun.O.EXCL, 0o600).unwrap() catch {
+                _.setErr("Failed to create temp file", .{});
+                _.finish();
+                return;
+            },
         };
-        defer file.close();
-        * = file.writeAll(result.items).unwrap() catch {
+        * = file_guard.file.writeAll(result_guard.list.items).unwrap() catch {
             _.setErr("Failed to write temp file", .{});
             _.finish();
             return;
@@ -784,13 +863,14 @@ pub struct CronRemoveJob {
 
     fn startMac(*_) {
         _.state = .booting_out;
-        const uid_str = allocPrintZ(bun.default_allocator, "gui/{d}/bun.cron.{s}", .{ getUid(), _.title }) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const uid_str_guard = OwnedZSliceGuard{
+            slice: allocPrintZ(bun.default_allocator, "gui/{d}/bun.cron.{s}", .{ getUid(), _.title }) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(uid_str);
-        const argv: [4]ConstCString? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str.ptr, null ];
+        const argv: [4]ConstCString? = [ "/bin/launchctl".ptr, "bootout".ptr, uid_str_guard.slice.ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 
@@ -798,10 +878,9 @@ pub struct CronRemoveJob {
         const args = callframe.argumentsAsArray(1);
         if (!args[0].isString()) return globalObject.throwInvalidArguments("Bun.cron.remove() expects a string title", .{});
 
-        const title_str = args[0].toBunString(globalObject)?;
-        defer title_str.deref();
-        const title_slice = title_str.toUTF8(bun.default_allocator);
-        defer title_slice.deinit();
+        const title_str_guard = BunStringGuard{ str: args[0].toBunString(globalObject)? };
+        const title_slice_guard = ZigSliceGuard{ slice: title_str_guard.str.toUTF8(bun.default_allocator) };
+        const title_slice = title_slice_guard.slice;
 
         if (!validateTitle(title_slice.slice()))
             return globalObject.throwInvalidArguments("Cron title must contain only alphanumeric characters, hyphens, and underscores", .{});
@@ -826,13 +905,14 @@ pub struct CronRemoveJob {
 
     fn startWindows(*_) {
         _.state = .installing_crontab;
-        const task_name = allocPrintZ(bun.default_allocator, "bun-cron-{s}", .{ _.title}) catch {
-            _.setErr("Out of memory", .{});
-            _.finish();
-            return;
+        const task_name_guard = OwnedZSliceGuard{
+            slice: allocPrintZ(bun.default_allocator, "bun-cron-{s}", .{ _.title}) catch {
+                _.setErr("Out of memory", .{});
+                _.finish();
+                return;
+            },
         };
-        defer bun.default_allocator.free(task_name);
-        const argv: [6]ConstCString? = [ "schtasks".ptr, "/delete".ptr, "/tn".ptr, task_name.ptr, "/f".ptr, null ];
+        const argv: [6]ConstCString? = [ "schtasks".ptr, "/delete".ptr, "/tn".ptr, task_name_guard.slice.ptr, "/f".ptr, null ];
         _.spawnCmd(&argv, .ignore, .ignore);
     }
 }
@@ -983,7 +1063,7 @@ pub struct CronJob {
         // scheduleNext → finishDeferredStop downgrades this_value and derefs the
         // list entry; bracket-ref so that path can't drop the last ref mid-function.
         _.ref();
-        defer _.deref();
+        const ref_guard = CronJobRefGuard{ job: _ };
 
         if (_.stopped) return;
         if (vm.scriptExecutionStatus() != .running) {
@@ -1008,8 +1088,9 @@ pub struct CronJob {
             return;
         }
 
-        vm.eventLoop().enter();
-        defer vm.eventLoop().exit();
+        const ev = vm.eventLoop();
+        ev.enter();
+        const ev_guard = EventLoopGuard{ ev: ev };
 
         _.in_fire = true;
         const result = cb.call(_.global, js_this, []) catch {
@@ -1068,7 +1149,7 @@ pub struct CronJob {
     static fn onPromiseResolve(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
         const job: *CronJob = args[args.len - 1].asPromisePtr(CronJob);
-        defer job.releasePendingRef();
+        const pending_guard = CronJobPendingRefGuard{ job: job };
         const vm = job.global.bunVM();
         if (js_this := job.this_value.tryGet())
             js.pendingPromiseSetCached(js_this, job.global, .js_undefined);
@@ -1079,7 +1160,7 @@ pub struct CronJob {
     static fn onPromiseReject(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
         const job: *CronJob = args[args.len - 1].asPromisePtr(CronJob);
-        defer job.releasePendingRef();
+        const pending_guard = CronJobPendingRefGuard{ job: job };
         const vm = job.global.bunVM();
         const e = args[0];
         let promise_value = jsc.JSValue.js_undefined;
@@ -1117,10 +1198,9 @@ pub struct CronJob {
         if (!schedule_arg.isString())
             return globalObject.throwInvalidArguments("Bun.cron() expects a string cron expression", .{});
 
-        const schedule_str = schedule_arg.toBunString(globalObject)?;
-        defer schedule_str.deref();
-        const schedule_slice = schedule_str.toUTF8(bun.default_allocator);
-        defer schedule_slice.deinit();
+        const schedule_str_guard = BunStringGuard{ str: schedule_arg.toBunString(globalObject)? };
+        const schedule_slice_guard = ZigSliceGuard{ slice: schedule_str_guard.str.toUTF8(bun.default_allocator) };
+        const schedule_slice = schedule_slice_guard.slice;
 
         const parsed = CronExpression.parse(schedule_slice.slice()) catch |e|
             return globalObject.throwInvalidArguments("{s}", .{ CronExpression.errorMessage(e)});
@@ -1179,10 +1259,9 @@ pub fn cronParse(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     if (!args[0].isString())
         return globalObject.throwInvalidArguments("Bun.cron.parse() expects a string cron expression as the first argument", .{});
 
-    const expr_str = args[0].toBunString(globalObject)?;
-    defer expr_str.deref();
-    const expr_slice = expr_str.toUTF8(bun.default_allocator);
-    defer expr_slice.deinit();
+    const expr_str_guard = BunStringGuard{ str: args[0].toBunString(globalObject)? };
+    const expr_slice_guard = ZigSliceGuard{ slice: expr_str_guard.str.toUTF8(bun.default_allocator) };
+    const expr_slice = expr_slice_guard.slice;
 
     const parsed = CronExpression.parse(expr_slice.slice()) catch |e|
         return globalObject.throwInvalidArguments("{s}", .{ CronExpression.errorMessage(e)});
@@ -1243,17 +1322,16 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
         } else undefined,
     };
 
-    let envp_arena = std.heap.ArenaAllocator.init(bun.default_allocator);
-    defer envp_arena.deinit();
+    let envp_arena_guard = ArenaGuard{ @"arena": std.heap.ArenaAllocator.init(bun.default_allocator) };
     const envp: [*:null]OptConstCString = if (comptime bun.Environment.isPosix)
-        @ptrCast(@constCast(std.c.environ))
+        unsafe { @ptrCast(@constCast(std.c.environ)) }
     else
-        @ptrCast(@constCast((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena.allocator()) catch {
+        unsafe { @ptrCast(@constCast((jsc.VirtualMachine.get().transpiler.env.map.createNullDelimitedEnvMap(envp_arena_guard.@"arena".allocator()) catch {
             job.setErr("Failed to create environment block", .{});
             job.finish();
             return;
-        }).ptr));
-    let spawned = (bun.spawn.spawnProcess(&spawn_options, @ptrCast(@constCast(argv)), envp) catch |e| {
+        }).ptr)) };
+    let spawned = (unsafe { bun.spawn.spawnProcess(&spawn_options, @ptrCast(@constCast(argv)), envp) } catch |e| {
         job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });
         job.finish();
         return;
@@ -1337,8 +1415,8 @@ fn validateTitle(title: []const u8): bool {
 
 /// Filter crontab content, removing any entry with matching title marker.
 fn filterCrontab(content: []const u8, title: [:0]const u8, result: *std.array_list.Managed(u8))! {
-    const marker = std.fmt.allocPrint(bun.default_allocator, "# bun-cron: {s}", .{ title})?;
-    defer bun.default_allocator.free(marker);
+    const marker_guard = OwnedSliceGuard{ slice: std.fmt.allocPrint(bun.default_allocator, "# bun-cron: {s}", .{ title})? };
+    const marker = marker_guard.slice;
     let skip_next = false;
     let lines = std.mem.splitScalar(u8, content, '\n');
     while (line := lines.next()) {
@@ -1360,10 +1438,9 @@ fn filterCrontab(content: []const u8, title: [:0]const u8, result: *std.array_li
 fn resolvePath(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, path: []const u8): ([:0]const u8)! {
     const vm = globalObject.bunVM();
     const srcloc = callframe.getCallerSrcLoc(globalObject);
-    defer srcloc.str.deref();
-    const caller_utf8 = srcloc.str.toUTF8(bun.default_allocator);
-    defer caller_utf8.deinit();
-    const raw_dir = bun.path.dirname(caller_utf8.slice(), .auto);
+    const srcloc_guard = BunStringGuard{ str: srcloc.str };
+    const caller_utf8_guard = ZigSliceGuard{ slice: srcloc_guard.str.toUTF8(bun.default_allocator) };
+    const raw_dir = bun.path.dirname(caller_utf8_guard.slice.slice(), .auto);
     const source_dir = if (raw_dir.len == 0) "." else raw_dir;
     let resolved = vm.transpiler.resolver.resolve(source_dir, path, .entry_point_run) catch return error.ModuleNotFound;
     const entry_path_opt = resolved.path();
@@ -1383,19 +1460,20 @@ fn xmlEscape(input: []const u8): ([]const u8)! {
     }
     if (!needs_escape) return bun.default_allocator.dupe(u8, input);
 
-    let result = std.array_list.Managed(u8).init(bun.default_allocator);
-    errdefer result.deinit();
+    let result_guard = ManagedU8Guard{ list: std.array_list.Managed(u8).init(bun.default_allocator) };
     for (c of input) {
         switch (c) {
-            '&' => result.appendSlice("&amp;")?,
-            '<' => result.appendSlice("&lt;")?,
-            '>' => result.appendSlice("&gt;")?,
-            '"' => result.appendSlice("&quot;")?,
-            '\'' => result.appendSlice("&apos;")?,
-            else => result.append(c)?,
+            '&' => result_guard.list.appendSlice("&amp;")?,
+            '<' => result_guard.list.appendSlice("&lt;")?,
+            '>' => result_guard.list.appendSlice("&gt;")?,
+            '"' => result_guard.list.appendSlice("&quot;")?,
+            '\'' => result_guard.list.appendSlice("&apos;")?,
+            else => result_guard.list.append(c)?,
         }
     }
-    return result.toOwnedSlice();
+    const owned = result_guard.list.toOwnedSlice()?;
+    result_guard.armed = false;
+    return owned;
 }
 
 fn cronToCalendarInterval(schedule: []const u8): ([]const u8)! {
@@ -1410,23 +1488,19 @@ fn cronToCalendarInterval(schedule: []const u8): ([]const u8)! {
     if (count != 5) return error.InvalidCron;
 
     // Parse each field into a list of integer values (or null for "*")
-    let field_values: [5]([]const i32)? = [ null, null, null, null, null ];
-    defer {
-        for (*fv of &field_values) {
-            if (v := fv.*) bun.default_allocator.free(v);
-        }
-    }
+    let fv_guard = FieldValuesGuard{};
     for (i of 0..5) {
         const field = fields[i];
         if (bun.strings.eql(field, "*")) continue;
-        let vals = std.array_list.Managed(i32).init(bun.default_allocator);
-        errdefer vals.deinit();
+        let vals_guard = ManagedI32Guard{ list: std.array_list.Managed(i32).init(bun.default_allocator) };
         let parts = std.mem.splitScalar(u8, field, ',');
         while (part := parts.next()) {
             const val = std.fmt.parseInt(i32, part, 10) catch return error.InvalidCron;
-            vals.append(val)?;
+            vals_guard.list.append(val)?;
         }
-        field_values[i] = vals.toOwnedSlice()?;
+        const owned_vals = vals_guard.list.toOwnedSlice()?;
+        vals_guard.armed = false;
+        fv_guard.values[i] = owned_vals;
     }
 
     // Generate StartCalendarInterval dicts.
@@ -1436,16 +1510,15 @@ fn cronToCalendarInterval(schedule: []const u8): ([]const u8)! {
     // the job fires when EITHER matches. launchd ANDs keys within a single dict, so we
     // emit two separate sets of dicts: one with Day (no Weekday) and one with Weekday
     // (no Day). launchd fires when ANY dict matches, achieving OR behavior.
-    let result = std.array_list.Managed(u8).init(bun.default_allocator);
-    errdefer result.deinit();
+    let result_guard = ManagedU8Guard{ list: std.array_list.Managed(u8).init(bun.default_allocator) };
 
-    const has_dom = field_values[2] != null;
-    const has_dow = field_values[4] != null;
+    const has_dom = fv_guard.values[2] != null;
+    const has_dow = fv_guard.values[4] != null;
     const needs_or_split = has_dom && has_dow;
 
     // Determine if we need an <array> wrapper (multiple dicts or OR split)
     let needs_product: bool = false;
-    for (fv of field_values) {
+    for (fv of fv_guard.values) {
         if (v := fv) {
             if (v.len > 1) {
                 needs_product = true;
@@ -1458,38 +1531,39 @@ fn cronToCalendarInterval(schedule: []const u8): ([]const u8)! {
     if (!needs_array) {
         // Single dict, no product needed
         const plist_keys: [5][]const u8 = [ "Minute", "Hour", "Day", "Month", "Weekday" ];
-        result.appendSlice("    <dict>\n")?;
+        result_guard.list.appendSlice("    <dict>\n")?;
         for (i of 0..5) {
-            if (vals := field_values[i]) {
+            if (vals := fv_guard.values[i]) {
                 if (vals.len == 1) {
-                    appendCalendarKey(&result, plist_keys[i], vals[0])?;
+                    appendCalendarKey(&result_guard.list, plist_keys[i], vals[0])?;
                 }
             }
         }
-        result.appendSlice("    </dict>")?;
+        result_guard.list.appendSlice("    </dict>")?;
     } else {
-        result.appendSlice("    <array>\n")?;
+        result_guard.list.appendSlice("    <array>\n")?;
 
         if (needs_or_split) {
             // OR split: emit day-of-month dicts (no Weekday), then day-of-week dicts (no Day)
             // Pass 1: Day + time fields (minute, hour, day, month — no weekday)
-            emitCalendarDicts(&result, field_values, .exclude_weekday)?;
+            emitCalendarDicts(&result_guard.list, fv_guard.values, .exclude_weekday)?;
             // Pass 2: Weekday + time fields (minute, hour, weekday, month — no day)
-            emitCalendarDicts(&result, field_values, .exclude_day)?;
+            emitCalendarDicts(&result_guard.list, fv_guard.values, .exclude_day)?;
         } else {
             // Normal Cartesian product: all fields together
-            emitCalendarDicts(&result, field_values, .include_all)?;
+            emitCalendarDicts(&result_guard.list, fv_guard.values, .include_all)?;
         }
 
-        result.appendSlice("    </array>")?;
+        result_guard.list.appendSlice("    </array>")?;
     }
-    return result.toOwnedSlice();
+    const owned_result = result_guard.list.toOwnedSlice()?;
+    result_guard.armed = false;
+    return owned_result;
 }
 
 fn appendCalendarKey(result: *std.array_list.Managed(u8), key: []const u8, val: i32)! {
-    const line = std.fmt.allocPrint(bun.default_allocator, "        <key>{s}</key>\n        <integer>{d}</integer>\n", .{ key, val })?;
-    defer bun.default_allocator.free(line);
-    result.appendSlice(line)?;
+    const line_guard = OwnedSliceGuard{ slice: std.fmt.allocPrint(bun.default_allocator, "        <key>{s}</key>\n        <integer>{d}</integer>\n", .{ key, val })? };
+    result.appendSlice(line_guard.slice)?;
 }
 
 const EmitMode = enum { include_all, exclude_weekday, exclude_day };
@@ -1543,10 +1617,9 @@ fn cronToTaskXml(
     abs_path: []const u8,
 ): ([]const u8)! {
     const allocator = bun.default_allocator;
-    let xml = std.array_list.Managed(u8).init(allocator);
-    errdefer xml.deinit();
+    let xml_guard = ManagedU8Guard{ list: std.array_list.Managed(u8).init(allocator) };
 
-    xml.appendSlice(
+    xml_guard.list.appendSlice(
         \\<?xml version="1.0"?>
         \\<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
         \\  <Triggers>
@@ -1589,31 +1662,31 @@ fn cronToTaskXml(
         let sb_buf: [32]u8 = undefined;
         const sb = std.fmt.bufPrint(&sb_buf, "2000-01-01T{d:0>2}:{d:0>2}:00", .{ first_hour, first_min }) catch return error.InvalidCron;
 
-        xml.appendSlice("    <CalendarTrigger>\n")?;
+        xml_guard.list.appendSlice("    <CalendarTrigger>\n")?;
         let line_buf: [128]u8 = undefined;
         const sb_line = std.fmt.bufPrint(&line_buf, "      <StartBoundary>{s}</StartBoundary>\n", .{ sb}) catch return error.InvalidCron;
-        xml.appendSlice(sb_line)?;
+        xml_guard.list.appendSlice(sb_line)?;
 
         if (hours_count == 24) {
             // Case 1: minute-based repetition
             const m = minute_interval.?;
             if (m == 1) {
-                xml.appendSlice("      <Repetition><Interval>PT1M</Interval></Repetition>\n")?;
+                xml_guard.list.appendSlice("      <Repetition><Interval>PT1M</Interval></Repetition>\n")?;
             } else {
                 const rep = std.fmt.bufPrint(&line_buf, "      <Repetition><Interval>PT{d}M</Interval></Repetition>\n", .{ m}) catch return error.InvalidCron;
-                xml.appendSlice(rep)?;
+                xml_guard.list.appendSlice(rep)?;
             }
         } else {
             // Case 2: hour-based repetition
             const h = hour_interval.?;
             if (h > 1) {
                 const rep = std.fmt.bufPrint(&line_buf, "      <Repetition><Interval>PT{d}H</Interval></Repetition>\n", .{ h}) catch return error.InvalidCron;
-                xml.appendSlice(rep)?;
+                xml_guard.list.appendSlice(rep)?;
             }
         }
 
-        xml.appendSlice("      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>\n")?;
-        xml.appendSlice("    </CalendarTrigger>\n")?;
+        xml_guard.list.appendSlice("      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>\n")?;
+        xml_guard.list.appendSlice("    </CalendarTrigger>\n")?;
     } else {
         // Complex pattern: emit CalendarTriggers for each hour×minute pair.
         // Cap at 48 triggers (Task Scheduler limit).
@@ -1637,26 +1710,26 @@ fn cronToTaskXml(
 
                 // Emit day-of-month trigger if needed
                 if (!days_is_wild) {
-                    appendCalendarTriggerWithSchedule(&xml, allocator, sb, .{ by_month: .{ cron: cron, months_is_wild: months_is_wild } })?;
+                    appendCalendarTriggerWithSchedule(&xml_guard.list, allocator, sb, .{ by_month: .{ cron: cron, months_is_wild: months_is_wild } })?;
                 }
 
                 // Emit day-of-week trigger if needed
                 if (!weekdays_is_wild) {
                     if (months_is_wild) {
-                        appendCalendarTriggerWithSchedule(&xml, allocator, sb, .{ by_week: cron.weekdays })?;
+                        appendCalendarTriggerWithSchedule(&xml_guard.list, allocator, sb, .{ by_week: cron.weekdays })?;
                     } else {
                         // Use ScheduleByMonthDayOfWeek to include month restrictions
-                        appendCalendarTriggerWithSchedule(&xml, allocator, sb, .{ by_month_dow: .{ cron: cron, months_is_wild: months_is_wild } })?;
+                        appendCalendarTriggerWithSchedule(&xml_guard.list, allocator, sb, .{ by_month_dow: .{ cron: cron, months_is_wild: months_is_wild } })?;
                     }
                 }
 
                 // Both wildcard: every day (with optional month restriction)
                 if (days_is_wild && weekdays_is_wild) {
                     if (months_is_wild) {
-                        appendCalendarTriggerWithSchedule(&xml, allocator, sb, .{ by_day: {} })?;
+                        appendCalendarTriggerWithSchedule(&xml_guard.list, allocator, sb, .{ by_day: {} })?;
                     } else {
                         // Daily but restricted months → use ScheduleByMonth with all days
-                        appendCalendarTriggerWithSchedule(&xml, allocator, sb, .{ by_month_all_days: cron.months })?;
+                        appendCalendarTriggerWithSchedule(&xml_guard.list, allocator, sb, .{ by_month_all_days: cron.months })?;
                     }
                 }
             }
@@ -1664,43 +1737,43 @@ fn cronToTaskXml(
     }
 
     // Close triggers, add action
-    const xml_bun = xmlEscape(bun_exe)?;
-    defer allocator.free(xml_bun);
-    const xml_title = xmlEscape(title)?;
-    defer allocator.free(xml_title);
-    const xml_sched = xmlEscape(schedule)?;
-    defer allocator.free(xml_sched);
-    const xml_path = xmlEscape(abs_path)?;
-    defer allocator.free(xml_path);
+    const xml_bun_guard = OwnedSliceGuard{ slice: xmlEscape(bun_exe)?, allocator: allocator };
+    const xml_title_guard = OwnedSliceGuard{ slice: xmlEscape(title)?, allocator: allocator };
+    const xml_sched_guard = OwnedSliceGuard{ slice: xmlEscape(schedule)?, allocator: allocator };
+    const xml_path_guard = OwnedSliceGuard{ slice: xmlEscape(abs_path)?, allocator: allocator };
 
-    const action_xml = std.fmt.allocPrint(allocator,
-        \\  </Triggers>
-        \\  <Principals>
-        \\    <Principal>
-        \\      <LogonType>S4U</LogonType>
-        \\      <RunLevel>LeastPrivilege</RunLevel>
-        \\    </Principal>
-        \\  </Principals>
-        \\  <Settings>
-        \\    <Enabled>true</Enabled>
-        \\    <AllowStartOnDemand>true</AllowStartOnDemand>
-        \\    <AllowHardTerminate>true</AllowHardTerminate>
-        \\    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-        \\    <StartWhenAvailable>true</StartWhenAvailable>
-        \\  </Settings>
-        \\  <Actions>
-        \\    <Exec>
-        \\      <Command>{s}</Command>
-        \\      <Arguments>run --cron-title={s} --cron-period="{s}" "{s}"</Arguments>
-        \\    </Exec>
-        \\  </Actions>
-        \\</Task>
-        \\
-    , .{ xml_bun, xml_title, xml_sched, xml_path })?;
-    defer allocator.free(action_xml);
-    xml.appendSlice(action_xml)?;
+    const action_xml_guard = OwnedSliceGuard{
+        slice: std.fmt.allocPrint(allocator,
+            \\  </Triggers>
+            \\  <Principals>
+            \\    <Principal>
+            \\      <LogonType>S4U</LogonType>
+            \\      <RunLevel>LeastPrivilege</RunLevel>
+            \\    </Principal>
+            \\  </Principals>
+            \\  <Settings>
+            \\    <Enabled>true</Enabled>
+            \\    <AllowStartOnDemand>true</AllowStartOnDemand>
+            \\    <AllowHardTerminate>true</AllowHardTerminate>
+            \\    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+            \\    <StartWhenAvailable>true</StartWhenAvailable>
+            \\  </Settings>
+            \\  <Actions>
+            \\    <Exec>
+            \\      <Command>{s}</Command>
+            \\      <Arguments>run --cron-title={s} --cron-period="{s}" "{s}"</Arguments>
+            \\    </Exec>
+            \\  </Actions>
+            \\</Task>
+            \\
+        , .{ xml_bun_guard.slice, xml_title_guard.slice, xml_sched_guard.slice, xml_path_guard.slice })?,
+        allocator: allocator,
+    };
+    xml_guard.list.appendSlice(action_xml_guard.slice)?;
 
-    return xml.toOwnedSlice();
+    const owned_xml = xml_guard.list.toOwnedSlice()?;
+    xml_guard.armed = false;
+    return owned_xml;
 }
 
 fn appendDaysOfMonthXml(xml: *std.array_list.Managed(u8), days: u32)! {

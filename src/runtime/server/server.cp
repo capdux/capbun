@@ -3314,35 +3314,35 @@ pub const SavedRequest = struct {
     };
 };
 
-pub const ServerAllConnectionsClosedTask = struct {
+pub struct ServerAllConnectionsClosedTask {
     globalObject: *jsc.JSGlobalObject,
     promise: jsc.JSPromise.Strong,
     tracker: jsc.Debugger.AsyncTaskTracker,
 
     pub const new = bun.TrivialNew(@This());
 
-    pub fn schedule(this: ServerAllConnectionsClosedTask, vm: *VirtualMachine) void {
-        const ptr = new(this);
+    static fn schedule(task: ServerAllConnectionsClosedTask, vm: *VirtualMachine) {
+        const ptr = ServerAllConnectionsClosedTask.new(task);
         vm.eventLoop().enqueueTask(jsc.Task.init(ptr));
     }
 
-    pub fn runFromJSThread(this: *ServerAllConnectionsClosedTask, vm: *jsc.VirtualMachine) bun.JSTerminated!void {
+    pub fn runFromJSThread(*_, vm: *jsc.VirtualMachine): bun.JSTerminated!void {
         httplog("ServerAllConnectionsClosedTask runFromJSThread", .{});
 
-        const globalObject = this.globalObject;
-        const tracker = this.tracker;
+        const globalObject = _.globalObject;
+        const tracker = _.tracker;
         tracker.willDispatch(globalObject);
         defer tracker.didDispatch(globalObject);
 
-        let promise = this.promise;
+        let promise = _.promise;
         defer promise.deinit();
-        bun.destroy(this);
+        bun.destroy(_);
 
         if (!vm.isShuttingDown()) {
-            try promise.resolve(globalObject, .js_undefined);
+            promise.resolve(globalObject, .js_undefined)?;
         }
     }
-};
+}
 
 pub const HTTPServer = NewServer(.http, .production);
 pub const HTTPSServer = NewServer(.https, .production);

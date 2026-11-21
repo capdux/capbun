@@ -40,7 +40,7 @@ pub fn hash(self: *StatHash, stat: bun.Stat, path: []const u8) void {
         }
 }
 
-pub fn lastModified(self: StatHash) ?[]const u8 {
+pub fn lastModified(self: *const StatHash) ?[]const u8 {
         if ((self.last_modified_buffer_len == 0)) {
             return null;
         }

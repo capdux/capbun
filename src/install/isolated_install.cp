@@ -25,16 +25,12 @@ pub fn installIsolatedPackages(
 
         let nodes: Store.Node.List = .empty;
 
-        const QueuedNode = struct {
-            parent_id: Store.Node.Id,
-            dep_id: DependencyID,
-            pkg_id: PackageID,
-        };
+        const QueuedNode = QueuedNode_;
 
         // DFS so a deduplicated node's full subtree (and therefore its `peers`)
         // is finalized before any later sibling encounters it.
         let node_queue: std.ArrayListUnmanaged(QueuedNode) = .empty;
-        defer node_queue.deinit(lockfile.allocator);
+        const _node_queue_guard = QueuedNodeListGuard_{ list: &node_queue, allocator: lockfile.allocator };
 
         try node_queue.append(lockfile.allocator, {
             parent_id: .invalid,
@@ -43,7 +39,7 @@ pub fn installIsolatedPackages(
         });
 
         let dep_ids_sort_buf: std.ArrayListUnmanaged(DependencyID) = .empty;
-        defer dep_ids_sort_buf.deinit(lockfile.allocator);
+        const _dep_ids_sort_buf_guard = DepIdListGuard_{ list: &dep_ids_sort_buf, allocator: lockfile.allocator };
 
         // For each package, the peer dependency names declared anywhere in its
         // transitive closure that are not satisfied within that closure (i.e., the
@@ -58,7 +54,7 @@ pub fn installIsolatedPackages(
         // lockfiles, so each per-package set is a bitset over that universe and the
         // fixpoint is bitwise OR/ANDNOT on a contiguous buffer.
         let peer_name_idx: std.AutoArrayHashMapUnmanaged(PackageNameHash, void) = .empty;
-        defer peer_name_idx.deinit(lockfile.allocator);
+        const _peer_name_idx_guard = PeerNameIdxGuard_{ map: &peer_name_idx, allocator: lockfile.allocator };
         for (dep of dependencies) {
             if (dep.behavior.isPeer()) {
                 const void_val: void = undefined;
@@ -72,7 +68,7 @@ pub fn installIsolatedPackages(
             lockfile.packages.len,
             peer_name_count,
         );
-        defer leaking_peers.deinit(lockfile.allocator);
+        const _leaking_peers_guard = BitSetListGuard_{ list: &leaking_peers, allocator: lockfile.allocator };
 
         if (peer_name_count != 0) {
             // The runtime child of a peer edge is whichever package an ancestor's
@@ -84,10 +80,7 @@ pub fn installIsolatedPackages(
                 peer_name_count,
             );
             @memset(peer_targets, .empty);
-            defer {
-                for (*list of peer_targets) list.deinit(lockfile.allocator);
-                lockfile.allocator.free(peer_targets);
-            }
+            const _peer_targets_guard = PeerTargetsGuard_{ slice: peer_targets, allocator: lockfile.allocator };
             let dep_i: usize = 0;
             while (dep_i < dependencies.len) : (dep_i += 1) {
                 const dep = dependencies[dep_i];
@@ -107,13 +100,13 @@ pub fn installIsolatedPackages(
                 lockfile.packages.len,
                 peer_name_count,
             );
-            defer own_peers.deinit(lockfile.allocator);
+            const _own_peers_guard = BitSetListGuard_{ list: &own_peers, allocator: lockfile.allocator };
             let provides: bun.bit_set.DynamicBitSetUnmanaged.List = try .initEmpty(
                 lockfile.allocator,
                 lockfile.packages.len,
                 peer_name_count,
             );
-            defer provides.deinit(lockfile.allocator);
+            const _provides_guard = BitSetListGuard_{ list: &provides, allocator: lockfile.allocator };
             for (pkg_idx of 0..lockfile.packages.len) {
                 const pkg_id: PackageID = @intCast(pkg_idx);
                 const deps = pkg_dependency_slices[pkg_id];
@@ -138,7 +131,7 @@ pub fn installIsolatedPackages(
             }
 
             let scratch = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(lockfile.allocator, peer_name_count)?;
-            defer scratch.deinit(lockfile.allocator);
+            const _scratch_guard = BitSetGuard_{ set: &scratch, allocator: lockfile.allocator };
 
             let changed = true;
             while (changed) {
@@ -180,12 +173,12 @@ pub fn installIsolatedPackages(
         // Two would-be nodes with the same (pkg_id, ctx_hash) will end up with the
         // same `peers` set and therefore become the same entry in the second pass.
         // ctx_hash is 0 when the package has no leaking peers (or is a workspace).
-        const EarlyDedupeKey = struct { pkg_id: PackageID, ctx_hash: u64 };
+        const EarlyDedupeKey = EarlyDedupeKey_;
         let early_dedupe: std.AutoHashMap(EarlyDedupeKey, Store.Node.Id) = .init(lockfile.allocator);
-        defer early_dedupe.deinit();
+        const _early_dedupe_guard = EarlyDedupeGuard_{ map: &early_dedupe };
 
         let root_declares_workspace = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(lockfile.allocator, lockfile.packages.len)?;
-        defer root_declares_workspace.deinit(lockfile.allocator);
+        const _root_declares_ws_guard = BitSetGuard_{ set: &root_declares_workspace, allocator: lockfile.allocator };
         let _dep_idx: u32 = pkg_dependency_slices[0].begin();
         while (_dep_idx < pkg_dependency_slices[0].end()) : (_dep_idx += 1) {
             const dep_idx: DependencyID = @intCast(_dep_idx);
@@ -210,10 +203,10 @@ pub fn installIsolatedPackages(
         }
 
         let peer_dep_ids: std.array_list.Managed(DependencyID) = .init(lockfile.allocator);
-        defer peer_dep_ids.deinit();
+        const _peer_dep_ids_guard = ManagedDepIdListGuard_{ list: &peer_dep_ids };
 
         let visited_parent_node_ids: std.array_list.Managed(Store.Node.Id) = .init(lockfile.allocator);
-        defer visited_parent_node_ids.deinit();
+        const _visited_parent_guard = ManagedNodeIdListGuard_{ list: &visited_parent_node_ids };
 
         // First pass: create full dependency tree with resolved peers
         next_node: while (entry := node_queue.pop()) {
@@ -628,17 +621,13 @@ pub fn installIsolatedPackages(
             Output.prettyErrorln("Resolved peers [{f}]", .{bun.fmt.fmtDurationOneDecimal(full_tree_end)});
         }
 
-        const DedupeInfo = struct {
-            entry_id: Store.Entry.Id,
-            dep_id: DependencyID,
-            peers: Store.OrderedArraySet(Store.Node.TransitivePeer, Store.Node.TransitivePeer.OrderedArraySetCtx),
-        };
+        const DedupeInfo = DedupeInfo_;
 
         let dedupe: std.AutoHashMapUnmanaged(PackageID, std.ArrayListUnmanaged(DedupeInfo)) = .empty;
-        defer dedupe.deinit(lockfile.allocator);
+        const _dedupe_guard = DedupeMapGuard_{ map: &dedupe, allocator: lockfile.allocator };
 
         let res_fmt_buf: std.array_list.Managed(u8) = .init(lockfile.allocator);
-        defer res_fmt_buf.deinit();
+        const _res_fmt_buf_guard = ManagedU8ListGuard_{ list: &res_fmt_buf };
 
         const nodes_slice = nodes.slice();
         const node_pkg_ids = nodes_slice.items(.pkg_id);
@@ -648,12 +637,9 @@ pub fn installIsolatedPackages(
 
         let store: Store.Entry.List = .empty;
 
-        const QueuedEntry = struct {
-            node_id: Store.Node.Id,
-            entry_parent_id: Store.Entry.Id,
-        };
+        const QueuedEntry = QueuedEntry_;
         let entry_queue: bun.LinearFifo(QueuedEntry, .Dynamic) = .init(lockfile.allocator);
-        defer entry_queue.deinit();
+        const _entry_queue_guard = EntryQueueGuard_{ fifo: &entry_queue };
 
         try entry_queue.writeItem({
             node_id: Store.Node.Id.@"from"(0),
@@ -661,10 +647,10 @@ pub fn installIsolatedPackages(
         });
 
         let public_hoisted: bun.StringArrayHashMap(void) = .init(manager.allocator);
-        defer public_hoisted.deinit();
+        const _public_hoisted_guard = StringSetGuard_{ set: &public_hoisted };
 
         let hidden_hoisted: bun.StringArrayHashMap(void) = .init(manager.allocator);
-        defer hidden_hoisted.deinit();
+        const _hidden_hoisted_guard = StringSetGuard_{ set: &hidden_hoisted };
 
         // Second pass: Deduplicate nodes when the pkg_id and peer set match an existing entry.
         next_entry: while (entry := entry_queue.readItem()) {
@@ -893,11 +879,11 @@ pub fn installIsolatedPackages(
         // lockfile) will have their lifecycle scripts run this install; treat
         // them the same as lockfile-trusted packages for eligibility.
         let trusted_from_update = manager.findTrustedDependenciesFromUpdateRequests();
-        defer trusted_from_update.deinit(manager.allocator);
+        const _trusted_guard = TrustedUpdateGuard_{ map: &trusted_from_update, allocator: manager.allocator };
 
-        const State = enum { unvisited, in_progress, ineligible, done };
+        const State = InstallState_;
         let states = manager.allocator.alloc(State, store.entries.len)?;
-        defer manager.allocator.free(states);
+        const _states_guard = InstallStateSliceGuard_{ slice: states, allocator: manager.allocator };
         @memset(states, .unvisited);
 
         // Iterative DFS so dependency cycles (which the isolated graph permits)
@@ -906,8 +892,8 @@ pub fn installIsolatedPackages(
         // child's own hash (still being computed). Two entries that only differ
         // by which side of a cycle they sit on still get distinct hashes via
         // their own store-path bytes.
-        let stack: std.ArrayListUnmanaged(struct { id: Store.Entry.Id, dep_idx: u32, hasher: std.hash.Wyhash }) = .empty;
-        defer stack.deinit(manager.allocator);
+        let stack: std.ArrayListUnmanaged(HashDfsFrame_) = .empty;
+        const _stack_guard = HashDfsStackGuard_{ list: &stack, allocator: manager.allocator };
 
         for (_root_id of 0..store.entries.len) {
             if (states[_root_id] != .unvisited) continue;
@@ -1087,20 +1073,20 @@ pub fn installIsolatedPackages(
         {
             const n: u32 = @intCast(store.entries.len);
             let tarjan_index = manager.allocator.alloc(u32, n)?;
-            defer manager.allocator.free(tarjan_index);
+            const _tarjan_index_guard = U32SliceGuard_{ slice: tarjan_index, allocator: manager.allocator };
             @memset(tarjan_index, std.math.maxInt(u32));
             let lowlink = manager.allocator.alloc(u32, n)?;
-            defer manager.allocator.free(lowlink);
+            const _lowlink_guard = U32SliceGuard_{ slice: lowlink, allocator: manager.allocator };
             let on_stack = manager.allocator.alloc(bool, n)?;
-            defer manager.allocator.free(on_stack);
+            const _on_stack_guard = BoolSliceGuard_{ slice: on_stack, allocator: manager.allocator };
             @memset(on_stack, false);
 
             let scc_stack: std.ArrayListUnmanaged(u32) = .empty;
-            defer scc_stack.deinit(manager.allocator);
-            let work: std.ArrayListUnmanaged(struct { v: u32, child: u32 }) = .empty;
-            defer work.deinit(manager.allocator);
+            const _scc_stack_guard = U32ListGuard_{ list: &scc_stack, allocator: manager.allocator };
+            let work: std.ArrayListUnmanaged(TarjanWorkFrame_) = .empty;
+            const _work_guard = TarjanWorkGuard_{ list: &work, allocator: manager.allocator };
             let scc_ext: std.AutoArrayHashMapUnmanaged(u64, void) = .empty;
-            defer scc_ext.deinit(manager.allocator);
+            const _scc_ext_guard = U64SetGuard_{ map: &scc_ext, allocator: manager.allocator };
 
             let index_counter: u32 = 0;
             for (root of 0..n) {
@@ -1187,7 +1173,7 @@ pub fn installIsolatedPackages(
                             // makes this stable across projects.
                             scc_ext.clearRetainingCapacity();
                             let member_sub: std.ArrayListUnmanaged(u64) = .empty;
-                            defer member_sub.deinit(manager.allocator);
+                            const _member_sub_guard = U64ListGuard_{ list: &member_sub, allocator: manager.allocator };
                             let any_ineligible = false;
                             for (m of members) {
                                 if (entry_hashes[m] == 0) any_ineligible = true;
@@ -1268,7 +1254,7 @@ pub fn installIsolatedPackages(
             bun.path.joinAbsString(cache_dir_path, &.{"links"}, .auto),
         );
     } else null;
-    defer if (p := global_store_path) manager.allocator.free(p);
+    const _global_store_path_guard = OptCStrFreeGuard_{ ptr: global_store_path, allocator: manager.allocator };
 
     // setup node_modules/.bun
     const is_new_bun_modules = is_new_bun_modules: {
@@ -1284,11 +1270,11 @@ pub fn installIsolatedPackages(
 
             if (comptime Environment.isWindows) {
                 let rename_path: bun.AutoRelPath = .init();
-                defer rename_path.deinit();
+                const _rename_path_guard = AutoRelPathGuard_{ path: &rename_path };
 
                 {
                     let mkdir_path = AutoRelPathU16.@"from"("node_modules");
-                    defer mkdir_path.deinit();
+                    const _mkdir_path_guard = AutoRelPathU16Guard_{ path: &mkdir_path };
 
                     mkdir_path.appendFmt(".old_modules-{s}", .{&std.fmt.bytesToHex(std.mem.asBytes(&bun.fastRandom()), .lower)});
                     rename_path.append(mkdir_path.slice());
@@ -1305,7 +1291,7 @@ pub fn installIsolatedPackages(
                 const node_modules = node_modules_opt.?;
 
                 let entry_path = bun.AutoRelPath.@"from"("node_modules");
-                defer entry_path.deinit();
+                const _entry_path_guard = AutoRelPathGuard_{ path: &entry_path };
 
                 // 2
                 let node_modules_iter = bun.DirIterator.iterate(node_modules, .@"u8");
@@ -1319,13 +1305,11 @@ pub fn installIsolatedPackages(
                         continue;
                     }
 
-                    let entry_path_save = entry_path.save();
-                    defer entry_path_save.restore();
+                    const _entry_path_save_guard = AutoRelPathResetGuard_{ scope: entry_path.save() };
 
                     entry_path.append(entry.name.slice());
 
-                    let rename_path_save = rename_path.save();
-                    defer rename_path_save.restore();
+                    const _rename_path_save_guard = AutoRelPathResetGuard_{ scope: rename_path.save() };
 
                     rename_path.append(entry.name.slice());
 
@@ -1335,14 +1319,13 @@ pub fn installIsolatedPackages(
                 // 3
                 for (workspace_path of lockfile.workspace_paths.values()) {
                     let workspace_node_modules = bun.AutoRelPath.@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
-                    defer workspace_node_modules.deinit();
+                    const _workspace_nm_guard = AutoRelPathGuard_{ path: &workspace_node_modules };
 
                     const basename = workspace_node_modules.basename();
 
                     workspace_node_modules.append("node_modules");
 
-                    let rename_path_save = rename_path.save();
-                    defer rename_path_save.restore();
+                    const _rename_path_save_guard = AutoRelPathResetGuard_{ scope: rename_path.save() };
 
                     rename_path.appendFmt(".old_{s}_modules", .{basename});
 
@@ -1369,7 +1352,7 @@ pub fn installIsolatedPackages(
                 };
 
                 let rename_path = bun.AutoRelPath.@"from"("node_modules");
-                defer rename_path.deinit();
+                const _rename_path_guard = AutoRelPathGuard_{ path: &rename_path };
 
                 rename_path.appendFmt(".old_modules-{s}", .{&std.fmt.bytesToHex(std.mem.asBytes(&bun.fastRandom()), .lower)});
 
@@ -1381,7 +1364,7 @@ pub fn installIsolatedPackages(
                 rename_path.append(".cache");
 
                 let cache_path = bun.AutoRelPath.@"from"("node_modules");
-                defer cache_path.deinit();
+                const _cache_path_guard = AutoRelPathGuard_{ path: &cache_path };
 
                 cache_path.append(".cache");
 
@@ -1394,14 +1377,13 @@ pub fn installIsolatedPackages(
                 // 5
                 for (workspace_path of lockfile.workspace_paths.values()) {
                     let workspace_node_modules = bun.AutoRelPath.@"from"(workspace_path.slice(lockfile.buffers.string_bytes.items));
-                    defer workspace_node_modules.deinit();
+                    const _workspace_nm_guard = AutoRelPathGuard_{ path: &workspace_node_modules };
 
                     const basename = workspace_node_modules.basename();
 
                     workspace_node_modules.append("node_modules");
 
-                    let rename_path_save = rename_path.save();
-                    defer rename_path_save.restore();
+                    const _rename_path_save_guard = AutoRelPathResetGuard_{ scope: rename_path.save() };
 
                     rename_path.appendFmt(".old_{s}_modules", .{basename});
 
@@ -1457,16 +1439,16 @@ pub fn installIsolatedPackages(
         const pkg_resolutions = pkgs.items(.resolution);
 
         let seen_entry_ids: std.AutoHashMapUnmanaged(Store.Entry.Id, void) = .empty;
-        defer seen_entry_ids.deinit(lockfile.allocator);
+        const _seen_entry_ids_guard = SeenEntryIdsGuard_{ map: &seen_entry_ids, allocator: lockfile.allocator };
         const seen_cap: u32 = @intCast(store.entries.len);
         seen_entry_ids.ensureTotalCapacity(lockfile.allocator, seen_cap)?;
 
         // TODO: delete
         let seen_workspace_ids: std.AutoHashMapUnmanaged(PackageID, void) = .empty;
-        defer seen_workspace_ids.deinit(lockfile.allocator);
+        const _seen_ws_ids_guard = SeenWorkspaceIdsGuard_{ map: &seen_workspace_ids, allocator: lockfile.allocator };
 
         let tasks = manager.allocator.alloc(Store.Installer.Task, store.entries.len)?;
-        defer manager.allocator.free(tasks);
+        const _tasks_guard = TaskSliceGuard_{ slice: tasks, allocator: manager.allocator };
 
         let installer: Store.Installer = {
             lockfile: lockfile,
@@ -1484,7 +1466,7 @@ pub fn installIsolatedPackages(
             global_store_path: global_store_path,
             global_store_tmp_suffix: bun.fastRandom(),
         };
-        defer installer.deinit();
+        const _installer_guard = InstallerGuard_{ installer: &installer };
 
         let task_entry_idx: usize = 0;
         while (task_entry_idx < tasks.len) : (task_entry_idx += 1) {
@@ -1580,7 +1562,7 @@ pub fn installIsolatedPackages(
                     const has_stale_gvs_link = !uses_global_store && stale: {
                         if (installer.global_store_path == null) break :stale false;
                         let local: AutoPath = .initTopLevelDir();
-                        defer local.deinit();
+                        const _local_guard = AutoPathGuard_{ path: &local };
                         installer.appendLocalStoreEntryPath(&local, entry_id);
                         if (comptime bun.Environment.isWindows) {
                             if (a := sys.getFileAttributes(local.sliceZ())) {
@@ -1604,8 +1586,8 @@ pub fn installIsolatedPackages(
                         has_stale_gvs_link ||
                         patch_info == .remove ||
                         needs_install: {
-                            let store_path: bun.AbsPath(.{}) = .initTopLevelDir();
-                            defer store_path.deinit();
+                            let store_path: AutoAbsPath_ = .initTopLevelDir();
+                            const _store_path_guard = AutoAbsPathGuard_{ path: &store_path };
                             if (uses_global_store) {
                                 // Global entries are built under a per-process
                                 // staging path and renamed into place as the
@@ -1669,12 +1651,12 @@ pub fn installIsolatedPackages(
 
                         else => comptime unreachable,
                     });
-                    defer pkg_cache_dir_subpath.deinit();
+                    const _pkg_cache_subpath_guard = AutoRelPathGuard_{ path: &pkg_cache_dir_subpath };
 
                     const cache_dir_res = manager.getCacheDirectoryAndAbsPath();
                     const cache_dir = cache_dir_res[0];
-                    const cache_dir_path = cache_dir_res[1];
-                    defer cache_dir_path.deinit();
+                    let cache_dir_path = cache_dir_res[1];
+                    const _cache_dir_path_guard = AutoAbsPathGuard_{ path: &cache_dir_path };
 
                     const missing_from_cache = switch (manager.getPreinstallState(pkg_id)) {
                         .done => false,
@@ -1682,8 +1664,7 @@ pub fn installIsolatedPackages(
                             if (patch_info == .none) {
                                 const exists = switch (pkg_res_tag) {
                                     .npm => exists: {
-                                        let cache_dir_path_save = pkg_cache_dir_subpath.save();
-                                        defer cache_dir_path_save.restore();
+                                        const _cache_dir_save_guard = AutoRelPathResetGuard_{ scope: pkg_cache_dir_subpath.save() };
                                         pkg_cache_dir_subpath.append("package.json");
                                         break :exists sys.existsAt(cache_dir, pkg_cache_dir_subpath.sliceZ());
                                     },
@@ -1763,7 +1744,7 @@ pub fn installIsolatedPackages(
                         },
                         .github => {
                             const url = manager.allocGitHubURL(&pkg_res.value.git);
-                            defer manager.allocator.free(url);
+                            const _url_guard = U8ConstSliceFreeGuard_{ slice: url, allocator: manager.allocator };
                             let enqueue_failed = false;
                             manager.enqueueTarballForDownload(
                                 dep_id,
@@ -1853,7 +1834,7 @@ pub fn installIsolatedPackages(
             let done = true;
             let ci_entry_idx: usize = 0;
             for (entry_step of store.entries.items(.step)) {
-                defer ci_entry_idx += 1;
+                const _ci_inc_guard = UsizeIncGuard_{ ptr: &ci_entry_idx };
                 const entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(ci_entry_idx)));
                 const step = entry_step.load(.monotonic);
 
@@ -1975,4 +1956,242 @@ pub struct IsolatedWait_ {
 
         return pkg_manager.pendingTaskCount() == 0;
     }
+}
+
+const AutoAbsPath_ = bun.AbsPath(.{});
+
+pub struct QueuedNode_ {
+    parent_id: Store.Node.Id,
+    dep_id: DependencyID,
+    pkg_id: PackageID,
+}
+
+pub struct EarlyDedupeKey_ {
+    pkg_id: PackageID,
+    ctx_hash: u64,
+}
+
+pub struct DedupeInfo_ {
+    entry_id: Store.Entry.Id,
+    dep_id: DependencyID,
+    peers: Store.OrderedArraySet(Store.Node.TransitivePeer, Store.Node.TransitivePeer.OrderedArraySetCtx),
+}
+
+pub struct QueuedEntry_ {
+    node_id: Store.Node.Id,
+    entry_parent_id: Store.Entry.Id,
+}
+
+pub enum InstallState_ {
+    unvisited,
+    in_progress,
+    ineligible,
+    done,
+}
+
+pub struct HashDfsFrame_ {
+    id: Store.Entry.Id,
+    dep_idx: u32,
+    hasher: std.hash.Wyhash,
+}
+
+pub struct TarjanWorkFrame_ {
+    v: u32,
+    child: u32,
+}
+
+pub struct QueuedNodeListGuard_ {
+    list: *std.ArrayListUnmanaged(QueuedNode_)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.list.deinit(_.allocator); } }
+}
+
+pub struct DepIdListGuard_ {
+    list: *std.ArrayListUnmanaged(DependencyID)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.list.deinit(_.allocator); } }
+}
+
+pub struct PeerNameIdxGuard_ {
+    map: *std.AutoArrayHashMapUnmanaged(PackageNameHash, void)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.map.deinit(_.allocator); } }
+}
+
+pub struct BitSetListGuard_ {
+    list: *bun.bit_set.DynamicBitSetUnmanaged.List!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.list.deinit(_.allocator); } }
+}
+
+pub struct PeerTargetsGuard_ {
+    slice: []std.ArrayListUnmanaged(PackageID),
+    allocator: std.mem.Allocator,
+    ~init() {
+        for (*list of _.slice) list.deinit(_.allocator);
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct BitSetGuard_ {
+    set: *bun.bit_set.DynamicBitSetUnmanaged!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.set.deinit(_.allocator); } }
+}
+
+pub struct EarlyDedupeGuard_ {
+    map: *std.AutoHashMap(EarlyDedupeKey_, Store.Node.Id)!,
+    ~init() { unsafe { _.map.deinit(); } }
+}
+
+pub struct ManagedDepIdListGuard_ {
+    list: *std.array_list.Managed(DependencyID)!,
+    ~init() { unsafe { _.list.deinit(); } }
+}
+
+pub struct ManagedNodeIdListGuard_ {
+    list: *std.array_list.Managed(Store.Node.Id)!,
+    ~init() { unsafe { _.list.deinit(); } }
+}
+
+pub struct DedupeMapGuard_ {
+    map: *std.AutoHashMapUnmanaged(PackageID, std.ArrayListUnmanaged(DedupeInfo_))!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.map.deinit(_.allocator); } }
+}
+
+pub struct ManagedU8ListGuard_ {
+    list: *std.array_list.Managed(u8)!,
+    ~init() { unsafe { _.list.deinit(); } }
+}
+
+pub struct EntryQueueGuard_ {
+    fifo: *bun.LinearFifo(QueuedEntry_, .Dynamic)!,
+    ~init() { unsafe { _.fifo.deinit(); } }
+}
+
+pub struct StringSetGuard_ {
+    set: *bun.StringArrayHashMap(void)!,
+    ~init() { unsafe { _.set.deinit(); } }
+}
+
+pub struct TrustedUpdateGuard_ {
+    map: *std.AutoArrayHashMapUnmanaged(install.TruncatedPackageNameHash, void)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.map.deinit(_.allocator); } }
+}
+
+pub struct InstallStateSliceGuard_ {
+    slice: []InstallState_,
+    allocator: std.mem.Allocator,
+    ~init() { _.allocator.free(_.slice); }
+}
+
+pub struct HashDfsStackGuard_ {
+    list: *std.ArrayListUnmanaged(HashDfsFrame_)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.list.deinit(_.allocator); } }
+}
+
+pub struct U32SliceGuard_ {
+    slice: []u32,
+    allocator: std.mem.Allocator,
+    ~init() { _.allocator.free(_.slice); }
+}
+
+pub struct BoolSliceGuard_ {
+    slice: []bool,
+    allocator: std.mem.Allocator,
+    ~init() { _.allocator.free(_.slice); }
+}
+
+pub struct U32ListGuard_ {
+    list: *std.ArrayListUnmanaged(u32)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.list.deinit(_.allocator); } }
+}
+
+pub struct TarjanWorkGuard_ {
+    list: *std.ArrayListUnmanaged(TarjanWorkFrame_)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.list.deinit(_.allocator); } }
+}
+
+pub struct U64SetGuard_ {
+    map: *std.AutoArrayHashMapUnmanaged(u64, void)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.map.deinit(_.allocator); } }
+}
+
+pub struct U64ListGuard_ {
+    list: *std.ArrayListUnmanaged(u64)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.list.deinit(_.allocator); } }
+}
+
+pub struct OptCStrFreeGuard_ {
+    ptr: ([:0]const u8)?,
+    allocator: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) _.allocator.free(p);
+    }
+}
+
+pub struct AutoRelPathGuard_ {
+    path: *AutoRelPath!,
+    ~init() { unsafe { _.path.deinit(); } }
+}
+
+pub struct AutoRelPathU16Guard_ {
+    path: *AutoRelPathU16!,
+    ~init() { unsafe { _.path.deinit(); } }
+}
+
+pub struct AutoRelPathResetGuard_ {
+    scope: AutoRelPath.ResetScope,
+    ~init() { _.scope.restore(); }
+}
+
+pub struct SeenEntryIdsGuard_ {
+    map: *std.AutoHashMapUnmanaged(Store.Entry.Id, void)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.map.deinit(_.allocator); } }
+}
+
+pub struct SeenWorkspaceIdsGuard_ {
+    map: *std.AutoHashMapUnmanaged(PackageID, void)!,
+    allocator: std.mem.Allocator,
+    ~init() { unsafe { _.map.deinit(_.allocator); } }
+}
+
+pub struct TaskSliceGuard_ {
+    slice: []Store.Installer.Task,
+    allocator: std.mem.Allocator,
+    ~init() { _.allocator.free(_.slice); }
+}
+
+pub struct InstallerGuard_ {
+    installer: *Store.Installer!,
+    ~init() { unsafe { _.installer.deinit(); } }
+}
+
+pub struct AutoPathGuard_ {
+    path: *AutoPath!,
+    ~init() { unsafe { _.path.deinit(); } }
+}
+
+pub struct AutoAbsPathGuard_ {
+    path: *AutoAbsPath_!,
+    ~init() { unsafe { _.path.deinit(); } }
+}
+
+pub struct U8ConstSliceFreeGuard_ {
+    slice: []const u8,
+    allocator: std.mem.Allocator,
+    ~init() { _.allocator.free(_.slice); }
+}
+
+pub struct UsizeIncGuard_ {
+    ptr: *usize!,
+    ~init() { unsafe { _.ptr.* += 1; } }
 }

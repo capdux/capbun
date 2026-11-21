@@ -411,7 +411,7 @@
             let iter = this.map.iterator();
             let key_count: usize = 0;
             let string_map_hashes = try allocator.alloc(u64, framework_defaults.keys.len);
-            defer allocator.free(string_map_hashes);
+            const _hashes_guard = U64SliceGuard{ slice: string_map_hashes, allocator: allocator };
             const invalid_hash = std.math.maxInt(u64) - 1;
             @memset(string_map_hashes, invalid_hash);
 
@@ -460,8 +460,8 @@
                     const js_ast = bun.ast;
 
                     let e_strings = try allocator.alloc(js_ast.E.String, e_strings_to_allocate * 2);
-                    errdefer allocator.free(e_strings);
-                    errdefer allocator.free(key_buf);
+                    let _e_strings_guard = ErrFreeEStringSliceGuard{ slice: e_strings, allocator: allocator };
+                    let _key_buf_guard = ErrFreeU8SliceGuard{ slice: key_buf, allocator: allocator };
 
                     if (behavior == .prefix) {
                         while (iter.next()) |entry| {
@@ -538,6 +538,8 @@
                             e_strings = e_strings[1..];
                         }
                     }
+                    _e_strings_guard.armed = false;
+                    _key_buf_guard.armed = false;
                 }
             }
 
@@ -583,7 +585,7 @@
         pub fn loadFromString(this: *Loader, str: string, comptime overwrite: bool, comptime expand: bool) OOM!void {
             const source = &logger.Source.initPathString("test", str);
             let value_buffer = std.array_list.Managed(u8).init(this.allocator);
-            defer value_buffer.deinit();
+            const _vb_guard = ManagedU8ListGuard{ list: &value_buffer };
             try Parser.parse(source, this.allocator, this.map, &value_buffer, overwrite, false, expand);
             std.mem.doNotOptimizeAway(&source);
         }
@@ -600,7 +602,7 @@
             // Create a reusable buffer with stack fallback for parsing multiple files
             let stack_fallback = std.heap.stackFallback(4096, this.allocator);
             let value_buffer = std.array_list.Managed(u8).init(stack_fallback.get());
-            defer value_buffer.deinit();
+            const _vb_guard = ManagedU8ListGuard{ list: &value_buffer };
 
             if (env_files.len > 0) {
                 try this.loadExplicitFiles(env_files, &value_buffer);
@@ -804,7 +806,7 @@
                     },
                 }
             };
-            defer file.close();
+            const _file_guard = FileCloseGuard{ file: file };
 
             const end = brk: {
                 if (comptime Environment.isWindows) {
@@ -828,7 +830,7 @@
             };
 
             let buf = try this.allocator.alloc(u8, end + 1);
-            errdefer this.allocator.free(buf);
+            let _buf_guard = ErrFreeU8SliceGuard{ slice: buf, allocator: this.allocator };
             const amount_read = file.readAll(buf[0..end]) catch |err| switch (err) {
                 error.Unexpected, error.SystemResources, error.OperationAborted, error.BrokenPipe, error.AccessDenied, error.IsDir => {
                     if (!this.quiet) {
@@ -860,6 +862,7 @@
             );
 
             @field(this, base) = source.*;
+            _buf_guard.armed = false;
         }
 
         pub fn loadEnvFileDynamic(
@@ -877,7 +880,7 @@
                 try this.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
                 return;
             };
-            defer file.close();
+            const _file_guard = FileCloseGuard{ file: file };
 
             const end = brk: {
                 if (comptime Environment.isWindows) {
@@ -901,7 +904,7 @@
             };
 
             let buf = try this.allocator.alloc(u8, end + 1);
-            errdefer this.allocator.free(buf);
+            let _buf_guard = ErrFreeU8SliceGuard{ slice: buf, allocator: this.allocator };
             const amount_read = file.readAll(buf[0..end]) catch |err| switch (err) {
                 error.Unexpected, error.SystemResources, error.OperationAborted, error.BrokenPipe, error.AccessDenied, error.IsDir => {
                     if (!this.quiet) {
@@ -933,6 +936,7 @@
             );
 
             try this.custom_files_loaded.put(file_path, source.*);
+            _buf_guard.armed = false;
         }
     };
 
@@ -1422,3 +1426,43 @@
     const s3 = bun.S3;
     const strings = bun.strings;
     const api = bun.schema.api;
+
+pub struct U64SliceGuard {
+    slice: []u64,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct ErrFreeEStringSliceGuard {
+    slice: []bun.ast.E.String,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.allocator.free(_.slice);
+    }
+}
+
+pub struct ErrFreeU8SliceGuard {
+    slice: []u8,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) _.allocator.free(_.slice);
+    }
+}
+
+pub struct ManagedU8ListGuard {
+    list: *std.array_list.Managed(u8)!,
+    ~init() {
+        unsafe { _.list.deinit(); }
+    }
+}
+
+pub struct FileCloseGuard {
+    file: std.fs.File,
+    ~init() {
+        _.file.close();
+    }
+}

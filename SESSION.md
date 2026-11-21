@@ -170,3 +170,31 @@
   - `src/runtime/webcore/fetch.cp`：恢复缺失的 `blob:` / `file:` 本地 URL 分支；
   - `src/runtime/api/Archive.cp`、`src/cli/pack_command.cp`、`src/jsc/RuntimeTranspilerCache.cp`：以 `~init()` RAII Guard 批量替代手工 `defer`/`errdefer`（`Archive` 15 guards / `pack_command` 21 guards 清零 35/35 / `RuntimeTranspilerCache` 7 guards 清零 13/13）；
   - 验证：`bun run zig:check` 5/5，`bun-pack.test.ts` (71/71)、`transpiler-cache.test.ts` (9/9)、`27061.test.ts` (6/6)、`blob.test.ts` (16/16)、`fetch-proxy-tls-intern-race.test.ts` (1/1) 共 **103/103 全绿**。
+- **[2026-11-22 02:02] 收到并验收 `cp_agy` 6 条结单通知（全部 `cpc --lib` + `zig ast-check` 验证通过并完成 `ack`）**：
+  1. `task-bun-20261122-orelse-assign-drop` (`repro_orelse_assign.cp` PASS)：修复 `codegen/stmt.rs` 赋值右值 `NullCoalesce` lowering，保留 `??` 与 `orelse` 语义（仅当 `nc_l == lhs` 且 `nc_r` 非控制流块时才用 `??=` 简写），并修复 `--lib` 跳过用户自定义 `struct Box`。
+  2. `task-bun-20261122-loop-field-shadow` (`repro_loop_field_shadow.cp` PASS)：修复 `for` 循环捕获变量与 struct 字段同名时的遮蔽优先级（`locals`/`block_locals` 与 `mut_borrow_loop_vars` 优先于类字段解析）。
+  3. `task-bun-20261122-if-else-return-drop` (`repro_if_else_return_drop.cp` PASS)：`parser/primary.rs` 支持 `Token::Return` 主表达式解析，`if/else` 表达式内可直接使用 `return` / `return expr` 分支。
+  4. `task-bun-20261122-expr-walrus-drop` (`repro_expr_walrus_drop.cp` PASS)：`parser/primary.rs` 与 `codegen/expr/control.rs` 补齐表达式位置 `if (v := opt)` / `if (*v := opt)` 解析与作用域绑定。
+  5. `task-bun-20261122-ptr-opt-and-string-from` (`repro_ptr_opt_and_unsafe.cp` PASS)：修复 `([*:0]u8)?` 等后缀 `?` 生成 `?[*:0]u8`（不再误作 `try`），并在 `cp_string_from` 补充 `*const [N]u8` / `*const [0:0]u8` 分支。
+  6. `task-bun-20261122-ptr-postfix-opt` (`repro_ptr_postfix_opt.cp` PASS)：`codegen/types/map_type.rs` 修复 `*Foo?`、`(*Foo)?`、`*Foo?!` 统一映射为 `?*Foo`，显式 `*(*Foo?)` 仍为 `*?*Foo`。
+- **[2026-11-22 02:08] 向 `cp_agy` 提交工单 `task-bun-20261122-val-receiver-dangling-slice`**：复现文件 `/data/dev/cp/temp/repro_value_receiver_dangling_slice.cp`，上报无只读接收者方法在 `cpc` 下生成按值拷贝 `self: StatHash`，且返回 `_.buf[0.._.len]` 悬垂栈切片时未做借用生命周期拦截（直接引发 `29181.test.ts` `Last-Modified` 头返回栈垃圾内存）。
+- **[2026-11-22 02:09] 向 `cp_agy` 提交工单 `task-bun-20261122-generic-anon-raii`**：复现文件 `/data/dev/cp/temp/repro_generic_anon_raii.cp`，上报泛型函数返回的匿名结构体含 `~init()` 时，生成的 `__cp_deinit` 参数错误输出为 `_: *__CpAnonStruct__` 导致 `ast-check` 失败。
+- **[2026-11-22 02:13] 收到并验收 `cp_agy` 结单通知 `task-bun-20261122-unsafe-e0209-gaps`（已完成 `ack`）**：
+  - 修复结论：`sema/safety.rs` 与 `sema/stmt_expr.rs` 补齐 `unsafe {}` 外部对裸指针下标读取（`ManyRawPtr`/`CPtr`/`SentinelPtr`/`RawPtr`）、裸指针切片（`p[0..1]`）及 `@ptrCast`/`@alignCast`/`@intFromPtr`/`@ptrFromInt`/`@constCast` 的 `E0209` 拦截。
+  - 复现验证：`/data/dev/cp/temp/repro_unsafe_leak_check.cp` 经新版 `cpc check --brief --json` 精确报出 `7` 条 `E0209`（覆盖全部第 2~7 行测试语句）。
+- **[2026-11-22 02:14] 向 `cp_agy` 提交工单 `task-bun-20261122-generic-struct-raii-defer`**：复现文件 `/data/dev/cp/temp/repro_generic_struct_raii_defer.cp`，上报泛型结构体 `Box<T>` 定义 `~init()` 后实例化 `Box<Type>{ ... }` 时 `cpc` 未在作用域注入 `defer b.__cp_deinit()`。
+- **[2026-11-22 02:16] 向 `cp_agy` 提交工单 `task-bun-20261122-call-new-silently-empties-fn`**：复现文件 `/data/dev/cp/temp/repro_trivial_new_drop.cp`，上报方法体内调用 `new(this)` 时 `cpc` 静默清空整个函数体且返回 `EXIT=0`（定位并修复 `29181.test.ts` `server.stop()` 永不 resolve 根因）。
+- **[2026-11-22 02:19] 收到并验收 `cp_agy` 2 条结单通知（全部 `cpc --lib` + `zig ast-check` 验证通过并完成 `ack`）**：
+  1. `task-bun-20261122-val-receiver-dangling-slice` (`repro_value_receiver_dangling_slice.cp` PASS)：`codegen/actor.rs` 修复非枚举 struct 省略只读接收者且返回借用视图（切片/字符串/指针含可选/错误包装）的方法，自动输出 `self: *const T` 替代值拷贝 `self: T`，从编译器层面根除 `StatHash.lastModified()` 类悬垂栈切片。
+  2. `task-bun-20261122-generic-anon-raii` (`repro_generic_anon_raii.cp` PASS)：`codegen/actor.rs` 识别 `@This()` 匿名结构体内的 `__CpAnonStruct__` 接收者，`~init()` 正确输出 `pub fn __cp_deinit(self: *@This()) void`。
+- **[2026-11-22 02:23] 向 `cp_agy` 提交工单 `task-bun-20261122-sentinel-const-space`**：复现文件 `/data/dev/cp/temp/repro_sentinel_const_space.cp`，上报 `List([:0]const u8)` 作为泛型类型实参时 `cpc` 丢失空格输出 `[:0]constu8`。
+- **[2026-11-22 02:31] 收到并验收 `cp_agy` 2 条结单通知（全部 `cpc --lib` + `zig ast-check` 验证通过并完成 `ack`）**：
+  1. `task-bun-20261122-generic-struct-raii-defer` (`repro_generic_struct_raii_defer.cp` PASS)：`codegen/types/mod.rs` `type_has_release` 剥离 `<...>`/`(...)` 泛型实参匹配 `class_defs`，泛型结构体 `Box<T>{ ~init() }` 实例化时现已自动注入 `defer __cp_deinit()`。
+  2. `task-bun-20261122-call-new-silently-empties-fn` (`repro_trivial_new_drop.cp` PASS)：`parser/primary.rs` 修复 `new(this)` 等非构造形式调用，正确保留 `const ptr = new(self);` 不再静默清空函数体。
+- **[2026-11-22 02:37] 收到并验收 `cp_agy` 结单通知 `task-bun-20261122-sentinel-const-space`（已完成 `ack`）**：
+  - 修复结论：`parser/types.rs` 与 `parser/primary.rs` 收集泛型/调用类型实参时保留 token 间距空格及 `SentinelSlice` `:const` 格式化；`repro_sentinel_const_space.cp` 精确输出 `List([:0]const u8)` 并通过 `zig ast-check`。
+
+- **[2026-11-22 02:44] 9 大核心模块 `~init()` RAII 改造与 `29181` 根治里程碑（`zig:check` 5/5、23/23 全绿）**：
+  - `src/resolver/fs/stat_hash.cp` & `src/runtime/server/server.cp`：修复 `lastModified()` 悬垂栈切片（改 `_: *const StatHash`）与 `ServerAllConnectionsClosedTask.schedule` 中 `new(this)` 被静默清空函数体问题，彻底跑通 `29181.test.ts` (2/2, 411 expects)；
+  - `src/runtime/api/JSBundler.cp`（59→0，15 guards，ratio `1.055`）、`src/runtime/api/cron.cp`（47→0，12 guards，ratio `1.081`）、`src/install/isolated_install.cp`（39→0，34 guards，ratio `1.123`，`Path.cp` `pub ResetScope`）、`src/dotenv/env_loader.cp`（9→0，5 guards，ratio `1.024`）、`src/runtime/node/node_fs.cp`（94→0，28 guards + 11 `unsafe {}`，ratio `1.014`）、`src/bake/DevServer.cp`（85→4，32 guards + 14 `unsafe {}`，ratio `1.076`）；
+  - 累计消除 329 处手工 `defer`/`errdefer` 并全部通过 `cpc_brief.py` 与 `zig:check` 5/5，`29181.test.ts` (2/2)、`cron-parse.test.ts` (11/11)、`bun-file.test.ts` (6/6)、`ci-info.test.ts` (4/4) 共 23/23 全绿。

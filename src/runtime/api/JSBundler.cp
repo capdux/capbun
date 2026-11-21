@@ -1,6 +1,109 @@
 const debug = bun.Output.scoped(.Transpiler, .visible);
 const OwnedString = bun.MutableString;
 
+const PropIter = jsc.JSPropertyIterator(.{
+    skip_empty_name: true,
+    include_value: true,
+});
+
+struct PathBufferGuard {
+    buf: *bun.PathBuffer!,
+    ~init() { bun.path_buffer_pool.put(_.buf); }
+}
+
+struct BundlerFileMapGuard {
+    map: BundlerFileMap = .{ map: .empty },
+    armed: bool = true,
+    ~init() { if (_.armed) _.map.deinitAndUnprotect(); }
+}
+
+struct PropIterGuard {
+    iter: PropIter,
+    ~init() { _.iter.deinit(); }
+}
+
+struct BlobOrStringGuard {
+    val: jsc.Node.BlobOrStringOrBuffer,
+    armed: bool = true,
+    ~init() { if (_.armed) _.val.deinitAndUnprotect(); }
+}
+
+struct CompileOptionsGuard {
+    opts: BundlerCompileOptions,
+    armed: bool = true,
+    ~init() { if (_.armed) _.opts.deinit(); }
+}
+
+struct ZigSliceGuard {
+    slice: jsc.ZigString.Slice,
+    ~init() { _.slice.deinit(); }
+}
+
+struct BundlerConfigGuard {
+    cfg: BundlerConfig,
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() { if (_.armed) _.cfg.deinit(_.allocator); }
+}
+
+type OptBundlerPluginPtr = (*BundlerPlugin)?;
+
+struct PluginsPtrGuard {
+    plugins: *OptBundlerPluginPtr!,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            unsafe {
+                if (plugin := _.plugins.*) plugin.deinit();
+            }
+        }
+    }
+}
+
+struct FDGuard {
+    fd: bun.FD,
+    ~init() { _.fd.close(); }
+}
+
+struct LoaderNamesGuard {
+    list: std.ArrayListUnmanaged(string) = .{},
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() {
+        if (_.armed) {
+            for (name of _.list.items) bun.default_allocator.free(name);
+            _.list.deinit(_.allocator);
+        }
+    }
+}
+
+struct LoaderValuesGuard {
+    list: std.ArrayListUnmanaged(api.Loader) = .{},
+    allocator: std.mem.Allocator,
+    armed: bool = true,
+    ~init() { if (_.armed) _.list.deinit(_.allocator); }
+}
+
+struct TopExceptionScopeGuard {
+    scope: jsc.TopExceptionScope,
+    ~init() { _.scope.deinit(); }
+}
+
+struct PerfTracerGuard {
+    tracer: bun.perf.Ctx,
+    ~init() { _.tracer.end(); }
+}
+
+struct BunStringGuard {
+    str: bun.String,
+    ~init() { _.str.deref(); }
+}
+
+struct IndentGuard {
+    indent: *u32!,
+    ~init() { unsafe { _.indent.* -= 1; } }
+}
+
     pub struct BundlerFileMap {
         map: bun.StringHashMapUnmanaged(jsc.Node.BlobOrStringOrBuffer) = .empty,
 
@@ -29,9 +132,8 @@ const OwnedString = bun.MutableString;
 
             // Normalize backslashes to forward slashes for consistent lookup
             // Map keys are stored with forward slashes (normalized in fromJS)
-            const buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(buf);
-            const normalized = bun.path.pathToPosixBuf(u8, specifier, buf);
+            const buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+            const normalized = bun.path.pathToPosixBuf(u8, specifier, buf_guard.buf);
             if (entry := _.map.get(normalized)) {
                 return entry.slice();
             }
@@ -47,9 +149,8 @@ const OwnedString = bun.MutableString;
             }
 
             // Normalize backslashes to forward slashes for consistent lookup
-            const buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(buf);
-            const normalized = bun.path.pathToPosixBuf(u8, specifier, buf);
+            const buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+            const normalized = bun.path.pathToPosixBuf(u8, specifier, buf_guard.buf);
             return _.map.contains(normalized);
         }
 
@@ -74,9 +175,8 @@ const OwnedString = bun.MutableString;
                     };
                 }
             } else {
-                const buf = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(buf);
-                const normalized_specifier = bun.path.pathToPosixBuf(u8, specifier, buf);
+                const buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+                const normalized_specifier = bun.path.pathToPosixBuf(u8, specifier, buf_guard.buf);
 
                 if (key := _.map.getKey(normalized_specifier)) {
                     return _resolver.Result{
@@ -95,25 +195,23 @@ const OwnedString = bun.MutableString;
             {
                 // First, ensure source_file is absolute. It may be relative (e.g., "../../Windows/Temp/...")
                 // on Windows when the bundler stores paths relative to cwd.
-                const abs_source_buf = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(abs_source_buf);
+                const abs_source_buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
                 const abs_source_file = if (isAbsolutePath(source_file))
                     source_file
                 else
-                    Fs.FileSystem.instance.absBuf(&{ source_file}, abs_source_buf);
+                    Fs.FileSystem.instance.absBuf(&{ source_file}, abs_source_buf_guard.buf);
 
                 // Normalize source_file to use forward slashes (for Windows compatibility)
                 // On Windows, source_file may have backslashes from the real filesystem
                 // Use pathToPosixBuf which always converts \ to / regardless of platform
-                const source_file_buf = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(source_file_buf);
-                const normalized_source_file = bun.path.pathToPosixBuf(u8, abs_source_file, source_file_buf);
+                const source_file_buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+                const normalized_source_file = bun.path.pathToPosixBuf(u8, abs_source_file, source_file_buf_guard.buf);
 
                 // Extract directory from source_file using posix path handling
                 // For "/entry.js", we want "/"; for "/src/index.js", we want "/src/"
                 // For "C:/foo/bar.js", we want "C:/foo"
-                const buf = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(buf);
+                const buf_guard = PathBufferGuard{ buf: bun.path_buffer_pool.get() };
+                const buf = buf_guard.buf;
                 const source_dir = bun.path.dirname(normalized_source_file, .posix);
                 // If dirname returns empty but path starts with drive letter, extract the drive + root
                 const effective_source_dir = if (source_dir.len == 0)
@@ -127,10 +225,12 @@ const OwnedString = bun.MutableString;
                     source_dir;
                 // Use .loose to preserve Windows drive letters, then normalize in-place on Windows
                 const joined_len = bun.path.joinAbsStringBuf(effective_source_dir, buf, &{ specifier}, .loose).len;
-                if (bun.Environment.isWindows) {
-                    bun.path.platformToPosixInPlace(u8, buf[0..joined_len]);
-                }
-                const joined = buf[0..joined_len];
+                const joined = unsafe {
+                    if (bun.Environment.isWindows) {
+                        bun.path.platformToPosixInPlace(u8, buf[0..joined_len]);
+                    }
+                    buf[0..joined_len]
+                };
                 // Must use getKey to return the map's owned key, not the temporary buffer
                 if (key := _.map.getKey(joined)) {
                     return _resolver.Result{
@@ -166,31 +266,23 @@ const OwnedString = bun.MutableString;
         /// Expected format: Record<string, string | Blob | File | TypedArray | ArrayBuffer>
         /// Uses async parsing for cross-thread safety since bundler runs on a separate thread.
         static fn fromJS(globalThis: *jsc.JSGlobalObject, files_value: jsc.JSValue): JSError!BundlerFileMap {
-            let file_map = BundlerFileMap{
-                map: .empty,
-            };
-            errdefer file_map.deinitAndUnprotect();
+            let file_map_guard = BundlerFileMapGuard{};
 
             const files_obj_opt = files_value.getObject();
             if (files_obj_opt == null) return globalThis.throwInvalidArguments("Expected files to be an object", .{});
             const files_obj = files_obj_opt.?;
 
-            let files_iter = try jsc.JSPropertyIterator(.{
-                skip_empty_name: true,
-                include_value: true,
-            }).init(globalThis, files_obj);
-            defer files_iter.deinit();
+            let files_iter_guard = PropIterGuard{ iter: try PropIter.init(globalThis, files_obj) };
 
-            file_map.map.ensureTotalCapacity(bun.default_allocator, @intCast(files_iter.len))?;
+            file_map_guard.map.map.ensureTotalCapacity(bun.default_allocator, @intCast(files_iter_guard.iter.len))?;
 
-            while (prop := files_iter.next()?) {
-                const property_value = files_iter.value;
+            while (prop := files_iter_guard.iter.next()?) {
+                const property_value = files_iter_guard.iter.value;
 
                 // Parse the value as BlobOrStringOrBuffer using async mode for thread safety
                 const maybe_blob_or_string = jsc.Node.BlobOrStringOrBuffer.fromJSAsync(globalThis, bun.default_allocator, property_value)?;
                 if (maybe_blob_or_string == null) return globalThis.throwInvalidArguments("Expected file content to be a string, Blob, File, TypedArray, or ArrayBuffer", .{});
-                let blob_or_string = maybe_blob_or_string.?;
-                errdefer blob_or_string.deinitAndUnprotect();
+                let blob_guard = BlobOrStringGuard{ val: maybe_blob_or_string.? };
 
                 // Clone the key since we need to own it
                 const key = prop.toOwnedSlice(bun.default_allocator)?;
@@ -201,10 +293,12 @@ const OwnedString = bun.MutableString;
                 // (uses sep_windows constant, not sep which varies by target)
                 bun.path.dangerouslyConvertPathToPosixInPlace(u8, key);
 
-                file_map.map.putAssumeCapacity(key, blob_or_string);
+                file_map_guard.map.map.putAssumeCapacity(key, blob_guard.val);
+                blob_guard.armed = false;
             }
 
-            return file_map;
+            file_map_guard.armed = false;
+            return file_map_guard.map;
         }
     }
 
@@ -226,19 +320,20 @@ const OwnedString = bun.MutableString;
             autoload_package_json: bool = false,
 
             pub fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, allocator: std.mem.Allocator, compile_target: CompileTarget?): JSError!BundlerCompileOptions? {
-                let opts = BundlerCompileOptions{
-                    .exec_argv = OwnedString.initEmpty(allocator),
-                    .executable_path = OwnedString.initEmpty(allocator),
-                    .windows_icon_path = OwnedString.initEmpty(allocator),
-                    .windows_title = OwnedString.initEmpty(allocator),
-                    .windows_publisher = OwnedString.initEmpty(allocator),
-                    .windows_version = OwnedString.initEmpty(allocator),
-                    .windows_description = OwnedString.initEmpty(allocator),
-                    .windows_copyright = OwnedString.initEmpty(allocator),
-                    .outfile = OwnedString.initEmpty(allocator),
-                    .compile_target = compile_target orelse .{},
+                let opts_guard = CompileOptionsGuard{
+                    opts: BundlerCompileOptions{
+                        .exec_argv = OwnedString.initEmpty(allocator),
+                        .executable_path = OwnedString.initEmpty(allocator),
+                        .windows_icon_path = OwnedString.initEmpty(allocator),
+                        .windows_title = OwnedString.initEmpty(allocator),
+                        .windows_publisher = OwnedString.initEmpty(allocator),
+                        .windows_version = OwnedString.initEmpty(allocator),
+                        .windows_description = OwnedString.initEmpty(allocator),
+                        .windows_copyright = OwnedString.initEmpty(allocator),
+                        .outfile = OwnedString.initEmpty(allocator),
+                        .compile_target = compile_target orelse .{},
+                    },
                 };
-                errdefer opts.deinit();
 
                 const object = brk: {
                     let compile_value: JSValue = undefined;
@@ -250,10 +345,12 @@ const OwnedString = bun.MutableString;
                         if (compile_value == .false) {
                             return null;
                         }
-                        return opts;
+                        opts_guard.armed = false;
+                        return opts_guard.opts;
                     } else if (compile_value.isString()) {
-                        opts.compile_target = CompileTarget.fromJS(globalThis, compile_value)?;
-                        return opts;
+                        opts_guard.opts.compile_target = CompileTarget.fromJS(globalThis, compile_value)?;
+                        opts_guard.armed = false;
+                        return opts_guard.opts;
                     } else if (compile_value.isObject()) {
                         break :brk compile_value;
                     } else {
@@ -262,33 +359,31 @@ const OwnedString = bun.MutableString;
                 };
 
                 if (target := object.getOwn(globalThis, "target")?) {
-                    opts.compile_target = CompileTarget.fromJS(globalThis, target)?;
+                    opts_guard.opts.compile_target = CompileTarget.fromJS(globalThis, target)?;
                 }
 
                 if (exec_argv := object.getOwnArray(globalThis, "execArgv")?) {
                     let iter = exec_argv.arrayIterator(globalThis)?;
                     let is_first = true;
                     while (arg := iter.next()?) {
-                        let slice = arg.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
+                        const slice_guard = ZigSliceGuard{ slice: arg.toSlice(globalThis, bun.default_allocator)? };
                         if (is_first) {
                             is_first = false;
-                            opts.exec_argv.appendSlice(slice.slice())?;
+                            opts_guard.opts.exec_argv.appendSlice(slice_guard.slice.slice())?;
                         } else {
-                            opts.exec_argv.appendChar(' ')?;
-                            opts.exec_argv.appendSlice(slice.slice())?;
+                            opts_guard.opts.exec_argv.appendChar(' ')?;
+                            opts_guard.opts.exec_argv.appendSlice(slice_guard.slice.slice())?;
                         }
                     }
                 }
 
                 if (executable_path := object.getOwn(globalThis, "executablePath")?) {
-                    let slice = executable_path.toSlice(globalThis, bun.default_allocator)?;
-                    defer slice.deinit();
-                    if (bun.sys.existsAtType(bun.FD.cwd(), slice.slice()).unwrapOr(.directory) != .file) {
+                    const slice_guard = ZigSliceGuard{ slice: executable_path.toSlice(globalThis, bun.default_allocator)? };
+                    if (bun.sys.existsAtType(bun.FD.cwd(), slice_guard.slice.slice()).unwrapOr(.directory) != .file) {
                         return globalThis.throwInvalidArguments("executablePath must be a valid path to a Bun executable", .{});
                     }
 
-                    opts.executable_path.appendSliceExact(slice.slice())?;
+                    opts_guard.opts.executable_path.appendSliceExact(slice_guard.slice.slice())?;
                 }
 
                 if (windows := object.getOwnTruthy(globalThis, "windows")?) {
@@ -297,73 +392,67 @@ const OwnedString = bun.MutableString;
                     }
 
                     if (hide_console := windows.getOwn(globalThis, "hideConsole")?) {
-                        opts.windows_hide_console = hide_console.toBoolean();
+                        opts_guard.opts.windows_hide_console = hide_console.toBoolean();
                     }
 
                     if (windows_icon_path := windows.getOwn(globalThis, "icon")?) {
-                        let slice = windows_icon_path.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
-                        if (bun.sys.existsAtType(bun.FD.cwd(), slice.slice()).unwrapOr(.directory) != .file) {
+                        const slice_guard = ZigSliceGuard{ slice: windows_icon_path.toSlice(globalThis, bun.default_allocator)? };
+                        if (bun.sys.existsAtType(bun.FD.cwd(), slice_guard.slice.slice()).unwrapOr(.directory) != .file) {
                             return globalThis.throwInvalidArguments("windows.icon must be a valid path to an ico file", .{});
                         }
 
-                        opts.windows_icon_path.appendSliceExact(slice.slice())?;
+                        opts_guard.opts.windows_icon_path.appendSliceExact(slice_guard.slice.slice())?;
                     }
 
                     if (windows_title := windows.getOwn(globalThis, "title")?) {
-                        let slice = windows_title.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
-                        opts.windows_title.appendSliceExact(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: windows_title.toSlice(globalThis, bun.default_allocator)? };
+                        opts_guard.opts.windows_title.appendSliceExact(slice_guard.slice.slice())?;
                     }
 
                     if (windows_publisher := windows.getOwn(globalThis, "publisher")?) {
-                        let slice = windows_publisher.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
-                        opts.windows_publisher.appendSliceExact(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: windows_publisher.toSlice(globalThis, bun.default_allocator)? };
+                        opts_guard.opts.windows_publisher.appendSliceExact(slice_guard.slice.slice())?;
                     }
 
                     if (windows_version := windows.getOwn(globalThis, "version")?) {
-                        let slice = windows_version.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
-                        opts.windows_version.appendSliceExact(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: windows_version.toSlice(globalThis, bun.default_allocator)? };
+                        opts_guard.opts.windows_version.appendSliceExact(slice_guard.slice.slice())?;
                     }
 
                     if (windows_description := windows.getOwn(globalThis, "description")?) {
-                        let slice = windows_description.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
-                        opts.windows_description.appendSliceExact(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: windows_description.toSlice(globalThis, bun.default_allocator)? };
+                        opts_guard.opts.windows_description.appendSliceExact(slice_guard.slice.slice())?;
                     }
 
                     if (windows_copyright := windows.getOwn(globalThis, "copyright")?) {
-                        let slice = windows_copyright.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
-                        opts.windows_copyright.appendSliceExact(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: windows_copyright.toSlice(globalThis, bun.default_allocator)? };
+                        opts_guard.opts.windows_copyright.appendSliceExact(slice_guard.slice.slice())?;
                     }
                 }
 
                 if (outfile := object.getOwn(globalThis, "outfile")?) {
-                    let slice = outfile.toSlice(globalThis, bun.default_allocator)?;
-                    defer slice.deinit();
-                    opts.outfile.appendSliceExact(slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: outfile.toSlice(globalThis, bun.default_allocator)? };
+                    opts_guard.opts.outfile.appendSliceExact(slice_guard.slice.slice())?;
                 }
 
                 if (autoload_dotenv := object.getBooleanLoose(globalThis, "autoloadDotenv")?) {
-                    opts.autoload_dotenv = autoload_dotenv;
+                    opts_guard.opts.autoload_dotenv = autoload_dotenv;
                 }
 
                 if (autoload_bunfig := object.getBooleanLoose(globalThis, "autoloadBunfig")?) {
-                    opts.autoload_bunfig = autoload_bunfig;
+                    opts_guard.opts.autoload_bunfig = autoload_bunfig;
                 }
 
                 if (autoload_tsconfig := object.getBooleanLoose(globalThis, "autoloadTsconfig")?) {
-                    opts.autoload_tsconfig = autoload_tsconfig;
+                    opts_guard.opts.autoload_tsconfig = autoload_tsconfig;
                 }
 
                 if (autoload_package_json := object.getBooleanLoose(globalThis, "autoloadPackageJson")?) {
-                    opts.autoload_package_json = autoload_package_json;
+                    opts_guard.opts.autoload_package_json = autoload_package_json;
                 }
 
-                return opts;
+                opts_guard.armed = false;
+                return opts_guard.opts;
             }
 
             fn deinit(*_) {
@@ -477,29 +566,31 @@ const OwnedString = bun.MutableString;
         pub const List = bun.StringArrayHashMapUnmanaged(Config);
 
         pub fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, plugins: *(*BundlerPlugin)?, allocator: std.mem.Allocator): JSError!Config {
-            let cfg = BundlerConfig{
-                .entry_points = bun.StringSet.init(allocator),
-                .external = bun.StringSet.init(allocator),
-                .optimize_imports = bun.StringSet.init(allocator),
-                .define = bun.StringMap.init(allocator, true),
-                .dir = OwnedString.initEmpty(allocator),
-                .outdir = OwnedString.initEmpty(allocator),
-                .rootdir = OwnedString.initEmpty(allocator),
-                .names = .{
-                    .owned_entry_point = OwnedString.initEmpty(allocator),
-                    .owned_chunk = OwnedString.initEmpty(allocator),
-                    .owned_asset = OwnedString.initEmpty(allocator),
+            let cfg_guard = BundlerConfigGuard{
+                cfg: BundlerConfig{
+                    .entry_points = bun.StringSet.init(allocator),
+                    .external = bun.StringSet.init(allocator),
+                    .optimize_imports = bun.StringSet.init(allocator),
+                    .define = bun.StringMap.init(allocator, true),
+                    .dir = OwnedString.initEmpty(allocator),
+                    .outdir = OwnedString.initEmpty(allocator),
+                    .rootdir = OwnedString.initEmpty(allocator),
+                    .names = .{
+                        .owned_entry_point = OwnedString.initEmpty(allocator),
+                        .owned_chunk = OwnedString.initEmpty(allocator),
+                        .owned_asset = OwnedString.initEmpty(allocator),
+                    },
                 },
+                allocator: allocator,
             };
-            errdefer cfg.deinit(allocator);
-            errdefer if (plugin := plugins.*) plugin.deinit();
+            let plugins_guard = PluginsPtrGuard{ plugins: plugins };
 
             let did_set_target = false;
             if (slice := config.getOptional(globalThis, "target", ZigString.Slice)?) {
-                defer slice.deinit();
-                if (strings.hasPrefixComptime(slice.slice(), "bun-")) {
-                    cfg.compile = {
-                        compile_target: try CompileTarget.fromSlice(globalThis, slice.slice()),
+                const slice_guard = ZigSliceGuard{ slice: slice };
+                if (strings.hasPrefixComptime(slice_guard.slice.slice(), "bun-")) {
+                    cfg_guard.cfg.compile = {
+                        compile_target: try CompileTarget.fromSlice(globalThis, slice_guard.slice.slice()),
                         exec_argv: OwnedString.initEmpty(allocator),
                         executable_path: OwnedString.initEmpty(allocator),
                         windows_icon_path: OwnedString.initEmpty(allocator),
@@ -510,13 +601,13 @@ const OwnedString = bun.MutableString;
                         windows_copyright: OwnedString.initEmpty(allocator),
                         outfile: OwnedString.initEmpty(allocator),
                     };
-                    cfg.target = .bun;
+                    cfg_guard.cfg.target = .bun;
                     did_set_target = true;
                 } else {
-                    if (t := options.Target.Map.get(slice.slice())) {
-                        cfg.target = t;
+                    if (t := options.Target.Map.get(slice_guard.slice.slice())) {
+                        cfg_guard.cfg.target = t;
                     } else {
-                        return globalThis.throwInvalidArguments("Expected target to be one of 'browser', 'node', 'bun', 'macro', or 'bun-<target>', got {s}", .{ slice.slice() });
+                        return globalThis.throwInvalidArguments("Expected target to be one of 'browser', 'node', 'bun', 'macro', or 'bun-<target>', got {s}", .{ slice_guard.slice.slice() });
                     }
                     did_set_target = true;
                 }
@@ -534,8 +625,8 @@ const OwnedString = bun.MutableString;
                     }
 
                     if (slice := plugin.getOptional(globalThis, "name", ZigString.Slice)?) {
-                        defer slice.deinit();
-                        if (slice.len == 0) {
+                        const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (slice_guard.slice.len == 0) {
                             return globalThis.throwInvalidArguments("Expected plugin to have a non-empty name", .{});
                         }
                     } else {
@@ -552,7 +643,7 @@ const OwnedString = bun.MutableString;
                     } else {
                         plugins.* = BundlerPlugin.create(
                             globalThis,
-                            switch (cfg.target) {
+                            switch (cfg_guard.cfg.target) {
                                 .bun, .bun_macro => jsc.JSGlobalObject.BunPluginTarget.bun,
                                 .node => jsc.JSGlobalObject.BunPluginTarget.node,
                                 else => .browser,
@@ -591,53 +682,53 @@ const OwnedString = bun.MutableString;
             }
 
             if (macros_flag := config.getBooleanLoose(globalThis, "macros")?) {
-                cfg.no_macros = !macros_flag;
+                cfg_guard.cfg.no_macros = !macros_flag;
             }
 
             if (bytecode := config.getBooleanLoose(globalThis, "bytecode")?) {
-                cfg.bytecode = bytecode;
+                cfg_guard.cfg.bytecode = bytecode;
 
                 if (bytecode) {
                     // Default to CJS for bytecode, since esm doesn't really work yet.
-                    cfg.format = .cjs;
-                    if (did_set_target && cfg.target != .bun && cfg.bytecode) {
+                    cfg_guard.cfg.format = .cjs;
+                    if (did_set_target && cfg_guard.cfg.target != .bun && cfg_guard.cfg.bytecode) {
                         return globalThis.throwInvalidArguments("target must be 'bun' when bytecode is true", .{});
                     }
-                    cfg.target = .bun;
+                    cfg_guard.cfg.target = .bun;
                 }
             }
 
             if (react_fast_refresh := config.getBooleanLoose(globalThis, "reactFastRefresh")?) {
-                cfg.react_fast_refresh = react_fast_refresh;
+                cfg_guard.cfg.react_fast_refresh = react_fast_refresh;
             }
 
             let has_out_dir = false;
             if (slice := config.getOptional(globalThis, "outdir", ZigString.Slice)?) {
-                defer slice.deinit();
-                cfg.outdir.appendSliceExact(slice.slice())?;
+                const slice_guard = ZigSliceGuard{ slice: slice };
+                cfg_guard.cfg.outdir.appendSliceExact(slice_guard.slice.slice())?;
                 has_out_dir = true;
             }
 
             if (slice := config.getOptional(globalThis, "banner", ZigString.Slice)?) {
-                defer slice.deinit();
-                cfg.banner.appendSliceExact(slice.slice())?;
+                const slice_guard = ZigSliceGuard{ slice: slice };
+                cfg_guard.cfg.banner.appendSliceExact(slice_guard.slice.slice())?;
             }
 
             if (slice := config.getOptional(globalThis, "footer", ZigString.Slice)?) {
-                defer slice.deinit();
-                cfg.footer.appendSliceExact(slice.slice())?;
+                const slice_guard = ZigSliceGuard{ slice: slice };
+                cfg_guard.cfg.footer.appendSliceExact(slice_guard.slice.slice())?;
             }
 
             if (source_map_js := config.getTruthy(globalThis, "sourcemap")?) {
                 if (source_map_js.isBoolean()) {
                     if (source_map_js == .true) {
-                        cfg.source_map = if (has_out_dir)
+                        cfg_guard.cfg.source_map = if (has_out_dir)
                             .linked
                         else
                             .@"inline";
                     }
                 } else if (!source_map_js.isEmptyOrUndefinedOrNull()) {
-                    cfg.source_map = try source_map_js.toEnum(
+                    cfg_guard.cfg.source_map = try source_map_js.toEnum(
                         globalThis,
                         "sourcemap",
                         options.SourceMapOption,
@@ -648,22 +739,21 @@ const OwnedString = bun.MutableString;
             if (env := config.get(globalThis, "env")?) {
                 if (!env.isUndefined()) {
                     if (env == .@"null" || env == .@"false" || (env.isNumber() && env.asNumber() == 0)) {
-                        cfg.env_behavior = .disable;
+                        cfg_guard.cfg.env_behavior = .disable;
                     } else if (env == .@"true" || (env.isNumber() && env.asNumber() == 1)) {
-                        cfg.env_behavior = .load_all;
+                        cfg_guard.cfg.env_behavior = .load_all;
                     } else if (env.isString()) {
-                        const slice = env.toSlice(globalThis, bun.default_allocator)?;
-                        defer slice.deinit();
-                        if (strings.eqlComptime(slice.slice(), "inline")) {
-                            cfg.env_behavior = .load_all;
-                        } else if (strings.eqlComptime(slice.slice(), "disable")) {
-                            cfg.env_behavior = .disable;
-                        } else if (asterisk := strings.indexOfChar(slice.slice(), '*')) {
+                        const slice_guard = ZigSliceGuard{ slice: env.toSlice(globalThis, bun.default_allocator)? };
+                        if (strings.eqlComptime(slice_guard.slice.slice(), "inline")) {
+                            cfg_guard.cfg.env_behavior = .load_all;
+                        } else if (strings.eqlComptime(slice_guard.slice.slice(), "disable")) {
+                            cfg_guard.cfg.env_behavior = .disable;
+                        } else if (asterisk := strings.indexOfChar(slice_guard.slice.slice(), '*')) {
                             if (asterisk > 0) {
-                                cfg.env_behavior = .prefix;
-                                cfg.env_prefix.appendSliceExact(slice.slice()[0..asterisk])?;
+                                cfg_guard.cfg.env_behavior = .prefix;
+                                cfg_guard.cfg.env_prefix.appendSliceExact(slice_guard.slice.slice()[0..asterisk])?;
                             } else {
-                                cfg.env_behavior = .load_all;
+                                cfg_guard.cfg.env_behavior = .load_all;
                             }
                         } else {
                             return globalThis.throwInvalidArguments("env must be 'inline', 'disable', or a string with a '*' character", .{});
@@ -675,7 +765,7 @@ const OwnedString = bun.MutableString;
             }
 
             if (packages := config.getOptionalEnum(globalThis, "packages", options.PackagesOption)?) {
-                cfg.packages = packages;
+                cfg_guard.cfg.packages = packages;
             }
 
             // Parse JSX configuration
@@ -685,74 +775,74 @@ const OwnedString = bun.MutableString;
                 }
 
                 if (slice := jsx_value.getOptional(globalThis, "runtime", ZigString.Slice)?) {
-                    defer slice.deinit();
+                    const slice_guard = ZigSliceGuard{ slice: slice };
                     let str_lower: [128]u8 = undefined;
-                    const len = @min(slice.len, str_lower.len);
-                    * = strings.copyLowercase(slice.slice()[0..len], str_lower[0..len]);
+                    const len = @min(slice_guard.slice.len, str_lower.len);
+                    * = strings.copyLowercase(slice_guard.slice.slice()[0..len], str_lower[0..len]);
                     if (runtime := options.JSX.RuntimeMap.get(str_lower[0..len])) {
-                        cfg.jsx.runtime = runtime.runtime;
+                        cfg_guard.cfg.jsx.runtime = runtime.runtime;
                         if (dev := runtime.development) {
-                            cfg.jsx.development = dev;
+                            cfg_guard.cfg.jsx.development = dev;
                         }
                     } else {
-                        return globalThis.throwInvalidArguments("Invalid jsx.runtime: '{s}'. Must be one of: 'classic', 'automatic', 'react', 'react-jsx', or 'react-jsxdev'", .{ slice.slice() });
+                        return globalThis.throwInvalidArguments("Invalid jsx.runtime: '{s}'. Must be one of: 'classic', 'automatic', 'react', 'react-jsx', or 'react-jsxdev'", .{ slice_guard.slice.slice() });
                     }
                 }
 
                 if (slice := jsx_value.getOptional(globalThis, "factory", ZigString.Slice)?) {
-                    defer slice.deinit();
-                    cfg.jsx.factory = allocator.dupe(u8, slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: slice };
+                    cfg_guard.cfg.jsx.factory = allocator.dupe(u8, slice_guard.slice.slice())?;
                 }
 
                 if (slice := jsx_value.getOptional(globalThis, "fragment", ZigString.Slice)?) {
-                    defer slice.deinit();
-                    cfg.jsx.fragment = allocator.dupe(u8, slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: slice };
+                    cfg_guard.cfg.jsx.fragment = allocator.dupe(u8, slice_guard.slice.slice())?;
                 }
 
                 if (slice := jsx_value.getOptional(globalThis, "importSource", ZigString.Slice)?) {
-                    defer slice.deinit();
-                    cfg.jsx.import_source = allocator.dupe(u8, slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: slice };
+                    cfg_guard.cfg.jsx.import_source = allocator.dupe(u8, slice_guard.slice.slice())?;
                 }
 
                 if (dev := jsx_value.getBooleanLoose(globalThis, "development")?) {
-                    cfg.jsx.development = dev;
+                    cfg_guard.cfg.jsx.development = dev;
                 }
 
                 if (val := jsx_value.getBooleanLoose(globalThis, "sideEffects")?) {
-                    cfg.jsx.side_effects = val;
+                    cfg_guard.cfg.jsx.side_effects = val;
                 }
             }
 
             if (format := config.getOptionalEnum(globalThis, "format", options.Format)?) {
-                cfg.format = format;
+                cfg_guard.cfg.format = format;
 
-                if (cfg.bytecode && format != .cjs && format != .esm) {
+                if (cfg_guard.cfg.bytecode && format != .cjs && format != .esm) {
                     return globalThis.throwInvalidArguments("format must be 'cjs' or 'esm' when bytecode is true.", .{});
                 }
             }
 
             if (hot := config.getBooleanLoose(globalThis, "splitting")?) {
-                cfg.code_splitting = hot;
+                cfg_guard.cfg.code_splitting = hot;
             }
 
             if (minify := config.getTruthy(globalThis, "minify")?) {
                 if (minify.isBoolean()) {
                     const value = minify.toBoolean();
-                    cfg.minify.whitespace = value;
-                    cfg.minify.syntax = value;
-                    cfg.minify.identifiers = value;
+                    cfg_guard.cfg.minify.whitespace = value;
+                    cfg_guard.cfg.minify.syntax = value;
+                    cfg_guard.cfg.minify.identifiers = value;
                 } else if (minify.isObject()) {
                     if (whitespace := minify.getBooleanLoose(globalThis, "whitespace")?) {
-                        cfg.minify.whitespace = whitespace;
+                        cfg_guard.cfg.minify.whitespace = whitespace;
                     }
                     if (syntax := minify.getBooleanLoose(globalThis, "syntax")?) {
-                        cfg.minify.syntax = syntax;
+                        cfg_guard.cfg.minify.syntax = syntax;
                     }
                     if (syntax := minify.getBooleanLoose(globalThis, "identifiers")?) {
-                        cfg.minify.identifiers = syntax;
+                        cfg_guard.cfg.minify.identifiers = syntax;
                     }
                     if (keep_names := minify.getBooleanLoose(globalThis, "keepNames")?) {
-                        cfg.minify.keep_names = keep_names;
+                        cfg_guard.cfg.minify.keep_names = keep_names;
                     }
                 } else {
                     return globalThis.throwInvalidArguments("Expected minify to be a boolean or an object", .{});
@@ -762,9 +852,8 @@ const OwnedString = bun.MutableString;
             if (entry_points := (config.getArray(globalThis, "entrypoints")? ?? config.getArray(globalThis, "entryPoints")?)) {
                 let iter = entry_points.arrayIterator(globalThis)?;
                 while (entry_point := iter.next()?) {
-                    let slice = entry_point.toSliceOrNull(globalThis)?;
-                    defer slice.deinit();
-                    cfg.entry_points.insert(slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: entry_point.toSliceOrNull(globalThis)? };
+                    cfg_guard.cfg.entry_points.insert(slice_guard.slice.slice())?;
                 }
             } else {
                 return globalThis.throwInvalidArguments("Expected entrypoints to be an array of strings", .{});
@@ -772,28 +861,26 @@ const OwnedString = bun.MutableString;
 
             // Parse the files option for in-memory files
             if (files_obj := config.getOwnObject(globalThis, "files")?) {
-                cfg.files = BundlerFileMap.fromJS(globalThis, files_obj.toJS())?;
+                cfg_guard.cfg.files = BundlerFileMap.fromJS(globalThis, files_obj.toJS())?;
             }
 
             if (flag := config.getBooleanLoose(globalThis, "emitDCEAnnotations")?) {
-                cfg.emit_dce_annotations = flag;
+                cfg_guard.cfg.emit_dce_annotations = flag;
             }
 
             if (flag := config.getBooleanLoose(globalThis, "ignoreDCEAnnotations")?) {
-                cfg.ignore_dce_annotations = flag;
+                cfg_guard.cfg.ignore_dce_annotations = flag;
             }
 
             if (conditions_value := config.getTruthy(globalThis, "conditions")?) {
                 if (conditions_value.isString()) {
-                    let slice = conditions_value.toSliceOrNull(globalThis)?;
-                    defer slice.deinit();
-                    cfg.conditions.insert(slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: conditions_value.toSliceOrNull(globalThis)? };
+                    cfg_guard.cfg.conditions.insert(slice_guard.slice.slice())?;
                 } else if (conditions_value.jsType().isArray()) {
                     let iter = conditions_value.arrayIterator(globalThis)?;
                     while (entry_point := iter.next()?) {
-                        let slice = entry_point.toSliceOrNull(globalThis)?;
-                        defer slice.deinit();
-                        cfg.conditions.insert(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: entry_point.toSliceOrNull(globalThis)? };
+                        cfg_guard.cfg.conditions.insert(slice_guard.slice.slice())?;
                     }
                 } else {
                     return globalThis.throwInvalidArguments("Expected conditions to be an array of strings", .{});
@@ -801,54 +888,54 @@ const OwnedString = bun.MutableString;
             }
 
             {
-                const path: ZigString.Slice = brk: {
-                    if (slice := config.getOptional(globalThis, "root", ZigString.Slice)?) {
-                        break :brk slice;
-                    }
+                const path_guard = ZigSliceGuard{
+                    slice: brk: {
+                        if (slice := config.getOptional(globalThis, "root", ZigString.Slice)?) {
+                            break :brk slice;
+                        }
 
-                    const entry_points = cfg.entry_points.keys();
+                        const entry_points = cfg_guard.cfg.entry_points.keys();
 
-                    // Check if all entry points are in the FileMap - if so, use cwd
-                    if (cfg.files.map.count() > 0) {
-                        let all_in_filemap = true;
-                        for (ep of entry_points) {
-                            if (!cfg.files.contains(ep)) {
-                                all_in_filemap = false;
-                                break;
+                        // Check if all entry points are in the FileMap - if so, use cwd
+                        if (cfg_guard.cfg.files.map.count() > 0) {
+                            let all_in_filemap = true;
+                            for (ep of entry_points) {
+                                if (!cfg_guard.cfg.files.contains(ep)) {
+                                    all_in_filemap = false;
+                                    break;
+                                }
+                            }
+                            if (all_in_filemap) {
+                                break :brk ZigString.Slice.fromUTF8NeverFree(".");
                             }
                         }
-                        if (all_in_filemap) {
-                            break :brk ZigString.Slice.fromUTF8NeverFree(".");
+
+                        if (entry_points.len == 1) {
+                            break :brk ZigString.Slice.fromUTF8NeverFree(std.fs.path.dirname(entry_points[0]) ?? ".");
                         }
-                    }
 
-                    if (entry_points.len == 1) {
-                        break :brk ZigString.Slice.fromUTF8NeverFree(std.fs.path.dirname(entry_points[0]) ?? ".");
-                    }
-
-                    break :brk ZigString.Slice.fromUTF8NeverFree(resolve_path.getIfExistsLongestCommonPath(entry_points) ?? ".");
+                        break :brk ZigString.Slice.fromUTF8NeverFree(resolve_path.getIfExistsLongestCommonPath(entry_points) ?? ".");
+                    },
                 };
 
-                defer path.deinit();
-
-                let dir = bun.FD.fromStdDir(std.fs.cwd().openDir(path.slice(), .{}) catch |e| {
-                    return globalThis.throwPretty("{s}: failed to open root directory: {s}", .{ @errorName(e), path.slice() });
-                });
-                defer dir.close();
+                const dir_guard = FDGuard{
+                    fd: bun.FD.fromStdDir(std.fs.cwd().openDir(path_guard.slice.slice(), .{}) catch |e| {
+                        return globalThis.throwPretty("{s}: failed to open root directory: {s}", .{ @errorName(e), path_guard.slice.slice() });
+                    }),
+                };
 
                 let rootdir_buf: bun.PathBuffer = undefined;
-                const rootdir = dir.getFdPath(&rootdir_buf) catch |e| {
-                    return globalThis.throwPretty("{s}: failed to get full root directory path: {s}", .{ @errorName(e), path.slice() });
+                const rootdir = dir_guard.fd.getFdPath(&rootdir_buf) catch |e| {
+                    return globalThis.throwPretty("{s}: failed to get full root directory path: {s}", .{ @errorName(e), path_guard.slice.slice() });
                 };
-                cfg.rootdir.appendSliceExact(rootdir)?;
+                cfg_guard.cfg.rootdir.appendSliceExact(rootdir)?;
             }
 
             if (externals := config.getOwnArray(globalThis, "external")?) {
                 let iter = externals.arrayIterator(globalThis)?;
                 while (entry_point := iter.next()?) {
-                    let slice = entry_point.toSliceOrNull(globalThis)?;
-                    defer slice.deinit();
-                    cfg.external.insert(slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: entry_point.toSliceOrNull(globalThis)? };
+                    cfg_guard.cfg.external.insert(slice_guard.slice.slice())?;
                 }
             }
 
@@ -857,13 +944,12 @@ const OwnedString = bun.MutableString;
                     if (!allow_unresolved_val.jsTypeLoose().isArray()) {
                         return globalThis.throwInvalidArguments("allowUnresolved must be an array", .{});
                     }
-                    cfg.allow_unresolved = bun.StringSet.init(bun.default_allocator);
+                    cfg_guard.cfg.allow_unresolved = bun.StringSet.init(bun.default_allocator);
                     if (try allow_unresolved_val.getLength(globalThis) > 0) {
                         let iter = allow_unresolved_val.arrayIterator(globalThis)?;
                         while (entry := iter.next()?) {
-                            let slice = entry.toSliceOrNull(globalThis)?;
-                            defer slice.deinit();
-                            cfg.allow_unresolved.?.insert(slice.slice())?;
+                            const slice_guard = ZigSliceGuard{ slice: entry.toSliceOrNull(globalThis)? };
+                            cfg_guard.cfg.allow_unresolved.?.insert(slice_guard.slice.slice())?;
                         }
                     }
                 }
@@ -872,27 +958,24 @@ const OwnedString = bun.MutableString;
             if (drops := config.getOwnArray(globalThis, "drop")?) {
                 let iter = drops.arrayIterator(globalThis)?;
                 while (entry := iter.next()?) {
-                    let slice = entry.toSliceOrNull(globalThis)?;
-                    defer slice.deinit();
-                    cfg.drop.insert(slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: entry.toSliceOrNull(globalThis)? };
+                    cfg_guard.cfg.drop.insert(slice_guard.slice.slice())?;
                 }
             }
 
             if (features := config.getOwnArray(globalThis, "features")?) {
                 let iter = features.arrayIterator(globalThis)?;
                 while (entry := iter.next()?) {
-                    let slice = entry.toSliceOrNull(globalThis)?;
-                    defer slice.deinit();
-                    cfg.features.insert(slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: entry.toSliceOrNull(globalThis)? };
+                    cfg_guard.cfg.features.insert(slice_guard.slice.slice())?;
                 }
             }
 
             if (optimize_imports := config.getOwnArray(globalThis, "optimizeImports")?) {
                 let iter = optimize_imports.arrayIterator(globalThis)?;
                 while (entry := iter.next()?) {
-                    let slice = entry.toSliceOrNull(globalThis)?;
-                    defer slice.deinit();
-                    cfg.optimize_imports.insert(slice.slice())?;
+                    const slice_guard = ZigSliceGuard{ slice: entry.toSliceOrNull(globalThis)? };
+                    cfg_guard.cfg.optimize_imports.insert(slice_guard.slice.slice())?;
                 }
             }
 
@@ -904,46 +987,46 @@ const OwnedString = bun.MutableString;
             // }
 
             if (slice := config.getOptional(globalThis, "publicPath", ZigString.Slice)?) {
-                defer slice.deinit();
-                cfg.public_path.appendSliceExact(slice.slice())?;
+                const slice_guard = ZigSliceGuard{ slice: slice };
+                cfg_guard.cfg.public_path.appendSliceExact(slice_guard.slice.slice())?;
             }
 
             if (naming := config.getTruthy(globalThis, "naming")?) {
                 if (naming.isString()) {
                     if (slice := config.getOptional(globalThis, "naming", ZigString.Slice)?) {
-                        defer slice.deinit();
-                        if (!strings.hasPrefixComptime(slice.slice(), "./")) {
-                            cfg.names.owned_entry_point.appendSliceExact("./")?;
+                        const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
+                            cfg_guard.cfg.names.owned_entry_point.appendSliceExact("./")?;
                         }
-                        cfg.names.owned_entry_point.appendSliceExact(slice.slice())?;
-                        cfg.names.entry_point.data = cfg.names.owned_entry_point.list.items;
+                        cfg_guard.cfg.names.owned_entry_point.appendSliceExact(slice_guard.slice.slice())?;
+                        cfg_guard.cfg.names.entry_point.data = cfg_guard.cfg.names.owned_entry_point.list.items;
                     }
                 } else if (naming.isObject()) {
                     if (slice := naming.getOptional(globalThis, "entry", ZigString.Slice)?) {
-                        defer slice.deinit();
-                        if (!strings.hasPrefixComptime(slice.slice(), "./")) {
-                            cfg.names.owned_entry_point.appendSliceExact("./")?;
+                        const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
+                            cfg_guard.cfg.names.owned_entry_point.appendSliceExact("./")?;
                         }
-                        cfg.names.owned_entry_point.appendSliceExact(slice.slice())?;
-                        cfg.names.entry_point.data = cfg.names.owned_entry_point.list.items;
+                        cfg_guard.cfg.names.owned_entry_point.appendSliceExact(slice_guard.slice.slice())?;
+                        cfg_guard.cfg.names.entry_point.data = cfg_guard.cfg.names.owned_entry_point.list.items;
                     }
 
                     if (slice := naming.getOptional(globalThis, "chunk", ZigString.Slice)?) {
-                        defer slice.deinit();
-                        if (!strings.hasPrefixComptime(slice.slice(), "./")) {
-                            cfg.names.owned_chunk.appendSliceExact("./")?;
+                        const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
+                            cfg_guard.cfg.names.owned_chunk.appendSliceExact("./")?;
                         }
-                        cfg.names.owned_chunk.appendSliceExact(slice.slice())?;
-                        cfg.names.chunk.data = cfg.names.owned_chunk.list.items;
+                        cfg_guard.cfg.names.owned_chunk.appendSliceExact(slice_guard.slice.slice())?;
+                        cfg_guard.cfg.names.chunk.data = cfg_guard.cfg.names.owned_chunk.list.items;
                     }
 
                     if (slice := naming.getOptional(globalThis, "asset", ZigString.Slice)?) {
-                        defer slice.deinit();
-                        if (!strings.hasPrefixComptime(slice.slice(), "./")) {
-                            cfg.names.owned_asset.appendSliceExact("./")?;
+                        const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
+                            cfg_guard.cfg.names.owned_asset.appendSliceExact("./")?;
                         }
-                        cfg.names.owned_asset.appendSliceExact(slice.slice())?;
-                        cfg.names.asset.data = cfg.names.owned_asset.list.items;
+                        cfg_guard.cfg.names.owned_asset.appendSliceExact(slice_guard.slice.slice())?;
+                        cfg_guard.cfg.names.asset.data = cfg_guard.cfg.names.owned_asset.list.items;
                     }
                 } else {
                     return globalThis.throwInvalidArguments("Expected naming to be a string or an object", .{});
@@ -951,14 +1034,10 @@ const OwnedString = bun.MutableString;
             }
 
             if (define := config.getOwnObject(globalThis, "define")?) {
-                let define_iter = try jsc.JSPropertyIterator(.{
-                    skip_empty_name: true,
-                    include_value: true,
-                }).init(globalThis, define);
-                defer define_iter.deinit();
+                let define_iter_guard = PropIterGuard{ iter: try PropIter.init(globalThis, define) };
 
-                while (prop := define_iter.next()?) {
-                    const property_value = define_iter.value;
+                while (prop := define_iter_guard.iter.next()?) {
+                    const property_value = define_iter_guard.iter.value;
                     const value_type = property_value.jsType();
 
                     if (!value_type.isStringLike()) {
@@ -974,81 +1053,72 @@ const OwnedString = bun.MutableString;
                     const key = prop.toOwnedSlice(bun.default_allocator)?;
 
                     // value is always cloned
-                    const value = val.toSlice(bun.default_allocator);
-                    defer value.deinit();
+                    const value_guard = ZigSliceGuard{ slice: val.toSlice(bun.default_allocator) };
 
                     // .insert clones the value, but not the key
-                    cfg.define.insert(key, value.slice())?;
+                    cfg_guard.cfg.define.insert(key, value_guard.slice.slice())?;
                 }
             }
 
             if (loaders := config.getOwnObject(globalThis, "loader")?) {
-                let loader_iter = try jsc.JSPropertyIterator(.{
-                    skip_empty_name: true,
-                    include_value: true,
-                }).init(globalThis, loaders);
-                defer loader_iter.deinit();
+                let loader_iter_guard = PropIterGuard{ iter: try PropIter.init(globalThis, loaders) };
 
                 // `loader_iter.i` is the property position, not a dense index of yielded
                 // entries. With `skip_empty_name = true` (or a skipped property getter),
                 // writing at `loader_iter.i` would leave earlier slots uninitialized and
                 // later freed as garbage. Use ArrayLists so the stored slice is always
                 // exactly what was appended.
-                let loader_names: std.ArrayListUnmanaged(string) = {};
-                errdefer {
-                    for (name of loader_names.items) bun.default_allocator.free(name);
-                    loader_names.deinit(allocator);
-                }
-                let loader_values: std.ArrayListUnmanaged(api.Loader) = {};
-                errdefer loader_values.deinit(allocator);
+                let loader_names_guard = LoaderNamesGuard{ allocator: allocator };
+                let loader_values_guard = LoaderValuesGuard{ allocator: allocator };
 
-                loader_names.ensureTotalCapacityPrecise(allocator, loader_iter.len)?;
-                loader_values.ensureTotalCapacityPrecise(allocator, loader_iter.len)?;
+                loader_names_guard.list.ensureTotalCapacityPrecise(allocator, loader_iter_guard.iter.len)?;
+                loader_values_guard.list.ensureTotalCapacityPrecise(allocator, loader_iter_guard.iter.len)?;
 
-                while (prop := loader_iter.next()?) {
+                while (prop := loader_iter_guard.iter.next()?) {
                     if (!prop.hasPrefixComptime(".") || prop.length() < 2) {
                         return globalThis.throwInvalidArguments("loader property names must be file extensions, such as '.txt'", .{});
                     }
 
-                    loader_values.appendAssumeCapacity(try loader_iter.value.toEnumFromMap(
+                    loader_values_guard.list.appendAssumeCapacity(try loader_iter_guard.iter.value.toEnumFromMap(
                         globalThis,
                         "loader",
                         api.Loader,
                         options.Loader.api_names,
                     ));
-                    loader_names.appendAssumeCapacity(try prop.toOwnedSlice(bun.default_allocator));
+                    loader_names_guard.list.appendAssumeCapacity(try prop.toOwnedSlice(bun.default_allocator));
                 }
 
-                cfg.loaders = api.LoaderMap{
-                    extensions: loader_names.items,
-                    loaders: loader_values.items,
+                cfg_guard.cfg.loaders = api.LoaderMap{
+                    extensions: loader_names_guard.list.items,
+                    loaders: loader_values_guard.list.items,
                 };
+                loader_names_guard.armed = false;
+                loader_values_guard.armed = false;
             }
 
             if (flag := config.getBooleanStrict(globalThis, "throw")?) {
-                cfg.throw_on_error = flag;
+                cfg_guard.cfg.throw_on_error = flag;
             }
 
             // Parse metafile option: boolean | string | { json?: string, markdown?: string }
             if (metafile_value := config.getOwn(globalThis, "metafile")?) {
                 if (metafile_value.isBoolean()) {
-                    cfg.metafile = metafile_value == .@"true";
+                    cfg_guard.cfg.metafile = metafile_value == .@"true";
                 } else if (metafile_value.isString()) {
                     // metafile: "path/to/meta.json" - shorthand for { json: "..." }
-                    cfg.metafile = true;
-                    const slice = metafile_value.toSlice(globalThis, bun.default_allocator)?;
-                    defer slice.deinit();
-                    cfg.metafile_json_path.appendSliceExact(slice.slice())?;
+                    cfg_guard.cfg.metafile = true;
+                    const slice_guard = ZigSliceGuard{ slice: metafile_value.toSlice(globalThis, bun.default_allocator)? };
+                    cfg_guard.cfg.metafile_json_path.appendSliceExact(slice_guard.slice.slice())?;
                 } else if (metafile_value.isObject()) {
                     // metafile: { json?: string, markdown?: string }
-                    cfg.metafile = true;
+                    cfg_guard.cfg.metafile = true;
                     if (slice := metafile_value.getOptional(globalThis, "json", ZigString.Slice)?) {
-                        defer slice.deinit();
-                        cfg.metafile_json_path.appendSliceExact(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: slice };
+                        cfg_guard.cfg.metafile_json_path.appendSliceExact(slice_guard.slice.slice())?;
                     }
                     if (slice := metafile_value.getOptional(globalThis, "markdown", ZigString.Slice)?) {
-                        defer slice.deinit();
-                        cfg.metafile_markdown_path.appendSliceExact(slice.slice())?;
+                        const slice_guard = ZigSliceGuard{ slice: slice };
+                        cfg_guard.cfg.metafile_markdown_path.appendSliceExact(slice_guard.slice.slice())?;
                     }
                 } else if (!metafile_value.isUndefinedOrNull()) {
                     return globalThis.throwInvalidArguments("Expected metafile to be a boolean, string, or object with json/markdown paths", .{});
@@ -1059,24 +1129,24 @@ const OwnedString = bun.MutableString;
                 globalThis,
                 config,
                 bun.default_allocator,
-                if (cfg.compile != null) cfg.compile.?.compile_target else null,
+                if (cfg_guard.cfg.compile != null) cfg_guard.cfg.compile.?.compile_target else null,
             )?)) {
-                cfg.compile = compile;
+                cfg_guard.cfg.compile = compile;
             }
 
-            if (*compile := cfg.compile) {
+            if (*compile := cfg_guard.cfg.compile) {
                 // When compile + target=browser + all HTML entrypoints, produce standalone HTML.
                 // Otherwise, default to bun executable compile.
                 const has_all_html_entrypoints = brk: {
-                    if (cfg.entry_points.count() == 0) break :brk false;
-                    for (ep of cfg.entry_points.keys()) {
+                    if (cfg_guard.cfg.entry_points.count() == 0) break :brk false;
+                    for (ep of cfg_guard.cfg.entry_points.keys()) {
                         if (!strings.hasSuffixComptime(ep, ".html")) break :brk false;
                     }
                     break :brk true;
                 };
-                const is_standalone_html = cfg.target == .browser && has_all_html_entrypoints;
+                const is_standalone_html = cfg_guard.cfg.target == .browser && has_all_html_entrypoints;
                 if (!is_standalone_html) {
-                    cfg.target = .bun;
+                    cfg_guard.cfg.target = .bun;
 
                     const define_keys = compile.compile_target.defineKeys();
                     const define_values = compile.compile_target.defineValues();
@@ -1084,20 +1154,20 @@ const OwnedString = bun.MutableString;
                     while (def_i < define_keys.len) : (def_i += 1) {
                         const key = define_keys[def_i];
                         const value = define_values[def_i];
-                        cfg.define.insert(key, value)?;
+                        cfg_guard.cfg.define.insert(key, value)?;
                     }
 
-                    const base_public_path = bun.StandaloneModuleGraph.targetBasePublicPath(cfg.compile.?.compile_target.os, "root/");
-                    cfg.public_path.append(base_public_path)?;
+                    const base_public_path = bun.StandaloneModuleGraph.targetBasePublicPath(cfg_guard.cfg.compile.?.compile_target.os, "root/");
+                    cfg_guard.cfg.public_path.append(base_public_path)?;
 
                     // When using --compile, only `external` sourcemaps work, as we do not
                     // look at the source map comment. Override any other sourcemap type.
-                    if (cfg.source_map != .none) {
-                        cfg.source_map = .external;
+                    if (cfg_guard.cfg.source_map != .none) {
+                        cfg_guard.cfg.source_map = .external;
                     }
 
                     if (compile.outfile.isEmpty()) {
-                        const entry_point = cfg.entry_points.keys()[0];
+                        const entry_point = cfg_guard.cfg.entry_points.keys()[0];
                         let outfile = std.fs.path.basename(entry_point);
                         const ext = std.fs.path.extension(outfile);
                         if (ext.len > 0) {
@@ -1125,25 +1195,27 @@ const OwnedString = bun.MutableString;
             // ESM bytecode requires compile because module_info (import/export metadata)
             // is only available in compiled binaries. Without it, JSC must parse the file
             // twice (once for module analysis, once for bytecode), which is a deopt.
-            if (cfg.bytecode && cfg.format == .esm && cfg.compile == null) {
+            if (cfg_guard.cfg.bytecode && cfg_guard.cfg.format == .esm && cfg_guard.cfg.compile == null) {
                 return globalThis.throwInvalidArguments("ESM bytecode requires compile: true. Use format: 'cjs' for bytecode without compile.", .{});
             }
 
             // Validate standalone HTML mode: compile + browser target + all HTML entrypoints
-            if (cfg.compile != null && cfg.target == .browser) {
+            if (cfg_guard.cfg.compile != null && cfg_guard.cfg.target == .browser) {
                 const has_all_html = brk: {
-                    if (cfg.entry_points.count() == 0) break :brk false;
-                    for (ep of cfg.entry_points.keys()) {
+                    if (cfg_guard.cfg.entry_points.count() == 0) break :brk false;
+                    for (ep of cfg_guard.cfg.entry_points.keys()) {
                         if (!strings.hasSuffixComptime(ep, ".html")) break :brk false;
                     }
                     break :brk true;
                 };
-                if (has_all_html && cfg.code_splitting) {
+                if (has_all_html && cfg_guard.cfg.code_splitting) {
                     return globalThis.throwInvalidArguments("Cannot use compile with target 'browser' and splitting for standalone HTML", .{});
                 }
             }
 
-            return cfg;
+            cfg_guard.armed = false;
+            plugins_guard.armed = false;
+            return cfg_guard.cfg;
         }
 
         pub const Names = BundlerNames;
@@ -1407,7 +1479,7 @@ pub union(enum) BundlerLoadValue {
         pub const Value = BundlerLoadValue;
 
         fn deinit(*_) {
-            debug("Deinit Load(0{x}, {s})", .{ @intFromPtr(_), _.path });
+            unsafe { debug("Deinit Load(0{x}, {s})", .{ @intFromPtr(_), _.path }); }
             _.value.deinit();
         }
 
@@ -1438,7 +1510,7 @@ pub union(enum) BundlerLoadValue {
             }
             _.called_defer = true;
 
-            debug_deferred("JSBundlerPlugin__onDefer(0x{x}, {s})", .{ @intFromPtr(_), _.path });
+            unsafe { debug_deferred("JSBundlerPlugin__onDefer(0x{x}, {s})", .{ @intFromPtr(_), _.path }); }
 
             // Notify the bundler thread about the deferral. This will decrement
             // the pending item counter and increment the deferred counter.
@@ -1585,9 +1657,8 @@ extern fn JSBundlerPlugin__runSetupFunction(
                 error.JSTerminated => return error.JSTerminated,
             };
 
-            let scope: jsc.TopExceptionScope = undefined;
-            scope.init(globalThis, @src());
-            defer scope.deinit();
+            let scope_guard = TopExceptionScopeGuard{ scope: undefined };
+            scope_guard.scope.init(globalThis, @src());
 
             const value = JSBundlerPlugin__runOnEndCallbacks(
                 _,
@@ -1596,7 +1667,7 @@ extern fn JSBundlerPlugin__runSetupFunction(
                 rejection_value,
             );
 
-            scope.returnIfException()?;
+            scope_guard.scope.returnIfException()?;
 
             return value;
         }
@@ -1620,17 +1691,16 @@ extern fn JSBundlerPlugin__runSetupFunction(
             is_onLoad: bool,
         ): bool {
             jsc.markBinding(@src());
-            let tracer = bun.perf.trace("JSBundler.hasAnyMatches");
-            defer tracer.end();
+            const tracer_guard = PerfTracerGuard{ tracer: bun.perf.trace("JSBundler.hasAnyMatches") };
 
-            const namespace_string = if (path.isFile())
-                bun.String.empty
-            else
-                bun.String.cloneUTF8(path.namespace);
-            const path_string = bun.String.cloneUTF8(path.text);
-            defer namespace_string.deref();
-            defer path_string.deref();
-            return JSBundlerPlugin__anyMatches(_, &namespace_string, &path_string, is_onLoad);
+            const namespace_guard = BunStringGuard{
+                str: if (path.isFile())
+                    bun.String.empty
+                else
+                    bun.String.cloneUTF8(path.namespace),
+            };
+            const path_guard = BunStringGuard{ str: bun.String.cloneUTF8(path.text) };
+            return JSBundlerPlugin__anyMatches(_, &namespace_guard.str, &path_guard.str, is_onLoad);
         }
 
         fn matchOnLoad(
@@ -1642,17 +1712,16 @@ extern fn JSBundlerPlugin__runSetupFunction(
             is_server_side: bool,
         ) {
             jsc.markBinding(@src());
-            let tracer = bun.perf.trace("JSBundler.matchOnLoad");
-            defer tracer.end();
-            debug("JSBundler.matchOnLoad(0x{x}, {s}, {s})", .{ @intFromPtr(_), namespace, path });
-            const namespace_string = if (namespace.len == 0)
-                bun.String.static("file")
-            else
-                bun.String.cloneUTF8(namespace);
-            const path_string = bun.String.cloneUTF8(path);
-            defer namespace_string.deref();
-            defer path_string.deref();
-            JSBundlerPlugin__matchOnLoad(_, &namespace_string, &path_string, context, @intFromEnum(default_loader), is_server_side);
+            const tracer_guard = PerfTracerGuard{ tracer: bun.perf.trace("JSBundler.matchOnLoad") };
+            unsafe { debug("JSBundler.matchOnLoad(0x{x}, {s}, {s})", .{ @intFromPtr(_), namespace, path }); }
+            const namespace_guard = BunStringGuard{
+                str: if (namespace.len == 0)
+                    bun.String.static("file")
+                else
+                    bun.String.cloneUTF8(namespace),
+            };
+            const path_guard = BunStringGuard{ str: bun.String.cloneUTF8(path) };
+            JSBundlerPlugin__matchOnLoad(_, &namespace_guard.str, &path_guard.str, context, @intFromEnum(default_loader), is_server_side);
         }
 
         fn matchOnResolve(
@@ -1664,18 +1733,16 @@ extern fn JSBundlerPlugin__runSetupFunction(
             import_record_kind: bun.ImportKind,
         ) {
             jsc.markBinding(@src());
-            let tracer = bun.perf.trace("JSBundler.matchOnResolve");
-            defer tracer.end();
-            const namespace_string = if (strings.eqlComptime(namespace, "file"))
-                bun.String.empty
-            else
-                bun.String.cloneUTF8(namespace);
-            const path_string = bun.String.cloneUTF8(path);
-            const importer_string = bun.String.cloneUTF8(importer);
-            defer namespace_string.deref();
-            defer path_string.deref();
-            defer importer_string.deref();
-            JSBundlerPlugin__matchOnResolve(_, &namespace_string, &path_string, &importer_string, context, @intFromEnum(import_record_kind));
+            const tracer_guard = PerfTracerGuard{ tracer: bun.perf.trace("JSBundler.matchOnResolve") };
+            const namespace_guard = BunStringGuard{
+                str: if (strings.eqlComptime(namespace, "file"))
+                    bun.String.empty
+                else
+                    bun.String.cloneUTF8(namespace),
+            };
+            const path_guard = BunStringGuard{ str: bun.String.cloneUTF8(path) };
+            const importer_guard = BunStringGuard{ str: bun.String.cloneUTF8(importer) };
+            JSBundlerPlugin__matchOnResolve(_, &namespace_guard.str, &path_guard.str, &importer_guard.str, context, @intFromEnum(import_record_kind));
         }
 
         fn addPlugin(
@@ -1687,8 +1754,7 @@ extern fn JSBundlerPlugin__runSetupFunction(
             is_bake: bool,
         ): !JSValue {
             jsc.markBinding(@src());
-            let tracer = bun.perf.trace("JSBundler.addPlugin");
-            defer tracer.end();
+            const tracer_guard = PerfTracerGuard{ tracer: bun.perf.trace("JSBundler.addPlugin") };
             return bun.jsc.fromJSHostCall(globalObject(_), @src(), JSBundlerPlugin__runSetupFunction, .{
                 _,
                 object,
@@ -1975,8 +2041,7 @@ pub struct BuildArtifact {
 
         {
             formatter.indent += 1;
-
-            defer formatter.indent -= 1;
+            const indent_guard = IndentGuard{ indent: unsafe { &formatter.indent } };
             formatter.writeIndent(Writer, writer)?;
             writer.print(
                 comptime Output.prettyFmt(
