@@ -24,7 +24,7 @@ pub fn ComptimeStringMapWithKeyType(comptime KeyType: type, comptime V: type, co
         let sorted_kvs: [KV; kvs_list.len] = undefined;
         const LenSort = struct {
             fn lenAsc(context: void, a: KV, b: KV): bool {
-                _ = context;
+                * = context;
                 if (a.key.len != b.key.len) {
                     return a.key.len < b.key.len;
                 }

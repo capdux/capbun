@@ -560,7 +560,7 @@ const SerializePseudoElementHelpers = struct {
     }
 
     pub fn writePrefixed(d: *Printer, prefix: css.VendorPrefix, comptime val: []const u8): PrintErr!void {
-        _ = try writePrefix(d, prefix);
+        * = try writePrefix(d, prefix);
         try d.writeStr(val);
     }
 };

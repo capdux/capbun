@@ -149,7 +149,7 @@ pub struct StoreS3 {
                 }
             }
 
-            fn deinit(wrap: *@This()): void {
+            fn deinit(wrap: *@This()) {
                 wrap.store.deref();
                 wrap.promise.deinit();
                 destroy(wrap);
@@ -202,7 +202,7 @@ pub struct StoreS3 {
                 }
             }
 
-            fn deinit(wrap: *@This()): void {
+            fn deinit(wrap: *@This()) {
                 wrap.store.deref();
                 wrap.promise.deinit();
                 wrap.resolvedlistOptions.deinit();

@@ -1046,7 +1046,8 @@ pub fn initFull() Self {
     }
 
 pub inline fn capacity(self: @This()) usize {
-            _ = self;
+            const self_ref = self;
+            _ = &self_ref;
             return bit_length;
     }
 
@@ -1298,7 +1299,8 @@ pub fn initFull() Self {
     }
 
 pub inline fn capacity(self: @This()) usize {
-            _ = self;
+            const self_ref = self;
+            _ = &self_ref;
             return bit_length;
     }
 

@@ -91,13 +91,13 @@ pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try al
 
 pub fn init(self: *DuplexUpgradeContext, upgrade: uws.UpgradedDuplex, tls: ?*TLSSocket, vm: *jsc.VirtualMachine, task: jsc.AnyTask, task_event: EventState, ssl_config: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX, is_open: bool, mode: SocketMode) void {
         var __upgrade_moved = false; _ = &__upgrade_moved;
-        defer if (!__upgrade_moved) { const __T = @TypeOf(upgrade); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = upgrade.release() catch {}; } else { upgrade.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = upgrade; _drop_val.release(); } };
+        defer if (!__upgrade_moved) { __upgrade_moved = true; const __T = @TypeOf(upgrade); if (@typeInfo(__T) == .optional) { if (upgrade) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { upgrade.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = upgrade; _drop_val.__cp_deinit(); } };
         var __task_moved = false; _ = &__task_moved;
-        defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
+        defer if (!__task_moved) { __task_moved = true; const __T = @TypeOf(task); if (@typeInfo(__T) == .optional) { if (task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = task; _drop_val.__cp_deinit(); } };
         var __task_event_moved = false; _ = &__task_event_moved;
-        defer if (!__task_event_moved) { const __T = @TypeOf(task_event); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task_event.release() catch {}; } else { task_event.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task_event; _drop_val.release(); } };
+        defer if (!__task_event_moved) { __task_event_moved = true; const __T = @TypeOf(task_event); if (@typeInfo(__T) == .optional) { if (task_event) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { task_event.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = task_event; _drop_val.__cp_deinit(); } };
         var __mode_moved = false; _ = &__mode_moved;
-        defer if (!__mode_moved) { const __T = @TypeOf(mode); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mode.release() catch {}; } else { mode.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mode; _drop_val.release(); } };
+        defer if (!__mode_moved) { __mode_moved = true; const __T = @TypeOf(mode); if (@typeInfo(__T) == .optional) { if (mode) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { mode.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = mode; _drop_val.__cp_deinit(); } };
             self.upgrade = upgrade;
             self.tls = tls;
             self.vm = vm;
@@ -199,7 +199,7 @@ pub fn runEvent(self: *DuplexUpgradeContext) void {
             switch (self.task_event) {
 .StartTLS => {
 if ((self.tls == null)) {
-                _ = self.deinit();
+                _ = self.release();
                 return;
             }
             _ = log("DuplexUpgradeContext.startTLS mode={s}", .{ @tagName(self.mode) });
@@ -213,7 +213,7 @@ if ((self.tls == null)) {
                     self.tls = null;
                     _ = (blk_catch_4: { break :blk_catch_4 ((tls.handleConnectError(errno)) catch |__ce_4| { _ = &__ce_4;  }); });
                 }
-                _ = self.deinit();
+                _ = self.release();
                 return;
             } }); });
             if (self.ssl_config) |*cfg| {
@@ -223,7 +223,7 @@ if ((self.tls == null)) {
             }
 },
 .Close => {
-_ = self.deinit();
+_ = self.release();
 },
 }
     }
@@ -238,7 +238,7 @@ pub fn startTLS(self: *DuplexUpgradeContext) void {
             _ = self.vm.enqueueTask(jsc.Task.init((&self.task)));
     }
 
-pub fn deinit(self: *DuplexUpgradeContext) void {
+pub fn release(self: *DuplexUpgradeContext) void {
             if (self.tls) |tls| {
                 _ = &tls;
                 self.tls = null;
@@ -256,6 +256,10 @@ pub fn deinit(self: *DuplexUpgradeContext) void {
             }
             _ = self.upgrade.deinit();
             _ = bun.destroy(self);
+    }
+
+pub fn deinit(self: *DuplexUpgradeContext) void {
+            _ = self.release();
     }
     pub const EventState = enum(u8) {
             StartTLS,
@@ -509,7 +513,7 @@ pub fn setKeepAlive(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: 
 
 pub fn setNoDelay(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
             _ = jsc.markBinding(@src());
-            _ = globalThis;
+            _ = &globalThis;
             const args = callframe.arguments_old(1);
             const enabled: bool = (if ((args.len >= 1)) args.ptr[0].toBoolean() else true);
             _ = log("setNoDelay({})", .{ enabled });
@@ -576,8 +580,7 @@ pub fn onWritable(self: *@This(), _: Socket) void {
             }
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            _ = (blk_catch_0: { break :blk_catch_0 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) }));
-            break :blk_catch_0 {}; }); });
+            _ = (blk_catch_0: { break :blk_catch_0 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
     }
 
 pub fn onTimeout(self: *@This(), _: Socket) void {
@@ -605,8 +608,7 @@ pub fn onTimeout(self: *@This(), _: Socket) void {
             }
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            _ = (blk_catch_1: { break :blk_catch_1 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) }));
-            break :blk_catch_1 {}; }); });
+            _ = (blk_catch_1: { break :blk_catch_1 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
     }
 
 pub fn getHandlers(self: *const @This()) *Handlers {
@@ -883,8 +885,7 @@ pub fn onEnd(self: *@This(), _: Socket) void {
             }
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            _ = (blk_catch_7: { break :blk_catch_7 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) }));
-            break :blk_catch_7 {}; }); });
+            _ = (blk_catch_7: { break :blk_catch_7 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
     }
 
 pub fn onHandshake(self: *@This(), s: Socket, success: i32, ssl_error: uws.us_bun_verify_error_t) bun.JSError!void {
@@ -986,8 +987,7 @@ pub fn onClose(self: *@This(), socket: Socket, err: c_int, reason: ?*anyopaque) 
             if ((err != 0)) {
                 js_error = try bun.sys.Error.fromCodeInt(err, .read).toJS(globalObject);
             }
-            _ = (blk_catch_11: { break :blk_catch_11 ((callback.call(globalObject, this_value, (&.{ this_value, js_error }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) }));
-            break :blk_catch_11 {}; }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((callback.call(globalObject, this_value, (&.{ this_value, js_error }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }
 
 pub fn onData(self: *@This(), s: Socket, data: []const u8) void {
@@ -1021,8 +1021,7 @@ pub fn onData(self: *@This(), s: Socket, data: []const u8) void {
                 }
             }
             }
-            _ = (blk_catch_13: { break :blk_catch_13 ((callback.call(globalObject, this_value, (&.{ this_value, output_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) }));
-            break :blk_catch_13 {}; }); });
+            _ = (blk_catch_13: { break :blk_catch_13 ((callback.call(globalObject, this_value, (&.{ this_value, output_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
     }
 
 pub fn getData(self: *@This(), _: *jsc.JSGlobalObject) JSValue {
@@ -1563,7 +1562,7 @@ pub fn shutdown(self: *@This(), _: *jsc.JSGlobalObject, callframe: *jsc.CallFram
 
 pub fn close(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
             _ = jsc.markBinding(@src());
-            _ = callframe;
+            _ = &callframe;
             _ = self.socket.close(.fast_shutdown);
             _ = self.socket.detach();
             _ = self.poll_ref.unref(globalObject.bunVM());
@@ -1616,7 +1615,7 @@ pub fn jsUnref(self: *@This(), globalObject: *jsc.JSGlobalObject, _: *jsc.CallFr
             return JSValue.js_undefined;
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn release(self: *@This()) void {
             _ = self.markInactive();
             _ = self.detachNativeCallback();
             _ = self.this_value.deinit();
@@ -1645,6 +1644,10 @@ pub fn deinit(self: *@This()) void {
                 self.owned_ssl_ctx = null;
             }
             _ = bun.destroy(self);
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = self.release();
     }
 
 pub fn finalize(self: *@This()) void {

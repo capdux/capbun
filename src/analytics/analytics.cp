@@ -176,7 +176,7 @@ comptime {
     @export(&Features.webview_webkit, { name: "Bun__Feature__webview_webkit" });
 }
 
-pub fn validateFeatureName(name: []const u8): void {
+pub fn validateFeatureName(name: []const u8) {
     if (name.len > 64) @compileError(std.fmt.comptimePrint("Invalid feature name: {s}", [name]));
     for (char of name) {
         switch (char) {

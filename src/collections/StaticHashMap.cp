@@ -174,7 +174,7 @@ pub fn HashMap(comptime K: type, comptime V: type, comptime Context: type, compt
             };
         }
 
-        pub fn deinit(*this, gpa: mem.Allocator): void {
+        pub fn deinit(*this, gpa: mem.Allocator) {
             gpa.free(this.slice());
         }
 
@@ -249,7 +249,7 @@ fn HashMapMixin(
     comptime Context: type,
 ): type {
     return struct {
-        pub fn clearRetainingCapacity(map_self: *Self): void {
+        pub fn clearRetainingCapacity(map_self: *Self) {
             @memset(map_self.slice(), Self.Entry{});
             map_self.len = 0;
         }
@@ -262,11 +262,11 @@ fn HashMapMixin(
             }
         }
 
-        pub fn putAssumeCapacity(map_self: *Self, key: K, value: V): void {
+        pub fn putAssumeCapacity(map_self: *Self, key: K, value: V) {
             map_self.putAssumeCapacityContext(key, value, undefined);
         }
 
-        pub fn putAssumeCapacityContext(map_self: *Self, key: K, value: V, ctx: Context): void {
+        pub fn putAssumeCapacityContext(map_self: *Self, key: K, value: V, ctx: Context) {
             const result = map_self.getOrPutAssumeCapacityContext(key, ctx);
             if (!result.found_existing) unsafe { result.value_ptr.* = value; }
         }
@@ -428,7 +428,7 @@ pub fn SortedHashMap(comptime V: type, comptime max_load_percentage: comptime_in
             };
         }
 
-        pub fn deinit(*this, gpa: mem.Allocator): void {
+        pub fn deinit(*this, gpa: mem.Allocator) {
             gpa.free(this.slice());
         }
 
@@ -439,7 +439,7 @@ pub fn SortedHashMap(comptime V: type, comptime max_load_percentage: comptime_in
             return usize(mem.readIntBig(u64, a[0..8]) >> shift);
         }
 
-        pub fn clearRetainingCapacity(*this): void {
+        pub fn clearRetainingCapacity(*this) {
             @memset(this.slice(), Entry{});
             this.len = 0;
         }
@@ -501,7 +501,7 @@ pub fn SortedHashMap(comptime V: type, comptime max_load_percentage: comptime_in
             this.putAssumeCapacity(key, value);
         }
 
-        pub fn putAssumeCapacity(*this, key: [32]u8, value: V): void {
+        pub fn putAssumeCapacity(*this, key: [32]u8, value: V) {
             const result = this.getOrPutAssumeCapacity(key);
             if (!result.found_existing) unsafe { result.value_ptr.* = value; }
         }

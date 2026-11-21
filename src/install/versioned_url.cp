@@ -14,7 +14,7 @@ pub fn VersionedURLType(comptime SemverIntType: type): type {
             return this.version.order(other.version, lhs_buf, rhs_buf);
         }
 
-        pub fn count(this: @This(), buf: []const u8, comptime Builder: type, builder: Builder): void {
+        pub fn count(this: @This(), buf: []const u8, comptime Builder: type, builder: Builder) void {
             this.version.count(buf, comptime Builder, builder);
             builder.count(this.url.slice(buf));
         }

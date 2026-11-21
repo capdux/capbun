@@ -32,7 +32,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         columns_value: JSValue,
         result: AnyMySQLError.Error!void,
 
-        pub fn run(ctx: *@This(), roots: *bun.jsc.MarkedArgumentBuffer) callconv(.c): void {
+        pub fn run(ctx: *@This(), roots: *bun.jsc.MarkedArgumentBuffer) callconv(.c) {
             ctx.result = ctx.query_ptr.bindAndExecuteImpl(ctx.writer, ctx.statement, ctx.globalObject, ctx.binding_value, ctx.columns_value, roots);
         }
     };

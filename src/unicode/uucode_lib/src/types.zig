@@ -1139,7 +1139,7 @@ pub fn SliceMapContext(comptime T: type) type {
         return struct {
 
 pub fn hash(self: @This(), s: []const T) u64 {
-            _ = self;
+            _ = &self;
             var hasher = std.hash.Wyhash.init(718259503);
             _ = &hasher;
             _ = std.hash.autoHashStrat((&hasher), s, .Deep);
@@ -1148,7 +1148,7 @@ pub fn hash(self: @This(), s: []const T) u64 {
     }
 
 pub fn eql(self: @This(), a: []const T, b: []const T) bool {
-            _ = self;
+            _ = &self;
             return std.mem.eql(T, a, b);
     }
     pub const Key = []const T;
@@ -1209,8 +1209,8 @@ pub fn OptionalTracking(comptime Optional: type) type {
     max_value: isize = 0,
 
 pub fn deinit(self: *@This(), allocator: Allocator) void {
-            _ = self;
-            _ = allocator;
+            _ = &self;
+            _ = &allocator;
     }
 
 pub fn track(self: *@This(), opt: ?T) void {

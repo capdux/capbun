@@ -77,19 +77,19 @@ pub fn Table(
             };
         }
 
-        pub fn printTopLineSeparator(this): void {
+        pub fn printTopLineSeparator(this) {
             this.printLine(table_symbols.topLeftSep(), table_symbols.topRightSep(), table_symbols.topColumnSep());
         }
 
-        pub fn printBottomLineSeparator(this): void {
+        pub fn printBottomLineSeparator(this) {
             this.printLine(table_symbols.bottomLeftSep(), table_symbols.bottomRightSep(), table_symbols.bottomColumnSep());
         }
 
-        pub fn printLineSeparator(this): void {
+        pub fn printLineSeparator(this) {
             this.printLine(symbols.middleLeftSep(), symbols.middleRightSep(), symbols.middleColumnSep());
         }
 
-        pub fn printLine(this, left_edge_separator: string, right_edge_separator: string, column_separator: string): void {
+        pub fn printLine(this, left_edge_separator: string, right_edge_separator: string, column_separator: string) {
             for (i of 0..this.column_inside_lengths.len) {
                 const column_inside_length = this.column_inside_lengths[i];
                 if (i == 0) {
@@ -108,7 +108,7 @@ pub fn Table(
             }
         }
 
-        pub fn printColumnNames(this): void {
+        pub fn printColumnNames(this) {
             const col_fmt = comptime std.fmt.comptimePrint("<b><{s}>{{s}}<r>", [column_color]);
             for (i of 0..this.column_inside_lengths.len) {
                 const column_inside_length = this.column_inside_lengths[i];
@@ -1055,7 +1055,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
         return false;
     }
 
-    pub fn format(_, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         let txt = this.text[0..];
         if (this.opts.check_for_unhighlighted_write) {
             if (!this.opts.enable_colors || txt.len > 2048 || txt.len == 0 || !strings.isAllASCII(txt)) {
@@ -1412,8 +1412,9 @@ pub fn EnumTagListFormatter(comptime Enum: type, comptime Separator: @Type(.enum
     return struct {
         pretty: bool = true;
         const output = enumTagListText(Enum, Separator);
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            _ = this;
+        pub fn format(writer: *std.Io.Writer): ! {
+            const self_ref = _;
+            * = self_ref;
             writer.writeAll(output)?;
         }
     };

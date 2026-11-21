@@ -96,7 +96,7 @@ pub fn LinearFifo(
         }
 
         static fn initDynamic(allocator: Allocator): Self {
-            const empty_arr: [T; 0] = [];
+            const empty_arr: [0]T = undefined;
             return Self{
                 allocator: allocator,
                 buf: unsafe { @constCast(&empty_arr) },
@@ -105,11 +105,11 @@ pub fn LinearFifo(
             };
         }
 
-        pub fn deinit(this): void {
+        pub fn deinit(this) {
             if (is_dynamic) this.allocator.free(this.buf);
         }
 
-        pub fn realign(*this): void {
+        pub fn realign(*this) {
             if (this.buf.len - this.head >= this.count) {
                 // this copy overlaps
                 bun.copy(T, this.buf[0..this.count], this.buf[this.head..][0..this.count]);
@@ -135,7 +135,7 @@ pub fn LinearFifo(
         }
 
         /// Reduce allocated capacity to `size`.
-        pub fn shrink(*this, size: usize): void {
+        pub fn shrink(*this, size: usize) {
             assert(size >= this.count);
             if (is_dynamic) {
                 this.realign();
@@ -198,7 +198,7 @@ pub fn LinearFifo(
         }
 
         /// Discard first `count` items in the fifo
-        pub fn discard(*this, count: usize): void {
+        pub fn discard(*this, count: usize) {
             assert(count <= this.count);
 
             if (comptime bun.Environment.allow_assert) {
@@ -299,14 +299,14 @@ pub fn LinearFifo(
         }
 
         /// Update the tail location of the buffer (usually follows use of writable/writableWithSize)
-        pub fn update(*this, count: usize): void {
+        pub fn update(*this, count: usize) {
             assert(this.count + count <= this.buf.len);
             this.count += count;
         }
 
         /// Appends the data in `src` to the fifo.
         /// You must have ensured there is enough space.
-        pub fn writeAssumeCapacity(*this, src: []const T): void {
+        pub fn writeAssumeCapacity(*this, src: []const T) {
             assert(this.writableLength() >= src.len);
 
             let src_left = src;
@@ -326,7 +326,7 @@ pub fn LinearFifo(
             return this.writeItemAssumeCapacity(item);
         }
 
-        pub fn writeItemAssumeCapacity(*this, item: T): void {
+        pub fn writeItemAssumeCapacity(*this, item: T) {
             let tail = this.head + this.count;
             if (powers_of_two) {
                 tail &= this.buf.len - 1;
@@ -357,7 +357,7 @@ pub fn LinearFifo(
         }
 
         /// Make `count` items available before the current read location
-        fn rewind(*this, count: usize): void {
+        fn rewind(*this, count: usize) {
             assert(this.writableLength() >= count);
 
             let head = this.head + (this.buf.len - count);
@@ -415,7 +415,7 @@ pub fn LinearFifo(
         }
 
         /// Remove one item at `offset` and MOVE all items after it up one.
-        pub fn orderedRemoveItem(*this, offset: usize): void {
+        pub fn orderedRemoveItem(*this, offset: usize) {
             if (offset == 0) return this.discard(1);
 
             assert(offset < this.count);

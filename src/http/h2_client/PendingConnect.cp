@@ -29,9 +29,13 @@ export @root struct PendingConnect {
         }
     }
 
-    fn deinit(*_) {
+    fn release(*_) {
         bun.default_allocator.free(_.hostname);
         _.waiters.deinit(bun.default_allocator);
         bun.destroy(_);
+    }
+
+    fn deinit(*_) {
+        _.release();
     }
 }

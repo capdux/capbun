@@ -402,7 +402,7 @@ pub fn finish(self: *FileResponseStream) void {
         _ = self.deref();
 }
 
-pub fn releaseInternal(self: *FileResponseStream) void {
+pub fn release(self: *FileResponseStream) void {
         _ = log("release", .{});
         if ((self.mode == .reader)) {
             _ = self.reader.deinit();
@@ -419,7 +419,7 @@ pub fn releaseInternal(self: *FileResponseStream) void {
 }
 
 pub fn deinit(self: *FileResponseStream) void {
-        _ = self.releaseInternal();
+        _ = self.release();
 }
 
 pub fn eventLoop(self: *FileResponseStream) jsc.EventLoopHandle {

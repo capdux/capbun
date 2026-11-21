@@ -62,7 +62,7 @@ pub fn BundleThread(CompletionStruct: type): type {
 
             // Blocks the calling thread until the bun build thread is created.
             // std.once also blocks other callers of this function until the first caller is done.
-            fn loadOnceImpl(): void {
+            fn loadOnceImpl() void {
                 const bundle_thread = bun.handleOom(bun.default_allocator.create(Self));
                 bundle_thread.* = uninitialized;
                 instance = bundle_thread;
@@ -78,17 +78,17 @@ pub fn BundleThread(CompletionStruct: type): type {
                 return instance.?;
             }
 
-            pub fn enqueue(completion: *CompletionStruct): void {
+            pub fn enqueue(completion: *CompletionStruct) void {
                 get().enqueue(completion);
             }
         };
 
-        pub fn enqueue(instance: *Self, completion: *CompletionStruct): void {
+        pub fn enqueue(instance: *Self, completion: *CompletionStruct) void {
             instance.queue.push(completion);
             instance.waker.wake();
         }
 
-        fn threadMain(instance: *Self): void {
+        fn threadMain(instance: *Self) void {
             Output.Source.configureNamedThread("Bundler");
 
             instance.waker = bun.Async.Waker.init() catch @panic("Failed to create waker");

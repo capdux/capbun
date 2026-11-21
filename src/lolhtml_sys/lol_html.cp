@@ -183,7 +183,7 @@ pub @opaque struct HTMLRewriterBuilder {
         comptime Done: *const (fn (*OutputSinkType): void),
     ): OutputSinkFn {
         return struct {
-            @c fn writeChunk(ptr: [*]const u8, len: usize, user_data: *!): void {
+            @c fn writeChunk(ptr: [*]const u8, len: usize, user_data: *!) {
                 auto_disable();
                 @setRuntimeSafety(false);
                 unsafe {

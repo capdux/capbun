@@ -152,7 +152,7 @@ pub fn markInactive(self: *Handlers) bool {
             } else {
                 var vm = self.vm;
                 _ = &vm;
-                _ = self.deinit();
+                _ = self.release();
                 _ = vm.allocator.destroy(self);
                 return true;
             }
@@ -211,10 +211,14 @@ pub fn fromGenerated(globalObject: *jsc.JSGlobalObject, generated: *const jsc.ge
         return result;
 }
 
-pub fn deinit(self: *Handlers) void {
+pub fn release(self: *Handlers) void {
         _ = self.unprotect();
         _ = self.promise.deinit();
         self.* = undefined;
+}
+
+pub fn deinit(self: *Handlers) void {
+        _ = self.release();
 }
 
 pub fn unprotect(self: *Handlers) void {
@@ -272,10 +276,14 @@ pub const SocketConfig = struct {
     reusePort: bool = false,
     ipv6Only: bool = false,
 
-pub fn deinit(self: *SocketConfig) void {
-            _ = self.handlers.deinit();
+pub fn release(self: *SocketConfig) void {
+            _ = self.handlers.release();
             _ = self.deinitExcludingHandlers();
             self.handlers = undefined;
+    }
+
+pub fn deinit(self: *SocketConfig) void {
+            _ = self.release();
     }
 
 pub fn deinitExcludingHandlers(self: *SocketConfig) void {
@@ -320,7 +328,7 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
             var result: SocketConfig = .{ .hostname_or_unix = .empty, .fd = fd_val, .ssl = ssl, .handlers = handlers_val, .default_data = default_data_val };
             _ = &result;
             errdefer {
-            _ = result.deinit();
+            _ = result.release();
             }
             if ((result.fd != null)) {
             } else {

@@ -1557,7 +1557,8 @@ pub fn EnumTagListFormatter(comptime Enum: type, comptime Separator: @Type(.enum
     pretty: bool = true,
 
 pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-            _ = self;
+            const self_ref = self;
+            _ = &self_ref;
             _ = try writer.writeAll(output);
     }
     const output = enumTagListText(Enum, Separator);

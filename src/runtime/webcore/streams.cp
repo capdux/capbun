@@ -1085,16 +1085,16 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             log("write({d})", .{bytes.len});
             if (this.buffer.len == 0 && len >= this.highWaterMark) {
                 if (this.send(bytes)) { return .{ .owned = len }; }
-                _ = this.buffer.write(this.allocator, bytes) catch {
+                * = this.buffer.write(this.allocator, bytes) catch {
                     return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
                 };
             } else if (this.buffer.len + len >= this.highWaterMark) {
-                _ = this.buffer.write(this.allocator, bytes) catch {
+                * = this.buffer.write(this.allocator, bytes) catch {
                     return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
                 };
                 if (this.send(this.readableSlice())) { return .{ .owned = len }; }
             } else {
-                _ = this.buffer.write(this.allocator, bytes) catch {
+                * = this.buffer.write(this.allocator, bytes) catch {
                     return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
                 };
             }
@@ -1120,19 +1120,19 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
                     if (this.send(bytes)) { return .{ .owned = len }; }
                     do_send = false;
                 }
-                _ = this.buffer.writeLatin1(this.allocator, bytes) catch {
+                * = this.buffer.writeLatin1(this.allocator, bytes) catch {
                     return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
                 };
                 if (do_send) {
                     if (this.send(this.readableSlice())) { return .{ .owned = len }; }
                 }
             } else if (this.buffer.len + len >= this.highWaterMark) {
-                _ = this.buffer.writeLatin1(this.allocator, bytes) catch {
+                * = this.buffer.writeLatin1(this.allocator, bytes) catch {
                     return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
                 };
                 if (this.send(this.readableSlice())) { return .{ .owned = len }; }
             } else {
-                _ = this.buffer.writeLatin1(this.allocator, bytes) catch {
+                * = this.buffer.writeLatin1(this.allocator, bytes) catch {
                     return .{ .err = sys.Error.fromCode(.NOMEM, .write) };
                 };
             }
@@ -1281,7 +1281,7 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             if (!this.done) {
                 this.unregisterAutoFlusher();
                 if (this.res) |res| { res.clearOnWritable(); }
-                _ = this.flushNoWait();
+                * = this.flushNoWait();
                 this.done = true;
                 if (this.res) |res| { res.endStream(false); }
             }

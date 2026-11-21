@@ -276,18 +276,18 @@ pub fn initIPv6(addr: [16]u8, port_: u16, flowinfo: u32, scope_id: u32) SocketAd
         return .{ ._addr = sockaddr.v6(std.mem.nativeToBig(u16, port_), addr, flowinfo, scope_id) };
 }
 
-pub fn releaseInternal(self: *SocketAddress) void {
+pub fn release(self: *SocketAddress) void {
         _ = self._presentation.deref();
         _ = bun.destroy(self);
 }
 
 pub fn deinit(self: *SocketAddress) void {
-        _ = self.releaseInternal();
+        _ = self.release();
 }
 
 pub fn finalize(self: *SocketAddress) void {
         _ = jsc.markBinding(@src());
-        _ = self.releaseInternal();
+        _ = self.release();
 }
 
 pub fn intoDTO(self: *SocketAddress, global: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {

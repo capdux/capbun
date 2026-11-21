@@ -114,7 +114,7 @@ pub fn ResumableSink(
                         let bytes = byte_stream.drain();
                         defer bytes.deinit(default_allocator);
                         log("onWrite {}", .{bytes.len});
-                        _ = onWrite(sink.context, bytes.slice());
+                        * = onWrite(sink.context, bytes.slice());
                         onEnd(sink.context, err);
                         sink.deref();
                         return sink;
@@ -124,7 +124,7 @@ pub fn ResumableSink(
                     defer bytes.deinit(default_allocator);
                     if (bytes.len > 0) {
                         log("onWrite {}", .{bytes.len});
-                        _ = onWrite(sink.context, bytes.slice());
+                        * = onWrite(sink.context, bytes.slice());
                     }
                     sink.status = .piped;
                     byte_stream.pipe = jsc.WebCore.Pipe.Wrap(@This(), onStreamPipe).init(sink);
@@ -142,7 +142,7 @@ pub fn ResumableSink(
             sink.#js_this.setStrong(js_this, globalThis);
             setStream(js_this, globalThis, js_stream);
 
-            _ = Bun__assignStreamIntoResumableSink(globalThis, js_stream, js_this);
+            * = Bun__assignStreamIntoResumableSink(globalThis, js_stream, js_this);
 
             return sink;
         }
@@ -310,7 +310,7 @@ pub fn ResumableSink(
             const chunk = stream.slice();
             log("onWrite {}", .{chunk.len});
 
-            _ = onWrite(this.context, chunk);
+            * = onWrite(this.context, chunk);
 
             const is_done = stream.isDone();
 

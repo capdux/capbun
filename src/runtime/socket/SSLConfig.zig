@@ -220,7 +220,7 @@ pub fn isSame(self: *const SSLConfig, other: *const SSLConfig) bool {
         return true;
 }
 
-pub fn deinit(self: *SSLConfig) void {
+pub fn release(self: *SSLConfig) void {
         _ = GlobalRegistry.remove(self);
         _ = freeString((&self.server_name));
         _ = freeString((&self.key_file_name));
@@ -233,6 +233,10 @@ pub fn deinit(self: *SSLConfig) void {
         _ = freeStrings((&self.ca));
         _ = freeString((&self.ssl_ciphers));
         _ = freeString((&self.protos));
+}
+
+pub fn deinit(self: *SSLConfig) void {
+        _ = self.release();
 }
 
 pub fn clone(self: *const SSLConfig) SSLConfig {

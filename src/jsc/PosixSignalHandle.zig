@@ -60,12 +60,12 @@ pub fn drain(self: *PosixSignalHandle, event_loop: *jsc.EventLoop) void {
         }
 }
 
-pub fn releaseInternal(self: *PosixSignalHandle) void {
+pub fn release(self: *PosixSignalHandle) void {
         _ = bun.destroy(self);
 }
 
 pub fn deinit(self: *PosixSignalHandle) void {
-        _ = self.releaseInternal();
+        _ = self.release();
 }
 pub const new = bun.TrivialNew(@This());
 pub const PosixSignalTask = struct {

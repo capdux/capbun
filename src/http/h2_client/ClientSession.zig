@@ -97,7 +97,7 @@ conn_send_window: i32 = H2FrameParser.DEFAULT_WINDOW_SIZE,
 conn_unacked_bytes: u32 = 0,
 registry_index: u32 = 4294967295,
 
-pub fn deinit(self: *ClientSession) void {
+pub fn release(self: *ClientSession) void {
         _ = bun.http.H2.live_sessions.fetchSub(1, .monotonic);
         _ = bun.debugAssert((self.registry_index == std.math.maxInt(u32)));
         _ = self.hpack.deinit();
@@ -119,6 +119,10 @@ pub fn deinit(self: *ClientSession) void {
             _ = self.ssl_config.?.deinit();
         }
         _ = bun.destroy(self);
+}
+
+pub fn deinit(self: *ClientSession) void {
+        _ = self.release();
 }
 
 pub fn create(ctx: *HTTPContextTLS, socket: Socket, client: *HTTPClient) *ClientSession {

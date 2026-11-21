@@ -249,15 +249,15 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
                 return streams.Signal.initWithType(SinkSignal, @as(*SinkSignal, @ptrFromInt(@as(usize, @bitCast(@intFromEnum(cpp))))));
             }
 
-            pub fn close(this: *@This(), _: ?Syscall.Error): void {
+            pub fn close(this: *@This(), _: ?Syscall.Error) void {
                 onClose(@as(SinkSignal, @bitCast(@intFromPtr(this))).cpp, .js_undefined);
             }
 
-            pub fn ready(this: *@This(), _: ?Blob.SizeType, _: ?Blob.SizeType): void {
+            pub fn ready(this: *@This(), _: ?Blob.SizeType, _: ?Blob.SizeType) void {
                 onReady(@as(SinkSignal, @bitCast(@intFromPtr(this))).cpp, .js_undefined, .js_undefined);
             }
 
-            pub fn start(_: *@This()): void {}
+            pub fn start(_: *@This()) void {}
         };
 
         pub fn memoryCost(this: *ThisSink) callconv(.c) usize {
@@ -284,18 +284,18 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return assignToStreamExtern(globalThis, stream, ptr, jsvalue_ptr);
         }
 
-        pub fn onClose(ptr: JSValue, reason: JSValue): void {
+        pub fn onClose(ptr: JSValue, reason: JSValue) void {
             jsc.markBinding(@src());
             const globalThis = jsc.VirtualMachine.get().global;
             return jsc.fromJSHostCallGeneric(globalThis, @src(), onCloseExtern, .{ ptr, reason }) catch return;
         }
 
-        pub fn onReady(ptr: JSValue, amount: JSValue, offset: JSValue): void {
+        pub fn onReady(ptr: JSValue, amount: JSValue, offset: JSValue) void {
             jsc.markBinding(@src());
             return onReadyExtern(ptr, amount, offset);
         }
 
-        pub fn onStart(ptr: JSValue, globalThis: *JSGlobalObject): void {
+        pub fn onStart(ptr: JSValue, globalThis: *JSGlobalObject) void {
             jsc.markBinding(@src());
             return onStartExtern(ptr, globalThis);
         }
@@ -305,7 +305,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             return createObjectExtern(globalThis, object, destructor);
         }
 
-        pub fn setDestroyCallback(value: JSValue, callback: usize): void {
+        pub fn setDestroyCallback(value: JSValue, callback: usize) void {
             jsc.markBinding(@src());
             return setDestroyCallbackExtern(value, callback);
         }
@@ -338,7 +338,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             this.sink.finalize();
         }
 
-        pub fn detach(this: *ThisSink, globalThis: *JSGlobalObject): void {
+        pub fn detach(this: *ThisSink, globalThis: *JSGlobalObject) void {
             if (comptime !@hasField(SinkType, "signal"))
                 return;
 
@@ -376,7 +376,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             };
         }
 
-        pub fn unprotect(this: *@This()): void {
+        pub fn unprotect(this: *@This()) void {
             _ = this;
         }
 

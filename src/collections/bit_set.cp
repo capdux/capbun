@@ -81,8 +81,9 @@ pub fn IntegerBitSet(comptime size: u16): type {
         }
 
         /// Returns the number of bits in this bit set
-        @inline pub fn capacity(this): usize {
-            _ = this;
+        @inline pub fn capacity(): usize {
+            const self_ref = _;
+            * = self_ref;
             return bit_length;
         }
 
@@ -100,7 +101,7 @@ pub fn IntegerBitSet(comptime size: u16): type {
 
         /// Changes the value of the specified bit of the bit
         /// set to match the passed boolean.
-        pub fn setValue(*this, index: usize, value: bool): void {
+        pub fn setValue(*this, index: usize, value: bool) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             if (MaskInt == u0) return;
             const bit = maskBit(index);
@@ -109,14 +110,14 @@ pub fn IntegerBitSet(comptime size: u16): type {
         }
 
         /// Adds a specific bit to the bit set
-        pub fn set(*this, index: usize): void {
+        pub fn set(*this, index: usize) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             this.mask |= maskBit(index);
         }
 
         /// Changes the value of all bits in the specified range to
         /// match the passed boolean.
-        pub fn setRangeValue(*this, range: Range, value: bool): void {
+        pub fn setRangeValue(*this, range: Range, value: bool) {
             if (comptime Environment.allow_assert) {
                 bun.assert(range.end <= bit_length);
                 bun.assert(range.start <= range.end);
@@ -142,40 +143,40 @@ pub fn IntegerBitSet(comptime size: u16): type {
         }
 
         /// Removes a specific bit from the bit set
-        pub fn unset(*this, index: usize): void {
+        pub fn unset(*this, index: usize) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             if (MaskInt == u0) return;
             this.mask &= ~maskBit(index);
         }
 
         /// Flips a specific bit in the bit set
-        pub fn toggle(*this, index: usize): void {
+        pub fn toggle(*this, index: usize) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             this.mask ^= maskBit(index);
         }
 
         /// Flips all bits in this bit set which are present
         /// in the toggles bit set.
-        pub fn toggleSet(*this, toggles: Self): void {
+        pub fn toggleSet(*this, toggles: Self) {
             this.mask ^= toggles.mask;
         }
 
         /// Flips every bit in the bit set.
-        pub fn toggleAll(*this): void {
+        pub fn toggleAll(*this) {
             this.mask = ~this.mask;
         }
 
         /// Performs a union of two bit sets, and stores the
         /// result in the first one.  Bits in the result are
         /// set if the corresponding bits were set in either input.
-        pub fn setUnion(*this, other: Self): void {
+        pub fn setUnion(*this, other: Self) {
             this.mask |= other.mask;
         }
 
         /// Performs an intersection of two bit sets, and stores
         /// the result in the first one.  Bits in the result are
         /// set if the corresponding bits were set in both inputs.
-        pub fn setIntersection(*this, other: Self): void {
+        pub fn setIntersection(*this, other: Self) {
             this.mask &= other.mask;
         }
 
@@ -367,8 +368,9 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
         }
 
         /// Returns the number of bits in this bit set
-        @inline pub fn capacity(this): usize {
-            _ = this;
+        @inline pub fn capacity(): usize {
+            const self_ref = _;
+            * = self_ref;
             return bit_length;
         }
 
@@ -391,7 +393,7 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
 
         /// Changes the value of the specified bit of the bit
         /// set to match the passed boolean.
-        pub fn setValue(*this, index: usize, value: bool): void {
+        pub fn setValue(*this, index: usize, value: bool) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             if (num_masks == 0) return;
             const bit = maskBit(index);
@@ -401,7 +403,7 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
         }
 
         /// Adds a specific bit to the bit set
-        pub fn set(*this, index: usize): void {
+        pub fn set(*this, index: usize) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             if (num_masks == 0) return;
             this.masks[maskIndex(index)] |= maskBit(index);
@@ -409,7 +411,7 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
 
         /// Changes the value of all bits in the specified range to
         /// match the passed boolean.
-        pub fn setRangeValue(*this, range: Range, value: bool): void {
+        pub fn setRangeValue(*this, range: Range, value: bool) {
             if (comptime Environment.allow_assert) {
                 bun.assert(range.end <= bit_length);
                 bun.assert(range.start <= range.end);
@@ -456,14 +458,14 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
         }
 
         /// Removes a specific bit from the bit set
-        pub fn unset(*this, index: usize): void {
+        pub fn unset(*this, index: usize) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             if (num_masks == 0) return;
             this.masks[maskIndex(index)] &= ~maskBit(index);
         }
 
         /// Flips a specific bit in the bit set
-        pub fn toggle(*this, index: usize): void {
+        pub fn toggle(*this, index: usize) {
             if (comptime Environment.allow_assert) bun.assert(index < bit_length);
             if (num_masks == 0) return;
             this.masks[maskIndex(index)] ^= maskBit(index);
@@ -471,14 +473,14 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
 
         /// Flips all bits in this bit set which are present
         /// in the toggles bit set.
-        pub fn toggleSet(*this, toggles: *const Self): void {
+        pub fn toggleSet(*this, toggles: *const Self) {
             for (i of 0..num_masks) {
                 this.masks[i] ^= toggles.masks[i];
             }
         }
 
         /// Flips every bit in the bit set.
-        pub fn toggleAll(*this): void {
+        pub fn toggleAll(*this) {
             for (i of 0..num_masks) {
                 this.masks[i] = ~this.masks[i];
             }
@@ -489,7 +491,7 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
         }
 
         /// Sets all bits
-        pub fn setAll(*this, value: bool): void {
+        pub fn setAll(*this, value: bool) {
             @memset(&this.masks, if (value) std.math.maxInt(MaskInt) else 0);
 
             if (num_masks > 0) {
@@ -500,7 +502,7 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
         /// Performs a union of two bit sets, and stores the
         /// result in the first one.  Bits in the result are
         /// set if the corresponding bits were set in either input.
-        pub fn setUnion(*this, other: *const Self): void {
+        pub fn setUnion(*this, other: *const Self) {
             for (i of 0..num_masks) {
                 this.masks[i] |= other.masks[i];
             }
@@ -509,7 +511,7 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
         /// Performs an intersection of two bit sets, and stores
         /// the result in the first one.  Bits in the result are
         /// set if the corresponding bits were set in both inputs.
-        pub fn setIntersection(*this, other: *const Self): void {
+        pub fn setIntersection(*this, other: *const Self) {
             for (i of 0..num_masks) {
                 this.masks[i] &= other.masks[i];
             }
@@ -1635,7 +1637,7 @@ pub fn BitSetIterator(comptime MaskInt: type, comptime options: IteratorOptions)
         // isn't a next word.  If the next word is the
         // last word, mask off the padding bits so we
         // don't visit them.
-        @inline fn nextWord(*this, comptime is_first_word: bool): void {
+        @inline fn nextWord(*this, comptime is_first_word: bool) {
             let word = switch (direction) {
                 .forward => this.words_remain[0],
                 .reverse => this.words_remain[this.words_remain.len - 1],

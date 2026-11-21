@@ -239,7 +239,7 @@ var iter = m.iterator();
 }
 }
 
-pub fn deinit(self: *ServerConfig) void {
+pub fn release(self: *ServerConfig) void {
         _ = self.address.deinit(bun.default_allocator);
         for (self.negative_routes.items) |route| {
             _ = &route;
@@ -278,6 +278,10 @@ pub fn deinit(self: *ServerConfig) void {
             _ = (builder.*).deinit();
         }
         _ = self.user_routes_to_build.clearAndFree();
+}
+
+pub fn deinit(self: *ServerConfig) void {
+        _ = self.release();
 }
 
 pub fn computeID(self: *const ServerConfig, allocator: std.mem.Allocator) []const u8 {
@@ -934,10 +938,14 @@ pub const RouteDeclaration = struct {
         specific: HTTP.Method,
     } = .@"any",
 
-    pub fn deinit(this: *RouteDeclaration) void {
+    pub fn release(this: *RouteDeclaration) void {
         if (this.path.len > 0) {
             bun.default_allocator.free(this.path);
         }
+    }
+
+    pub fn deinit(this: *RouteDeclaration) void {
+        this.release();
     }
 };
 pub const StaticRouteEntry = struct {
@@ -954,11 +962,15 @@ pub fn clone(self: @This()) !StaticRouteEntry {
             return .{ .path = try bun.default_allocator.dupe(u8, self.path), .route = self.route, .method = self.method };
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn release(self: *@This()) void {
             _ = bun.default_allocator.free(self.path);
             self.path = "";
             _ = self.route.deref();
             self.* = undefined;
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = self.release();
     }
 
 pub fn isLessThan(_: void, lhs: StaticRouteEntry, rhs: StaticRouteEntry) bool {
@@ -974,9 +986,13 @@ const UserRouteBuilder = struct {
     route: ServerConfig.RouteDeclaration,
     callback: jsc.Strong.Optional = .empty,
 
-pub fn deinit(self: *@This()) void {
+pub fn release(self: *@This()) void {
             _ = self.route.deinit();
             _ = self.callback.deinit();
+    }
+
+pub fn deinit(self: *@This()) void {
+            _ = self.release();
     }
 };
 pub const StringZ = [:0]const u8;

@@ -1,7 +1,8 @@
 pub fn IdentityContext(comptime Key: type): type {
     return struct {
-        pub fn hash(this, key: Key): u64 {
-            _ = this;
+        pub fn hash(key: Key): u64 {
+            const self_ref = _;
+            * = self_ref;
             return switch (comptime @typeInfo(Key)) {
                 .@"enum" => @intFromEnum(key),
                 .int => key,

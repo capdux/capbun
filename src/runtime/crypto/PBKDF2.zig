@@ -97,7 +97,7 @@ pub fn runTask(task: *jsc.WorkPoolTask) void {
 
 pub fn runFromJS(self: *Job_) bun.JSError!void {
             defer {
-            _ = self.releaseInternal();
+            _ = self.release();
             }
             if (self.vm.isShuttingDown()) {
                 return;
@@ -116,7 +116,7 @@ pub fn runFromJS(self: *Job_) bun.JSError!void {
             _ = try promise.resolve(globalThis, buffer_value);
     }
 
-pub fn releaseInternal(self: *Job_) void {
+pub fn release(self: *Job_) void {
             _ = self.poll.unref(self.vm);
             _ = self.pbkdf2.deinitAndUnprotect();
             _ = self.promise.deinit();
@@ -125,7 +125,7 @@ pub fn releaseInternal(self: *Job_) void {
     }
 
 pub fn deinit(self: *Job_) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
 
 pub fn create(vm: *jsc.VirtualMachine, globalThis: *jsc.JSGlobalObject, data: *const PBKDF2) *Job_ {

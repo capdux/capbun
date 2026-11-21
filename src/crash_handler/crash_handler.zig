@@ -1263,7 +1263,7 @@ var process: std.os.windows.PROCESS_INFORMATION = undefined;
         _ = (blk_catch_44: { break :blk_catch_44 ((cmd_line.append(0)) catch |__ce_44| { _ = &__ce_44; return; }); });
         const cmd_line_slice = cmd_line.buffer[0..(cmd_line.len - 1) :0];
         const spawn_result = std.os.windows.kernel32.CreateProcessW(null, cmd_line_slice, null, null, 1, .{}, null, null, (&startup_info), (&process));
-        _ = spawn_result;
+        _ = &spawn_result;
 },
 .mac, .linux, .freebsd => {
 var buf: bun.PathBuffer = undefined;

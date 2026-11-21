@@ -1032,7 +1032,7 @@ pub fn call(char: T) bool {
 pub fn normalizeStringGenericTZ(comptime T: type, path_: []const T, buf: []T, comptime options: NormalizeOptions(T)) if (options.zero_terminate) [:0]T else []T {
         const isWindows = (options.separator == std.fs.path.sep_windows);
         const sep_str = (&.{ options.separator });
-        _ = sep_str;
+        _ = &sep_str;
         if ((isWindows and bun.Environment.isDebug)) {
             _ = assert((!strings.hasPrefixComptimeType(T, path_, strings.literal(T, ":\\"))));
         }

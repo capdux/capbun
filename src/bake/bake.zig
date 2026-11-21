@@ -233,7 +233,7 @@ pub fn parsePluginArray(opts: *SplitBundlerOptions, plugin_array: JSValue, globa
 _ = unreachable;
 },
 .fulfilled => |val| {
-_ = val;
+_ = &val;
 },
 .rejected => |err| {
 return global.throwValue(err);

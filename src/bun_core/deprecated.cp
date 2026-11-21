@@ -68,7 +68,7 @@ fn SinglyLinkedListNode(comptime T: type): type {
         pub const Data = T;
 
         /// Insert a new node after the current one.
-        pub fn insertAfter(*this, new_node: *Node!): void {
+        pub fn insertAfter(*this, new_node: *Node!) {
             new_node.next = this.next;
             this.next = new_node;
         }
@@ -99,7 +99,7 @@ fn SinglyLinkedListNode(comptime T: type): type {
         }
 
         /// Reverse the list starting from this node in-place.
-        pub static fn reverse(indirect: *NodeOptPtr!): void {
+        pub static fn reverse(indirect: *NodeOptPtr!) {
             unsafe {
                 if (indirect.* == null) {
                     return;
@@ -125,13 +125,13 @@ pub fn SinglyLinkedList(comptime T: type): type {
         first: (*Node!)? = null;
 
         /// Insert a new node at the head.
-        pub fn prepend(*this, new_node: *Node!): void {
+        pub fn prepend(*this, new_node: *Node!) {
             new_node.next = this.first;
             this.first = new_node;
         }
 
         /// Remove a node from the list.
-        pub fn remove(*this, node: *Node!): void {
+        pub fn remove(*this, node: *Node!) {
             if (this.first == node) {
                 this.first = node.next;
             } else {
@@ -183,7 +183,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
         len: usize = 0;
 
         /// Insert a new node after an existing one.
-        pub fn insertAfter(*this, node: *Node!, new_node: *Node!): void {
+        pub fn insertAfter(*this, node: *Node!, new_node: *Node!) {
             new_node.prev = node;
             if (node.next != null) {
                 let next_node = node.next.?;
@@ -201,7 +201,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
         }
 
         /// Insert a new node before an existing one.
-        pub fn insertBefore(*this, node: *Node!, new_node: *Node!): void {
+        pub fn insertBefore(*this, node: *Node!, new_node: *Node!) {
             new_node.next = node;
             if (node.prev != null) {
                 let prev_node = node.prev.?;
@@ -219,7 +219,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
         }
 
         /// Concatenate list2 onto the end of list1, removing all entries from the former.
-        pub fn concatByMoving(*this, list2: *Self!): void {
+        pub fn concatByMoving(*this, list2: *Self!) {
             let l2_first = list2.first ?? return;
             if (this.last != null) {
                 let l1_last = this.last.?;
@@ -238,7 +238,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
         }
 
         /// Insert a new node at the end of the list.
-        pub fn append(*this, new_node: *Node!): void {
+        pub fn append(*this, new_node: *Node!) {
             if (last := this.last) {
                 // Insert after last.
                 this.insertAfter(last, new_node);
@@ -249,7 +249,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
         }
 
         /// Insert a new node at the beginning of the list.
-        pub fn prepend(*this, new_node: *Node!): void {
+        pub fn prepend(*this, new_node: *Node!) {
             if (first := this.first) {
                 // Insert before first.
                 this.insertBefore(first, new_node);
@@ -265,7 +265,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
         }
 
         /// Remove a node from the list.
-        pub fn remove(*this, node: *Node!): void {
+        pub fn remove(*this, node: *Node!) {
             if (node.prev != null) {
                 let prev_node = node.prev.?;
                 // Intermediate node.

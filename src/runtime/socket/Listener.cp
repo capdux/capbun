@@ -190,7 +190,7 @@ pub const ListenerType = union(enum) {
             .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
             .none => {},
         }
-        _.releaseInternal();
+        _.release();
     }
 
     fn unlinkUnixSocketPath() {
@@ -202,7 +202,7 @@ pub const ListenerType = union(enum) {
         * = bun.sys.unlink(bun.path.z(path, buf));
     }
 
-    fn releaseInternal(*_) {
+    fn release(*_) {
         log("deinit", .{});
         _.strong_self.deinit();
         _.strong_data.deinit();
@@ -227,7 +227,7 @@ pub const ListenerType = union(enum) {
     }
 
     fn deinit(*_) {
-        _.releaseInternal();
+        _.release();
     }
 
     fn getConnectionsCount(*_, globalObject: *jsc.JSGlobalObject): JSValue {
@@ -346,7 +346,7 @@ pub const UnixOrHost = union(enum) {
         }
     }
 
-    pub fn releaseInternal(this: UnixOrHost): void {
+    pub fn release(this: UnixOrHost) void {
         switch (this) {
             .unix => |u| {
                 bun.default_allocator.free(u);
@@ -358,8 +358,8 @@ pub const UnixOrHost = union(enum) {
         }
     }
 
-    pub fn deinit(this: UnixOrHost): void {
-        this.releaseInternal();
+    pub fn deinit(this: UnixOrHost) void {
+        this.release();
     }
 };
 
@@ -927,7 +927,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
     ctx: ?*BoringSSL.SSL_CTX = null,
     pub const new = bun.TrivialNew(WindowsNamedPipeListeningContext);
 
-    fn onClientConnect(this: *WindowsNamedPipeListeningContext, status: uv.ReturnCode): void {
+    fn onClientConnect(this: *WindowsNamedPipeListeningContext, status: uv.ReturnCode) {
         if (status != uv.ReturnCode.zero or this.vm.isShuttingDown() or this.listener == null) {
             return;
         }
@@ -947,10 +947,10 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
 
     fn onPipeClosed(pipe: *uv.Pipe) callconv(.c) void {
         const this_ctx: *WindowsNamedPipeListeningContext = @ptrCast(@alignCast(pipe.data));
-        this_ctx.releaseInternal();
+        this_ctx.release();
     }
 
-    pub fn closePipeAndDeinit(this: *WindowsNamedPipeListeningContext): void {
+    pub fn closePipeAndDeinit(this: *WindowsNamedPipeListeningContext) {
         this.listener = null;
         this.uvPipe.data = this;
         this.uvPipe.close(onPipeClosed);
@@ -970,7 +970,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
         });
         let pipe_initialized = false;
         errdefer {
-            if (pipe_initialized) this_ctx.closePipeAndDeinit() else this_ctx.releaseInternal();
+            if (pipe_initialized) this_ctx.closePipeAndDeinit() else this_ctx.release();
         }
 
         if (ssl_config) |ssl_options| {
@@ -1006,7 +1006,7 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
         return this_ctx;
     }
 
-    pub fn releaseInternal(*_) {
+    pub fn release(*_) {
         _.listener = null;
         if (ctx := _.ctx) {
             _.ctx = null;
@@ -1016,6 +1016,6 @@ pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) struct {
     }
 
     pub fn deinit(*_) {
-        _.releaseInternal();
+        _.release();
     }
 } else struct {};

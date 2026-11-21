@@ -61,7 +61,7 @@ export @root struct ClientSession {
     conn_unacked_bytes: u32 = 0,
     registry_index: u32 = 4294967295,
 
-    fn deinit(*_) {
+    fn release(*_) {
         bun.http.H2.live_sessions.fetchSub(1, .monotonic);
         bun.debugAssert(_.registry_index == std.math.maxInt(u32));
         _.hpack.deinit();
@@ -81,6 +81,10 @@ export @root struct ClientSession {
             _.ssl_config.?.deinit();
         }
         bun.destroy(_);
+    }
+
+    fn deinit(*_) {
+        _.release();
     }
 
     static fn create(ctx: *HTTPContextTLS, socket: Socket, client: *HTTPClient): *ClientSession {

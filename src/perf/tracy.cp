@@ -153,7 +153,7 @@ export fn TracyAllocator(@comptime name: cstring?): type {
             }
         }
 
-        fn freeFn(ptr: *!, buf: []u8, buf_align: u8, ret_addr: usize): void {
+        fn freeFn(ptr: *!, buf: []u8, buf_align: u8, ret_addr: usize) {
             unsafe {
                 const self_ptr = ptr as *Self!;
                 self_ptr.parent_allocator.rawFree(buf, buf_align, ret_addr);

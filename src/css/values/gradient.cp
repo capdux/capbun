@@ -1501,7 +1501,7 @@ pub const Circle = union(enum) {
         if (input.tryParse(Length.parse, .{}).asValue()) |length| {
             // The `circle` keyword is optional if there is only a single length.
             // We are assuming here that Ellipse.parse ran first.
-            _ = input.tryParse(css.Parser.expectIdentMatching, .{"circle"});
+            * = input.tryParse(css.Parser.expectIdentMatching, .{"circle"});
             return .{ .result = Circle{ .radius = length } };
         }
 

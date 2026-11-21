@@ -37,13 +37,17 @@ export @root struct Stream {
     send_window: i32,
     pending_body: string = "",
 
-    pub fn deinit(*_) {
+    pub fn release(*_) {
         bun.http.H2.live_streams.fetchSub(1, .monotonic);
         _.header_block.deinit(bun.default_allocator);
         _.body_buffer.deinit(bun.default_allocator);
         _.decoded_bytes.deinit(bun.default_allocator);
         _.decoded_headers.deinit(bun.default_allocator);
         bun.destroy(_);
+    }
+
+    pub fn deinit(*_) {
+        _.release();
     }
 
     pub fn rst(*_, code: H2FrameParser.ErrorCode) {

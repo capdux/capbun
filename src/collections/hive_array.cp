@@ -163,7 +163,7 @@ pub fn HiveArrayFallback(comptime T: type, comptime capacity: u16, comptime Hive
             return false;
         }
 
-        pub fn put(*this, value: *T): void {
+        pub fn put(*this, value: *T) {
             if (comptime capacity > 0) {
                 if (this.hive.put(value)) return;
             }

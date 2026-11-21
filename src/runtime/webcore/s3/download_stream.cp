@@ -65,7 +65,7 @@ export class S3HttpDownloadStreamingTask {
         this.state.store(@bitCast(state), .monotonic);
     }
 
-    pub fn releaseInternal(*_) {
+    pub fn release(*_) {
         this.poll_ref.unref(this.vm);
         this.response_buffer.deinit();
         this.reported_response_buffer.deinit();
@@ -81,7 +81,7 @@ export class S3HttpDownloadStreamingTask {
     }
 
     pub fn deinit(*_: *S3HttpDownloadStreamingTask) {
-        this.releaseInternal();
+        this.release();
         bun.destroy(this);
     }
 

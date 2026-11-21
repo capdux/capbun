@@ -133,7 +133,7 @@ pub type CStringSlice = []CString;
         return true;
     }
 
-    pub fn deinit(*_) {
+    pub fn release(*_) {
         GlobalRegistry.remove(_);
         freeString(&_.server_name);
         freeString(&_.key_file_name);
@@ -146,6 +146,10 @@ pub type CStringSlice = []CString;
         freeStrings(&_.ca);
         freeString(&_.ssl_ciphers);
         freeString(&_.protos);
+    }
+
+    pub fn deinit(*_) {
+        _.release();
     }
 
     pub fn clone(_: *const SSLConfig): SSLConfig {
@@ -413,7 +417,7 @@ pub const GlobalRegistry = struct {
         return new_shared;
     }
 
-    fn remove(config: *SSLConfig): void {
+    fn remove(config: *SSLConfig) {
         mutex.lock();
         defer mutex.unlock();
         if (configs.count() == 0) return;

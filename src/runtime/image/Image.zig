@@ -134,7 +134,7 @@ pub fn slice(self: PipelineTaskInput) []const u8 {
             return ((self.copied) orelse (self.bytes));
     }
 
-pub fn releaseInternal(self: *PipelineTaskInput) void {
+pub fn release(self: *PipelineTaskInput) void {
             if ((self.pinned != .zero)) {
                 _ = JSC__JSValue__unpinArrayBuffer(self.pinned);
             }
@@ -751,7 +751,7 @@ pub fn encodeForBody(self: *Image, global: *jsc.JSGlobalObject, this_value: jsc.
         return global.throw("Image: source ArrayBuffer was detached", .{}); }); });
         _ = &input;
         defer {
-        _ = input.releaseInternal();
+        _ = input.release();
         }
         var task: PipelineTask = .{ .image = self, .global = global, .pipeline = self.pipeline, .input = input, .kind = .{ .encode = self.pipeline.output }, .deliver = .uint8array, .max_pixels = self.max_pixels, .auto_orient = self.auto_orient };
         _ = &task;
@@ -1046,7 +1046,7 @@ pub fn then(self: *PipelineTask, promise: *jsc.JSPromise) bun.JSTerminated!void 
             defer {
             _ = self.deinit();
             }
-            _ = self.input.releaseInternal();
+            _ = self.input.release();
             const global = self.global;
             switch (self.result) {
 .encoded => |r| {

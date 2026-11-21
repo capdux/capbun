@@ -231,10 +231,7 @@ pub fn get(_: std.mem.Allocator) *PoolLinkedList.Node {
                 }
             }
             const new_node = ((default_allocator.create(PoolLinkedList.Node)) catch unreachable);
-            var __new_node_moved = false; _ = &__new_node_moved;
-            defer if (!__new_node_moved) { const __T = @TypeOf(new_node); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = new_node.release() catch {}; } else { new_node.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = new_node; _drop_val.release(); } };
             new_node.* = PoolLinkedList.Node{ .data = PoolHashMap.initContext(default_allocator, IdentityContext{  }) };
-            __new_node_moved = true;
             return new_node;
     }
 

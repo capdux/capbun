@@ -312,7 +312,7 @@ const Brace = struct {
 
         const matched = globMatchImpl(&branch_state, glob, branch_index, path, brace_stack);
 
-        _ = brace_stack.pop();
+        * = brace_stack.pop();
 
         return matched;
     }

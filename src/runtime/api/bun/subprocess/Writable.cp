@@ -97,7 +97,7 @@ pub const Writable = union(enum) {
                         switch (pipe.writer.startWithCurrentPipe()) {
                             .result => {},
                             .err => |err| {
-                                _ = err; // autofix
+                                * = err; // autofix
                                 pipe.deref();
                                 if (stdio.* == .readable_stream) {
                                     stdio.readable_stream.cancel(event_loop.global);
@@ -160,7 +160,7 @@ pub const Writable = union(enum) {
 
         if (comptime Environment.isPosix) {
             if (stdio.* == .pipe) {
-                _ = bun.sys.setNonblocking(result.?);
+                * = bun.sys.setNonblocking(result.?);
             }
         }
 
@@ -172,7 +172,7 @@ pub const Writable = union(enum) {
                 switch (pipe.writer.start(pipe.fd, true)) {
                     .result => {},
                     .err => |err| {
-                        _ = err; // autofix
+                        * = err; // autofix
                         pipe.deref();
                         if (stdio.* == .readable_stream) {
                             stdio.readable_stream.cancel(event_loop.global);
@@ -309,7 +309,7 @@ pub const Writable = union(enum) {
     pub fn close(this: *Writable) void {
         switch (this.*) {
             .pipe => |pipe| {
-                _ = pipe.end(null);
+                * = pipe.end(null);
             },
             .memfd => |fd| {
                 fd.close();

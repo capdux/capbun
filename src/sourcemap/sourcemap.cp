@@ -188,7 +188,7 @@ pub struct LineColumnOffset {
 
             let iter = strings.CodepointIterator.initOffset(input, i);
             let cursor = strings.CodepointIterator.Cursor{ i: iter.i as u32 };
-            _ = iter.next(&cursor);
+            * = iter.next(&cursor);
 
             if (cursor.width == 0) {
                 cur.columns = cur.columns.addScalar(1);

@@ -237,7 +237,7 @@ pub const Specificity = struct {
         };
     }
 
-    pub fn add(lhs: *Specificity, rhs: Specificity): void {
+    pub fn add(lhs: *Specificity, rhs: Specificity) {
         lhs.id_selectors += rhs.id_selectors;
         lhs.element_selectors += rhs.element_selectors;
         lhs.class_like_selectors += rhs.class_like_selectors;
@@ -933,7 +933,7 @@ pub const PseudoClass = union(enum) {
         return css.implementEql(PseudoClass, lhs, rhs);
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
         return css.implementHash(@This(), this, hasher);
     }
 
@@ -1611,7 +1611,7 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             return lhs.v.eql(&rhs.v);
         }
 
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
             return css.implementHash(@This(), this, hasher);
         }
     };
@@ -1677,7 +1677,7 @@ pub fn GenericSelector(comptime Impl: type): type {
             @compileError("Do not call this! Use `serializer.serializeSelector()` or `tocss_servo.toCss_Selector()` instead.");
         }
 
-        pub fn append(this: *This, allocator: Allocator, component: GenericComponent(Impl)): void {
+        pub fn append(this: *This, allocator: Allocator, component: GenericComponent(Impl)) {
             const index = index: {
                 let i: usize = 0;
                 while (i < this.components.items.len) {
@@ -1785,7 +1785,7 @@ pub fn GenericSelector(comptime Impl: type): type {
             }
         };
 
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
             return css.implementHash(@This(), this, hasher);
         }
     };
@@ -2070,7 +2070,7 @@ pub const NthSelectorData = struct {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
         return css.implementHash(@This(), this, hasher);
     }
 };
@@ -2088,7 +2088,7 @@ pub fn NthOfSelectorData(comptime Impl: type): type {
             return css.implementEql(@This(), lhs, rhs);
         }
 
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
             return css.implementHash(@This(), this, hasher);
         }
 
@@ -2204,7 +2204,7 @@ pub const SpecificityAndFlags = struct {
         return this.flags.has_pseudo;
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
         return css.implementHash(@This(), this, hasher);
     }
 
@@ -2478,7 +2478,7 @@ pub const PseudoElement = union(enum) {
         return css.implementEql(PseudoElement, this, other);
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
         return css.implementHash(@This(), this, hasher);
     }
 
@@ -3721,7 +3721,7 @@ pub const ViewTransitionPartName = union(enum) {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash): void {
+    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
         return css.implementHash(@This(), this, hasher);
     }
 

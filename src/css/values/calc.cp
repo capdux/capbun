@@ -1424,7 +1424,7 @@ pub fn Calc(comptime V: type): type {
         /// I don't like how this function requires allocating a second ArrayList
         /// I am pretty sure we could do this reduction in place, or do it as the
         /// arguments are being parsed.
-        pub fn reduceArgs(allocator: Allocator, args: *ArrayList(This), order: std.math.Order): void {
+        pub fn reduceArgs(allocator: Allocator, args: *ArrayList(This), order: std.math.Order) void {
             // Reduces the arguments of a min() or max() expression, combining compatible values.
             // e.g. min(1px, 1em, 2px, 3in) => min(1px, 1em)
             let reduced = ArrayList(This){};
@@ -1576,7 +1576,7 @@ pub fn MathFunction(comptime V: type): type {
             };
         }
 
-        pub fn deinit(this: *@This(), allocator: Allocator): void {
+        pub fn deinit(this: *@This(), allocator: Allocator) void {
             switch (this.*) {
                 .calc => |*calc| calc.deinit(allocator),
                 .min => |*min| css.deepDeinit(ThisCalc, allocator, min),

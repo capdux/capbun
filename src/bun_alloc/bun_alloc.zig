@@ -375,7 +375,8 @@ pub fn isOverflowing() bool {
     }
 
 pub fn exists(self: @This(), value: ValueType) bool {
-            _ = self;
+            const self_ref = self;
+            _ = &self_ref;
             return isSliceInBuffer(value, Self.instance.backing_buf);
     }
 
@@ -442,7 +443,8 @@ pub fn init(allocator: std.mem.Allocator) *Self {
     }
 
 pub fn deinit(self: *@This()) void {
-            _ = self;
+            const self_ref = self;
+            _ = &self_ref;
             _ = bun.default_allocator.destroy(Self.instance);
             Self.loaded = false;
     }
@@ -780,7 +782,8 @@ pub fn atIndex(self: *@This(), index: IndexType) ?*ValueType {
     }
 
 pub fn keyAtIndex(self: *@This(), index: IndexType) ?[]const u8 {
-            _ = self;
+            const self_ref = self;
+            _ = &self_ref;
             if (((index.index == Unassigned.index) or (index.index == NotFound.index))) {
                 return null;
             } else {

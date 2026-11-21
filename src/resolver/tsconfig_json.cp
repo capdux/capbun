@@ -97,12 +97,12 @@ pub struct TSConfigJSON {
 
         remaining = input;
         while (index := strings.indexOf(remaining, "${configDir}")) {
-            _ = string_builder.append(remaining[0..index]);
-            _ = string_builder.append(configDir);
+            * = string_builder.append(remaining[0..index]);
+            * = string_builder.append(configDir);
             remaining = remaining[index + "${configDir}".len ..];
         }
 
-        _ = string_builder.appendZ(remaining);
+        * = string_builder.appendZ(remaining);
 
         return string_builder.allocatedSlice()[0 .. string_builder.len - 1];
     }
@@ -166,7 +166,7 @@ pub struct TSConfigJSON {
                 if (str := jsx_prop.expr.asString(allocator)) {
                     const str_lower = allocator.alloc(u8, str.len) catch unreachable;
                     defer allocator.free(str_lower);
-                    _ = strings.copyLowercase(str, str_lower);
+                    * = strings.copyLowercase(str, str_lower);
                     if (runtime := options.JSX.RuntimeMap.get(str_lower)) {
                         result.jsx.runtime = runtime.runtime;
                         result.jsx_flags.insert(.runtime);

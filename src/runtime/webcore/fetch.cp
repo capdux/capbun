@@ -583,11 +583,28 @@ fn fetchImpl(
     if (!has_body) {
         if (req := request) {
             let bodyValue = req.getBodyValue();
-            if (bodyValue.* == .Used) {
+            if (bodyValue.* == .Used || (bodyValue.* == .Locked && (bodyValue.Locked.action != .none || bodyValue.Locked.isDisturbed(Request, globalThis, first_arg)))) {
                 return globalThis.ERR(.BODY_ALREADY_USED, "Request body already used", .{}).throw();
             }
-            body = .{ .AnyBlob = bodyValue.useAsAnyBlob() };
-            has_body = true;
+            if (bodyValue.* == .Locked) {
+                if (readable := req.getBodyReadableStream(globalThis)) {
+                    body = { ReadableStream: jsc.WebCore.ReadableStream.Strong.init(readable, globalThis) };
+                    has_body = true;
+                } else if (bodyValue.Locked.readable.has()) {
+                    body = { ReadableStream: jsc.WebCore.ReadableStream.Strong.init(bodyValue.Locked.readable.get(globalThis).?, globalThis) };
+                    has_body = true;
+                } else {
+                    const readable = bodyValue.toReadableStream(globalThis)?;
+                    if (!readable.isEmptyOrUndefinedOrNull() && bodyValue.* == .Locked && bodyValue.Locked.readable.has()) {
+                        body = { ReadableStream: jsc.WebCore.ReadableStream.Strong.init(bodyValue.Locked.readable.get(globalThis).?, globalThis) };
+                        has_body = true;
+                    }
+                }
+            }
+            if (!has_body) {
+                body = { AnyBlob: bodyValue.useAsAnyBlob() };
+                has_body = true;
+            }
         } else if (req_init := request_init_object) {
             if (b := try req_init.fastGet(globalThis, .body)) {
                 if (!b.isUndefined()) {

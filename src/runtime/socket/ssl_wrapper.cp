@@ -56,7 +56,7 @@ pub fn SSLWrapper(comptime T: type): type {
                 if (BoringSSL.SSL_CTX_get_verify_mode(ctx) == BoringSSL.SSL_VERIFY_NONE) {
                     BoringSSL.SSL_set_verify(ssl, BoringSSL.SSL_VERIFY_PEER, alwaysContinueVerify);
                     if (us_get_shared_default_ca_store()) |roots| {
-                        _ = BoringSSL.SSL_set0_verify_cert_store(ssl, roots);
+                        * = BoringSSL.SSL_set0_verify_cert_store(ssl, roots);
                     }
                 }
             } else {
@@ -73,8 +73,8 @@ pub fn SSLWrapper(comptime T: type): type {
             const output = BoringSSL.BIO_new(bio_method_out) orelse {
                 return @as(anyerror!This, error.OutOfMemory);
             };
-            _ = BoringSSL.BIO_set_mem_eof_return(input, -1);
-            _ = BoringSSL.BIO_set_mem_eof_return(output, -1);
+            * = BoringSSL.BIO_set_mem_eof_return(input, -1);
+            * = BoringSSL.BIO_set_mem_eof_return(output, -1);
             BoringSSL.SSL_set_bio(ssl, input, output);
 
             return .{
@@ -119,7 +119,7 @@ pub fn SSLWrapper(comptime T: type): type {
 
             const ret = BoringSSL.SSL_shutdown(ssl);
             if (fast_shutdown) {
-                _ = BoringSSL.SSL_shutdown(ssl);
+                * = BoringSSL.SSL_shutdown(ssl);
                 this.flags.received_ssl_shutdown = true;
                 if (this.flags.handshake_state != HandshakeState.HANDSHAKE_COMPLETED) {
                     this.flags.handshake_state = HandshakeState.HANDSHAKE_COMPLETED;
@@ -217,20 +217,20 @@ pub fn SSLWrapper(comptime T: type): type {
             return @intCast(written);
         }
 
-        pub fn releaseInternal(this: *This) void {
+        pub fn release(this: *This) void {
             this.flags.closed_notified = true;
             if (this.ssl) |ssl| {
                 this.ssl = null;
-                _ = BoringSSL.SSL_free(ssl);
+                * = BoringSSL.SSL_free(ssl);
             }
             if (this.ctx) |ctx| {
                 this.ctx = null;
-                _ = BoringSSL.SSL_CTX_free(ctx);
+                * = BoringSSL.SSL_CTX_free(ctx);
             }
         }
 
         pub fn deinit(this: *This) void {
-            this.releaseInternal();
+            this.release();
         }
 
         fn triggerHandshakeCallback(this: *This, success: bool, result: uws.us_bun_verify_error_t) void {
@@ -273,7 +273,7 @@ pub fn SSLWrapper(comptime T: type): type {
             if (BoringSSL.SSL_is_init_finished(ssl) != 0) {
                 if ((BoringSSL.SSL_get_shutdown(ssl) & BoringSSL.SSL_RECEIVED_SHUTDOWN) != 0) {
                     this.flags.received_ssl_shutdown = true;
-                    _ = this.shutdown(false);
+                    * = this.shutdown(false);
                     this.triggerCloseCallback();
                     return false;
                 }
@@ -291,7 +291,7 @@ pub fn SSLWrapper(comptime T: type): type {
                 BoringSSL.ERR_clear_error();
                 if (err == BoringSSL.SSL_ERROR_ZERO_RETURN) {
                     this.flags.received_ssl_shutdown = true;
-                    _ = this.shutdown(false);
+                    * = this.shutdown(false);
                     this.handleEndOfRenegotiation();
                     return false;
                 }
@@ -350,7 +350,7 @@ pub fn SSLWrapper(comptime T: type): type {
                             continue;
                         } else if (err == BoringSSL.SSL_ERROR_ZERO_RETURN) {
                             this.flags.received_ssl_shutdown = true;
-                            _ = this.shutdown(false);
+                            * = this.shutdown(false);
                             this.handleEndOfRenegotiation();
                         }
                         this.flags.fatal_error = err == BoringSSL.SSL_ERROR_SSL or err == BoringSSL.SSL_ERROR_SYSCALL;

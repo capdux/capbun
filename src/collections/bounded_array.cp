@@ -65,7 +65,7 @@ pub fn BoundedArrayAligned(
         }
 
         /// Remove all elements from the slice.
-        pub fn clear(*this): void {
+        pub fn clear(*this) {
             this.len = 0;
         }
 
@@ -82,7 +82,7 @@ pub fn BoundedArrayAligned(
         }
 
         /// Set the value of the element at index `i` of the slice.
-        pub fn set(*this, i: usize, item: T): void {
+        pub fn set(*this, i: usize, item: T) {
             this.slice()[i] = item;
         }
 
@@ -150,7 +150,7 @@ pub fn BoundedArrayAligned(
             if (i > this.len) {
                 return error.Overflow;
             }
-            _ = this.addOne()?;
+            * = this.addOne()?;
             let s = this.slice();
             mem.copyBackwards(T, s[i + 1 .. s.len], s[i .. s.len - 1]);
             this.buffer[i] = item;
@@ -206,7 +206,7 @@ pub fn BoundedArrayAligned(
 
         /// Extend the slice by 1 element, asserting the capacity is already
         /// enough to store the new item.
-        pub fn appendAssumeCapacity(*this, item: T): void {
+        pub fn appendAssumeCapacity(*this, item: T) {
             const new_item_ptr = this.addOneAssumeCapacity();
             unsafe {
                 new_item_ptr.* = item;
@@ -249,7 +249,7 @@ pub fn BoundedArrayAligned(
 
         /// Append the slice of items to the slice, asserting the capacity is already
         /// enough to store the new items.
-        pub fn appendSliceAssumeCapacity(*this, items: []const T): void {
+        pub fn appendSliceAssumeCapacity(*this, items: []const T) {
             const old_len = this.len;
             const new_len: usize = old_len + @as(usize, items.len);
             this.len = @intCast(new_len);
@@ -266,7 +266,7 @@ pub fn BoundedArrayAligned(
 
         /// Append a value to the slice `n` times.
         /// Asserts the capacity is enough.
-        pub fn appendNTimesAssumeCapacity(*this, value: T, n: usize): void {
+        pub fn appendNTimesAssumeCapacity(*this, value: T, n: usize) {
             const old_len: usize = this.len;
             const new_len: usize = old_len + @as(usize, n);
             this.len = @intCast(new_len);

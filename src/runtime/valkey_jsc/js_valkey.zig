@@ -1335,8 +1335,8 @@ pub fn onClose(client: *JSValkeyClient, _: SocketType, _: i32, _: ?*anyopaque) v
     }
 
 pub fn onEnd(client: *JSValkeyClient, socket: SocketType) void {
-            _ = client;
-            _ = socket;
+            _ = &client;
+            _ = &socket;
     }
 
 pub fn onConnectError(client: *JSValkeyClient, _: SocketType, _: i32) bun.JSTerminated!void {

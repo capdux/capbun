@@ -16,7 +16,7 @@ pub struct CertError {
     code: [:0]const u8 = "",
     reason: [:0]const u8 = "",
 
-    pub fn releaseInternal(_: *CertError) {
+    pub fn release(_: *CertError) {
         if (_.code.len > 0) {
             bun.default_allocator.free(_.code);
         }
@@ -26,7 +26,7 @@ pub struct CertError {
     }
 
     pub fn deinit(_: *CertError) {
-        _.releaseInternal();
+        _.release();
     }
 }
 
@@ -83,7 +83,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
     fn onClose(_: *UpgradedDuplex) {
         log("onClose", .{});
-        defer _.releaseInternal();
+        defer _.release();
 
         _.handlers.onClose(_.handlers.ctx);
         _.callWriteOrEnd(null, false);
@@ -447,7 +447,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         _.setTimeoutInMilliseconds(seconds * 1000);
     }
 
-    pub fn releaseInternal(_: *UpgradedDuplex) {
+    pub fn release(_: *UpgradedDuplex) {
         log("release", .{});
         _.setTimeout(0);
 
@@ -474,11 +474,11 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             _.onCloseCallback.deinit();
         }
         let ssl_error = _.ssl_error;
-        ssl_error.releaseInternal();
+        ssl_error.release();
         _.ssl_error = .{};
     }
 
     pub fn deinit(_: *UpgradedDuplex) {
-        _.releaseInternal();
+        _.release();
     }
 }

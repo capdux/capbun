@@ -75,7 +75,7 @@ pub fn WebSocket(comptime ssl_flag: i32): type { return struct {
         return bun.cast(?*T, uws_ws_get_user_data(ssl_flag, this.raw()));
     }
 
-    pub fn close(this: *@This()): void {
+    pub fn close(this: *@This()) {
         uws_ws_close(ssl_flag, this.raw());
     }
 
@@ -95,11 +95,11 @@ pub fn WebSocket(comptime ssl_flag: i32): type { return struct {
         return uws_ws_send_last_fragment(ssl_flag, this.raw(), message.ptr, message.len, compress);
     }
 
-    pub fn end(this: *@This(), code: i32, message: string): void {
+    pub fn end(this: *@This(), code: i32, message: string) {
         uws_ws_end(ssl_flag, this.raw(), code, message.ptr, message.len);
     }
 
-    pub fn cork(this: *@This(), ctx: anytype, comptime callback: anytype): void {
+    pub fn cork(this: *@This(), ctx: anytype, comptime callback: anytype) {
         const Wrapper = struct {
             pub fn wrap(user_data: *!?) callconv(.c) void {
                 callback(@ptrCast(@alignCast(user_data)));

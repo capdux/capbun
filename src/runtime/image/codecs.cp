@@ -359,7 +359,7 @@ pub struct Encoded {
     /// 2-arg JSC deallocator signature.
     static fn wrap(comptime f: auto): FreeFn {
         const S = struct {
-            @c fn call(p: *!, _: *!): void {
+            @c fn call(p: *!, _: *!) {
                 f(p);
             }
         };

@@ -241,14 +241,14 @@ pub fn toStreamBuffer(self: us_socket_stream_buffer_t) bun.io.StreamBuffer {
             return bun.io.StreamBuffer{ .list = .{ .allocator = bun.default_allocator, .items = items, .capacity = cap }, .cursor = self.cursor };
     }
 
-pub fn releaseInternal(self: *us_socket_stream_buffer_t) void {
+pub fn release(self: *us_socket_stream_buffer_t) void {
             if ((self.list_ptr != null)) {
                 _ = bun.default_allocator.free(self.list_ptr.?[0..self.list_cap]);
             }
     }
 
 pub fn deinit(self: *us_socket_stream_buffer_t) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
 };
 

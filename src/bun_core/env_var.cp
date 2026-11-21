@@ -283,7 +283,7 @@ fn BoolCache(comptime ip: BoolInput): type {
         value: std.atomic.Value(BoolStoredType) = std.atomic.Value(BoolStoredType).init(.unknown);
 
         inline fn getCached(*this): BoolOutput {
-            _ = ip;
+            * = ip;
             const cached = this.value.load(.monotonic);
             switch (cached) {
                 .unknown => {
@@ -575,7 +575,7 @@ fn PlatformSpecificCore(
             return Self.cache.deserAndInvalidate(env_var);
         }
 
-        static fn assertPlatformSupported(): void {
+        static fn assertPlatformSupported() {
             const missing_key_fmt = "Cannot retrieve the value of {s} for {s} since no {s} key is associated with it.";
             if (comptime bun.Environment.isWindows && windows_key == null) {
                 @compileError(std.fmt.comptimePrint(missing_key_fmt, [comptime_key, "Windows", "Windows"]));

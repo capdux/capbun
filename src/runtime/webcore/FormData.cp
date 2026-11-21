@@ -214,7 +214,7 @@ export class FormData {
             globalThis: *JSGlobalObject,
             form: *jsc.DOMFormData,
 
-            pub fn onEntry(wrap: *@This(), name: Semver.String, field: Field, buf: []const u8): void {
+            pub fn onEntry(wrap: *@This(), name: Semver.String, field: Field, buf: []const u8) {
                 const value_str = field.value;
                 let key = jsc.ZigString.initUTF8(name.slice(buf));
 

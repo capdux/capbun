@@ -232,7 +232,7 @@ _ = (blk_catch_7: { break :blk_catch_7 ((tcp.onClose(TCPSocket.Socket.fromNamedP
 pub fn runEvent(self: *WindowsNamedPipeContext) void {
             switch (self.task_event) {
 .deinit => {
-_ = self.releaseInternal();
+_ = self.release();
 },
 .none => {
 _ = @panic("Invalid event state");
@@ -324,7 +324,7 @@ _ = (blk_catch_11: { break :blk_catch_11 ((tcp.handleConnectError(@intFromEnum(b
             return (&obj.named_pipe);
     }
 
-pub fn releaseInternal(self: *WindowsNamedPipeContext) void {
+pub fn release(self: *WindowsNamedPipeContext) void {
             _ = log("release", .{});
             const socket = self.socket;
             self.socket = .none;
@@ -344,7 +344,7 @@ else => {
     }
 
 pub fn deinit(self: *WindowsNamedPipeContext) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", scheduleDeinit, .{});
     pub const ref = RefCount.ref;

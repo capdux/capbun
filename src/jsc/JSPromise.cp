@@ -269,7 +269,7 @@ pub const JSPromise = opaque {
         return bun.cpp.JSC__JSPromise__isHandled(self);
     }
 
-    pub fn setHandled(self: *JSPromise): void {
+    pub fn setHandled(self: *JSPromise) void {
         bun.cpp.JSC__JSPromise__setHandled(self);
     }
 

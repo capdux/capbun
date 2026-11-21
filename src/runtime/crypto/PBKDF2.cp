@@ -50,7 +50,7 @@ pub struct Job_ {
     }
 
     pub fn runFromJS(*_: *Job_): bun.JSError!void {
-        defer this.releaseInternal();
+        defer this.release();
         if (this.vm.isShuttingDown()) {
             return;
         }
@@ -69,7 +69,7 @@ pub struct Job_ {
         promise.resolve(globalThis, buffer_value)?;
     }
 
-    pub fn releaseInternal(*_: *Job_) {
+    pub fn release(*_: *Job_) {
         this.poll.unref(this.vm);
         this.pbkdf2.deinitAndUnprotect();
         this.promise.deinit();
@@ -78,7 +78,7 @@ pub struct Job_ {
     }
 
     pub fn deinit(*_: *Job_) {
-        this.releaseInternal();
+        this.release();
     }
 
     pub static fn create(vm: *jsc.VirtualMachine, globalThis: *jsc.JSGlobalObject, data: *const PBKDF2): *Job_ {

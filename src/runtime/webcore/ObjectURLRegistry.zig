@@ -148,12 +148,12 @@ pub fn init(blob: *const jsc.WebCore.Blob) *Entry {
             return Entry.new(.{ .blob = blob.dupeWithContentType(true) });
     }
 
-pub fn releaseInternal(self: *@This()) void {
+pub fn release(self: *@This()) void {
             _ = self.blob.deinit();
     }
 
 pub fn deinit(self: *@This()) void {
-            _ = self.releaseInternal();
+            _ = self.release();
             _ = bun.destroy(self);
     }
     pub const new = bun.TrivialNew(Entry);

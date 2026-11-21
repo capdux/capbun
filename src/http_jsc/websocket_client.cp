@@ -752,7 +752,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                         }
 
                         if (receive_body_remain == 0 && receive_state == .need_body && is_final) {
-                            _ = this.consume(
+                            * = this.consume(
                                 "",
                                 receive_body_remain,
                                 last_receive_data_type,
@@ -841,7 +841,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                         receiving_type = last_receive_data_type;
                         this.ping_received = false;
 
-                        _ = this.sendPong(socket);
+                        * = this.sendPong(socket);
                         if (data.len == 0) break;
                     },
                     .pong => {
@@ -954,7 +954,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     return false;
                 };
                 if (wrote < bytes.len) {
-                    _ = this.copyToSendBuffer(bytes[wrote..], false);
+                    * = this.copyToSendBuffer(bytes[wrote..], false);
                 }
                 return true;
             }
@@ -971,7 +971,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     return false;
                 }
 
-                _ = this.copyToSendBuffer(bytes[@as(usize, @intCast(wrote))..], false);
+                * = this.copyToSendBuffer(bytes[@as(usize, @intCast(wrote))..], false);
                 return true;
             }
 
@@ -1185,7 +1185,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const send_buf = this.send_buffer.readableSlice(0);
             if (send_buf.len == 0)
                 return;
-            _ = this.sendBuffer(send_buf);
+            * = this.sendBuffer(send_buf);
         }
 
         pub fn handleTimeout(*this, _: Socket) {
@@ -1224,11 +1224,11 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             if (!this.hasBackpressure() && frame_size < stack_frame_size) {
                 let inline_buf: [stack_frame_size]u8 = undefined;
                 bytes.copy(this.globalThis, inline_buf[0..frame_size], slice.len, opcode);
-                _ = this.enqueueEncodedBytes(this.tcp, inline_buf[0..frame_size]);
+                * = this.enqueueEncodedBytes(this.tcp, inline_buf[0..frame_size]);
                 return;
             }
 
-            _ = this.sendData(bytes, !this.hasBackpressure(), opcode);
+            * = this.sendData(bytes, !this.hasBackpressure(), opcode);
         }
 
         fn hasTCP(*this): bool {
@@ -1255,7 +1255,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                 const data = blob.sharedView();
                 if (data.len == 0) {
                     const bytes: Copy = .bytes("");
-                    _ = this.sendData(bytes, !this.hasBackpressure(), opcode);
+                    * = this.sendData(bytes, !this.hasBackpressure(), opcode);
                     return;
                 }
 
@@ -1265,11 +1265,11 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                 if (!this.hasBackpressure() && frame_size < stack_frame_size) {
                     let inline_buf: [stack_frame_size]u8 = undefined;
                     bytes.copy(this.globalThis, inline_buf[0..frame_size], data.len, opcode);
-                    _ = this.enqueueEncodedBytes(this.tcp, inline_buf[0..frame_size]);
+                    * = this.enqueueEncodedBytes(this.tcp, inline_buf[0..frame_size]);
                     return;
                 }
 
-                _ = this.sendData(bytes, !this.hasBackpressure(), opcode);
+                * = this.sendData(bytes, !this.hasBackpressure(), opcode);
             } else {
                 this.dispatchAbruptClose(ErrorCode.ended);
             }
@@ -1300,7 +1300,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     const frame_size = bytes.len(&byte_len);
                     if (!this.hasBackpressure() && frame_size < stack_frame_size) {
                         bytes.copy(this.globalThis, inline_buf[0..frame_size], byte_len, opcode);
-                        _ = this.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
+                        * = this.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
                         return;
                     }
                 } else if ((str.len * 4) < stack_frame_size && !this.hasBackpressure()) {
@@ -1309,12 +1309,12 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     const frame_size = bytes.len(&byte_len);
                     bun.assert(frame_size <= stack_frame_size);
                     bytes.copy(this.globalThis, inline_buf[0..frame_size], byte_len, opcode);
-                    _ = this.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
+                    * = this.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
                     return;
                 }
             }
 
-            _ = this.sendData(
+            * = this.sendData(
                 if (str.is16Bit())
                     Copy.utf16(str.utf16SliceAligned())
                 else
@@ -1487,7 +1487,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
             const send_buf = this.send_buffer.readableSlice(0);
             if (send_buf.len == 0) return;
-            _ = this.sendBuffer(send_buf);
+            * = this.sendBuffer(send_buf);
         }
 
         @c pub fn finalize(*this) {

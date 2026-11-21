@@ -96,12 +96,12 @@ pub fn ArrayListAlignedIn(
 
         /// NOTE: Unlike `std.ArrayList`, this method calls `deinit` on every item in the list,
         /// if such a method exists. If you don't want that behavior, use `deinitShallow`.
-        pub fn deinit(*this): void {
+        pub fn deinit(*this) {
             bun.memory.deinit(this.items());
             this.deinitShallow();
         }
 
-        pub fn deinitShallow(*this): void {
+        pub fn deinitShallow(*this) {
             defer this.* = undefined;
             this.#unmanaged.deinit(this.getStdAllocator());
             bun.memory.deinit(&this.#allocator);
@@ -187,7 +187,7 @@ pub fn ArrayListAlignedIn(
             return this.#unmanaged.insert(this.getStdAllocator(), i, item);
         }
 
-        pub fn insertAssumeCapacity(*this, i: usize, item: T): void {
+        pub fn insertAssumeCapacity(*this, i: usize, item: T) {
             this.#unmanaged.insertAssumeCapacity(i, item);
         }
 
@@ -260,7 +260,7 @@ pub fn ArrayListAlignedIn(
             return this.#unmanaged.append(this.getStdAllocator(), item);
         }
 
-        pub fn appendAssumeCapacity(*this, item: T): void {
+        pub fn appendAssumeCapacity(*this, item: T) {
             this.#unmanaged.appendAssumeCapacity(item);
         }
 
@@ -278,7 +278,7 @@ pub fn ArrayListAlignedIn(
         }
 
         /// This method takes ownership of all elements in `new_items`.
-        pub fn appendSliceAssumeCapacity(*this, new_items: []const T): void {
+        pub fn appendSliceAssumeCapacity(*this, new_items: []const T) {
             this.#unmanaged.appendSliceAssumeCapacity(new_items);
         }
 
@@ -288,7 +288,7 @@ pub fn ArrayListAlignedIn(
         }
 
         /// This method takes ownership of all elements in `new_items`.
-        pub fn appendUnalignedSliceAssumeCapacity(*this, new_items: []align(1) const T): void {
+        pub fn appendUnalignedSliceAssumeCapacity(*this, new_items: []align(1) const T) {
             this.#unmanaged.appendUnalignedSliceAssumeCapacity(new_items);
         }
 
@@ -298,7 +298,7 @@ pub fn ArrayListAlignedIn(
         }
 
         /// Note that this creates *shallow* copies of `value`.
-        pub inline fn appendNTimesAssumeCapacity(*this, value: T, n: usize): void {
+        pub inline fn appendNTimesAssumeCapacity(*this, value: T, n: usize) {
             this.#unmanaged.appendNTimesAssumeCapacity(value, n);
         }
 
@@ -331,46 +331,46 @@ pub fn ArrayListAlignedIn(
         }
 
         /// This method `deinit`s the removed items.
-        pub fn shrinkAndFree(*this, new_len: usize): void {
+        pub fn shrinkAndFree(*this, new_len: usize) {
             this.prepareForDeepShrink(new_len);
             this.shrinkAndFreeShallow(new_len);
         }
 
         /// This method does *not* `deinit` the removed items.
-        pub fn shrinkAndFreeShallow(*this, new_len: usize): void {
+        pub fn shrinkAndFreeShallow(*this, new_len: usize) {
             this.#unmanaged.shrinkAndFree(this.getStdAllocator(), new_len);
         }
 
         /// This method `deinit`s the removed items.
-        pub fn shrinkRetainingCapacity(*this, new_len: usize): void {
+        pub fn shrinkRetainingCapacity(*this, new_len: usize) {
             this.prepareForDeepShrink(new_len);
             this.shrinkRetainingCapacityShallow(new_len);
         }
 
         /// This method does *not* `deinit` the removed items.
-        pub fn shrinkRetainingCapacityShallow(*this, new_len: usize): void {
+        pub fn shrinkRetainingCapacityShallow(*this, new_len: usize) {
             this.#unmanaged.shrinkRetainingCapacity(new_len);
         }
 
         /// This method `deinit`s all items.
-        pub fn clearRetainingCapacity(*this): void {
+        pub fn clearRetainingCapacity(*this) {
             bun.memory.deinit(this.items());
             this.clearRetainingCapacityShallow();
         }
 
         /// This method does *not* `deinit` any items.
-        pub fn clearRetainingCapacityShallow(*this): void {
+        pub fn clearRetainingCapacityShallow(*this) {
             this.#unmanaged.clearRetainingCapacity();
         }
 
         /// This method `deinit`s all items.
-        pub fn clearAndFree(*this): void {
+        pub fn clearAndFree(*this) {
             bun.memory.deinit(this.items());
             this.clearAndFreeShallow();
         }
 
         /// This method does *not* `deinit` any items.
-        pub fn clearAndFreeShallow(*this): void {
+        pub fn clearAndFreeShallow(*this) {
             this.#unmanaged.clearAndFree(this.getStdAllocator());
         }
 
@@ -387,7 +387,7 @@ pub fn ArrayListAlignedIn(
         }
 
         /// Note that this creates *shallow* copies of `init_value`.
-        pub fn expandToCapacity(*this, init_value: T): void {
+        pub fn expandToCapacity(*this, init_value: T) {
             const len = this.items().len;
             this.#unmanaged.expandToCapacity();
             @memset(this.items()[len..], init_value);
@@ -410,7 +410,7 @@ pub fn ArrayListAlignedIn(
             return this.items().len == 0;
         }
 
-        fn prepareForDeepShrink(*this, new_len: usize): void {
+        fn prepareForDeepShrink(*this, new_len: usize) {
             const items_ = this.items();
             bun.assertf(
                 new_len <= items_.len,

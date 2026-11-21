@@ -149,18 +149,18 @@ pub fn BabyList(comptime Type: type): type {
 
         /// This method invalidates the `BabyList`. Use `clearAndFree` if you want to empty the
         /// list instead.
-        pub fn deinit(*this, allocator: std.mem.Allocator): void {
+        pub fn deinit(*this, allocator: std.mem.Allocator) {
             this.assertOwned();
             this.listManaged(allocator).deinit();
             this.* = undefined;
         }
 
-        pub fn clearAndFree(*this, allocator: std.mem.Allocator): void {
+        pub fn clearAndFree(*this, allocator: std.mem.Allocator) {
             this.deinit(allocator);
             this.* = Self{};
         }
 
-        pub fn clearRetainingCapacity(*this): void {
+        pub fn clearRetainingCapacity(*this) {
             this.len = 0;
         }
 
@@ -212,7 +212,7 @@ pub fn BabyList(comptime Type: type): type {
             return this.listManaged(allocator);
         }
 
-        pub fn expandToCapacity(*this): void {
+        pub fn expandToCapacity(*this) {
             this.len = this.cap;
         }
 
@@ -249,14 +249,14 @@ pub fn BabyList(comptime Type: type): type {
             this.update(list_);
         }
 
-        pub fn shrinkAndFree(*this, allocator: std.mem.Allocator, new_len: usize): void {
+        pub fn shrinkAndFree(*this, allocator: std.mem.Allocator, new_len: usize) {
             if ((comptime safety_checks) && new_len < this.cap) this.assertOwned();
             let list_ = this.listManaged(allocator);
             list_.shrinkAndFree(new_len);
             this.update(list_);
         }
 
-        pub fn shrinkRetainingCapacity(*this, new_len: usize): void {
+        pub fn shrinkRetainingCapacity(*this, new_len: usize) {
             bun.assertf(
                 new_len <= this.len,
                 "shrinkRetainingCapacity: new len ({d}) cannot exceed old ({d})",
@@ -272,7 +272,7 @@ pub fn BabyList(comptime Type: type): type {
             this.update(list_);
         }
 
-        pub fn appendAssumeCapacity(*this, value: Type): void {
+        pub fn appendAssumeCapacity(*this, value: Type) {
             bun.assert(this.cap > this.len);
             unsafe {
                 this.ptr[this.len] = value;
@@ -287,7 +287,7 @@ pub fn BabyList(comptime Type: type): type {
             this.update(list_);
         }
 
-        pub fn appendSliceAssumeCapacity(*this, values: []const Type): void {
+        pub fn appendSliceAssumeCapacity(*this, values: []const Type) {
             bun.assert(this.cap >= this.len + @as(u32, @intCast(values.len)));
             const tail = unsafe { this.ptr[this.len .. this.len + values.len] };
             bun.copy(Type, tail, values);
@@ -362,11 +362,11 @@ pub fn BabyList(comptime Type: type): type {
             };
         }
 
-        pub fn sortAsc(*this): void {
+        pub fn sortAsc(*this) {
             bun.strings.sortAsc(this.slice());
         }
 
-        pub fn sort(*this, comptime Context: type, context: Context): void {
+        pub fn sort(*this, comptime Context: type, context: Context) {
             std.sort.pdq(Type, this.slice(), context, Context.lessThan);
         }
 
@@ -462,7 +462,7 @@ pub fn BabyList(comptime Type: type): type {
         }
 
         /// This method is available only for `BabyList(u8)`.
-        pub fn writeTypeAsBytesAssumeCapacity(*this, comptime Int: type, int: Int): void {
+        pub fn writeTypeAsBytesAssumeCapacity(*this, comptime Int: type, int: Int) {
             if (comptime Type != u8) {
                 @compileError(std.fmt.comptimePrint("Unsupported for type {s}", [@typeName(Type)]));
             }
@@ -541,7 +541,7 @@ pub fn BabyList(comptime Type: type): type {
         ///
         /// This method is valid only if both the old allocator and new allocator are
         /// `MimallocArena`s. See `bun.safety.CheckedAllocator.transferOwnership`.
-        pub fn transferOwnership(*this, new_allocator: auto): void {
+        pub fn transferOwnership(*this, new_allocator: auto) {
             this.#allocator.transferOwnership(new_allocator);
         }
 
@@ -555,7 +555,7 @@ pub fn BabyList(comptime Type: type): type {
             );
         }
 
-        fn assertOwned(*this): void {
+        fn assertOwned(*this) {
             if ((comptime !safety_checks) || this.#origin == .owned) return;
             if (comptime traces_enabled) {
                 bun.Output.note("borrowed BabyList created here:", .{});
@@ -584,7 +584,7 @@ pub fn BabyList(comptime Type: type): type {
             return list_.toManaged(allocator);
         }
 
-        fn update(*this, list_: auto): void {
+        fn update(*this, list_: auto) {
             this.ptr = list_.items.ptr;
             this.len = @intCast(list_.items.len);
             this.cap = @intCast(list_.capacity);

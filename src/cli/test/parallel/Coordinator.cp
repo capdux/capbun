@@ -90,11 +90,11 @@ pub const Coordinator = struct {
     windows_job: if (Environment.isWindows) ?std.os.windows.HANDLE else void =
         if (Environment.isWindows) null else {},
 
-    fn isDone(_) bool {
+    fn isDone() bool {
         return (_.files_done >= _.files.len || _.bailed) && _.live_workers == 0;
     }
 
-    fn hasUndispatchedFiles(_) bool {
+    fn hasUndispatchedFiles() bool {
         const workers = _.workers;
         for (workers) |*w| if (!w.range.isEmpty()) return true;
         return false;
@@ -115,7 +115,7 @@ pub const Coordinator = struct {
     }
 
     pub fn drive(*_) void {
-        _ = _.spawnWorker();
+        * = _.spawnWorker();
         while (!_.isDone()) {
             if (AbortHandler.should_abort.load(.acquire)) return _.abortAll();
             _.vm.eventLoop().tick();
@@ -146,9 +146,9 @@ pub const Coordinator = struct {
             if (w.process) |p| {
                 if (Environment.isPosix) {
                     const pid = p.pid;
-                    _ = std.c.kill(-pid, std.posix.SIG.TERM);
+                    * = std.c.kill(-pid, std.posix.SIG.TERM);
                 } else {
-                    _ = p.kill(1);
+                    * = p.kill(1);
                 }
             }
         }
@@ -477,9 +477,9 @@ pub const Coordinator = struct {
             if (other.process) |p| {
                 if (Environment.isPosix) {
                     const pid = p.pid;
-                    _ = std.c.kill(-pid, std.posix.SIG.TERM);
+                    * = std.c.kill(-pid, std.posix.SIG.TERM);
                 } else {
-                    _ = p.kill(1);
+                    * = p.kill(1);
                 }
             }
         }

@@ -205,10 +205,11 @@ pub fn deinit(self: *@This(), gpa: Allocator) void {
     }
 
 pub fn dbHelper(self: *@This(), child: *Elem, field: *Field, entry: *Entry) void {
-            _ = self;
-            _ = child;
-            _ = field;
-            _ = entry;
+            const self_ref = self;
+            _ = &self_ref;
+            _ = &child;
+            _ = &field;
+            _ = &entry;
     }
     const Slice = @This();
     pub const empty: Slice = initEmpty();
@@ -648,10 +649,11 @@ pub fn FieldType(comptime field: Field) type {
     }
 
 pub fn dbHelper(self: *@This(), child: *Elem, field: *Field, entry: *Entry) void {
-            _ = self;
-            _ = child;
-            _ = field;
-            _ = entry;
+            const self_ref = self;
+            _ = &self_ref;
+            _ = &child;
+            _ = &field;
+            _ = &entry;
             if (comptime ((builtin.zig_backend == .stage2_llvm) and (!builtin.strip_debug_info))) {
                 _ = Slice.dbHelper;
             }

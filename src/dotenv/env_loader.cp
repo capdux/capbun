@@ -478,7 +478,7 @@
                                 };
                                 const expr_data = js_ast.Expr.Data{ .e_string = &e_strings[0] };
 
-                                _ = try to_string.getOrPutValue(
+                                * = try to_string.getOrPutValue(
                                     key_str,
                                     .init(.{
                                         .can_be_removed_if_unused = true,
@@ -500,7 +500,7 @@
 
                                     const expr_data = js_ast.Expr.Data{ .e_string = &e_strings[0] };
 
-                                    _ = try to_string.getOrPutValue(
+                                    * = try to_string.getOrPutValue(
                                         framework_defaults.keys[key_i],
                                         .init(.{
                                             .can_be_removed_if_unused = true,
@@ -527,7 +527,7 @@
 
                             const expr_data = js_ast.Expr.Data{ .e_string = &e_strings[0] };
 
-                            _ = try to_string.getOrPutValue(
+                            * = try to_string.getOrPutValue(
                                 key_str,
                                 .init(.{
                                     .can_be_removed_if_unused = true,
@@ -545,7 +545,7 @@
                 const value = framework_defaults.values[i];
 
                 if (!to_string.contains(key) and !to_json.contains(key)) {
-                    _ = try to_json.getOrPutValue(key, value);
+                    * = try to_json.getOrPutValue(key, value);
                 }
             }
         }

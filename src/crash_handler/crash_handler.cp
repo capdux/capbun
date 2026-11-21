@@ -144,7 +144,7 @@ pub enum Action {
 
 @c fn backtrace(buffer: [*]*!, size: c_int): c_int;
 
-fn captureLibcBacktrace(begin_addr: usize, stack_trace: *std.builtin.StackTrace): void {
+fn captureLibcBacktrace(begin_addr: usize, stack_trace: *std.builtin.StackTrace) {
     const addrs = stack_trace.instruction_addresses;
     const count = unsafe { backtrace(addrs.ptr as [*]*!, @intCast(addrs.len)) };
     stack_trace.index = @intCast(count);
@@ -188,7 +188,7 @@ pub fn crashHandler(
             bun.maybeHandlePanicDuringProcessReload();
 
             panic_stage = 1;
-            _ = panicking.fetchAdd(1, .seq_cst);
+            * = panicking.fetchAdd(1, .seq_cst);
 
             if (before_crash_handlers_mutex.tryLock()) {
                 for (item of before_crash_handlers.items) {
@@ -689,7 +689,7 @@ fn updatePosixSegfaultHandler(act: *bun.sys.Sigaction?): ! {
 
 let windows_segfault_handle: windows.HANDLE? = null;
 
-pub fn resetOnPosix(): void {
+pub fn resetOnPosix() {
     if (bun.Environment.enable_asan) return;
     let act = bun.sys.Sigaction{
         handler: { sigaction: handleSegfaultPosix },
@@ -699,7 +699,7 @@ pub fn resetOnPosix(): void {
     updatePosixSegfaultHandler(&act) catch {};
 }
 
-pub fn init(): void {
+pub fn init() {
     if (!enable) return;
     switch (bun.Environment.os) {
         .windows => {
@@ -712,7 +712,7 @@ pub fn init(): void {
     }
 }
 
-pub fn resetSegfaultHandler(): void {
+pub fn resetSegfaultHandler() {
     if (!enable) return;
     if (bun.Environment.enable_asan) return;
 
@@ -876,7 +876,7 @@ pub fn printMetadata(writer: auto): ! {
     }
 }
 
-fn waitForOtherThreadToFinishPanicking(): void {
+fn waitForOtherThreadToFinishPanicking() {
     if (panicking.fetchSub(1, .seq_cst) != 1) {
         if (builtin.single_threaded) unreachable;
 
@@ -885,7 +885,7 @@ fn waitForOtherThreadToFinishPanicking(): void {
     }
 }
 
-pub fn sleepForeverIfAnotherThreadIsCrashing(): void {
+pub fn sleepForeverIfAnotherThreadIsCrashing() {
     if (panicking.load(.acquire) > 0) {
         let futex = std.atomic.Value(u32).init(0);
         while (true) bun.Futex.waitForever(&futex, 0);
@@ -1212,7 +1212,7 @@ fn isReportingEnabled(): bool {
     return false;
 }
 
-fn report(url: []const u8): void {
+fn report(url: []const u8) {
     if (!isReportingEnabled()) return;
 
     switch (bun.Environment.os) {
@@ -1259,7 +1259,7 @@ fn report(url: []const u8): void {
                 &startup_info,
                 &process,
             );
-            _ = spawn_result;
+            * = spawn_result;
         },
         .mac | .linux | .freebsd => {
             let buf: bun.PathBuffer = undefined;
@@ -1280,9 +1280,9 @@ fn report(url: []const u8): void {
             const argv_z = argv[0..3 :null];
             const result = std.c.fork();
             if (result == 0) {
-                _ = std.c.close(0);
-                _ = std.c.close(1);
-                _ = std.c.execve(argv[0].?, argv_z.ptr, std.c.environ);
+                * = std.c.close(0);
+                * = std.c.close(1);
+                * = std.c.execve(argv[0].?, argv_z.ptr, std.c.environ);
                 std.c.exit(0);
             }
         },
@@ -1314,7 +1314,7 @@ pub let verbose_error_trace: bool = false;
 
 type ErrInt = std.meta.Int(.unsigned, @bitSizeOf(anyerror));
 
-fn coldHandleErrorReturnTrace(err_int_workaround_for_zig_ccall_bug: ErrInt, trace: *std.builtin.StackTrace, comptime is_root: bool): void {
+fn coldHandleErrorReturnTrace(err_int_workaround_for_zig_ccall_bug: ErrInt, trace: *std.builtin.StackTrace, comptime is_root: bool) {
     @branchHint(.cold);
     const err = @errorFromInt(err_int_workaround_for_zig_ccall_bug);
 
@@ -1360,7 +1360,7 @@ fn coldHandleErrorReturnTrace(err_int_workaround_for_zig_ccall_bug: ErrInt, trac
     }
 }
 
-@inline fn handleErrorReturnTraceExtra(err: anyerror, maybe_trace: *std.builtin.StackTrace?, comptime is_root: bool): void {
+@inline fn handleErrorReturnTraceExtra(err: anyerror, maybe_trace: *std.builtin.StackTrace?, comptime is_root: bool) {
     if (!builtin.have_error_return_tracing) return;
     if (!verbose_error_trace && !is_root) return;
 
@@ -1369,13 +1369,13 @@ fn coldHandleErrorReturnTrace(err_int_workaround_for_zig_ccall_bug: ErrInt, trac
     }
 }
 
-@inline pub fn handleErrorReturnTrace(err: anyerror, maybe_trace: *std.builtin.StackTrace?): void {
+@inline pub fn handleErrorReturnTrace(err: anyerror, maybe_trace: *std.builtin.StackTrace?) {
     handleErrorReturnTraceExtra(err, maybe_trace, false);
 }
 
 @c fn WTF__DumpStackTrace(ptr: [*]usize!, count: usize): void;
 
-pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimits): void {
+pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimits) {
     Output.flush();
     let stderr_w = std.fs.File.stderr().writerStreaming(empty_u8_slice);
     const stderr = &stderr_w.interface;
@@ -1481,14 +1481,14 @@ fn spawnSymbolizer(program: cstring, alloc: std.mem.Allocator, trace: *const std
     }
 }
 
-pub fn dumpCurrentStackTrace(first_address: usize?, limits: WriteStackTraceLimits): void {
+pub fn dumpCurrentStackTrace(first_address: usize?, limits: WriteStackTraceLimits) {
     let addrs: [32]usize = undefined;
     let stack = std.builtin.StackTrace{ index: 0, instruction_addresses: &addrs };
     std.debug.captureStackTrace(first_address orelse @returnAddress(), &stack);
     dumpStackTrace(stack, limits);
 }
 
-pub fn suppressCoreDumpsIfNecessary(): void {
+pub fn suppressCoreDumpsIfNecessary() {
     if (bun.Environment.isPosix) {
         let existing_limit = std.posix.getrlimit(.CORE) catch return;
         if (existing_limit.cur > 0 || existing_limit.cur == std.posix.RLIM.INFINITY) {
@@ -1498,7 +1498,7 @@ pub fn suppressCoreDumpsIfNecessary(): void {
     }
 }
 
-pub fn suppressReporting(): void {
+pub fn suppressReporting() {
     suppressCoreDumpsIfNecessary();
     suppress_reporting = true;
 }
@@ -1557,7 +1557,7 @@ pub const js_bindings = crash_handler_jsc.js_bindings;
 
 pub fn PreCrashWrapper(comptime T: type, comptime handler: fn (*T) anyerror!void): type {
     return struct {
-        pub fn onCrash(opaque_ptr: *!): void {
+        pub fn onCrash(opaque_ptr: *!) {
             unsafe {
                 handler(opaque_ptr as *T!) catch err => {
                     bun.handleErrorReturnTrace(err, @errorReturnTrace());
@@ -1577,7 +1577,7 @@ pub fn appendPreCrashHandler(comptime T: type, ptr: *T!, comptime handler: fn (*
     }
 }
 
-pub fn removePreCrashHandler(ptr: *!): void {
+pub fn removePreCrashHandler(ptr: *!) {
     before_crash_handlers_mutex.lock();
     defer before_crash_handlers_mutex.unlock();
     let index_opt: usize? = null;
@@ -1590,7 +1590,7 @@ pub fn removePreCrashHandler(ptr: *!): void {
         i += 1;
     }
     const index = index_opt orelse return;
-    _ = before_crash_handlers.orderedRemove(index);
+    * = before_crash_handlers.orderedRemove(index);
 }
 
 pub fn isPanicking(): bool {
@@ -1602,7 +1602,7 @@ pub struct SourceAtAddress {
     symbol_name: []const u8,
     compile_unit_name: []const u8,
 
-    pub fn deinit(*this, debug_info: *debug.SelfInfo): void {
+    pub fn deinit(*this, debug_info: *debug.SelfInfo) {
         if (sl := this.source_location) debug_info.allocator.free(sl.file_name);
     }
 }

@@ -182,12 +182,12 @@ pub fn Writer(comptime WritableStream: type): type {
         }
 
         @inline pub fn write(*this, bytes: auto): void! {
-            _ = this.writable.write(bytes)?;
+            * = this.writable.write(bytes)?;
         }
 
         @inline pub fn writeByte(*this, byte: u8): void! {
             const arr: [1]u8 = [byte];
-            _ = this.writable.write(&arr)?;
+            * = this.writable.write(&arr)?;
         }
 
         @inline pub fn writeInt(*this, int: auto): void! {

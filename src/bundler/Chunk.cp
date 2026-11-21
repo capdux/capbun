@@ -212,7 +212,7 @@ pub const ChunkCssImportOrder = struct {
     pub const Layers = CssImportOrderLayers;
     pub const CssImportOrderDebug = ChunkCssImportOrderDebug;
 
-    pub fn hash(hasher: auto): void {
+    pub fn hash(hasher: auto) {
         // TODO: conditions, condition_import_records
 
         bun.writeAnyToHasher(hasher, std.@"meta".activeTag(_.kind));

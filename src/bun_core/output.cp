@@ -315,7 +315,7 @@ pub struct Source {
     pub const Stdio = SourceStdio;
 }
 
-@c pub fn Bun__restoreWindowsStdio(): void {
+@c pub fn Bun__restoreWindowsStdio() {
     WindowsStdio.restore();
 }
 comptime {
@@ -337,20 +337,20 @@ struct WindowsStdio {
         inline for (i of 0..3) {
             if (m := win_console_mode[i]) {
                 unsafe {
-                    _ = c.SetConsoleMode(handles[i], m);
+                    * = c.SetConsoleMode(handles[i], m);
                 }
             }
         }
 
         if (win_console_output_codepage != 0) {
             unsafe {
-                _ = c.SetConsoleOutputCP(win_console_output_codepage);
+                * = c.SetConsoleOutputCP(win_console_output_codepage);
             }
         }
 
         if (win_console_codepage != 0) {
             unsafe {
-                _ = c.SetConsoleCP(win_console_codepage);
+                * = c.SetConsoleCP(win_console_codepage);
             }
         }
     }
@@ -375,10 +375,10 @@ struct WindowsStdio {
         const CP_UTF8 = 65001;
         unsafe {
             win_console_output_codepage = c.GetConsoleOutputCP();
-            _ = c.SetConsoleOutputCP(CP_UTF8);
+            * = c.SetConsoleOutputCP(CP_UTF8);
 
             win_console_codepage = c.GetConsoleCP();
-            _ = c.SetConsoleCP(CP_UTF8);
+            * = c.SetConsoleCP(CP_UTF8);
 
             let mode: WindowsStdio.w.DWORD = undefined;
             if (c.GetConsoleMode(stdin, &mode) != 0) {
@@ -389,13 +389,13 @@ struct WindowsStdio {
             if (c.GetConsoleMode(stdout, &mode) != 0) {
                 win_console_mode[1] = mode as u32;
                 bun_stdio_tty[1] = 1;
-                _ = c.SetConsoleMode(stdout, WindowsStdio.w.ENABLE_PROCESSED_OUTPUT | std.os.windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING | WindowsStdio.w.ENABLE_WRAP_AT_EOL_OUTPUT | mode);
+                * = c.SetConsoleMode(stdout, WindowsStdio.w.ENABLE_PROCESSED_OUTPUT | std.os.windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING | WindowsStdio.w.ENABLE_WRAP_AT_EOL_OUTPUT | mode);
             }
 
             if (c.GetConsoleMode(stderr, &mode) != 0) {
                 win_console_mode[2] = mode as u32;
                 bun_stdio_tty[2] = 1;
-                _ = c.SetConsoleMode(stderr, WindowsStdio.w.ENABLE_PROCESSED_OUTPUT | std.os.windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING | WindowsStdio.w.ENABLE_WRAP_AT_EOL_OUTPUT | mode);
+                * = c.SetConsoleMode(stderr, WindowsStdio.w.ENABLE_PROCESSED_OUTPUT | std.os.windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING | WindowsStdio.w.ENABLE_WRAP_AT_EOL_OUTPUT | mode);
             }
         }
     }
@@ -967,7 +967,7 @@ fn ScopedLogger(comptime tagname: []const u8, comptime visibility: Visibility): 
 
         let is_visible_once = std.once(evaluateIsVisible);
 
-        fn evaluateIsVisible(): void {
+        fn evaluateIsVisible() void {
             scopedEvaluateIsVisible(tagname, &really_disable);
         }
 
@@ -976,7 +976,7 @@ fn ScopedLogger(comptime tagname: []const u8, comptime visibility: Visibility): 
             return !really_disable.load(.monotonic);
         }
 
-        pub fn log(comptime fmt: string, args: anytype): void {
+        pub fn log(comptime fmt: string, args: anytype) void {
             scopedLogImpl(tagname, &really_disable, &out_set, &out, &buffered_writer, &buffer, &lock, isVisible, fmt, args);
         }
     };

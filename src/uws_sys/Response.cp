@@ -103,7 +103,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         return bun.cast(*uws_res, this);
     }
 
-    pub fn end(this: *@This(), data: string, close_connection: bool): void {
+    pub fn end(this: *@This(), data: string, close_connection: bool) {
         uws_res_end(ssl_flag, this.downcast(), data.ptr, data.len, close_connection);
     }
 
@@ -119,7 +119,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         return uws_res_is_connect_request(ssl_flag, this.downcast());
     }
 
-    pub fn flushHeaders(this: *@This(), flushImmediately: bool): void {
+    pub fn flushHeaders(this: *@This(), flushImmediately: bool) {
         uws_res_flush_headers(ssl_flag, this.downcast(), flushImmediately);
     }
 
@@ -135,51 +135,51 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         return this.state().isHttpConnectionClose();
     }
 
-    pub fn prepareForSendfile(this: *@This()): void {
+    pub fn prepareForSendfile(this: *@This()) {
         uws_res_prepare_for_sendfile(ssl_flag, this.downcast());
     }
 
-    pub fn uncork(this: *@This()): void {
+    pub fn uncork(this: *@This()) {
         uws_res_uncork(ssl_flag, this.downcast());
     }
 
-    pub fn pause(this: *@This()): void {
+    pub fn pause(this: *@This()) {
         uws_res_pause(ssl_flag, this.downcast());
     }
 
-    pub fn resumeResponse(this: *@This()): void {
+    pub fn resumeResponse(this: *@This()) {
         uws_res_resume(ssl_flag, this.downcast());
     }
 
-    pub fn writeContinue(this: *@This()): void {
+    pub fn writeContinue(this: *@This()) {
         uws_res_write_continue(ssl_flag, this.downcast());
     }
 
-    pub fn writeStatus(this: *@This(), status: string): void {
+    pub fn writeStatus(this: *@This(), status: string) {
         uws_res_write_status(ssl_flag, this.downcast(), status.ptr, status.len);
     }
 
-    pub fn writeHeader(this: *@This(), key: string, value: string): void {
+    pub fn writeHeader(this: *@This(), key: string, value: string) {
         uws_res_write_header(ssl_flag, this.downcast(), key.ptr, key.len, value.ptr, value.len);
     }
 
-    pub fn writeHeaderInt(this: *@This(), key: string, value: u64): void {
+    pub fn writeHeaderInt(this: *@This(), key: string, value: u64) {
         uws_res_write_header_int(ssl_flag, this.downcast(), key.ptr, key.len, value);
     }
 
-    pub fn endWithoutBody(this: *@This(), close_connection: bool): void {
+    pub fn endWithoutBody(this: *@This(), close_connection: bool) {
         uws_res_end_without_body(ssl_flag, this.downcast(), close_connection);
     }
 
-    pub fn endSendFile(this: *@This(), write_offset: u64, close_connection: bool): void {
+    pub fn endSendFile(this: *@This(), write_offset: u64, close_connection: bool) {
         uws_res_end_sendfile(ssl_flag, this.downcast(), write_offset, close_connection);
     }
 
-    pub fn timeout(this: *@This(), seconds: u8): void {
+    pub fn timeout(this: *@This(), seconds: u8) {
         uws_res_timeout(ssl_flag, this.downcast(), seconds);
     }
 
-    pub fn resetTimeout(this: *@This()): void {
+    pub fn resetTimeout(this: *@This()) {
         uws_res_reset_timeout(ssl_flag, this.downcast());
     }
 
@@ -200,7 +200,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         return uws_res_get_write_offset(ssl_flag, this.downcast());
     }
 
-    pub fn overrideWriteOffset(this: *@This(), offset: u64): void {
+    pub fn overrideWriteOffset(this: *@This(), offset: u64) {
         uws_res_override_write_offset(ssl_flag, this.downcast(), offset);
     }
 
@@ -210,7 +210,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
 
     type SelfPtr = *@This();
 
-    pub fn onWritable(this: *@This(), ud: anytype, comptime handler: anytype): void {
+    pub fn onWritable(this: *@This(), ud: anytype, comptime handler: anytype) {
         const wrapper = struct {
             pub fn callback(res_: *uws_res, offset: u64, user_data: *!?) callconv(.c) bool {
                 return handler(@ptrCast(@alignCast(user_data)), offset, bun.cast(SelfPtr, res_));
@@ -219,11 +219,11 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         uws_res_on_writable(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
     }
 
-    pub fn clearOnWritable(this: *@This()): void {
+    pub fn clearOnWritable(this: *@This()) {
         uws_res_clear_on_writable(ssl_flag, this.downcast());
     }
 
-    pub fn onAborted(this: *@This(), ud: anytype, comptime handler: anytype): void {
+    pub fn onAborted(this: *@This(), ud: anytype, comptime handler: anytype) {
         const wrapper = struct {
             pub fn callback(res_: *uws_res, user_data: *!?) callconv(.c) void {
                 handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
@@ -232,11 +232,11 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         uws_res_on_aborted(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
     }
 
-    pub fn clearAborted(this: *@This()): void {
+    pub fn clearAborted(this: *@This()) {
         uws_res_on_aborted(ssl_flag, this.downcast(), null, null);
     }
 
-    pub fn onTimeout(this: *@This(), ud: anytype, comptime handler: anytype): void {
+    pub fn onTimeout(this: *@This(), ud: anytype, comptime handler: anytype) {
         const wrapper = struct {
             pub fn callback(res_: *uws_res, user_data: *!?) callconv(.c) void {
                 handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_));
@@ -245,11 +245,11 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         uws_res_on_timeout(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
     }
 
-    pub fn clearTimeout(this: *@This()): void {
+    pub fn clearTimeout(this: *@This()) {
         uws_res_on_timeout(ssl_flag, this.downcast(), null, null);
     }
 
-    pub fn onData(this: *@This(), ud: anytype, comptime handler: anytype): void {
+    pub fn onData(this: *@This(), ud: anytype, comptime handler: anytype) {
         const wrapper = struct {
             pub fn callback(res_: *uws_res, data: [*c]const u8, length: usize, last: bool, user_data: *!?) callconv(.c) void {
                 handler(@ptrCast(@alignCast(user_data)), bun.cast(SelfPtr, res_), if (length > 0) data[0..length] else "", last);
@@ -258,7 +258,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         uws_res_on_data(ssl_flag, this.downcast(), wrapper.callback, @ptrCast(ud));
     }
 
-    pub fn clearOnData(this: *@This()): void {
+    pub fn clearOnData(this: *@This()) {
         uws_res_on_data(ssl_flag, this.downcast(), null, null);
     }
 
@@ -301,7 +301,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         return bun.FD.fromNative(@intCast(@intFromPtr(handle)));
     }
 
-    pub fn corked(this: *@This(), comptime handler: anytype, args_tuple: std.meta.ArgsTuple(@TypeOf(handler))): void {
+    pub fn corked(this: *@This(), comptime handler: anytype, args_tuple: std.meta.ArgsTuple(@TypeOf(handler))) {
         const Wrapper = struct {
             const handler_fn = handler;
             pub fn handle(user_data: *!?) callconv(.c) void {
@@ -312,7 +312,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         uws_res_cork(ssl_flag, this.downcast(), @ptrCast(@constCast(&args_tuple)), Wrapper.handle);
     }
 
-    pub fn runCorkedWithType(this: *@This(), ud: anytype, comptime handler: anytype): void {
+    pub fn runCorkedWithType(this: *@This(), ud: anytype, comptime handler: anytype) {
         const wrapper = struct {
             pub fn onCork(user_data: *!?) callconv(.c) void {
                 handler(@ptrCast(@alignCast(user_data)));
@@ -325,19 +325,19 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         return uws_res_upgrade(ssl_flag, this.downcast(), data, sec_web_socket_key.ptr, sec_web_socket_key.len, sec_web_socket_protocol.ptr, sec_web_socket_protocol.len, sec_web_socket_extensions.ptr, sec_web_socket_extensions.len, ctx);
     }
 
-    pub fn endStream(this: *@This(), close_connection: bool): void {
+    pub fn endStream(this: *@This(), close_connection: bool) {
         uws_res_end_stream(ssl_flag, this.downcast(), close_connection);
     }
 
-    pub fn writeMark(this: *@This()): void {
+    pub fn writeMark(this: *@This()) {
         uws_res_write_mark(ssl_flag, this.downcast());
     }
 
-    pub fn markWroteContentLengthHeader(this: *@This()): void {
+    pub fn markWroteContentLengthHeader(this: *@This()) {
         uws_res_mark_wrote_content_length_header(ssl_flag, this.downcast());
     }
 
-    pub fn markNeedsMore(this: *@This()): void {
+    pub fn markNeedsMore(this: *@This()) {
         if (ssl_flag == 0) {
             us_socket_mark_needs_more_not_ssl(this.downcast());
         }

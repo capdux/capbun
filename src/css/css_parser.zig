@@ -2577,6 +2577,7 @@ pub fn consumeChar(self: *Tokenizer) u32 {
             const c = self.nextChar();
             const len_utf8 = Tokenizer.lenUtf8(c);
             self.position = (self.position + len_utf8);
+            self.current_line_start_position = (self.current_line_start_position +% (len_utf8 - Tokenizer.lenUtf16(c)));
             return c;
     }
 
@@ -2707,6 +2708,7 @@ pub fn consumeContinuationByte(self: *Tokenizer) void {
             if (bun.Environment.allow_assert) {
                 _ = std.debug.assert(((self.nextByteUnchecked() & 192) == 128));
             }
+            self.current_line_start_position = (self.current_line_start_position +% 1);
             self.position = (self.position + 1);
     }
 
@@ -2714,6 +2716,7 @@ pub fn consume4byteIntro(self: *Tokenizer) void {
             if (bun.Environment.allow_assert) {
                 _ = std.debug.assert(((self.nextByteUnchecked() & 240) == 240));
             }
+            self.current_line_start_position = (self.current_line_start_position -% 1);
             self.position = (self.position + 1);
     }
 
@@ -2764,8 +2767,10 @@ pub fn consumeKnownByte(self: *Tokenizer, byte: u8) void {
             }
             self.position = (self.position + 1);
             if (((byte & 240) == 240)) {
+                self.current_line_start_position = (self.current_line_start_position -% 1);
             } else {
                 if (((byte & 192) == 128)) {
+                    self.current_line_start_position = (self.current_line_start_position +% 1);
                 }
             }
     }
@@ -5719,7 +5724,7 @@ return .{ .err = e };
     pub const RuleBodyItemParser = struct {
     
     pub fn parseQualified(parser: *This) bool {
-                _ = parser;
+                _ = &parser;
                 return true;
         }
     
@@ -6012,7 +6017,7 @@ pub fn debugLayerRuleSanityCheck(self: *const @This()) void {
                 return;
             }
             const layer_names_field_len = self.layer_names.len;
-            _ = layer_names_field_len;
+            _ = &layer_names_field_len;
             var actual_layer_rules_len: usize = 0;
             _ = &actual_layer_rules_len;
             for (self.rules.v.items) |*rule| {
@@ -6052,7 +6057,7 @@ return false;
     }
 
 pub fn newFromTailwindImports(allocator: Allocator, options: ParserOptions, imports_from_tailwind: CssRuleList(AtRule)) @This() {
-            _ = allocator;
+            _ = &allocator;
             if (comptime (AtRule != BundlerAtRule)) {
                 _ = @compileError("Expected BundlerAtRule for this function.");
             }

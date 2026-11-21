@@ -203,7 +203,7 @@ pub struct UDPSocketConfig {
             .flags = parsed_flags,
         };
 
-        errdefer config.releaseInternal();
+        errdefer config.release();
 
         if (socket := try options.getTruthy(globalThis, "socket")) {
             if (!socket.isObject()) {
@@ -266,7 +266,7 @@ pub struct UDPSocketConfig {
         return config;
     }
 
-    pub fn releaseInternal(*_) {
+    pub fn release(*_) {
         this.hostname.deref();
         if (*val := this.connect) {
             val.address.deref();
@@ -274,7 +274,7 @@ pub struct UDPSocketConfig {
     }
 
     pub fn deinit(*_) {
-        this.releaseInternal();
+        this.release();
     }
 }
 
@@ -832,7 +832,7 @@ export class UDPSocket {
 
         let previous_config = this.config;
         this.config = config;
-        previous_config.releaseInternal();
+        previous_config.release();
 
         return JSValue.js_undefined;
     }
@@ -887,19 +887,19 @@ export class UDPSocket {
     pub fn finalize(*_) {
         log("Finalize {*}", .{this});
         this.this_value.finalize();
-        this.releaseInternal();
+        this.release();
     }
 
-    pub fn releaseInternal(*_) {
+    pub fn release(*_) {
         bun.assert(this.closed or this.vm.isShuttingDown());
         this.poll_ref.disable();
-        this.config.releaseInternal();
+        this.config.release();
         this.this_value.deinit();
         bun.destroy(this);
     }
 
     pub fn deinit(*_) {
-        this.releaseInternal();
+        this.release();
     }
 
     pub static fn jsConnect(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {

@@ -85,13 +85,13 @@ pub fn getLastModified(self: *S3Stat, globalObject: *jsc.JSGlobalObject) jsc.JSV
             return jsc.JSValue.fromDateNumber(globalObject, self.lastModified);
     }
 
-pub fn releaseInternal(self: *S3Stat) void {
+pub fn release(self: *S3Stat) void {
             _ = self.etag.deref();
             _ = self.contentType.deref();
     }
 
 pub fn finalize(self: *S3Stat) void {
-            _ = self.releaseInternal();
+            _ = self.release();
             _ = bun.destroy(self);
     }
     const log = bun.Output.scoped(.S3Stat, .visible);

@@ -105,7 +105,7 @@ fn MultiArrayListSlice(
             }
         }
 
-        pub fn set(*this, index: usize, elem: T): void {
+        pub fn set(*this, index: usize, elem: T) {
             const e = switch (@typeInfo(T)) {
                 .@"struct" => elem,
                 .@"union" => Elem.fromT(elem),
@@ -143,7 +143,7 @@ fn MultiArrayListSlice(
             }
         }
 
-        pub fn deinit(*this, gpa: Allocator): void {
+        pub fn deinit(*this, gpa: Allocator) {
             let other = this.toMultiArrayList();
             other.deinit(gpa);
             this.* = undefined;
@@ -151,11 +151,12 @@ fn MultiArrayListSlice(
 
         /// This function is used in the debugger pretty formatters in tools/ to fetch the
         /// child field order and entry type to facilitate fancy debug printing for this type.
-        pub fn dbHelper(*this, child: *Elem, field: *Field, entry: *Entry): void {
-            _ = this;
-            _ = child;
-            _ = field;
-            _ = entry;
+        pub fn dbHelper(*_, child: *Elem, field: *Field, entry: *Entry) {
+            const self_ref = _;
+            * = self_ref;
+            * = child;
+            * = field;
+            * = entry;
         }
     };
 }
@@ -170,7 +171,7 @@ fn MultiArrayListSortContext(
         sub_ctx: Ctx;
         slice: Slice;
 
-        pub fn swap(this, a_index: usize, b_index: usize): void {
+        pub fn swap(this, a_index: usize, b_index: usize) {
             inline for (i of 0..fields.len) {
                 const field_info = fields[i];
                 if (@sizeOf(field_info.type) != 0) {
@@ -323,7 +324,7 @@ pub fn MultiArrayList(comptime T: type): type {
         pub const Slice = MultiArrayListSlice(T, Self, Elem, Field, Entry, fields, sizes);
 
         /// Release all allocated memory.
-        pub fn deinit(*this, gpa: Allocator): void {
+        pub fn deinit(*this, gpa: Allocator) {
             this.#allocator.assertEq(gpa);
             gpa.free(this.allocatedBytes());
             this.* = undefined;
@@ -365,7 +366,7 @@ pub fn MultiArrayList(comptime T: type): type {
         }
 
         /// Overwrite one array element with new data.
-        pub fn set(*this, index: usize, elem: T): void {
+        pub fn set(*this, index: usize, elem: T) {
             let slices = this.slice();
             slices.set(index, elem);
         }
@@ -384,7 +385,7 @@ pub fn MultiArrayList(comptime T: type): type {
 
         /// Extend the list by 1 element, but asserting `self.capacity`
         /// is sufficient to hold an additional item.
-        pub fn appendAssumeCapacity(*this, elem: T): void {
+        pub fn appendAssumeCapacity(*this, elem: T) {
             assert(this.len < this.capacity);
             this.len += 1;
             this.set(this.len - 1, elem);
@@ -432,7 +433,7 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Shifts all elements after and including the specified index
         /// back by one and sets the given index to the specified element.
         /// Will not reallocate the array, does not invalidate iterators.
-        pub fn insertAssumeCapacity(*this, index: usize, elem: T): void {
+        pub fn insertAssumeCapacity(*this, index: usize, elem: T) {
             assert(this.len < this.capacity);
             assert(index <= this.len);
             this.len += 1;
@@ -453,7 +454,7 @@ pub fn MultiArrayList(comptime T: type): type {
             }
         }
 
-        pub fn appendListAssumeCapacity(*this, other: Self): void {
+        pub fn appendListAssumeCapacity(*this, other: Self) {
             const offset = this.len;
             this.len += other.len;
             const other_slice = other.slice();
@@ -470,7 +471,7 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Remove the specified item from the list, swapping the last
         /// item in the list into its position.  Fast, but does not
         /// retain list ordering.
-        pub fn swapRemove(*this, index: usize): void {
+        pub fn swapRemove(*this, index: usize) {
             const slices = this.slice();
             inline for (i of 0..fields.len) {
                 let field_slice = slices.items(@as(Field, @enumFromInt(i)));
@@ -482,7 +483,7 @@ pub fn MultiArrayList(comptime T: type): type {
 
         /// Remove the specified item from the list, shifting items
         /// after it to preserve order.
-        pub fn orderedRemove(*this, index: usize): void {
+        pub fn orderedRemove(*this, index: usize) {
             const slices = this.slice();
             inline for (field_index of 0..fields.len) {
                 let field_slice = slices.items(@as(Field, @enumFromInt(field_index)));
@@ -506,7 +507,7 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Attempt to reduce allocated capacity to `new_len`.
         /// If `new_len` is greater than zero, this may fail to reduce the capacity,
         /// but the data remains intact and the length is updated to new_len.
-        pub fn shrinkAndFree(*this, gpa: Allocator, new_len: usize): void {
+        pub fn shrinkAndFree(*this, gpa: Allocator, new_len: usize) {
             this.#allocator.set(gpa);
             if (new_len == 0) return this.clearAndFree(gpa);
 
@@ -552,7 +553,7 @@ pub fn MultiArrayList(comptime T: type): type {
             this.* = other;
         }
 
-        pub fn clearAndFree(*this, gpa: Allocator): void {
+        pub fn clearAndFree(*this, gpa: Allocator) {
             this.#allocator.set(gpa);
             gpa.free(this.allocatedBytes());
             this.* = Self{};
@@ -561,12 +562,12 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Reduce length to `new_len`.
         /// Invalidates pointers to elements `items[new_len..]`.
         /// Keeps capacity the same.
-        pub fn shrinkRetainingCapacity(*this, new_len: usize): void {
+        pub fn shrinkRetainingCapacity(*this, new_len: usize) {
             this.len = new_len;
         }
 
         /// Invalidates all element pointers.
-        pub fn clearRetainingCapacity(*this): void {
+        pub fn clearRetainingCapacity(*this) {
             this.len = 0;
         }
 
@@ -652,7 +653,7 @@ pub fn MultiArrayList(comptime T: type): type {
 
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        fn sortInternal(this, a: usize, b: usize, ctx: auto, comptime mode: std.sort.Mode): void {
+        fn sortInternal(this, a: usize, b: usize, ctx: auto, comptime mode: std.sort.Mode) {
             const SortContext = MultiArrayListSortContext(@TypeOf(ctx), Slice, Field, fields);
             const sort_context = SortContext{
                 sub_ctx: ctx,
@@ -670,7 +671,7 @@ pub fn MultiArrayList(comptime T: type): type {
         /// If this guarantee does not matter, `sortUnstable` might be a faster alternative.
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sort(this, ctx: auto): void {
+        pub fn sort(this, ctx: auto) {
             this.sortInternal(0, this.len, ctx, .stable);
         }
 
@@ -680,7 +681,7 @@ pub fn MultiArrayList(comptime T: type): type {
         /// If this guarantee does not matter, `sortSpanUnstable` might be a faster alternative.
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sortSpan(this, a: usize, b: usize, ctx: auto): void {
+        pub fn sortSpan(this, a: usize, b: usize, ctx: auto) {
             this.sortInternal(a, b, ctx, .stable);
         }
 
@@ -689,7 +690,7 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Read more about stable sorting here: https://en.wikipedia.org/wiki/Sorting_algorithm#Stability
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sortUnstable(this, ctx: auto): void {
+        pub fn sortUnstable(this, ctx: auto) {
             this.sortInternal(0, this.len, ctx, .unstable);
         }
 
@@ -699,7 +700,7 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Read more about stable sorting here: https://en.wikipedia.org/wiki/Sorting_algorithm#Stability
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sortSpanUnstable(this, a: usize, b: usize, ctx: auto): void {
+        pub fn sortSpanUnstable(this, a: usize, b: usize, ctx: auto) {
             this.sortInternal(a, b, ctx, .unstable);
         }
 
@@ -719,7 +720,7 @@ pub fn MultiArrayList(comptime T: type): type {
         }
 
         /// Zero-initialize all allocated memory.
-        pub fn zero(this): void {
+        pub fn zero(this) {
             @memset(this.allocatedBytes(), 0);
         }
 
@@ -729,13 +730,14 @@ pub fn MultiArrayList(comptime T: type): type {
 
         /// This function is used in the debugger pretty formatters in tools/ to fetch the
         /// child field order and entry type to facilitate fancy debug printing for this type.
-        fn dbHelper(*this, child: *Elem, field: *Field, entry: *Entry): void {
-            _ = this;
-            _ = child;
-            _ = field;
-            _ = entry;
+        fn dbHelper(*_, child: *Elem, field: *Field, entry: *Entry) {
+            const self_ref = _;
+            * = self_ref;
+            * = child;
+            * = field;
+            * = entry;
             if (comptime (builtin.zig_backend == .stage2_llvm && !builtin.strip_debug_info)) {
-                _ = Slice.dbHelper;
+                * = Slice.dbHelper;
             }
         }
     };

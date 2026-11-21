@@ -1497,3 +1497,6 @@
   - `ini.cp` 遗留 `try parser.parse(...)` 与未转义 `arena` 导致整句被 `cpc` 吞掉，全量替换 102 处 `try` 为 `?` 后 `.npmrc` 全部恢复；`package_json.cp` 4 处 `let i = 0; for (key of keys)` 遗漏 `i += 1;` 改用 `while (i < keys.len) : (i += 1)` 彻底修复条件导出错位；`writeOutputFilesToDisk.cp` 去掉 `string("")` 消除 `sourceMappingURL=*const [0:0]u8`。
 - **[2026-11-21] `build_command.cp` 表达式级 `:=` 吞赋值修复**：
   - 表达式位置嵌入 `if (user_defines := ctx.args.define)` 导致 `client_transpiler.options.define` 整句被 `cpc` 丢弃，拆分为独立 `let define_data: options.defines.UserDefines? = null;` 语句后 `zig:check` 5/5 通过。
+- **[2026-11-21] 全仓新语法收敛、`release()` 还原与 `fetch` `.Locked` 校验**：
+  - 随新版 `cpc`（`syntax-raii-20261121-v2`）将 `release` 彻底退回普通方法后，全仓 28 个文件安全还原 `release` 命名；`migrate_cp_syntax.py --apply --no-release src` 迁移 96 个 `.cp` 后，修复嵌套透传结构体中的 `_ =` / `: void` / `this` 及 `linear_fifo` `const empty_arr` 后 `zig:check` 全绿；
+  - `fetch.cp` 补全 `bodyValue.* == .Locked` 的 `isDisturbed` 校验与 `.ReadableStream` 构造。

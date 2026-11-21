@@ -71,7 +71,7 @@ pub const Tmpfile = struct {
                         },
                         .err => |err| {
                             if (err.getErrno() == .EXIST and retry) {
-                                _ = bun.sys.unlinkat(this.destination_dir, basename);
+                                * = bun.sys.unlinkat(this.destination_dir, basename);
                                 retry = false;
                                 continue;
                             } else {

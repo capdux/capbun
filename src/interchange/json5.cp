@@ -802,7 +802,7 @@ const Codepoint = struct {
 
     // ── Comment Helpers ──
 
-    fn skipToEndOfLine(*this): void {
+    fn skipToEndOfLine(*this) {
         while (this.pos < this.source.len) {
             const cc = this.source[this.pos];
             if (cc == '\n' or cc == '\r') break;

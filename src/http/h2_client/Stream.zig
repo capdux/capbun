@@ -95,13 +95,17 @@ data_bytes_received: u64 = 0,
 send_window: i32,
 pending_body: []const u8 = "",
 
-pub fn deinit(self: *Stream) void {
+pub fn release(self: *Stream) void {
         _ = bun.http.H2.live_streams.fetchSub(1, .monotonic);
         _ = self.header_block.deinit(bun.default_allocator);
         _ = self.body_buffer.deinit(bun.default_allocator);
         _ = self.decoded_bytes.deinit(bun.default_allocator);
         _ = self.decoded_headers.deinit(bun.default_allocator);
         _ = bun.destroy(self);
+}
+
+pub fn deinit(self: *Stream) void {
+        _ = self.release();
 }
 
 pub fn rst(self: *Stream, code: H2FrameParser.ErrorCode) void {

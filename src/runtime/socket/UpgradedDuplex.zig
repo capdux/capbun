@@ -53,7 +53,7 @@ pub const CertError = struct {
     code: [:0]const u8 = "",
     reason: [:0]const u8 = "",
 
-pub fn releaseInternal(self: *CertError) void {
+pub fn release(self: *CertError) void {
             if ((self.code.len > 0)) {
                 _ = bun.default_allocator.free(self.code);
             }
@@ -63,7 +63,7 @@ pub fn releaseInternal(self: *CertError) void {
     }
 
 pub fn deinit(self: *CertError) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
 };
 
@@ -113,7 +113,7 @@ pub fn onHandshake(self: *UpgradedDuplex, handshake_success: bool, ssl_error: uw
 pub fn onClose(self: *UpgradedDuplex) void {
         _ = log("onClose", .{});
         defer {
-        _ = self.releaseInternal();
+        _ = self.release();
         }
         _ = self.handlers.onClose(self.handlers.ctx);
         _ = self.callWriteOrEnd(null, false);
@@ -423,7 +423,7 @@ pub fn setTimeout(self: *UpgradedDuplex, seconds: u32) void {
         _ = self.setTimeoutInMilliseconds((seconds * 1000));
 }
 
-pub fn releaseInternal(self: *UpgradedDuplex) void {
+pub fn release(self: *UpgradedDuplex) void {
         _ = log("release", .{});
         _ = self.setTimeout(0);
         if (self.wrapper) |*wrapper| {
@@ -454,12 +454,12 @@ pub fn releaseInternal(self: *UpgradedDuplex) void {
         }
         var ssl_error = self.ssl_error;
         _ = &ssl_error;
-        _ = ssl_error.releaseInternal();
+        _ = ssl_error.release();
         self.ssl_error = .{};
 }
 
 pub fn deinit(self: *UpgradedDuplex) void {
-        _ = self.releaseInternal();
+        _ = self.release();
 }
 const EventLoopTimer = bun.api.Timer.EventLoopTimer;
 const us_bun_verify_error_t = uws.us_bun_verify_error_t;

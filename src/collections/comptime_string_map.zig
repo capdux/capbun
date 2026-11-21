@@ -81,7 +81,7 @@ pub fn ComptimeStringMapWithKeyType(comptime KeyType: type, comptime V: type, co
         const LenSort = struct {
 
 pub fn lenAsc(context: void, a: KV, b: KV) bool {
-            _ = context;
+            _ = &context;
             if ((a.key.len != b.key.len)) {
                 return (a.key.len < b.key.len);
             }

@@ -77,7 +77,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             return true;
         }
 
-        pub fn detachNativeCallback(this: *This): void {
+        pub fn detachNativeCallback(this: *This) {
             const native_callback = this.native_callback;
             this.native_callback = .none;
 
@@ -181,7 +181,7 @@ pub fn NewSocket(comptime ssl: bool): type {
 
         pub fn setNoDelay(this: *This, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
             jsc.markBinding(@src());
-            _ = globalThis;
+            * = globalThis;
 
             const args = callframe.arguments_old(1);
             const enabled: bool = if (args.len >= 1) args.ptr[0].toBoolean() else true;
@@ -190,7 +190,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             return JSValue.jsBoolean(this.socket.setNoDelay(enabled));
         }
 
-        pub fn handleError(this: *This, err_value: jsc.JSValue): void {
+        pub fn handleError(this: *This, err_value: jsc.JSValue) {
             log("handleError", .{});
             const h = this.getHandlers();
             let vm = h.vm;
@@ -205,10 +205,10 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
-            _ = h.callErrorHandler(this_value, &.{ this_value, err_value });
+            * = h.callErrorHandler(this_value, &.{ this_value, err_value });
         }
 
-        pub fn onWritable(this: *This, _: Socket): void {
+        pub fn onWritable(this: *This, _: Socket) {
             jsc.markBinding(@src());
             if (this.socket.isDetached()) return;
             if (this.native_callback.onWritable()) return;
@@ -235,12 +235,12 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
-            _ = callback.call(globalObject, this_value, &.{this_value}) catch |err| {
-                _ = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
+            * = callback.call(globalObject, this_value, &.{this_value}) catch |err| {
+                * = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
             };
         }
 
-        pub fn onTimeout(this: *This, _: Socket): void {
+        pub fn onTimeout(this: *This, _: Socket) {
             jsc.markBinding(@src());
             if (this.socket.isDetached()) return;
             const h = this.getHandlers();
@@ -260,8 +260,8 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
-            _ = callback.call(globalObject, this_value, &.{this_value}) catch |err| {
-                _ = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
+            * = callback.call(globalObject, this_value, &.{this_value}) catch |err| {
+                * = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
             };
         }
 
@@ -333,7 +333,7 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             if (result.toError()) |err_val| {
                 if (h.rejectPromise(err_val) catch true) return;
-                _ = h.callErrorHandler(this_value, &.{ this_value, err_val });
+                * = h.callErrorHandler(this_value, &.{ this_value, err_val });
             } else if (h.promise.trySwap()) |val| {
                 let promise = val.asPromise().?;
                 const err_ = err.toErrorInstanceWithAsyncStack(globalObject, promise);
@@ -345,7 +345,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             jsc.markBinding(@src());
             try this.handleConnectError(errno);
         }
-        pub fn markActive(this: *This): void {
+        pub fn markActive(this: *This) {
             if (!this.flags.is_active) {
                 const h = this.getHandlers();
                 h.markActive();
@@ -356,7 +356,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
         }
 
-        pub fn closeAndDetach(this: *This, code: uws.Socket.CloseCode): void {
+        pub fn closeAndDetach(this: *This, code: uws.Socket.CloseCode) {
             const socket = this.socket;
             this.buffered_data_for_node_net.clearAndFree(bun.default_allocator);
 
@@ -366,7 +366,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             socket.close(code);
         }
 
-        pub fn markInactive(this: *This): void {
+        pub fn markInactive(this: *This) {
             if (this.flags.is_active) {
                 if (!this.socket.isClosed()) {
                     this.closeAndDetach(.normal);
@@ -395,7 +395,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             return handlers.mode.isServer();
         }
 
-        pub fn onOpen(this: *This, socket: Socket): void {
+        pub fn onOpen(this: *This, socket: Socket) {
             log("onOpen {s} {*} {} {}", .{ if (this.isServer()) "S" else "C", this, this.socket.isDetached(), this.ref_count.get() });
             this.ref();
             defer this.deref();
@@ -425,10 +425,10 @@ pub fn NewSocket(comptime ssl: bool): type {
                         }
                         if (this.protos) |protos| {
                             if (this.isServer()) {
-                                _ = BoringSSL.SSL_set_ex_data(ssl_ptr, 0, this);
+                                * = BoringSSL.SSL_set_ex_data(ssl_ptr, 0, this);
                                 BoringSSL.SSL_CTX_set_alpn_select_cb(BoringSSL.SSL_get_SSL_CTX(ssl_ptr), selectALPNCallback, null);
                             } else {
-                                _ = BoringSSL.SSL_set_alpn_protos(ssl_ptr, protos.ptr, @as(c_uint, @intCast(protos.len)));
+                                * = BoringSSL.SSL_set_alpn_protos(ssl_ptr, protos.ptr, @as(c_uint, @intCast(protos.len)));
                             }
                         }
                     }
@@ -472,7 +472,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 }
 
                 if (h.rejectPromise(err) catch true) return;
-                _ = h.callErrorHandler(this_value, &.{ this_value, err });
+                * = h.callErrorHandler(this_value, &.{ this_value, err });
             }
         }
 
@@ -487,7 +487,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             return value;
         }
 
-        pub fn onEnd(this: *This, _: Socket): void {
+        pub fn onEnd(this: *This, _: Socket) {
             jsc.markBinding(@src());
             if (this.socket.isDetached()) return;
             const h = this.getHandlers();
@@ -511,8 +511,8 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             const globalObject = h.globalObject;
             const this_value = this.getThisValue(globalObject);
-            _ = callback.call(globalObject, this_value, &.{this_value}) catch |err| {
-                _ = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
+            * = callback.call(globalObject, this_value, &.{this_value}) catch |err| {
+                * = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
             };
         }
 
@@ -575,7 +575,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
 
             if (result.toError()) |err_value| {
-                _ = h.callErrorHandler(this_value, &.{ this_value, err_value });
+                * = h.callErrorHandler(this_value, &.{ this_value, err_value });
             }
         }
 
@@ -622,15 +622,15 @@ pub fn NewSocket(comptime ssl: bool): type {
                 js_error = try bun.sys.Error.fromCodeInt(err, .read).toJS(globalObject);
             }
 
-            _ = callback.call(globalObject, this_value, &.{
+            * = callback.call(globalObject, this_value, &.{
                 this_value,
                 js_error,
             }) catch |e| {
-                _ = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(e) });
+                * = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(e) });
             };
         }
 
-        pub fn onData(this: *This, s: Socket, data: []const u8): void {
+        pub fn onData(this: *This, s: Socket, data: []const u8) {
             jsc.markBinding(@src());
             this.socket = s;
             if (this.socket.isDetached()) return;
@@ -658,11 +658,11 @@ pub fn NewSocket(comptime ssl: bool): type {
                 }
             }
 
-            _ = callback.call(globalObject, this_value, &.{
+            * = callback.call(globalObject, this_value, &.{
                 this_value,
                 output_value,
             }) catch |err| {
-                _ = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
+                * = h.callErrorHandler(this_value, &.{ this_value, globalObject.takeError(err) });
             };
         }
 
@@ -671,7 +671,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             return .js_undefined;
         }
 
-        pub fn setData(this: *This, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): void {
+        pub fn setData(this: *This, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
             log("setData()", .{});
             This.js.dataSetCached(this.getThisValue(globalObject), globalObject, value);
         }
@@ -975,7 +975,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                         if (written > 0) {
                             if (remaining_in_buffered_data.len > 0) {
                                 let input_buffer = this.buffered_data_for_node_net.slice();
-                                _ = bun.c.memmove(input_buffer.ptr, input_buffer.ptr[written..], remaining_in_buffered_data.len);
+                                * = bun.c.memmove(input_buffer.ptr, input_buffer.ptr[written..], remaining_in_buffered_data.len);
                                 this.buffered_data_for_node_net.len = @truncate(remaining_in_buffered_data.len);
                             }
                         }
@@ -1007,7 +1007,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                         const len = @as(usize, @intCast(this.buffered_data_for_node_net.len)) - wrote_len;
                         bun.debugAssert(len <= this.buffered_data_for_node_net.len);
                         bun.debugAssert(len <= this.buffered_data_for_node_net.cap);
-                        _ = bun.c.memmove(this.buffered_data_for_node_net.ptr, this.buffered_data_for_node_net.ptr[wrote_len..], len);
+                        * = bun.c.memmove(this.buffered_data_for_node_net.ptr, this.buffered_data_for_node_net.ptr[wrote_len..], len);
                         this.buffered_data_for_node_net.len = @truncate(len);
                     }
                 }
@@ -1190,14 +1190,14 @@ pub fn NewSocket(comptime ssl: bool): type {
             return this.flags.is_active and this.flags.end_after_flush and !this.flags.empty_packet_pending and this.buffered_data_for_node_net.len == 0;
         }
 
-        fn internalFlush(this: *This): void {
+        fn internalFlush(this: *This) {
             if (this.buffered_data_for_node_net.len > 0) {
                 const written: usize = @intCast(@max(this.doSocketWrite(this.buffered_data_for_node_net.slice()), 0));
                 this.bytes_written += written;
                 if (written > 0) {
                     if (this.buffered_data_for_node_net.len > written) {
                         const remaining = this.buffered_data_for_node_net.slice()[written..];
-                        _ = bun.c.memmove(this.buffered_data_for_node_net.ptr, remaining.ptr, remaining.len);
+                        * = bun.c.memmove(this.buffered_data_for_node_net.ptr, remaining.ptr, remaining.len);
                         this.buffered_data_for_node_net.len = @truncate(remaining.len);
                     } else {
                         this.buffered_data_for_node_net.clearAndFree(bun.default_allocator);
@@ -1205,7 +1205,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 }
             }
 
-            _ = this.tryWriteEmptyPacket();
+            * = this.tryWriteEmptyPacket();
             this.socket.flush();
 
             if (this.canEndAfterFlush()) {
@@ -1240,7 +1240,7 @@ pub fn NewSocket(comptime ssl: bool): type {
 
         pub fn close(this: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
             jsc.markBinding(@src());
-            _ = callframe;
+            * = callframe;
             this.socket.close(.fast_shutdown);
             this.socket.detach();
             this.poll_ref.unref(globalObject.bunVM());
@@ -1286,7 +1286,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             return JSValue.js_undefined;
         }
 
-        pub fn deinit(this: *This): void {
+        pub fn release(this: *This) {
             this.markInactive();
             this.detachNativeCallback();
             this.this_value.deinit();
@@ -1317,7 +1317,11 @@ pub fn NewSocket(comptime ssl: bool): type {
             bun.destroy(this);
         }
 
-        pub fn finalize(this: *This): void {
+        pub fn deinit(this: *This) {
+            this.release();
+        }
+
+        pub fn finalize(this: *This) {
             log("finalize() {d}", .{@intFromPtr(this)});
             this.flags.finalizing = true;
             this.this_value.finalize();
@@ -1755,7 +1759,7 @@ pub class DuplexUpgradeContext {
         switch (this.task_event) {
             .StartTLS => {
                 if (this.tls == null) {
-                    this.deinit();
+                    this.release();
                     return;
                 }
                 log("DuplexUpgradeContext.startTLS mode={s}", .{@tagName(this.mode)});
@@ -1769,7 +1773,7 @@ pub class DuplexUpgradeContext {
                             this.tls = null;
                             tls.handleConnectError(errno) catch {};
                         }
-                        this.deinit();
+                        this.release();
                         return;
                     }
                 };
@@ -1778,7 +1782,7 @@ pub class DuplexUpgradeContext {
                     this.ssl_config = null;
                 }
             },
-            .Close => this.deinit(),
+            .Close => this.release(),
         }
     }
 
@@ -1792,7 +1796,7 @@ pub class DuplexUpgradeContext {
         this.vm.enqueueTask(jsc.Task.init(&this.task));
     }
 
-    pub fn deinit(*_: *DuplexUpgradeContext) {
+    pub fn release(*_: *DuplexUpgradeContext) {
         if (tls := this.tls) {
             this.tls = null;
             tls.deref();
@@ -1807,6 +1811,10 @@ pub class DuplexUpgradeContext {
         }
         this.upgrade.deinit();
         bun.destroy(this);
+    }
+
+    pub fn deinit(*_: *DuplexUpgradeContext) {
+        this.release();
     }
 }
 

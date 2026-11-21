@@ -886,7 +886,7 @@ fn BaseWindowsPipeWriter(
                 .pipe, .tty => true,
                 else => false,
             } and FDType == *bun.MovableIfWindowsFd) {
-                _ = rawfd.take();
+                * = rawfd.take();
             }
             source.setData(this);
             this.source = source;
@@ -1095,7 +1095,7 @@ pub const StreamBuffer = struct {
     }
 
     pub fn write(this: *StreamBuffer, buffer: []const u8) OOM!void {
-        _ = try this.list.appendSlice(buffer);
+        * = try this.list.appendSlice(buffer);
     }
 
     pub fn wrote(this: *StreamBuffer, amount: usize) void {
@@ -1111,7 +1111,7 @@ pub const StreamBuffer = struct {
     }
 
     pub fn writeTypeAsBytes(this: *StreamBuffer, comptime T: type, data: *const T) OOM!void {
-        _ = try this.write(std.mem.asBytes(data));
+        * = try this.write(std.mem.asBytes(data));
     }
 
     pub fn writeTypeAsBytesAssumeCapacity(this: *StreamBuffer, comptime T: type, data: T) void {
@@ -1129,7 +1129,7 @@ pub const StreamBuffer = struct {
             {
                 let byte_list = bun.ByteList.moveFromList(&this.list);
                 defer this.list = byte_list.moveToListManaged(this.list.allocator);
-                _ = try byte_list.writeLatin1(this.list.allocator, buffer);
+                * = try byte_list.writeLatin1(this.list.allocator, buffer);
             }
 
             return this.list.items[this.cursor..];
@@ -1138,7 +1138,7 @@ pub const StreamBuffer = struct {
                 let byte_list = bun.ByteList.moveFromList(&this.list);
                 defer this.list = byte_list.moveToListManaged(this.list.allocator);
 
-                _ = try byte_list.writeUTF16(this.list.allocator, buffer);
+                * = try byte_list.writeUTF16(this.list.allocator, buffer);
             }
 
             return this.list.items[this.cursor..];
@@ -1159,14 +1159,14 @@ pub const StreamBuffer = struct {
         let byte_list = bun.ByteList.moveFromList(&this.list);
         defer this.list = byte_list.moveToListManaged(this.list.allocator);
 
-        _ = try byte_list.writeLatin1(this.list.allocator, buffer);
+        * = try byte_list.writeLatin1(this.list.allocator, buffer);
     }
 
     pub fn writeUTF16(this: *StreamBuffer, buffer: []const u16) OOM!void {
         let byte_list = bun.ByteList.moveFromList(&this.list);
         defer this.list = byte_list.moveToListManaged(this.list.allocator);
 
-        _ = try byte_list.writeUTF16(this.list.allocator, buffer);
+        * = try byte_list.writeUTF16(this.list.allocator, buffer);
     }
 
     pub fn slice(this: *const StreamBuffer) []const u8 {

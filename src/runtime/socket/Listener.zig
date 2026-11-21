@@ -236,7 +236,7 @@ _ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
 
 },
 }
-        _ = self.releaseInternal();
+        _ = self.release();
 }
 
 pub fn unlinkUnixSocketPath(self: Listener) void {
@@ -254,7 +254,7 @@ pub fn unlinkUnixSocketPath(self: Listener) void {
         _ = bun.sys.unlink(bun.path.z(path, buf));
 }
 
-pub fn releaseInternal(self: *Listener) void {
+pub fn release(self: *Listener) void {
         _ = log("deinit", .{});
         _ = self.strong_self.deinit();
         _ = self.strong_data.deinit();
@@ -281,7 +281,7 @@ pub fn releaseInternal(self: *Listener) void {
 }
 
 pub fn deinit(self: *Listener) void {
-        _ = self.releaseInternal();
+        _ = self.release();
 }
 
 pub fn getConnectionsCount(self: *Listener, globalObject: *jsc.JSGlobalObject) JSValue {
@@ -437,7 +437,7 @@ pub const UnixOrHost = union(enum) {
         }
     }
 
-    pub fn releaseInternal(this: UnixOrHost) void {
+    pub fn release(this: UnixOrHost) void {
         switch (this) {
             .unix => |u| {
                 bun.default_allocator.free(u);
@@ -450,7 +450,7 @@ pub const UnixOrHost = union(enum) {
     }
 
     pub fn deinit(this: UnixOrHost) void {
-        this.releaseInternal();
+        this.release();
     }
 };
 pub const WindowsNamedPipeListeningContext = (if (Environment.isWindows) struct {
@@ -475,7 +475,7 @@ pub fn onClientConnect(self: *@This(), status: uv.ReturnCode) void {
 
 pub fn onPipeClosed(pipe: *uv.Pipe) callconv(.c) void {
             const this_ctx: *WindowsNamedPipeListeningContext = @ptrCast(@alignCast(pipe.data));
-            _ = this_ctx.releaseInternal();
+            _ = this_ctx.release();
     }
 
 pub fn closePipeAndDeinit(self: *@This()) void {
@@ -493,7 +493,7 @@ pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, s
                 if (pipe_initialized) {
                     _ = this_ctx.closePipeAndDeinit();
                 } else {
-                    _ = this_ctx.releaseInternal();
+                    _ = this_ctx.release();
                 }
             }
             }
@@ -530,7 +530,7 @@ pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, s
             return this_ctx;
     }
 
-pub fn releaseInternal(self: *@This()) void {
+pub fn release(self: *@This()) void {
             self.listener = null;
             if (self.ctx) |ctx| {
                 _ = &ctx;
@@ -541,7 +541,7 @@ pub fn releaseInternal(self: *@This()) void {
     }
 
 pub fn deinit(self: *@This()) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
     pub const new = bun.TrivialNew(WindowsNamedPipeListeningContext);
 } else struct {

@@ -739,7 +739,7 @@ pub fn normalizeStringGenericTZ(
 ): if (options.zero_terminate) [:0]T else []T {
     const isWindows = options.separator == std.fs.path.sep_windows;
     const sep_str = &[options.separator];
-    _ = sep_str;
+    * = sep_str;
 
     if (isWindows and bun.Environment.isDebug) {
         assert(!strings.hasPrefixComptimeType(T, path_, strings.literal(T, ":\\")));

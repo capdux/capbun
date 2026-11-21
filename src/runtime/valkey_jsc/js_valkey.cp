@@ -1578,8 +1578,8 @@ pub fn SocketHandler(comptime ssl: bool): type {
         }
 
         pub fn onEnd(client: *JSValkeyClient, socket: SocketType) {
-            _ = client;
-            _ = socket;
+            * = client;
+            * = socket;
 
             // Half-opened sockets are not allowed.
             // usockets will always call onClose after onEnd in this case so we don't need to do anything here

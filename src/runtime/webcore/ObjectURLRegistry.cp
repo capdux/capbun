@@ -21,12 +21,12 @@ pub const Entry = struct {
         });
     }
 
-    pub fn releaseInternal(this: *Entry) void {
+    pub fn release(this: *Entry) void {
         this.blob.deinit();
     }
 
     pub fn deinit(this: *Entry) void {
-        this.releaseInternal();
+        this.release();
         bun.destroy(this);
     }
 };

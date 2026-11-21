@@ -478,14 +478,14 @@ pub struct HashJob_ {
     pub const new = bun.TrivialNew(@This());
     pub const Result = HashJobResult_;
 
-    pub fn releaseInternal(*_: *HashJob_) {
+    pub fn release(*_: *HashJob_) {
         this.promise.deinit();
         bun.freeSensitive(bun.default_allocator, this.password);
         bun.destroy(this);
     }
 
     pub fn deinit(*_: *HashJob_) {
-        this.releaseInternal();
+        this.release();
     }
 
     pub static fn getValue(password: []const u8, algorithm: Algorithm_Value): HashJobResultValue {
@@ -510,7 +510,7 @@ pub struct HashJob_ {
         result.task = jsc.AnyTask.New(HashJobResult_, HashJobResult_.runFromJS).init(result);
         job.ref = .{};
         job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom(&result.task));
-        job.releaseInternal();
+        job.release();
     }
 }
 pub const HashJob = HashJob_;
@@ -574,7 +574,7 @@ pub struct VerifyJob_ {
     pub const new = bun.TrivialNew(@This());
     pub const Result = VerifyJobResult_;
 
-    pub fn releaseInternal(*_: *VerifyJob_) {
+    pub fn release(*_: *VerifyJob_) {
         this.promise.deinit();
         bun.freeSensitive(bun.default_allocator, this.password);
         bun.freeSensitive(bun.default_allocator, this.prev_hash);
@@ -582,7 +582,7 @@ pub struct VerifyJob_ {
     }
 
     pub fn deinit(*_: *VerifyJob_) {
-        this.releaseInternal();
+        this.release();
     }
 
     pub static fn getValue(password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?): VerifyJobResultValue {
@@ -607,7 +607,7 @@ pub struct VerifyJob_ {
         result.task = jsc.AnyTask.New(VerifyJobResult_, VerifyJobResult_.runFromJS).init(result);
         job.ref = .{};
         job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom(&result.task));
-        job.releaseInternal();
+        job.release();
     }
 }
 pub const VerifyJob = VerifyJob_;

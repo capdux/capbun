@@ -781,11 +781,31 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                 _ = &req;
                 var bodyValue = req.getBodyValue();
                 _ = &bodyValue;
-                if ((bodyValue.* == .Used)) {
+                if (((bodyValue.* == .Used) or ((bodyValue.* == .Locked) and ((bodyValue.Locked.action != .none) or bodyValue.Locked.isDisturbed(Request, globalThis, first_arg))))) {
                     return globalThis.ERR(.BODY_ALREADY_USED, "Request body already used", .{}).throw();
                 }
-                body = .{ .AnyBlob = bodyValue.useAsAnyBlob() };
-                has_body = true;
+                if ((bodyValue.* == .Locked)) {
+                    if (req.getBodyReadableStream(globalThis)) |readable| {
+                        _ = &readable;
+                        body = .{ .ReadableStream = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis) };
+                        has_body = true;
+                    } else {
+                        if (bodyValue.Locked.readable.has()) {
+                            body = .{ .ReadableStream = jsc.WebCore.ReadableStream.Strong.init((bodyValue.Locked.readable.get(globalThis)).?, globalThis) };
+                            has_body = true;
+                        } else {
+                            const readable = try bodyValue.toReadableStream(globalThis);
+                            if ((((!readable.isEmptyOrUndefinedOrNull()) and (bodyValue.* == .Locked)) and bodyValue.Locked.readable.has())) {
+                                body = .{ .ReadableStream = jsc.WebCore.ReadableStream.Strong.init((bodyValue.Locked.readable.get(globalThis)).?, globalThis) };
+                                has_body = true;
+                            }
+                        }
+                    }
+                }
+                if ((!has_body)) {
+                    body = .{ .AnyBlob = bodyValue.useAsAnyBlob() };
+                    has_body = true;
+                }
             } else {
                 if (request_init_object) |req_init| {
                     _ = &req_init;

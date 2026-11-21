@@ -141,7 +141,7 @@ pub fn ObjectPool(
             return data().loaded && data().list.first != null;
         }
 
-        pub static fn push(allocator: std.mem.Allocator, pooled: Type): void {
+        pub static fn push(allocator: std.mem.Allocator, pooled: Type) {
             if (comptime env.allow_assert) {
                 bun.assert(!full());
             }
@@ -199,12 +199,12 @@ pub fn ObjectPool(
             return new_node;
         }
 
-        pub static fn releaseValue(value: *Type): void {
+        pub static fn releaseValue(value: *Type) {
             const node: *LinkedList.Node = @fieldParentPtr("data", value);
             node.release();
         }
 
-        pub static fn release(node: *LinkedList.Node): void {
+        pub static fn release(node: *LinkedList.Node) {
             if (comptime max_count > 0) {
                 if (data().count >= max_count) {
                     if (comptime log_allocations) {
@@ -226,7 +226,7 @@ pub fn ObjectPool(
             data().loaded = true;
         }
 
-        pub static fn deleteAll(): void {
+        pub static fn deleteAll() {
             let dat = data();
             if (!dat.loaded) {
                 return;
@@ -241,7 +241,7 @@ pub fn ObjectPool(
             }
         }
 
-        static fn destroyNode(node: *LinkedList.Node): void {
+        static fn destroyNode(node: *LinkedList.Node) {
             if (comptime Type != bun.ByteList) {
                 bun.memory.deinit(&node.data);
             }

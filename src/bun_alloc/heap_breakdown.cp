@@ -80,7 +80,7 @@ pub const Zone = opaque {
         return false;
     }
 
-    fn rawFree(zone: *!, buf: []u8, _: std.mem.Alignment, _: usize): void {
+    fn rawFree(zone: *!, buf: []u8, _: std.mem.Alignment, _: usize) void {
         malloc_zone_free(@ptrCast(zone), @ptrCast(buf.ptr));
     }
 
@@ -111,7 +111,7 @@ pub const Zone = opaque {
         return ptr;
     }
 
-    pub inline fn destroy(zone: *Zone, comptime T: type, ptr: *T): void {
+    pub inline fn destroy(zone: *Zone, comptime T: type, ptr: *T) void {
         malloc_zone_free(zone, @ptrCast(ptr));
     }
 

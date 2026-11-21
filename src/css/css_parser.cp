@@ -601,10 +601,10 @@ pub fn DeriveParse(comptime T: type): type {
         pub fn parse(input: *Parser): Result(T) {
             if (comptime is_union_enum) {
                 const counts_val = comptime counts: {
-                    let mut f_void_idx: usize? = null;
-                    let mut f_payload_idx: usize? = null;
-                    let mut p_count: usize = 0;
-                    let mut v_count: usize = 0;
+                    let f_void_idx: usize? = null;
+                    let f_payload_idx: usize? = null;
+                    let p_count: usize = 0;
+                    let v_count: usize = 0;
                     for (tyinfo.@"union".fields, 0..) |field, i| {
                         if (field.@"type" == void) {
                             v_count += 1;
@@ -2137,7 +2137,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                 pub fn parsefn(_: void, input2: *Parser): Result(void) {
                                     // Firefox also allows an empty string as an argument...
                                     // https://github.com/mozilla/gecko-dev/blob/0077f2248712a1b45bf02f0f866449f663538164/servo/components/style/stylesheets/document_rule.rs#L303
-                                    _ = input2.tryParse(parseInner, {});
+                                    * = input2.tryParse(parseInner, {});
                                     if (input2.expectExhausted().asErr()) |e| return .{ .err = e };
                                     return .success;
                                 }
@@ -2718,7 +2718,7 @@ pub fn NestedRuleParser(comptime T: type): type {
 
         pub const RuleBodyItemParser = struct {
             pub fn parseQualified(parser: *This): bool {
-                _ = parser; // autofix
+                * = parser; // autofix
                 return true;
             }
 
@@ -2918,7 +2918,7 @@ pub fn StyleSheetParser(comptime P: type): type {
                             .semicolon = true,
                             .close_curly_bracket = true,
                         };
-                        _ = this.input.parseUntilAfter(delimiters, void, @as(void, undefined), voidWrap(void, Parser.parseEmpty));
+                        * = this.input.parseUntilAfter(delimiters, void, @as(void, undefined), voidWrap(void, Parser.parseEmpty));
                     } else {
                         return parse_at_rule(allocator, &start, name, this.input, P, this.parser);
                     }
@@ -3406,7 +3406,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             if (comptime !bun.Environment.isDebug) return;
 
             const layer_names_field_len = self.layer_names.len;
-            _ = layer_names_field_len; // autofix
+            * = layer_names_field_len; // autofix
             let actual_layer_rules_len: usize = 0;
 
             for (self.rules.v.items) |*rule| {
@@ -3447,7 +3447,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             options: ParserOptions,
             imports_from_tailwind: CssRuleList(AtRule),
         ) @This() {
-            _ = allocator; // autofix
+            * = allocator; // autofix
             if (comptime AtRule != BundlerAtRule) @compileError("Expected BundlerAtRule for this function.");
 
             const stylesheet = This{
@@ -4905,7 +4905,7 @@ struct Tokenizer {
                 '\n', 0x0C, '\r' => _.consumeNewline(),
                 '/' => {
                     if (Tokenizer.startsWith(_, "/*")) {
-                        _ = _.consumeComment();
+                        * = _.consumeComment();
                     } else {
                         return;
                     }
@@ -5138,7 +5138,7 @@ struct Tokenizer {
                 '\n', 0x0C, '\r' => _.consumeNewline(),
                 '/' => {
                     if (Tokenizer.startsWith(_, "/*")) {
-                        _ = _.consumeComment();
+                        * = _.consumeComment();
                     } else {
                         return;
                     }

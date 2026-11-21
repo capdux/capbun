@@ -67,9 +67,9 @@ export class ReadFileRead {
     total_size: SizeType = 0;
 }
 
-export const ReadFileResultType = SystemError.Maybe(ReadFileRead);
-export type ReadFileOnReadFileCallback = *const fn (ctx: *!, bytes: ReadFileResultType) void;
-export const ReadFileTask = WorkTask(ReadFile);
+pub const ReadFileResultType = SystemError.Maybe(ReadFileRead);
+pub type ReadFileOnReadFileCallback = *const fn (ctx: *!, bytes: ReadFileResultType);
+pub const ReadFileTask = WorkTask(ReadFile);
 
 export class ReadFile {
     file_store: FileStore;
@@ -161,7 +161,7 @@ export class ReadFile {
             @compileError("dont call this function on windows");
 
         const Handler = struct {
-            pub fn run(ptr: *!, bytes: ReadFileResultType): void {
+            pub fn run(ptr: *!, bytes: ReadFileResultType) {
                 callback(cast(Context, ptr), bytes) catch {};
             }
         };

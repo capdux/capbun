@@ -333,14 +333,14 @@ pub const HashJob_ = struct {
     ref: Async.KeepAlive = .{},
     task: jsc.WorkPoolTask = .{ .callback = (&run) },
 
-pub fn releaseInternal(self: *HashJob_) void {
+pub fn release(self: *HashJob_) void {
             _ = self.promise.deinit();
             _ = bun.freeSensitive(bun.default_allocator, self.password);
             _ = bun.destroy(self);
     }
 
 pub fn deinit(self: *HashJob_) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
 
 pub fn getValue(password: []const u8, algorithm: Algorithm_Value) HashJobResultValue {
@@ -357,7 +357,7 @@ pub fn run(task: *bun.ThreadPool.Task) void {
             result.task = jsc.AnyTask.New(HashJobResult_, HashJobResult_.runFromJS).init(result);
             job.ref = .{};
             _ = job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom((&result.task)));
-            _ = job.releaseInternal();
+            _ = job.release();
     }
     pub const new = bun.TrivialNew(@This());
     pub const Result = HashJobResult_;
@@ -405,7 +405,7 @@ pub const VerifyJob_ = struct {
     ref: Async.KeepAlive = .{},
     task: jsc.WorkPoolTask = .{ .callback = (&run) },
 
-pub fn releaseInternal(self: *VerifyJob_) void {
+pub fn release(self: *VerifyJob_) void {
             _ = self.promise.deinit();
             _ = bun.freeSensitive(bun.default_allocator, self.password);
             _ = bun.freeSensitive(bun.default_allocator, self.prev_hash);
@@ -413,7 +413,7 @@ pub fn releaseInternal(self: *VerifyJob_) void {
     }
 
 pub fn deinit(self: *VerifyJob_) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
 
 pub fn getValue(password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum) VerifyJobResultValue {
@@ -430,7 +430,7 @@ pub fn run(task: *bun.ThreadPool.Task) void {
             result.task = jsc.AnyTask.New(VerifyJobResult_, VerifyJobResult_.runFromJS).init(result);
             job.ref = .{};
             _ = job.event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.createFrom((&result.task)));
-            _ = job.releaseInternal();
+            _ = job.release();
     }
     pub const new = bun.TrivialNew(@This());
     pub const Result = VerifyJobResult_;

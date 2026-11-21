@@ -86,7 +86,7 @@ pub fn Intrusive(
         pub fn remove(self: *Self, v: *T) void {
             const prev = v.heap.prev orelse {
                 assert(self.root.? == v);
-                _ = self.deleteMin();
+                * = self.deleteMin();
                 return;
             };
 

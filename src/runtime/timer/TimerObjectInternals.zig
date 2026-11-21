@@ -471,7 +471,7 @@ pub fn finalize(self: *TimerObjectInternals) void {
             _ = self.deref();
     }
 
-pub fn releaseInternal(self: *TimerObjectInternals) void {
+pub fn release(self: *TimerObjectInternals) void {
             _ = self.deinit();
     }
 

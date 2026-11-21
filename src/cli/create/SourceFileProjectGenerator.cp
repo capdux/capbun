@@ -53,8 +53,8 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
     // The versions of react & react-dom need to match up, && it's SO easy to mess that up.
     // So we have to be a little opinionated here.
     // Add react-dom if react is used
-    _ = result.dependencies.swapRemove("react");
-    _ = result.dependencies.swapRemove("react-dom");
+    * = result.dependencies.swapRemove("react");
+    * = result.dependencies.swapRemove("react-dom");
     try result.dependencies.insert("react-dom@19");
     try result.dependencies.insert("react@19");
 

@@ -106,11 +106,11 @@ pub fn NewApp(comptime ssl: bool): type {
         }
     };
 
-    pub fn close(this: *@This()): void {
+    pub fn close(this: *@This()) {
         uws_app_close(ssl_flag, bun.cast(*uws_app_s, this));
     }
 
-    pub fn closeIdleConnections(this: *@This()): void {
+    pub fn closeIdleConnections(this: *@This()) {
         uws_app_close_idle(ssl_flag, bun.cast(*uws_app_s, this));
     }
 
@@ -120,19 +120,19 @@ pub fn NewApp(comptime ssl: bool): type {
         return bun.cast(?*@This(), app);
     }
 
-    pub fn destroy(this: *@This()): void {
+    pub fn destroy(this: *@This()) {
         uws_app_destroy(ssl_flag, bun.cast(*uws_app_s, this));
     }
 
-    pub fn setFlags(this: *@This(), require_host_header: bool, use_strict_method_validation: bool): void {
+    pub fn setFlags(this: *@This(), require_host_header: bool, use_strict_method_validation: bool) {
         uws_app_set_flags(ssl_flag, bun.cast(*uws_app_t, this), require_host_header, use_strict_method_validation);
     }
 
-    pub fn setMaxHTTPHeaderSize(this: *@This(), max_header_size: u64): void {
+    pub fn setMaxHTTPHeaderSize(this: *@This(), max_header_size: u64) {
         uws_app_set_max_http_header_size(ssl_flag, bun.cast(*uws_app_t, this), max_header_size);
     }
 
-    pub fn clearRoutes(this: *@This()): void {
+    pub fn clearRoutes(this: *@This()) {
         uws_app_clear_routes(ssl_flag, bun.cast(*uws_app_t, this));
     }
 
@@ -177,43 +177,43 @@ pub fn NewApp(comptime ssl: bool): type {
         f(ssl_flag, bun.cast(*uws_app_t, this), pattern.ptr, pattern.len, Handler.handle, @ptrCast(ud));
     }
 
-    pub fn get(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn get(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_get, pattern, ud, handler);
     }
 
-    pub fn post(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn post(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_post, pattern, ud, handler);
     }
 
-    pub fn put(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn put(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_put, pattern, ud, handler);
     }
 
-    pub fn delete(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn delete(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_delete, pattern, ud, handler);
     }
 
-    pub fn patch(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn patch(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_patch, pattern, ud, handler);
     }
 
-    pub fn head(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn head(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_head, pattern, ud, handler);
     }
 
-    pub fn options(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn options(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_options, pattern, ud, handler);
     }
 
-    pub fn connect(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn connect(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_connect, pattern, ud, handler);
     }
 
-    pub fn trace(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn trace(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_trace, pattern, ud, handler);
     }
 
-    pub fn any(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype): void {
+    pub fn any(this: *@This(), pattern: string, ud: anytype, comptime handler: anytype) {
         this.route(uws_app_any, pattern, ud, handler);
     }
 
@@ -238,11 +238,11 @@ pub fn NewApp(comptime ssl: bool): type {
         }
     }
 
-    pub fn domain(this: *@This(), pattern: [*:0]const u8): void {
+    pub fn domain(this: *@This(), pattern: [*:0]const u8) {
         uws_app_domain(ssl_flag, bun.cast(*uws_app_t, this), pattern);
     }
 
-    pub fn run(this: *@This()): void {
+    pub fn run(this: *@This()) {
         uws_app_run(ssl_flag, bun.cast(*uws_app_t, this));
     }
 
@@ -258,11 +258,11 @@ pub fn NewApp(comptime ssl: bool): type {
         return uws_get_native_handle(ssl_flag, bun.cast(*!, this));
     }
 
-    pub fn removeServerName(this: *@This(), hostname_pattern: [*:0]const u8): void {
+    pub fn removeServerName(this: *@This(), hostname_pattern: [*:0]const u8) {
         uws_remove_server_name(ssl_flag, bun.cast(*uws_app_t, this), hostname_pattern);
     }
 
-    pub fn addServerName(this: *@This(), hostname_pattern: [*:0]const u8): void {
+    pub fn addServerName(this: *@This(), hostname_pattern: [*:0]const u8) {
         uws_add_server_name(ssl_flag, bun.cast(*uws_app_t, this), hostname_pattern);
     }
 
@@ -272,15 +272,15 @@ pub fn NewApp(comptime ssl: bool): type {
         }
     }
 
-    pub fn missingServerName(this: *@This(), handler: MissingServerHandler, user_data: *!?): void {
+    pub fn missingServerName(this: *@This(), handler: MissingServerHandler, user_data: *!?) {
         uws_missing_server_name(ssl_flag, bun.cast(*uws_app_t, this), handler, user_data);
     }
 
-    pub fn filter(this: *@This(), handler: FilterHandler, user_data: *!?): void {
+    pub fn filter(this: *@This(), handler: FilterHandler, user_data: *!?) {
         uws_filter(ssl_flag, bun.cast(*uws_app_t, this), handler, user_data);
     }
 
-    pub fn ws(this: *@This(), pattern: string, ctx: *!, id: usize, behavior_: WebSocketBehavior): void {
+    pub fn ws(this: *@This(), pattern: string, ctx: *!, id: usize, behavior_: WebSocketBehavior) {
         let behavior = behavior_;
         uws_ws(ssl_flag, bun.cast(*uws_app_t, this), ctx, pattern.ptr, pattern.len, id, &behavior);
     }

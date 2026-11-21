@@ -96,7 +96,7 @@ pub struct PipelineTaskInput {
     fn slice(): []const u8 {
         return _.copied ?? _.bytes;
     }
-    fn releaseInternal(*_) {
+    fn release(*_) {
         if (_.pinned != .zero) JSC__JSValue__unpinArrayBuffer(_.pinned);
         if (c := _.copied) bun.default_allocator.free(c);
     }
@@ -742,7 +742,7 @@ fn encodeForBody(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue): bun.
         if (e == error.OutOfMemory) bun.outOfMemory();
         return global.throw("Image: source ArrayBuffer was detached", {});
     };
-    defer input.releaseInternal();
+    defer input.release();
     let task: PipelineTask = {
         image: _,
         global: global,
@@ -1100,7 +1100,7 @@ pub struct PipelineTask {
         defer _.deinit();
         // JS thread again — release the per-task pin so user code can
         // transfer/detach the source now.
-        _.input.releaseInternal();
+        _.input.release();
         const global = _.global;
         // Stash final dims here (JS thread) — `run()` is on a WorkPool thread
         // so writing `this.image.*` there would race the synchronous getters.

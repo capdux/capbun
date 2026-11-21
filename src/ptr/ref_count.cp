@@ -168,7 +168,7 @@ pub fn RefCount(comptime T: type, comptime field_name: string, comptime destruct
         }
 
         pub static fn dupeRef(target: *T): RefPtr(T) {
-            _ = @as(*const T, target); // ensure ptr child is T
+            * = @as(*const T, target); // ensure ptr child is T
             return RefPtr(T).initRef(target);
         }
 
@@ -289,7 +289,7 @@ pub fn ThreadSafeRefCount(comptime T: type, comptime field_name: string, comptim
 
         pub static fn dupeRef(target: *T): RefPtr(T) {
             if (enable_debug) getRefCount(target).debug.assertValid();
-            _ = @as(*const T, target); // ensure ptr child is T
+            * = @as(*const T, target); // ensure ptr child is T
             return RefPtr(T).initRef(target);
         }
 
@@ -588,8 +588,7 @@ pub fn DebugData(comptime thread_safe: bool): type {
             debug.dump(null, data.ptr, if (thread_safe) count.load(.seq_cst) else unsafe { count.* });
         }
 
-        fn getScopeExtraVTable(*this): *const allocation_scope.Extra.VTable {
-            _ = this;
+        fn getScopeExtraVTable(_: *@This()): *const allocation_scope.Extra.VTable {
             const p = &@This().scope_extra_vtable;
             return p;
         }

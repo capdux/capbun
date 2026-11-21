@@ -236,7 +236,7 @@ pub fn writeData(self: *@This(), data: []const u8) !usize {
             return @intCast(written);
     }
 
-pub fn releaseInternal(self: *@This()) void {
+pub fn release(self: *@This()) void {
             self.flags.closed_notified = true;
             if (self.ssl) |ssl| {
                 _ = &ssl;
@@ -251,7 +251,7 @@ pub fn releaseInternal(self: *@This()) void {
     }
 
 pub fn deinit(self: *@This()) void {
-            _ = self.releaseInternal();
+            _ = self.release();
     }
 
 pub fn triggerHandshakeCallback(self: *@This(), success: bool, result: uws.us_bun_verify_error_t) void {

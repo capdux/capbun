@@ -366,7 +366,7 @@ pub fn BoolCache(comptime ip: BoolInput) type {
     value: std.atomic.Value(BoolStoredType) = std.atomic.Value(BoolStoredType).init(.unknown),
 
 pub inline fn getCached(self: *@This()) BoolOutput {
-            _ = ip;
+            _ = &ip;
             const cached = self.value.load(.monotonic);
             switch (cached) {
 .unknown => {

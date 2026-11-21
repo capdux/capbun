@@ -6,14 +6,14 @@ import { ConnectingSocket } from "./ConnectingSocket.cp";
 import SocketGroupMod from "./SocketGroup.zig";
 import { us_socket_t } from "./us_socket_t.cp";
 
-export const VTable = SocketGroupMod.VTable;
+pub const VTable = SocketGroupMod.VTable;
 
 pub fn Trampolines(comptime H: type): type {
     const has_ext = @hasDecl(H, "Ext");
     const E = if (has_ext) H.Ext else void;
 
     return struct {
-        inline fn call(s: *us_socket_t, comptime f: anytype, extra: anytype): void {
+        inline fn call(s: *us_socket_t, comptime f: anytype, extra: anytype) {
             if (comptime has_ext) {
                 @call(.auto, f, .{s.ext(@typeInfo(E).pointer.child)} ++ .{s} ++ extra);
             } else {

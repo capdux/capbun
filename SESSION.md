@@ -139,3 +139,8 @@
 - **[2026-11-21 23:14] `build_command.cp` `define` 静默丢弃修复与全仓扫描推进**：
   - 修复 `src/cli/build_command.cp:277-292` 表达式级 `if (user_defines := ...)` 导致 `client_transpiler.options.define = options.Define.init(...)` 被 `cpc` 静默丢弃的问题（全仓扫描 148 文件 2,173 行 `try ` 与全仓 `= if (x := ...)` 确认仅此一处），`zig:check` **5/5** 全绿；
   - `test/bundler` 第二批（15 文件）跑出 **23 pass / 14 fail / 0 crash**（14 项 error 均因环境缺少 `filenamify`）。
+- **[2026-11-21 23:37] 全仓 `migrate_cp_syntax.py` 标准化、28 模块 `release()` 还原与 `fetch.cp` `.Locked` 校验里程碑**：
+  - 执行 `python3 /data/dev/cp/scripts/migrate_cp_syntax.py --apply --no-release src` 扫描全仓 **1,293 个 `.cp` 文件**并完成 **96 个文件**的 CP 新语法标准化迁移；
+  - 将此前改名为 `releaseInternal`/`releaseLoop` 或合并进 `deinit()` 的全部 **28 个模块**（`FileResponseStream`, `PosixSignalHandle`, `Listener`, `TimerObjectInternals`, `ConcurrentTask`, `udp_socket`, `UpgradedDuplex`, `Image`, `PBKDF2`, `Loop`, `WindowsNamedPipeContext`, `WindowsNamedPipe`, `s3/simple_request`, `s3/download_stream`, `ssl_wrapper`, `S3Stat`, `ObjectURLRegistry`, `s3/error_jsc`, `SocketAddress`, `us_socket_t`, `PasswordObject`, `h2_client/{Stream,ClientSession,PendingConnect}`, `ServerConfig`, `SSLConfig`, `Handlers`, `socket`）还原回 `release` 名称并全部重编通过 `cpc_brief.py`；
+  - 修复全仓重编后暴露的 45 个 `ast-check` 问题及 `linear_fifo`/`read_file`/`vtable` 3 个 `zig:check` 问题，`bun run zig:check` **5/5 steps succeeded**；
+  - 还原 `src/runtime/webcore/fetch.cp:584-608` `bodyValue.* == .Locked` 的 `isDisturbed` 校验与 `.ReadableStream` 提取分支。

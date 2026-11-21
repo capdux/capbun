@@ -86,7 +86,7 @@ pub const KeepAlive = struct {
         if (this.status != .active)
             return;
         this.status = .inactive;
-        _ = @atomicRmw(@TypeOf(vm.pending_unref_counter), &vm.pending_unref_counter, .Add, 1, .monotonic);
+        * = @atomicRmw(@TypeOf(vm.pending_unref_counter), &vm.pending_unref_counter, .Add, 1, .monotonic);
     }
 
     /// Allow a poll to keep the process alive.
@@ -1157,12 +1157,12 @@ pub const LinuxWaker = struct {
 
     pub fn wait(this: LinuxWaker) void {
         let bytes: usize = 0;
-        _ = std.posix.read(this.fd.cast(), std.mem.asBytes(&bytes)) catch 0;
+        * = std.posix.read(this.fd.cast(), std.mem.asBytes(&bytes)) catch 0;
     }
 
     pub fn wake(this: *const LinuxWaker) void {
         let bytes: usize = 1;
-        _ = std.posix.write(
+        * = std.posix.write(
             this.fd.cast(),
             std.mem.asBytes(&bytes),
         ) catch 0;

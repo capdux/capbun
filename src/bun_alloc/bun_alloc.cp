@@ -133,7 +133,7 @@ fn OverflowGroup(comptime Block: type): type {
         allocated: UsedSize;
         ptrs: [max]*Block!;
 
-        pub inline fn zero(*this): void {
+        pub inline fn zero(*this) {
             this.used = 0;
             this.allocated = 0;
         }
@@ -167,7 +167,7 @@ fn OverflowListBlock(comptime ValueType: type, comptime block_count: comptime_in
         used: SizeType;
         items: [block_count]ValueType;
 
-        pub inline fn zero(*this): void {
+        pub inline fn zero(*this) {
             this.used = 0;
         }
 
@@ -196,7 +196,7 @@ pub fn OverflowList(comptime ValueType: type, comptime block_count: comptime_int
         list: Overflow;
         count: u31;
 
-        pub inline fn zero(*this): void {
+        pub inline fn zero(*this) {
             this.list.zero();
             this.count = 0;
         }
@@ -210,7 +210,7 @@ pub fn OverflowList(comptime ValueType: type, comptime block_count: comptime_int
             return this.list.tail().append(value);
         }
 
-        fn reset(*this): void {
+        fn reset(*this) {
             for (block of this.list.slice()) {
                 block.used = 0;
             }
@@ -250,7 +250,7 @@ fn BSSListOverflowBlock(comptime ValueType: type, comptime ChunkSize: comptime_i
         data: [ChunkSize]ValueType;
         prev: (*OverflowBlock!)?;
 
-        pub inline fn zero(*this): void {
+        pub inline fn zero(*this) {
             // Avoid struct initialization syntax.
             // This makes Bun start about 1ms faster.
             // https://github.com/ziglang/zig/issues/24313
@@ -267,7 +267,7 @@ fn BSSListOverflowBlock(comptime ValueType: type, comptime ChunkSize: comptime_i
             return &this.data[index];
         }
 
-        pub fn deinit(*this): void {
+        pub fn deinit(*this) {
             if (p := this.prev) {
                 p.deinit();
             }
@@ -327,7 +327,7 @@ pub fn BSSList(comptime ValueType: type, comptime _count: auto): type {
             return Self.instance;
         }
 
-        pub fn deinit(*this): void {
+        pub fn deinit(*this) {
             this.head.deinit();
             bun.default_allocator.destroy(Self.instance);
             Self.loaded = false;
@@ -337,8 +337,9 @@ pub fn BSSList(comptime ValueType: type, comptime _count: auto): type {
             return Self.instance.used >= @as(u16, count);
         }
 
-        pub fn exists(this, value: ValueType): bool {
-            _ = this;
+        pub fn exists(value: ValueType): bool {
+            const self_ref = _;
+            * = self_ref;
             return isSliceInBuffer(value, Self.instance.backing_buf);
         }
 
@@ -412,8 +413,9 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
             return Self.instance;
         }
 
-        pub fn deinit(*this): void {
-            _ = this;
+        pub fn deinit(*_) {
+            const self_ref = _;
+            * = self_ref;
             bun.default_allocator.destroy(Self.instance);
             Self.loaded = false;
         }
@@ -554,7 +556,7 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
 
             if (result.is_overflow) {
                 if (this.overflow_list.len() == result.index) {
-                    _ = this.overflow_list.append(value);
+                    * = this.overflow_list.append(value);
                 } else {
                     unsafe {
                         let slot = this.overflow_list.atIndexMut(result);
@@ -605,7 +607,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             return Self.instance;
         }
 
-        pub fn deinit(*this): void {
+        pub fn deinit(*this) {
             this.index.deinit(this.allocator);
             bun.default_allocator.destroy(Self.instance);
             Self.loaded = false;
@@ -656,7 +658,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             return this.atIndex(index);
         }
 
-        pub fn markNotFound(*this, result: Result): void {
+        pub fn markNotFound(*this, result: Result) {
             this.mutex.lock();
             defer this.mutex.unlock();
 
@@ -758,7 +760,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             return Self.instance;
         }
 
-        pub fn deinit(*this): void {
+        pub fn deinit(*this) {
             this.map.deinit();
             bun.default_allocator.destroy(Self.instance);
             Self.instance_loaded = false;
@@ -778,8 +780,9 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             return @call(bun.callmod_inline, BSSMapType.atIndex, [this.map, index]);
         }
 
-        pub fn keyAtIndex(*this, index: IndexType): ([]const u8)? {
-            _ = this;
+        pub fn keyAtIndex(*_, index: IndexType): ([]const u8)? {
+            const self_ref = _;
+            * = self_ref;
             if (index.index == Unassigned.index || index.index == NotFound.index) {
                 return null;
             } else {
@@ -843,7 +846,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             }
         }
 
-        pub fn markNotFound(*this, result: Result): void {
+        pub fn markNotFound(*this, result: Result) {
             this.map.markNotFound(result);
         }
 

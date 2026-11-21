@@ -217,7 +217,7 @@ pub fn shouldEnableDateHeaderTimer(self: PosixLoop) bool {
             return self.internal_loop_data.shouldEnableDateHeaderTimer();
     }
 
-pub fn releaseLoop(self: *PosixLoop) void {
+pub fn release(self: *PosixLoop) void {
             _ = self.deinit();
     }
 
@@ -323,7 +323,7 @@ pub fn updateDate(self: *WindowsLoop) void {
             _ = uws_loop_date_header_timer_update(@as(*Loop, @ptrCast(@alignCast(self))));
     }
 
-pub fn releaseLoop(self: *WindowsLoop) void {
+pub fn release(self: *WindowsLoop) void {
             _ = self.deinit();
     }
 

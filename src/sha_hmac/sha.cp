@@ -22,7 +22,7 @@ fn NewHasher(comptime digest_size: comptime_int, comptime ContextType: type, com
 
         pub fn hash(bytes: []const u8, out: *Digest) void {
             @setRuntimeSafety(false);
-            _ = Full(bytes.ptr, bytes.len, out);
+            * = Full(bytes.ptr, bytes.len, out);
         }
 
         pub fn update(this: *@This(), data: []const u8) void {
@@ -74,7 +74,7 @@ fn NewEVP(comptime digest_size: comptime_int, comptime MDName: []const u8): type
         }
 
         pub fn deinit(this: *@This()) void {
-            _ = BoringSSL.EVP_MD_CTX_cleanup(&this.ctx);
+            * = BoringSSL.EVP_MD_CTX_cleanup(&this.ctx);
         }
     };
 }

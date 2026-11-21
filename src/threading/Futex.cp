@@ -299,7 +299,7 @@ const WasmImpl = struct {
             : [ptr] "r" (raw_ptr),
               [waiters] "r" (max_waiters),
         );
-        _ = woken_count;
+        * = woken_count;
     }
 };
 

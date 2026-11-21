@@ -181,7 +181,7 @@ pub const SplitBundlerOptions = struct {
                 switch (promise.unwrap(global.vm(), .mark_handled)) {
                     .pending => unreachable,
                     .fulfilled => |val| {
-                        _ = val;
+                        * = val;
                     },
                     .rejected => |err| {
                         return global.throwValue(err);

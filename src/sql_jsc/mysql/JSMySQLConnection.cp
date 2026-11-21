@@ -256,7 +256,7 @@ fn hasNullByte(s: []const u8): bool {
                 success: i32,
                 ssl_error: uws.us_bun_verify_error_t,
             ) {
-                _ = s;
+                * = s;
                 const handshakeWasSuccessful = conn.#connection.doHandshake(success, ssl_error) catch |e| return conn.failFmt(@errorCast(e), "Failed to send handshake response", .{});
                 if (!handshakeWasSuccessful) {
                     conn.failWithJSValue(ssl_error.toJS(conn.#globalObject) catch return);
@@ -266,31 +266,31 @@ fn hasNullByte(s: []const u8): bool {
             pub const onHandshake = if (ssl) onHandshake_ else null;
 
             pub static fn onClose(conn: *JSMySQLConnection, s: SocketType, code: i32, data: *!?) {
-                _ = s;
-                _ = code;
-                _ = data;
+                * = s;
+                * = code;
+                * = data;
                 defer conn.deref();
                 conn.fail("Connection closed", err.ConnectionClosed);
             }
 
             pub static fn onEnd(conn: *JSMySQLConnection, socket: SocketType) {
-                _ = conn;
+                * = conn;
                 socket.close(.normal);
             }
 
             pub static fn onConnectError(conn: *JSMySQLConnection, s: SocketType, code: i32) {
-                _ = s;
-                _ = code;
+                * = s;
+                * = code;
                 conn.fail("Connection closed", err.ConnectionClosed);
             }
 
             pub static fn onTimeout(conn: *JSMySQLConnection, s: SocketType) {
-                _ = s;
+                * = s;
                 conn.fail("Connection timeout", err.ConnectionTimedOut);
             }
 
             pub static fn onData(conn: *JSMySQLConnection, s: SocketType, data: []const u8) {
-                _ = s;
+                * = s;
                 conn.ref();
                 defer conn.deref();
                 const vm = conn.#vm;
@@ -315,7 +315,7 @@ fn hasNullByte(s: []const u8): bool {
             }
 
             pub static fn onWritable(conn: *JSMySQLConnection, s: SocketType) {
-                _ = s;
+                * = s;
                 conn.#connection.resetBackpressure();
                 conn.drainInternal();
             }
