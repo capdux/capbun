@@ -9,8 +9,8 @@ export @root struct VLQ {
     len: u8 = 0,
 
     @inline
-    pub fn slice(): string {
-        return this.bytes[0..this.len as usize];
+    pub fn slice(_: &VLQ): string {
+        return _.bytes[0.._.len as usize];
     }
 
     pub fn writeTo(writer: auto)! {

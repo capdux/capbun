@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
@@ -380,6 +380,19 @@ if ((((expr.data == .e_array) and expr.data.e_array.was_originally_macro) and (!
                 var array = expr.data.e_array;
                 _ = &array;
                 array.items.len = @min(array.items.len, @as(u32, @truncate(bound_array.items.len)));
+                const child_slice = array.items.slice();
+                var item_i: usize = 0;
+                _ = &item_i;
+                for (cp_iter_slice(bound_array.items[0..array.items.len])) |item| {
+                    _ = &item;
+                    if ((item.binding.data == .b_missing)) {
+                        child_slice[cp_cast_int(usize, item_i)] = p.newExpr(E.Missing, expr.loc);
+                        item_i = (item_i + 1);
+                        continue;
+                    }
+                    _ = p.visitBindingAndExprForMacro(item.binding, child_slice[@as(usize, @intCast(item_i))]);
+                    item_i = (item_i + 1);
+                }
             }
 },
 .b_identifier => |id| {
@@ -583,6 +596,10 @@ pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name
                 shadow_ref = ((p.newSymbol(.constant, name_str)) catch unreachable);
             }
             _ = ((p.recordDeclaredSymbol(shadow_ref)) catch unreachable);
+            if (cls.@"extends") |ext| {
+                _ = &ext;
+                cls.@"extends" = p.visitExpr(ext);
+            }
             {
                 _ = ((p.pushScopeForVisitPass(.class_body, cls.body_loc)) catch unreachable);
                 defer {
@@ -708,6 +725,16 @@ pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name
                         var super_index: ?usize = null;
                         _ = &super_index;
                         if ((cls.@"extends" != null)) {
+                            var super_i: usize = 0;
+                            _ = &super_i;
+                            for (cp_iter_slice(constructor.func.body.stmts)) |stmt| {
+                                _ = &stmt;
+                                if ((((stmt.data == .s_expr) and ((if (@typeInfo(@TypeOf(stmt.data.s_expr)) == .@"enum") @intFromEnum(stmt.data.s_expr) else stmt.data.s_expr.value).data == .e_call)) and ((if (@typeInfo(@TypeOf(stmt.data.s_expr)) == .@"enum") @intFromEnum(stmt.data.s_expr) else stmt.data.s_expr.value).data.e_call.target.data == .e_super))) {
+                                    super_index = super_i;
+                                    break;
+                                }
+                                super_i = (super_i + 1);
+                            }
                         }
                         if ((to_add > 0)) {
                             var stmts = std.array_list.Managed(Stmt).fromOwnedSlice(p.allocator, constructor.func.body.stmts);
@@ -726,10 +753,11 @@ pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name
 const arg_symbol = p.symbols.items[@as(usize, @intCast(id.ref.innerIndex()))];
                                     const name = arg_symbol.original_name;
                                     const arg_ident = p.newExpr(E.Identifier{ .@"ref" = id.ref }, arg.binding.loc);
-                                    _ = &arg_ident;
+                                    const insert_idx: usize = (if ((super_index != null)) ((j + super_index.?) + 1) else j);
+                                    _ = ((stmts.insert(insert_idx, Stmt.assign(p.newExpr(E.Dot{ .target = p.newExpr(E.This, arg.binding.loc), .name = name, .name_loc = arg.binding.loc }, arg.binding.loc), arg_ident))) catch unreachable);
                                     class_body.items.len = (class_body.items.len + 1);
                                     _ = bun.copy(G.Property, class_body.items[(j + 1)..], class_body.items[j..(class_body.items.len - 1)]);
-                                    const field_symbol_ref = (blk_catch_33: { break :blk_catch_33 ((p.declareSymbol(.other, arg.binding.loc, name)) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 id.ref; }); });
+                                    const field_symbol_ref = (blk_catch_34: { break :blk_catch_34 ((p.declareSymbol(.other, arg.binding.loc, name)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 id.ref; }); });
                                     field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
                                     const field_ident = p.newExpr(E.Identifier{ .@"ref" = field_symbol_ref }, arg.binding.loc);
                                     class_body.items[cp_cast_int(usize, j)] = G.Property{ .key = field_ident };
@@ -790,8 +818,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_11 = stmts.items.len;
-                        while (i < __end_11) : (i += 1) {
+                        const __end_13 = stmts.items.len;
+                        while (i < __end_13) : (i += 1) {
                             const stmt = (&stmts.items[@as(usize, @intCast(i))]);
                             if ((stmt.data == .s_enum)) {
                                 const old_scopes_in_order = p.scope_order_to_visit;
@@ -826,8 +854,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                 {
                     var stmt_idx: i32 = 0;
                     _ = &stmt_idx;
-                    const __end_12 = stmts.items.len;
-                    while (stmt_idx < __end_12) : (stmt_idx += 1) {
+                    const __end_14 = stmts.items.len;
+                    while (stmt_idx < __end_14) : (stmt_idx += 1) {
                         const stmt = (&stmts.items[@as(usize, @intCast(stmt_idx))]);
                         const list = list_getter: {
                         switch (stmt.data) {
@@ -894,7 +922,7 @@ const name_ref = (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@Ty
                             if (p.hoisted_ref_for_sloppy_mode_block_fn.get(name_ref)) |hoisted_ref| {
                                 _ = &hoisted_ref;
                                 _ = p.recordUsage(name_ref);
-                                _ = (blk_catch_36: { break :blk_catch_36 ((var_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = hoisted_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc), .value = p.newExpr(E.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch |e| { _ = &e; break :blk_catch_36 bun.handleOom(e); }); });
+                                _ = (blk_catch_37: { break :blk_catch_37 ((var_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = hoisted_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc), .value = p.newExpr(E.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch |e| { _ = &e; break :blk_catch_37 bun.handleOom(e); }); });
                             }
                         }
                         (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name) = null;
@@ -981,8 +1009,8 @@ _ = ((non_fn_stmts.append(stmt)) catch unreachable);
                     {
                         var stmt_i: i32 = 0;
                         _ = &stmt_i;
-                        const __end_18 = items.len;
-                        while (stmt_i < __end_18) : (stmt_i += 1) {
+                        const __end_20 = items.len;
+                        while (stmt_i < __end_20) : (stmt_i += 1) {
                             const stmt = (&items[@as(usize, @intCast(stmt_i))]);
                             switch (stmt.data) {
 .s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => {
@@ -1103,7 +1131,7 @@ if ((output.items.len > 0)) {
                     var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
                     _ = &prev_stmt;
                     if (((prev_stmt.data == .s_local) and local.canMergeWith(prev_stmt.data.s_local))) {
-                        _ = (blk_catch_41: { break :blk_catch_41 ((prev_stmt.data.s_local.decls.appendSlice(p.allocator, local.decls.slice())) catch |e| { _ = &e; break :blk_catch_41 bun.handleOom(e); }); });
+                        _ = (blk_catch_42: { break :blk_catch_42 ((prev_stmt.data.s_local.decls.appendSlice(p.allocator, local.decls.slice())) catch |e| { _ = &e; break :blk_catch_42 bun.handleOom(e); }); });
                         continue;
                     }
                 }

@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
@@ -205,9 +205,9 @@ pub const UTF16Replacement = struct {
 
 pub inline fn utf8Width(replacement: UTF16Replacement) u3_fast {
             return (switch (replacement.code_point) {
-0...126 => 1,
-128...2046 => 2,
-2048...65534 => 3,
+0...127 => 1,
+128...2047 => 2,
+2048...65535 => 3,
 else => 4,
 });
     }
@@ -1602,10 +1602,10 @@ pub fn encodeUTF8Comptime(comptime codepoint: u32) []const u8 {
         const HEADER_3BYTE: u8 = 224;
         const HEADER_4BYTE: u8 = 224;
         return (switch (codepoint) {
-0...126 => (&.{ @as(u8, @truncate(codepoint)) }),
-128...2046 => (&.{ (HEADER_2BYTE | @as(u8, @truncate(cp_shr(codepoint, 6)))), (HEADER_CONT_BYTE | @as(u8, @truncate((codepoint & 63)))) }),
-2048...65534 => (&.{ (HEADER_3BYTE | @as(u8, @truncate(cp_shr(codepoint, 12)))), (HEADER_CONT_BYTE | @as(u8, @truncate((cp_shr(codepoint, 6) & 63)))), (HEADER_CONT_BYTE | @as(u8, @truncate((codepoint & 63)))) }),
-65536...1114110 => (&.{ (HEADER_4BYTE | @as(u8, @truncate(cp_shr(codepoint, 18)))), (HEADER_CONT_BYTE | @as(u8, @truncate((cp_shr(codepoint, 12) & 63)))), (HEADER_CONT_BYTE | @as(u8, @truncate((cp_shr(codepoint, 6) & 63)))), (HEADER_CONT_BYTE | @as(u8, @truncate((codepoint & 63)))) }),
+0...127 => (&.{ @as(u8, @truncate(codepoint)) }),
+128...2047 => (&.{ (HEADER_2BYTE | @as(u8, @truncate(cp_shr(codepoint, 6)))), (HEADER_CONT_BYTE | @as(u8, @truncate((codepoint & 63)))) }),
+2048...65535 => (&.{ (HEADER_3BYTE | @as(u8, @truncate(cp_shr(codepoint, 12)))), (HEADER_CONT_BYTE | @as(u8, @truncate((cp_shr(codepoint, 6) & 63)))), (HEADER_CONT_BYTE | @as(u8, @truncate((codepoint & 63)))) }),
+65536...1114111 => (&.{ (HEADER_4BYTE | @as(u8, @truncate(cp_shr(codepoint, 18)))), (HEADER_CONT_BYTE | @as(u8, @truncate((cp_shr(codepoint, 12) & 63)))), (HEADER_CONT_BYTE | @as(u8, @truncate((cp_shr(codepoint, 6) & 63)))), (HEADER_CONT_BYTE | @as(u8, @truncate((codepoint & 63)))) }),
 else => @compileError("Invalid UTF-8 codepoint!"),
 });
 }
@@ -1643,7 +1643,7 @@ p[cp_cast_int(usize, 0)] = @as(u8, @truncate((240 | cp_shr(r, 18))));
 
 pub fn wtf8Sequence(code_point: u32) [4]u8 {
         return (switch (code_point) {
-0...126 => .{ @truncate(code_point), 0, 0, 0 },
+0...127 => .{ @truncate(code_point), 0, 0, 0 },
 128...2046 => .{ @truncate((192 | cp_shr(code_point, 6))), @truncate((128 | (code_point & 63))), 0, 0 },
 2048...65534 => .{ @truncate((224 | cp_shr(code_point, 12))), @truncate((128 | (cp_shr(code_point, 6) & 63))), @truncate((128 | (code_point & 63))), 0 },
 else => .{ @truncate((240 | cp_shr(code_point, 18))), @truncate((128 | (cp_shr(code_point, 12) & 63))), @truncate((128 | (cp_shr(code_point, 6) & 63))), @truncate((128 | (code_point & 63))) },
@@ -1652,14 +1652,14 @@ else => .{ @truncate((240 | cp_shr(code_point, 18))), @truncate((128 | (cp_shr(c
 
 pub inline fn wtf8ByteSequenceLength(first_byte: u8) u8 {
         return (switch (first_byte) {
-0...126 => 1,
+0...127 => 1,
 else => (if (((first_byte & 224) == 192)) 2 else (if (((first_byte & 240) == 224)) 3 else (if (((first_byte & 248) == 240)) 4 else 1))),
 });
 }
 
 pub inline fn wtf8ByteSequenceLengthWithInvalid(first_byte: u8) u8 {
         return (switch (first_byte) {
-0...126 => 1,
+0...127 => 1,
 else => (if (((first_byte & 224) == 192)) 2 else (if (((first_byte & 240) == 224)) 3 else (if (((first_byte & 248) == 240)) 4 else 0))),
 });
 }

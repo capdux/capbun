@@ -169,17 +169,17 @@ pub const Streaming = IntegrityStreaming;
 
         while (i < end) {
             const x0 = @as(u16, switch (buf[i]) {
-                '0'..'9' => buf[i] - '0',
-                'A'..'Z' => buf[i] - 'A' + 10,
-                'a'..'z' => buf[i] - 'a' + 10,
+                '0'..='9' => buf[i] - '0',
+                'A'..='Z' => buf[i] - 'A' + 10,
+                'a'..='z' => buf[i] - 'a' + 10,
                 else => return error.InvalidCharacter,
             });
             i += 1;
 
             const x1 = @as(u16, switch (buf[i]) {
-                '0'..'9' => buf[i] - '0',
-                'A'..'Z' => buf[i] - 'A' + 10,
-                'a'..'z' => buf[i] - 'a' + 10,
+                '0'..='9' => buf[i] - '0',
+                'A'..='Z' => buf[i] - 'A' + 10,
+                'a'..='z' => buf[i] - 'a' + 10,
                 else => return error.InvalidCharacter,
             });
 
@@ -241,7 +241,7 @@ pub const Streaming = IntegrityStreaming;
         return Integrity{ value: out, tag: tag };
     }
 
-    pub fn slice(): []const u8 {
+    pub fn slice(_: &Integrity): []const u8 {
         return _.value[0.._.tag.digestLen()];
     }
 

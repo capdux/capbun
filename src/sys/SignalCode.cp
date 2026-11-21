@@ -86,7 +86,7 @@ pub enum SignalCode: u8 {
     /// https://tldp.org/LDP/abs/html/exitcodes.html
     static fn toExitCode(value: SignalCode): u8? {
         return switch (@intFromEnum(value)) {
-            1..31 => 128 +% @intFromEnum(value),
+            1..=31 => 128 +% @intFromEnum(value),
             else => null,
         };
     }

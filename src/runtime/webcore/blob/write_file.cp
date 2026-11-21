@@ -28,9 +28,9 @@ const Body = WebCore.Body;
 const log = Output.scoped(.WriteFile, .hidden);
 const bloblog = Output.scoped(.WriteFile, .hidden);
 
-export const WriteFileResultType = SystemError.Maybe(SizeType);
+pub const WriteFileResultType = SystemError.Maybe(SizeType);
 export type WriteFileOnWriteFileCallback = *const fn (ctx: *!, count: WriteFileResultType) void!bun.JSTerminated;
-export const WriteFileTask = WorkTask(WriteFile);
+pub const WriteFileTask = WorkTask(WriteFile);
 
 export class WriteFile {
     file_blob: Blob;

@@ -912,7 +912,7 @@ fn NewPrinter(
         }
 
         static fn printBuffer(p: *Printer, str: []const u8) {
-            p.writer.print([]const u8, str);
+            p.writer.print(@TypeOf(str), str);
         }
 
         static fn print(p: *Printer, str: auto) {
@@ -1430,7 +1430,7 @@ fn NewPrinter(
                 }
 
                 if (has_rest_arg && i + 1 == args.len) {
-                    p.print("..");
+                    p.print("...");
                 }
 
                 p.printBinding(arg.binding, {});
@@ -1454,7 +1454,7 @@ fn NewPrinter(
 
         static fn printClass(p: *Printer, cls: G.Class) {
             if (ext := cls.extends) {
-                p.print(" ext");
+                p.print(" extends");
                 p.printSpace();
                 p.printExpr(ext, Level.new.sub(1), ExprFlag.Set.initEmpty());
             }
@@ -1530,14 +1530,14 @@ fn NewPrinter(
                     0 => {
                         p.print("0");
                     },
-                    1..9 => {
+                    1..=9 => {
                         let bytes: [1]u8 = ['0' + @as(u8, @intCast(val))];
                         p.print(&bytes);
                     },
                     10 => {
                         p.print("10");
                     },
-                    11..99 => {
+                    11..=99 => {
                         const buf = unsafe { (p.writer.reserve(2) catch unreachable)[0..2] };
                         formatUnsignedIntegerBetween(2, buf, val);
                         p.writer.advance(2);
@@ -1545,7 +1545,7 @@ fn NewPrinter(
                     100 => {
                         p.print("100");
                     },
-                    101..999 => {
+                    101..=999 => {
                         const buf = unsafe { (p.writer.reserve(3) catch unreachable)[0..3] };
                         formatUnsignedIntegerBetween(3, buf, val);
                         p.writer.advance(3);
@@ -1554,7 +1554,7 @@ fn NewPrinter(
                     1000 => {
                         p.print("1000");
                     },
-                    1001..9999 => {
+                    1001..=9999 => {
                         const buf = unsafe { (p.writer.reserve(4) catch unreachable)[0..4] };
                         formatUnsignedIntegerBetween(4, buf, val);
                         p.writer.advance(4);
@@ -1578,32 +1578,32 @@ fn NewPrinter(
                         p.print("1e9");
                     },
 
-                    10001..99999 => {
+                    10001..=99999 => {
                         const buf = unsafe { (p.writer.reserve(5) catch unreachable)[0..5] };
                         formatUnsignedIntegerBetween(5, buf, val);
                         p.writer.advance(5);
                     },
-                    100001..999999 => {
+                    100001..=999999 => {
                         const buf = unsafe { (p.writer.reserve(6) catch unreachable)[0..6] };
                         formatUnsignedIntegerBetween(6, buf, val);
                         p.writer.advance(6);
                     },
-                    1_000_001..9_999_999 => {
+                    1_000_001..=9_999_999 => {
                         const buf = unsafe { (p.writer.reserve(7) catch unreachable)[0..7] };
                         formatUnsignedIntegerBetween(7, buf, val);
                         p.writer.advance(7);
                     },
-                    10_000_001..99_999_999 => {
+                    10_000_001..=99_999_999 => {
                         const buf = unsafe { (p.writer.reserve(8) catch unreachable)[0..8] };
                         formatUnsignedIntegerBetween(8, buf, val);
                         p.writer.advance(8);
                     },
-                    100_000_001..999_999_999 => {
+                    100_000_001..=999_999_999 => {
                         const buf = unsafe { (p.writer.reserve(9) catch unreachable)[0..9] };
                         formatUnsignedIntegerBetween(9, buf, val);
                         p.writer.advance(9);
                     },
-                    1_000_000_001..9_999_999_999 => {
+                    1_000_000_001..=9_999_999_999 => {
                         const buf = unsafe { (p.writer.reserve(10) catch unreachable)[0..10] };
                         formatUnsignedIntegerBetween(10, buf, val);
                         p.writer.advance(10);
@@ -1970,54 +1970,58 @@ fn NewPrinter(
             return printClauseItemAs(p, item, .export_from);
         }
 
-        static fn printClauseItemAs(p: *Printer, item: js_ast.ClauseItem, comptime @"as": @Type(.enum_literal)) {
+        static fn printClauseItemAs(p: *Printer, item: js_ast.ClauseItem, comptime kind: @Type(.enum_literal)) {
             const name = p.renamer.nameForSymbol(item.name.ref.?);
 
-            if (comptime @"as" == .@"import") {
-                if (strings.eql(name, item.alias)) {
-                    p.printIdentifier(name);
-                } else {
+            switch (kind) {
+                .@"import" => {
+                    if (strings.eql(name, item.alias)) {
+                        p.printIdentifier(name);
+                    } else {
+                        p.printClauseAlias(item.alias);
+                        p.print(" as ");
+                        p.addSourceMapping(item.alias_loc);
+                        p.printIdentifier(name);
+                    }
+                },
+                .@"var" => {
                     p.printClauseAlias(item.alias);
-                    p.print(" as ");
-                    p.addSourceMapping(item.alias_loc);
+
+                    if (!strings.eql(name, item.alias)) {
+                        p.print(":");
+                        p.printSpace();
+
+                        p.printIdentifier(name);
+                    }
+                },
+                .@"export" => {
                     p.printIdentifier(name);
-                }
-            } else if (comptime @"as" == .@"var") {
-                p.printClauseAlias(item.alias);
 
-                if (!strings.eql(name, item.alias)) {
-                    p.print(":");
-                    p.printSpace();
+                    if (!strings.eql(name, item.alias)) {
+                        p.print(" as ");
+                        p.addSourceMapping(item.alias_loc);
+                        p.printClauseAlias(item.alias);
+                    }
+                },
+                .export_from => {
+                    // In `export { x } from 'mod'`, the "name" on the left of `as`
+                    // refers to an export of the other module, not a local binding.
+                    // It's stored as the raw source text on `item.original_name`
+                    // (ECMAScript allows this to be a string literal like `"a b c"`)
+                    // and the item's ref points to a synthesized intermediate symbol
+                    // whose display name may be mangled by a minifier. We must print
+                    // `original_name` via `printClauseAlias` so string literals stay
+                    // quoted and mangling can't corrupt the foreign-module name.
+                    const from_name = if (item.original_name.len > 0) item.original_name else name;
+                    p.printClauseAlias(from_name);
 
-                    p.printIdentifier(name);
-                }
-            } else if (comptime @"as" == .@"export") {
-                p.printIdentifier(name);
-
-                if (!strings.eql(name, item.alias)) {
-                    p.print(" as ");
-                    p.addSourceMapping(item.alias_loc);
-                    p.printClauseAlias(item.alias);
-                }
-            } else if (comptime @"as" == .export_from) {
-                // In `export { x } from 'mod'`, the "name" on the left of `as`
-                // refers to an export of the other module, not a local binding.
-                // It's stored as the raw source text on `item.original_name`
-                // (ECMAScript allows this to be a string literal like `"a b c"`)
-                // and the item's ref points to a synthesized intermediate symbol
-                // whose display name may be mangled by a minifier. We must print
-                // `original_name` via `printClauseAlias` so string literals stay
-                // quoted and mangling can't corrupt the foreign-module name.
-                const from_name = if (item.original_name.len > 0) item.original_name else name;
-                p.printClauseAlias(from_name);
-
-                if (!strings.eql(from_name, item.alias)) {
-                    p.print(" as ");
-                    p.addSourceMapping(item.alias_loc);
-                    p.printClauseAlias(item.alias);
-                }
-            } else {
-                @compileError("Unknown as");
+                    if (!strings.eql(from_name, item.alias)) {
+                        p.print(" as ");
+                        p.addSourceMapping(item.alias_loc);
+                        p.printClauseAlias(item.alias);
+                    }
+                },
+                else => @compileError("Unknown as"),
             }
         }
 
@@ -2051,7 +2055,7 @@ fn NewPrinter(
             while (iter.next(&cursor)) {
                 switch (cursor.c) {
                     // unlike other versions, we only want to mutate > 0x7F
-                    0..last_ascii => {
+                    0..=last_ascii => {
                         if (!is_ascii) {
                             ascii_start = cursor.i;
                             is_ascii = true;
@@ -2064,7 +2068,7 @@ fn NewPrinter(
                         }
 
                         switch (cursor.c) {
-                            0..0xFFFF => {
+                            0..=0xFFFF => {
                                 const ubuf: [6]u8 = [
                                     '\\',
                                     'u',
@@ -2116,7 +2120,7 @@ fn NewPrinter(
                 },
                 .e_spread e => {
                     p.addSourceMapping(expr.loc);
-                    p.print("..");
+                    p.print("...");
                     const none_flag = ExprFlag.Set.initEmpty();
                     p.printExpr(e.value, .comma, none_flag);
                 },
@@ -3316,7 +3320,7 @@ fn NewPrinter(
                 let cursor: CodepointIterator.Cursor = .{};
                 while (iter.next(&cursor)) {
                     switch (cursor.c) {
-                        first_ascii..last_ascii => {
+                        first_ascii..=last_ascii => {
                             if (!is_ascii) {
                                 ascii_start = cursor.i;
                                 is_ascii = true;
@@ -3329,7 +3333,7 @@ fn NewPrinter(
                             }
 
                             switch (cursor.c) {
-                                0..0xFFFF => {
+                                0..=0xFFFF => {
                                     const ubuf: [6]u8 = [
                                         '\\',
                                         'u',
@@ -3386,7 +3390,7 @@ fn NewPrinter(
                 if (item.kind == .spread) {
                     if (comptime is_json && Environment.allow_assert)
                         unreachable;
-                    p.print("..");
+                    p.print("...");
                     p.printExpr(item.value.?, .comma, ExprFlag.Set.initEmpty());
                     return;
                 }
@@ -3713,7 +3717,7 @@ fn NewPrinter(
 
                             const is_last = i + 1 == b.items.len;
                             if (b.has_spread && is_last) {
-                                p.print("..");
+                                p.print("...");
                             }
 
                             p.printBinding(item.binding, tlm);
@@ -3757,7 +3761,7 @@ fn NewPrinter(
                             }
 
                             if (property.flags.contains(.is_spread)) {
-                                p.print("..");
+                                p.print("...");
                             } else {
                                 if (property.flags.contains(.is_computed)) {
                                     p.print("[");
@@ -5356,7 +5360,7 @@ fn NewPrinter(
             let cursor: CodepointIterator.Cursor = .{};
             while (iter.next(&cursor)) {
                 switch (cursor.c) {
-                    first_ascii..last_ascii => {
+                    first_ascii..=last_ascii => {
                         if (!is_ascii) {
                             ascii_start = cursor.i;
                             is_ascii = true;
@@ -5395,7 +5399,7 @@ fn NewPrinter(
 
                 if ((comptime ascii_only) && c > last_ascii) {
                     switch (c) {
-                        0..0xFFFF => {
+                        0..=0xFFFF => {
                             const ubuf: [6]u8 = [
                                 '\\',
                                 'u',
@@ -5720,7 +5724,7 @@ pub fn NewWriter(
             return { context: writer };
         }
         static fn stdWriterWrite(writer: *Self, bytes: []const u8): usize ! EmptyError {
-            writer.print([]const u8, bytes);
+            writer.print(@TypeOf(bytes), bytes);
             return bytes.len;
         }
 

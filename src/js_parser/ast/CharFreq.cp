@@ -63,9 +63,9 @@ fn scanSmall(out: *align(1) Buffer, text: string, delta: i32) {
 
     for (c of text) {
         const i: usize = switch (c) {
-            'a'..'z' => @as(usize, @intCast(c)) - 'a',
-            'A'..'Z' => @as(usize, @intCast(c)) - ('A' - 26),
-            '0'..'9' => @as(usize, @intCast(c)) + (53 - '0'),
+            'a'..='z' => @as(usize, @intCast(c)) - 'a',
+            'A'..='Z' => @as(usize, @intCast(c)) - ('A' - 26),
+            '0'..='9' => @as(usize, @intCast(c)) + (53 - '0'),
             '_' => 62,
             '$' => 63,
             else => continue,

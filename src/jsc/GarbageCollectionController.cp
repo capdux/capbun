@@ -50,13 +50,9 @@ const bun = @import("bun");
             _.gc_repeating_timer.set(_, onGCRepeatingTimer, gc_timer_interval, gc_timer_interval);
     }
 
-    pub fn release(*_) {
+    pub fn deinit(*_) {
         _.gc_timer.deinit(true);
         _.gc_repeating_timer.deinit(true);
-    }
-
-    pub fn deinit(*_) {
-        _.release();
     }
 
     pub fn scheduleGCTimer(_: *GarbageCollectionController) {

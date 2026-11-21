@@ -5875,7 +5875,7 @@ struct Tokenizer {
     /// 110xxxxx  0xC0..0xDF   First byte of a 2-byte character encoding
     /// 1110xxxx  0xE0..0xEF   First byte of a 3-byte character encoding
     /// 11110xxx  0xF0..0xF7   First byte of a 4-byte character encoding
-    /// 10xxxxxx  0x80..0xBF   Continuation byte: one of 1-3 bytes following the first <--
+    /// 10xxxxxx  0x80..=0xBF   Continuation byte: one of 1-3 bytes following the first <--
     fn consumeContinuationByte(*_) {
         if (bun.Environment.allow_assert) std.debug.assert((_.nextByteUnchecked() & 0xC0) == 0x80);
         // Continuation bytes contribute to column overcount. Note
@@ -5893,7 +5893,7 @@ struct Tokenizer {
     /// 110xxxxx  0xC0..0xDF   First byte of a 2-byte character encoding
     /// 1110xxxx  0xE0..0xEF   First byte of a 3-byte character encoding
     /// 11110xxx  0xF0..0xF7   First byte of a 4-byte character encoding <--
-    /// 10xxxxxx  0x80..0xBF   Continuation byte: one of 1-3 bytes following the first
+    /// 10xxxxxx  0x80..=0xBF   Continuation byte: one of 1-3 bytes following the first
     fn consume4byteIntro(*_) {
         if (bun.Environment.allow_assert) std.debug.assert((_.nextByteUnchecked() & 0xF0) == 0xF0);
         // This takes two UTF-16 characters to represent, so we

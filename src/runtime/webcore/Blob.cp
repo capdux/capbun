@@ -1780,7 +1780,7 @@ pub struct BlobExternalSharedDescriptor {
         }
     }
 
-    fn release(*_) {
+    fn releaseInternal(*_) {
         _.detach();
         if (_.content_type_allocated && _.content_type.len > 0) {
             default_allocator.free(_.content_type);
@@ -1791,7 +1791,7 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn deinit(*_) {
-        _.release();
+        _.releaseInternal();
     }
 
     fn dupe(): Blob {

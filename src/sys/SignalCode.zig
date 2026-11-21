@@ -113,7 +113,7 @@ pub fn valid(value: SignalCode) bool {
 
 pub fn toExitCode(value: SignalCode) ?u8 {
             return (switch (@intFromEnum(value)) {
-1...30 => (128 +% @intFromEnum(value)),
+1...31 => (128 +% @intFromEnum(value)),
 else => null,
 });
     }

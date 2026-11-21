@@ -318,13 +318,17 @@ pub fn Visit(
                         let array = expr.data.e_array;
 
                         array.items.len = @min(array.items.len, @as(u32, @truncate(bound_array.items.len)));
-                        for (item, *child_expr of bound_array.items[0..array.items.len], array.items.slice()) {
+                        const child_slice = array.items.slice();
+                        let item_i: usize = 0;
+                        for (item of bound_array.items[0..array.items.len]) {
                             if (item.binding.data == .b_missing) {
-                                child_expr.* = p.newExpr(E.Missing{}, expr.loc);
+                                child_slice[item_i] = p.newExpr(E.Missing{}, expr.loc);
+                                item_i += 1;
                                 continue;
                             }
 
-                            p.visitBindingAndExprForMacro(item.binding, child_expr.*);
+                            p.visitBindingAndExprForMacro(item.binding, child_slice[item_i]);
+                            item_i += 1;
                         }
                     }
                 },
@@ -563,8 +567,8 @@ pub fn Visit(
 
             p.recordDeclaredSymbol(shadow_ref) catch unreachable;
 
-            if (extends := cls.@"extends") {
-                cls.@"extends" = p.visitExpr(extends);
+            if (ext := cls.@"extends") {
+                cls.@"extends" = p.visitExpr(ext);
             }
 
             {
@@ -697,10 +701,13 @@ pub fn Visit(
                         // if this is an expression, we can move statements after super() because there will be 0 decorators
                         let super_index: usize? = null;
                         if (cls.@"extends" != null) {
-                            for (stmt, index of constructor.func.body.stmts, 0..) {
-                                if (stmt.data != .s_expr || stmt.data.s_expr.value.data != .e_call || stmt.data.s_expr.value.data.e_call.target.data != .e_super) continue;
-                                super_index = index;
-                                break;
+                            let super_i: usize = 0;
+                            for (stmt of constructor.func.body.stmts) {
+                                if (stmt.data == .s_expr && stmt.data.s_expr.value.data == .e_call && stmt.data.s_expr.value.data.e_call.target.data == .e_super) {
+                                    super_index = super_i;
+                                    break;
+                                }
+                                super_i += 1;
                             }
                         }
 
@@ -720,7 +727,8 @@ pub fn Visit(
                                             const name = arg_symbol.original_name;
                                             const arg_ident = p.newExpr(E.Identifier{ @"ref": id.ref }, arg.binding.loc);
 
-                                            stmts.insert(if (super_index) |k| j + k + 1 else j, Stmt.assign(
+                                            const insert_idx: usize = if (super_index != null) j + super_index.? + 1 else j;
+                                            stmts.insert(insert_idx, Stmt.assign(
                                                 p.newExpr(E.Dot{
                                                     target: p.newExpr(E.This{}, arg.binding.loc),
                                                     name: name,

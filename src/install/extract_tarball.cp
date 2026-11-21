@@ -29,7 +29,7 @@ const DirnameReader = struct {
     pub fn onFirstDirectoryName(dirname_reader: *DirnameReader, first_dirname: []const u8) void {
         bun.assert(dirname_reader.needs_first_dirname);
         dirname_reader.needs_first_dirname = false;
-        dirname_reader.outdirname.* = FileSystem.DirnameStore.instance.append([]const u8, first_dirname) catch unreachable;
+        dirname_reader.outdirname.* = FileSystem.DirnameStore.instance.append(@TypeOf(first_dirname), first_dirname) catch unreachable;
     }
 }
 

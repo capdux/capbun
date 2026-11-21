@@ -53,7 +53,7 @@ pub fn parse(possibly_encoded_pathname_: string): !URLPath {
 
     if (strings.containsChar(decoded_pathname, '%')) {
         let possibly_encoded_pathname = match (decoded_pathname.len) {
-            0..1024 => temp_path_buf[0..],
+            0..=1024 => temp_path_buf[0..],
             else => big_temp_path_buf[0..],
         };
         possibly_encoded_pathname = possibly_encoded_pathname[0..@min(

@@ -112,13 +112,9 @@ pub fn init(self: *GarbageCollectionController, vm: *VirtualMachine) void {
         }
 }
 
-pub fn release(self: *GarbageCollectionController) void {
+pub fn deinit(self: *GarbageCollectionController) void {
         _ = self.gc_timer.deinit(true);
         _ = self.gc_repeating_timer.deinit(true);
-}
-
-pub fn deinit(self: *GarbageCollectionController) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
 }
 
 pub fn scheduleGCTimer(self: *GarbageCollectionController) void {
@@ -132,8 +128,7 @@ pub fn bunVM(self: *GarbageCollectionController) *VirtualMachine {
 
 pub fn onGCTimer(timer: *uws.Timer) callconv(.c) void {
         var ctrl = timer.as(*GarbageCollectionController);
-        var __ctrl_moved = false; _ = &__ctrl_moved;
-        defer if (!__ctrl_moved) { const __T = @TypeOf(ctrl); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ctrl.release() catch {}; } else { ctrl.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ctrl; _drop_val.release(); } };
+        _ = &ctrl;
         if (ctrl.disabled) {
             return;
         }
@@ -156,11 +151,8 @@ pub fn updateGCRepeatTimer(self: *GarbageCollectionController, comptime setting:
 
 pub fn onGCRepeatingTimer(timer: *uws.Timer) callconv(.c) void {
         var ctrl = timer.as(*GarbageCollectionController);
-        var __ctrl_moved = false; _ = &__ctrl_moved;
-        defer if (!__ctrl_moved) { const __T = @TypeOf(ctrl); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ctrl.release() catch {}; } else { ctrl.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ctrl; _drop_val.release(); } };
+        _ = &ctrl;
         const prev_heap_size = ctrl.gc_last_heap_size_on_repeating_timer;
-        var __prev_heap_size_moved = false; _ = &__prev_heap_size_moved;
-        defer if (!__prev_heap_size_moved) { const __T = @TypeOf(prev_heap_size); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = prev_heap_size.release() catch {}; } else { prev_heap_size.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = prev_heap_size; _drop_val.release(); } };
         _ = ctrl.performGC();
         ctrl.gc_last_heap_size_on_repeating_timer = ctrl.gc_last_heap_size;
         if ((prev_heap_size == ctrl.gc_last_heap_size_on_repeating_timer)) {
@@ -181,8 +173,7 @@ pub fn processGCTimer(self: *GarbageCollectionController) void {
             return;
         }
         var vm = self.bunVM().jsc_vm;
-        var __vm_moved = false; _ = &__vm_moved;
-        defer if (!__vm_moved) { const __T = @TypeOf(vm); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = vm.release() catch {}; } else { vm.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = vm; _drop_val.release(); } };
+        _ = &vm;
         _ = self.processGCTimerWithHeapSize(vm, vm.blockBytesAllocated());
 }
 
@@ -223,8 +214,7 @@ pub fn performGC(self: *GarbageCollectionController) void {
             return;
         }
         var vm = self.bunVM().jsc_vm;
-        var __vm_moved = false; _ = &__vm_moved;
-        defer if (!__vm_moved) { const __T = @TypeOf(vm); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = vm.release() catch {}; } else { vm.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = vm; _drop_val.release(); } };
+        _ = &vm;
         _ = vm.collectAsync();
         self.gc_last_heap_size = vm.blockBytesAllocated();
 }

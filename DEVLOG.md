@@ -1464,3 +1464,9 @@
   - **错误联合中的枚举返回**：返回类型为 `!EnumType`（如 `anyerror!Continuation`）时，`return .tag;` 会被 `cpc` 误降级为 `return error.tag;`，必须显式写为 `return EnumType.tag;`（已修复 `parseSuffix.cp` 109 处）；
   - **单例指针防 RAII 自动释放**：`const actual = uws.Loop.get();` 会触发 `cpc` 注入 `defer actual.release()` 提前释放全局事件循环，借用单例直接内联调用；
   - **表达式 `if (opt) |x|` 静默丢弃**：`x = if (opt) |v| ...` 会被 `cpc` 静默丢弃整句，统一改写为语句级 `if (v := opt)`。
+- **[2026-11-21] `bun bd test` 全链路排障核心技术经验**：
+  - **函数类型别名导出 Wild Jump**：`const Cb = fn(...) Ret` 会被 `cpc` 降级为 `*const fn`，导致 `@export(&@field(...))` 导出 `.rodata` 地址；用 `@TypeOf(_Cb)` 保留函数类型；
+  - **`switch` 闭区间语义**：`a..b` 在 `cpc` 中为半开区间 `[a, b)`，字符/数字闭区间必须写 `'a'..='z'`（避免丢失 `'9'`/`'Z'`/`'z'`）；
+  - **静默语句丢弃四类模式**：(1) 实参传 `[]const u8` 切片类型（改 `@TypeOf`）；(2) `if (comptime @"as" == ...)`（改具名形参 `switch (kind)`）；(3) 多变量 `for (a, b of ...)`（改单变量 `for` + 索引）；(4) `extends` 作 `if (extends := ...)` 捕获变量及 `@"from".*` / `_.*` 解引用赋值；
+  - **非托管对象禁命名 `release()`**：`Blob`、`GarbageCollectionController` 等结构体定义 `release()` 会触发 `cpc` 自动注入 `defer x.release()` 引发提前释放/UAF，改名 `releaseInternal` 或合并入 `deinit`；
+  - **值接收者悬垂栈切片**：省略接收者按值传递，返回 `&_.field` 或 `_.buf[0..]` 必须显式写 `_: *const Self`。

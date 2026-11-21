@@ -286,7 +286,8 @@ fn NewLexer_(
             const all_comments = _.all_comments;
             const comments_to_preserve_before = _.comments_to_preserve_before;
             const temp_buffer_u16 = _.temp_buffer_u16;
-            _.* = original.*;
+            const dst: *LexerType = _;
+            dst.* = original.*;
 
             // make sure pointers are valid
             _.all_comments = all_comments;
@@ -397,7 +398,7 @@ fn NewLexer_(
                             },
 
                             // legacy octal literals
-                            '0'..'7' => {
+                            '0'..='7' => {
                                 const octal_start = (iter.i + width2) - 2;
                                 if (comptime is_json) {
                                     lexer.end = start + iter.i - width2;
@@ -422,14 +423,14 @@ fn NewLexer_(
                                 const c3: CodePoint = iter.c;
 
                                 switch (c3) {
-                                    '0'..'7' => {
+                                    '0'..='7' => {
                                         value = value * 8 + c3 - '0';
                                         prev = iter;
                                         if (!iterator.next(&iter)) return lexer.syntaxError();
 
                                         const c4 = iter.c;
                                         switch (c4) {
-                                            '0'..'7' => {
+                                            '0'..='7' => {
                                                 const temp = value * 8 + c4 - '0';
                                                 if (temp < 256) {
                                                     value = temp;
@@ -477,13 +478,13 @@ fn NewLexer_(
                                 c3 = iter.c;
                                 width3 = iter.width;
                                 switch (c3) {
-                                    '0'..'9' => {
+                                    '0'..='9' => {
                                         value = value * 16 | (c3 - '0');
                                     },
-                                    'a'..'f' => {
+                                    'a'..='f' => {
                                         value = value * 16 | (c3 + 10 - 'a');
                                     },
-                                    'A'..'F' => {
+                                    'A'..='F' => {
                                         value = value * 16 | (c3 + 10 - 'A');
                                     },
                                     else => {
@@ -496,13 +497,13 @@ fn NewLexer_(
                                 c3 = iter.c;
                                 width3 = iter.width;
                                 switch (c3) {
-                                    '0'..'9' => {
+                                    '0'..='9' => {
                                         value = value * 16 | (c3 - '0');
                                     },
-                                    'a'..'f' => {
+                                    'a'..='f' => {
                                         value = value * 16 | (c3 + 10 - 'a');
                                     },
-                                    'A'..'F' => {
+                                    'A'..='F' => {
                                         value = value * 16 | (c3 + 10 - 'A');
                                     },
                                     else => {
@@ -537,13 +538,13 @@ fn NewLexer_(
                                         c3 = iter.c;
 
                                         switch (c3) {
-                                            '0'..'9' => {
+                                            '0'..='9' => {
                                                 value = value * 16 | (c3 - '0');
                                             },
-                                            'a'..'f' => {
+                                            'a'..='f' => {
                                                 value = value * 16 | (c3 + 10 - 'a');
                                             },
-                                            'A'..'F' => {
+                                            'A'..='F' => {
                                                 value = value * 16 | (c3 + 10 - 'A');
                                             },
                                             '}' => {
@@ -585,13 +586,13 @@ fn NewLexer_(
                                     let j: usize = 0;
                                     while (j < 4) : (j += 1) {
                                         switch (c3) {
-                                            '0'..'9' => {
+                                            '0'..='9' => {
                                                 value = value * 16 | (c3 - '0');
                                             },
-                                            'a'..'f' => {
+                                            'a'..='f' => {
                                                 value = value * 16 | (c3 + 10 - 'a');
                                             },
-                                            'A'..'F' => {
+                                            'A'..='F' => {
                                                 value = value * 16 | (c3 + 10 - 'A');
                                             },
                                             else => {
@@ -652,7 +653,7 @@ fn NewLexer_(
 
                 switch (iter.c) {
                     -1 => return lexer.addDefaultError("Unexpected end of file"),
-                    0..0xFFFF => {
+                    0..=0xFFFF => {
                         buf.append(@as(u16, i32(iter.c))) catch unreachable;
                     },
                     else => {
@@ -913,7 +914,7 @@ fn NewLexer_(
                         lexer.step();
                         while (lexer.code_point != '}') {
                             switch (lexer.code_point) {
-                                '0'..'9', 'a'..'f', 'A'..'F' => {
+                                '0'..='9', 'a'..='f', 'A'..='F' => {
                                     lexer.step();
                                 },
                                 else => lexer.syntaxError()?,
@@ -926,25 +927,25 @@ fn NewLexer_(
                         // comptime var j: usize = 0;
 
                         switch (lexer.code_point) {
-                            '0'..'9', 'a'..'f', 'A'..'F' => {
+                            '0'..='9', 'a'..='f', 'A'..='F' => {
                                 lexer.step();
                             },
                             else => lexer.syntaxError()?,
                         }
                         switch (lexer.code_point) {
-                            '0'..'9', 'a'..'f', 'A'..'F' => {
+                            '0'..='9', 'a'..='f', 'A'..='F' => {
                                 lexer.step();
                             },
                             else => lexer.syntaxError()?,
                         }
                         switch (lexer.code_point) {
-                            '0'..'9', 'a'..'f', 'A'..'F' => {
+                            '0'..='9', 'a'..='f', 'A'..='F' => {
                                 lexer.step();
                             },
                             else => lexer.syntaxError()?,
                         }
                         switch (lexer.code_point) {
-                            '0'..'9', 'a'..'f', 'A'..'F' => {
+                            '0'..='9', 'a'..='f', 'A'..='F' => {
                                 lexer.step();
                             },
                             else => lexer.syntaxError()?,
@@ -1732,7 +1733,7 @@ fn NewLexer_(
                         lexer.parseStringLiteral('`')?;
                     },
 
-                    '_', '$', 'a'..'z', 'A'..'Z' => {
+                    '_', '$', 'a'..='z', 'A'..='Z' => {
                         const advance = latin1IdentifierContinueLength(lexer.source.contents[lexer.current..]);
 
                         lexer.end = lexer.current + advance;
@@ -1778,7 +1779,7 @@ fn NewLexer_(
                         lexer.token = scan_result.token;
                     },
 
-                    '.', '0'..'9' => {
+                    '.', '0'..='9' => {
                         lexer.parseNumericLiteralOrDot()?;
                     },
 
@@ -2769,7 +2770,7 @@ fn NewLexer_(
                         base = 16;
                     },
 
-                    '0'..'7', '_' => {
+                    '0'..='7', '_' => {
                         base = 8;
                         lexer.is_legacy_octal_literal = true;
                     },
@@ -3209,8 +3210,8 @@ pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer): bool {
     if (name.len == 0) return false;
 
     switch (name[0]) {
-        'a'..'z',
-        'A'..'Z',
+        'a'..='z',
+        'A'..='Z',
         '$',
         '_',
         => {},
@@ -3220,9 +3221,9 @@ pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer): bool {
     let i: usize = 1;
     while (i < name.len) : (i += 1) {
         switch (name[i]) {
-            '0'..'9',
-            'a'..'z',
-            'A'..'Z',
+            '0'..='9',
+            'a'..='z',
+            'A'..='Z',
             '$',
             '_',
             => {},
@@ -3242,7 +3243,7 @@ pub fn latin1IdentifierContinueLengthScalar(name: []const u8): usize {
     let i = @as(usize, 0);
     while (i < name.len) : (i += 1) {
         switch (name[i]) {
-            '0'..'9', 'a'..'z', 'A'..'Z', '$', '_' => {},
+            '0'..='9', 'a'..='z', 'A'..='Z', '$', '_' => {},
             else => return i,
         }
     }

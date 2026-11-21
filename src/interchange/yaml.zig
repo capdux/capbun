@@ -74,7 +74,7 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
@@ -483,21 +483,21 @@ pub fn EncodingChars(comptime encoding: Encoding) type {
 
 pub fn isNsDecDigit(c: encoding.unit()) bool {
                 return (switch (c) {
-48...56 => true,
+48...57 => true,
 else => false,
 });
         }
 
 pub fn isNsHexDigit(c: encoding.unit()) bool {
                 return (switch (c) {
-48...56, 97...101, 65...69 => true,
+48...57, 97...102, 65...70 => true,
 else => false,
 });
         }
 
 pub fn isNsWordChar(c: encoding.unit()) bool {
                 return (switch (c) {
-48...56, 65...89, 97...121, '-' => true,
+48...57, 65...90, 97...122, '-' => true,
 else => false,
 });
         }
@@ -508,7 +508,7 @@ pub fn isNsChar(c: encoding.unit()) bool {
 ' ', 9 => false,
 10, 13 => false,
 33...125 => true,
-128...254 => true,
+128...255 => true,
 else => false,
 }),
 .utf16 => (switch (c) {
@@ -516,8 +516,8 @@ else => false,
 10, 13 => false,
 33...125 => true,
 133 => true,
-160...55294 => true,
-57344...65532 => true,
+160...55295 => true,
+57344...65533 => true,
 else => false,
 }),
 .latin1 => (switch (c) {
@@ -1386,7 +1386,7 @@ end_ch = c;
                     end_ch = parser.next();
                     continue :end_sw;
 },
-49...56 => {
+49...57 => {
 first = false;
                     _ = parser.inc(1);
                     end_ch = parser.next();
@@ -1402,7 +1402,7 @@ first = false;
                     end_ch = parser.next();
                     continue :end_sw;
 },
-97...99, 'f', 65...67, 'F' => |c| {
+97...100, 'f', 65...68, 'F' => |c| {
 hex = true;
                     if (first) {
                         if (((c == 98) or (c == 66))) {
@@ -3172,7 +3172,7 @@ _ = try ctx.appendSource(43, self.pos);
                     sw_v_12 = self.next();
                     continue :sw_12;
 },
-48...56 => {
+48...57 => {
 _ = try ctx.tryResolveNumber(self, .other);
                     sw_v_12 = self.next();
                     continue :sw_12;
@@ -3218,7 +3218,7 @@ pub fn scanBlockHeader(self: *@This()) ScanBlockHeaderError!ScanBlockHeaderResul
 0 => {
 return ScanBlockHeaderResult{ .indent = ((indent_indicator) orelse (.default)), .chomp = ((chomp) orelse (.default)) };
 },
-49...56 => |digit| {
+49...57 => |digit| {
 if ((indent_indicator != null)) {
                         return error.UnexpectedCharacter;
                     }
@@ -3804,9 +3804,9 @@ pub fn decodeHexCodePoint(self: *@This(), comptime escape: Escape, text: *std.ar
                     _ = self.inc(1);
                     const digit = self.next();
                     const num: u8 = (switch (digit) {
-48...56 => @intCast((digit - 48)),
-97...101 => @intCast(((digit - 97) + 10)),
-65...69 => @intCast(((digit - 65) + 10)),
+48...57 => @intCast((digit - 48)),
+97...102 => @intCast(((digit - 97) + 10)),
+65...70 => @intCast(((digit - 65) + 10)),
 else => {
 return error.UnexpectedCharacter;
 },

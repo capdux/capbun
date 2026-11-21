@@ -72,7 +72,7 @@ pub const VLQ = @This();
 bytes: [7]u8,
 len: u8 = 0,
 
-pub inline fn slice(self: VLQ) []const u8 {
+pub inline fn slice(self: *const VLQ) []const u8 {
         return self.bytes[0..(if (comptime @typeInfo(@TypeOf(self.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.len)) else cp_cast_int(usize, self.len))];
 }
 

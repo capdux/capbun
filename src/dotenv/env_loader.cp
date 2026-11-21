@@ -339,7 +339,7 @@
                     node_path_to_use = node_path_to_use_set_once;
                 } else {
                     const node = this.getNodePath(fs, &buf) orelse return false;
-                    node_path_to_use = try fs.dirname_store.append([]const u8, bun.asByteSlice(node));
+                    node_path_to_use = try fs.dirname_store.append(@TypeOf(node_path_to_use), bun.asByteSlice(node));
                 }
             }
             node_path_to_use_set_once = node_path_to_use;

@@ -64,7 +64,7 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
@@ -1131,8 +1131,7 @@ pub fn fmt(p: *Printer, comptime str: []const u8, args: anytype) !void {
     }
 
 pub fn printBuffer(p: *Printer, str: []const u8) void {
-        _ = p;
-        _ = str;
+            _ = p.writer.print(@TypeOf(str), str);
     }
 
 pub fn print(p: *Printer, str: anytype) void {
@@ -1490,7 +1489,7 @@ pub fn printFnArgs(p: *Printer, open_paren_loc: ?logger.Loc, args: []G.Arg, has_
                     _ = p.printSpace();
                 }
                 if ((has_rest_arg and ((i + 1) == args.len))) {
-                    _ = p.print("..");
+                    _ = p.print("...");
                 }
                 _ = p.printBinding(arg.binding, .{});
                 if (arg.default) |default| {
@@ -1513,7 +1512,7 @@ pub fn printFunc(p: *Printer, func: G.Fn) void {
 pub fn printClass(p: *Printer, cls: G.Class) void {
             if (cls.extends) |ext| {
                 _ = &ext;
-                _ = p.print(" ext");
+                _ = p.print(" extends");
                 _ = p.printSpace();
                 _ = p.printExpr(ext, Level.new.sub(1), ExprFlag.Set.initEmpty());
             }
@@ -1580,7 +1579,7 @@ pub fn printNonNegativeFloat(p: *Printer, float: f64) void {
 0 => {
 _ = p.print("0");
 },
-1...8 => {
+1...9 => {
 var bytes: [1]u8 = .{ (48 + @as(u8, @intCast(val))) };
                 _ = &bytes;
                 _ = p.print((&bytes));
@@ -1588,7 +1587,7 @@ var bytes: [1]u8 = .{ (48 + @as(u8, @intCast(val))) };
 10 => {
 _ = p.print("10");
 },
-11...98 => {
+11...99 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(2)) catch unreachable)[0..2];
 
@@ -1599,7 +1598,7 @@ const buf = (blk: {
 'd' => {
 _ = p.print("100");
 },
-101...998 => {
+101...999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(3)) catch unreachable)[0..3];
 
@@ -1610,7 +1609,7 @@ const buf = (blk: {
 1000 => {
 _ = p.print("1000");
 },
-1001...9998 => {
+1001...9999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(4)) catch unreachable)[0..4];
 
@@ -1636,7 +1635,7 @@ _ = p.print("1e8");
 1000000000 => {
 _ = p.print("1e9");
 },
-10001...99998 => {
+10001...99999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(5)) catch unreachable)[0..5];
 
@@ -1644,7 +1643,7 @@ const buf = (blk: {
                 _ = formatUnsignedIntegerBetween(5, buf, val);
                 _ = p.writer.advance(5);
 },
-100001...999998 => {
+100001...999999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(6)) catch unreachable)[0..6];
 
@@ -1652,7 +1651,7 @@ const buf = (blk: {
                 _ = formatUnsignedIntegerBetween(6, buf, val);
                 _ = p.writer.advance(6);
 },
-1000001...9999998 => {
+1000001...9999999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(7)) catch unreachable)[0..7];
 
@@ -1660,7 +1659,7 @@ const buf = (blk: {
                 _ = formatUnsignedIntegerBetween(7, buf, val);
                 _ = p.writer.advance(7);
 },
-10000001...99999998 => {
+10000001...99999999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(8)) catch unreachable)[0..8];
 
@@ -1668,7 +1667,7 @@ const buf = (blk: {
                 _ = formatUnsignedIntegerBetween(8, buf, val);
                 _ = p.writer.advance(8);
 },
-100000001...999999998 => {
+100000001...999999999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(9)) catch unreachable)[0..9];
 
@@ -1676,7 +1675,7 @@ const buf = (blk: {
                 _ = formatUnsignedIntegerBetween(9, buf, val);
                 _ = p.writer.advance(9);
 },
-1000000001...9999999998 => {
+1000000001...9999999999 => {
 const buf = (blk: {
                 break :blk ((p.writer.reserve(10)) catch unreachable)[0..10];
 
@@ -1997,10 +1996,48 @@ pub fn printExportFromClauseItem(p: *Printer, item: js_ast.ClauseItem) void {
             return printClauseItemAs(p, item, .export_from);
     }
 
-pub fn printClauseItemAs(p: *Printer, item: js_ast.ClauseItem, comptime @"as": @Type(.enum_literal)) void {
-        _ = @"as";
+pub fn printClauseItemAs(p: *Printer, item: js_ast.ClauseItem, comptime kind: @Type(.enum_literal)) void {
             const name = p.renamer.nameForSymbol((if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name).ref.?);
-            _ = &name;
+            switch (kind) {
+.@"import" => {
+if (strings.eql(name, item.alias)) {
+                _ = p.printIdentifier(name);
+            } else {
+                _ = p.printClauseAlias(item.alias);
+                _ = p.print(" as ");
+                _ = p.addSourceMapping(item.alias_loc);
+                _ = p.printIdentifier(name);
+            }
+},
+.@"var" => {
+_ = p.printClauseAlias(item.alias);
+            if ((!strings.eql(name, item.alias))) {
+                _ = p.print(":");
+                _ = p.printSpace();
+                _ = p.printIdentifier(name);
+            }
+},
+.@"export" => {
+_ = p.printIdentifier(name);
+            if ((!strings.eql(name, item.alias))) {
+                _ = p.print(" as ");
+                _ = p.addSourceMapping(item.alias_loc);
+                _ = p.printClauseAlias(item.alias);
+            }
+},
+.export_from => {
+const from_name = (if ((item.original_name.len > 0)) item.original_name else name);
+            _ = p.printClauseAlias(from_name);
+            if ((!strings.eql(from_name, item.alias))) {
+                _ = p.print(" as ");
+                _ = p.addSourceMapping(item.alias_loc);
+                _ = p.printClauseAlias(item.alias);
+            }
+},
+else => {
+_ = @compileError("Unknown as");
+},
+}
     }
 
 pub fn canPrintIdentifierUTF16(p: *Printer, name: []const u16) bool {
@@ -2039,7 +2076,7 @@ if (is_ascii) {
                     is_ascii = false;
                 }
                 switch (cursor.c) {
-0...65534 => {
+0...65535 => {
 const ubuf: [6]u8 = .{ 92, 117, hex_chars[@as(usize, @intCast(cp_shr(cursor.c, 12)))], hex_chars[@as(usize, @intCast((cp_shr(cursor.c, 8) & 15)))], hex_chars[@as(usize, @intCast((cp_shr(cursor.c, 4) & 15)))], hex_chars[@as(usize, @intCast((cursor.c & 15)))] };
                 _ = p.print(ubuf);
 },
@@ -2085,7 +2122,7 @@ _ = p.printSpaceBeforeIdentifier();
 },
 .e_spread => |e| {
 _ = p.addSourceMapping(expr.loc);
-            _ = p.print("..");
+            _ = p.print("...");
             const none_flag = ExprFlag.Set.initEmpty();
             _ = p.printExpr((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), .comma, none_flag);
 },
@@ -3144,7 +3181,7 @@ if (is_ascii) {
                         is_ascii = false;
                     }
                     switch (cursor.c) {
-0...65534 => {
+0...65535 => {
 const ubuf: [6]u8 = .{ 92, 117, hex_chars[@as(usize, @intCast(cp_shr(cursor.c, 12)))], hex_chars[@as(usize, @intCast((cp_shr(cursor.c, 8) & 15)))], hex_chars[@as(usize, @intCast((cp_shr(cursor.c, 4) & 15)))], hex_chars[@as(usize, @intCast((cursor.c & 15)))] };
                     _ = p.print(ubuf);
 },
@@ -3177,7 +3214,7 @@ pub fn printProperty(p: *Printer, item_in: G.Property) void {
                     if (comptime (is_json and Environment.allow_assert)) {
                         _ = unreachable;
                     }
-                    _ = p.print("..");
+                    _ = p.print("...");
                     _ = p.printExpr((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value).?, .comma, ExprFlag.Set.initEmpty());
                     return;
                 }
@@ -3494,7 +3531,7 @@ _ = p.print("[");
                     }
                     const is_last = ((i + 1) == b.items.len);
                     if ((b.has_spread and is_last)) {
-                        _ = p.print("..");
+                        _ = p.print("...");
                     }
                     _ = p.printBinding((item.*).binding, tlm);
                     _ = p.maybePrintDefaultBindingValue((item.*));
@@ -3533,7 +3570,7 @@ _ = p.print("{");
                         _ = p.printIndent();
                     }
                     if ((property.*).flags.contains(.is_spread)) {
-                        _ = p.print("..");
+                        _ = p.print("...");
                     } else {
                         if ((property.*).flags.contains(.is_computed)) {
                             _ = p.print("[");
@@ -5149,7 +5186,7 @@ pub fn printIdentifierUTF16(p: *Printer, name: []const u16) !void {
                 }
                 if (((comptime ascii_only) and (c > last_ascii))) {
                     switch (c) {
-0...65534 => {
+0...65535 => {
 const ubuf: [6]u8 = .{ 92, 117, hex_chars[@as(usize, @intCast(cp_shr(c, 12)))], hex_chars[@as(usize, @intCast((cp_shr(c, 8) & 15)))], hex_chars[@as(usize, @intCast((cp_shr(c, 4) & 15)))], hex_chars[@as(usize, @intCast((c & 15)))] };
                     _ = p.print(ubuf);
 },
@@ -5399,7 +5436,7 @@ pub fn stdWriter(writer: *Self) std.Io.GenericWriter(*Self,EmptyError,stdWriterW
     }
 
 pub fn stdWriterWrite(writer: *Self, bytes: []const u8) EmptyError!usize {
-        _ = writer;
+            _ = writer.print(@TypeOf(bytes), bytes);
             return bytes.len;
     }
 

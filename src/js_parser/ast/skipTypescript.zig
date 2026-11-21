@@ -778,14 +778,14 @@ if ((!p.lexer.has_newline_before)) {
 pub fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag) anyerror!SkipTypeParameterResult {
             _ = p.markTypeScriptOnly();
             if ((p.lexer.token != .t_less_than)) {
-                return error.did_not_skip_anything;
+                return SkipTypeParameterResult.did_not_skip_anything;
             }
             var result = SkipTypeParameterResult.could_be_type_cast;
             _ = &result;
             _ = try p.lexer.next();
             if (((p.lexer.token == .t_greater_than) and flags.allow_empty_type_parameters)) {
                 _ = try p.lexer.next();
-                return error.definitely_type_parameters;
+                return SkipTypeParameterResult.definitely_type_parameters;
             }
             while (true) {
                 var has_in = false;

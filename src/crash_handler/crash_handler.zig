@@ -50,7 +50,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -71,7 +71,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => []const @typeInfo(@TypeOf(__cp_val)).array.child, else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val[0..], else => return __cp_val, } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.indexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } for (__cp_slice, 0..) |__item, __idx| { if (cp_eq(__item, __needle)) return @intCast(__idx); } return -1; }
 fn cp_last_index_of(__container: anytype, __needle: anytype) i32 { const __cp_slice = cp_iter_slice(__container); const __SliceT = @TypeOf(__cp_slice); if (comptime is_string_like(__SliceT) and is_string_like(@TypeOf(__needle))) { if (std.mem.lastIndexOf(u8, to_string_slice(__cp_slice), to_string_slice(__needle))) |__idx| return @intCast(__idx); return -1; } var __idx: usize = __cp_slice.len; while (__idx > 0) { __idx -= 1; if (cp_eq(__cp_slice[__idx], __needle)) return @intCast(__idx); } return -1; }
@@ -789,9 +789,23 @@ _ = std.posix.abort();
 pub fn handleRootError(err: anyerror, error_return_trace: ?*std.builtin.StackTrace) noreturn {
         var show_trace = bun.Environment.show_crash_trace;
         _ = &show_trace;
-        __sw_blk_4: { const __disc_4 = err; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if ((cp_match_tag(__err_v_4, .InvalidArgument) or cp_match_tag(__err_v_4, .@"Invalid Bunfig") or cp_match_tag(__err_v_4, .InstallFailed))) {  if ((!show_trace)) {
+        switch (err) {
+error.OutOfMemory => {
+_ = bun.outOfMemory();
+},
+error.InvalidArgument, error.@"Invalid Bunfig", error.InstallFailed => {
+if ((!show_trace)) {
             _ = Global.exit(1);
-        } break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .SyntaxError)) {  _ = Output.err("SyntaxError", "An error occurred while parsing code", .{}); break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .CurrentWorkingDirectoryUnlinked)) {  _ = Output.errGeneric("The current working directory was deleted, so that command didn't work. Please cd into a different directory and try again.", .{}); break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .SystemFdQuotaExceeded)) {  if (comptime bun.Environment.isPosix) {
+        }
+},
+error.SyntaxError => {
+_ = Output.err("SyntaxError", "An error occurred while parsing code", .{});
+},
+error.CurrentWorkingDirectoryUnlinked => {
+_ = Output.errGeneric("The current working directory was deleted, so that command didn't work. Please cd into a different directory and try again.", .{});
+},
+error.SystemFdQuotaExceeded => {
+if (comptime bun.Environment.isPosix) {
             const limit_res = (blk_catch_38: { break :blk_catch_38 ((std.posix.getrlimit(.NOFILE)) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 null; }); });
             const limit = (if ((limit_res != null)) limit_res.?.cur else null);
             if (comptime bun.Environment.isMac) {
@@ -811,7 +825,10 @@ pub fn handleRootError(err: anyerror, error_return_trace: ?*std.builtin.StackTra
             }
         } else {
             _ = Output.prettyError("<r><red>error<r>: Your computer ran out of file descriptors <d>(<red>SystemFdQuotaExceeded<r><d>)<r>", .{});
-        } break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .ProcessFdQuotaExceeded)) {  if (comptime bun.Environment.isPosix) {
+        }
+},
+error.ProcessFdQuotaExceeded => {
+if (comptime bun.Environment.isPosix) {
             const limit_res = (blk_catch_39: { break :blk_catch_39 ((std.posix.getrlimit(.NOFILE)) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 null; }); });
             const limit = (if ((limit_res != null)) limit_res.?.cur else null);
             if (comptime bun.Environment.isMac) {
@@ -831,7 +848,10 @@ pub fn handleRootError(err: anyerror, error_return_trace: ?*std.builtin.StackTra
             }
         } else {
             _ = Output.prettyErrorln("<r><red>error<r>: bun ran out of file descriptors <d>(<red>ProcessFdQuotaExceeded<r><d>)<r>", .{});
-        } break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if ((cp_match_tag(__err_v_4, .NotOpenForReading) or cp_match_tag(__err_v_4, .Unexpected))) {  if (comptime bun.Environment.isPosix) {
+        }
+},
+error.NotOpenForReading, error.Unexpected => {
+if (comptime bun.Environment.isPosix) {
             const limit = (blk_catch_40: { break :blk_catch_40 ((std.posix.getrlimit(.NOFILE)) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 std.mem.zeroes(std.posix.rlimit); }); });
             if (((limit.cur > 0) and (limit.cur < (8192 * 2)))) {
                 _ = Output.prettyError("\n<r><red>error<r>: An unknown error occurred, possibly due to low max file descriptors <d>(<red>Unexpected<r><d>)<r>\n\n<d>Current limit: {d}<r>\n\nTo fix this, try running:\n\n  <cyan>ulimit -n 2147483646<r>\n", .{ limit.cur });
@@ -854,9 +874,20 @@ pub fn handleRootError(err: anyerror, error_return_trace: ?*std.builtin.StackTra
         } else {
             _ = Output.errGeneric("An unknown error occurred <d>(<red>{s}<r><d>)<r>", .{ @errorName(err) });
             show_trace = true;
-        } break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if ((cp_match_tag(__err_v_4, .ENOENT) or cp_match_tag(__err_v_4, .FileNotFound))) {  _ = Output.err("ENOENT", "Bun could not find a file, and the code that produces this error is missing a better error.", .{}); break :__sw_blk_4; } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .MissingPackageJSON)) {  _ = Output.errGeneric("Bun could not find a package.json file to install from", .{});
-        _ = Output.note("Run \"bun init\" to initialize a project", .{}); break :__sw_blk_4; } } {  _ = Output.errGeneric((if (bun.Environment.show_crash_trace) "'main' returned <red>error.{s}<r>" else "An internal error occurred (<red>{s}<r>)"), .{ @errorName(err) });
-        show_trace = true; break :__sw_blk_4; }  }
+        }
+},
+error.ENOENT, error.FileNotFound => {
+_ = Output.err("ENOENT", "Bun could not find a file, and the code that produces this error is missing a better error.", .{});
+},
+error.MissingPackageJSON => {
+_ = Output.errGeneric("Bun could not find a package.json file to install from", .{});
+        _ = Output.note("Run \"bun init\" to initialize a project", .{});
+},
+else => {
+_ = Output.errGeneric((if (bun.Environment.show_crash_trace) "'main' returned <red>error.{s}<r>" else "An internal error occurred (<red>{s}<r>)"), .{ @errorName(err) });
+        show_trace = true;
+},
+}
         if (show_trace) {
             verbose_error_trace = show_trace;
             _ = handleErrorReturnTraceExtra(err, error_return_trace, true);
@@ -1394,7 +1425,7 @@ else => posix_programs,
             }
             var sfa = std.heap.stackFallback(16384, arena_alloc.allocator());
             _ = &sfa;
-            _ = (blk_catch_58: { break :blk_catch_58 ((spawnSymbolizer(program, sfa.get(), (&trace))) catch |e| { _ = &e; break :blk_catch_58 @as(void, (__sw_blk_9: { const __disc_9 = e; _ = &__disc_9; if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if (cp_match_tag(__err_v_9, .FileNotFound)) {  break :__sw_blk_9 cp_val(continue); } } {   }  unreachable; })); }); });
+            _ = (blk_catch_58: { break :blk_catch_58 ((spawnSymbolizer(program, sfa.get(), (&trace))) catch |e| { _ = &e; break :blk_catch_58 @as(void, (__sw_blk_8: { const __disc_8 = e; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .FileNotFound)) {  break :__sw_blk_8 cp_val(continue); } } {   }  unreachable; })); }); });
             return;
         }
 }

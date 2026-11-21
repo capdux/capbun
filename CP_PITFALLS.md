@@ -138,3 +138,11 @@
 - **`if (*v := optField)`**：会降成 `(v.*).*`，改用 `!= null` + `.?`。
 - **`T == X || (...)` 布尔表达式**：会误触发错误集合并，改用 `if/else`。
 - **无接收者的 hash/eql 上下文方法**：必须在函数体内引用 `_`，`cpc` 才会生成 `self`。
+- **`const Cb = fn (...) Ret` 被降级为 `*const fn`**：用于 `@export(&Cb)` 时会导出 `.rodata` 数据地址导致 Wild Jump SEGV；用占位函数 `@TypeOf(_Cb)` 保留函数类型。
+- **`switch` 字符/整数闭区间必须写 `..=`**：`a..b` 在 `cpc` 中是半开 `[a, b)`（会丢失 `'9'`/`'Z'`/`'z'`），闭区间必须写 `'a'..='z'`。
+- **实参直接传切片类型 `[]const u8` / `[]u16` 被吞语句或拆参**：改用 `@TypeOf(arg)` 或 `@TypeOf(arr[0])` 传给泛型函数（已报 `task-bun-20261121-slice-type-arg`）。
+- **无接收者值方法返回 `&_.field` 或 `_.buf[0..]` 产生悬垂栈切片**：省略接收者按值拷贝，返回内部切片/指针必须写 `_: *const Self`（不可变指针）或 `*_`（可变指针）。
+- **多变量 `for (a, b of slice1, slice2)` 被 `cpc` 静默丢弃**：改用单变量 `for (a of slice1)` + 显式索引计数器。
+- **内置关键字 `extends` 等作 `if (extends := opt)` 捕获变量被静默丢弃整块**：避开 `extends` 等保留字命名（改名 `ext`）。
+- **指针解引用赋值含 `@"from"` 或 `_` 被 `cpc` 静默丢弃**：如 `dst.* = @"from".*;` / `_.* = src.*;` 会整句丢失；改用普通具名指针变量中转（已报 `task-bun-20261121-deref-assign-drop`）。
+- **`fn release(*_)` 命名触发自动 RAII 提前释放**：在由 JS GC 或外部分配器接管生命周期的结构体上（如 `Blob`、`GarbageCollectionController`），勿将清理方法命名为 `release`（会被 `cpc` 自动注入 `defer x.release()`），可改名 `releaseInternal` 或合并入 `deinit`。

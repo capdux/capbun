@@ -327,8 +327,9 @@ const empty_u16_buf: [1]u16 = [0];
     defer allocator.free(buf1);
     let buf2 = bun.handleOom(allocator.alloc(u16, v.utf16ByteLength() + 1));
     defer allocator.free(buf2);
+    const U16Slice = []u16;
     const len1: usize = switch (wtf1.is8Bit()) {
-        true => bun.strings.copyLatin1IntoUTF16([]u16, buf1, wtf1.latin1Slice()).written,
+        true => bun.strings.copyLatin1IntoUTF16(U16Slice, buf1, wtf1.latin1Slice()).written,
         false => b: {
             @memcpy(buf1[0..wtf1.length()], wtf1.utf16Slice());
             break :b wtf1.length();
@@ -341,8 +342,9 @@ const empty_u16_buf: [1]u16 = [0];
             str2 = empty_u16_buf[0..0 :0].ptr;
         } else {
             const wtf2 = v.value.WTFStringImpl;
+            const U16Slice2 = []u16;
             const len2: usize = switch (wtf2.is8Bit()) {
-                true => bun.strings.copyLatin1IntoUTF16([]u16, buf2, wtf2.latin1Slice()).written,
+                true => bun.strings.copyLatin1IntoUTF16(U16Slice2, buf2, wtf2.latin1Slice()).written,
                 false => b: {
                     @memcpy(buf2[0..wtf2.length()], wtf2.utf16Slice());
                     break :b wtf2.length();

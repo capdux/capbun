@@ -151,7 +151,7 @@ pub struct ExecutionSequence {
     pub const MAX_FLAKY_ATTEMPTS = EXECUTION_MAX_FLAKY_ATTEMPTS;
     pub const FlakyAttempt = ExecutionFlakyAttempt;
 
-    fn flakyAttempts(): []const ExecutionFlakyAttempt {
+    fn flakyAttempts(_: &ExecutionSequence): []const ExecutionFlakyAttempt {
         return _.flaky_attempts_buf[0.._.flaky_attempt_count];
     }
 

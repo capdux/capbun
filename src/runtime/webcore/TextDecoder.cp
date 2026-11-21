@@ -30,7 +30,7 @@ pub struct Buffered {
     buf: [3]u8 = .{ 0, 0, 0 },
     len: u2 = 0,
 
-    fn slice(): []const u8 {
+    fn slice(_: &Buffered): []const u8 {
         return _.buf[0.._.len];
     }
 }

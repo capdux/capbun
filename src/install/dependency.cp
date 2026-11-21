@@ -148,7 +148,7 @@ pub enum DependencyVersionTag: u8 {
             },
             // 1.2.3
             // 123.tar.gz
-            '0'..'9' => {
+            '0'..='9' => {
                 if (Dependency.isTarball(dependency)) return .tarball;
                 return .npm;
             },
@@ -334,7 +334,7 @@ pub enum DependencyVersionTag: u8 {
                 if (Dependency.isSCPLikePath(dependency)) return .git;
                 if (dependency.len == 1) return .dist_tag;
                 return switch (dependency[1]) {
-                    '0'..'9' => .npm,
+                    '0'..='9' => .npm,
                     else => .dist_tag,
                 };
             },

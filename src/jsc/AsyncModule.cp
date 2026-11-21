@@ -367,7 +367,8 @@ pub struct AsyncModule {
 
     fn done(*_, jsc_vm: *VirtualMachine) {
         let clone = jsc_vm.allocator.create(AsyncModule) catch unreachable;
-        clone.* = _.*;
+        const src: *const AsyncModule = _;
+        clone.* = src.*;
         jsc_vm.modules.scheduled += 1;
         clone.any_task = jsc.AnyTask.New(AsyncModule, onDone).init(clone);
         jsc_vm.enqueueTask(jsc.Task.init(&clone.any_task));

@@ -888,7 +888,7 @@ fn readKey(*_): Key? {
                 'D' => .arrow_left,
                 'H' => .home,
                 'F' => .end,
-                '1'..'6' => blk: {
+                '1'..='6' => blk: {
                     const fourth_opt = _.readByte();
                     if (fourth_opt == null) break :blk .unknown;
                     const fourth = fourth_opt.?;

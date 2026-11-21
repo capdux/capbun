@@ -197,7 +197,7 @@ pub fn isNPMPackageNameIgnoreLength(target: string): bool {
 
     const scoped = switch (target[0]) {
         // Old packages may have capital letters
-        'A'..'Z', 'a'..'z', '0'..'9', '$', '-' => false,
+        'A'..='Z', 'a'..='z', '0'..='9', '$', '-' => false,
         '@' => true,
         else => return false,
     };
@@ -207,7 +207,7 @@ pub fn isNPMPackageNameIgnoreLength(target: string): bool {
     for (c of target[1..]) {
         switch (c) {
             // Old packages may have capital letters
-            'A'..'Z', 'a'..'z', '0'..'9', '-', '_', '.' => {},
+            'A'..='Z', 'a'..='z', '0'..='9', '-', '_', '.' => {},
             '/' => {
                 if (!scoped) return false;
                 if (slash_index > 0) return false;
@@ -231,35 +231,35 @@ pub fn isUUID(str: string): bool {
     if (str.len != uuid_len) return false;
     for (i of 0..8) {
         switch (str[i]) {
-            '0'..'9', 'a'..'f', 'A'..'F' => {},
+            '0'..='9', 'a'..='f', 'A'..='F' => {},
             else => return false,
         }
     }
     if (str[8] != '-') return false;
     for (i of 9..13) {
         switch (str[i]) {
-            '0'..'9', 'a'..'f', 'A'..'F' => {},
+            '0'..='9', 'a'..='f', 'A'..='F' => {},
             else => return false,
         }
     }
     if (str[13] != '-') return false;
     for (i of 14..18) {
         switch (str[i]) {
-            '0'..'9', 'a'..'f', 'A'..'F' => {},
+            '0'..='9', 'a'..='f', 'A'..='F' => {},
             else => return false,
         }
     }
     if (str[18] != '-') return false;
     for (i of 19..23) {
         switch (str[i]) {
-            '0'..'9', 'a'..'f', 'A'..'F' => {},
+            '0'..='9', 'a'..='f', 'A'..='F' => {},
             else => return false,
         }
     }
     if (str[23] != '-') return false;
     for (i of 24..36) {
         switch (str[i]) {
-            '0'..'9', 'a'..'f', 'A'..'F' => {},
+            '0'..='9', 'a'..='f', 'A'..='F' => {},
             else => return false,
         }
     }
@@ -301,7 +301,7 @@ pub fn startsWithNpmSecret(str: string): u8 {
         }
 
         switch (str[i]) {
-            '0'..'9', 'a'..'z', 'A'..'Z' => {},
+            '0'..='9', 'a'..='z', 'A'..='Z' => {},
             else => return if (i >= min_len) i else 0,
         }
     }
@@ -589,7 +589,7 @@ pub struct StringOrTinyString {
     remainder_buf: Buffer = undefined,
     @"meta": StringOrTinyStringMeta = {},
 
-    fn slice(): []const u8 {
+    fn slice(_: &StringOrTinyString): []const u8 {
         // This is a switch expression instead of a statement to make sure it uses the faster assembly
         if (_.@"meta".is_tiny_string == 1) {
             return _.remainder_buf[0.._.@"meta".remainder_len];
@@ -692,7 +692,7 @@ pub fn copyLowercase(input: string, out: []u8): string {
         while (i < in_slice.len) : (i += 1) {
             const c = in_slice[i];
             switch (c) {
-                'A'..'Z' => {
+                'A'..='Z' => {
                     bun.copy(u8, out_slice, in_slice[0..i]);
                     out_slice[i] = std.ascii.toLower(c);
                     const end = i + 1;
@@ -721,7 +721,7 @@ pub fn copyLowercaseIfNeeded(input: string, out: []u8): string {
         while (i < in_slice.len) : (i += 1) {
             const c = in_slice[i];
             switch (c) {
-                'A'..'Z' => {
+                'A'..='Z' => {
                     bun.copy(u8, out_slice, in_slice[0..i]);
                     out_slice[i] = std.ascii.toLower(c);
                     const end = i + 1;
@@ -1055,10 +1055,10 @@ pub fn eqlCaseInsensitiveT(comptime T: type, a: []const T, b: []const u8): bool 
         const c = a[i];
         const d = b[i];
         switch (c) {
-            'a'..'z' => {
+            'a'..='z' => {
                 if (c != d && (c & @as(T, 0b11011111)) != d) return false;
             }
-            'A'..'Z' => {
+            'A'..='Z' => {
                 if (c != d && (c | @as(T, 0b00100000)) != d) return false;
             }
             else => {
@@ -1469,8 +1469,8 @@ fn _decodeHexToBytes(destination: []u8, comptime Char: type, source: []const Cha
 
 fn byte2hex(char: u8): u8 {
     return switch (char) {
-        0..9 => char + '0',
-        10..15 => char - 10 + 'a',
+        0..=9 => char + '0',
+        10..=15 => char - 10 + 'a',
         else => unreachable,
     };
 }
@@ -1753,7 +1753,7 @@ pub fn getLinesInText(text: []const u8, line: u32, comptime line_range_count: us
         chunks[i] = text[r_slice[i].start..r_slice[i].end];
     }
 
-    std.mem.reverse([]const u8, results.slice());
+    std.mem.reverse(@TypeOf(results.slice()[0]), results.slice());
 
     return results;
 }
@@ -1872,12 +1872,14 @@ pub type u3_fast = u8;
 
 pub fn sortAsc(@"in": []string) {
     // TODO: experiment with simd to see if it's faster
-    std.sort.pdq([]const u8, @"in", {}, cmpStringsAsc);
+    const empty_sort_ctx: void = undefined;
+    std.sort.pdq(@TypeOf(@"in"[0]), @"in", empty_sort_ctx, cmpStringsAsc);
 }
 
 pub fn sortDesc(@"in": []string) {
     // TODO: experiment with simd to see if it's faster
-    std.sort.pdq([]const u8, @"in", {}, cmpStringsDesc);
+    const empty_sort_ctx: void = undefined;
+    std.sort.pdq(@TypeOf(@"in"[0]), @"in", empty_sort_ctx, cmpStringsDesc);
 }
 
 pub struct StringArrayByIndexSorter {
@@ -2170,7 +2172,7 @@ pub fn mustEscapeYAMLString(contents: []const u8): bool {
     if (contents.len == 0) return true;
 
     return switch (contents[0]) {
-        'A'..'Z', 'a'..'z' => strings.hasPrefixComptime(contents, "Yes") || strings.hasPrefixComptime(contents, "No") || strings.hasPrefixComptime(contents, "true") ||
+        'A'..='Z', 'a'..='z' => strings.hasPrefixComptime(contents, "Yes") || strings.hasPrefixComptime(contents, "No") || strings.hasPrefixComptime(contents, "true") ||
             strings.hasPrefixComptime(contents, "false") ||
             std.mem.indexOfAnyPos(u8, contents, 1, ": \t\r\n\x0B\x0C\\\",[]") != null,
         else => true,

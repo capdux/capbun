@@ -289,8 +289,8 @@ pub struct ThreadPool {
             debug("Worker.create()", .{});
         }
 
-        fn initializeTranspiler(*_, transpiler: *Transpiler, @"from": *Transpiler, allocator: std.mem.Allocator) {
-            transpiler.* = @"from".*;
+        fn initializeTranspiler(*_, transpiler: *Transpiler, src: *Transpiler, allocator: std.mem.Allocator) {
+            transpiler.* = src.*;
             transpiler.setLog(_.data.log);
             transpiler.setAllocator(allocator);
             transpiler.linker.resolver = &transpiler.resolver;

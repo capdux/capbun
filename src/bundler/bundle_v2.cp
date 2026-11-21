@@ -4448,7 +4448,7 @@ pub fn generateUniqueKey(): u64 {
         const hex = std.fmt.bufPrint(&buf, "{f}", [ bun.fmt.hexIntLower(key)]) catch
             unreachable;
         switch (hex[0]) {
-            '0'..'9' => {},
+            '0'..='9' => {},
             else => Output.panic("unique key is a valid identifier: {s}", [ hex]),
         }
     }

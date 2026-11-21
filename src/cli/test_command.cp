@@ -88,7 +88,7 @@ pub fn escapeXml(str: string, writer: auto)! {
                 writer.writeAll(escaped)?;
                 last = i + 1;
             },
-            0..0x1f => {
+            0..=0x1f => {
                 // Escape all control characters
                 writer.print("&#{d};", .{c})?;
             },

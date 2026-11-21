@@ -594,9 +594,9 @@ pub struct UTF16Replacement {
 
     pub inline fn utf8Width(replacement: UTF16Replacement): u3_fast {
         return switch (replacement.code_point) {
-            0..0x7F => 1,
-            0x80..0x7FF => 2,
-            0x800..0xFFFF => 3,
+            0..=0x7F => 1,
+            0x80..=0x7FF => 2,
+            0x800..=0xFFFF => 3,
             else => 4,
         };
     }
@@ -1902,17 +1902,17 @@ pub fn encodeUTF8Comptime(comptime codepoint: u32): []const u8 {
     const HEADER_4BYTE: u8 = 0b11100000;
 
     return switch (codepoint) {
-        0x0..0x7F => &[ @as(u8, @truncate(codepoint)) ],
-        0x80..0x7FF => &[
+        0x0..=0x7F => &[ @as(u8, @truncate(codepoint)) ],
+        0x80..=0x7FF => &[
             HEADER_2BYTE | @as(u8, @truncate(codepoint >> 6)),
             HEADER_CONT_BYTE | @as(u8, @truncate(codepoint & 0b00111111)),
         ],
-        0x800..0xFFFF => &[
+        0x800..=0xFFFF => &[
             HEADER_3BYTE | @as(u8, @truncate(codepoint >> 12)),
             HEADER_CONT_BYTE | @as(u8, @truncate((codepoint >> 6) & 0b00111111)),
             HEADER_CONT_BYTE | @as(u8, @truncate(codepoint & 0b00111111)),
         ],
-        0x10000..0x10FFFF => &[
+        0x10000..=0x10FFFF => &[
             HEADER_4BYTE | @as(u8, @truncate(codepoint >> 18)),
             HEADER_CONT_BYTE | @as(u8, @truncate((codepoint >> 12) & 0b00111111)),
             HEADER_CONT_BYTE | @as(u8, @truncate((codepoint >> 6) & 0b00111111)),
@@ -1957,7 +1957,7 @@ pub fn encodeWTF8RuneT(p: *[4]u8, comptime R: type, r: R): u3_fast {
 
 pub fn wtf8Sequence(code_point: u32): [4]u8 {
     return switch (code_point) {
-        0..0x7f => [
+        0..=0x7f => [
             @truncate(code_point),
             0,
             0,
@@ -1986,7 +1986,7 @@ pub fn wtf8Sequence(code_point: u32): [4]u8 {
 
 pub inline fn wtf8ByteSequenceLength(first_byte: u8): u8 {
     return switch (first_byte) {
-        0..0x7f => 1,
+        0..=0x7f => 1,
         else => if ((first_byte & 0xE0) == 0xC0)
             2
         else if ((first_byte & 0xF0) == 0xE0)
@@ -2001,7 +2001,7 @@ pub inline fn wtf8ByteSequenceLength(first_byte: u8): u8 {
 /// 0 == invalid
 pub inline fn wtf8ByteSequenceLengthWithInvalid(first_byte: u8): u8 {
     return switch (first_byte) {
-        0..0x7f => 1,
+        0..=0x7f => 1,
         else => if ((first_byte & 0xE0) == 0xC0)
             2
         else if ((first_byte & 0xF0) == 0xE0)

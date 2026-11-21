@@ -314,8 +314,8 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
                 _ = debug("Worker.create()", .{});
         }
     
-    pub fn initializeTranspiler(self: *@This(), transpiler: *Transpiler, @"from": *Transpiler, allocator: std.mem.Allocator) void {
-            _ = @"from";
+    pub fn initializeTranspiler(self: *@This(), transpiler: *Transpiler, src: *Transpiler, allocator: std.mem.Allocator) void {
+                transpiler.* = src.*;
                 _ = transpiler.setLog(self.data.log);
                 _ = transpiler.setAllocator(allocator);
                 transpiler.linker.resolver = (&transpiler.resolver);

@@ -283,24 +283,24 @@ type EncodingCharsUtf16 = EncodingChars<.utf16>;
 pub struct EncodingChars<const encoding: Encoding> {
     static fn isNsDecDigit(c: encoding.unit()): bool {
         return switch (c) {
-            '0'..'9' => true,
+            '0'..='9' => true,
             else => false,
         };
     }
     static fn isNsHexDigit(c: encoding.unit()): bool {
         return switch (c) {
-            '0'..'9',
-            'a'..'f',
-            'A'..'F'
+            '0'..='9',
+            'a'..='f',
+            'A'..='F'
             => true,
             else => false,
         };
     }
     static fn isNsWordChar(c: encoding.unit()): bool {
         return switch (c) {
-            '0'..'9',
-            'A'..'Z',
-            'a'..'z',
+            '0'..='9',
+            'A'..='Z',
+            'a'..='z',
             '-'
             => true,
             else => false,
@@ -316,7 +316,7 @@ pub struct EncodingChars<const encoding: Encoding> {
 
                 0x21..0x7e => true,
 
-                0x80..0xff => true,
+                0x80..=0xff => true,
 
                 // TODO: include 0x85, [0xa0 - 0xd7ff], [0xe000 - 0xfffd], [0x010000 - 0x10ffff]
                 else => false,
@@ -330,8 +330,8 @@ pub struct EncodingChars<const encoding: Encoding> {
 
                 0x85 => true,
 
-                0xa0..0xd7ff => true,
-                0xe000..0xfffd => true,
+                0xa0..=0xd7ff => true,
+                0xe000..=0xfffd => true,
 
                 // TODO: include 0x85, [0xa0 - 0xd7ff], [0xe000 - 0xfffd], [0x010000 - 0x10ffff]
                 else => false,
@@ -1303,7 +1303,7 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
                 end_ch = parser.next(); continue :end_sw;
             },
 
-            '1'..'9'
+            '1'..='9'
             => {
                 first = false;
                 parser.inc(1);
@@ -1322,9 +1322,9 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
                 end_ch = parser.next(); continue :end_sw;
             },
 
-            'a'..'d',
+            'a'..='d',
             'f',
-            'A'..'D',
+            'A'..='D',
             'F'
             => |c| {
                 hex = true;
@@ -3472,7 +3472,7 @@ pub struct Parser<const enc: Encoding> {
                         sw_v_12 = _.next(); continue :sw_12;
                     },
 
-                    '0'..'9' => {
+                    '0'..='9' => {
                         ctx.tryResolveNumber(_, .other)?;
                         sw_v_12 = _.next(); continue :sw_12;
                     },
@@ -3524,7 +3524,7 @@ pub struct Parser<const enc: Encoding> {
             0 => {
                 return ScanBlockHeaderResult{ indent: indent_indicator ?? .default, chomp: chomp ?? .default };
             },
-            '1'..'9' => |digit| {
+            '1'..='9' => |digit| {
                 if (indent_indicator != null) {
                     return error.UnexpectedCharacter;
                 }
@@ -4127,9 +4127,9 @@ pub struct Parser<const enc: Encoding> {
             _.inc(1);
             const digit = _.next();
             const num: u8 = switch (digit) {
-                '0'..'9' => @intCast(digit - '0'),
-                'a'..'f' => @intCast(digit - 'a' + 10),
-                'A'..'F' => @intCast(digit - 'A' + 10),
+                '0'..='9' => @intCast(digit - '0'),
+                'a'..='f' => @intCast(digit - 'a' + 10),
+                'A'..='F' => @intCast(digit - 'A' + 10),
                 else => return error.UnexpectedCharacter,
             };
 

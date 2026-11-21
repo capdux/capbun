@@ -888,7 +888,7 @@ pub fn SkipTypescript(
             p.markTypeScriptOnly();
 
             if (p.lexer.token != .t_less_than) {
-                return .did_not_skip_anything;
+                return SkipTypeParameterResult.did_not_skip_anything;
             }
 
             let result = SkipTypeParameterResult.could_be_type_cast;
@@ -896,7 +896,7 @@ pub fn SkipTypescript(
 
             if (p.lexer.token == .t_greater_than && flags.allow_empty_type_parameters) {
                 p.lexer.next()?;
-                return .definitely_type_parameters;
+                return SkipTypeParameterResult.definitely_type_parameters;
             }
 
             while (true) {

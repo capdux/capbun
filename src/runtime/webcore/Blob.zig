@@ -35,12 +35,10 @@ fn is_cp_result(comptime __T: type) bool {
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 comptime {
     const jsonResolveRequestStream = jsc.toJSHostFn(onFileStreamResolveRequestStream);
-    var __jsonResolveRequestStream_moved = false; _ = &__jsonResolveRequestStream_moved;
-    defer if (!__jsonResolveRequestStream_moved) { const __T = @TypeOf(jsonResolveRequestStream); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsonResolveRequestStream.release() catch {}; } else { jsonResolveRequestStream.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsonResolveRequestStream; _drop_val.release(); } };
+    _ = &jsonResolveRequestStream;
     _ = @export((&jsonResolveRequestStream), .{ .name = "Bun__FileStreamWrapper__onResolveRequestStream" });
     const jsonRejectRequestStream = jsc.toJSHostFn(onFileStreamRejectRequestStream);
-    var __jsonRejectRequestStream_moved = false; _ = &__jsonRejectRequestStream_moved;
-    defer if (!__jsonRejectRequestStream_moved) { const __T = @TypeOf(jsonRejectRequestStream); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsonRejectRequestStream.release() catch {}; } else { jsonRejectRequestStream.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsonRejectRequestStream; _drop_val.release(); } };
+    _ = &jsonRejectRequestStream;
     _ = @export((&jsonRejectRequestStream), .{ .name = "Bun__FileStreamWrapper__onRejectRequestStream" });
 
 }
@@ -169,13 +167,9 @@ pub fn deinit(self: *BlobInternal) void {
 
 pub fn toStringOwned(self: *BlobInternal, globalThis: *JSGlobalObject) JSError!JSValue {
             const bytes_without_bom = strings.withoutUTF8BOM(self.bytes.items);
-            var __bytes_without_bom_moved = false; _ = &__bytes_without_bom_moved;
-            defer if (!__bytes_without_bom_moved) { const __T = @TypeOf(bytes_without_bom); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes_without_bom.release() catch {}; } else { bytes_without_bom.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes_without_bom; _drop_val.release(); } };
             if ((blk_catch_0: { break :blk_catch_0 ((strings.toUTF16Alloc(bun.default_allocator, bytes_without_bom, false, false)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |out| {
                 _ = &out;
                 const return_value = ZigString.toExternalU16(out.ptr, out.len, globalThis);
-                var __return_value_moved = false; _ = &__return_value_moved;
-                defer if (!__return_value_moved) { const __T = @TypeOf(return_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = return_value.release() catch {}; } else { return_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = return_value; _drop_val.release(); } };
                 _ = return_value.ensureStillAlive();
                 _ = self.deinit();
                 return return_value;
@@ -185,16 +179,14 @@ pub fn toStringOwned(self: *BlobInternal, globalThis: *JSGlobalObject) JSError!J
                     _ = self.deinit();
                     }
                     var out = String.cloneLatin1(self.bytes.items[3..]);
-                    var __out_moved = false; _ = &__out_moved;
-                    defer if (!__out_moved) { const __T = @TypeOf(out); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = out.release() catch {}; } else { out.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = out; _drop_val.release(); } };
+                    _ = &out;
                     defer {
                     _ = out.deref();
                     }
                     return out.toJS(globalThis);
                 } else {
                     var str = ZigString.init(self.toOwnedSlice());
-                    var __str_moved = false; _ = &__str_moved;
-                    defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                    _ = &str;
                     _ = str.markGlobal();
                     return str.toExternalValue(globalThis);
                 }
@@ -203,13 +195,8 @@ pub fn toStringOwned(self: *BlobInternal, globalThis: *JSGlobalObject) JSError!J
 
 pub fn toJSON(self: *BlobInternal, globalThis: *JSGlobalObject) JSValue {
             const str_bytes = ZigString.init(strings.withoutUTF8BOM(self.bytes.items)).withEncoding();
-            var __str_bytes_moved = false; _ = &__str_bytes_moved;
-            defer if (!__str_bytes_moved) { const __T = @TypeOf(str_bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str_bytes.release() catch {}; } else { str_bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str_bytes; _drop_val.release(); } };
             const json = str_bytes.toJSONObject(globalThis);
-            var __json_moved = false; _ = &__json_moved;
-            defer if (!__json_moved) { const __T = @TypeOf(json); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = json.release() catch {}; } else { json.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = json; _drop_val.release(); } };
             _ = self.deinit();
-            __json_moved = true;
             return json;
     }
 
@@ -325,17 +312,11 @@ pub fn toBlob(self: *BlobAny, global: *JSGlobalObject) Blob {
             }
             if ((self.* == .WTFStringImpl)) {
                 const b = Blob.create(self.slice(), bun.default_allocator, global, true);
-                var __b_moved = false; _ = &__b_moved;
-                defer if (!__b_moved) { const __T = @TypeOf(b); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = b.release() catch {}; } else { b.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = b; _drop_val.release(); } };
                 self.* = BlobAny{ .Blob = Blob{  } };
-                __b_moved = true;
                 return b;
             }
             const b = Blob.init(self.InternalBlob.slice(), self.InternalBlob.bytes.allocator, global);
-            var __b_moved = false; _ = &__b_moved;
-            defer if (!__b_moved) { const __T = @TypeOf(b); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = b.release() catch {}; } else { b.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = b; _drop_val.release(); } };
             self.* = BlobAny{ .Blob = Blob{  } };
-            __b_moved = true;
             return b;
     }
 
@@ -349,16 +330,12 @@ if ((self.InternalBlob.bytes.items.len == 0)) {
                 return JSValue.jsNull();
             }
             const str = self.InternalBlob.toJSON(global);
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
             self.* = BlobAny{ .Blob = Blob{  } };
-            __str_moved = true;
             return str;
 },
 .WTFStringImpl => {
 var str = String.init(self.WTFStringImpl);
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+            _ = &str;
             defer {
             _ = str.deref();
             }
@@ -381,16 +358,12 @@ if ((self.InternalBlob.bytes.items.len == 0)) {
                 return ZigString.Empty.toJS(global);
             }
             const owned = try self.InternalBlob.toStringOwned(global);
-            var __owned_moved = false; _ = &__owned_moved;
-            defer if (!__owned_moved) { const __T = @TypeOf(owned); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = owned.release() catch {}; } else { owned.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = owned; _drop_val.release(); } };
             self.* = BlobAny{ .Blob = Blob{  } };
-            __owned_moved = true;
             return owned;
 },
 .WTFStringImpl => {
 var str = String.init(self.WTFStringImpl);
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+            _ = &str;
             defer {
             _ = str.deref();
             }
@@ -415,22 +388,16 @@ return self.Blob.toArrayBufferView(global, lifetime, TypedArrayView);
 },
 .InternalBlob => {
 const bytes = self.InternalBlob.toOwnedSlice();
-            var __bytes_moved = false; _ = &__bytes_moved;
-            defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
             self.* = BlobAny{ .Blob = Blob{  } };
             return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
 },
 .WTFStringImpl => {
 const str = String.init(self.WTFStringImpl);
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
             defer {
             _ = str.deref();
             }
             self.* = BlobAny{ .Blob = Blob{  } };
             const bytes = bun.handleOom(str.toOwnedSlice(bun.default_allocator));
-            var __bytes_moved = false; _ = &__bytes_moved;
-            defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
             return ArrayBuffer.fromDefaultAllocator(global, bytes, TypedArrayView);
 },
 }
@@ -508,8 +475,7 @@ pub fn toUint8ArrayTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSErr
 pub fn toJSONShare(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
             const bytes = self.slice();
             var str = String.cloneUTF8(bytes);
-            var __str_moved = false; _ = &__str_moved;
-            defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+            _ = &str;
             defer {
             _ = str.deref();
             }
@@ -529,11 +495,7 @@ pub fn toPromise(self: *BlobAny, globalThis: *JSGlobalObject, action: webcore.st
 .text => try self.toStringTransfer(globalThis),
 .blob => brk: {
             const duped = bun.handleOom(bun.default_allocator.dupe(u8, self.slice()));
-            var __duped_moved = false; _ = &__duped_moved;
-            defer if (!__duped_moved) { const __T = @TypeOf(duped); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = duped.release() catch {}; } else { duped.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = duped; _drop_val.release(); } };
             const b = bun.new(Blob, Blob.init(duped, bun.default_allocator, globalThis));
-            var __b_moved = false; _ = &__b_moved;
-            defer if (!__b_moved) { const __T = @TypeOf(b); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = b.release() catch {}; } else { b.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = b; _drop_val.release(); } };
             break :brk b.toJS(globalThis);
 },
 });
@@ -564,10 +526,8 @@ name: String = String.dead,
 
 pub fn new(blob: Blob) *Blob {
         var result = bun.new(Blob, blob);
-        var __result_moved = false; _ = &__result_moved;
-        defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
+        _ = &result;
         result.ref_count = .init(1);
-        __result_moved = true;
         return result;
 }
 
@@ -602,8 +562,6 @@ pub fn writeFormatForSize(is_jdom_file: bool, size: usize, writer: anytype, comp
 
 pub fn writeFormat(self: *Blob, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool) !void {
         const Writer = @TypeOf(writer);
-        var __Writer_moved = false; _ = &__Writer_moved;
-        defer if (!__Writer_moved) { const __T = @TypeOf(Writer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Writer.release() catch {}; } else { Writer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Writer; _drop_val.release(); } };
         if ((self.store == null)) {
             if ((self.size > 0)) {
                 if (self.is_jsdom_file) {
@@ -651,8 +609,6 @@ _ = try Blob.writeFormatForSize(self.is_jsdom_file, self.size, writer, enable_an
 }
         }
         const has_name = (!self.name.isEmpty());
-        var __has_name_moved = false; _ = &__has_name_moved;
-        defer if (!__has_name_moved) { const __T = @TypeOf(has_name); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = has_name.release() catch {}; } else { has_name.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = has_name; _drop_val.release(); } };
         const show_name = ((self.is_jsdom_file and has_name) or ((has_name and (self.store != null)) and (self.store.?.data == .bytes)));
         if (((!self.isS3()) and ((((self.content_type.len > 0) or (self.offset > 0)) or show_name) or (self.last_modified != 0.0)))) {
             _ = try writer.writeAll(" {\n");
@@ -702,11 +658,8 @@ pub fn doReadFileInternal(self: *Blob, comptime Handler: type, ctx: Handler, com
             return;
         }
         const file_read = (blk_catch_1: { break :blk_catch_1 ((read_file_mod.ReadFile.createWithCtx(bun.default_allocator, self.store.?, ctx, NewInternalReadFileHandler(Handler, Function).run, self.offset, self.size)) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
-        var __file_read_moved = false; _ = &__file_read_moved;
-        defer if (!__file_read_moved) { const __T = @TypeOf(file_read); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = file_read.release() catch {}; } else { file_read.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = file_read; _drop_val.release(); } };
         var read_file_task = read_file_mod.ReadFileTask.createOnJSThread(bun.default_allocator, global, file_read);
-        var __read_file_task_moved = false; _ = &__read_file_task_moved;
-        defer if (!__read_file_task_moved) { const __T = @TypeOf(read_file_task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = read_file_task.release() catch {}; } else { read_file_task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = read_file_task; _drop_val.release(); } };
+        _ = &read_file_task;
         _ = read_file_task.schedule();
 }
 
@@ -722,11 +675,7 @@ pub fn run(c: *Handler, r: read_file_mod.ReadFileResultType) void {
             _ = Handler.onReadBytes(c, res);
     }
 };
-            var __Adapter_moved = false; _ = &__Adapter_moved;
-            defer if (!__Adapter_moved) { const __T = @TypeOf(Adapter); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Adapter.release() catch {}; } else { Adapter.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Adapter; _drop_val.release(); } };
             const HandlerPtr = @TypeOf(ctx);
-            var __HandlerPtr_moved = false; _ = &__HandlerPtr_moved;
-            defer if (!__HandlerPtr_moved) { const __T = @TypeOf(HandlerPtr); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = HandlerPtr.release() catch {}; } else { HandlerPtr.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = HandlerPtr; _drop_val.release(); } };
             _ = self.doReadFileInternal(HandlerPtr, ctx, Adapter.run, global);
             return;
         }
@@ -763,21 +712,12 @@ _ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), 
 }
     }
 };
-            var __Task_moved = false; _ = &__Task_moved;
-            defer if (!__Task_moved) { const __T = @TypeOf(Task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Task.release() catch {}; } else { Task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Task; _drop_val.release(); } };
             var t = bun.new(Task, .{ .ctx = ctx, .blob = self.dupe(), .vm = global.bunVM() });
-            var __t_moved = false; _ = &__t_moved;
-            defer if (!__t_moved) { const __T = @TypeOf(t); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = t.release() catch {}; } else { t.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = t; _drop_val.release(); } };
+            _ = &t;
             _ = t.poll.ref(t.vm);
             const env = t.vm.transpiler.env;
-            var __env_moved = false; _ = &__env_moved;
-            defer if (!__env_moved) { const __T = @TypeOf(env); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = env.release() catch {}; } else { env.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = env; _drop_val.release(); } };
             const cred = t.blob.store.?.data.s3.getCredentials();
-            var __cred_moved = false; _ = &__cred_moved;
-            defer if (!__cred_moved) { const __T = @TypeOf(cred); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cred.release() catch {}; } else { cred.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cred; _drop_val.release(); } };
             const path = t.blob.store.?.data.s3.path();
-            var __path_moved = false; _ = &__path_moved;
-            defer if (!__path_moved) { const __T = @TypeOf(path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path.release() catch {}; } else { path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path; _drop_val.release(); } };
             var proxy: ?[]const u8 = null;
             _ = &proxy;
             if (env.getHttpProxy(true, null, null)) |p| {
@@ -785,8 +725,6 @@ _ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), 
                 proxy = p.href;
             }
             const payer = t.blob.store.?.data.s3.request_payer;
-            var __payer_moved = false; _ = &__payer_moved;
-            defer if (!__payer_moved) { const __T = @TypeOf(payer); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = payer.release() catch {}; } else { payer.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = payer; _drop_val.release(); } };
             if (((self.offset > 0) or (self.size != Blob.max_size))) {
                 const len: ?usize = (if ((self.size != Blob.max_size)) @intCast(self.size) else null);
                 _ = try bun.S3.downloadSlice(cred, path, @intCast(self.offset), len, @ptrCast((&Task.cb)), t, proxy, payer);
@@ -798,8 +736,6 @@ _ = t.done(BlobReadBytesResult{ .err = .{ .code = bun.String.cloneUTF8(e.code), 
         const view = self.sharedView();
         const owned = (blk_catch_2: { break :blk_catch_2 ((bun.default_allocator.dupe(u8, view)) catch |__ce_2| { _ = &__ce_2; _ = Handler.onReadBytes(ctx, .{ .err = .{ .code = bun.String.static("ENOMEM"), .message = bun.String.static("Out of memory"), .syscall = bun.String.static("read") } });
         return; }); });
-        var __owned_moved = false; _ = &__owned_moved;
-        defer if (!__owned_moved) { const __T = @TypeOf(owned); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = owned.release() catch {}; } else { owned.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = owned; _drop_val.release(); } };
         _ = Handler.onReadBytes(ctx, .{ .ok = owned });
 }
 
@@ -887,7 +823,7 @@ pub fn detach(self: *Blob) void {
         }
 }
 
-pub fn release(self: *Blob) void {
+pub fn releaseInternal(self: *Blob) void {
         _ = self.detach();
         if ((self.content_type_allocated and (self.content_type.len > 0))) {
             _ = default_allocator.free(self.content_type);
@@ -898,7 +834,7 @@ pub fn release(self: *Blob) void {
 }
 
 pub fn deinit(self: *Blob) void {
-        _ = (if (comptime @typeInfo(@TypeOf(self)) == .pointer) (self) else &(self)).release();
+        _ = self.releaseInternal();
 }
 
 pub fn dupe(self: Blob) Blob {
@@ -919,8 +855,6 @@ pub fn dupeWithContentType(self: Blob, preserve_type: bool) Blob {
 
 pub fn init(data: []u8, allocator: std.mem.Allocator, globalThis: *JSGlobalObject) Blob {
         const store = BlobStore.init(data, allocator);
-        var __store_moved = false; _ = &__store_moved;
-        defer if (!__store_moved) { const __T = @TypeOf(store); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = store.release() catch {}; } else { store.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = store; _drop_val.release(); } };
         return Blob{ .size = @as(SizeType, @truncate(data.len)), .store = store, .globalThis = globalThis };
 }
 
@@ -930,26 +864,18 @@ pub fn initWithStore(store: *BlobStore, globalThis: *JSGlobalObject) Blob {
 
 pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         const vm = globalObject.bunVM();
-        var __vm_moved = false; _ = &__vm_moved;
-        defer if (!__vm_moved) { const __T = @TypeOf(vm); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = vm.release() catch {}; } else { vm.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = vm; _drop_val.release(); } };
         const arguments = callframe.arguments_old(2).slice();
-        var __arguments_moved = false; _ = &__arguments_moved;
-        defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
         var args = CallFrame.ArgumentsSlice.init(vm, arguments);
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
+        _ = &args;
         defer {
         _ = args.deinit();
         }
         const path_opt = try jsc.Node.PathOrFileDescriptor.fromJS(globalObject, (&args), default_allocator);
-        var __path_opt_moved = false; _ = &__path_opt_moved;
-        defer if (!__path_opt_moved) { const __T = @TypeOf(path_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path_opt.release() catch {}; } else { path_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path_opt; _drop_val.release(); } };
         if ((path_opt == null)) {
             return globalObject.throwInvalidArguments("Expected file path string or file descriptor", .{});
         }
         var path = path_opt.?;
-        var __path_moved = false; _ = &__path_moved;
-        defer if (!__path_moved) { const __T = @TypeOf(path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path.release() catch {}; } else { path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path; _drop_val.release(); } };
+        _ = &path;
         const options: ?JSValue = (if ((arguments.len >= 2)) arguments[1] else null);
         if ((path == .path)) {
             if (strings.hasPrefixComptime(path.path.slice(), "s3://")) {
@@ -960,8 +886,7 @@ pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JS
         _ = path.deinitAndUnprotect();
         }
         var blob = Blob.initWithStore(bun.handleOom(BlobStore.initFile(path, null, default_allocator)), globalObject);
-        var __blob_moved = false; _ = &__blob_moved;
-        defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
+        _ = &blob;
         if (options) |opts| {
             _ = &opts;
             if (opts.isObject()) {
@@ -969,14 +894,11 @@ pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JS
                     _ = &file_type;
                     if (file_type.isString()) {
                         var str = try file_type.toSlice(globalObject, default_allocator);
-                        var __str_moved = false; _ = &__str_moved;
-                        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                        _ = &str;
                         defer {
                         _ = str.deinit();
                         }
                         const slice = str.slice();
-                        var __slice_moved = false; _ = &__slice_moved;
-                        defer if (!__slice_moved) { const __T = @TypeOf(slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = slice.release() catch {}; } else { slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = slice; _drop_val.release(); } };
                         if (strings.isAllASCII(slice)) {
                             blob.content_type_was_set = true;
                             if (vm.mimeType(slice)) |entry| {
@@ -984,8 +906,6 @@ pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JS
                                 blob.content_type = (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value);
                             } else {
                                 const buf = bun.handleOom(default_allocator.alloc(u8, slice.len));
-                                var __buf_moved = false; _ = &__buf_moved;
-                                defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
                                 blob.content_type = strings.copyLowercase(slice, buf);
                                 blob.content_type_allocated = true;
                             }
@@ -999,8 +919,6 @@ pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JS
             }
         }
         const ptr_ = Blob.new(blob);
-        var __ptr__moved = false; _ = &__ptr__moved;
-        defer if (!__ptr__moved) { const __T = @TypeOf(ptr_); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ptr_.release() catch {}; } else { ptr_.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ptr_; _drop_val.release(); } };
         return ptr_.toJS(globalObject);
 }
 
@@ -1088,8 +1006,7 @@ pub fn toString(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore
             return ZigString.Empty.toJS(global);
         }
         var str = String.cloneUTF8(view);
-        var __str_moved = false; _ = &__str_moved;
-        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+        _ = &str;
         defer {
         _ = str.deref();
         }
@@ -1102,8 +1019,7 @@ pub fn toJSON(self: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.L
             return global.throwTODO("Blob.toJSON for file/S3 blobs is not yet ported");
         }
         var str = String.cloneUTF8(self.sharedView());
-        var __str_moved = false; _ = &__str_moved;
-        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+        _ = &str;
         defer {
         _ = str.deref();
         }
@@ -1120,8 +1036,6 @@ pub fn toArrayBufferView(self: *Blob, global: *JSGlobalObject, comptime lifetime
             return jsc.ArrayBuffer.create(global, "", TypedArrayView);
         }
         const copy = bun.handleOom(bun.default_allocator.dupe(u8, view));
-        var __copy_moved = false; _ = &__copy_moved;
-        defer if (!__copy_moved) { const __T = @TypeOf(copy); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = copy.release() catch {}; } else { copy.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = copy; _drop_val.release(); } };
         return ArrayBuffer.fromDefaultAllocator(global, copy, TypedArrayView);
 }
 
@@ -1162,8 +1076,6 @@ pub fn getLoader(self: Blob, jsc_vm: *VirtualMachine) ?bun.options.Loader {
         if (self.getFileName()) |filename| {
             _ = &filename;
             const current_path = bun.fs.Path.init(filename);
-            var __current_path_moved = false; _ = &__current_path_moved;
-            defer if (!__current_path_moved) { const __T = @TypeOf(current_path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = current_path.release() catch {}; } else { current_path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = current_path; _drop_val.release(); } };
             return ((current_path.loader((&jsc_vm.transpiler.options.loaders))) orelse (.tsx));
         } else {
             if (self.getMimeTypeOrContentType()) |mime_type| {
@@ -1185,8 +1097,7 @@ pub fn needsToReadFile(self: Blob) bool {
 
 pub fn getJSON(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
         var str = String.cloneUTF8(self.sharedView());
-        var __str_moved = false; _ = &__str_moved;
-        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+        _ = &str;
         defer {
         _ = str.deref();
         }
@@ -1233,8 +1144,7 @@ pub fn getSize(self: *Blob, _: *JSGlobalObject) JSValue {
 
 pub fn getSlice(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
         var copy = self.dupe();
-        var __copy_moved = false; _ = &__copy_moved;
-        defer if (!__copy_moved) { const __T = @TypeOf(copy); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = copy.release() catch {}; } else { copy.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = copy; _drop_val.release(); } };
+        _ = &copy;
         return Blob.new(copy).toJS(globalThis);
 }
 
@@ -1250,8 +1160,6 @@ pub fn getStream(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSErro
 
 pub fn getText(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
         const str = try String.createUTF8ForJS(globalThis, self.sharedView());
-        var __str_moved = false; _ = &__str_moved;
-        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
         return JSPromise.resolvedPromiseValue(globalThis, str);
 }
 
@@ -1308,11 +1216,8 @@ pub fn tryCreate(bytes_: []const u8, allocator_: std.mem.Allocator, globalThis: 
 },
 .result => |result| {
 const store = BlobStore.new(.{ .data = .{ .bytes = result }, .allocator = bun.default_allocator, .ref_count = std.atomic.Value(u32).init(1) });
-                var __store_moved = false; _ = &__store_moved;
-                defer if (!__store_moved) { const __T = @TypeOf(store); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = store.release() catch {}; } else { store.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = store; _drop_val.release(); } };
                 var blob = Blob.initWithStore(store, globalThis);
-                var __blob_moved = false; _ = &__blob_moved;
-                defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
+                _ = &blob;
                 if ((was_string and (blob.content_type.len == 0))) {
                     blob.content_type = (if (@typeInfo(@TypeOf(MimeType.text)) == .@"enum") @intFromEnum(MimeType.text) else MimeType.text.value);
                 }
@@ -1355,16 +1260,13 @@ pub fn fromJSWithoutDeferGC(global: *JSGlobalObject, arg: JSValue, comptime move
         switch (current.jsTypeLoose()) {
 .Array, .DerivedArray => {
 var top_iter = try jsc.JSArrayIterator.init(current, global);
-        var __top_iter_moved = false; _ = &__top_iter_moved;
-        defer if (!__top_iter_moved) { const __T = @TypeOf(top_iter); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = top_iter.release() catch {}; } else { top_iter.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = top_iter; _drop_val.release(); } };
+        _ = &top_iter;
         might_only_be_one_thing = (top_iter.len == 1);
         if ((top_iter.len == 0)) {
             return Blob{ .globalThis = global };
         }
         if (might_only_be_one_thing) {
             const next_opt = try top_iter.next();
-            var __next_opt_moved = false; _ = &__next_opt_moved;
-            defer if (!__next_opt_moved) { const __T = @TypeOf(next_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = next_opt.release() catch {}; } else { next_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = next_opt; _drop_val.release(); } };
             top_value = next_opt.?;
         }
 },
@@ -1380,20 +1282,13 @@ might_only_be_one_thing = true;
 .Cell, .NumberObject, .String, .StringObject, .DerivedStringObject => {
 if ((!fail_if_top_value_is_not_typed_array_like)) {
                 var str = try top_value.toBunString(global);
-                var __str_moved = false; _ = &__str_moved;
-                defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
+                _ = &str;
                 defer {
                 _ = str.deref();
                 }
                 const res_tuple = try str.toOwnedSliceReturningAllASCII(bun.default_allocator);
-                var __res_tuple_moved = false; _ = &__res_tuple_moved;
-                defer if (!__res_tuple_moved) { const __T = @TypeOf(res_tuple); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = res_tuple.release() catch {}; } else { res_tuple.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = res_tuple; _drop_val.release(); } };
                 const bytes = @field(res_tuple, "0");
-                var __bytes_moved = false; _ = &__bytes_moved;
-                defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
                 const ascii = @field(res_tuple, "1");
-                var __ascii_moved = false; _ = &__ascii_moved;
-                defer if (!__ascii_moved) { const __T = @TypeOf(ascii); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = ascii.release() catch {}; } else { ascii.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = ascii; _drop_val.release(); } };
                 return Blob.initWithAllASCII(bytes, bun.default_allocator, global, ascii);
             }
 },
@@ -1423,8 +1318,6 @@ if ((!fail_if_top_value_is_not_typed_array_like)) {
                         return build.blob.dupe();
                     } else {
                         const sliced = try current.toSliceClone(global);
-                        var __sliced_moved = false; _ = &__sliced_moved;
-                        defer if (!__sliced_moved) { const __T = @TypeOf(sliced); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sliced.release() catch {}; } else { sliced.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sliced; _drop_val.release(); } };
                         if (sliced.allocator.get()) |allocator| {
                             _ = &allocator;
                             return Blob.initWithAllASCII(@constCast(sliced.slice()), allocator, global, false);
@@ -1442,14 +1335,10 @@ else => {
             }
         }
         var stack_allocator = std.heap.stackFallback(1024, bun.default_allocator);
-        var __stack_allocator_moved = false; _ = &__stack_allocator_moved;
-        defer if (!__stack_allocator_moved) { const __T = @TypeOf(stack_allocator); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stack_allocator.release() catch {}; } else { stack_allocator.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stack_allocator; _drop_val.release(); } };
+        _ = &stack_allocator;
         const stack_mem_all = stack_allocator.get();
-        var __stack_mem_all_moved = false; _ = &__stack_mem_all_moved;
-        defer if (!__stack_mem_all_moved) { const __T = @TypeOf(stack_mem_all); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stack_mem_all.release() catch {}; } else { stack_mem_all.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stack_mem_all; _drop_val.release(); } };
         var stack = std.array_list.Managed(JSValue).init(stack_mem_all);
-        var __stack_moved = false; _ = &__stack_moved;
-        defer if (!__stack_moved) { const __T = @TypeOf(stack); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stack.release() catch {}; } else { stack.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stack; _drop_val.release(); } };
+        _ = &stack;
         var joiner = StringJoiner{ .allocator = stack_mem_all };
         _ = &joiner;
         var could_have_non_ascii = false;
@@ -1463,18 +1352,14 @@ else => {
             switch (current.jsTypeLoose()) {
 .NumberObject, .String, .StringObject, .DerivedStringObject => {
 var sliced = try current.toSlice(global, bun.default_allocator);
-            var __sliced_moved = false; _ = &__sliced_moved;
-            defer if (!__sliced_moved) { const __T = @TypeOf(sliced); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sliced.release() catch {}; } else { sliced.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sliced; _drop_val.release(); } };
+            _ = &sliced;
             const allocator = sliced.allocator.get();
-            var __allocator_moved = false; _ = &__allocator_moved;
-            defer if (!__allocator_moved) { const __T = @TypeOf(allocator); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = allocator.release() catch {}; } else { allocator.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = allocator; _drop_val.release(); } };
             could_have_non_ascii = (could_have_non_ascii or (!sliced.allocator.isWTFAllocator()));
             _ = joiner.push(sliced.slice(), allocator);
 },
 .Array, .DerivedArray => {
 var iter = try jsc.JSArrayIterator.init(current, global);
-            var __iter_moved = false; _ = &__iter_moved;
-            defer if (!__iter_moved) { const __T = @TypeOf(iter); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = iter.release() catch {}; } else { iter.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = iter; _drop_val.release(); } };
+            _ = &iter;
             _ = try stack.ensureUnusedCapacity(iter.len);
             var any_arrays = false;
             _ = &any_arrays;
@@ -1486,11 +1371,8 @@ var iter = try jsc.JSArrayIterator.init(current, global);
                     switch (item.jsTypeLoose()) {
 .NumberObject, .Cell, .String, .StringObject, .DerivedStringObject => {
 var sliced = try item.toSlice(global, bun.default_allocator);
-                    var __sliced_moved = false; _ = &__sliced_moved;
-                    defer if (!__sliced_moved) { const __T = @TypeOf(sliced); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sliced.release() catch {}; } else { sliced.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sliced; _drop_val.release(); } };
+                    _ = &sliced;
                     const allocator = sliced.allocator.get();
-                    var __allocator_moved = false; _ = &__allocator_moved;
-                    defer if (!__allocator_moved) { const __T = @TypeOf(allocator); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = allocator.release() catch {}; } else { allocator.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = allocator; _drop_val.release(); } };
                     could_have_non_ascii = (could_have_non_ascii or (!sliced.allocator.isWTFAllocator()));
                     _ = joiner.push(sliced.slice(), allocator);
                     continue;
@@ -1498,8 +1380,7 @@ var sliced = try item.toSlice(global, bun.default_allocator);
 .ArrayBuffer, .Int8Array, .Uint8Array, .Uint8ClampedArray, .Int16Array, .Uint16Array, .Int32Array, .Uint32Array, .Float16Array, .Float32Array, .Float64Array, .BigInt64Array, .BigUint64Array, .DataView => {
 could_have_non_ascii = true;
                     var buf = (item.asArrayBuffer(global)).?;
-                    var __buf_moved = false; _ = &__buf_moved;
-                    defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
+                    _ = &buf;
                     _ = joiner.pushStatic(buf.byteSlice());
                     continue;
 },
@@ -1516,11 +1397,7 @@ if (item.as(Blob)) |blob| {
                         continue;
                     } else {
                         const sliced = try current.toSliceClone(global);
-                        var __sliced_moved = false; _ = &__sliced_moved;
-                        defer if (!__sliced_moved) { const __T = @TypeOf(sliced); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sliced.release() catch {}; } else { sliced.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sliced; _drop_val.release(); } };
                         const allocator = sliced.allocator.get();
-                        var __allocator_moved = false; _ = &__allocator_moved;
-                        defer if (!__allocator_moved) { const __T = @TypeOf(allocator); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = allocator.release() catch {}; } else { allocator.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = allocator; _drop_val.release(); } };
                         could_have_non_ascii = (could_have_non_ascii or (allocator != null));
                         _ = joiner.push(sliced.slice(), allocator);
                     }
@@ -1540,30 +1417,22 @@ if (current.as(Blob)) |blob| {
                 _ = joiner.pushStatic(blob.sharedView());
             } else {
                 const sliced = try current.toSliceClone(global);
-                var __sliced_moved = false; _ = &__sliced_moved;
-                defer if (!__sliced_moved) { const __T = @TypeOf(sliced); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sliced.release() catch {}; } else { sliced.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sliced; _drop_val.release(); } };
                 const allocator = sliced.allocator.get();
-                var __allocator_moved = false; _ = &__allocator_moved;
-                defer if (!__allocator_moved) { const __T = @TypeOf(allocator); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = allocator.release() catch {}; } else { allocator.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = allocator; _drop_val.release(); } };
                 could_have_non_ascii = (could_have_non_ascii or (allocator != null));
                 _ = joiner.push(sliced.slice(), allocator);
             }
 },
 .ArrayBuffer, .Int8Array, .Uint8Array, .Uint8ClampedArray, .Int16Array, .Uint16Array, .Int32Array, .Uint32Array, .Float16Array, .Float32Array, .Float64Array, .BigInt64Array, .BigUint64Array, .DataView => {
 var buf = (current.asArrayBuffer(global)).?;
-            var __buf_moved = false; _ = &__buf_moved;
-            defer if (!__buf_moved) { const __T = @TypeOf(buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = buf.release() catch {}; } else { buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = buf; _drop_val.release(); } };
+            _ = &buf;
             _ = joiner.pushStatic(buf.slice());
             could_have_non_ascii = true;
 },
 else => {
 var sliced = try current.toSlice(global, bun.default_allocator);
-            var __sliced_moved = false; _ = &__sliced_moved;
-            defer if (!__sliced_moved) { const __T = @TypeOf(sliced); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sliced.release() catch {}; } else { sliced.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sliced; _drop_val.release(); } };
+            _ = &sliced;
             if (global.hasException()) {
                 const end_result = try joiner.done(bun.default_allocator);
-                var __end_result_moved = false; _ = &__end_result_moved;
-                defer if (!__end_result_moved) { const __T = @TypeOf(end_result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = end_result.release() catch {}; } else { end_result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = end_result; _drop_val.release(); } };
                 _ = bun.default_allocator.free(end_result);
                 return error.JSError;
             }
@@ -1579,8 +1448,6 @@ var sliced = try current.toSlice(global, bun.default_allocator);
             }
         }
         const joined = try joiner.done(bun.default_allocator);
-        var __joined_moved = false; _ = &__joined_moved;
-        defer if (!__joined_moved) { const __T = @TypeOf(joined); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = joined.release() catch {}; } else { joined.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = joined; _drop_val.release(); } };
         if ((!could_have_non_ascii)) {
             return Blob.initWithAllASCII(joined, bun.default_allocator, global, true);
         }
@@ -1591,8 +1458,7 @@ pub fn getSliceFrom(self: *Blob, globalThis: *JSGlobalObject, relativeStart: i64
         const offset = (self.offset +| @as(SizeType, @intCast(relativeStart)));
         const len = @as(SizeType, @intCast(@max((relativeEnd -| relativeStart), 0)));
         var blob = self.dupe();
-        var __blob_moved = false; _ = &__blob_moved;
-        defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
+        _ = &blob;
         blob.offset = offset;
         blob.size = len;
         if (blob.content_type_allocated) {
@@ -1606,8 +1472,7 @@ pub fn getSliceFrom(self: *Blob, globalThis: *JSGlobalObject, relativeStart: i64
         blob.content_type_allocated = content_type_was_allocated;
         blob.content_type_was_set = (self.content_type_was_set or content_type_was_allocated);
         var blob_ = Blob.new(blob);
-        var __blob__moved = false; _ = &__blob__moved;
-        defer if (!__blob__moved) { const __T = @TypeOf(blob_); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_.release() catch {}; } else { blob_.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_; _drop_val.release(); } };
+        _ = &blob_;
         return blob_.toJS(globalThis);
 }
 
@@ -1621,14 +1486,11 @@ pub fn pipeReadableStreamToBlob(self: *Blob, globalThis: *JSGlobalObject, readab
         if (self.isS3()) {
             const s3 = (&self.store.?.data.s3);
             var aws_options = (blk_catch_3: { break :blk_catch_3 ((s3.getCredentialsWithOptions(extra_options, globalThis)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e)); }); });
-            var __aws_options_moved = false; _ = &__aws_options_moved;
-            defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
+            _ = &aws_options;
             defer {
             _ = aws_options.deinit();
             }
             const path = s3.path();
-            var __path_moved = false; _ = &__path_moved;
-            defer if (!__path_moved) { const __T = @TypeOf(path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path.release() catch {}; } else { path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path; _drop_val.release(); } };
             var proxy_url: ?[]const u8 = null;
             _ = &proxy_url;
             if (globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) |p| {
@@ -1643,14 +1505,10 @@ pub fn pipeReadableStreamToBlob(self: *Blob, globalThis: *JSGlobalObject, readab
         const file_sink = brk_sink: {
         if (Environment.isWindows) {
             const pathlike = store.data.file.pathlike;
-            var __pathlike_moved = false; _ = &__pathlike_moved;
-            defer if (!__pathlike_moved) { const __T = @TypeOf(pathlike); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pathlike.release() catch {}; } else { pathlike.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pathlike; _drop_val.release(); } };
             const fd: bun.FD = (if ((pathlike == .fd)) pathlike.fd else brk: {
             var file_path: bun.PathBuffer = undefined;
             _ = &file_path;
             const path = pathlike.path.sliceZ((&file_path));
-            var __path_moved = false; _ = &__path_moved;
-            defer if (!__path_moved) { const __T = @TypeOf(path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path.release() catch {}; } else { path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path; _drop_val.release(); } };
             break :brk (switch (bun.sys.open(path, ((bun.O.WRONLY | bun.O.CREAT) | bun.O.NONBLOCK), write_permissions)) {
 .result => |result| break :brk result,
 .err => |e| {
@@ -1681,11 +1539,8 @@ else => false,
             }
             break :brk false;
 };
-            var __is_stdout_or_stderr_moved = false; _ = &__is_stdout_or_stderr_moved;
-            defer if (!__is_stdout_or_stderr_moved) { const __T = @TypeOf(is_stdout_or_stderr); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = is_stdout_or_stderr.release() catch {}; } else { is_stdout_or_stderr.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = is_stdout_or_stderr; _drop_val.release(); } };
             var sink = jsc.WebCore.FileSink.init(fd, self.globalThis.bunVM().eventLoop());
-            var __sink_moved = false; _ = &__sink_moved;
-            defer if (!__sink_moved) { const __T = @TypeOf(sink); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sink.release() catch {}; } else { sink.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sink; _drop_val.release(); } };
+            _ = &sink;
             sink.writer.owns_fd = (pathlike != .fd);
             if (is_stdout_or_stderr) {
                 switch (sink.writer.startSync(fd, false)) {
@@ -1711,8 +1566,7 @@ else => {
             break :brk_sink sink;
         }
         var sink = jsc.WebCore.FileSink.init(bun.invalid_fd, self.globalThis.bunVM().eventLoop());
-        var __sink_moved = false; _ = &__sink_moved;
-        defer if (!__sink_moved) { const __T = @TypeOf(sink); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = sink.release() catch {}; } else { sink.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = sink; _drop_val.release(); } };
+        _ = &sink;
         var input_path: jsc.WebCore.PathOrFileDescriptor = brk: {
         if ((store.data.file.pathlike == .fd)) {
             break :brk .{ .fd = store.data.file.pathlike.fd };
@@ -1736,11 +1590,8 @@ else => {
 }
         break :brk_sink sink;
 };
-        var __file_sink_moved = false; _ = &__file_sink_moved;
-        defer if (!__file_sink_moved) { const __T = @TypeOf(file_sink); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = file_sink.release() catch {}; } else { file_sink.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = file_sink; _drop_val.release(); } };
         var signal = (&file_sink.signal);
-        var __signal_moved = false; _ = &__signal_moved;
-        defer if (!__signal_moved) { const __T = @TypeOf(signal); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = signal.release() catch {}; } else { signal.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = signal; _drop_val.release(); } };
+        _ = &signal;
         signal.* = jsc.WebCore.FileSink.JSSink.SinkSignal.init(.zero);
         _ = signal.clear();
         _ = bun.assert(signal.isDead());
@@ -1765,11 +1616,7 @@ else => {
                 switch (promise.status()) {
 .pending => {
 const wrapper = FileStreamWrapper.new(.{ .promise = jsc.JSPromise.Strong.init(globalThis), .readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable_stream, globalThis), .sink = file_sink });
-                var __wrapper_moved = false; _ = &__wrapper_moved;
-                defer if (!__wrapper_moved) { const __T = @TypeOf(wrapper); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = wrapper.release() catch {}; } else { wrapper.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = wrapper; _drop_val.release(); } };
                 const promise_value = wrapper.promise.value();
-                var __promise_value_moved = false; _ = &__promise_value_moved;
-                defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
                 _ = try assignment_result.then(globalThis, wrapper, onFileStreamResolveRequestStream, onFileStreamRejectRequestStream);
                 return promise_value;
 },
@@ -1796,17 +1643,13 @@ _ = file_sink.deref();
 
 pub fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         const arguments = callframe.arguments();
-        var __arguments_moved = false; _ = &__arguments_moved;
-        defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
         var args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
+        _ = &args;
         defer {
         _ = args.deinit();
         }
         var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
-        var __path_or_blob_moved = false; _ = &__path_or_blob_moved;
-        defer if (!__path_or_blob_moved) { const __T = @TypeOf(path_or_blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path_or_blob.release() catch {}; } else { path_or_blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path_or_blob; _drop_val.release(); } };
+        _ = &path_or_blob;
         defer {
         {
             if ((path_or_blob == .path)) {
@@ -1818,21 +1661,15 @@ pub fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSV
             _ = try validateWritableBlob(globalThis, (&path_or_blob.blob));
         }
         const data_opt = args.nextEat();
-        var __data_opt_moved = false; _ = &__data_opt_moved;
-        defer if (!__data_opt_moved) { const __T = @TypeOf(data_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = data_opt.release() catch {}; } else { data_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = data_opt; _drop_val.release(); } };
         if ((data_opt == null)) {
             return globalThis.throwInvalidArguments("Bun.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
         }
         const data = data_opt.?;
-        var __data_moved = false; _ = &__data_moved;
-        defer if (!__data_moved) { const __T = @TypeOf(data); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = data.release() catch {}; } else { data.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = data; _drop_val.release(); } };
         var mkdirp_if_not_exists: ?bool = null;
         _ = &mkdirp_if_not_exists;
         var mode: ?bun.Mode = null;
         _ = &mode;
         const options = args.nextEat();
-        var __options_moved = false; _ = &__options_moved;
-        defer if (!__options_moved) { const __T = @TypeOf(options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = options.release() catch {}; } else { options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = options; _drop_val.release(); } };
         if (options) |options_object| {
             _ = &options_object;
             if (options_object.isObject()) {
@@ -1850,8 +1687,6 @@ pub fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSV
                             return globalThis.throwInvalidArgumentType("write", "options.mode", "number");
                         }
                         const mode_int = mode_value.toInt64();
-                        var __mode_int_moved = false; _ = &__mode_int_moved;
-                        defer if (!__mode_int_moved) { const __T = @TypeOf(mode_int); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mode_int.release() catch {}; } else { mode_int.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mode_int; _drop_val.release(); } };
                         if (((mode_int < 0) or (mode_int > 511))) {
                             return globalThis.throwRangeError(mode_int, .{ .field_name = "mode", .min = 0, .max = 511 });
                         }
@@ -1931,17 +1766,14 @@ pub fn free(_: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
 
 pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         var args = callframe.arguments_old(2);
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
+        _ = &args;
         var wrapper = args.ptr[@as(usize, @intCast((args.len - 1)))].asPromisePtr(FileStreamWrapper);
-        var __wrapper_moved = false; _ = &__wrapper_moved;
-        defer if (!__wrapper_moved) { const __T = @TypeOf(wrapper); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = wrapper.release() catch {}; } else { wrapper.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = wrapper; _drop_val.release(); } };
+        _ = &wrapper;
         defer {
         _ = wrapper.deinit();
         }
         var strong = wrapper.readable_stream_ref;
-        var __strong_moved = false; _ = &__strong_moved;
-        defer if (!__strong_moved) { const __T = @TypeOf(strong); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = strong.release() catch {}; } else { strong.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = strong; _drop_val.release(); } };
+        _ = &strong;
         defer {
         _ = strong.deinit();
         }
@@ -1956,18 +1788,14 @@ pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: 
 
 pub fn onFileStreamRejectRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         const args = callframe.arguments_old(2);
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         var wrapper = args.ptr[@as(usize, @intCast((args.len - 1)))].asPromisePtr(FileStreamWrapper);
-        var __wrapper_moved = false; _ = &__wrapper_moved;
-        defer if (!__wrapper_moved) { const __T = @TypeOf(wrapper); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = wrapper.release() catch {}; } else { wrapper.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = wrapper; _drop_val.release(); } };
+        _ = &wrapper;
         defer {
         _ = wrapper.sink.deref();
         }
         const err_val = args.ptr[0];
         var strong = wrapper.readable_stream_ref;
-        var __strong_moved = false; _ = &__strong_moved;
-        defer if (!__strong_moved) { const __T = @TypeOf(strong); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = strong.release() catch {}; } else { strong.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = strong; _drop_val.release(); } };
+        _ = &strong;
         defer {
         _ = strong.deinit();
         }
@@ -2015,15 +1843,11 @@ pub fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_b
         switch (destination_store.data) {
 .file => |file| {
 const node_fs = ctx.bunVM().nodeFS();
-        var __node_fs_moved = false; _ = &__node_fs_moved;
-        defer if (!__node_fs_moved) { const __T = @TypeOf(node_fs); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = node_fs.release() catch {}; } else { node_fs.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = node_fs; _drop_val.release(); } };
         var result = node_fs.truncate(.{ .path = file.pathlike, .len = 0, .flags = bun.O.CREAT }, .sync);
-        var __result_moved = false; _ = &__result_moved;
-        defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
+        _ = &result;
         if ((result == .err)) {
             var cur_errno = result.err.getErrno();
-            var __cur_errno_moved = false; _ = &__cur_errno_moved;
-            defer if (!__cur_errno_moved) { const __T = @TypeOf(cur_errno); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cur_errno.release() catch {}; } else { cur_errno.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cur_errno; _drop_val.release(); } };
+            _ = &cur_errno;
             var was_eperm = false;
             _ = &was_eperm;
             if ((cur_errno == .PERM)) {
@@ -2047,8 +1871,6 @@ if (was_eperm) {
                 if (dirpath_opt) |dirpath| {
                     _ = &dirpath;
                     const mkdir_result = node_fs.mkdirRecursive(.{ .path = .{ .string = bun.PathString.init(dirpath) }, .recursive = true, .always_return_none = true });
-                    var __mkdir_result_moved = false; _ = &__mkdir_result_moved;
-                    defer if (!__mkdir_result_moved) { const __T = @TypeOf(mkdir_result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mkdir_result.release() catch {}; } else { mkdir_result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mkdir_result; _drop_val.release(); } };
                     if ((mkdir_result == .err)) {
                         result.err = mkdir_result.err;
                     } else {
@@ -2057,8 +1879,6 @@ if (was_eperm) {
                         const mode: bun.Mode = ((options.mode) orelse (jsc.Node.fs.default_permission));
                         while (true) {
                             const open_res = bun.sys.open(file.pathlike.path.sliceZ((&buf)), (bun.O.CREAT | bun.O.TRUNC), mode);
-                            var __open_res_moved = false; _ = &__open_res_moved;
-                            defer if (!__open_res_moved) { const __T = @TypeOf(open_res); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = open_res.release() catch {}; } else { open_res.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = open_res; _drop_val.release(); } };
                             switch (open_res) {
 .err => |e| {
 if ((e.getErrno() == .INTR)) {
@@ -2082,8 +1902,7 @@ _ = fd.close();
 },
 .s3 => |*s3| {
 var aws_options = (blk_catch_4: { break :blk_catch_4 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
-        var __aws_options_moved = false; _ = &__aws_options_moved;
-        defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
+        _ = &aws_options;
         defer {
         _ = aws_options.deinit();
         }
@@ -2117,14 +1936,8 @@ pub fn deinit(self: *@This()) void {
     }
     pub const new = bun.TrivialNew(@This());
 };
-        var __Wrapper_moved = false; _ = &__Wrapper_moved;
-        defer if (!__Wrapper_moved) { const __T = @TypeOf(Wrapper); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Wrapper.release() catch {}; } else { Wrapper.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Wrapper; _drop_val.release(); } };
         const promise = jsc.JSPromise.Strong.init(ctx);
-        var __promise_moved = false; _ = &__promise_moved;
-        defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
         const promise_value = promise.value();
-        var __promise_value_moved = false; _ = &__promise_value_moved;
-        defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
         var proxy_url: ?[]const u8 = null;
         _ = &proxy_url;
         if (ctx.bunVM().transpiler.env.getHttpProxy(true, null, null)) |p| {
@@ -2133,7 +1946,6 @@ pub fn deinit(self: *@This()) void {
         }
         _ = destination_store.ref();
         _ = try S3.upload((&aws_options.credentials), s3.path(), "", destination_blob.contentTypeOrMimeType(), aws_options.content_disposition, aws_options.content_encoding, aws_options.acl, proxy_url, aws_options.storage_class, aws_options.request_payer, Wrapper.resolve, Wrapper.new(.{ .promise = promise, .store = destination_store, .global = ctx }));
-        __promise_value_moved = true;
         return promise_value;
 },
 .bytes => {
@@ -2146,8 +1958,6 @@ pub fn deinit(self: *@This()) void {
 pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, destination_blob: *Blob, options: WriteFileOptions) JSError!JSValue {
         const destination_store = ((destination_blob.store) orelse (Output.panic("Destination blob is detached", .{})));
         const destination_type = std.meta.activeTag(destination_store.data);
-        var __destination_type_moved = false; _ = &__destination_type_moved;
-        defer if (!__destination_type_moved) { const __T = @TypeOf(destination_type); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = destination_type.release() catch {}; } else { destination_type.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = destination_type; _drop_val.release(); } };
         if (Environment.isDebug) {
             _ = bun.assertf((destination_type != .bytes), "Cannot write to a Blob backed by a Buffer or TypedArray. This is a bug in the caller. Please report it to the Bun team.", .{});
         }
@@ -2157,19 +1967,13 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
         }
         const source_store = source_store_opt.?;
         const source_type = std.meta.activeTag(source_store.data);
-        var __source_type_moved = false; _ = &__source_type_moved;
-        defer if (!__source_type_moved) { const __T = @TypeOf(source_type); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = source_type.release() catch {}; } else { source_type.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = source_type; _drop_val.release(); } };
         if (((destination_type == .file) and (source_type == .bytes))) {
             var write_file_promise = bun.new(WriteFilePromise, .{ .globalThis = ctx });
-            var __write_file_promise_moved = false; _ = &__write_file_promise_moved;
-            defer if (!__write_file_promise_moved) { const __T = @TypeOf(write_file_promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = write_file_promise.release() catch {}; } else { write_file_promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = write_file_promise; _drop_val.release(); } };
+            _ = &write_file_promise;
             if (comptime Environment.isWindows) {
                 var promise = JSPromise.create(ctx);
-                var __promise_moved = false; _ = &__promise_moved;
-                defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
+                _ = &promise;
                 const promise_value = promise.asValue(ctx);
-                var __promise_value_moved = false; _ = &__promise_value_moved;
-                defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
                 _ = promise_value.ensureStillAlive();
                 _ = write_file_promise.promise.strong.set(ctx, promise_value);
                 _ = (blk_catch_5: { break :blk_catch_5 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
@@ -2178,17 +1982,11 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                 return promise_value;
             }
             const file_copier = ((write_file_mod.WriteFile.create(destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, WriteFilePromise.run, ((options.mkdirp_if_not_exists) orelse (true)))) catch unreachable);
-            var __file_copier_moved = false; _ = &__file_copier_moved;
-            defer if (!__file_copier_moved) { const __T = @TypeOf(file_copier); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = file_copier.release() catch {}; } else { file_copier.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = file_copier; _drop_val.release(); } };
             var task = write_file_mod.WriteFileTask.createOnJSThread(bun.default_allocator, ctx, file_copier);
-            var __task_moved = false; _ = &__task_moved;
-            defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
+            _ = &task;
             var promise = JSPromise.create(ctx);
-            var __promise_moved = false; _ = &__promise_moved;
-            defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
+            _ = &promise;
             const promise_value = promise.asValue(ctx);
-            var __promise_value_moved = false; _ = &__promise_value_moved;
-            defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
             _ = write_file_promise.promise.strong.set(ctx, promise_value);
             _ = promise_value.ensureStillAlive();
             _ = task.schedule();
@@ -2199,18 +1997,13 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                     return copy_file_mod.CopyFileWindows.init(destination_store, source_store, ctx.bunVM().eventLoop(), ((options.mkdirp_if_not_exists) orelse (true)), destination_blob.size, options.mode);
                 }
                 var file_copier = copy_file_mod.CopyFile.create(bun.default_allocator, destination_store, source_store, destination_blob.offset, destination_blob.size, ctx, ((options.mkdirp_if_not_exists) orelse (true)), options.mode);
-                var __file_copier_moved = false; _ = &__file_copier_moved;
-                defer if (!__file_copier_moved) { const __T = @TypeOf(file_copier); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = file_copier.release() catch {}; } else { file_copier.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = file_copier; _drop_val.release(); } };
+                _ = &file_copier;
                 _ = file_copier.schedule();
                 return file_copier.promise.value();
             } else {
                 if (((destination_type == .file) and (source_type == .s3))) {
                     const s3 = (&source_store.data.s3);
-                    var __s3_moved = false; _ = &__s3_moved;
-                    defer if (!__s3_moved) { const __T = @TypeOf(s3); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s3.release() catch {}; } else { s3.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s3; _drop_val.release(); } };
                     const stream_val = try jsc.WebCore.ReadableStream.fromBlobCopyRef(ctx, source_blob, @truncate(s3.options.partSize));
-                    var __stream_val_moved = false; _ = &__stream_val_moved;
-                    defer if (!__stream_val_moved) { const __T = @TypeOf(stream_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stream_val.release() catch {}; } else { stream_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stream_val; _drop_val.release(); } };
                     if (try jsc.WebCore.ReadableStream.fromJS(stream_val, ctx)) |stream| {
                         _ = &stream;
                         return destination_blob.pipeReadableStreamToBlob(ctx, stream, options.extra_options);
@@ -2220,8 +2013,6 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                 } else {
                     if (((destination_type == .bytes) and (source_type == .bytes))) {
                         const cloned = Blob.new(source_blob.dupe());
-                        var __cloned_moved = false; _ = &__cloned_moved;
-                        defer if (!__cloned_moved) { const __T = @TypeOf(cloned); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = cloned.release() catch {}; } else { cloned.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = cloned; _drop_val.release(); } };
                         return JSPromise.resolvedPromiseValue(ctx, cloned.toJS(ctx));
                     } else {
                         if (((destination_type == .bytes) and ((source_type == .file) or (source_type == .s3)))) {
@@ -2230,11 +2021,8 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         } else {
                             if ((destination_type == .s3)) {
                                 const s3 = (&destination_store.data.s3);
-                                var __s3_moved = false; _ = &__s3_moved;
-                                defer if (!__s3_moved) { const __T = @TypeOf(s3); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = s3.release() catch {}; } else { s3.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = s3; _drop_val.release(); } };
                                 var aws_options = (blk_catch_7: { break :blk_catch_7 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
-                                var __aws_options_moved = false; _ = &__aws_options_moved;
-                                defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
+                                _ = &aws_options;
                                 defer {
                                 _ = aws_options.deinit();
                                 }
@@ -2248,8 +2036,6 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
 .bytes => |bytes| {
 if ((bytes.len > S3.MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE)) {
                                     const stream_val = try jsc.WebCore.ReadableStream.fromBlobCopyRef(ctx, source_blob, @truncate(s3.options.partSize));
-                                    var __stream_val_moved = false; _ = &__stream_val_moved;
-                                    defer if (!__stream_val_moved) { const __T = @TypeOf(stream_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stream_val.release() catch {}; } else { stream_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stream_val; _drop_val.release(); } };
                                     if (try jsc.WebCore.ReadableStream.fromJS(stream_val, ctx)) |stream| {
                                         _ = &stream;
                                         return S3.uploadStream((if ((options.extra_options != null)) aws_options.credentials.dupe() else s3.getCredentials()), s3.path(), stream, ctx, aws_options.options, aws_options.acl, aws_options.storage_class, destination_blob.contentTypeOrMimeType(), aws_options.content_disposition, aws_options.content_encoding, proxy_url, aws_options.request_payer, null, undefined);
@@ -2286,23 +2072,15 @@ pub fn deinit(self: *@This()) void {
     }
     pub const new = bun.TrivialNew(@This());
 };
-                                    var __Wrapper_moved = false; _ = &__Wrapper_moved;
-                                    defer if (!__Wrapper_moved) { const __T = @TypeOf(Wrapper); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = Wrapper.release() catch {}; } else { Wrapper.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = Wrapper; _drop_val.release(); } };
                                     _ = source_store.ref();
                                     const promise = jsc.JSPromise.Strong.init(ctx);
-                                    var __promise_moved = false; _ = &__promise_moved;
-                                    defer if (!__promise_moved) { const __T = @TypeOf(promise); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise.release() catch {}; } else { promise.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise; _drop_val.release(); } };
                                     const promise_value = promise.value();
-                                    var __promise_value_moved = false; _ = &__promise_value_moved;
-                                    defer if (!__promise_value_moved) { const __T = @TypeOf(promise_value); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = promise_value.release() catch {}; } else { promise_value.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = promise_value; _drop_val.release(); } };
                                     _ = try S3.upload((&aws_options.credentials), s3.path(), bytes.slice(), destination_blob.contentTypeOrMimeType(), aws_options.content_disposition, aws_options.content_encoding, aws_options.acl, proxy_url, aws_options.storage_class, aws_options.request_payer, Wrapper.resolve, Wrapper.new(.{ .store = source_store, .promise = promise, .global = ctx }));
                                     return promise_value;
                                 }
 },
 .file, .s3 => {
 const stream_val = try jsc.WebCore.ReadableStream.fromBlobCopyRef(ctx, source_blob, @truncate(s3.options.partSize));
-                                var __stream_val_moved = false; _ = &__stream_val_moved;
-                                defer if (!__stream_val_moved) { const __T = @TypeOf(stream_val); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = stream_val.release() catch {}; } else { stream_val.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = stream_val; _drop_val.release(); } };
                                 if (try jsc.WebCore.ReadableStream.fromJS(stream_val, ctx)) |stream| {
                                     _ = &stream;
                                     return S3.uploadStream((if ((options.extra_options != null)) aws_options.credentials.dupe() else s3.getCredentials()), s3.path(), stream, ctx, s3.options, aws_options.acl, aws_options.storage_class, destination_blob.contentTypeOrMimeType(), aws_options.content_disposition, aws_options.content_encoding, proxy_url, aws_options.request_payer, null, undefined);
@@ -2341,8 +2119,6 @@ pub fn writeStringToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Pat
         var truncate = (needs_open or str.isEmpty());
         _ = &truncate;
         const jsc_vm = globalThis.bunVM();
-        var __jsc_vm_moved = false; _ = &__jsc_vm_moved;
-        defer if (!__jsc_vm_moved) { const __T = @TypeOf(jsc_vm); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = jsc_vm.release() catch {}; } else { jsc_vm.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = jsc_vm; _drop_val.release(); } };
         var written: usize = 0;
         _ = &written;
         defer {
@@ -2357,18 +2133,14 @@ pub fn writeStringToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Pat
         }
         if ((!str.isEmpty())) {
             var decoded = str.toUTF8(jsc_vm.allocator);
-            var __decoded_moved = false; _ = &__decoded_moved;
-            defer if (!__decoded_moved) { const __T = @TypeOf(decoded); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = decoded.release() catch {}; } else { decoded.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = decoded; _drop_val.release(); } };
+            _ = &decoded;
             defer {
             _ = decoded.deinit();
             }
             var remain = decoded.slice();
-            var __remain_moved = false; _ = &__remain_moved;
-            defer if (!__remain_moved) { const __T = @TypeOf(remain); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = remain.release() catch {}; } else { remain.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = remain; _drop_val.release(); } };
+            _ = &remain;
             while ((remain.len > 0)) {
                 const result = bun.sys.write(fd, remain);
-                var __result_moved = false; _ = &__result_moved;
-                defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
                 switch (result) {
 .result => |res| {
 written = (written + res);
@@ -2427,8 +2199,6 @@ pub fn writeBytesToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Path
         const end = (remain.ptr + remain.len);
         while ((remain.ptr != end)) {
             const result = bun.sys.write(fd, remain);
-            var __result_moved = false; _ = &__result_moved;
-            defer if (!__result_moved) { const __T = @TypeOf(result); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = result.release() catch {}; } else { result.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = result; _drop_val.release(); } };
             switch (result) {
 .result => |res| {
 written = (written + res);
@@ -2469,14 +2239,10 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
         _ = &path_or_blob;
         if ((path_or_blob == .blob)) {
             const blob_store_opt = path_or_blob.blob.store;
-            var __blob_store_opt_moved = false; _ = &__blob_store_opt_moved;
-            defer if (!__blob_store_opt_moved) { const __T = @TypeOf(blob_store_opt); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_store_opt.release() catch {}; } else { blob_store_opt.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_store_opt; _drop_val.release(); } };
             if ((blob_store_opt == null)) {
                 return globalThis.throwInvalidArguments("Blob is detached", .{});
             }
             const blob_store = blob_store_opt.?;
-            var __blob_store_moved = false; _ = &__blob_store_moved;
-            defer if (!__blob_store_moved) { const __T = @TypeOf(blob_store); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_store.release() catch {}; } else { blob_store.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_store; _drop_val.release(); } };
             _ = bun.assertWithLocation((blob_store.data != .bytes), @src());
             if ((blob_store.data == .file)) {
                 blob_store.data.file.last_modified = jsc.init_timestamp;
@@ -2505,12 +2271,8 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
             if (((path_or_blob == .path) or (((path_or_blob.blob.offset == 0) and (!path_or_blob.blob.isS3())) and (!((((path_or_blob.blob.store != null) and (path_or_blob.blob.store.?.data == .file)) and (path_or_blob.blob.store.?.data.file.mode != 0)) and bun.isRegularFile(path_or_blob.blob.store.?.data.file.mode)))))) {
                 if (data.isString()) {
                     const len = try data.getLength(globalThis);
-                    var __len_moved = false; _ = &__len_moved;
-                    defer if (!__len_moved) { const __T = @TypeOf(len); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = len.release() catch {}; } else { len.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = len; _drop_val.release(); } };
                     if ((len < (256 * 1024))) {
                         const str = try data.toBunString(globalThis);
-                        var __str_moved = false; _ = &__str_moved;
-                        defer if (!__str_moved) { const __T = @TypeOf(str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = str.release() catch {}; } else { str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = str; _drop_val.release(); } };
                         defer {
                         _ = str.deref();
                         }
@@ -2550,15 +2312,12 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
         }
         var destination_blob: Blob = (if ((path_or_blob == .path)) brk: {
         const new_blob = Blob.findOrCreateFileFromPath((&path_or_blob_.path), globalThis, true);
-        var __new_blob_moved = false; _ = &__new_blob_moved;
-        defer if (!__new_blob_moved) { const __T = @TypeOf(new_blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = new_blob.release() catch {}; } else { new_blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = new_blob; _drop_val.release(); } };
         if ((new_blob.store == null)) {
             return globalThis.throwInvalidArguments("Writing to an empty blob is not implemented yet", .{});
         }
         break :brk new_blob;
 } else path_or_blob.blob.dupe());
-        var __destination_blob_moved = false; _ = &__destination_blob_moved;
-        defer if (!__destination_blob_moved) { const __T = @TypeOf(destination_blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = destination_blob.release() catch {}; } else { destination_blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = destination_blob; _drop_val.release(); } };
+        _ = &destination_blob;
         if ((bun.Environment.allow_assert and (path_or_blob == .blob))) {
             _ = bun.unsafeAssert((path_or_blob.blob.store != null));
         }
@@ -2566,8 +2325,6 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
         if (data.as(Response)) |response| {
             _ = &response;
             const bodyValue = response.getBodyValue();
-            var __bodyValue_moved = false; _ = &__bodyValue_moved;
-            defer if (!__bodyValue_moved) { const __T = @TypeOf(bodyValue); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bodyValue.release() catch {}; } else { bodyValue.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bodyValue; _drop_val.release(); } };
             switch (bodyValue.*) {
 .WTFStringImpl, .InternalBlob, .Used, .Empty, .Blob, .Null => {
 break :brk bodyValue.use();
@@ -2581,8 +2338,7 @@ _ = destination_blob.detach();
 if (destination_blob.isS3()) {
                 const s3 = (&destination_blob.store.?.data.s3);
                 var aws_options = try s3.getCredentialsWithOptions(options.extra_options, globalThis);
-                var __aws_options_moved = false; _ = &__aws_options_moved;
-                defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
+                _ = &aws_options;
                 defer {
                 _ = aws_options.deinit();
                 }
@@ -2605,8 +2361,7 @@ if (destination_blob.isS3()) {
                 return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
             }
             var task = bun.new(WriteFileWaitFromLockedValueTask, .{ .globalThis = globalThis, .file_blob = destination_blob, .promise = jsc.JSPromise.Strong.init(globalThis), .mkdirp_if_not_exists = ((options.mkdirp_if_not_exists) orelse (true)) });
-            var __task_moved = false; _ = &__task_moved;
-            defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
+            _ = &task;
             bodyValue.Locked.task = task;
             bodyValue.Locked.onReceiveValue = WriteFileWaitFromLockedValueTask.thenWrap;
             return task.promise.value();
@@ -2616,8 +2371,6 @@ if (destination_blob.isS3()) {
         if (data.as(Request)) |request| {
             _ = &request;
             const bodyValue = request.getBodyValue();
-            var __bodyValue_moved = false; _ = &__bodyValue_moved;
-            defer if (!__bodyValue_moved) { const __T = @TypeOf(bodyValue); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bodyValue.release() catch {}; } else { bodyValue.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bodyValue; _drop_val.release(); } };
             switch (bodyValue.*) {
 .WTFStringImpl, .InternalBlob, .Used, .Empty, .Blob, .Null => {
 break :brk bodyValue.use();
@@ -2631,8 +2384,7 @@ _ = destination_blob.detach();
 if (destination_blob.isS3()) {
                 const s3 = (&destination_blob.store.?.data.s3);
                 var aws_options = try s3.getCredentialsWithOptions(options.extra_options, globalThis);
-                var __aws_options_moved = false; _ = &__aws_options_moved;
-                defer if (!__aws_options_moved) { const __T = @TypeOf(aws_options); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = aws_options.release() catch {}; } else { aws_options.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = aws_options; _drop_val.release(); } };
+                _ = &aws_options;
                 defer {
                 _ = aws_options.deinit();
                 }
@@ -2655,8 +2407,7 @@ if (destination_blob.isS3()) {
                 return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
             }
             var task = bun.new(WriteFileWaitFromLockedValueTask, .{ .globalThis = globalThis, .file_blob = destination_blob, .promise = jsc.JSPromise.Strong.init(globalThis), .mkdirp_if_not_exists = ((options.mkdirp_if_not_exists) orelse (true)) });
-            var __task_moved = false; _ = &__task_moved;
-            defer if (!__task_moved) { const __T = @TypeOf(task); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = task.release() catch {}; } else { task.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = task; _drop_val.release(); } };
+            _ = &task;
             bodyValue.Locked.task = task;
             bodyValue.Locked.onReceiveValue = WriteFileWaitFromLockedValueTask.thenWrap;
             return task.promise.value();
@@ -2670,8 +2421,7 @@ if (destination_blob.isS3()) {
         }
         break :brk try Blob.get(globalThis, data, false, false);
 };
-        var __source_blob_moved = false; _ = &__source_blob_moved;
-        defer if (!__source_blob_moved) { const __T = @TypeOf(source_blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = source_blob.release() catch {}; } else { source_blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = source_blob; _drop_val.release(); } };
+        _ = &source_blob;
         defer {
         _ = source_blob.detach();
         }
@@ -2710,11 +2460,8 @@ pub fn getFdByOpening(ctx: *This, comptime Callback: OpenCallback) void {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
             var path_string = (if (@hasField(This, "file_store")) ctx.file_store.pathlike.path else ctx.file_blob.store.?.data.file.pathlike.path);
-            var __path_string_moved = false; _ = &__path_string_moved;
-            defer if (!__path_string_moved) { const __T = @TypeOf(path_string); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path_string.release() catch {}; } else { path_string.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path_string; _drop_val.release(); } };
+            _ = &path_string;
             const path = path_string.sliceZ((&buf));
-            var __path_moved = false; _ = &__path_moved;
-            defer if (!__path_moved) { const __T = @TypeOf(path); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path.release() catch {}; } else { path.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path; _drop_val.release(); } };
             if (Environment.isWindows) {
                 const WrappedCallback = struct {
 
@@ -2731,8 +2478,7 @@ pub fn callback(req: *libuv.fs_t) callconv(.c) void {
                 if (req.result.errEnum()) |errEnum| {
                     _ = &errEnum;
                     var path_string_2 = (if (@hasField(This, "file_store")) target.file_store.pathlike.path else target.file_blob.store.?.data.file.pathlike.path);
-                    var __path_string_2_moved = false; _ = &__path_string_2_moved;
-                    defer if (!__path_string_2_moved) { const __T = @TypeOf(path_string_2); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = path_string_2.release() catch {}; } else { path_string_2.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = path_string_2; _drop_val.release(); } };
+                    _ = &path_string_2;
                     target.errno = bun.errnoToZigErr(errEnum);
                     target.system_error = bun.sys.Error.fromCode(errEnum, .open).withPath(path_string_2.slice()).toSystemError();
                     target.opened_fd = invalid_fd;
@@ -2743,11 +2489,7 @@ pub fn callback(req: *libuv.fs_t) callconv(.c) void {
             _ = Callback(target, target.opened_fd);
     }
 };
-                var __WrappedCallback_moved = false; _ = &__WrappedCallback_moved;
-                defer if (!__WrappedCallback_moved) { const __T = @TypeOf(WrappedCallback); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = WrappedCallback.release() catch {}; } else { WrappedCallback.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = WrappedCallback; _drop_val.release(); } };
                 const rc = libuv.uv_fs_open(ctx.loop, (&ctx.req), path, open_flags_, jsc.Node.fs.default_permission, (&WrappedCallback.callback));
-                var __rc_moved = false; _ = &__rc_moved;
-                defer if (!__rc_moved) { const __T = @TypeOf(rc); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = rc.release() catch {}; } else { rc.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = rc; _drop_val.release(); } };
                 if (rc.errEnum()) |errno| {
                     _ = &errno;
                     ctx.errno = bun.errnoToZigErr(errno);
@@ -2798,8 +2540,6 @@ pub fn getFd(ctx: *This, comptime Callback: OpenCallback) void {
             }
             if (@hasField(This, "file_store")) {
                 const pathlike = ctx.file_store.pathlike;
-                var __pathlike_moved = false; _ = &__pathlike_moved;
-                defer if (!__pathlike_moved) { const __T = @TypeOf(pathlike); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pathlike.release() catch {}; } else { pathlike.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pathlike; _drop_val.release(); } };
                 if ((pathlike == .fd)) {
                     ctx.opened_fd = pathlike.fd;
                     _ = Callback(ctx, ctx.opened_fd);
@@ -2807,8 +2547,6 @@ pub fn getFd(ctx: *This, comptime Callback: OpenCallback) void {
                 }
             } else {
                 const pathlike = ctx.file_blob.store.?.data.file.pathlike;
-                var __pathlike_moved = false; _ = &__pathlike_moved;
-                defer if (!__pathlike_moved) { const __T = @TypeOf(pathlike); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = pathlike.release() catch {}; } else { pathlike.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = pathlike; _drop_val.release(); } };
                 if ((pathlike == .fd)) {
                     ctx.opened_fd = pathlike.fd;
                     _ = Callback(ctx, ctx.opened_fd);
@@ -2897,8 +2635,6 @@ pub export fn Blob__deref(blob: *Blob) callconv(.c) void {
 
 pub export fn Blob__dupeFromJS(value: JSValue) callconv(.c) ?*Blob {
         const b = ((Blob.fromJS(value)) orelse { return null; });
-        var __b_moved = false; _ = &__b_moved;
-        defer if (!__b_moved) { const __T = @TypeOf(b); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = b.release() catch {}; } else { b.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = b; _drop_val.release(); } };
         return Blob.new(b.dupeWithContentType(true));
 }
 
@@ -2909,8 +2645,6 @@ pub export fn Blob__setAsFile(blob: *Blob, path_str: *String) callconv(.c) void 
             if (((store.*).data == .bytes)) {
                 if (((store.*).data.bytes.stored_name.len == 0)) {
                     const utf8 = path_str.toUTF8Bytes(default_allocator);
-                    var __utf8_moved = false; _ = &__utf8_moved;
-                    defer if (!__utf8_moved) { const __T = @TypeOf(utf8); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = utf8.release() catch {}; } else { utf8.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = utf8; _drop_val.release(); } };
                     (store.*).data.bytes.stored_name = bun.PathString.init(utf8);
                 }
             }
@@ -2931,11 +2665,7 @@ pub export fn Blob__getFileNameString(blob: *Blob) callconv(.c) String {
 
 pub export fn Blob__getDataPtr(value: JSValue) callconv(.c) ?*anyopaque {
         const blob = ((Blob.fromJS(value)) orelse { return null; });
-        var __blob_moved = false; _ = &__blob_moved;
-        defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
         const data = blob.sharedView();
-        var __data_moved = false; _ = &__data_moved;
-        defer if (!__data_moved) { const __T = @TypeOf(data); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = data.release() catch {}; } else { data.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = data; _drop_val.release(); } };
         if ((data.len == 0)) {
             return null;
         }
@@ -2944,11 +2674,7 @@ pub export fn Blob__getDataPtr(value: JSValue) callconv(.c) ?*anyopaque {
 
 pub export fn Blob__getSize(value: JSValue) callconv(.c) usize {
         const blob = ((Blob.fromJS(value)) orelse { return 0; });
-        var __blob_moved = false; _ = &__blob_moved;
-        defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
         const data = blob.sharedView();
-        var __data_moved = false; _ = &__data_moved;
-        defer if (!__data_moved) { const __T = @TypeOf(data); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = data.release() catch {}; } else { data.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = data; _drop_val.release(); } };
         return data.len;
 }
 
@@ -2957,19 +2683,13 @@ pub export fn Blob__fromBytes(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8
             return Blob.new(Blob.initEmpty(globalThis));
         }
         const bytes = bun.handleOom(default_allocator.dupe(u8, ptr_arg.?[0..len]));
-        var __bytes_moved = false; _ = &__bytes_moved;
-        defer if (!__bytes_moved) { const __T = @TypeOf(bytes); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = bytes.release() catch {}; } else { bytes.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = bytes; _drop_val.release(); } };
         const store = BlobStore.init(bytes, default_allocator);
-        var __store_moved = false; _ = &__store_moved;
-        defer if (!__store_moved) { const __T = @TypeOf(store); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = store.release() catch {}; } else { store.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = store; _drop_val.release(); } };
         return Blob.new(Blob.initWithStore(store, globalThis));
 }
 
 pub export fn Blob__fromBytesWithType(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8, len: usize, mime: [*:0]const u8) callconv(.c) *Blob {
         const blob = Blob__fromBytes(globalThis, ptr_arg, len);
         const mime_slice = std.mem.span(mime);
-        var __mime_slice_moved = false; _ = &__mime_slice_moved;
-        defer if (!__mime_slice_moved) { const __T = @TypeOf(mime_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mime_slice.release() catch {}; } else { mime_slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mime_slice; _drop_val.release(); } };
         if ((mime_slice.len > 0)) {
             blob.content_type = mime_slice;
             blob.content_type_was_set = true;
@@ -2982,19 +2702,12 @@ pub export fn Blob__fromMmapWithType(globalThis: *JSGlobalObject, ptr_arg: [*]u8
             return Blob__fromBytesWithType(globalThis, ptr_arg, len, mime);
         }
         const store = BlobStore.init(ptr_arg[0..len], .{ .ptr = undefined, .vtable = MmapFreeInterface.vtable });
-        var __store_moved = false; _ = &__store_moved;
-        defer if (!__store_moved) { const __T = @TypeOf(store); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = store.release() catch {}; } else { store.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = store; _drop_val.release(); } };
         const blob = Blob.new(Blob.initWithStore(store, globalThis));
-        var __blob_moved = false; _ = &__blob_moved;
-        defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
         const mime_slice = std.mem.span(mime);
-        var __mime_slice_moved = false; _ = &__mime_slice_moved;
-        defer if (!__mime_slice_moved) { const __T = @TypeOf(mime_slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = mime_slice.release() catch {}; } else { mime_slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = mime_slice; _drop_val.release(); } };
         if ((mime_slice.len > 0)) {
             blob.content_type = mime_slice;
             blob.content_type_was_set = true;
         }
-        __blob_moved = true;
         return blob;
 }
 
@@ -3002,21 +2715,15 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
         _ = jsc.markBinding(@src());
         const allocator = default_allocator;
         var blob: Blob = undefined;
-        var __blob_moved = false; _ = &__blob_moved;
-        defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
+        _ = &blob;
         var arguments = callframe.arguments_old(3);
-        var __arguments_moved = false; _ = &__arguments_moved;
-        defer if (!__arguments_moved) { const __T = @TypeOf(arguments); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = arguments.release() catch {}; } else { arguments.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = arguments; _drop_val.release(); } };
+        _ = &arguments;
         const args = arguments.slice();
-        var __args_moved = false; _ = &__args_moved;
-        defer if (!__args_moved) { const __T = @TypeOf(args); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = args.release() catch {}; } else { args.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = args; _drop_val.release(); } };
         if ((args.len < 2)) {
             return globalThis.throwInvalidArguments("new File(bits, name) expects at least 2 arguments", .{});
         }
         {
             const name_value_str = try String.fromJS(args[1], globalThis);
-            var __name_value_str_moved = false; _ = &__name_value_str_moved;
-            defer if (!__name_value_str_moved) { const __T = @TypeOf(name_value_str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = name_value_str.release() catch {}; } else { name_value_str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = name_value_str; _drop_val.release(); } };
             defer {
             _ = name_value_str.deref();
             }
@@ -3047,14 +2754,11 @@ blob.name = name_value_str.dupeRef();
                     _ = inner: {
                     if (content_type.isString()) {
                         var content_type_str = try content_type.toSlice(globalThis, default_allocator);
-                        var __content_type_str_moved = false; _ = &__content_type_str_moved;
-                        defer if (!__content_type_str_moved) { const __T = @TypeOf(content_type_str); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = content_type_str.release() catch {}; } else { content_type_str.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = content_type_str; _drop_val.release(); } };
+                        _ = &content_type_str;
                         defer {
                         _ = content_type_str.deinit();
                         }
                         const slice = content_type_str.slice();
-                        var __slice_moved = false; _ = &__slice_moved;
-                        defer if (!__slice_moved) { const __T = @TypeOf(slice); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = slice.release() catch {}; } else { slice.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = slice; _drop_val.release(); } };
                         if ((!strings.isAllASCII(slice))) {
                             break :inner;
                         }
@@ -3065,8 +2769,6 @@ blob.name = name_value_str.dupeRef();
                             break :inner;
                         }
                         const content_type_buf = bun.handleOom(allocator.alloc(u8, slice.len));
-                        var __content_type_buf_moved = false; _ = &__content_type_buf_moved;
-                        defer if (!__content_type_buf_moved) { const __T = @TypeOf(content_type_buf); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = content_type_buf.release() catch {}; } else { content_type_buf.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = content_type_buf; _drop_val.release(); } };
                         blob.content_type = strings.copyLowercase(slice, content_type_buf);
                         blob.content_type_allocated = true;
                     }
@@ -3087,10 +2789,8 @@ blob.name = name_value_str.dupeRef();
             blob.content_type_was_set = false;
         }
         var blob_ = Blob.new(blob);
-        var __blob__moved = false; _ = &__blob__moved;
-        defer if (!__blob__moved) { const __T = @TypeOf(blob_); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob_.release() catch {}; } else { blob_.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob_; _drop_val.release(); } };
+        _ = &blob_;
         blob_.is_jsdom_file = true;
-        __blob__moved = true;
         return blob_;
 }
 
@@ -3105,7 +2805,5 @@ pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *Call
 pub export fn JSDOMFile__hasInstance(_: JSValue, _: *JSGlobalObject, value: JSValue) callconv(jsc.conv) bool {
         _ = jsc.markBinding(@src());
         const blob = ((value.as(Blob)) orelse { return false; });
-        var __blob_moved = false; _ = &__blob_moved;
-        defer if (!__blob_moved) { const __T = @TypeOf(blob); if (@typeInfo(__T) == .pointer) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "release")) { const __CpRType = @typeInfo(@TypeOf(__CpChild.release)).@"fn".return_type.?; if (@typeInfo(__CpRType) == .error_union) { _ = blob.release() catch {}; } else { blob.release(); } } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "release")) { var _drop_val = blob; _drop_val.release(); } };
         return blob.is_jsdom_file;
 }

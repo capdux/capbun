@@ -97,7 +97,7 @@ pub const Buffered = struct {
     buf: [3]u8 = .{ 0, 0, 0 },
     len: u2 = 0,
 
-pub fn slice(self: Buffered) []const u8 {
+pub fn slice(self: *const Buffered) []const u8 {
             return self.buf[0..self.len];
     }
 };

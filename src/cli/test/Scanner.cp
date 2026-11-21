@@ -216,7 +216,7 @@ pub fn next(scanner: *Scanner, entry: *FileSystem.Entry, fd: bun.FD) {
             }
 
             if (comptime bun.Environment.allow_assert)
-                bun.assert(!strings.contains(name, "node_modules"));
+                bun.assert(!strings.contains(name, std.fs.path.sep_str ++ "node_modules" ++ std.fs.path.sep_str));
 
             for (exclude_name of scanner.exclusion_names) {
                 if (strings.eql(exclude_name, name)) return;
