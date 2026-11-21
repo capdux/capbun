@@ -208,6 +208,53 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const SourcePathsGuard = struct {
+    slice: ?[][]const u8 = null,
+    count: ?*usize = null,
+    alloc: std.mem.Allocator,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SourcePathsGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.slice) |s| {
+                _ = &s;
+                var cnt: usize = 0;
+                _ = &cnt;
+                if (self.count) |c| {
+                    _ = &c;
+                    cnt = (blk: {
+                    break :blk c.*;
+
+});
+                }
+                for (cp_iter_slice(s[0..cnt])) |item| {
+                    _ = &item;
+                    _ = self.alloc.free(item);
+                }
+                _ = self.alloc.free(s);
+                self.slice = null;
+            }
+    }
+};
+
+pub const PathBufferPoolGuard = struct {
+    buf: ?*bun.PathBuffer = null,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *PathBufferPoolGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.buf) |b| {
+                _ = &b;
+                {
+                    _ = bun.path_buffer_pool.put(b);
+                }
+                self.buf = null;
+            }
+    }
+};
+
 pub const SourceMapState = struct {
     generated_line: i32 = 0,
     generated_column: i32 = 0,
@@ -560,17 +607,13 @@ return error.InvalidSourceMap;
         if ((hint != .source_only)) {
             source_paths_slice = bun.handleOom(alloc.alloc(string, sources_content.items.len));
         }
-        errdefer {
-        {
-            if ((hint != .source_only)) {
-                for (cp_iter_slice(source_paths_slice.?[0..i])) |item| {
-                    _ = &item;
-                    _ = alloc.free(item);
-                }
-                _ = alloc.free(source_paths_slice.?);
-            }
-        }
-        }
+        var _source_paths_guard = SourcePathsGuard{ .slice = source_paths_slice, .count = (blk: {
+        break :blk (&i);
+
+}), .alloc = alloc };
+        _ = &_source_paths_guard;
+        var ___source_paths_guard_moved = false; _ = &___source_paths_guard_moved;
+        defer if (!___source_paths_guard_moved) { ___source_paths_guard_moved = true; const __T = @TypeOf(_source_paths_guard); if (@typeInfo(__T) == .optional) { if (_source_paths_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _source_paths_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _source_paths_guard; _drop_val.__cp_deinit(); } };
         if ((hint != .source_only)) {
             for (cp_iter_slice(sources_paths.items.slice())) |item| {
                 _ = &item;
@@ -668,6 +711,7 @@ if (map.?.findMapping(bun.Ordinal.fromZeroBased(loc.line), bun.Ordinal.fromZeroB
         }
         break :content try alloc.dupe(u8, str);
 } else null);
+        _source_paths_guard.slice = null;
         _map_guard.ptr = null;
         return ParseUrl{ .map = map, .mapping = mapping, .source_contents = content_slice };
 }
@@ -771,9 +815,13 @@ pub fn getSourceMapImpl(comptime SourceProviderKind: type, provider: *SourceProv
             }
             var load_path_buf: *bun.PathBuffer = bun.path_buffer_pool.get();
             _ = &load_path_buf;
-            defer {
-            _ = bun.path_buffer_pool.put(load_path_buf);
-            }
+            var _load_path_buf_guard = PathBufferPoolGuard{ .buf = (blk: {
+            break :blk load_path_buf;
+
+}) };
+            _ = &_load_path_buf_guard;
+            var ___load_path_buf_guard_moved = false; _ = &___load_path_buf_guard_moved;
+            defer if (!___load_path_buf_guard_moved) { ___load_path_buf_guard_moved = true; const __T = @TypeOf(_load_path_buf_guard); if (@typeInfo(__T) == .optional) { if (_load_path_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _load_path_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _load_path_buf_guard; _drop_val.__cp_deinit(); } };
             if (((source_filename.len + 4) > load_path_buf.len)) {
                 break :try_external;
             }

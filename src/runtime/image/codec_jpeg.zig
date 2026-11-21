@@ -47,7 +47,7 @@ fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTarge
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const codecs = @import("./codecs.zig");
@@ -64,6 +64,42 @@ const TJPARAM_MAXPIXELS = 24;
 const TJPARAM_SAVEMARKERS = 25;
 const TJPF_RGBA = 7;
 const TJSAMP_420 = 2;
+const TjHandleGuard = struct {
+    h: tjhandle,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = tj3Destroy(self.h);
+    }
+};
+const TjFreeGuard = struct {
+    ptr: OptU8ManyPtr,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.ptr) |p| {
+                _ = &p;
+                _ = tj3Free(p);
+            }
+    }
+};
+const SliceFreeGuard = struct {
+    slice: ?[]u8,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.slice) |s| {
+                _ = &s;
+                _ = bun.default_allocator.free(s);
+            }
+    }
+};
 
 pub extern "c" fn tj3Init(init_type: c_int) callconv(.c) tjhandle;
 
@@ -102,10 +138,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         if ((h_opt == null)) {
             return error.OutOfMemory;
         }
-        const h = h_opt.?;
-        defer {
-        _ = tj3Destroy(h);
-        }
+        const h_guard = TjHandleGuard{ .h = h_opt.? };
+        const h = h_guard.h;
         _ = tj3Set(h, TJPARAM_SAVEMARKERS, 2);
         if ((tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0)) {
             return error.DecodeFailed;
@@ -129,7 +163,10 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
                 _ = &sfs;
                 var best: ScalingFactor = .{ .num = 1, .denom = 1 };
                 _ = &best;
-                for (cp_iter_slice(sfs[0..@intCast(n)])) |sf| {
+                for (cp_iter_slice((blk: {
+                break :blk sfs[0..@intCast(n)];
+
+}))) |sf| {
                     _ = &sf;
                     if ((sf.num >= sf.denom)) {
                         continue;
@@ -153,9 +190,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         _ = tj3Set(h, TJPARAM_MAXPIXELS, ((std.math.cast(c_int, (src_w * src_h))) orelse (std.math.maxInt(c_int))));
         _ = tj3SetCroppingRegion(h, .{ .x = 0, .y = 0, .w = @intCast(w), .h = @intCast(ht) });
         const out = try bun.default_allocator.alloc(u8, (((if (comptime @typeInfo(@TypeOf(w)) == .@"enum") cp_cast_int(usize, @intFromEnum(w)) else cp_cast_int(usize, w)) * ht) * 4));
-        errdefer {
-        _ = bun.default_allocator.free(out);
-        }
+        var out_guard = SliceFreeGuard{ .slice = out };
+        _ = &out_guard;
         if ((tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast((w * 4)), TJPF_RGBA) != 0)) {
             return error.DecodeFailed;
         }
@@ -170,13 +206,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         if (((tj3GetICCProfile(h, (&icc_ptr), (&icc_size)) != 0) or (icc_size == 0))) {
             break :icc_blk null;
         }
-        defer {
-        if (icc_ptr) |p| {
-            _ = &p;
-            _ = tj3Free(p);
-        }
-        }
-        if (icc_ptr) |p| {
+        const icc_guard = TjFreeGuard{ .ptr = icc_ptr };
+        if (icc_guard.ptr) |p| {
             _ = &p;
             break :icc_blk (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.dupe(u8, (blk: {
             break :blk p[0..icc_size];
@@ -185,6 +216,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         }
         break :icc_blk null;
 };
+        out_guard.slice = null;
         return .{ .rgba = out, .width = w, .height = ht, .icc_profile = icc };
 }
 
@@ -193,10 +225,8 @@ pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool,
         if ((h_opt == null)) {
             return error.OutOfMemory;
         }
-        const h = h_opt.?;
-        defer {
-        _ = tj3Destroy(h);
-        }
+        const h_guard = TjHandleGuard{ .h = h_opt.? };
+        const h = h_guard.h;
         _ = tj3Set(h, TJPARAM_QUALITY, @intCast(@min(@max(quality, 1), 100)));
         _ = tj3Set(h, TJPARAM_SUBSAMP, TJSAMP_420);
         if (progressive) {
@@ -219,5 +249,8 @@ pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool,
             }
             return error.EncodeFailed;
         }
-        return .{ .bytes = out_ptr.?[0..out_len], .free = codecs.Encoded.wrap(tj3Free) };
+        return .{ .bytes = (blk: {
+        break :blk out_ptr.?[0..out_len];
+
+}), .free = codecs.Encoded.wrap(tj3Free) };
 }

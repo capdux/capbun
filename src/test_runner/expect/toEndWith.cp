@@ -1,3 +1,8 @@
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 pub fn toEndWith(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
     defer client.postMatch(globalThis);
 
@@ -22,11 +27,9 @@ pub fn toEndWith(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
 
     let pass = value.isString();
     if (pass) {
-        const value_string = value.toSliceOrNull(globalThis)?;
-        defer value_string.deinit();
-        const expected_string = expected.toSliceOrNull(globalThis)?;
-        defer expected_string.deinit();
-        pass = strings.endsWith(value_string.slice(), expected_string.slice()) || expected_string.len == 0;
+        const value_string = DeinitGuard<jsc.ZigString.Slice>{ val: value.toSliceOrNull(globalThis)? };
+        const expected_string = DeinitGuard<jsc.ZigString.Slice>{ val: expected.toSliceOrNull(globalThis)? };
+        pass = strings.endsWith(value_string.val.slice(), expected_string.val.slice()) || expected_string.val.len == 0;
     }
 
     const not = client.flags.not;
@@ -34,10 +37,9 @@ pub fn toEndWith(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
 
     if (pass) return JSValue.js_undefined;
 
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const value_fmt = value.toFmt(&formatter);
-    const expected_fmt = expected.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+    const value_fmt = value.toFmt(&formatter.val);
+    const expected_fmt = expected.toFmt(&formatter.val);
 
     if (not) {
         const expected_line = "Expected to not end with: <green>{f}<r>\n";

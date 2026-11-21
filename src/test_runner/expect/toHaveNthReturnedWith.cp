@@ -21,9 +21,8 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
     client.incrementExpectCallCounter();
     const returns = bun.cpp.JSMockFunction__getReturns(globalThis, value)?;
     if (!returns.jsType().isArray()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter.val) });
     }
 
     const calls_count: u32 = @truncate(returns.getLength(globalThis)?);
@@ -41,9 +40,8 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
         if (nth_result.isObject()) {
             const result_type = (nth_result.get(globalThis, "type")?) ?? .js_undefined;
             if (result_type.isString()) {
-                const type_str = result_type.toBunString(globalThis)?;
-                defer type_str.deref();
-                if (type_str.eqlComptime("return")) {
+                const type_str = DerefGuard<bun.String>{ val: result_type.toBunString(globalThis)? };
+                if (type_str.val.eqlComptime("return")) {
                     if (v := nth_result.get(globalThis, "value")?) {
                         nth_return_value = v;
                     } else {
@@ -52,7 +50,7 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
                     if (nth_return_value.jestDeepEquals(expected, globalThis)?) {
                         pass = true;
                     }
-                } else if (type_str.eqlComptime("throw")) {
+                } else if (type_str.val.eqlComptime("throw")) {
                     nth_call_threw = true;
                     if (v := nth_result.get(globalThis, "value")?) {
                         nth_error_value = v;
@@ -69,13 +67,12 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
     }
 
     // Handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
 
     const signature = comptime getSignature("toHaveNthReturnedWith", "<green>n<r>, <green>expected<r>", false);
 
     if (client.flags.not) {
-        return client.throw(globalThis, comptime getSignature("toHaveNthReturnedWith", "<green>n<r>, <green>expected<r>", true), "\n\n" ++ "Expected mock function not to have returned on call {d}: <green>{f}<r>\n" ++ "But it did.\n", .{ n, expected.toFmt(&formatter) });
+        return client.throw(globalThis, comptime getSignature("toHaveNthReturnedWith", "<green>n<r>, <green>expected<r>", true), "\n\n" ++ "Expected mock function not to have returned on call {d}: <green>{f}<r>\n" ++ "But it did.\n", .{ n, expected.toFmt(&formatter.val) });
     }
 
     if (!nth_call_exists) {
@@ -83,7 +80,7 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
     }
 
     if (nth_call_threw) {
-        return client.throw(globalThis, signature, "\n\n" ++ "Call {d} threw an error: <red>{f}<r>\n", .{ n, nth_error_value.toFmt(&formatter) });
+        return client.throw(globalThis, signature, "\n\n" ++ "Call {d} threw an error: <red>{f}<r>\n", .{ n, nth_error_value.toFmt(&formatter.val) });
     }
 
     // Diff if possible
@@ -92,7 +89,7 @@ pub fn toHaveNthReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callf
         return client.throw(globalThis, signature, "\n\nCall {d}:\n{f}\n", .{ n, diff_format });
     }
 
-    return client.throw(globalThis, signature, "\n\nCall {d}:\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ n, expected.toFmt(&formatter), nth_return_value.toFmt(&formatter) });
+    return client.throw(globalThis, signature, "\n\nCall {d}:\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ n, expected.toFmt(&formatter.val), nth_return_value.toFmt(&formatter.val) });
 }
 
 import bun from "bun";
@@ -106,3 +103,13 @@ const mock = bun.jsc.Expect.mock;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}

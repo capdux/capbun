@@ -23,6 +23,43 @@ const Debugger = @import("../../jsc/Debugger.zig");
     fn Bun__JSTimeout__call(globalObject: *jsc.JSGlobalObject, timer: JSValue, callback: JSValue, arguments: JSValue): bool;
 }
 
+pub struct DerefGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deref();
+        }
+    }
+}
+
+pub struct ImmediateRunGuard {
+    internals: *TimerObjectInternals!,
+
+    ~init() {
+        unsafe {
+            if (_.internals.eventLoopTimer().state == .FIRED) {
+                _.internals.deref();
+            }
+            _.internals.deref();
+        }
+    }
+}
+
+pub struct InspectorDispatchGuard {
+    vm: *jsc.VirtualMachine!,
+    globalThis: *jsc.JSGlobalObject!,
+    async_id: u64,
+
+    ~init() {
+        unsafe {
+            if (_.vm.isInspectorEnabled()) {
+                Debugger.didDispatchAsyncCall(_.globalThis, .DOMTimer, _.async_id);
+            }
+        }
+    }
+}
+
 export class TimerObjectInternals {
     /// Identifier for this timer that is exposed to JavaScript (by `+timer`)
     id: i32 = -1;
@@ -114,14 +151,10 @@ export class TimerObjectInternals {
         const callback = ImmediateObject.js.callbackGetCached(timer).?;
         const arguments = ImmediateObject.js.argumentsGetCached(timer).?;
 
+        const _internals_ptr: *TimerObjectInternals! = unsafe { _ };
         const exception_thrown = ({
             _.ref();
-            defer {
-                if (_.eventLoopTimer().state == .FIRED) {
-                    _.deref();
-                }
-                _.deref();
-            }
+            const _run_guard = ImmediateRunGuard{ internals: _internals_ptr };
             break _.run(globalThis, timer, callback, arguments, _.asyncID(), vm);
         });
 
@@ -195,7 +228,7 @@ export class TimerObjectInternals {
         vm.eventLoop().enter();
         {
             _.ref();
-            defer _.deref();
+            const _deref_guard = DerefGuard<TimerObjectInternals>{ ptr: unsafe { _ } };
 
             * = _.run(globalThis, this_object, callback, arguments, ID.asyncID(async_id), vm);
 
@@ -284,11 +317,11 @@ export class TimerObjectInternals {
             Debugger.willDispatchAsyncCall(globalThis, .DOMTimer, async_id);
         }
 
-        defer {
-            if (vm.isInspectorEnabled()) {
-                Debugger.didDispatchAsyncCall(globalThis, .DOMTimer, async_id);
-            }
-        }
+        const _inspector_guard = InspectorDispatchGuard{
+            vm: unsafe { vm },
+            globalThis: unsafe { globalThis },
+            async_id: async_id,
+        };
 
         _.flags.in_callback = true;
         defer _.flags.in_callback = false;

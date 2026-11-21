@@ -1,9 +1,14 @@
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 pub fn toEqualIgnoringWhitespace(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
     defer client.postMatch(globalThis);
 
     const thisValue = callFrame.this();
     const _arguments = callFrame.arguments_old(1);
-    const arguments: []const JSValue = _arguments.ptr[0.._arguments.len];
+    const arguments: []const JSValue = unsafe { _arguments.ptr[0.._arguments.len] };
 
     if (arguments.len < 1) {
         return globalThis.throwInvalidArguments("toEqualIgnoringWhitespace() requires 1 argument", {});
@@ -22,13 +27,11 @@ pub fn toEqualIgnoringWhitespace(client: *Expect, globalThis: *JSGlobalObject, c
     let pass = value.isString() && expected.isString();
 
     if (pass) {
-        const value_slice = value.toSlice(globalThis, default_allocator)?;
-        defer value_slice.deinit();
-        const expected_slice = expected.toSlice(globalThis, default_allocator)?;
-        defer expected_slice.deinit();
+        const value_slice = DeinitGuard<jsc.ZigString.Slice>{ val: value.toSlice(globalThis, default_allocator)? };
+        const expected_slice = DeinitGuard<jsc.ZigString.Slice>{ val: expected.toSlice(globalThis, default_allocator)? };
 
-        const value_utf8 = value_slice.slice();
-        const expected_utf8 = expected_slice.slice();
+        const value_utf8 = value_slice.val.slice();
+        const expected_utf8 = expected_slice.val.slice();
 
         let left: usize = 0;
         let right: usize = 0;
@@ -63,10 +66,9 @@ pub fn toEqualIgnoringWhitespace(client: *Expect, globalThis: *JSGlobalObject, c
     if (pass) return JSValue.js_undefined;
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const expected_fmt = expected.toFmt(&formatter);
-    const value_fmt = value.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+    const expected_fmt = expected.toFmt(&formatter.val);
+    const value_fmt = value.toFmt(&formatter.val);
 
     if (not) {
         const signature = comptime getSignature("toEqualIgnoringWhitespace", "<green>expected<r>", true);

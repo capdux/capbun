@@ -2718,7 +2718,7 @@ pub fn storeNameInRef(p: *P, name: []const u8) !Ref {
 
 });
             if (in_source_contents) {
-                const source_index: u32 = (blk: {
+                const source_index: u31 = (blk: {
                 break :blk @intCast((@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)));
 
 });

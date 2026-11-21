@@ -12,71 +12,95 @@ const writeStatus = bun.api.server.writeStatus;
 const uws = bun.uws;
 const AnyResponse = uws.AnyResponse;
 
-pub const FileRoute = struct {
+pub struct DerefGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct FileRouteOnGuard {
+    route: *FileRoute,
+    fd: bun.FD,
+    resp: AnyResponse,
+    armed: bool = true,
+
+    ~init() {
+        if (_.armed) {
+            const empty_loop: void = undefined;
+            if (bun.Environment.isWindows) bun.Async.Closer.close(_.fd, bun.windows.libuv.Loop.get()) else bun.Async.Closer.close(_.fd, empty_loop);
+            _.route.onResponseComplete(_.resp);
+        }
+    }
+}
+
+pub struct FileRouteInitOptions {
+    server: AnyServer?,
+    status_code: u16 = 200,
+    headers: (*jsc.WebCore.FetchHeaders)? = null,
+}
+
+@root struct FileRoute {
     ref_count: RefCount,
-    server: ?AnyServer = null,
+    server: AnyServer? = null,
     blob: Blob,
-    headers: Headers = .{ .allocator = bun.default_allocator },
+    headers: Headers = Headers{ allocator: bun.default_allocator },
     status_code: u16,
-    stat_hash: bun.fs.StatHash = .{},
+    stat_hash: bun.fs.StatHash = {},
     has_last_modified_header: bool,
     has_content_length_header: bool,
     has_content_range_header: bool,
 
-    pub const InitOptions = struct {
-        server: ?AnyServer,
-        status_code: u16 = 200,
-        headers: ?*jsc.WebCore.FetchHeaders = null,
-    };
+    pub const InitOptions = FileRouteInitOptions;
 
-    pub fn lastModifiedDate(this: *const FileRoute) bun.JSError!?u64 {
-        if (this.has_last_modified_header) {
-            if (this.headers.get("last-modified")) |last_modified| {
-                let string_val = bun.String.init(last_modified);
-                defer string_val.deref();
-                const date_f64 = try bun.String.parseDate(&string_val, bun.jsc.VirtualMachine.get().global);
-                if (!std.math.isNan(date_f64) and std.math.isFinite(date_f64)) {
+    fn lastModifiedDate(): bun.JSError!u64? {
+        if (_.has_last_modified_header) {
+            if (last_modified := _.headers.get("last-modified")) {
+                let string_guard = DerefGuard<bun.String>{ val: bun.String.init(last_modified) };
+                const date_f64 = bun.String.parseDate(&string_guard.val, bun.jsc.VirtualMachine.get().global)?;
+                if (!std.math.isNan(date_f64) && std.math.isFinite(date_f64)) {
                     return @intFromFloat(date_f64);
                 }
             }
         }
 
-        if (this.stat_hash.last_modified_u64 > 0) {
-            return this.stat_hash.last_modified_u64;
+        if (_.stat_hash.last_modified_u64 > 0) {
+            return _.stat_hash.last_modified_u64;
         }
 
         return null;
     }
 
-    pub fn initFromBlob(blob: Blob, opts: InitOptions) *FileRoute {
+    static fn initFromBlob(blob: Blob, opts: InitOptions): *FileRoute {
         const headers = bun.handleOom(Headers.from(opts.headers, bun.default_allocator, .{ .body = &.{ .Blob = blob } }));
-        return bun.new(FileRoute, .{
-            .ref_count = .init(),
-            .server = opts.server,
-            .blob = blob,
-            .headers = headers,
-            .has_last_modified_header = headers.get("last-modified") != null,
-            .has_content_length_header = headers.get("content-length") != null,
-            .has_content_range_header = headers.get("content-range") != null,
-            .status_code = opts.status_code,
+        return bun.new(FileRoute, FileRoute{
+            ref_count: .init(),
+            server: opts.server,
+            blob: blob,
+            headers: headers,
+            has_last_modified_header: headers.get("last-modified") != null,
+            has_content_length_header: headers.get("content-length") != null,
+            has_content_range_header: headers.get("content-range") != null,
+            status_code: opts.status_code,
         });
     }
 
-    fn deinit(this: *FileRoute) void {
-        this.blob.deinit();
-        this.headers.deinit();
-        bun.destroy(this);
+    fn deinit(*_) {
+        _.blob.deinit();
+        _.headers.deinit();
+        bun.destroy(_);
     }
 
-    pub fn memoryCost(this: *const FileRoute) usize {
-        return @sizeOf(FileRoute) + this.headers.memoryCost() + this.blob.reported_estimated_size;
+    fn memoryCost(): usize {
+        return @sizeOf(FileRoute) + _.headers.memoryCost() + _.blob.reported_estimated_size;
     }
 
-    pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSError!?*FileRoute {
-        if (argument.as(jsc.WebCore.Response)) |response| {
+    static fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue): bun.JSError!(*FileRoute)? {
+        if (response := argument.as(jsc.WebCore.Response)) {
             const bodyValue = response.getBodyValue();
             bodyValue.toBlobIfPossible();
-            if (bodyValue.* == .Blob and bodyValue.Blob.needsToReadFile()) {
+            if (bodyValue.* == .Blob && bodyValue.Blob.needsToReadFile()) {
                 if (bodyValue.Blob.store.?.data.file.pathlike == .fd) {
                     return globalThis.throwTODO("Support serving files from a file descriptor. Please pass a path instead.");
                 }
@@ -88,66 +112,93 @@ pub const FileRoute = struct {
                 bodyValue.* = .{ .Blob = blob.dupe() };
                 const headers = bun.handleOom(Headers.from(response.getInitHeaders(), bun.default_allocator, .{ .body = &.{ .Blob = blob } }));
 
-                return bun.new(FileRoute, .{
-                    .ref_count = .init(),
-                    .server = null,
-                    .blob = blob,
-                    .headers = headers,
-                    .has_last_modified_header = headers.get("last-modified") != null,
-                    .has_content_length_header = headers.get("content-length") != null,
-                    .has_content_range_header = headers.get("content-range") != null,
-                    .status_code = response.statusCode(),
+                return bun.new(FileRoute, FileRoute{
+                    ref_count: .init(),
+                    server: null,
+                    blob: blob,
+                    headers: headers,
+                    has_last_modified_header: headers.get("last-modified") != null,
+                    has_content_length_header: headers.get("content-length") != null,
+                    has_content_range_header: headers.get("content-range") != null,
+                    status_code: response.statusCode(),
                 });
             }
         }
-        if (argument.as(Blob)) |blob| {
+        if (blob := argument.as(Blob)) {
             if (blob.needsToReadFile()) {
                 let b = blob.dupe();
                 b.globalThis = globalThis;
                 bun.assertf(!b.isHeapAllocated(), "expected blob not to be heap-allocated", .{});
-                return bun.new(FileRoute, .{
-                    .ref_count = .init(),
-                    .server = null,
-                    .blob = b,
-                    .headers = bun.handleOom(Headers.from(null, bun.default_allocator, .{ .body = &.{ .Blob = b } })),
-                    .has_content_length_header = false,
-                    .has_last_modified_header = false,
-                    .has_content_range_header = false,
-                    .status_code = 200,
+                return bun.new(FileRoute, FileRoute{
+                    ref_count: .init(),
+                    server: null,
+                    blob: b,
+                    headers: bun.handleOom(Headers.from(null, bun.default_allocator, .{ .body = &.{ .Blob = b } })),
+                    has_content_length_header: false,
+                    has_last_modified_header: false,
+                    has_content_range_header: false,
+                    status_code: 200,
                 });
             }
         }
         return null;
     }
 
-    fn writeHeaders(this: *FileRoute, resp: AnyResponse) void {
-        const entries = this.headers.entries.slice();
+    fn writeHeaders(*_, resp: AnyResponse) {
+        const entries = _.headers.entries.slice();
         const names = entries.items(.name);
         const values = entries.items(.value);
-        const buf = this.headers.buf.items;
+        const buf = _.headers.buf.items;
 
         switch (resp) {
-            inline else => |s, tag| {
-                for (names, values) |name, value| {
+            .SSL => |s| {
+                let idx: usize = 0;
+                for (name of names) {
+                    const value = values[idx];
                     s.writeHeader(name.slice(buf), value.slice(buf));
+                    idx += 1;
                 }
-                if (comptime tag != .H3) if (this.server) |srv| if (srv.h3AltSvc()) |alt|
-                    s.writeHeader("alt-svc", alt);
+                if (srv := _.server) {
+                    if (alt := srv.h3AltSvc()) {
+                        s.writeHeader("alt-svc", alt);
+                    }
+                }
+            },
+            .TCP => |s| {
+                let idx: usize = 0;
+                for (name of names) {
+                    const value = values[idx];
+                    s.writeHeader(name.slice(buf), value.slice(buf));
+                    idx += 1;
+                }
+                if (srv := _.server) {
+                    if (alt := srv.h3AltSvc()) {
+                        s.writeHeader("alt-svc", alt);
+                    }
+                }
+            },
+            .H3 => |s| {
+                let idx: usize = 0;
+                for (name of names) {
+                    const value = values[idx];
+                    s.writeHeader(name.slice(buf), value.slice(buf));
+                    idx += 1;
+                }
             },
         }
 
-        if (!this.has_last_modified_header) {
-            if (this.stat_hash.lastModified()) |last_modified| {
+        if (!_.has_last_modified_header) {
+            if (last_modified := _.stat_hash.lastModified()) {
                 resp.writeHeader("last-modified", last_modified);
             }
         }
 
-        if (this.has_content_length_header) {
+        if (_.has_content_length_header) {
             resp.markWroteContentLengthHeader();
         }
     }
 
-    pub fn writeStatusCode(_: *FileRoute, status_code: u16, resp: AnyResponse) void {
+    static fn writeStatusCode(status_code: u16, resp: AnyResponse) {
         switch (resp) {
             .SSL => |r| writeStatus(true, r, status_code),
             .TCP => |r| writeStatus(false, r, status_code),
@@ -158,26 +209,26 @@ pub const FileRoute = struct {
         }
     }
 
-    pub fn onHEADRequest(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
-        bun.debugAssert(this.server != null);
+    fn onHEADRequest(*_, req: uws.AnyRequest, resp: AnyResponse) {
+        bun.debugAssert(_.server != null);
 
-        this.on(req, resp, .HEAD);
+        _.on(req, resp, .HEAD);
     }
 
-    pub fn onRequest(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
-        this.on(req, resp, bun.http.Method.find(req.method()) orelse .GET);
+    fn onRequest(*_, req: uws.AnyRequest, resp: AnyResponse) {
+        _.on(req, resp, bun.http.Method.find(req.method()) ?? .GET);
     }
 
-    pub fn on(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse, method: bun.http.Method) void {
-        bun.debugAssert(this.server != null);
-        this.ref();
-        if (this.server) |server| {
+    fn on(*_, req: uws.AnyRequest, resp: AnyResponse, method: bun.http.Method) {
+        bun.debugAssert(_.server != null);
+        _.ref();
+        if (server := _.server) {
             server.onPendingRequest();
             resp.timeout(server.config().idleTimeout);
         }
-        const path = this.blob.store.?.getPath() orelse {
+        const path = _.blob.store.?.getPath() orelse {
             req.setYield(true);
-            this.onResponseComplete(resp);
+            _.onResponseComplete(resp);
             return;
         };
 
@@ -203,53 +254,55 @@ pub const FileRoute = struct {
 
         if (fd_result == .err) {
             req.setYield(true);
-            this.onResponseComplete(resp);
+            _.onResponseComplete(resp);
             return;
         }
 
         const fd = fd_result.result;
 
-        // `fd_owned` tracks whether this function is still responsible for
+        // `fd_guard` tracks whether this function is still responsible for
         // closing the file descriptor and releasing the route ref. Every
         // non-streaming return — bodiless status codes (304/204/205/307/308),
         // HEAD, non-streamable files, and the two JS-exception `catch return`
-        // paths below — hits this defer, so neither the fd nor the route ref
+        // paths below — triggers `~init()`, so neither the fd nor the route ref
         // (or the server's pending_requests counter) can leak regardless of
-        // which branch runs. The streaming path clears `fd_owned` right
+        // which branch runs. The streaming path disarms `fd_guard` right
         // before handing ownership to `FileResponseStream`.
-        let fd_owned = true;
-        defer if (fd_owned) {
-            bun.Async.Closer.close(fd, if (bun.Environment.isWindows) bun.windows.libuv.Loop.get());
-            this.onResponseComplete(resp);
+        let fd_guard = FileRouteOnGuard{
+            route: _,
+            fd: fd,
+            resp: resp,
         };
 
-        const input_if_modified_since_date: ?u64 = req.dateForHeader("if-modified-since") catch return; // TODO: properly propagate exception upwards
+        const input_if_modified_since_date: u64? = req.dateForHeader("if-modified-since") catch return; // TODO: properly propagate exception upwards
 
-        const can_serve_file: bool, const size: u64, const file_type: bun.io.FileType, const pollable: bool = brk: {
-            const stat = switch (bun.sys.fstat(fd)) {
-                .result => |s| s,
-                .err => break :brk .{ false, 0, undefined, false },
-            };
+        let can_serve_file: bool = false;
+        let size: u64 = 0;
+        let file_type: bun.io.FileType = undefined;
+        let pollable: bool = false;
+        switch (bun.sys.fstat(fd)) {
+            .result => |stat| {
+                const stat_size: u64 = @intCast(@max(stat.size, 0));
+                const _size: u64 = @min(stat_size, @as(u64, _.blob.size));
 
-            const stat_size: u64 = @intCast(@max(stat.size, 0));
-            const _size: u64 = @min(stat_size, @as(u64, this.blob.size));
-
-            if (bun.S.ISDIR(@intCast(stat.mode))) {
-                break :brk .{ false, 0, undefined, false };
-            }
-
-            this.stat_hash.hash(stat, path);
-
-            if (bun.S.ISFIFO(@intCast(stat.mode)) or bun.S.ISCHR(@intCast(stat.mode))) {
-                break :brk .{ true, _size, .pipe, true };
-            }
-
-            if (bun.S.ISSOCK(@intCast(stat.mode))) {
-                break :brk .{ true, _size, .socket, true };
-            }
-
-            break :brk .{ true, _size, .file, false };
-        };
+                if (!bun.S.ISDIR(@intCast(stat.mode))) {
+                    _.stat_hash.hash(stat, path);
+                    can_serve_file = true;
+                    size = _size;
+                    if (bun.S.ISFIFO(@intCast(stat.mode)) || bun.S.ISCHR(@intCast(stat.mode))) {
+                        file_type = .pipe;
+                        pollable = true;
+                    } else if (bun.S.ISSOCK(@intCast(stat.mode))) {
+                        file_type = .socket;
+                        pollable = true;
+                    } else {
+                        file_type = .file;
+                        pollable = false;
+                    }
+                }
+            },
+            .err => {},
+        }
 
         if (!can_serve_file) {
             req.setYield(true);
@@ -261,7 +314,7 @@ pub const FileRoute = struct {
         // RFC 9110 §14.2: Range is only defined for GET (HEAD mirrors GET's
         // headers). Skip if the route has a non-200 status or the user already
         // set Content-Range — they're managing partial responses themselves.
-        const range: RangeRequest.Result = if ((method == .GET or method == .HEAD) and file_type == .file and this.status_code == 200 and !this.has_content_range_header)
+        const range: RangeRequest.Result = if ((method == .GET || method == .HEAD) && file_type == .file && _.status_code == 200 && !_.has_content_range_header)
             RangeRequest.fromRequest(req, size)
         else
             .none;
@@ -273,9 +326,9 @@ pub const FileRoute = struct {
             // Unlike If-Unmodified-Since, If-Modified-Since can only be used with a
             // GET or HEAD. When used in combination with If-None-Match, it is
             // ignored, unless the server doesn't support If-None-Match.
-            if (input_if_modified_since_date) |requested_if_modified_since| {
-                if (method == .HEAD or method == .GET) {
-                    if (this.lastModifiedDate() catch return) |actual_last_modified_at| { // TODO: properly propagate exception upwards
+            if (requested_if_modified_since := input_if_modified_since_date) {
+                if (method == .HEAD || method == .GET) {
+                    if (actual_last_modified_at := (_.lastModifiedDate() catch return)) { // TODO: properly propagate exception upwards
                         // Compare at second precision: the Last-Modified header we
                         // emit is second-granular (HTTP-date), so a sub-second
                         // mtime would otherwise never satisfy `<=` against the
@@ -290,18 +343,18 @@ pub const FileRoute = struct {
             if (range == .unsatisfiable) break :brk 416;
             if (range == .satisfiable) break :brk 206;
 
-            if (size == 0 and file_type == .file and this.status_code == 200) {
+            if (size == 0 && file_type == .file && _.status_code == 200) {
                 break :brk 204;
             }
 
-            break :brk this.status_code;
+            break :brk _.status_code;
         };
 
         req.setYield(false);
 
-        this.writeStatusCode(status_code, resp);
+        FileRoute.writeStatusCode(status_code, resp);
         resp.writeMark();
-        this.writeHeaders(resp);
+        _.writeHeaders(resp);
 
         // Bodiless statuses end here — before the range switch, so a 304 (which
         // can win over a satisfiable Range per RFC 9110 §13.2.2) doesn't emit
@@ -314,12 +367,15 @@ pub const FileRoute = struct {
             else => {},
         }
 
-        const body_offset: u64, const body_len: ?u64 = switch (range) {
-            .satisfiable => |r| brk: {
+        let body_offset: u64 = 0;
+        let body_len: u64? = null;
+        switch (range) {
+            .satisfiable => |r| {
                 let crbuf: [96]u8 = undefined;
                 resp.writeHeader("content-range", std.fmt.bufPrint(&crbuf, "bytes {d}-{d}/{d}", .{ r.start, r.end, size }) catch unreachable);
                 resp.writeHeader("accept-ranges", "bytes");
-                break :brk .{ this.blob.offset + r.start, r.end - r.start + 1 };
+                body_offset = _.blob.offset + r.start;
+                body_len = r.end - r.start + 1;
             },
             .unsatisfiable => {
                 let crbuf: [64]u8 = undefined;
@@ -328,14 +384,14 @@ pub const FileRoute = struct {
                 resp.end("", resp.shouldCloseConnection());
                 return;
             },
-            .none => .{
-                if (file_type == .file) this.blob.offset else 0,
-                if (file_type == .file and this.blob.size > 0) @as(u64, @intCast(size)) else null,
+            .none => {
+                body_offset = if (file_type == .file) _.blob.offset else 0;
+                body_len = if (file_type == .file && _.blob.size > 0) @as(u64, @intCast(size)) else null;
             },
-        };
+        }
 
-        if (file_type == .file and !resp.state().hasWrittenContentLengthHeader()) {
-            resp.writeHeaderInt("content-length", body_len orelse size);
+        if (file_type == .file && !resp.state().hasWrittenContentLengthHeader()) {
+            resp.writeHeaderInt("content-length", body_len ?? size);
             resp.markWroteContentLengthHeader();
         }
 
@@ -344,46 +400,46 @@ pub const FileRoute = struct {
             return;
         }
 
-        // Hand ownership of the fd to FileResponseStream; disable the defer close.
+        // Hand ownership of the fd to FileResponseStream; disarm the RAII guard.
         // The route ref taken at the top of on() is released in onStreamComplete.
-        fd_owned = false;
+        fd_guard.armed = false;
         FileResponseStream.start(.{
             .fd = fd,
             .auto_close = true,
             .resp = resp,
-            .vm = this.server.?.vm(),
+            .vm = _.server.?.vm(),
             .file_type = file_type,
             .pollable = pollable,
             .offset = body_offset,
             .length = body_len,
-            .idle_timeout = this.server.?.config().idleTimeout,
-            .ctx = this,
+            .idle_timeout = _.server.?.config().idleTimeout,
+            .ctx = _,
             .on_complete = onStreamComplete,
             .on_error = onStreamError,
         });
     }
 
-    fn onStreamComplete(ctx: *!, resp: AnyResponse) void {
-        const this: *FileRoute = @ptrCast(@alignCast(ctx));
-        this.onResponseComplete(resp);
+    static fn onStreamComplete(ctx: *!, resp: AnyResponse) {
+        const route: *FileRoute = unsafe { @ptrCast(@alignCast(ctx)) };
+        route.onResponseComplete(resp);
     }
 
-    fn onStreamError(ctx: *!, resp: AnyResponse, _: bun.sys.Error) void {
-        const this: *FileRoute = @ptrCast(@alignCast(ctx));
-        this.onResponseComplete(resp);
+    static fn onStreamError(ctx: *!, resp: AnyResponse, _: bun.sys.Error) {
+        const route: *FileRoute = unsafe { @ptrCast(@alignCast(ctx)) };
+        route.onResponseComplete(resp);
     }
 
-    fn onResponseComplete(this: *FileRoute, resp: AnyResponse) void {
+    fn onResponseComplete(*_, resp: AnyResponse) {
         resp.clearAborted();
         resp.clearOnWritable();
         resp.clearTimeout();
-        if (this.server) |server| {
+        if (server := _.server) {
             server.onStaticRequestComplete();
         }
-        this.deref();
+        _.deref();
     }
 
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
-};
+}

@@ -1,4 +1,55 @@
 
+struct FreeGuard {
+    allocator: std.mem.Allocator,
+    ptr: []const u8,
+    ~init() {
+        _.allocator.free(_.ptr);
+    }
+}
+
+struct CloseFDGuard<T> {
+    val: T,
+    ~init() {
+        * = _.val.closeFD();
+    }
+}
+
+fn sideEffectsHasSideEffects(side_effects: PackageJSON.SideEffects, path: []const u8): bool {
+    return switch (side_effects) {
+        .unspecified => true,
+        .false => false,
+        .map => |map| map.contains(bun.StringHashMapUnowned.Key.init(path)),
+        .glob => |glob_list| {
+            // Normalize path for cross-platform glob matching
+            const normalized_path = PackageJSON.normalizePathForGlob(bun.default_allocator, path) catch return true;
+            let normalized_path_guard = FreeGuard{ allocator: bun.default_allocator, ptr: normalized_path };
+
+            for (pattern of glob_list.items) {
+                if (glob.match(pattern, normalized_path_guard.ptr).matches()) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        .mixed => |mixed| {
+            // First check exact matches
+            if (mixed.exact.contains(bun.StringHashMapUnowned.Key.init(path))) {
+                return true;
+            }
+            // Then check glob patterns with normalized path
+            const normalized_path = PackageJSON.normalizePathForGlob(bun.default_allocator, path) catch return true;
+            let normalized_path_guard = FreeGuard{ allocator: bun.default_allocator, ptr: normalized_path };
+
+            for (pattern of mixed.globs.items) {
+                if (glob.match(pattern, normalized_path_guard.ptr).matches()) {
+                    return true;
+                }
+            }
+            return false;
+        },
+    };
+}
+
 pub const IncludeScripts = enum { ignore_scripts, include_scripts };
 pub const IncludeDependencies = enum { main, local, none };
 // Assume they're not going to have hundreds of main fields or browser map
@@ -143,39 +194,7 @@ pub struct PackageJSON {
         };
 
         pub fn hasSideEffects(side_effects: SideEffects, path: []const u8): bool {
-            return switch (side_effects) {
-                .unspecified => true,
-                .false => false,
-                .map => |map| map.contains(bun.StringHashMapUnowned.Key.init(path)),
-                .glob => |glob_list| {
-                    // Normalize path for cross-platform glob matching
-                    const normalized_path = normalizePathForGlob(bun.default_allocator, path) catch return true;
-                    defer bun.default_allocator.free(normalized_path);
-
-                    for (glob_list.items) |pattern| {
-                        if (glob.match(pattern, normalized_path).matches()) {
-                            return true;
-                        }
-                    }
-                    return false;
-                },
-                .mixed => |mixed| {
-                    // First check exact matches
-                    if (mixed.exact.contains(bun.StringHashMapUnowned.Key.init(path))) {
-                        return true;
-                    }
-                    // Then check glob patterns with normalized path
-                    const normalized_path = normalizePathForGlob(bun.default_allocator, path) catch return true;
-                    defer bun.default_allocator.free(normalized_path);
-
-                    for (mixed.globs.items) |pattern| {
-                        if (glob.match(pattern, normalized_path).matches()) {
-                            return true;
-                        }
-                    }
-                    return false;
-                },
-            };
+            return sideEffectsHasSideEffects(side_effects, path);
         }
     };
 
@@ -617,7 +636,7 @@ pub struct PackageJSON {
         // So we cannot free these
         const allocator = bun.default_allocator;
 
-        let entry = r.caches.fs.readFileWithAllocator(
+        let entry_raw = r.caches.fs.readFileWithAllocator(
             allocator,
             r.fs,
             package_json_path,
@@ -631,7 +650,8 @@ pub struct PackageJSON {
 
             return null;
         };
-        defer * = entry.closeFD();
+        let entry_guard = CloseFDGuard<@TypeOf(entry_raw)>{ val: entry_raw };
+        const entry = entry_guard.val;
 
         if (*debug := r.debug_logs) {
             debug.addNoteFmt("The file \"{s}\" exists", .{package_json_path});
@@ -847,7 +867,7 @@ pub struct PackageJSON {
 
                                 if (strings.containsChar(name, '*') || strings.containsChar(name, '?') || strings.containsChar(name, '[') || strings.containsChar(name, '{')) {
                                     // Normalize pattern to use forward slashes for cross-platform compatibility
-                                    const normalized_pattern = normalizePathForGlob(allocator, pattern) catch @constCast(pattern);
+                                    const normalized_pattern = normalizePathForGlob(allocator, pattern) catch unsafe { @constCast(pattern) };
                                     glob_list.appendAssumeCapacity(normalized_pattern);
                                 } else {
                                     * = map.getOrPutAssumeCapacity(
@@ -874,7 +894,7 @@ pub struct PackageJSON {
 
                                 const pattern = r.fs.join(&joined);
                                 // Normalize pattern to use forward slashes for cross-platform compatibility
-                                const normalized_pattern = normalizePathForGlob(allocator, pattern) catch @constCast(pattern);
+                                const normalized_pattern = normalizePathForGlob(allocator, pattern) catch unsafe { @constCast(pattern) };
                                 glob_list.appendAssumeCapacity(normalized_pattern);
                             }
                         }

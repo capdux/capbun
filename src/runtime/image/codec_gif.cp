@@ -12,6 +12,27 @@
 //! transparency index. Animated/disposal/NETSCAPE loop are skipped — Sharp's
 //! default `pages:1` does the same.
 
+pub struct DestroyGuard<T> {
+    ptr: *T!,
+    ~init() {
+        bun.default_allocator.destroy(_.ptr);
+    }
+}
+
+pub struct FreeGuard<T> {
+    slice: []T,
+    ~init() {
+        bun.default_allocator.free(_.slice);
+    }
+}
+
+pub struct OptFreeGuard<T> {
+    slice: ([]T)?,
+    ~init() {
+        if (s := _.slice) bun.default_allocator.free(s);
+    }
+}
+
 pub struct Bits {
     /// Sub-block-aware bit reader. GIF wraps the LZW bitstream in length-
     /// prefixed sub-blocks (≤255 bytes each, terminated by a 0 block), and
@@ -196,11 +217,11 @@ fn decodeFrame(bytes: []const u8, lzw_off: usize, w: u32, h: u32, interlace: boo
     let prev: u16? = null;
 
     let dict = bun.default_allocator.create(Dict) catch return error.OutOfMemory;
-    defer bun.default_allocator.destroy(dict);
+    const _dict_guard = DestroyGuard<Dict>{ ptr: dict };
     let scratch: [4096]u8 = undefined;
 
     let idx = bun.default_allocator.alloc(u8, npix)?;
-    defer bun.default_allocator.free(idx);
+    const _idx_guard = FreeGuard<u8>{ slice: idx };
     let written: usize = 0;
 
     let bits: Bits = { src: bytes, i: lzw_off };
@@ -260,7 +281,7 @@ fn decodeFrame(bytes: []const u8, lzw_off: usize, w: u32, h: u32, interlace: boo
     // pass order; remap to scan order while expanding so we don't allocate a
     // second index buffer.
     const out = bun.default_allocator.alloc(u8, npix * 4)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = OptFreeGuard<u8>{ slice: out };
 
     let pal: [256][4]u8 = undefined;
     let pi: usize = 0;
@@ -290,6 +311,7 @@ fn decodeFrame(bytes: []const u8, lzw_off: usize, w: u32, h: u32, interlace: boo
             expandRow(idx[@as(usize, y) * w ..][0..w], out[@as(usize, y) * w * 4 ..], &pal);
         }
     }
+    out_guard.slice = null;
     return { rgba: out, width: w, height: h };
 }
 

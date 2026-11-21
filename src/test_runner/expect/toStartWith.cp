@@ -1,3 +1,8 @@
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
 pub fn toStartWith(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFrame): bun.JSError!JSValue {
     defer client.postMatch(globalThis);
 
@@ -22,10 +27,10 @@ pub fn toStartWith(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
 
     let pass = value.isString();
     if (pass) {
-        const value_string = value.toSliceOrNull(globalThis)?;
-        defer value_string.deinit();
-        const expected_string = expected.toSliceOrNull(globalThis)?;
-        defer expected_string.deinit();
+        let value_string = value.toSliceOrNull(globalThis)?;
+        const _value_guard = DeinitGuard<@TypeOf(value_string)>{ ptr: unsafe { &value_string } };
+        let expected_string = expected.toSliceOrNull(globalThis)?;
+        const _expected_guard = DeinitGuard<@TypeOf(expected_string)>{ ptr: unsafe { &expected_string } };
         pass = strings.startsWith(value_string.slice(), expected_string.slice()) || expected_string.len == 0;
     }
 
@@ -35,7 +40,7 @@ pub fn toStartWith(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Cal
     if (pass) return JSValue.js_undefined;
 
     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    const _fmt_guard = DeinitGuard<@TypeOf(formatter)>{ ptr: unsafe { &formatter } };
     const value_fmt = value.toFmt(&formatter);
     const expected_fmt = expected.toFmt(&formatter);
 

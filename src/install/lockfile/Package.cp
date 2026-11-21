@@ -2090,7 +2090,7 @@ pub fn Package(comptime SemverIntType: type): type {
                         .workspace => .init({ workspace: old.resolution.value.workspace }),
                         .remote_tarball => .init({ remote_tarball: old.resolution.value.remote_tarball }),
                         .single_file_module => .init({ single_file_module: old.resolution.value.single_file_module }),
-                        else => .init({ uninitialized: {} }),
+                        else => .init(.uninitialized),
                     },
                 };
 

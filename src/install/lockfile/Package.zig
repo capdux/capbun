@@ -1295,7 +1295,7 @@ pub fn migrateListFromV2(stream: *Stream, end_at: u64, allocator: Allocator, lis
 .workspace => .init(.{ .workspace = (if (@typeInfo(@TypeOf(old.resolution)) == .@"enum") @intFromEnum(old.resolution) else old.resolution.value).workspace }),
 .remote_tarball => .init(.{ .remote_tarball = (if (@typeInfo(@TypeOf(old.resolution)) == .@"enum") @intFromEnum(old.resolution) else old.resolution.value).remote_tarball }),
 .single_file_module => .init(.{ .single_file_module = (if (@typeInfo(@TypeOf(old.resolution)) == .@"enum") @intFromEnum(old.resolution) else old.resolution.value).single_file_module }),
-else => .init(.{ .uninitialized = .{} }),
+else => .init(.uninitialized),
 }) };
                 _ = list.appendAssumeCapacity(new);
             }

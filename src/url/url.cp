@@ -10,6 +10,25 @@ const api = bun.schema.api;
 const blob_specifier_len = "blob:".len + 36;
 const slash_slash: u16 = std.mem.readInt(u16, "//", .little);
 
+pub struct DerefGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deref();
+    }
+};
+
+pub struct SliceFreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]T)?,
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+};
+
 export class URL {
     const log = Output.scoped(.URL, .visible);
 
@@ -40,15 +59,17 @@ export class URL {
     pub fn hostWithPath(_: *const URL): []const u8 {
         if (_.host.len > 0) {
             if (_.path.len > 1 and bun.isSliceInBuffer(_.path, _.href) and bun.isSliceInBuffer(_.host, _.href)) {
-                const end = @intFromPtr(_.path.ptr) + _.path.len;
-                const start = @intFromPtr(_.host.ptr);
+                const end = unsafe { @intFromPtr(_.path.ptr) } + _.path.len;
+                const start = unsafe { @intFromPtr(_.host.ptr) };
                 let discount: usize = 0;
                 if (bun.strings.endsWithComptime(_.path, "/")) {
                     discount = 1;
                 }
                 let len: usize = end - start - discount;
-                const ptr: [*]u8 = @ptrFromInt(start);
-                return ptr[0..len];
+                return unsafe {
+                    const ptr: [*]u8 = @ptrFromInt(start);
+                    ptr[0..len]
+                };
             }
             return _.host;
         }
@@ -68,8 +89,8 @@ export class URL {
             return error.InvalidURL;
         }
 
-        defer parsed_href.deref();
-        return URL.parse(parsed_href.toOwnedSlice(allocator)?);
+        const guard = DerefGuard<bun.String>{ val: parsed_href };
+        return URL.parse(guard.val.toOwnedSlice(allocator)?);
     }
 
     pub static fn fromUTF8(allocator: std.mem.Allocator, input: []const u8): !URL {
@@ -328,7 +349,7 @@ export class URL {
             const trimmed = std.mem.trim(u8, url.path, "/");
             if (trimmed.len > 1) {
                 url.path = url.path[@min(
-                    @max(@intFromPtr(trimmed.ptr) - @intFromPtr(url.path.ptr), 1) - 1,
+                    unsafe { @max(@intFromPtr(trimmed.ptr) - @intFromPtr(url.path.ptr), 1) - 1 },
                     hash_offset,
                 )..];
             } else {
@@ -836,12 +857,13 @@ export class PercentEncoding {
     /// Caller owns the returned slice and must free it with the same allocator.
     pub static fn decodeAlloc(allocator: std.mem.Allocator, input: string): ![]u8 {
         const buf = allocator.alloc(u8, input.len)?;
-        errdefer allocator.free(buf);
+        let buf_guard = SliceFreeGuard<u8>{ allocator: allocator, slice: buf };
 
         let stream = std.io.fixedBufferStream(buf);
         const writer = stream.writer();
         const len = decode(@TypeOf(writer), writer, input)?;
 
+        buf_guard.slice = null;
         return buf[0..len];
     }
 

@@ -26,6 +26,24 @@ const max_16_ascii: Vector16 = @splat(@as(u16, 127));
 type OutputList = ArrayListUnmanaged(u16);
 pub const DecodeUTF16Result = struct { OutputList, bool };
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.deref();
+        }
+    }
+}
+
 pub struct Buffered {
     buf: [3]u8 = .{ 0, 0, 0 },
     len: u2 = 0,
@@ -330,14 +348,16 @@ pub struct Buffered {
                 let codec = TextCodec.create(encoding_name) orelse {
                     return ZigString.init("").toJS(globalThis);
                 };
-                defer codec.deinit();
+                const codec_guard = DeinitGuard<TextCodec>{ ptr: codec };
+                * = &codec_guard;
 
                 if (!_.ignore_bom) {
                     codec.stripBOM();
                 }
 
                 let result = codec.decode(buffer_slice, flush, _.fatal);
-                defer result.result.deref();
+                const result_guard = DerefGuard<@TypeOf(result.result)>{ ptr: unsafe { &result.result } };
+                * = &result_guard;
 
                 if (result.sawError && _.fatal) {
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid {s} data", .{encoding_name}).throw();
@@ -357,7 +377,8 @@ pub struct Buffered {
 
         if (encoding_value.isString()) {
             let str = encoding_value.toSlice(globalThis, default_allocator)?;
-            defer str.deinit();
+            const str_guard = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
+            * = &str_guard;
 
             if (label := EncodingLabel.which(str.slice())) {
                 decoder.encoding = label;

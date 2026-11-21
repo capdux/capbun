@@ -1,3 +1,17 @@
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+struct ExitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.exit();
+    }
+}
+
 pub fn create(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
     const object = JSValue.createEmptyObject(globalThis, 1);
     object.put(
@@ -19,30 +33,27 @@ pub fn parse(
     globalThis: *jsc.JSGlobalObject,
     callframe: *jsc.CallFrame,
 ): bun.JSError!jsc.JSValue {
-    let arena_ = bun.ArenaAllocator.init(globalThis.allocator());
-    const allocator = arena_.allocator();
-    defer arena_.deinit();
+    let arena_guard = DeinitGuard<bun.ArenaAllocator>{ val: bun.ArenaAllocator.init(globalThis.allocator()) };
+    const allocator = arena_guard.val.allocator();
 
     let ast_memory_allocator = bun.handleOom(allocator.create(ast.ASTMemoryAllocator));
-    let ast_scope = ast_memory_allocator.enter(allocator);
-    defer ast_scope.exit();
+    let ast_scope_guard = ExitGuard<ast.ASTMemoryAllocator.Scope>{ val: ast_memory_allocator.enter(allocator) };
+    * = &ast_scope_guard;
 
-    let log = logger.Log.init(default_allocator);
-    defer log.deinit();
+    let log_guard = DeinitGuard<logger.Log>{ val: logger.Log.init(default_allocator) };
     const input_value = callframe.argument(0);
     if (input_value.isEmptyOrUndefinedOrNull()) {
         return globalThis.throwInvalidArguments("Expected a string to parse", {});
     }
 
-    let input_slice = input_value.toSlice(globalThis, bun.default_allocator)?;
-    defer input_slice.deinit();
-    const source = &logger.Source.initPathString("input.jsonc", input_slice.slice());
-    const log_ptr: *logger.Log = &log;
+    let input_slice_guard = DeinitGuard<jsc.ZigString.Slice>{ val: input_value.toSlice(globalThis, bun.default_allocator)? };
+    const source = &logger.Source.initPathString("input.jsonc", input_slice_guard.val.slice());
+    const log_ptr: *logger.Log = &log_guard.val;
     const parse_result = json.parseTSConfig(source, log_ptr, allocator, true) catch |e| {
         if (e == error.StackOverflow) {
             return globalThis.throwStackOverflow();
         }
-        return globalThis.throwValue((log.toJS(globalThis, default_allocator, "Failed to parse JSONC"))?);
+        return globalThis.throwValue((log_guard.val.toJS(globalThis, default_allocator, "Failed to parse JSONC"))?);
     };
 
     return parse_result.toJS(allocator, globalThis) catch |e| switch (e) {

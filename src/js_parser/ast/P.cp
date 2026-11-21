@@ -3800,7 +3800,7 @@ pub fn NewParser_(
                 @intFromPtr(p.source.contents.ptr) <= @intFromPtr(name.ptr) && (@intFromPtr(name.ptr) + name.len) <= (@intFromPtr(p.source.contents.ptr) + p.source.contents.len)
             };
             if (in_source_contents) {
-                const source_index: u32 = unsafe { @intCast(@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)) };
+                const source_index: u31 = unsafe { @intCast(@intFromPtr(name.ptr) - @intFromPtr(p.source.contents.ptr)) };
                 return Ref.initSourceEnd({
                     source_index: source_index,
                     inner_index: @intCast(name.len),

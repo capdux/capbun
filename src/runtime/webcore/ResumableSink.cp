@@ -18,6 +18,36 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ReadableStream = jsc.WebCore.ReadableStream;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    alloc: Allocator,
+
+    ~init() {
+        _.val.deinit(_.alloc);
+    }
+}
+
+pub struct StreamResultGuard {
+    stream: webcore.streams.Result,
+    alloc: Allocator,
+
+    ~init() {
+        switch (_.stream) {
+            .owned_and_done => |*owned| owned.deinit(_.alloc),
+            .owned => |*owned| owned.deinit(_.alloc),
+            else => {},
+        }
+    }
+}
+
 extern fn Bun__assignStreamIntoResumableSink(globalThis: *JSGlobalObject, stream: JSValue, sink: JSValue): JSValue;
 
 pub fn ResumableSink(
@@ -111,20 +141,24 @@ pub fn ResumableSink(
                             break :brk_err null;
                         };
 
-                        let bytes = byte_stream.drain();
-                        defer bytes.deinit(default_allocator);
-                        log("onWrite {}", .{bytes.len});
-                        * = onWrite(sink.context, bytes.slice());
+                        let bytes_guard = DeinitWithAllocGuard<@TypeOf(byte_stream.drain())>{
+                            val: byte_stream.drain(),
+                            alloc: default_allocator,
+                        };
+                        log("onWrite {}", .{bytes_guard.val.len});
+                        * = onWrite(sink.context, bytes_guard.val.slice());
                         onEnd(sink.context, err);
                         sink.deref();
                         return sink;
                     }
 
-                    let bytes = byte_stream.drain();
-                    defer bytes.deinit(default_allocator);
-                    if (bytes.len > 0) {
-                        log("onWrite {}", .{bytes.len});
-                        * = onWrite(sink.context, bytes.slice());
+                    let bytes_guard = DeinitWithAllocGuard<@TypeOf(byte_stream.drain())>{
+                        val: byte_stream.drain(),
+                        alloc: default_allocator,
+                    };
+                    if (bytes_guard.val.len > 0) {
+                        log("onWrite {}", .{bytes_guard.val.len});
+                        * = onWrite(sink.context, bytes_guard.val.slice());
                     }
                     sink.status = .piped;
                     byte_stream.pipe = jsc.WebCore.Pipe.Wrap(@This(), onStreamPipe).init(sink);
@@ -194,8 +228,8 @@ pub fn ResumableSink(
                 return globalThis.throwInvalidArguments("ResumableSink.write requires a string or buffer", .{});
             };
 
-            defer sb.deinit();
-            const bytes = sb.slice();
+            const sb_guard = DeinitGuard<@TypeOf(sb)>{ val: sb };
+            const bytes = sb_guard.val.slice();
             log("jsWrite {}", .{bytes.len});
             switch (onWrite(this.context, bytes)) {
                 .backpressure => {
@@ -292,32 +326,21 @@ pub fn ResumableSink(
             stream: webcore.streams.Result,
             allocator: Allocator,
         ) void {
-            let stream_ = stream;
-            if (false) {
-                stream_ = stream;
-            }
-            const stream_needs_deinit = stream == .owned or stream == .owned_and_done;
-
-            defer {
-                if (stream_needs_deinit) {
-                    switch (stream_) {
-                        .owned_and_done => |*owned| owned.deinit(allocator),
-                        .owned => |*owned| owned.deinit(allocator),
-                        else => unreachable,
-                    }
-                }
-            }
-            const chunk = stream.slice();
+            const stream_guard = StreamResultGuard{
+                stream: stream,
+                alloc: allocator,
+            };
+            const chunk = stream_guard.stream.slice();
             log("onWrite {}", .{chunk.len});
 
             * = onWrite(this.context, chunk);
 
-            const is_done = stream.isDone();
+            const is_done = stream_guard.stream.isDone();
 
             if (is_done) {
                 const err: ?JSValue = brk_err: {
-                    if (stream == .err) {
-                        const weak_pair = stream.err.toJSWeak(this.globalThis);
+                    if (stream_guard.stream == .err) {
+                        const weak_pair = stream_guard.stream.err.toJSWeak(this.globalThis);
                         const js_err = weak_pair[0];
                         const was_strong = weak_pair[1];
                         js_err.ensureStillAlive();

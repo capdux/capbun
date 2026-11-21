@@ -4,7 +4,451 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
 pub const bun = @import("bun");
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
+pub const FileRouteOnGuard = struct {
+    route: *FileRoute,
+    fd: bun.FD,
+    resp: AnyResponse,
+    armed: bool = true,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FileRouteOnGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.armed) {
+                const empty_loop: void = undefined;
+                if (bun.Environment.isWindows) {
+                    _ = bun.Async.Closer.close(self.fd, bun.windows.libuv.Loop.get());
+                } else {
+                    _ = bun.Async.Closer.close(self.fd, empty_loop);
+                }
+                _ = self.route.onResponseComplete(self.resp);
+            }
+    }
+};
+
+pub const FileRouteInitOptions = struct {
+    server: ?AnyServer,
+    status_code: u16 = 200,
+    headers: ?*jsc.WebCore.FetchHeaders = null,
+};
+
+pub const FileRoute = @This();
+
+ref_count: RefCount = .init(),
+server: ?AnyServer = null,
+blob: Blob,
+headers: Headers = Headers{ .allocator = bun.default_allocator },
+status_code: u16,
+stat_hash: bun.fs.StatHash = .{},
+has_last_modified_header: bool,
+has_content_length_header: bool,
+has_content_range_header: bool,
+
+pub fn lastModifiedDate(self: FileRoute) bun.JSError!?u64 {
+        if (self.has_last_modified_header) {
+            if (self.headers.get("last-modified")) |last_modified| {
+                _ = &last_modified;
+                var string_guard = DerefGuard(bun.String){ .val = bun.String.init(last_modified) };
+                _ = &string_guard;
+                var __string_guard_moved = false; _ = &__string_guard_moved;
+                defer if (!__string_guard_moved) { __string_guard_moved = true; const __T = @TypeOf(string_guard); if (@typeInfo(__T) == .optional) { if (string_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { string_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = string_guard; _drop_val.__cp_deinit(); } };
+                const date_f64 = try bun.String.parseDate((&string_guard.val), bun.jsc.VirtualMachine.get().global);
+                if (((!std.math.isNan(date_f64)) and std.math.isFinite(date_f64))) {
+                    return @intFromFloat(date_f64);
+                }
+            }
+        }
+        if ((self.stat_hash.last_modified_u64 > 0)) {
+            return self.stat_hash.last_modified_u64;
+        }
+        return null;
+}
+
+pub fn initFromBlob(blob: Blob, opts: InitOptions) *FileRoute {
+        const headers = bun.handleOom(Headers.from(opts.headers, bun.default_allocator, .{ .body = (&.{ .Blob = blob }) }));
+        return bun.new(FileRoute, FileRoute{ .ref_count = .init(), .server = opts.server, .blob = blob, .headers = headers, .has_last_modified_header = (headers.get("last-modified") != null), .has_content_length_header = (headers.get("content-length") != null), .has_content_range_header = (headers.get("content-range") != null), .status_code = opts.status_code });
+}
+
+pub fn deinit(self: *FileRoute) void {
+        _ = self.blob.deinit();
+        _ = self.headers.deinit();
+        _ = bun.destroy(self);
+}
+
+pub fn memoryCost(self: FileRoute) usize {
+        return ((@sizeOf(FileRoute) + self.headers.memoryCost()) + self.blob.reported_estimated_size);
+}
+
+pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSError!?*FileRoute {
+        if (argument.as(jsc.WebCore.Response)) |response| {
+            _ = &response;
+            const bodyValue = response.getBodyValue();
+            _ = bodyValue.toBlobIfPossible();
+            if (((bodyValue.* == .Blob) and bodyValue.Blob.needsToReadFile())) {
+                if ((bodyValue.Blob.store.?.data.file.pathlike == .fd)) {
+                    return globalThis.throwTODO("Support serving files from a file descriptor. Please pass a path instead.");
+                }
+                var blob = bodyValue.use();
+                _ = &blob;
+                blob.globalThis = globalThis;
+                _ = bun.assertf((!blob.isHeapAllocated()), "expected blob not to be heap-allocated", .{});
+                bodyValue.* = .{ .Blob = blob.dupe() };
+                const headers = bun.handleOom(Headers.from(response.getInitHeaders(), bun.default_allocator, .{ .body = (&.{ .Blob = blob }) }));
+                return bun.new(FileRoute, FileRoute{ .ref_count = .init(), .server = null, .blob = blob, .headers = headers, .has_last_modified_header = (headers.get("last-modified") != null), .has_content_length_header = (headers.get("content-length") != null), .has_content_range_header = (headers.get("content-range") != null), .status_code = response.statusCode() });
+            }
+        }
+        if (argument.as(Blob)) |blob| {
+            _ = &blob;
+            if (blob.needsToReadFile()) {
+                var b = blob.dupe();
+                _ = &b;
+                b.globalThis = globalThis;
+                _ = bun.assertf((!b.isHeapAllocated()), "expected blob not to be heap-allocated", .{});
+                return bun.new(FileRoute, FileRoute{ .ref_count = .init(), .server = null, .blob = b, .headers = bun.handleOom(Headers.from(null, bun.default_allocator, .{ .body = (&.{ .Blob = b }) })), .has_content_length_header = false, .has_last_modified_header = false, .has_content_range_header = false, .status_code = 200 });
+            }
+        }
+        return null;
+}
+
+pub fn writeHeaders(self: *FileRoute, resp: AnyResponse) void {
+        const entries = self.headers.entries.slice();
+        const names = entries.items(.name);
+        const values = entries.items(.value);
+        const buf = self.headers.buf.items;
+        switch (resp) {
+.SSL => |s| {
+var idx: usize = 0;
+        _ = &idx;
+        for (cp_iter_slice(names)) |name| {
+            _ = &name;
+            const value = values[@as(usize, @intCast(idx))];
+            _ = s.writeHeader(name.slice(buf), value.slice(buf));
+            idx = (idx + 1);
+        }
+        if (self.server) |srv| {
+            _ = &srv;
+            if (srv.h3AltSvc()) |alt| {
+                _ = &alt;
+                _ = s.writeHeader("alt-svc", alt);
+            }
+        }
+},
+.TCP => |s| {
+var idx: usize = 0;
+        _ = &idx;
+        for (cp_iter_slice(names)) |name| {
+            _ = &name;
+            const value = values[@as(usize, @intCast(idx))];
+            _ = s.writeHeader(name.slice(buf), value.slice(buf));
+            idx = (idx + 1);
+        }
+        if (self.server) |srv| {
+            _ = &srv;
+            if (srv.h3AltSvc()) |alt| {
+                _ = &alt;
+                _ = s.writeHeader("alt-svc", alt);
+            }
+        }
+},
+.H3 => |s| {
+var idx: usize = 0;
+        _ = &idx;
+        for (cp_iter_slice(names)) |name| {
+            _ = &name;
+            const value = values[@as(usize, @intCast(idx))];
+            _ = s.writeHeader(name.slice(buf), value.slice(buf));
+            idx = (idx + 1);
+        }
+},
+}
+        if ((!self.has_last_modified_header)) {
+            if (self.stat_hash.lastModified()) |last_modified| {
+                _ = &last_modified;
+                _ = resp.writeHeader("last-modified", last_modified);
+            }
+        }
+        if (self.has_content_length_header) {
+            _ = resp.markWroteContentLengthHeader();
+        }
+}
+
+pub fn writeStatusCode(status_code: u16, resp: AnyResponse) void {
+        switch (resp) {
+.SSL => |r| {
+_ = writeStatus(true, r, status_code);
+},
+.TCP => |r| {
+_ = writeStatus(false, r, status_code);
+},
+.H3 => |r| {
+var b: [16]u8 = undefined;
+        _ = &b;
+        _ = r.writeStatus(((std.fmt.bufPrint((&b), "{d}", .{ status_code })) catch unreachable));
+},
+}
+}
+
+pub fn onHEADRequest(self: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
+        _ = bun.debugAssert((self.server != null));
+        _ = self.on(req, resp, .HEAD);
+}
+
+pub fn onRequest(self: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
+        _ = self.on(req, resp, ((bun.http.Method.find(req.method())) orelse (.GET)));
+}
+
+pub fn on(self: *FileRoute, req: uws.AnyRequest, resp: AnyResponse, method: bun.http.Method) void {
+        _ = bun.debugAssert((self.server != null));
+        _ = self.ref();
+        if (self.server) |server| {
+            _ = &server;
+            _ = server.onPendingRequest();
+            _ = resp.timeout(server.config().idleTimeout);
+        }
+        const path = ((self.blob.store.?.getPath()) orelse {
+        _ = req.setYield(true);
+        _ = self.onResponseComplete(resp);
+        return;
+});
+        const open_flags = ((bun.O.RDONLY | bun.O.CLOEXEC) | bun.O.NONBLOCK);
+        const fd_result = brk: {
+        if (bun.Environment.isWindows) {
+            var path_buffer: bun.PathBuffer = undefined;
+            _ = &path_buffer;
+            _ = @memcpy(path_buffer[0..path.len], path);
+            path_buffer[cp_cast_int(usize, path.len)] = 0;
+            break :brk bun.sys.open(path_buffer[0..path.len :0], open_flags, 0);
+        }
+        break :brk bun.sys.openA(path, open_flags, 0);
+};
+        if ((fd_result == .err)) {
+            _ = req.setYield(true);
+            _ = self.onResponseComplete(resp);
+            return;
+        }
+        const fd = fd_result.result;
+        var fd_guard = FileRouteOnGuard{ .route = self, .fd = fd, .resp = resp };
+        _ = &fd_guard;
+        var __fd_guard_moved = false; _ = &__fd_guard_moved;
+        defer if (!__fd_guard_moved) { __fd_guard_moved = true; const __T = @TypeOf(fd_guard); if (@typeInfo(__T) == .optional) { if (fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = fd_guard; _drop_val.__cp_deinit(); } };
+        const input_if_modified_since_date: ?u64 = (blk_catch_1: { break :blk_catch_1 ((req.dateForHeader("if-modified-since")) catch |__ce_1| { _ = &__ce_1; return; }); });
+        var can_serve_file: bool = false;
+        _ = &can_serve_file;
+        var size: u64 = 0;
+        _ = &size;
+        var file_type: bun.io.FileType = undefined;
+        _ = &file_type;
+        var pollable: bool = false;
+        _ = &pollable;
+        switch (bun.sys.fstat(fd)) {
+.result => |stat| {
+const stat_size: u64 = @intCast(@max(stat.size, 0));
+        const _size: u64 = @min(stat_size, (if (comptime @typeInfo(@TypeOf(self.blob.size)) == .@"enum") cp_cast_int(u64, @intFromEnum(self.blob.size)) else cp_cast_int(u64, self.blob.size)));
+        if ((!bun.S.ISDIR(@intCast(stat.mode)))) {
+            _ = self.stat_hash.hash(stat, path);
+            can_serve_file = true;
+            size = _size;
+            if ((bun.S.ISFIFO(@intCast(stat.mode)) or bun.S.ISCHR(@intCast(stat.mode)))) {
+                file_type = .pipe;
+                pollable = true;
+            } else {
+                if (bun.S.ISSOCK(@intCast(stat.mode))) {
+                    file_type = .socket;
+                    pollable = true;
+                } else {
+                    file_type = .file;
+                    pollable = false;
+                }
+            }
+        }
+},
+.err => {
+
+},
+}
+        if ((!can_serve_file)) {
+            _ = req.setYield(true);
+            return;
+        }
+        const range: RangeRequest.Result = (if ((((((method == .GET) or (method == .HEAD)) and (file_type == .file)) and (self.status_code == 200)) and (!self.has_content_range_header))) RangeRequest.fromRequest(req, size) else .none);
+        const status_code: u16 = brk: {
+        if (input_if_modified_since_date) |requested_if_modified_since| {
+            _ = &requested_if_modified_since;
+            if (((method == .HEAD) or (method == .GET))) {
+                if ((blk_catch_2: { break :blk_catch_2 ((self.lastModifiedDate()) catch |__ce_2| { _ = &__ce_2; return; }); })) |actual_last_modified_at| {
+                    _ = &actual_last_modified_at;
+                    if (((actual_last_modified_at / 1000) <= (requested_if_modified_since / 1000))) {
+                        break :brk 304;
+                    }
+                }
+            }
+        }
+        if ((range == .unsatisfiable)) {
+            break :brk 416;
+        }
+        if ((range == .satisfiable)) {
+            break :brk 206;
+        }
+        if ((((size == 0) and (file_type == .file)) and (self.status_code == 200))) {
+            break :brk 204;
+        }
+        break :brk self.status_code;
+};
+        _ = req.setYield(false);
+        _ = FileRoute.writeStatusCode(status_code, resp);
+        _ = resp.writeMark();
+        _ = self.writeHeaders(resp);
+        switch (status_code) {
+204, 205, 304, 307, 308 => {
+_ = resp.endWithoutBody(resp.shouldCloseConnection());
+        return;
+},
+else => {
+
+},
+}
+        var body_offset: u64 = 0;
+        _ = &body_offset;
+        var body_len: ?u64 = null;
+        _ = &body_len;
+        switch (range) {
+.satisfiable => |r| {
+var crbuf: [96]u8 = undefined;
+        _ = &crbuf;
+        _ = resp.writeHeader("content-range", ((std.fmt.bufPrint((&crbuf), "bytes {d}-{d}/{d}", .{ r.start, r.end, size })) catch unreachable));
+        _ = resp.writeHeader("accept-ranges", "bytes");
+        body_offset = (self.blob.offset + r.start);
+        body_len = ((r.end - r.start) + 1);
+},
+.unsatisfiable => {
+var crbuf: [64]u8 = undefined;
+        _ = &crbuf;
+        _ = resp.writeHeader("content-range", ((std.fmt.bufPrint((&crbuf), "bytes */{d}", .{ size })) catch unreachable));
+        _ = resp.writeHeader("accept-ranges", "bytes");
+        _ = resp.end("", resp.shouldCloseConnection());
+        return;
+},
+.none => {
+body_offset = (if ((file_type == .file)) self.blob.offset else 0);
+        body_len = (if (((file_type == .file) and (self.blob.size > 0))) @as(u64, @intCast(size)) else null);
+},
+}
+        if (((file_type == .file) and (!resp.state().hasWrittenContentLengthHeader()))) {
+            _ = resp.writeHeaderInt("content-length", ((body_len) orelse (size)));
+            _ = resp.markWroteContentLengthHeader();
+        }
+        if ((method == .HEAD)) {
+            _ = resp.endWithoutBody(resp.shouldCloseConnection());
+            return;
+        }
+        fd_guard.armed = false;
+        _ = FileResponseStream.start(.{ .fd = fd, .auto_close = true, .resp = resp, .vm = self.server.?.vm(), .file_type = file_type, .pollable = pollable, .offset = body_offset, .length = body_len, .idle_timeout = self.server.?.config().idleTimeout, .ctx = self, .on_complete = onStreamComplete, .on_error = onStreamError });
+}
+
+pub fn onStreamComplete(ctx: *anyopaque, resp: AnyResponse) void {
+        const route: *FileRoute = (blk: {
+        break :blk @ptrCast(@alignCast(ctx));
+
+});
+        _ = route.onResponseComplete(resp);
+}
+
+pub fn onStreamError(ctx: *anyopaque, resp: AnyResponse, _: bun.sys.Error) void {
+        const route: *FileRoute = (blk: {
+        break :blk @ptrCast(@alignCast(ctx));
+
+});
+        _ = route.onResponseComplete(resp);
+}
+
+pub fn onResponseComplete(self: *FileRoute, resp: AnyResponse) void {
+        _ = resp.clearAborted();
+        _ = resp.clearOnWritable();
+        _ = resp.clearTimeout();
+        if (self.server) |server| {
+            _ = &server;
+            _ = server.onStaticRequestComplete();
+        }
+        _ = self.deref();
+}
+pub const InitOptions = FileRouteInitOptions;
+const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
+pub const ref = RefCount.ref;
+pub const deref = RefCount.deref;
 const jsc = bun.jsc;
 const Headers = bun.http.Headers;
 const AnyServer = jsc.API.AnyServer;
@@ -14,378 +458,3 @@ const RangeRequest = bun.api.server.RangeRequest;
 const writeStatus = bun.api.server.writeStatus;
 const uws = bun.uws;
 const AnyResponse = uws.AnyResponse;
-pub const FileRoute = struct {
-    ref_count: RefCount,
-    server: ?AnyServer = null,
-    blob: Blob,
-    headers: Headers = .{ .allocator = bun.default_allocator },
-    status_code: u16,
-    stat_hash: bun.fs.StatHash = .{},
-    has_last_modified_header: bool,
-    has_content_length_header: bool,
-    has_content_range_header: bool,
-
-    pub const InitOptions = struct {
-        server: ?AnyServer,
-        status_code: u16 = 200,
-        headers: ?*jsc.WebCore.FetchHeaders = null,
-    };
-
-    pub fn lastModifiedDate(this: *const FileRoute) bun.JSError!?u64 {
-        if (this.has_last_modified_header) {
-            if (this.headers.get("last-modified")) |last_modified| {
-                var string_val = bun.String.init(last_modified);
-                defer string_val.deref();
-                const date_f64 = try bun.String.parseDate(&string_val, bun.jsc.VirtualMachine.get().global);
-                if (!std.math.isNan(date_f64) and std.math.isFinite(date_f64)) {
-                    return @intFromFloat(date_f64);
-                }
-            }
-        }
-
-        if (this.stat_hash.last_modified_u64 > 0) {
-            return this.stat_hash.last_modified_u64;
-        }
-
-        return null;
-    }
-
-    pub fn initFromBlob(blob: Blob, opts: InitOptions) *FileRoute {
-        const headers = bun.handleOom(Headers.from(opts.headers, bun.default_allocator, .{ .body = &.{ .Blob = blob } }));
-        return bun.new(FileRoute, .{
-            .ref_count = .init(),
-            .server = opts.server,
-            .blob = blob,
-            .headers = headers,
-            .has_last_modified_header = headers.get("last-modified") != null,
-            .has_content_length_header = headers.get("content-length") != null,
-            .has_content_range_header = headers.get("content-range") != null,
-            .status_code = opts.status_code,
-        });
-    }
-
-    fn deinit(this: *FileRoute) void {
-        this.blob.deinit();
-        this.headers.deinit();
-        bun.destroy(this);
-    }
-
-    pub fn memoryCost(this: *const FileRoute) usize {
-        return @sizeOf(FileRoute) + this.headers.memoryCost() + this.blob.reported_estimated_size;
-    }
-
-    pub fn fromJS(globalThis: *jsc.JSGlobalObject, argument: jsc.JSValue) bun.JSError!?*FileRoute {
-        if (argument.as(jsc.WebCore.Response)) |response| {
-            const bodyValue = response.getBodyValue();
-            bodyValue.toBlobIfPossible();
-            if (bodyValue.* == .Blob and bodyValue.Blob.needsToReadFile()) {
-                if (bodyValue.Blob.store.?.data.file.pathlike == .fd) {
-                    return globalThis.throwTODO("Support serving files from a file descriptor. Please pass a path instead.");
-                }
-
-                var blob = bodyValue.use();
-
-                blob.globalThis = globalThis;
-                bun.assertf(!blob.isHeapAllocated(), "expected blob not to be heap-allocated", .{});
-                bodyValue.* = .{ .Blob = blob.dupe() };
-                const headers = bun.handleOom(Headers.from(response.getInitHeaders(), bun.default_allocator, .{ .body = &.{ .Blob = blob } }));
-
-                return bun.new(FileRoute, .{
-                    .ref_count = .init(),
-                    .server = null,
-                    .blob = blob,
-                    .headers = headers,
-                    .has_last_modified_header = headers.get("last-modified") != null,
-                    .has_content_length_header = headers.get("content-length") != null,
-                    .has_content_range_header = headers.get("content-range") != null,
-                    .status_code = response.statusCode(),
-                });
-            }
-        }
-        if (argument.as(Blob)) |blob| {
-            if (blob.needsToReadFile()) {
-                var b = blob.dupe();
-                b.globalThis = globalThis;
-                bun.assertf(!b.isHeapAllocated(), "expected blob not to be heap-allocated", .{});
-                return bun.new(FileRoute, .{
-                    .ref_count = .init(),
-                    .server = null,
-                    .blob = b,
-                    .headers = bun.handleOom(Headers.from(null, bun.default_allocator, .{ .body = &.{ .Blob = b } })),
-                    .has_content_length_header = false,
-                    .has_last_modified_header = false,
-                    .has_content_range_header = false,
-                    .status_code = 200,
-                });
-            }
-        }
-        return null;
-    }
-
-    fn writeHeaders(this: *FileRoute, resp: AnyResponse) void {
-        const entries = this.headers.entries.slice();
-        const names = entries.items(.name);
-        const values = entries.items(.value);
-        const buf = this.headers.buf.items;
-
-        switch (resp) {
-            inline else => |s, tag| {
-                for (names, values) |name, value| {
-                    s.writeHeader(name.slice(buf), value.slice(buf));
-                }
-                if (comptime tag != .H3) if (this.server) |srv| if (srv.h3AltSvc()) |alt|
-                    s.writeHeader("alt-svc", alt);
-            },
-        }
-
-        if (!this.has_last_modified_header) {
-            if (this.stat_hash.lastModified()) |last_modified| {
-                resp.writeHeader("last-modified", last_modified);
-            }
-        }
-
-        if (this.has_content_length_header) {
-            resp.markWroteContentLengthHeader();
-        }
-    }
-
-    pub fn writeStatusCode(_: *FileRoute, status_code: u16, resp: AnyResponse) void {
-        switch (resp) {
-            .SSL => |r| writeStatus(true, r, status_code),
-            .TCP => |r| writeStatus(false, r, status_code),
-            .H3 => |r| {
-                var b: [16]u8 = undefined;
-                r.writeStatus(std.fmt.bufPrint(&b, "{d}", .{status_code}) catch unreachable);
-            },
-        }
-    }
-
-    pub fn onHEADRequest(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
-        bun.debugAssert(this.server != null);
-
-        this.on(req, resp, .HEAD);
-    }
-
-    pub fn onRequest(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse) void {
-        this.on(req, resp, bun.http.Method.find(req.method()) orelse .GET);
-    }
-
-    pub fn on(this: *FileRoute, req: uws.AnyRequest, resp: AnyResponse, method: bun.http.Method) void {
-        bun.debugAssert(this.server != null);
-        this.ref();
-        if (this.server) |server| {
-            server.onPendingRequest();
-            resp.timeout(server.config().idleTimeout);
-        }
-        const path = this.blob.store.?.getPath() orelse {
-            req.setYield(true);
-            this.onResponseComplete(resp);
-            return;
-        };
-
-        const open_flags = bun.O.RDONLY | bun.O.CLOEXEC | bun.O.NONBLOCK;
-
-        const fd_result = brk: {
-            if (bun.Environment.isWindows) {
-                var path_buffer: bun.PathBuffer = undefined;
-                @memcpy(path_buffer[0..path.len], path);
-                path_buffer[path.len] = 0;
-                break :brk bun.sys.open(
-                    path_buffer[0..path.len :0],
-                    open_flags,
-                    0,
-                );
-            }
-            break :brk bun.sys.openA(
-                path,
-                open_flags,
-                0,
-            );
-        };
-
-        if (fd_result == .err) {
-            req.setYield(true);
-            this.onResponseComplete(resp);
-            return;
-        }
-
-        const fd = fd_result.result;
-
-        // `fd_owned` tracks whether this function is still responsible for
-        // closing the file descriptor and releasing the route ref. Every
-        // non-streaming return — bodiless status codes (304/204/205/307/308),
-        // HEAD, non-streamable files, and the two JS-exception `catch return`
-        // paths below — hits this defer, so neither the fd nor the route ref
-        // (or the server's pending_requests counter) can leak regardless of
-        // which branch runs. The streaming path clears `fd_owned` right
-        // before handing ownership to `FileResponseStream`.
-        var fd_owned = true;
-        defer if (fd_owned) {
-            bun.Async.Closer.close(fd, if (bun.Environment.isWindows) bun.windows.libuv.Loop.get());
-            this.onResponseComplete(resp);
-        };
-
-        const input_if_modified_since_date: ?u64 = req.dateForHeader("if-modified-since") catch return; // TODO: properly propagate exception upwards
-
-        const can_serve_file: bool, const size: u64, const file_type: bun.io.FileType, const pollable: bool = brk: {
-            const stat = switch (bun.sys.fstat(fd)) {
-                .result => |s| s,
-                .err => break :brk .{ false, 0, undefined, false },
-            };
-
-            const stat_size: u64 = @intCast(@max(stat.size, 0));
-            const _size: u64 = @min(stat_size, @as(u64, this.blob.size));
-
-            if (bun.S.ISDIR(@intCast(stat.mode))) {
-                break :brk .{ false, 0, undefined, false };
-            }
-
-            this.stat_hash.hash(stat, path);
-
-            if (bun.S.ISFIFO(@intCast(stat.mode)) or bun.S.ISCHR(@intCast(stat.mode))) {
-                break :brk .{ true, _size, .pipe, true };
-            }
-
-            if (bun.S.ISSOCK(@intCast(stat.mode))) {
-                break :brk .{ true, _size, .socket, true };
-            }
-
-            break :brk .{ true, _size, .file, false };
-        };
-
-        if (!can_serve_file) {
-            req.setYield(true);
-            return;
-        }
-
-        // Range applies to the slice the route was configured with, not the
-        // underlying file: a Bun.file(p).slice(a,b) route exposes only [a,b).
-        // RFC 9110 §14.2: Range is only defined for GET (HEAD mirrors GET's
-        // headers). Skip if the route has a non-200 status or the user already
-        // set Content-Range — they're managing partial responses themselves.
-        const range: RangeRequest.Result = if ((method == .GET or method == .HEAD) and file_type == .file and this.status_code == 200 and !this.has_content_range_header)
-            RangeRequest.fromRequest(req, size)
-        else
-            .none;
-
-        const status_code: u16 = brk: {
-            // RFC 9110 §13.2.2: conditional preconditions are evaluated before
-            // Range. If-Modified-Since on an unmodified resource yields 304 even
-            // when a Range header is present (without If-Range).
-            // Unlike If-Unmodified-Since, If-Modified-Since can only be used with a
-            // GET or HEAD. When used in combination with If-None-Match, it is
-            // ignored, unless the server doesn't support If-None-Match.
-            if (input_if_modified_since_date) |requested_if_modified_since| {
-                if (method == .HEAD or method == .GET) {
-                    if (this.lastModifiedDate() catch return) |actual_last_modified_at| { // TODO: properly propagate exception upwards
-                        // Compare at second precision: the Last-Modified header we
-                        // emit is second-granular (HTTP-date), so a sub-second
-                        // mtime would otherwise never satisfy `<=` against the
-                        // client's echoed value.
-                        if (actual_last_modified_at / 1000 <= requested_if_modified_since / 1000) {
-                            break :brk 304;
-                        }
-                    }
-                }
-            }
-
-            if (range == .unsatisfiable) break :brk 416;
-            if (range == .satisfiable) break :brk 206;
-
-            if (size == 0 and file_type == .file and this.status_code == 200) {
-                break :brk 204;
-            }
-
-            break :brk this.status_code;
-        };
-
-        req.setYield(false);
-
-        this.writeStatusCode(status_code, resp);
-        resp.writeMark();
-        this.writeHeaders(resp);
-
-        // Bodiless statuses end here — before the range switch, so a 304 (which
-        // can win over a satisfiable Range per RFC 9110 §13.2.2) doesn't emit
-        // Content-Range.
-        switch (status_code) {
-            204, 205, 304, 307, 308 => {
-                resp.endWithoutBody(resp.shouldCloseConnection());
-                return;
-            },
-            else => {},
-        }
-
-        const body_offset: u64, const body_len: ?u64 = switch (range) {
-            .satisfiable => |r| brk: {
-                var crbuf: [96]u8 = undefined;
-                resp.writeHeader("content-range", std.fmt.bufPrint(&crbuf, "bytes {d}-{d}/{d}", .{ r.start, r.end, size }) catch unreachable);
-                resp.writeHeader("accept-ranges", "bytes");
-                break :brk .{ this.blob.offset + r.start, r.end - r.start + 1 };
-            },
-            .unsatisfiable => {
-                var crbuf: [64]u8 = undefined;
-                resp.writeHeader("content-range", std.fmt.bufPrint(&crbuf, "bytes */{d}", .{size}) catch unreachable);
-                resp.writeHeader("accept-ranges", "bytes");
-                resp.end("", resp.shouldCloseConnection());
-                return;
-            },
-            .none => .{
-                if (file_type == .file) this.blob.offset else 0,
-                if (file_type == .file and this.blob.size > 0) @as(u64, @intCast(size)) else null,
-            },
-        };
-
-        if (file_type == .file and !resp.state().hasWrittenContentLengthHeader()) {
-            resp.writeHeaderInt("content-length", body_len orelse size);
-            resp.markWroteContentLengthHeader();
-        }
-
-        if (method == .HEAD) {
-            resp.endWithoutBody(resp.shouldCloseConnection());
-            return;
-        }
-
-        // Hand ownership of the fd to FileResponseStream; disable the defer close.
-        // The route ref taken at the top of on() is released in onStreamComplete.
-        fd_owned = false;
-        FileResponseStream.start(.{
-            .fd = fd,
-            .auto_close = true,
-            .resp = resp,
-            .vm = this.server.?.vm(),
-            .file_type = file_type,
-            .pollable = pollable,
-            .offset = body_offset,
-            .length = body_len,
-            .idle_timeout = this.server.?.config().idleTimeout,
-            .ctx = this,
-            .on_complete = onStreamComplete,
-            .on_error = onStreamError,
-        });
-    }
-
-    fn onStreamComplete(ctx: *anyopaque, resp: AnyResponse) void {
-        const this: *FileRoute = @ptrCast(@alignCast(ctx));
-        this.onResponseComplete(resp);
-    }
-
-    fn onStreamError(ctx: *anyopaque, resp: AnyResponse, _: bun.sys.Error) void {
-        const this: *FileRoute = @ptrCast(@alignCast(ctx));
-        this.onResponseComplete(resp);
-    }
-
-    fn onResponseComplete(this: *FileRoute, resp: AnyResponse) void {
-        resp.clearAborted();
-        resp.clearOnWritable();
-        resp.clearTimeout();
-        if (this.server) |server| {
-            server.onStaticRequestComplete();
-        }
-        this.deref();
-    }
-
-    const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-    pub const ref = RefCount.ref;
-    pub const deref = RefCount.deref;
-};

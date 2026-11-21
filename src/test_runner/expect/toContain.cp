@@ -1,3 +1,10 @@
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 const ExpectedEntry = struct {
     globalThis: *JSGlobalObject,
     expected: JSValue,
@@ -49,16 +56,16 @@ pub fn toContain(
             }
         }
     } else if (value.isStringLiteral() && expected.isStringLiteral()) {
-        const value_string = value.toSlice(globalThis, default_allocator)?;
-        defer value_string.deinit();
-        const expected_string = expected.toSlice(globalThis, default_allocator)?;
-        defer expected_string.deinit();
+        const value_string_raw = value.toSlice(globalThis, default_allocator)?;
+        const value_string = DeinitGuard<@TypeOf(value_string_raw)>{ val: value_string_raw };
+        const expected_string_raw = expected.toSlice(globalThis, default_allocator)?;
+        const expected_string = DeinitGuard<@TypeOf(expected_string_raw)>{ val: expected_string_raw };
 
-        if (expected_string.len == 0) { // edge case empty string is always contained
+        if (expected_string.val.len == 0) { // edge case empty string is always contained
             pass = true;
-        } else if (strings.contains(value_string.slice(), expected_string.slice())) {
+        } else if (strings.contains(value_string.val.slice(), expected_string.val.slice())) {
             pass = true;
-        } else if (value_string.len == 0 && expected_string.len == 0) { // edge case two empty strings are true
+        } else if (value_string.val.len == 0 && expected_string.val.len == 0) { // edge case two empty strings are true
             pass = true;
         }
     } else if (value.isIterable(globalThis)?) {
@@ -76,12 +83,13 @@ pub fn toContain(
     if (pass) return JSValue.js_undefined;
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const value_fmt = value.toFmt(&formatter);
-    const expected_fmt = expected.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{
+        val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true },
+    };
+    const value_fmt = value.toFmt(&formatter.val);
+    const expected_fmt = expected.toFmt(&formatter.val);
     if (not) {
-        const received_fmt = value.toFmt(&formatter);
+        const received_fmt = value.toFmt(&formatter.val);
         const expected_line = "Expected to not contain: <green>{f}<r>\nReceived: <red>{f}<r>\n";
         const signature = comptime getSignature("toContain", "<green>expected<r>", true);
         return client.throw(globalThis, signature, "\n\n" ++ expected_line, .{ expected_fmt, received_fmt });

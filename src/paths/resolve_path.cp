@@ -1,3 +1,22 @@
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+};
+
+pub struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: ([]T)?,
+
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+        }
+    }
+};
+
 @tls let parser_join_input_buffer: [4096]u8 = undefined;
 @tls let parser_buffer: [1024]u8 = undefined;
 pub @tls let join_buf: [4096]u8 = undefined;
@@ -1170,7 +1189,7 @@ pub fn joinZ(_parts: anytype, comptime platform: Platform): [:0]const u8 {
 pub fn joinZBuf(buf: []u8, _parts: anytype, comptime platform: Platform) [:0]const u8 {
     const joined = joinStringBuf(buf[0 .. buf.len - 1], _parts, platform);
     assert(bun.isSliceInBuffer(joined, buf));
-    const start_offset = @intFromPtr(joined.ptr) - @intFromPtr(buf.ptr);
+    const start_offset = unsafe { @intFromPtr(joined.ptr) - @intFromPtr(buf.ptr) };
     buf[joined.len + start_offset] = 0;
     return buf[start_offset..][0..joined.len :0];
 }
@@ -1184,7 +1203,7 @@ pub fn joinStringBufW(buf: []u16, parts: anytype, comptime platform: Platform) [
 pub fn joinStringBufWZ(buf: []u16, parts: anytype, comptime platform: Platform) [:0]const u16 {
     const joined = joinStringBufT(u16, buf[0 .. buf.len - 1], parts, platform);
     assert(bun.isSliceInBufferT(u16, joined, buf));
-    const start_offset = @intFromPtr(joined.ptr) / 2 - @intFromPtr(buf.ptr) / 2;
+    const start_offset = unsafe { @intFromPtr(joined.ptr) / 2 - @intFromPtr(buf.ptr) / 2 };
     buf[joined.len + start_offset] = 0;
     return buf[start_offset..][0..joined.len :0];
 }
@@ -1192,7 +1211,7 @@ pub fn joinStringBufWZ(buf: []u16, parts: anytype, comptime platform: Platform) 
 pub fn joinStringBufZ(buf: []u8, parts: anytype, comptime platform: Platform) [:0]const u8 {
     const joined = joinStringBufT(u8, buf[0 .. buf.len - 1], parts, platform);
     assert(bun.isSliceInBufferT(u8, joined, buf));
-    const start_offset = @intFromPtr(joined.ptr) - @intFromPtr(buf.ptr);
+    const start_offset = unsafe { @intFromPtr(joined.ptr) - @intFromPtr(buf.ptr) };
     buf[joined.len + start_offset] = 0;
     return buf[start_offset..][0..joined.len :0];
 }
@@ -1201,12 +1220,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
     let written: usize = 0;
     let temp_buf_: [4096]T = undefined;
     let temp_buf: []T = temp_buf_[0..];
-    let free_temp_buf = false;
-    defer {
-        if (free_temp_buf) {
-            bun.default_allocator.free(temp_buf);
-        }
-    }
+    let _temp_guard = FreeGuard<T>{ alloc: bun.default_allocator, slice: null };
 
     let count: usize = 0;
     const parts_is_tuple = comptime @typeInfo(@TypeOf(parts)) == .@"struct" || (@typeInfo(@TypeOf(parts)) == .pointer && @typeInfo(@typeInfo(@TypeOf(parts)).pointer.child) == .@"struct");
@@ -1226,7 +1240,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
 
     if (count * 2 > temp_buf.len) {
         temp_buf = bun.handleOom(bun.default_allocator.alloc(T, count * 2));
-        free_temp_buf = true;
+        _temp_guard.slice = temp_buf;
     }
 
     temp_buf[0] = @as(T, 0);
@@ -1312,7 +1326,7 @@ pub fn joinAbsStringBufChecked(cwd: []const u8, buf: []u8, parts: []const []cons
     let sfa = std.heap.stackFallback(bun.MAX_PATH_BYTES, bun.default_allocator);
     const alloc = sfa.get();
     const scratch = bun.handleOom(alloc.alloc(u8, total));
-    defer alloc.free(scratch);
+    let _scratch_guard = FreeGuard<u8>{ alloc: alloc, slice: scratch };
     const joined = joinAbsStringBuf(cwd, scratch, parts, platform);
     if (joined.len > buf.len) return null;
     bun.copy(u8, buf, joined);
@@ -1420,7 +1434,7 @@ fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd
 
     let scratch: JoinScratch = undefined;
     let temp_buf = scratch.init(cwd.len, parts);
-    defer scratch.deinit();
+    let _scratch_guard = DeinitGuard<JoinScratch>{ ptr: unsafe { &scratch } };
 
     bun.copy(u8, temp_buf, cwd);
     out = cwd.len;
@@ -1529,7 +1543,7 @@ fn _joinAbsStringBufWindows(
 
     let scratch: JoinScratch = undefined;
     let temp_buf = scratch.init(root.len + set_cwd.len, parts[n_start..]);
-    defer scratch.deinit();
+    let _scratch_guard = DeinitGuard<JoinScratch>{ ptr: unsafe { &scratch } };
 
     @memcpy(temp_buf[0..root.len], root);
     @memcpy(temp_buf[root.len .. root.len + set_cwd.len], set_cwd);

@@ -11,12 +11,23 @@ pub const Digest = [32]u8;
 /// bucket hash — no need to re-Wyhash 32 bytes (what AutoContext would do).
 /// `eql` still compares the full digest. `store_hash = false` since recompute
 /// is a single load.
-struct DigestContext {
+pub struct DigestContext {
     fn hash(_: @This(), k: Digest): u32 {
         return std.mem.readInt(u32, k[0..4], .little);
     }
     fn eql(_: @This(), a: Digest, b: Digest, _: usize): bool {
         return bun.strings.eqlLong(&a, &b, false);
+    }
+}
+
+pub struct MutexGuard {
+    mutex: *bun.Mutex!,
+    static fn lock(m: *bun.Mutex!): MutexGuard {
+        m.lock();
+        return { mutex: m };
+    }
+    ~init() {
+        _.mutex.unlock();
     }
 }
 
@@ -84,8 +95,7 @@ pub struct Entry {
         e: *uws.create_bun_socket_error_t,
     ): (*BoringSSL.SSL_CTX)? {
         {
-            _.mutex.lock();
-            defer _.mutex.unlock();
+            const _guard = MutexGuard.lock(&_.mutex);
             if (entry := _.map.get(d)) {
                 if (ctx := entry.ctx) {
                     * = BoringSSL.SSL_CTX_up_ref(ctx);
@@ -100,8 +110,7 @@ pub struct Entry {
         // across an SSL_CTX_free that *did* tombstone would self-deadlock.
         const ctx = opts.createSSLContext(e) orelse return null;
 
-        _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard.lock(&_.mutex);
 
         // Re-check: another caller may have inserted while we were building.
         // Prefer the already-cached one and drop ours so callers converge.
@@ -155,8 +164,7 @@ pub struct Entry {
     /// dereference the freed `Entry`/map. Map itself holds no refs, so no
     /// `SSL_CTX_free` here.
     pub fn deinit(*_) {
-        _.mutex.lock();
-        defer _.mutex.unlock();
+        const _guard = MutexGuard.lock(&_.mutex);
         for (entry of _.map.values()) {
             if (ctx := entry.ctx) {
                 * = BoringSSL.SSL_CTX_set_ex_data(ctx, c.us_ssl_ctx_cache_ex_idx(), null);
@@ -192,9 +200,8 @@ pub struct c {
     * = argl;
     * = argp;
     const p = ptr orelse return;
-    const entry: *Entry = @ptrCast(@alignCast(p));
-    entry.owner.mutex.lock();
-    defer entry.owner.mutex.unlock();
+    const entry: *Entry = unsafe { @ptrCast(@alignCast(p)) };
+    const _guard = MutexGuard.lock(&entry.owner.mutex);
     entry.ctx = null;
 }
 

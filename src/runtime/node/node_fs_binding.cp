@@ -3,6 +3,30 @@ const jsc = bun.jsc;
 const node = bun.api.node;
 const ArgumentsSlice = jsc.CallFrame.ArgumentsSlice;
 
+pub struct DeinitGuard<T> {
+    val: T,
+    armed: bool = true,
+
+    ~init() {
+        if (_.armed) {
+            _.val.deinit();
+        }
+    }
+}
+
+pub struct OptionalDeinitGuard<T> {
+    val: T,
+    armed: bool = true,
+
+    ~init() {
+        if (comptime T != void && @hasDecl(T, "deinit")) {
+            if (_.armed) {
+                _.val.deinit();
+            }
+        }
+    }
+}
+
 type NodeFSFunction = *const fn (binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue;
 
 const NodeFSFunctionEnum = std.meta.DeclEnum(node.fs.NodeFS);
@@ -19,22 +43,20 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
 
     return struct {
         pub fn runSync(binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-            let slice = ArgumentsSlice.init(globalObject.bunVM(), callframe.arguments());
-            defer slice.deinit();
+            let slice_guard = DeinitGuard<ArgumentsSlice>{ val: ArgumentsSlice.init(globalObject.bunVM(), callframe.arguments()) };
 
-            const args = if (Arguments != void)
-                (Arguments.fromJS(globalObject, &slice)?)
-            else
-                @as(void, undefined);
-
-            defer if (comptime Arguments != void && @hasDecl(Arguments, "deinit"))
-                args.deinit();
+            let args_guard = OptionalDeinitGuard<Arguments>{
+                val: if (Arguments != void)
+                    (Arguments.fromJS(globalObject, &slice_guard.val)?)
+                else
+                    @as(void, undefined),
+            };
 
             if (globalObject.hasException()) {
                 return jsc.JSValue.zero;
             }
 
-            let result = function(&binding.node_fs, args, .sync);
+            let result = function(&binding.node_fs, args_guard.val, .sync);
             return switch (result) {
                 .err => |e| globalObject.throwValue((e.toJS(globalObject))?),
                 .result => |*res| globalObject.toJS(res),
@@ -42,35 +64,36 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
         }
 
         pub fn runAsync(binding: *Binding, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-            let slice = ArgumentsSlice.init(globalObject.bunVM(), callframe.arguments());
-            slice.will_be_async = true;
-            let deinit = false;
+            let slice_guard = DeinitGuard<ArgumentsSlice>{
+                val: ArgumentsSlice.init(globalObject.bunVM(), callframe.arguments()),
+                armed: false,
+            };
+            slice_guard.val.will_be_async = true;
 
-            defer if (deinit) slice.deinit();
-
-            let args = if (Arguments != void)
-                Arguments.fromJS(globalObject, &slice) catch |e| {
-                    deinit = true;
-                    return e;
-                }
-            else
-                @as(void, undefined);
-
-            defer if (comptime Arguments != void && @hasDecl(Arguments, "deinit")) {
-                if (deinit) args.deinit();
+            let args_guard = OptionalDeinitGuard<Arguments>{
+                val: if (Arguments != void)
+                    Arguments.fromJS(globalObject, &slice_guard.val) catch |e| {
+                        slice_guard.armed = true;
+                        return e;
+                    }
+                else
+                    @as(void, undefined),
+                armed: false,
             };
 
             if (globalObject.hasException()) {
-                deinit = true;
+                slice_guard.armed = true;
+                args_guard.armed = true;
                 return jsc.JSValue.zero;
             }
 
             const have_abort_signal = @hasField(Arguments, "signal");
             if (have_abort_signal) check_early_abort: {
-                if (args.signal == null) break :check_early_abort;
-                const signal = args.signal.?;
+                if (args_guard.val.signal == null) break :check_early_abort;
+                const signal = args_guard.val.signal.?;
                 if (reason := signal.reasonIfAborted(globalObject)) {
-                    deinit = true;
+                    slice_guard.armed = true;
+                    args_guard.armed = true;
                     return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, reason.toJS(globalObject));
                 }
             }
@@ -78,14 +101,14 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
             const Task = @field(node.fs.Async, @tagName(function_name));
             switch (comptime function_name) {
                 .cp => {
-                    return Task.create(globalObject, binding, args, globalObject.bunVM(), slice.@"arena");
+                    return Task.create(globalObject, binding, args_guard.val, globalObject.bunVM(), slice_guard.val.@"arena");
                 },
                 .readdir => {
-                    if (args.recursive) return node.fs.AsyncReaddirRecursiveTask.create(globalObject, args, globalObject.bunVM());
+                    if (args_guard.val.recursive) return node.fs.AsyncReaddirRecursiveTask.create(globalObject, args_guard.val, globalObject.bunVM());
                 },
                 else => {},
             }
-            return Task.create(globalObject, binding, args, globalObject.bunVM());
+            return Task.create(globalObject, binding, args_guard.val, globalObject.bunVM());
         }
     };
 }

@@ -1,3 +1,10 @@
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 const ExpectedEntry = struct {
     globalThis: *JSGlobalObject,
     expected: JSValue,
@@ -55,22 +62,22 @@ pub fn toContainEqual(
         if (expected_type.isStringObjectLike() && value_type.isString()) {
             pass = false;
         } else {
-            const value_string = value.toSliceOrNull(globalThis)?;
-            defer value_string.deinit();
-            const expected_string = expected.toSliceOrNull(globalThis)?;
-            defer expected_string.deinit();
+            const value_string_raw = value.toSliceOrNull(globalThis)?;
+            const value_string = DeinitGuard<@TypeOf(value_string_raw)>{ val: value_string_raw };
+            const expected_string_raw = expected.toSliceOrNull(globalThis)?;
+            const expected_string = DeinitGuard<@TypeOf(expected_string_raw)>{ val: expected_string_raw };
 
             // jest does not have a `typeof === "string"` check for `toContainEqual`.
             // it immediately spreads the value into an array.
 
             let expected_codepoint_cursor = strings.CodepointIterator.Cursor{};
-            let expected_iter = strings.CodepointIterator.init(expected_string.slice());
+            let expected_iter = strings.CodepointIterator.init(expected_string.val.slice());
             * = expected_iter.next(&expected_codepoint_cursor);
 
             if (expected_iter.next(&expected_codepoint_cursor)) {
                 pass = false;
             } else {
-                pass = strings.indexOf(value_string.slice(), expected_string.slice()) != null;
+                pass = strings.indexOf(value_string.val.slice(), expected_string.val.slice()) != null;
             }
         }
     } else if (value.isIterable(globalThis)?) {
@@ -88,10 +95,11 @@ pub fn toContainEqual(
     if (pass) return thisValue;
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
-    const value_fmt = value.toFmt(&formatter);
-    const expected_fmt = expected.toFmt(&formatter);
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{
+        val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true },
+    };
+    const value_fmt = value.toFmt(&formatter.val);
+    const expected_fmt = expected.toFmt(&formatter.val);
     if (not) {
         const expected_line = "Expected to not contain: <green>{f}<r>\n";
         const signature = comptime getSignature("toContainEqual", "<green>expected<r>", true);

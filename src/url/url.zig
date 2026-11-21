@@ -82,13 +82,43 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 const Environment = @import("bun").Environment;
 const Output = @import("bun").Output;
 const jsc = @import("bun").jsc;
 const strings = @import("bun").strings;
 const schema = @import("bun").schema;
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
+pub fn SliceFreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: ?[]T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.allocator.free(s);
+                }
+        }
+    };
+}
+
 pub const URL = struct {
     hash: []const u8 = "",
     host: []const u8 = "",
@@ -131,8 +161,14 @@ pub fn isFile(self: *const URL) bool {
 pub fn hostWithPath(self: *const URL) []const u8 {
             if ((self.host.len > 0)) {
                 if ((((self.path.len > 1) and bun.isSliceInBuffer(self.path, self.href)) and bun.isSliceInBuffer(self.host, self.href))) {
-                    const end = (@intFromPtr(self.path.ptr) + self.path.len);
-                    const start = @intFromPtr(self.host.ptr);
+                    const end = ((blk: {
+                    break :blk @intFromPtr(self.path.ptr);
+
+}) + self.path.len);
+                    const start = (blk: {
+                    break :blk @intFromPtr(self.host.ptr);
+
+});
                     var discount: usize = 0;
                     _ = &discount;
                     if (bun.strings.endsWithComptime(self.path, "/")) {
@@ -140,8 +176,11 @@ pub fn hostWithPath(self: *const URL) []const u8 {
                     }
                     var len: usize = ((end - start) - discount);
                     _ = &len;
+                    return (blk: {
                     const ptr: [*]u8 = @ptrFromInt(start);
-                    return ptr[0..len];
+                    break :blk ptr[0..len];
+
+});
                 }
                 return self.host;
             }
@@ -158,10 +197,11 @@ pub fn fromString(allocator: std.mem.Allocator, input: bun.String) !URL {
             if ((parsed_href.tag == .Dead)) {
                 return error.InvalidURL;
             }
-            defer {
-            _ = parsed_href.deref();
-            }
-            return URL.parse(try parsed_href.toOwnedSlice(allocator));
+            var guard = DerefGuard(bun.String){ .val = parsed_href };
+            _ = &guard;
+            var __guard_moved = false; _ = &__guard_moved;
+            defer if (!__guard_moved) { __guard_moved = true; const __T = @TypeOf(guard); if (@typeInfo(__T) == .optional) { if (guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = guard; _drop_val.__cp_deinit(); } };
+            return URL.parse(try guard.val.toOwnedSlice(allocator));
     }
 
 pub fn fromUTF8(allocator: std.mem.Allocator, input: []const u8) !URL {
@@ -403,7 +443,10 @@ else => {
             if ((url.path.len > 1)) {
                 const trimmed = std.mem.trim(u8, url.path, "/");
                 if ((trimmed.len > 1)) {
-                    url.path = url.path[@min((@max((@intFromPtr(trimmed.ptr) - @intFromPtr(url.path.ptr)), 1) - 1), hash_offset)..];
+                    url.path = url.path[@min((blk: {
+                    break :blk (@max((@intFromPtr(trimmed.ptr) - @intFromPtr(url.path.ptr)), 1) - 1);
+
+}), hash_offset)..];
                 } else {
                     url.path = "/";
                 }
@@ -898,13 +941,15 @@ pub fn decode(comptime Writer: type, writer: Writer, input: []const u8) !u32 {
 
 pub fn decodeAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
             const buf = try allocator.alloc(u8, input.len);
-            errdefer {
-            _ = allocator.free(buf);
-            }
+            var buf_guard = SliceFreeGuard(u8){ .allocator = allocator, .slice = buf };
+            _ = &buf_guard;
+            var __buf_guard_moved = false; _ = &__buf_guard_moved;
+            defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
             var stream = std.io.fixedBufferStream(buf);
             _ = &stream;
             const writer = stream.writer();
             const len = try decode(@TypeOf(writer), writer, input);
+            buf_guard.slice = null;
             return buf[0..len];
     }
 

@@ -50,17 +50,28 @@ struct Context {
 
 type GeneratorType = lut.Generator(GraphemeBreakNoControl, Context);
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() { unsafe { _.ptr.deinit(); } }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() { _.alloc.free(_.slice); }
+}
+
 pub fn @"main"(): void! {
     let arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena_state.deinit();
+    const _arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ ptr: unsafe { &arena_state } };
     const alloc = arena_state.allocator();
 
     const gen = GeneratorType{};
 
     const t = gen.generate(alloc)?;
-    defer alloc.free(t.stage1);
-    defer alloc.free(t.stage2);
-    defer alloc.free(t.stage3);
+    const _g1 = FreeGuard<@TypeOf(t.stage1)>{ alloc: alloc, slice: t.stage1 };
+    const _g2 = FreeGuard<@TypeOf(t.stage2)>{ alloc: alloc, slice: t.stage2 };
+    const _g3 = FreeGuard<@TypeOf(t.stage3)>{ alloc: alloc, slice: t.stage3 };
 
     let buf: [4096]u8 = undefined;
     let stdout_file = std.fs.File.stdout().writer(&buf);

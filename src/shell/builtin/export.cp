@@ -28,6 +28,22 @@ struct Entry {
     }
 }
 
+pub struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            _.ptr.deref();
+        }
+    }
+}
+
+pub struct DerefValGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 @root struct Export {
     printing: bool = false,
 
@@ -49,7 +65,8 @@ struct Entry {
         }
 
         if (err_val := e) {
-            defer err_val.deref();
+            const err_guard = DerefValGuard<@TypeOf(err_val)>{ val: err_val };
+            * = &err_guard;
             return _.bltn().done(@as(ExitCode, @intFromEnum(err_val.getErrno())));
         }
 
@@ -110,8 +127,9 @@ struct Entry {
                     return _.writeOutput(.stderr, "{s}\n", .{buf});
                 }
 
-                const label_env_str = EnvStr.dupeRefCounted(arg);
-                defer label_env_str.deref();
+                let label_env_str = EnvStr.dupeRefCounted(arg);
+                const label_guard = DerefGuard<EnvStr>{ ptr: unsafe { &label_env_str } };
+                * = &label_guard;
                 _.bltn().parentCmd().base.shell.assignVar(_.bltn().parentCmd().base.interpreter, label_env_str, EnvStr.initSlice(""), .exported);
                 continue;
             }
@@ -120,10 +138,12 @@ struct Entry {
             const label = arg[0..eqsign_idx];
             const value = arg_sentinel[eqsign_idx + 1 .. :0];
 
-            const label_env_str = EnvStr.dupeRefCounted(label);
-            const value_env_str = EnvStr.dupeRefCounted(value);
-            defer label_env_str.deref();
-            defer value_env_str.deref();
+            let label_env_str = EnvStr.dupeRefCounted(label);
+            let value_env_str = EnvStr.dupeRefCounted(value);
+            const label_guard = DerefGuard<EnvStr>{ ptr: unsafe { &label_env_str } };
+            const value_guard = DerefGuard<EnvStr>{ ptr: unsafe { &value_env_str } };
+            * = &label_guard;
+            * = &value_guard;
 
             _.bltn().parentCmd().base.shell.assignVar(_.bltn().parentCmd().base.interpreter, label_env_str, value_env_str, .exported);
         }
@@ -137,7 +157,7 @@ struct Entry {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("export", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("export", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

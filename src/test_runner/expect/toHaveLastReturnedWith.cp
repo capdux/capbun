@@ -11,9 +11,8 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
 
     const returns = bun.cpp.JSMockFunction__getReturns(globalThis, value)?;
     if (!returns.jsType().isArray()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        return globalThis.throw("Expected value must be a mock function: {f}", .{ value.toFmt(&formatter.val) });
     }
 
     const calls_count: u32 = @truncate(returns.getLength(globalThis)?);
@@ -28,10 +27,9 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
         if (last_result.isObject()) {
             const result_type = (last_result.get(globalThis, "type")?) ?? .js_undefined;
             if (result_type.isString()) {
-                const type_str = result_type.toBunString(globalThis)?;
-                defer type_str.deref();
+                const type_str = DerefGuard<bun.String>{ val: result_type.toBunString(globalThis)? };
 
-                if (type_str.eqlComptime("return")) {
+                if (type_str.val.eqlComptime("return")) {
                     if (v := last_result.get(globalThis, "value")?) {
                         last_return_value = v;
                     } else {
@@ -41,7 +39,7 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
                     if (last_return_value.jestDeepEquals(expected, globalThis)?) {
                         pass = true;
                     }
-                } else if (type_str.eqlComptime("throw")) {
+                } else if (type_str.val.eqlComptime("throw")) {
                     last_call_threw = true;
                     if (v := last_result.get(globalThis, "value")?) {
                         last_error_value = v;
@@ -58,13 +56,12 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
     }
 
     // Handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
 
     const signature = comptime getSignature("toHaveBeenLastReturnedWith", "<green>expected<r>", false);
 
     if (client.flags.not) {
-        return client.throw(globalThis, comptime getSignature("toHaveBeenLastReturnedWith", "<green>expected<r>", true), "\n\n" ++ "Expected mock function not to have last returned: <green>{f}<r>\n" ++ "But it did.\n", .{ expected.toFmt(&formatter) });
+        return client.throw(globalThis, comptime getSignature("toHaveBeenLastReturnedWith", "<green>expected<r>", true), "\n\n" ++ "Expected mock function not to have last returned: <green>{f}<r>\n" ++ "But it did.\n", .{ expected.toFmt(&formatter.val) });
     }
 
     if (calls_count == 0) {
@@ -72,7 +69,7 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
     }
 
     if (last_call_threw) {
-        return client.throw(globalThis, signature, "\n\n" ++ "The last call threw an error: <red>{f}<r>\n", .{ last_error_value.toFmt(&formatter) });
+        return client.throw(globalThis, signature, "\n\n" ++ "The last call threw an error: <red>{f}<r>\n", .{ last_error_value.toFmt(&formatter.val) });
     }
 
     // Diff if possible
@@ -81,7 +78,7 @@ pub fn toHaveLastReturnedWith(client: *Expect, globalThis: *JSGlobalObject, call
         return client.throw(globalThis, signature, "\n\n{f}\n", .{ diff_format });
     }
 
-    return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ expected.toFmt(&formatter), last_return_value.toFmt(&formatter) });
+    return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nReceived: <red>{f}<r>", .{ expected.toFmt(&formatter.val), last_return_value.toFmt(&formatter.val) });
 }
 
 import bun from "bun";
@@ -95,3 +92,13 @@ const mock = bun.jsc.Expect.mock;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}

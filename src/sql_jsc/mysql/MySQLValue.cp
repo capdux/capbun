@@ -10,6 +10,20 @@ const JSC = bun.jsc;
 const JSValue = JSC.JSValue;
 const ZigString = JSC.ZigString;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 extern fn JSC__JSValue__unpinArrayBuffer(v: JSC.JSValue);
 extern fn JSC__JSValue__borrowBytesForOffThread(v: JSC.JSValue, out_ptr: *[*]const u8, out_len: *usize): i32;
 
@@ -396,7 +410,7 @@ pub struct ValueDecimal {
     pub fn toJS(globalObject: *JSC.JSGlobalObject): JSValue {
         let stack = std.heap.stackFallback(64, bun.default_allocator);
         let str = std.array_list.Managed(u8).init(stack.get());
-        defer str.deinit();
+        const _str_guard = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
 
         if (this.negative) {
             str.append('-') catch return JSValue.jsNumber(0);
@@ -532,7 +546,7 @@ pub union(enum) Value {
 
                 if (value.isString()) {
                     const str = bun.String.fromJS(value, globalObject)?;
-                    defer str.deref();
+                    const _str_guard = DerefGuard<bun.String>{ val: str };
                     return Value{ @"string": str.toUTF8(bun.default_allocator) };
                 }
 
@@ -541,12 +555,12 @@ pub union(enum) Value {
             .MYSQL_TYPE_JSON => {
                 let str: bun.String = bun.String.empty;
                 value.jsonStringifyFast(globalObject, &str)?;
-                defer str.deref();
+                const _str_guard = DerefGuard<bun.String>{ val: str };
                 return Value{ @"string": str.toUTF8(bun.default_allocator) };
             },
             else => {
                 const str = bun.String.fromJS(value, globalObject)?;
-                defer str.deref();
+                const _str_guard = DerefGuard<bun.String>{ val: str };
                 return Value{ @"string": str.toUTF8(bun.default_allocator) };
             },
         };

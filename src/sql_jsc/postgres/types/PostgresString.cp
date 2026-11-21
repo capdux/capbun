@@ -9,6 +9,16 @@ const short = int_types.short;
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+            _.ptr = null;
+        }
+    }
+}
+
 pub const to = 25;
 pub const from: [1]short = [@as(short, 1002)];
 
@@ -21,12 +31,12 @@ pub fn toJSWithType(
         return value.toJS(globalThis);
     } else if (comptime Type == *Data) {
         let str = bun.String.borrowUTF8(value.slice());
-        defer str.deinit();
-        defer value.deinit();
+        let _str_guard = DeinitGuard<bun.String>{ ptr: unsafe { &str } };
+        let _value_guard = DeinitGuard<Data>{ ptr: value };
         return str.toJS(globalThis);
     } else {
         let str = bun.String.borrowUTF8(value);
-        defer str.deinit();
+        let _str_guard = DeinitGuard<bun.String>{ ptr: unsafe { &str } };
         return str.toJS(globalThis);
     }
 }
@@ -36,6 +46,6 @@ pub fn toJS(
     value: anytype,
 ): anyerror!JSValue {
     let str = toJSWithType(globalThis, @TypeOf(value), value)?;
-    defer str.deinit();
+    let _str_guard = DeinitGuard<JSValue>{ ptr: unsafe { &str } };
     return str.toJS(globalThis);
 }

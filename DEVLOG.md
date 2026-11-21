@@ -1608,3 +1608,7 @@
 ## [2026-11-22 Wave #29] RAII 改造与 `unsafe {}` 经验
 - `Store.cp`：`switch (result)` 中 `.success => |list_result|` 解包载荷类型应以 `DeinitGuard<@TypeOf(list_result_mut)>` 实例化，避免将外层联合体 `S3ListObjectsResult` 误传给内部 `S3ListObjectsV2Result`。
 - `threading/ThreadPool.cp`：位掩码比较须加括号 `(new_stack & ~PTR_MASK) == 0`；在 `*_` 方法中 `_` 已是指针接收者，比较指针相等直接写 `target == unsafe { _ }`。
+
+## [2026-11-22 Wave #30] RAII 改造与 `unsafe {}` 经验
+- `Sink.cp`：`cpc` 会将 `*(*!)` 与 `**void` 折叠为单级 `*anyopaque` / `*void`，对于 `assignToStream` 所需的 `**anyopaque` 二级指针，通过具名别名 `const OpaquePtr = *!;` + `*OpaquePtr` 稳定保留二级指针签名；无载荷 tag `.empty` 与 `JSValue.null` 显式写全。
+- `FileRoute.cp` / `Package.cp` / `P.cp`：POSIX 分支 `void` 参数通过 `const empty_loop: void = undefined;` 传入；`union(enum)` 无载荷 tag 用 `.init(.uninitialized)` 替代 `.init({ uninitialized: {} })`；`source_index` 严格保持 `u31`。

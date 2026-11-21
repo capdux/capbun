@@ -47,11 +47,32 @@ const TJPARAM_SAVEMARKERS = 25;
 const TJPF_RGBA = 7;
 const TJSAMP_420 = 2;
 
+const TjHandleGuard = struct {
+    h: tjhandle,
+    ~init() {
+        tj3Destroy(_.h);
+    }
+};
+
+const TjFreeGuard = struct {
+    ptr: OptU8ManyPtr,
+    ~init() {
+        if (p := _.ptr) tj3Free(p);
+    }
+};
+
+const SliceFreeGuard = struct {
+    slice: ([]u8)?,
+    ~init() {
+        if (s := _.slice) bun.default_allocator.free(s);
+    }
+};
+
 pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): codecs.Error!codecs.Decoded {
     const h_opt = tj3Init(1);
     if (h_opt == null) return error.OutOfMemory;
-    const h = h_opt.?;
-    defer tj3Destroy(h);
+    const h_guard = TjHandleGuard{ h: h_opt.? };
+    const h = h_guard.h;
     // Ask libjpeg-turbo to keep the APP2/ICC_PROFILE markers so we can pull
     // the profile out after header parse. Must be set PRE-header — the
     // marker buffer is discarded if we set this after.
@@ -79,7 +100,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
         let n: c_int = 0;
         if (sfs := tj3GetScalingFactors(&n)) {
             let best: ScalingFactor = { num: 1, denom: 1 };
-            for (sf of sfs[0..@intCast(n)]) {
+            for (sf of unsafe { sfs[0..@intCast(n)] }) {
                 // Only consider downscale factors.
                 if (sf.num >= sf.denom) continue;
                 const sw = scaled(src_w, sf);
@@ -117,7 +138,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     * = tj3Set(h, TJPARAM_MAXPIXELS, std.math.cast(c_int, src_w * src_h) ?? std.math.maxInt(c_int));
     * = tj3SetCroppingRegion(h, { x: 0, y: 0, w: @intCast(w), h: @intCast(ht) });
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * ht * 4)?;
-    errdefer bun.default_allocator.free(out);
+    let out_guard = SliceFreeGuard{ slice: out };
     if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), TJPF_RGBA) != 0)
         return error.DecodeFailed;
     if (tj3Get(h, TJPARAM_JPEGWIDTH) != rw || tj3Get(h, TJPARAM_JPEGHEIGHT) != rh)
@@ -137,20 +158,21 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     let icc_size: usize = 0;
     const icc: ([]u8)? = icc_blk: {
         if (tj3GetICCProfile(h, &icc_ptr, &icc_size) != 0 || icc_size == 0) break :icc_blk null;
-        defer if (p := icc_ptr) tj3Free(p);
-        if (p := icc_ptr) {
+        const icc_guard = TjFreeGuard{ ptr: icc_ptr };
+        if (p := icc_guard.ptr) {
             break :icc_blk (bun.default_allocator.dupe(u8, unsafe { p[0..icc_size] }) catch |e| return e);
         }
         break :icc_blk null;
     };
+    out_guard.slice = null;
     return { rgba: out, width: w, height: ht, icc_profile: icc };
 }
 
 pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool, icc_profile: ([]const u8)?): codecs.Error!codecs.Encoded {
     const h_opt = tj3Init(0);
     if (h_opt == null) return error.OutOfMemory;
-    const h = h_opt.?;
-    defer tj3Destroy(h);
+    const h_guard = TjHandleGuard{ h: h_opt.? };
+    const h = h_guard.h;
     * = tj3Set(h, TJPARAM_QUALITY, @intCast(@min(@max(quality, 1), 100)));
     * = tj3Set(h, TJPARAM_SUBSAMP, TJSAMP_420);
     // Progressive emits a multi-scan SOF2 stream; same size ±1%, decodes
@@ -175,7 +197,7 @@ pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool,
     }
     // tj3Compress8 allocates via libjpeg-turbo's allocator; hand it to JS
     // with `tj3Free` as the finalizer instead of duping.
-    return { bytes: out_ptr.?[0..out_len], free: codecs.Encoded.wrap(tj3Free) };
+    return { bytes: unsafe { out_ptr.?[0..out_len] }, free: codecs.Encoded.wrap(tj3Free) };
 }
 
 import bun from "bun";

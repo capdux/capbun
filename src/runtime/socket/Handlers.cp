@@ -14,6 +14,40 @@ type JSValue = jsc.JSValue;
 type ZigString = jsc.ZigString;
 type BinaryType = jsc.ArrayBuffer.BinaryType;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe {
+            _.ptr.deinit();
+        }
+    }
+}
+
+pub struct MemoryDeinitGuard<T> {
+    ptr: *T!?,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe {
+                bun.memory.deinit(p);
+            }
+        }
+    }
+}
+
+pub struct ReleaseGuard<T> {
+    ptr: *T!?,
+
+    ~init() {
+        if (p := _.ptr) {
+            unsafe {
+                p.release();
+            }
+        }
+    }
+}
+
 const callback_fields = [
     "onOpen",
     "onClose",
@@ -143,7 +177,7 @@ pub struct HandlersScope {
         is_server: bool,
     ): Handlers!bun.JSError {
         let generated: jsc.generated.SocketConfigHandlers = jsc.generated.SocketConfigHandlers.fromJS(globalObject, opts)?;
-        defer generated.deinit();
+        const _gen_guard = DeinitGuard<jsc.generated.SocketConfigHandlers>{ ptr: unsafe { &generated } };
         return Handlers.fromGenerated(globalObject, &generated, is_server);
     }
 
@@ -298,7 +332,7 @@ pub struct SocketConfig {
                 .boolean => |b| if (b) .zero else null,
                 .object => |s| SSLConfig.fromGenerated(vm, global, unsafe { &s })?,
             };
-            errdefer bun.memory.deinit(&ssl);
+            let _ssl_guard = MemoryDeinitGuard<SSLConfig?>{ ptr: unsafe { &ssl } };
             let fd_val: bun.FD? = if (generated.fd != null) bun.FD.fromUV(generated.fd.?) else null;
             let default_data_val = if (generated.data.isUndefined()) .zero else generated.data;
             let handlers_val = Handlers.fromGenerated(global, &generated.handlers, is_server)?;
@@ -309,7 +343,7 @@ pub struct SocketConfig {
                 .handlers = handlers_val,
                 .default_data = default_data_val,
             };
-            errdefer result.release();
+            let _result_guard = ReleaseGuard<SocketConfig>{ ptr: unsafe { &result } };
 
             if (result.fd != null) {
             } else if (unix := generated.unix_.get()) {
@@ -342,6 +376,8 @@ pub struct SocketConfig {
             } else {
                 return global.throwInvalidArguments("Expected either \"hostname\" or \"unix\"", .{});
             }
+            _result_guard.ptr = null;
+            _ssl_guard.ptr = null;
             return result;
         }
 
@@ -352,7 +388,7 @@ pub struct SocketConfig {
             is_server: bool,
         ): SocketConfig!bun.JSError {
             let generated: jsc.generated.SocketConfig = jsc.generated.SocketConfig.fromJS(globalObject, opts)?;
-            defer generated.deinit();
+            const _gen_guard = DeinitGuard<jsc.generated.SocketConfig>{ ptr: unsafe { &generated } };
             return SocketConfig.fromGenerated(vm, globalObject, &generated, is_server);
         }
     }

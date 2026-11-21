@@ -33,9 +33,27 @@ struct CowDebugData {
 const DebugData = if (cow_str_assertions) CowDebugData else void;
 const DebugField = if (cow_str_assertions) OptionalType(*DebugData) else void;
 
+struct MutexUnlockGuard {
+    mutex: *bun.Mutex!;
+
+    ~init() {
+        _.mutex.unlock();
+    }
+}
+
+struct DebugDestroyGuard {
+    debug: DebugField;
+
+    ~init() {
+        if (comptime cow_str_assertions) {
+            if (d := _.debug) bun.destroy(d);
+        }
+    }
+}
+
 fn borrowCowDebug(debug: *DebugData) {
     debug.mutex.lock();
-    defer debug.mutex.unlock();
+    const _unlock = MutexUnlockGuard{ mutex: unsafe { &debug.mutex } };
     debug.borrows += 1;
 }
 
@@ -203,11 +221,9 @@ pub fn CowSliceZ(comptime T: type, comptime sentinel: T?): type {
                 this.intoOwned(allocator)?;
             }
             defer this.* = Self.empty;
-            defer {
-                if (cow_str_assertions && this.isOwned()) {
-                    if (d := this.debug) bun.destroy(d);
-                }
-            }
+            const _destroy_debug = DebugDestroyGuard{
+                debug: if (comptime cow_str_assertions) (if (this.isOwned()) this.debug else null) else {},
+            };
             return unsafe { this.ptr[0..this.flags.len] };
         }
 
@@ -276,7 +292,7 @@ pub fn CowSliceZ(comptime T: type, comptime sentinel: T?): type {
             if (comptime cow_str_assertions) {
                 if (debug := this.debug) {
                     debug.mutex.lock();
-                    defer debug.mutex.unlock();
+                    const _unlock = MutexUnlockGuard{ mutex: unsafe { &debug.mutex } };
                     bun.assert(debug.borrows > 0);
                     debug.borrows -= 1;
                     this.debug = null;

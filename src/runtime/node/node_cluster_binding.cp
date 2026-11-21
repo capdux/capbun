@@ -15,6 +15,13 @@ const log = Output.scoped(.IPC, .visible);
 extern fn Bun__Process__queueNextTick1(global: *jsc.JSGlobalObject, arg1: jsc.JSValue, arg2: jsc.JSValue);
 extern fn Process__emitErrorEvent(global: *jsc.JSGlobalObject, value: jsc.JSValue);
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub let child_singleton: InternalMsgHolder = {};
 
 pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -50,9 +57,8 @@ pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFram
     child_singleton.seq = child_singleton.seq +% 1;
 
     // similar code as Bun__Process__send
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-    defer formatter.deinit();
-    if (Environment.isDebug) log("child: {f}", .{ message.toFmt(&formatter) });
+    let fmt_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
+    if (Environment.isDebug) log("child: {f}", .{ message.toFmt(&fmt_guard.val) });
 
     const ipc_instance = vm.getIPCInstance().?;
 
@@ -138,7 +144,8 @@ pub struct InternalMsgHolder {
                 if (entry := _.callbacks.getEntry(ack)) {
                     let cbstrong = entry.value_ptr.*;
                     if (callback := cbstrong.get()) {
-                        defer cbstrong.deinit();
+                        let cb_guard = DeinitGuard<jsc.Strong.Optional>{ val: cbstrong };
+                        * = cb_guard;
                         * = _.callbacks.swapRemove(ack);
                         event_loop.runCallback(callback, globalThis, _.worker.get().?, &.{
                             message,
@@ -207,9 +214,8 @@ pub fn sendHelperPrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     ipc_data.internal_msg_queue.seq = ipc_data.internal_msg_queue.seq +% 1;
 
     // similar code as bun.jsc.Subprocess.doSend
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
-    defer formatter.deinit();
-    if (Environment.isDebug) log("primary: {f}", .{ message.toFmt(&formatter) });
+    let fmt_guard = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
+    if (Environment.isDebug) log("primary: {f}", .{ message.toFmt(&fmt_guard.val) });
 
     * = handle;
     const success = ipc_data.serializeAndSend(globalThis, message, .internal, .@"null", null);
@@ -241,10 +247,9 @@ pub fn handleInternalMessagePrimary(globalThis: *jsc.JSGlobalObject, subprocess:
         if (!p.isUndefined()) {
             const ack = p.toInt32();
             if (entry := ipc_data.internal_msg_queue.callbacks.getEntry(ack)) {
-                let cbstrong = entry.value_ptr.*;
-                defer cbstrong.deinit();
+                let cb_guard = DeinitGuard<jsc.Strong.Optional>{ val: entry.value_ptr.* };
                 * = ipc_data.internal_msg_queue.callbacks.swapRemove(ack);
-                const cb = cbstrong.get().?;
+                const cb = cb_guard.val.get().?;
                 event_loop.runCallback(cb, globalThis, ipc_data.internal_msg_queue.worker.get().?, &.{
                     message,
                     .@"null", // handle

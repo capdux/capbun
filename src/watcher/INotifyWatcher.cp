@@ -27,8 +27,10 @@ pub @c struct Event {
 
     pub static fn name(event: *align(1) Event): [:0]u8 {
         if (comptime Environment.allow_assert) bun.assertf(event.name_len > 0, "INotifyWatcher.Event.name() called with name_len == 0, you should check it before calling this function.", {});
-        const name_first_char_ptr = std.mem.asBytes(&event.name_len).ptr + @sizeOf(u32);
-        return bun.sliceTo(@as([*:0]u8, @ptrCast(name_first_char_ptr)), 0);
+        return unsafe {
+            const name_first_char_ptr = std.mem.asBytes(&event.name_len).ptr + @sizeOf(u32);
+            bun.sliceTo(@as([*:0]u8, @ptrCast(name_first_char_ptr)), 0)
+        };
     }
 
     pub static fn size(event: *align(1) Event): u32 {
@@ -48,6 +50,30 @@ pub struct ReadPtr {
     len: u32,
 }
 
+pub struct FutexWakeGuard {
+    ptr: (*std.atomic.Value(u32))?,
+
+    ~init() {
+        if (p := _.ptr) {
+            Futex.wake(p, 10);
+        }
+    }
+}
+
+pub struct OutputFlushGuard {
+    ~init() {
+        Output.flush();
+    }
+}
+
+pub struct MutexUnlockGuard<T> {
+    mutex: *T!,
+
+    ~init() {
+        _.mutex.unlock();
+    }
+}
+
 @root struct INotifyWatcher {
     fd: bun.FD = bun.invalid_fd,
     loaded: bool = false,
@@ -60,7 +86,7 @@ pub struct ReadPtr {
     pub fn watchPath(*_, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
         bun.assert(this.loaded);
         const old_count = this.watch_count.fetchAdd(1, .release);
-        defer if (old_count == 0) Futex.wake(&this.watch_count, 10);
+        const _wake_guard = FutexWakeGuard{ ptr: if (old_count == 0) unsafe { &this.watch_count } else null };
         const watch_file_mask = IN.EXCL_UNLINK | IN.MOVE_SELF | IN.DELETE_SELF | IN.MOVED_TO | IN.MODIFY;
         const rc = system.inotify_add_watch(this.fd.cast(), pathname, watch_file_mask);
         log("inotify_add_watch({f}) = {}", [this.fd, rc]);
@@ -70,7 +96,7 @@ pub struct ReadPtr {
     pub fn watchDir(*_, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
         bun.assert(this.loaded);
         const old_count = this.watch_count.fetchAdd(1, .release);
-        defer if (old_count == 0) Futex.wake(&this.watch_count, 10);
+        const _wake_guard = FutexWakeGuard{ ptr: if (old_count == 0) unsafe { &this.watch_count } else null };
         const watch_dir_mask = IN.EXCL_UNLINK | IN.DELETE | IN.DELETE_SELF | IN.CREATE | IN.MOVE_SELF | IN.ONLYDIR | IN.MOVED_TO | IN.MODIFY;
         const rc = system.inotify_add_watch(this.fd.cast(), pathname, watch_dir_mask);
         log("inotify_add_watch({f}) = {}", [this.fd, rc]);
@@ -182,7 +208,7 @@ pub struct ReadPtr {
 
         let count: u32 = 0;
         while (i < read_eventlist_bytes.len) {
-            const event: UnalignedEventPtr = @ptrCast(read_eventlist_bytes[i..][0..@sizeOf(Event)].ptr);
+            const event: UnalignedEventPtr = unsafe { @ptrCast(read_eventlist_bytes[i..][0..@sizeOf(Event)].ptr) };
             this.eventlist_ptrs[count] = event;
             i += Event.size(event);
             count += 1;
@@ -219,7 +245,7 @@ pub struct ReadPtr {
     }
 
     pub static fn watchLoopCycle(watcher: *bun.Watcher): bun.sys.Maybe(void) {
-        defer Output.flush();
+        const _flush_guard = OutputFlushGuard{};
 
         const events = switch (watcher.platform.read()) {
             .result => |result| result,
@@ -335,7 +361,7 @@ pub struct ReadPtr {
         if (all_events.len == 0) return .success;
 
         watcher.mutex.lock();
-        defer watcher.mutex.unlock();
+        const _unlock_guard = MutexUnlockGuard<@TypeOf(watcher.mutex)>{ mutex: unsafe { &watcher.mutex } };
         if (watcher.running) {
             watcher.writeTraceEvents(all_events[0 .. last_event_index + 1], watcher.changed_filepaths[0..name_off]);
             watcher.onFileUpdate(watcher.ctx, all_events[0 .. last_event_index + 1], watcher.changed_filepaths[0..name_off], watcher.watchlist);

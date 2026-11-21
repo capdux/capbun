@@ -22,6 +22,22 @@ pub fn eql(self: DigestContext, a: Digest, b: Digest, _: usize) bool {
     }
 };
 
+pub const MutexGuard = struct {
+    mutex: *bun.Mutex,
+    __cp_dropped: bool = false,
+
+pub fn lock(m: *bun.Mutex) MutexGuard {
+            _ = m.lock();
+            return .{ .mutex = m };
+    }
+
+pub fn __cp_deinit(self: *MutexGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.mutex.unlock();
+    }
+};
+
 pub const Entry = struct {
     ctx: ?*BoringSSL.SSL_CTX,
     owner: *SSLContextCache,
@@ -29,7 +45,7 @@ pub const Entry = struct {
 
 pub const SSLContextCache = @This();
 
-map: std.ArrayHashMapUnmanaged(Digest,*Entry,DigestContext,false) = .empty,
+map: std.ArrayHashMapUnmanaged(Digest, *Entry, DigestContext, false) = .empty,
 mutex: bun.Mutex = .{},
 ops_since_compact: u32 = 0,
 
@@ -44,10 +60,10 @@ pub fn getOrCreateOpts(self: *SSLContextCache, opts: uws.SocketContext.BunSocket
 
 pub fn getOrCreateDigest(self: *SSLContextCache, opts: uws.SocketContext.BunSocketContextOptions, d: Digest, e: *uws.create_bun_socket_error_t) ?*BoringSSL.SSL_CTX {
         {
-            _ = self.mutex.lock();
-            defer {
-            _ = self.mutex.unlock();
-            }
+            var _guard = MutexGuard.lock((&self.mutex));
+            _ = &_guard;
+            var ___guard_moved = false; _ = &___guard_moved;
+            defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
             if (self.map.get(d)) |entry| {
                 _ = &entry;
                 if (entry.ctx) |ctx| {
@@ -58,10 +74,10 @@ pub fn getOrCreateDigest(self: *SSLContextCache, opts: uws.SocketContext.BunSock
             }
         }
         const ctx = ((opts.createSSLContext(e)) orelse { return null; });
-        _ = self.mutex.lock();
-        defer {
-        _ = self.mutex.unlock();
-        }
+        var _guard = MutexGuard.lock((&self.mutex));
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         const gop = bun.handleOom(self.map.getOrPut(bun.default_allocator, d));
         if (gop.found_existing) {
             const entry = gop.value_ptr.*;
@@ -107,10 +123,10 @@ pub fn compactLocked(self: *SSLContextCache) void {
 }
 
 pub fn deinit(self: *SSLContextCache) void {
-        _ = self.mutex.lock();
-        defer {
-        _ = self.mutex.unlock();
-        }
+        var _guard = MutexGuard.lock((&self.mutex));
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         for (self.map.values()) |entry| {
             _ = &entry;
             if (entry.ctx) |ctx| {
@@ -139,10 +155,13 @@ pub export fn bun_ssl_ctx_cache_on_free(parent: ?*anyopaque, ptr: ?*anyopaque, a
         _ = &argl;
         _ = &argp;
         const p = ((ptr) orelse { return; });
-        const entry: *Entry = @ptrCast(@alignCast(p));
-        _ = entry.owner.mutex.lock();
-        defer {
-        _ = entry.owner.mutex.unlock();
-        }
+        const entry: *Entry = (blk: {
+        break :blk @ptrCast(@alignCast(p));
+
+});
+        var _guard = MutexGuard.lock((&entry.owner.mutex));
+        _ = &_guard;
+        var ___guard_moved = false; _ = &___guard_moved;
+        defer if (!___guard_moved) { ___guard_moved = true; const __T = @TypeOf(_guard); if (@typeInfo(__T) == .optional) { if (_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard; _drop_val.__cp_deinit(); } };
         entry.ctx = null;
 }

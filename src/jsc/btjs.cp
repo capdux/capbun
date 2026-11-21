@@ -1,5 +1,32 @@
 import bun from "bun";
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
+pub struct OptSourceLocFreeGuard {
+    alloc: std.mem.Allocator,
+    sl: std.debug.SourceLocation?,
+
+    ~init() {
+        if (s := _.sl) {
+            _.alloc.free(s.file_name);
+        }
+    }
+}
+
 extern const jsc_llint_begin: u8;
 extern const jsc_llint_end: u8;
 
@@ -14,16 +41,16 @@ extern const jsc_llint_end: u8;
 
 fn dumpBtjsTraceDebugImpl(): [*:0]const u8 {
     let result_writer = std.Io.Writer.Allocating.init(bun.default_allocator);
-    defer result_writer.deinit();
+    let _rw_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: unsafe { &result_writer } };
     const w = &result_writer.writer;
 
     const debug_info = std.debug.getSelfDebugInfo() catch |e| {
         w.print("Unable to dump stack trace: Unable to open debug info: {s}\x00", .{ @errorName(e) }) catch {
             return "<oom>".ptr;
         };
-        return @ptrCast((result_writer.toOwnedSlice() catch {
+        return unsafe { @ptrCast((result_writer.toOwnedSlice() catch {
             return "<oom>".ptr;
-        }).ptr);
+        }).ptr) };
     };
 
     const tty_config = std.io.tty.detectConfig(std.fs.File.stdout());
@@ -34,7 +61,7 @@ fn dumpBtjsTraceDebugImpl(): [*:0]const u8 {
     let it: std.debug.StackIterator = (if (has_context && !bun.Environment.isWindows) blk: {
         break :blk std.debug.StackIterator.initWithContext(null, debug_info, &context) catch null;
     } else null) ?? std.debug.StackIterator.init(null, null);
-    defer it.deinit();
+    let _it_guard = DeinitGuard<std.debug.StackIterator>{ ptr: unsafe { &it } };
 
     while (return_address := it.next()) {
         printLastUnwindError(&it, debug_info, w, tty_config);
@@ -60,9 +87,9 @@ fn dumpBtjsTraceDebugImpl(): [*:0]const u8 {
         return "<oom>".ptr;
     };
 
-    return @ptrCast((result_writer.toOwnedSlice() catch {
+    return unsafe { @ptrCast((result_writer.toOwnedSlice() catch {
         return "<oom>".ptr;
-    }).ptr);
+    }).ptr) };
 }
 
 fn printSourceAtAddress(debug_info: *std.debug.SelfInfo, out_stream: *std.Io.Writer, address: usize, tty_config: std.io.tty.Config, fp: usize): !void {
@@ -82,13 +109,9 @@ fn printSourceAtAddress(debug_info: *std.debug.SelfInfo, out_stream: *std.Io.Wri
             return e;
         }
     };
-    defer {
-        if (sl := symbol_info.source_location) {
-            debug_info.allocator.free(sl.file_name);
-        }
-    }
+    let _sl_guard = OptSourceLocFreeGuard{ alloc: debug_info.allocator, sl: symbol_info.source_location };
 
-    const probably_llint = address > @intFromPtr(&jsc_llint_begin) && address < @intFromPtr(&jsc_llint_end);
+    const probably_llint = unsafe { address > @intFromPtr(&jsc_llint_begin) && address < @intFromPtr(&jsc_llint_end) };
     let allow_llint = true;
     if (std.mem.startsWith(u8, symbol_info.name, "__")) {
         allow_llint = false;
@@ -98,7 +121,7 @@ fn printSourceAtAddress(debug_info: *std.debug.SelfInfo, out_stream: *std.Io.Wri
     }
     const do_llint = probably_llint && allow_llint;
 
-    const frame: *const bun.jsc.CallFrame = @ptrFromInt(fp);
+    const frame: *const bun.jsc.CallFrame = unsafe { @ptrFromInt(fp) };
     if (do_llint) {
         const srcloc = frame.getCallerSrcLoc(bun.jsc.VirtualMachine.get().global);
         tty_config.setColor(out_stream, .bold)?;
@@ -196,7 +219,7 @@ fn printLineFromFileAnyOs(out_stream: *std.Io.Writer, source_location: std.debug
     if (!bun.Environment.isDebug) unreachable;
 
     let f = std.fs.cwd().openFile(source_location.file_name, .{})?;
-    defer f.close();
+    let _f_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &f } };
 
     let buf: [4096]u8 = undefined;
     let amt_read = f.read(buf[0..])?;

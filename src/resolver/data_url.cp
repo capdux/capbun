@@ -4,6 +4,23 @@ const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const strings = bun.strings;
 
+struct OptSliceFreeGuard {
+    allocator: Allocator;
+    slice: ([]u8)? = null;
+
+    ~init() {
+        if (s := _.slice) _.allocator.free(s);
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: (*T)? = null;
+
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
 err PercentEncodeError {
     InvalidCharacter,
     OutOfMemory,
@@ -38,7 +55,7 @@ pub struct PercentEncoding {
 
     static fn _decode(allocator: Allocator, path: []const u8, strict: bool): ([]u8)? ! EncodeError {
         let ret: ([]u8)? = null;
-        errdefer if (some := ret) allocator.free(some);
+        let ret_guard = OptSliceFreeGuard{ allocator: allocator };
         let ret_index: usize = 0;
         let i: usize = 0;
 
@@ -46,6 +63,7 @@ pub struct PercentEncoding {
             if (path[i] == '%' && path[i..].len >= 3 && isHex(path[i + 1]) && isHex(path[i + 2])) {
                 if (ret == null) {
                     ret = allocator.alloc(u8, path.len)?;
+                    ret_guard.slice = ret;
                     bun.copy(u8, ret.?, path[0..i]);
                     ret_index = i;
                 }
@@ -63,7 +81,10 @@ pub struct PercentEncoding {
             }
         }
 
-        if (some := ret) return some[0..ret_index];
+        if (some := ret) {
+            ret_guard.slice = null;
+            return some[0..ret_index];
+        }
         return null;
     }
 }
@@ -120,17 +141,18 @@ pub struct DataURL {
 
     fn decodeData(allocator: Allocator): []u8! {
         const percent_decoded_owned: ([]u8)? = PercentEncoding.decodeUnstrict(allocator, _.data)?;
-        defer if (owned := percent_decoded_owned) allocator.free(owned);
+        const _percent_guard = OptSliceFreeGuard{ allocator: allocator, slice: percent_decoded_owned };
         const percent_decoded: []const u8 = percent_decoded_owned ?? _.data;
 
         if (_.is_base64) {
             const len = bun.base64.decodeLen(percent_decoded);
             const buf = allocator.alloc(u8, len)?;
-            errdefer allocator.free(buf);
+            let buf_guard = OptSliceFreeGuard{ allocator: allocator, slice: buf };
             const result = bun.base64.decode(buf, percent_decoded);
             if (!result.isSuccessful() || result.count != len) {
                 return err.Base64DecodeError;
             }
+            buf_guard.slice = null;
             return buf;
         }
 
@@ -153,11 +175,12 @@ pub struct DataURL {
             }
 
             let buf = std.array_list.Managed(u8).init(allocator);
-            errdefer buf.deinit();
-            const success2 = encodeStringAsPercentEscapedDataURL(&buf, mime_type, text) catch unreachable;
+            let buf_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &buf } };
+            const success2 = encodeStringAsPercentEscapedDataURL(unsafe { &buf }, mime_type, text) catch unreachable;
             if (!success2) {
                 break :use_base64;
             }
+            buf_guard.ptr = null;
             return buf.items;
         }
 

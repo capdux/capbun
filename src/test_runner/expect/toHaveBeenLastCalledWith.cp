@@ -10,9 +10,8 @@ pub fn toHaveBeenLastCalledWith(client: *Expect, globalThis: *JSGlobalObject, ca
 
     const calls = bun.cpp.JSMockFunction__getCalls(globalThis, value)?;
     if (!calls.jsType().isArray()) {
-        let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-        defer formatter.deinit();
-        return client.throw(globalThis, comptime getSignature("toHaveBeenLastCalledWith", "<green>...expected<r>", false), "\n\nMatcher error: <red>received<r> value must be a mock function\nReceived: {f}", .{ value.toFmt(&formatter) });
+        let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+        return client.throw(globalThis, comptime getSignature("toHaveBeenLastCalledWith", "<green>...expected<r>", false), "\n\nMatcher error: <red>received<r> value must be a mock function\nReceived: {f}", .{ value.toFmt(&formatter.val) });
     }
 
     const totalCalls: u32 = @truncate(calls.getLength(globalThis)?);
@@ -24,9 +23,8 @@ pub fn toHaveBeenLastCalledWith(client: *Expect, globalThis: *JSGlobalObject, ca
         lastCallValue = calls.getIndex(globalThis, totalCalls - 1)?;
 
         if (!lastCallValue.jsType().isArray()) {
-            let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-            defer formatter.deinit();
-            return globalThis.throw("Expected value must be a mock function with calls: {f}", .{ value.toFmt(&formatter) });
+            let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
+            return globalThis.throw("Expected value must be a mock function with calls: {f}", .{ value.toFmt(&formatter.val) });
         }
 
         if ((lastCallValue.getLength(globalThis)?) != arguments.len) {
@@ -47,8 +45,7 @@ pub fn toHaveBeenLastCalledWith(client: *Expect, globalThis: *JSGlobalObject, ca
     }
 
     // handle failure
-    let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-    defer formatter.deinit();
+    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
 
     const expected_args_js_array = JSValue.createEmptyArray(globalThis, arguments.len)?;
     let i: u32 = 0;
@@ -60,14 +57,14 @@ pub fn toHaveBeenLastCalledWith(client: *Expect, globalThis: *JSGlobalObject, ca
     if (client.flags.not) {
         const signature = comptime getSignature("toHaveBeenLastCalledWith", "<green>...expected<r>", true);
         return client.throw(globalThis, signature, "\n\nExpected last call not to be with: <green>{f}<r>\nBut it was.", .{ 
-            expected_args_js_array.toFmt(&formatter),
+            expected_args_js_array.toFmt(&formatter.val),
         });
     }
     const signature = comptime getSignature("toHaveBeenLastCalledWith", "<green>...expected<r>", false);
 
     if (totalCalls == 0) {
         return client.throw(globalThis, signature, "\n\nExpected: <green>{f}<r>\nBut it was not called.", .{ 
-            expected_args_js_array.toFmt(&formatter),
+            expected_args_js_array.toFmt(&formatter.val),
         });
     }
 
@@ -90,3 +87,8 @@ const JSValue = bun.jsc.JSValue;
 
 const Expect = bun.jsc.Expect.Expect;
 const getSignature = Expect.getSignature;
+
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}

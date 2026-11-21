@@ -54,6 +54,33 @@ pub struct DerefGuard<T> {
     }
 }
 
+pub struct SourcePathsGuard {
+    slice: (([]const u8)[])? = null,
+    count: (*usize!)? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (s := _.slice) {
+            let cnt: usize = 0;
+            if (c := _.count) {
+                cnt = unsafe { c.* };
+            }
+            for (item of s[0..cnt]) _.alloc.free(item);
+            _.alloc.free(s);
+            _.slice = null;
+        }
+    }
+}
+
+pub struct PathBufferPoolGuard {
+    buf: (*bun.PathBuffer!)? = null,
+    ~init() {
+        if (b := _.buf) {
+            unsafe { bun.path_buffer_pool.put(b); }
+            _.buf = null;
+        }
+    }
+}
+
 pub struct SourceMapState {
     generated_line: i32 = 0,
     generated_column: i32 = 0,
@@ -494,12 +521,11 @@ export @root struct SourceMap {
         if (hint != .source_only) {
             source_paths_slice = bun.handleOom(alloc.alloc(string, sources_content.items.len));
         }
-        errdefer {
-            if (hint != .source_only) {
-                for (item of source_paths_slice.?[0..i]) alloc.free(item);
-                alloc.free(source_paths_slice.?);
-            }
-        }
+        let _source_paths_guard = SourcePathsGuard{
+            slice: source_paths_slice,
+            count: unsafe { &i },
+            alloc: alloc,
+        };
 
         if (hint != .source_only) {
             for (item of sources_paths.items.slice()) {
@@ -596,6 +622,7 @@ export @root struct SourceMap {
             break :content alloc.dupe(u8, str)?;
         } else null;
 
+        _source_paths_guard.slice = null;
         _map_guard.ptr = null;
         return ParseUrl{
             map: map,
@@ -719,7 +746,7 @@ export @root struct SourceMap {
                         }
                     }
                     let load_path_buf: *bun.PathBuffer = bun.path_buffer_pool.get();
-                    defer bun.path_buffer_pool.put(load_path_buf);
+                    let _load_path_buf_guard = PathBufferPoolGuard{ buf: unsafe { load_path_buf } };
                     if (source_filename.len + 4 > load_path_buf.len)
                         break :try_external;
                     @memcpy(load_path_buf[0..source_filename.len], source_filename);

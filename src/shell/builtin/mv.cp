@@ -22,6 +22,22 @@ const Maybe = bun.sys.Maybe;
 
 const debug = bun.Output.scoped(.ShellCat, .hidden);
 
+pub struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+pub struct OptDerefGuard<T> {
+    val: T?,
+    ~init() {
+        if (v := _.val) {
+            v.deref();
+        }
+    }
+}
+
 pub const ParseFlagResult = union(enum) {
     continue_parsing,
     done,
@@ -281,7 +297,7 @@ pub const State = union(enum) {
                                 }
                             } else {
                                 const sys_err = e.toShellSystemError();
-                                defer sys_err.deref();
+                                const _sys_err_guard = DerefGuard<@TypeOf(sys_err)>{ val: sys_err };
                                 const buf = _.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
                                 return _.writeFailingError(buf, 1);
                             }
@@ -358,7 +374,7 @@ pub const State = union(enum) {
     }
 
     pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
-        defer if (err := e) err.deref();
+        const _err_guard = OptDerefGuard<jsc.SystemError>{ val: e };
         switch (_.state) {
             .waiting_write_err => {
                 if (e != null) {
@@ -372,7 +388,7 @@ pub const State = union(enum) {
     }
 
     pub fn checkTargetTaskDone(*_, task: *ShellMvCheckTargetTask) {
-        * = @intFromPtr(task);
+        * = unsafe { @intFromPtr(task) };
 
         if (comptime bun.Environment.allow_assert) {
             assert(_.state == .check_target);
@@ -407,7 +423,7 @@ pub const State = union(enum) {
         if (exec.tasks_done >= exec.task_count) {
             if (err_val := exec.err) {
                 const sys_err = err_val.toShellSystemError();
-                defer sys_err.deref();
+                const _sys_err_guard = DerefGuard<@TypeOf(sys_err)>{ val: sys_err };
                 const buf = _.bltn().fmtErrorArena(.mv, "{f}: {f}\n", .{ sys_err.path, sys_err.message });
                 if (exec.err_path_owned) bun.default_allocator.free(err_val.path);
                 exec.err = null;
@@ -506,7 +522,7 @@ pub const State = union(enum) {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("mv", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("mv", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }
