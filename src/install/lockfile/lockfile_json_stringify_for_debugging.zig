@@ -62,9 +62,27 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
 
 pub const bun = @import("bun");
+pub fn JsonScopeGuard(comptime W: type) type {
+    return struct {
+        w: W,
+        is_array: bool,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.is_array) {
+                    _ = (blk_catch_0: { break :blk_catch_0 ((self.w.endArray()) catch |__ce_0| { _ = &__ce_0;  }); });
+                } else {
+                    _ = (blk_catch_1: { break :blk_catch_1 ((self.w.endObject()) catch |__ce_1| { _ = &__ce_1;  }); });
+                }
+        }
+    };
+}
+
 const PathBuffer = bun.PathBuffer;
 const ExternalString = bun.Semver.ExternalString;
 const install = bun.install;
@@ -83,9 +101,10 @@ const Tree = Lockfile.Tree;
 pub fn jsonStringifyDependency(client: *const Lockfile, w: anytype, dep_id: DependencyID, dep: Dependency, res: PackageID) !void {
         const sb = client.buffers.string_bytes.items;
         _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_0: { break :blk_catch_0 ((w.endObject()) catch |__ce_0| { _ = &__ce_0;  }); });
-        }
+        var _guard_dep = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_dep;
+        var ___guard_dep_moved = false; _ = &___guard_dep_moved;
+        defer if (!___guard_dep_moved) { ___guard_dep_moved = true; const __T = @TypeOf(_guard_dep); if (@typeInfo(__T) == .optional) { if (_guard_dep) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dep.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dep; _drop_val.__cp_deinit(); } };
         _ = try w.objectField("name");
         _ = try w.write((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(sb));
         if (((dep.version.tag == .npm) and (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).npm.is_alias)) {
@@ -101,9 +120,10 @@ _ = try w.write(null);
 },
 .npm => {
 _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_1: { break :blk_catch_1 ((w.endObject()) catch |__ce_1| { _ = &__ce_1;  }); });
-        }
+        var _guard_npm = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_npm;
+        var ___guard_npm_moved = false; _ = &___guard_npm_moved;
+        defer if (!___guard_npm_moved) { ___guard_npm_moved = true; const __T = @TypeOf(_guard_npm); if (@typeInfo(__T) == .optional) { if (_guard_npm) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_npm.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_npm; _drop_val.__cp_deinit(); } };
         const info: Dependency.Version.NpmInfo = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).npm;
         _ = try w.objectField("name");
         _ = try w.write((if (@typeInfo(@TypeOf(info)) == .@"enum" or @typeInfo(@TypeOf(info)) == .@"union") @tagName(info) else info.name).slice(sb));
@@ -112,9 +132,10 @@ _ = try w.beginObject();
 },
 .dist_tag => {
 _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_2: { break :blk_catch_2 ((w.endObject()) catch |__ce_2| { _ = &__ce_2;  }); });
-        }
+        var _guard_tag = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_tag;
+        var ___guard_tag_moved = false; _ = &___guard_tag_moved;
+        defer if (!___guard_tag_moved) { ___guard_tag_moved = true; const __T = @TypeOf(_guard_tag); if (@typeInfo(__T) == .optional) { if (_guard_tag) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tag.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tag; _drop_val.__cp_deinit(); } };
         const info: Dependency.Version.TagInfo = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).dist_tag;
         _ = try w.objectField("name");
         _ = try w.write((if (@typeInfo(@TypeOf(info)) == .@"enum" or @typeInfo(@TypeOf(info)) == .@"union") @tagName(info) else info.name).slice(sb));
@@ -123,9 +144,10 @@ _ = try w.beginObject();
 },
 .tarball => {
 _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_3: { break :blk_catch_3 ((w.endObject()) catch |__ce_3| { _ = &__ce_3;  }); });
-        }
+        var _guard_tarball = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_tarball;
+        var ___guard_tarball_moved = false; _ = &___guard_tarball_moved;
+        defer if (!___guard_tarball_moved) { ___guard_tarball_moved = true; const __T = @TypeOf(_guard_tarball); if (@typeInfo(__T) == .optional) { if (_guard_tarball) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tarball.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tarball; _drop_val.__cp_deinit(); } };
         const info: Dependency.Version.TarballInfo = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).tarball;
         _ = try w.objectField(@tagName(info.uri));
         _ = try w.write((switch (info.uri) {
@@ -145,9 +167,10 @@ _ = try w.write((if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(d
 },
 .git => {
 _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_4: { break :blk_catch_4 ((w.endObject()) catch |__ce_4| { _ = &__ce_4;  }); });
-        }
+        var _guard_git = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_git;
+        var ___guard_git_moved = false; _ = &___guard_git_moved;
+        defer if (!___guard_git_moved) { ___guard_git_moved = true; const __T = @TypeOf(_guard_git); if (@typeInfo(__T) == .optional) { if (_guard_git) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_git.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_git; _drop_val.__cp_deinit(); } };
         const info: Repository = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).git;
         _ = try w.objectField("owner");
         _ = try w.write(info.owner.slice(sb));
@@ -162,9 +185,10 @@ _ = try w.beginObject();
 },
 .github => {
 _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_5: { break :blk_catch_5 ((w.endObject()) catch |__ce_5| { _ = &__ce_5;  }); });
-        }
+        var _guard_github = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_github;
+        var ___guard_github_moved = false; _ = &___guard_github_moved;
+        defer if (!___guard_github_moved) { ___guard_github_moved = true; const __T = @TypeOf(_guard_github); if (@typeInfo(__T) == .optional) { if (_guard_github) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_github.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_github; _drop_val.__cp_deinit(); } };
         const info: Repository = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).github;
         _ = try w.objectField("owner");
         _ = try w.write(info.owner.slice(sb));
@@ -179,9 +203,10 @@ _ = try w.beginObject();
 },
 .catalog => {
 _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_6: { break :blk_catch_6 ((w.endObject()) catch |__ce_6| { _ = &__ce_6;  }); });
-        }
+        var _guard_catalog = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_catalog;
+        var ___guard_catalog_moved = false; _ = &___guard_catalog_moved;
+        defer if (!___guard_catalog_moved) { ___guard_catalog_moved = true; const __T = @TypeOf(_guard_catalog); if (@typeInfo(__T) == .optional) { if (_guard_catalog) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_catalog.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_catalog; _drop_val.__cp_deinit(); } };
         const info = (if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).catalog;
         _ = try w.objectField("name");
         _ = try w.write((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(sb));
@@ -194,9 +219,10 @@ _ = try w.beginObject();
         _ = try w.objectField("behavior");
         {
             _ = try w.beginObject();
-            defer {
-            _ = (blk_catch_7: { break :blk_catch_7 ((w.endObject()) catch |__ce_7| { _ = &__ce_7;  }); });
-            }
+            var _guard_beh = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+            _ = &_guard_beh;
+            var ___guard_beh_moved = false; _ = &___guard_beh_moved;
+            defer if (!___guard_beh_moved) { ___guard_beh_moved = true; const __T = @TypeOf(_guard_beh); if (@typeInfo(__T) == .optional) { if (_guard_beh) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_beh.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_beh; _drop_val.__cp_deinit(); } };
             const fields = @typeInfo(Behavior).@"struct".fields;
             inline for (fields[1..(fields.len - 1)]) |field| {
                 if (@field(dep.behavior, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))) {
@@ -212,9 +238,10 @@ _ = try w.beginObject();
 pub fn jsonStringify(client: *const Lockfile, w: anytype) !void {
         const sb = client.buffers.string_bytes.items;
         _ = try w.beginObject();
-        defer {
-        _ = (blk_catch_8: { break :blk_catch_8 ((w.endObject()) catch |__ce_8| { _ = &__ce_8;  }); });
-        }
+        var _guard_root = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+        _ = &_guard_root;
+        var ___guard_root_moved = false; _ = &___guard_root_moved;
+        defer if (!___guard_root_moved) { ___guard_root_moved = true; const __T = @TypeOf(_guard_root); if (@typeInfo(__T) == .optional) { if (_guard_root) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_root.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_root; _drop_val.__cp_deinit(); } };
         _ = try w.objectField("format");
         _ = try w.write(@tagName(client.format));
         _ = try w.objectField("meta_hash");
@@ -222,13 +249,17 @@ pub fn jsonStringify(client: *const Lockfile, w: anytype) !void {
         {
             _ = try w.objectField("package_index");
             _ = try w.beginObject();
-            defer {
-            _ = (blk_catch_9: { break :blk_catch_9 ((w.endObject()) catch |__ce_9| { _ = &__ce_9;  }); });
-            }
+            var _guard_pkg_idx = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+            _ = &_guard_pkg_idx;
+            var ___guard_pkg_idx_moved = false; _ = &___guard_pkg_idx_moved;
+            defer if (!___guard_pkg_idx_moved) { ___guard_pkg_idx_moved = true; const __T = @TypeOf(_guard_pkg_idx); if (@typeInfo(__T) == .optional) { if (_guard_pkg_idx) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pkg_idx.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pkg_idx; _drop_val.__cp_deinit(); } };
             var iter = client.package_index.iterator();
             _ = &iter;
             while (iter.next()) |it| {
-                const entry: PackageIndex.Entry = it.value_ptr.*;
+                const entry: PackageIndex.Entry = (blk: {
+                break :blk it.value_ptr.*;
+
+});
                 const first_id = (switch (entry) {
 .id => |id| id,
 .ids => |ids| ids.items[0],
@@ -253,9 +284,10 @@ _ = try w.beginArray();
         {
             _ = try w.objectField("trees");
             _ = try w.beginArray();
-            defer {
-            _ = (blk_catch_10: { break :blk_catch_10 ((w.endArray()) catch |__ce_10| { _ = &__ce_10;  }); });
-            }
+            var _guard_trees = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = true };
+            _ = &_guard_trees;
+            var ___guard_trees_moved = false; _ = &___guard_trees_moved;
+            defer if (!___guard_trees_moved) { ___guard_trees_moved = true; const __T = @TypeOf(_guard_trees); if (@typeInfo(__T) == .optional) { if (_guard_trees) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_trees.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_trees; _drop_val.__cp_deinit(); } };
             const dependencies = client.buffers.dependencies.items;
             const hoisted_deps = client.buffers.hoisted_dependencies.items;
             const resolutions = client.buffers.resolutions.items;
@@ -270,9 +302,10 @@ _ = try w.beginArray();
                 const __end_1 = client.buffers.trees.items.len;
                 while (tree_id < __end_1) : (tree_id += 1) {
                     _ = try w.beginObject();
-                    defer {
-                    _ = (blk_catch_11: { break :blk_catch_11 ((w.endObject()) catch |__ce_11| { _ = &__ce_11;  }); });
-                    }
+                    var _guard_tree = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                    _ = &_guard_tree;
+                    var ___guard_tree_moved = false; _ = &___guard_tree_moved;
+                    defer if (!___guard_tree_moved) { ___guard_tree_moved = true; const __T = @TypeOf(_guard_tree); if (@typeInfo(__T) == .optional) { if (_guard_tree) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tree.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tree; _drop_val.__cp_deinit(); } };
                     const tree = client.buffers.trees.items[@as(usize, @intCast(tree_id))];
                     _ = try w.objectField("id");
                     _ = try w.write(tree_id);
@@ -286,9 +319,10 @@ _ = try w.beginArray();
                     _ = try w.objectField("dependencies");
                     {
                         _ = try w.beginObject();
-                        defer {
-                        _ = (blk_catch_12: { break :blk_catch_12 ((w.endObject()) catch |__ce_12| { _ = &__ce_12;  }); });
-                        }
+                        var _guard_tree_deps = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                        _ = &_guard_tree_deps;
+                        var ___guard_tree_deps_moved = false; _ = &___guard_tree_deps_moved;
+                        defer if (!___guard_tree_deps_moved) { ___guard_tree_deps_moved = true; const __T = @TypeOf(_guard_tree_deps); if (@typeInfo(__T) == .optional) { if (_guard_tree_deps) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tree_deps.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tree_deps; _drop_val.__cp_deinit(); } };
                         for (cp_iter_slice(tree.dependencies.get(hoisted_deps))) |tree_dep_id| {
                             _ = &tree_dep_id;
                             const dep = dependencies[@as(usize, @intCast(tree_dep_id))];
@@ -296,9 +330,10 @@ _ = try w.beginArray();
                             _ = try w.objectField((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(sb));
                             {
                                 _ = try w.beginObject();
-                                defer {
-                                _ = (blk_catch_13: { break :blk_catch_13 ((w.endObject()) catch |__ce_13| { _ = &__ce_13;  }); });
-                                }
+                                var _guard_tree_dep = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                                _ = &_guard_tree_dep;
+                                var ___guard_tree_dep_moved = false; _ = &___guard_tree_dep_moved;
+                                defer if (!___guard_tree_dep_moved) { ___guard_tree_dep_moved = true; const __T = @TypeOf(_guard_tree_dep); if (@typeInfo(__T) == .optional) { if (_guard_tree_dep) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tree_dep.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tree_dep; _drop_val.__cp_deinit(); } };
                                 _ = try w.objectField("id");
                                 _ = try w.write(tree_dep_id);
                                 _ = try w.objectField("package_id");
@@ -312,9 +347,10 @@ _ = try w.beginArray();
         {
             _ = try w.objectField("dependencies");
             _ = try w.beginArray();
-            defer {
-            _ = (blk_catch_14: { break :blk_catch_14 ((w.endArray()) catch |__ce_14| { _ = &__ce_14;  }); });
-            }
+            var _guard_deps = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = true };
+            _ = &_guard_deps;
+            var ___guard_deps_moved = false; _ = &___guard_deps_moved;
+            defer if (!___guard_deps_moved) { ___guard_deps_moved = true; const __T = @TypeOf(_guard_deps); if (@typeInfo(__T) == .optional) { if (_guard_deps) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deps.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deps; _drop_val.__cp_deinit(); } };
             const dependencies = client.buffers.dependencies.items;
             const resolutions = client.buffers.resolutions.items;
             {
@@ -331,17 +367,19 @@ _ = try w.beginArray();
         {
             _ = try w.objectField("packages");
             _ = try w.beginArray();
-            defer {
-            _ = (blk_catch_15: { break :blk_catch_15 ((w.endArray()) catch |__ce_15| { _ = &__ce_15;  }); });
-            }
+            var _guard_pkgs = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = true };
+            _ = &_guard_pkgs;
+            var ___guard_pkgs_moved = false; _ = &___guard_pkgs_moved;
+            defer if (!___guard_pkgs_moved) { ___guard_pkgs_moved = true; const __T = @TypeOf(_guard_pkgs); if (@typeInfo(__T) == .optional) { if (_guard_pkgs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pkgs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pkgs; _drop_val.__cp_deinit(); } };
             var i: usize = 0;
             _ = &i;
             while ((i < client.packages.len)) : (i = (i + 1)) {
                 const pkg: Package = client.packages.get(i);
                 _ = try w.beginObject();
-                defer {
-                _ = (blk_catch_16: { break :blk_catch_16 ((w.endObject()) catch |__ce_16| { _ = &__ce_16;  }); });
-                }
+                var _guard_pkg = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                _ = &_guard_pkg;
+                var ___guard_pkg_moved = false; _ = &___guard_pkg_moved;
+                defer if (!___guard_pkg_moved) { ___guard_pkg_moved = true; const __T = @TypeOf(_guard_pkg); if (@typeInfo(__T) == .optional) { if (_guard_pkg) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pkg.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pkg; _drop_val.__cp_deinit(); } };
                 _ = try w.objectField("id");
                 _ = try w.write(i);
                 _ = try w.objectField("name");
@@ -352,9 +390,10 @@ _ = try w.beginArray();
                 {
                     const res = pkg.resolution;
                     _ = try w.beginObject();
-                    defer {
-                    _ = (blk_catch_17: { break :blk_catch_17 ((w.endObject()) catch |__ce_17| { _ = &__ce_17;  }); });
-                    }
+                    var _guard_res = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                    _ = &_guard_res;
+                    var ___guard_res_moved = false; _ = &___guard_res_moved;
+                    defer if (!___guard_res_moved) { ___guard_res_moved = true; const __T = @TypeOf(_guard_res); if (@typeInfo(__T) == .optional) { if (_guard_res) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_res.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_res; _drop_val.__cp_deinit(); } };
                     _ = try w.objectField("tag");
                     _ = try w.write(@tagName(res.tag));
                     _ = try w.objectField("value");
@@ -365,9 +404,10 @@ _ = try w.beginArray();
                 _ = try w.objectField("dependencies");
                 {
                     _ = try w.beginArray();
-                    defer {
-                    _ = (blk_catch_18: { break :blk_catch_18 ((w.endArray()) catch |__ce_18| { _ = &__ce_18;  }); });
-                    }
+                    var _guard_pkg_deps = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = true };
+                    _ = &_guard_pkg_deps;
+                    var ___guard_pkg_deps_moved = false; _ = &___guard_pkg_deps_moved;
+                    defer if (!___guard_pkg_deps_moved) { ___guard_pkg_deps_moved = true; const __T = @TypeOf(_guard_pkg_deps); if (@typeInfo(__T) == .optional) { if (_guard_pkg_deps) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pkg_deps.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pkg_deps; _drop_val.__cp_deinit(); } };
                     var dep_id: u32 = pkg.dependencies.off;
                     _ = &dep_id;
                     const dep_end = (pkg.dependencies.off + pkg.dependencies.len);
@@ -378,9 +418,10 @@ _ = try w.beginArray();
                 if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".arch))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".arch))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".arch))) != Npm.Architecture.all_value)) {
                     _ = try w.objectField("arch");
                     _ = try w.beginArray();
-                    defer {
-                    _ = (blk_catch_19: { break :blk_catch_19 ((w.endArray()) catch |__ce_19| { _ = &__ce_19;  }); });
-                    }
+                    var _guard_arch = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = true };
+                    _ = &_guard_arch;
+                    var ___guard_arch_moved = false; _ = &___guard_arch_moved;
+                    defer if (!___guard_arch_moved) { ___guard_arch_moved = true; const __T = @TypeOf(_guard_arch); if (@typeInfo(__T) == .optional) { if (_guard_arch) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arch.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arch; _drop_val.__cp_deinit(); } };
                     for (cp_iter_slice(Npm.Architecture.NameMap.kvs)) |kv| {
                         _ = &kv;
                         if (pkg.@"meta".arch.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
@@ -391,9 +432,10 @@ _ = try w.beginArray();
                 if (((if (comptime @typeInfo(@TypeOf(@intFromEnum(pkg.@"meta".os))) == .@"enum") cp_cast_int(u16, @intFromEnum(@intFromEnum(pkg.@"meta".os))) else cp_cast_int(u16, @intFromEnum(pkg.@"meta".os))) != Npm.OperatingSystem.all_value)) {
                     _ = try w.objectField("os");
                     _ = try w.beginArray();
-                    defer {
-                    _ = (blk_catch_20: { break :blk_catch_20 ((w.endArray()) catch |__ce_20| { _ = &__ce_20;  }); });
-                    }
+                    var _guard_os = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = true };
+                    _ = &_guard_os;
+                    var ___guard_os_moved = false; _ = &___guard_os_moved;
+                    defer if (!___guard_os_moved) { ___guard_os_moved = true; const __T = @TypeOf(_guard_os); if (@typeInfo(__T) == .optional) { if (_guard_os) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_os.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_os; _drop_val.__cp_deinit(); } };
                     for (cp_iter_slice(Npm.OperatingSystem.NameMap.kvs)) |kv| {
                         _ = &kv;
                         if (pkg.@"meta".os.has((if (@typeInfo(@TypeOf(kv)) == .@"enum") @intFromEnum(kv) else kv.value))) {
@@ -418,17 +460,19 @@ _ = try w.write(null);
 },
 .file => {
 _ = try w.beginObject();
-                defer {
-                _ = (blk_catch_21: { break :blk_catch_21 ((w.endObject()) catch |__ce_21| { _ = &__ce_21;  }); });
-                }
+                var _guard_bin_file = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                _ = &_guard_bin_file;
+                var ___guard_bin_file_moved = false; _ = &___guard_bin_file_moved;
+                defer if (!___guard_bin_file_moved) { ___guard_bin_file_moved = true; const __T = @TypeOf(_guard_bin_file); if (@typeInfo(__T) == .optional) { if (_guard_bin_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bin_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bin_file; _drop_val.__cp_deinit(); } };
                 _ = try w.objectField("file");
                 _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).file.slice(sb));
 },
 .named_file => {
 _ = try w.beginObject();
-                defer {
-                _ = (blk_catch_22: { break :blk_catch_22 ((w.endObject()) catch |__ce_22| { _ = &__ce_22;  }); });
-                }
+                var _guard_bin_named = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                _ = &_guard_bin_named;
+                var ___guard_bin_named_moved = false; _ = &___guard_bin_named_moved;
+                defer if (!___guard_bin_named_moved) { ___guard_bin_named_moved = true; const __T = @TypeOf(_guard_bin_named); if (@typeInfo(__T) == .optional) { if (_guard_bin_named) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bin_named.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bin_named; _drop_val.__cp_deinit(); } };
                 _ = try w.objectField("name");
                 _ = try w.write((if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).named_file[0].slice(sb));
                 _ = try w.objectField("file");
@@ -440,9 +484,10 @@ _ = try w.objectField("dir");
 },
 .map => {
 _ = try w.beginObject();
-                defer {
-                _ = (blk_catch_23: { break :blk_catch_23 ((w.endObject()) catch |__ce_23| { _ = &__ce_23;  }); });
-                }
+                var _guard_bin_map = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                _ = &_guard_bin_map;
+                var ___guard_bin_map_moved = false; _ = &___guard_bin_map_moved;
+                defer if (!___guard_bin_map_moved) { ___guard_bin_map_moved = true; const __T = @TypeOf(_guard_bin_map); if (@typeInfo(__T) == .optional) { if (_guard_bin_map) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bin_map.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bin_map; _drop_val.__cp_deinit(); } };
                 const data: []const ExternalString = (if (@typeInfo(@TypeOf(pkg.bin)) == .@"enum") @intFromEnum(pkg.bin) else pkg.bin.value).map.get(client.buffers.extern_strings.items);
                 var bin_i: usize = 0;
                 _ = &bin_i;
@@ -455,9 +500,10 @@ _ = try w.beginObject();
                 {
                     _ = try w.objectField("scripts");
                     _ = try w.beginObject();
-                    defer {
-                    _ = (blk_catch_24: { break :blk_catch_24 ((w.endObject()) catch |__ce_24| { _ = &__ce_24;  }); });
-                    }
+                    var _guard_scripts = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+                    _ = &_guard_scripts;
+                    var ___guard_scripts_moved = false; _ = &___guard_scripts_moved;
+                    defer if (!___guard_scripts_moved) { ___guard_scripts_moved = true; const __T = @TypeOf(_guard_scripts); if (@typeInfo(__T) == .optional) { if (_guard_scripts) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_scripts.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_scripts; _drop_val.__cp_deinit(); } };
                     inline for ((comptime std.@"meta".fieldNames(Lockfile.Scripts))) |field_name| {
                         const script = @field(pkg.scripts, field_name).slice(sb);
                         if ((script.len > 0)) {
@@ -473,9 +519,10 @@ _ = try w.beginObject();
         _ = try w.objectField("workspace_paths");
         {
             _ = try w.beginObject();
-            defer {
-            _ = (blk_catch_25: { break :blk_catch_25 ((w.endObject()) catch |__ce_25| { _ = &__ce_25;  }); });
-            }
+            var _guard_wp = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+            _ = &_guard_wp;
+            var ___guard_wp_moved = false; _ = &___guard_wp_moved;
+            defer if (!___guard_wp_moved) { ___guard_wp_moved = true; const __T = @TypeOf(_guard_wp); if (@typeInfo(__T) == .optional) { if (_guard_wp) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_wp.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_wp; _drop_val.__cp_deinit(); } };
             const wp_keys = client.workspace_paths.keys();
             const wp_vals = client.workspace_paths.values();
             {
@@ -494,9 +541,10 @@ _ = try w.beginObject();
         _ = try w.objectField("workspace_versions");
         {
             _ = try w.beginObject();
-            defer {
-            _ = (blk_catch_26: { break :blk_catch_26 ((w.endObject()) catch |__ce_26| { _ = &__ce_26;  }); });
-            }
+            var _guard_wv = JsonScopeGuard(@TypeOf(w)){ .w = w, .is_array = false };
+            _ = &_guard_wv;
+            var ___guard_wv_moved = false; _ = &___guard_wv_moved;
+            defer if (!___guard_wv_moved) { ___guard_wv_moved = true; const __T = @TypeOf(_guard_wv); if (@typeInfo(__T) == .optional) { if (_guard_wv) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_wv.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_wv; _drop_val.__cp_deinit(); } };
             const wv_keys = client.workspace_versions.keys();
             const wv_vals = client.workspace_versions.values();
             {

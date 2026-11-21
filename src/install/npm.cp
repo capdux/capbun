@@ -10,6 +10,67 @@ import npm_jsc_mod from "../install_jsc/npm_jsc.zig";
 
 type OptSemverVersion = Semver.Version?;
 
+pub struct DeinitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct CloseValGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct CloseIfValGuard<T> {
+    val: T,
+    active: bool = true,
+    ~init() {
+        if (_.active) _.val.close();
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct FreeIfGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    active: bool,
+    ~init() {
+        if (_.active) _.allocator.free(_.slice);
+    }
+}
+
+pub struct EndGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.end();
+    }
+}
+
+pub struct DestroyGuard<T> {
+    ptr: T,
+    ~init() {
+        bun.destroy(_.ptr);
+    }
+}
+
+pub struct UnlinkAtGuard {
+    dir: std.fs.Dir,
+    path: [:0]const u8,
+    ~init() {
+        bun.sys.unlinkat(.fromStdDir(_.dir), _.path).unwrap() catch {};
+    }
+}
+
 const WhoamiError = OOM || error{
     NeedAuth,
     ProbablyInvalidAuth,
@@ -36,7 +97,7 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager): WhoamiErr
     const ci_name = bun.ci.detectCIName();
 
     let print_buf = std.array_list.Managed(u8).init(allocator);
-    defer print_buf.deinit();
+    const _guard_print_buf = DeinitGuard<*@TypeOf(print_buf)!>{ ptr: &print_buf };
     let print_writer = print_buf.writer();
 
     let headers: http.HeaderBuilder = {};
@@ -1082,7 +1143,7 @@ pub struct PackageManifest {
 
             const allocator = stack_fallback.get();
             let buffer = std.array_list.Managed(u8).initCapacity(allocator, manifest.byteLength(scope) + 64)?;
-            defer buffer.deinit();
+            const _guard_buffer = DeinitGuard<*@TypeOf(buffer)!>{ ptr: &buffer };
             const writer = &buffer.writer();
             Serializer.write(manifest, scope, @TypeOf(writer), writer)?;
             // --- Perf Improvement #1 ----
@@ -1142,21 +1203,21 @@ pub struct PackageManifest {
             };
 
             {
-                errdefer file.close();
+                let _guard_file = CloseIfValGuard<@TypeOf(file)>{ val: file };
                 file.writeAll(buffer.items).unwrap()?;
+                _guard_file.active = false;
             }
             if (comptime Environment.isWindows) {
                 let realpath2_buf: bun.PathBuffer = undefined;
-                let did_close = false;
-                errdefer if (!did_close) file.close();
+                let _guard_file = CloseIfValGuard<@TypeOf(file)>{ val: file };
 
                 const cache_dir_abs = PackageManager.get().cache_directory_path;
                 const cache_path_abs = bun.path.joinAbsStringBufZ(cache_dir_abs, &realpath2_buf, &.{ cache_dir_abs, outpath }, .auto);
                 file.close();
-                did_close = true;
+                _guard_file.active = false;
                 bun.sys.renameat(bun.FD.cwd(), path_to_use_for_opening_file, bun.FD.cwd(), cache_path_abs).unwrap()?;
             } else if (Environment.isLinux && is_using_o_tmpfile) {
-                defer file.close();
+                const _guard_file = CloseValGuard<@TypeOf(file)>{ val: file };
                 // Attempt #1.
                 bun.sys.linkatTmpfile(file.handle, cache_dir, outpath).unwrap() catch {
                     // Attempt #2: the file may already exist. Let's unlink and try again.
@@ -1166,17 +1227,14 @@ pub struct PackageManifest {
                     // There is no attempt #3. This is a cache, so it's not essential.
                 };
             } else {
-                defer file.close();
+                const _guard_file = CloseValGuard<@TypeOf(file)>{ val: file };
                 // Attempt #1. Rename the file.
                 const rc = bun.sys.renameat(.fromStdDir(tmpdir), tmp_path, cache_dir, outpath);
 
                 switch (rc) {
                     .err => |e| {
                         // Fallback path: atomically swap from <tmp>/*.npm -> <cache>/*.npm, then unlink the temporary file.
-                        defer {
-                            // If atomically swapping fails, then we should still unlink the temporary file as a courtesy.
-                            bun.sys.unlinkat(.fromStdDir(tmpdir), tmp_path).unwrap() catch {};
-                        }
+                        const _guard_unlink = UnlinkAtGuard{ dir: tmpdir, path: tmp_path };
 
                         if (switch (e.getErrno()) {
                             .EXIST, .NOTEMPTY, .OPNOTSUPP => true,
@@ -1223,10 +1281,10 @@ pub struct PackageManifest {
 
                 static fn run(task: *bun.ThreadPool.Task) {
                     let tracer = bun.perf.trace("PackageManifest.Serializer.save");
-                    defer tracer.end();
+                    const _guard_tracer = EndGuard<*@TypeOf(tracer)!>{ ptr: &tracer };
 
                     const save_task: *@This() = @fieldParentPtr("task", task);
-                    defer bun.destroy(save_task);
+                    const _guard_save_task = DestroyGuard<@TypeOf(save_task)>{ ptr: save_task };
 
                     Serializer.save(&save_task.manifest, save_task.scope, save_task.tmpdir, save_task.cache_dir) catch |e| {
                         if (PackageManager.verbose_install) {
@@ -1276,7 +1334,7 @@ pub struct PackageManifest {
             let file_path_buf: [576]u8 = undefined;
             const file_name = manifestFileName(&file_path_buf, file_id, scope)?;
             const cache_file = File.openat(.fromStdDir(cache_dir), file_name, bun.O.RDONLY, 0).unwrap() catch return null;
-            defer cache_file.close();
+            const _guard_cache_file = CloseValGuard<@TypeOf(cache_file)>{ val: cache_file };
 
             const loaded = loadByFile(allocator, scope, cache_file) catch null;
             if (m := loaded) {
@@ -1290,11 +1348,12 @@ pub struct PackageManifest {
 
         static fn loadByFile(allocator: std.mem.Allocator, scope: *const Registry.Scope, manifest_file: File): !PackageManifest? {
             let tracer = bun.perf.trace("PackageManifest.Serializer.loadByFile");
-            defer tracer.end();
+            const _guard_tracer = EndGuard<*@TypeOf(tracer)!>{ ptr: &tracer };
             const bytes = manifest_file.readToEnd(allocator).unwrap()?;
-            errdefer allocator.free(bytes);
+            let _guard_bytes = FreeIfGuard<[]const u8>{ allocator: allocator, slice: bytes, active: true };
 
             if (bytes.len < header_bytes.len) {
+                _guard_bytes.active = false;
                 return null;
             }
 
@@ -1302,8 +1361,10 @@ pub struct PackageManifest {
             if (m := readAll(bytes, scope)?) {
                 manifest = m;
             } else {
+                _guard_bytes.active = false;
                 return null;
             }
+            _guard_bytes.active = false;
 
             if (manifest.versions.len == 0) {
                 // it's impossible to publish a package with zero versions, bust
@@ -1779,7 +1840,7 @@ pub struct PackageManifest {
         initializeStore();
         defer bun.ast.Stmt.Data.Store.memory_allocator.?.pop();
         let arena_ = bun.ArenaAllocator.init(allocator);
-        defer arena_.deinit();
+        const _guard_arena = DeinitGuard<*@TypeOf(arena_)!>{ ptr: &arena_ };
         const json = BunJSON.parseUTF8(
             source,
             log,
@@ -1803,16 +1864,16 @@ pub struct PackageManifest {
         let result: PackageManifest = bun.serializable(PackageManifest{});
 
         let string_pool = String.Builder.StringPool.init(default_allocator);
-        defer string_pool.deinit();
+        const _guard_string_pool = DeinitGuard<*@TypeOf(string_pool)!>{ ptr: &string_pool };
         let all_extern_strings_dedupe_map = ExternalStringMapDeduper.initContext(default_allocator, {});
-        defer all_extern_strings_dedupe_map.deinit();
+        const _guard_all_ext = DeinitGuard<*@TypeOf(all_extern_strings_dedupe_map)!>{ ptr: &all_extern_strings_dedupe_map };
         let version_extern_strings_dedupe_map = ExternalStringMapDeduper.initContext(default_allocator, {});
-        defer version_extern_strings_dedupe_map.deinit();
+        const _guard_ver_ext = DeinitGuard<*@TypeOf(version_extern_strings_dedupe_map)!>{ ptr: &version_extern_strings_dedupe_map };
         let optional_peer_dep_names = std.array_list.Managed(u64).init(default_allocator);
-        defer optional_peer_dep_names.deinit();
+        const _guard_opt_peer = DeinitGuard<*@TypeOf(optional_peer_dep_names)!>{ ptr: &optional_peer_dep_names };
 
         let bundled_deps_set = bun.StringSet.init(allocator);
-        defer bundled_deps_set.deinit();
+        const _guard_bundled = DeinitGuard<*@TypeOf(bundled_deps_set)!>{ ptr: &bundled_deps_set };
         let bundle_all_deps = false;
 
         let bundled_deps_count: usize = 0;
@@ -2698,22 +2759,22 @@ pub struct PackageManifest {
                 };
 
                 let all_indices = bun.default_allocator.alloc(Int, max_versions_count)?;
-                defer bun.default_allocator.free(all_indices);
+                const _guard_indices = FreeGuard<[]Int>{ allocator: bun.default_allocator, slice: all_indices };
                 const releases_list = [ &result.pkg.releases, &result.pkg.prereleases ];
 
                 let all_cloned_versions = bun.default_allocator.alloc(Semver.Version, max_versions_count)?;
-                defer bun.default_allocator.free(all_cloned_versions);
+                const _guard_versions = FreeGuard<[]Semver.Version>{ allocator: bun.default_allocator, slice: all_cloned_versions };
 
                 let all_cloned_packages = bun.default_allocator.alloc(PackageVersion, max_versions_count)?;
-                defer bun.default_allocator.free(all_cloned_packages);
+                const _guard_packages = FreeGuard<[]PackageVersion>{ allocator: bun.default_allocator, slice: all_cloned_packages };
 
                 inline for (release_i of 0..2) {
                     let release = releases_list[release_i];
                     let indices = all_indices[0..release.keys.len];
                     const cloned_packages = all_cloned_packages[0..release.keys.len];
                     const cloned_versions = all_cloned_versions[0..release.keys.len];
-                    let versioned_packages_ = @constCast(release.values.get(versioned_packages));
-                    let semver_versions_ = @constCast(release.keys.get(all_semver_versions));
+                    let versioned_packages_ = unsafe { @constCast(release.values.get(versioned_packages)) };
+                    let semver_versions_ = unsafe { @constCast(release.keys.get(all_semver_versions)) };
                     @memcpy(cloned_packages, versioned_packages_);
                     @memcpy(cloned_versions, semver_versions_);
 

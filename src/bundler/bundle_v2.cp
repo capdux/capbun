@@ -48,13 +48,70 @@ pub const MangledProps = std.AutoArrayHashMapUnmanaged(Ref, string);
 import PathToSourceIndexMap from "./PathToSourceIndexMap.zig";
 import barrel_imports from "./barrel_imports.zig";
 
+struct PathBufferGuard<T> {
+    buf: T? = null,
+    ~init() {
+        if (b := _.buf) {
+            bun.path_buffer_pool.put(b);
+        }
+    }
+};
+
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit();
+        }
+    }
+};
+
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.alloc);
+        }
+    }
+};
+
+struct TraceEndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.end();
+    }
+};
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.close();
+    }
+};
+
+struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+};
+
+struct DestroyGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.alloc.destroy(_.ptr);
+    }
+};
+
 pub const Watcher = bun.jsc.hot_reloader.NewHotReloader(BundleV2, EventLoop, true);
 
 /// This assigns a concise, predictable, and unique `.pretty` attribute to a Path.
 /// DevServer relies on pretty paths for identifying modules, so they must be unique.
 pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, top_level_dir: string, allocator: std.mem.Allocator): !Fs.Path {
     const buf = bun.path_buffer_pool.get();
-    defer bun.path_buffer_pool.put(buf);
+    const _guard_buf = PathBufferGuard<@TypeOf(buf)>{ buf: buf };
 
     const is_node = bun.strings.eqlComptime(path.namespace, "node");
     if (is_node &&
@@ -69,7 +126,7 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
     // "node:" prefix is not emitted.
     if (path.isFile() || is_node) {
         const buf2 = if (target == .bake_server_components_ssr) bun.path_buffer_pool.get() else buf;
-        defer if (target == .bake_server_components_ssr) bun.path_buffer_pool.put(buf2);
+        const _guard_buf2 = PathBufferGuard<@TypeOf(buf2)>{ buf: if (target == .bake_server_components_ssr) buf2 else null };
         const rel = bun.path.relativePlatformBuf(buf2, top_level_dir, path.text, .loose, false);
         let path_clone = path;
         // stack-allocated temporary is not leaked because dupeAlloc on the path will
@@ -397,7 +454,7 @@ pub struct BundleV2 {
 
     fn findReachableFiles(*_): ![]Index {
         let trace = bun.perf.trace("Bundler.findReachableFiles");
-        defer trace.end();
+        const _guard_trace = TraceEndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
 
         // Create a quick index for server-component boundaries.
         // We need to mark the generated files as reachable, or else many files will appear missing.
@@ -407,14 +464,21 @@ pub struct BundleV2 {
             _.graph.server_component_boundaries.slice().bitSet(stack_alloc, _.graph.input_files.len)?
         else
             null;
-        defer if (*b := scb_bitset) b.deinit(stack_alloc);
+        const _guard_scb = DeinitWithAllocGuard<bun.bit_set.DynamicBitSetUnmanaged>{
+            ptr: if (*b := scb_bitset) unsafe { b as *bun.bit_set.DynamicBitSetUnmanaged! } else null,
+            alloc: stack_alloc,
+        };
 
         let additional_files_imported_by_js_and_inlined_in_css = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(stack_alloc, _.graph.input_files.len)?;
         let additional_files_imported_by_css_and_inlined = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(stack_alloc, _.graph.input_files.len)?;
-        defer {
-            additional_files_imported_by_js_and_inlined_in_css.deinit(stack_alloc);
-            additional_files_imported_by_css_and_inlined.deinit(stack_alloc);
-        }
+        const _guard_add_js = DeinitWithAllocGuard<bun.bit_set.DynamicBitSetUnmanaged>{
+            ptr: unsafe { &additional_files_imported_by_js_and_inlined_in_css },
+            alloc: stack_alloc,
+        };
+        const _guard_add_css = DeinitWithAllocGuard<bun.bit_set.DynamicBitSetUnmanaged>{
+            ptr: unsafe { &additional_files_imported_by_css_and_inlined },
+            alloc: stack_alloc,
+        };
 
         _.dynamic_import_entry_points = std.AutoArrayHashMap(Index.Int, void).init(_.allocator());
 
@@ -437,7 +501,7 @@ pub struct BundleV2 {
             additional_files_imported_by_js_and_inlined_in_css: &additional_files_imported_by_js_and_inlined_in_css,
             additional_files_imported_by_css_and_inlined: &additional_files_imported_by_css_and_inlined,
         };
-        defer visitor.visited.deinit();
+        const _guard_visited = DeinitGuard<@TypeOf(visitor.visited)>{ ptr: unsafe { &visitor.visited } };
 
         // If we don't include the runtime, __toESM or __toCommonJS will not get
         // imported and weird things will happen
@@ -1030,11 +1094,12 @@ pub struct BundleV2 {
             Watcher.enableHotModuleReloading(bundle, null);
         }
         // errdefer pool.destroy();
-        errdefer bundle.graph.heap.deinit();
+        let _guard_heap = DeinitGuard<@TypeOf(bundle.graph.heap)>{ ptr: unsafe { &bundle.graph.heap } };
 
         pool.* = .init(bundle, thread_pool)?;
         bundle.graph.pool = pool;
         pool.start();
+        _guard_heap.ptr = null;
         return bundle;
     }
 
@@ -1242,7 +1307,7 @@ pub struct BundleV2 {
 
     fn cloneAST(*_)! {
         let trace = bun.perf.trace("Bundler.cloneAST");
-        defer trace.end();
+        const _guard_trace = TraceEndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
         bun.safety.alloc.assertEq(_.allocator(), _.transpiler.allocator);
         bun.safety.alloc.assertEq(_.allocator(), _.linker.graph.allocator);
         _.linker.graph.ast = _.graph.ast.clone(_.allocator())?;
@@ -1549,7 +1614,7 @@ pub struct BundleV2 {
 
         // Find all external dependencies from reachable files
         let external_deps = bun.StringSet.init(bun.default_allocator);
-        defer external_deps.deinit();
+        const _guard_external_deps = DeinitGuard<@TypeOf(external_deps)>{ ptr: unsafe { &external_deps } };
 
         const import_records = _.graph.ast.items(.import_records);
 
@@ -1963,7 +2028,7 @@ pub struct BundleV2 {
 
     static fn onLoad(load: *bun.jsc.API.JSBundler.Load, bundle: *BundleV2) {
         debug("onLoad: ({d}, {s})", [ load.source_index.get(), @tagName(load.value) ]);
-        defer load.deinit();
+        const _guard_load = DeinitGuard<bun.jsc.API.JSBundler.Load>{ ptr: unsafe { load as *bun.jsc.API.JSBundler.Load! } };
         defer {
             if (comptime FeatureFlags.help_catch_memory_issues) {
                 bundle.graph.heap.helpCatchMemoryIssues();
@@ -2079,7 +2144,7 @@ pub struct BundleV2 {
     }
 
     static fn onResolve(resolve: *bun.jsc.API.JSBundler.Resolve, bundle: *BundleV2) {
-        defer resolve.deinit();
+        const _guard_resolve = DeinitGuard<bun.jsc.API.JSBundler.Resolve>{ ptr: unsafe { resolve as *bun.jsc.API.JSBundler.Resolve! } };
         defer bundle.decrementScanCounter();
         debug("onResolve: ({s}:{s}, {s})", [ resolve.import_record.namespace, resolve.import_record.specifier, @tagName(resolve.value) ]);
 
@@ -2268,17 +2333,20 @@ pub struct BundleV2 {
             on_parse_finalizers.deinit(bun.default_allocator);
         }
 
-        defer {
-            _.graph.ast.deinit(_.allocator());
-            _.graph.input_files.deinit(_.allocator());
-            _.graph.entry_points.deinit(_.allocator());
-            _.graph.entry_point_original_names.deinit(_.allocator());
-        }
+        const _ast_ptr = unsafe { &_.graph.ast };
+        const _input_ptr = unsafe { &_.graph.input_files };
+        const _entry_ptr = unsafe { &_.graph.entry_points };
+        const _entry_names_ptr = unsafe { &_.graph.entry_point_original_names };
+        const _guard_ast = DeinitWithAllocGuard<@TypeOf(_ast_ptr.*)>{ ptr: _ast_ptr, alloc: _.allocator() };
+        const _guard_input = DeinitWithAllocGuard<@TypeOf(_input_ptr.*)>{ ptr: _input_ptr, alloc: _.allocator() };
+        const _guard_entry = DeinitWithAllocGuard<@TypeOf(_entry_ptr.*)>{ ptr: _entry_ptr, alloc: _.allocator() };
+        const _guard_entry_names = DeinitWithAllocGuard<@TypeOf(_entry_names_ptr.*)>{ ptr: _entry_names_ptr, alloc: _.allocator() };
 
         if (_.graph.pool.workers_assignments.count() > 0) {
             {
                 _.graph.pool.workers_assignments_lock.lock();
-                defer _.graph.pool.workers_assignments_lock.unlock();
+                const _lock_ptr = unsafe { &_.graph.pool.workers_assignments_lock };
+                const _guard_lock = UnlockGuard<@TypeOf(_lock_ptr.*)>{ ptr: _lock_ptr };
                 for (worker of _.graph.pool.workers_assignments.values()) {
                     worker.deinitSoon();
                 }
@@ -2402,7 +2470,7 @@ pub struct BundleV2 {
                 bun.Output.warn("Failed to open output directory '{s}': {s}", [ outdir, @errorName(e) ]);
                 return;
             };
-            defer root_dir.close();
+            const _guard_root_dir = CloseGuard<@TypeOf(root_dir)>{ ptr: unsafe { &root_dir } };
 
             // Create parent directories if needed (relative to outdir)
             if (parent := std.fs.path.dirname(file_path)) {
@@ -2416,7 +2484,7 @@ pub struct BundleV2 {
             * = jsc.Node.fs.NodeFS.writeFileWithPathBuffer(&path_buf, {
                 data: { buffer: {
                     buffer: {
-                        ptr: @constCast(content.ptr),
+                        ptr: unsafe { @constCast(content.ptr) },
                         len: @as(u32, @truncate(content.len)),
                         byte_len: @as(u32, @truncate(content.len)),
                     },
@@ -2522,7 +2590,7 @@ pub struct BundleV2 {
                         // resolution, which is not usually the case.
                         css_total_files.appendAssumeCapacity(Index.init(index));
                         let parse_log = Logger.Log.init(_.allocator());
-                        defer parse_log.deinit();
+                        const _guard_parse_log = DeinitGuard<Logger.Log>{ ptr: unsafe { &parse_log } };
                         const parse_log_ptr = unsafe { &parse_log };
                         if (_.linker.scanCSSImports(
                             @as(u32, @intCast(index)),
@@ -2628,7 +2696,7 @@ pub struct BundleV2 {
         if (Environment.isDebug) for (idx of js_reachable_files) {
             bun.assert(_.graph.ast.items(.parts)[idx.get()].len != 0); // will create a memory leak
         }
-        _.linker.computeDataForSourceMap(@as([]Index.Int, @ptrCast(js_reachable_files)));
+        _.linker.computeDataForSourceMap(unsafe { @as([]Index.Int, @ptrCast(js_reachable_files)) });
         errdefer {
             // reminder that the caller cannot handle this error, since source contents
             // are default-allocated. the only option is to crash here.
@@ -2664,7 +2732,7 @@ pub struct BundleV2 {
             content: {
                 javascript: { 
                     // TODO(@paperclover): remove this ptrCast when Source Index is fixed
-                    files_in_chunk_order: @as([]Index.Int, @ptrCast(js_reachable_files)),
+                    files_in_chunk_order: unsafe { @as([]Index.Int, @ptrCast(js_reachable_files)) },
                     parts_in_chunk_in_order: js_part_ranges,
                 },
             },
@@ -3259,7 +3327,7 @@ pub struct BundleV2 {
                                 }
                             } else {
                                 const buf = bun.path_buffer_pool.get();
-                                defer bun.path_buffer_pool.put(buf);
+                                const _guard_buf = PathBufferGuard<@TypeOf(buf)>{ buf: buf };
                                 const specifier_to_use = if (loader == .html && bun.strings.hasPrefix(import_record.path.text, bun.fs.FileSystem.instance.top_level_dir)) brk: {
                                     const specifier_to_use = import_record.path.text[bun.fs.FileSystem.instance.top_level_dir.len..];
                                     if (Environment.isWindows) {
@@ -3624,7 +3692,7 @@ pub struct BundleV2 {
     static fn onParseTaskComplete(parse_result: *ParseTask.Result, bundle: *BundleV2) {
         let trace = bun.perf.trace("Bundler.onParseTaskComplete");
         const graph = unsafe { &bundle.graph };
-        defer trace.end();
+        const _guard_trace = TraceEndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
         if (parse_result.external.function != null) {
             const source = switch (parse_result.value) {
                 inline .empty, .err => |data| data.source_index.get(),
@@ -3638,7 +3706,10 @@ pub struct BundleV2 {
             }
         }
 
-        defer bun.default_allocator.destroy(parse_result);
+        const _guard_parse_result = DestroyGuard<ParseTask.Result>{
+            ptr: unsafe { parse_result as *ParseTask.Result! },
+            alloc: bun.default_allocator,
+        };
 
         let diff: i32 = -1;
         defer {
@@ -3649,7 +3720,7 @@ pub struct BundleV2 {
         }
 
         let resolve_queue = ResolveQueue.init(bundle.allocator());
-        defer resolve_queue.deinit();
+        const _guard_resolve_queue = DeinitGuard<ResolveQueue>{ ptr: unsafe { &resolve_queue } };
         let process_log = true;
 
         if (parse_result.value == .success) {

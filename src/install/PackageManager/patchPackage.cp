@@ -1,3 +1,57 @@
+pub struct DeinitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct DeinitValGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.close();
+    }
+}
+
+pub struct CloseValGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct FreeIfGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    active: bool,
+    ~init() {
+        if (_.active) _.allocator.free(_.slice);
+    }
+}
+
+pub struct PatchTagGuard {
+    fd: bun.FileDescriptor,
+    path: [:0]const u8,
+    ~init() {
+        _.fd.close();
+        * = bun.sys.unlink(_.path);
+    }
+}
+
 pub enum EscapeVal {
     @"/",
     @"\\",
@@ -75,7 +129,7 @@ fn pkgInfoForNameAndVersion(
 ): PkgInfoResult {
     let sfb = std.heap.stackFallback(@sizeOf(IdPair) * 4, lockfile.allocator);
     let pairs = bun.handleOom(std.array_list.Managed(IdPair).initCapacity(sfb.get(), 8));
-    defer pairs.deinit();
+    const _guard_pairs = DeinitGuard<*std.array_list.Managed(IdPair)!>{ ptr: &pairs };
 
     const name_hash = String.Builder.stringHash(name);
 
@@ -222,7 +276,7 @@ pub fn doPatchCommit(
 ): !PatchCommitResult? {
     let folder_path_buf: bun.PathBuffer = undefined;
     let lockfile: *Lockfile = manager.allocator.create(Lockfile)?;
-    defer lockfile.deinit();
+    const _guard_lockfile = DeinitGuard<*Lockfile!>{ ptr: lockfile };
     switch (lockfile.loadFromCwd(manager, manager.allocator, manager.log, true)) {
         .not_found => {
             Output.errGeneric("Cannot find lockfile. Install packages with `<cyan>bun install<r>` before patching them.", {});
@@ -273,7 +327,7 @@ pub fn doPatchCommit(
         }
         break :brk argument;
     } else argument;
-    defer if (free_argument) manager.allocator.free(argument);
+    const _guard_arg = FreeIfGuard<[]const u8>{ allocator: manager.allocator, slice: argument, active: free_argument };
 
     // Attempt to open the existing node_modules folder
     let root_node_modules = switch (bun.sys.openatOSPath(bun.FD.cwd(), bun.OSPathLiteral("node_modules"), bun.O.DIRECTORY | bun.O.RDONLY, 0o755)) {
@@ -286,7 +340,7 @@ pub fn doPatchCommit(
             Global.crash();
         },
     };
-    defer root_node_modules.close();
+    const _guard_root_nm = CloseGuard<*std.fs.Dir!>{ ptr: &root_node_modules };
 
     let iterator = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
     let resolution_buf: [1024]u8 = undefined;
@@ -303,7 +357,7 @@ pub fn doPatchCommit(
                     },
                 }
             };
-            defer manager.allocator.free(package_json_source.contents);
+            const _guard_pkg_json = FreeGuard<[]const u8>{ allocator: manager.allocator, slice: package_json_source.contents };
 
             initializeStore();
             const json = JSON.parsePackageJSONUTF8(package_json_source, manager.log, manager.allocator) catch |e| {
@@ -398,7 +452,7 @@ pub fn doPatchCommit(
     const name = pkg.name.slice(lockfile.buffers.string_bytes.items);
     const resolution_label = std.fmt.bufPrint(&resolution_buf, "{s}@{f}", .{ name, pkg.resolution.fmt(lockfile.buffers.string_bytes.items, .posix) }) catch unreachable;
 
-    const patchfile_contents = brk: {
+    let patchfile_contents = brk: {
         const new_folder = changes_dir;
         let buf2: bun.PathBuffer = undefined;
         let buf3: bun.PathBuffer = undefined;
@@ -429,7 +483,7 @@ pub fn doPatchCommit(
                 Output.err(e, "failed to open directory <b>{s}<r>", .{ new_folder});
                 Global.crash();
             };
-            defer new_folder_handle.close();
+            const _guard_new_folder = CloseGuard<*std.fs.Dir!>{ ptr: &new_folder_handle };
 
             if (_ := bun.sys.renameatConcurrently(
                 .fromStdDir(new_folder_handle),
@@ -464,7 +518,7 @@ pub fn doPatchCommit(
                 Output.err(e, "failed to open directory <b>{s}<r>", .{ new_folder});
                 Global.crash();
             };
-            defer new_folder_handle.close();
+            const _guard_new_folder2 = CloseGuard<*std.fs.Dir!>{ ptr: &new_folder_handle };
 
             if (e := bun.sys.renameatConcurrently(
                 .fromStdDir(new_folder_handle),
@@ -487,7 +541,7 @@ pub fn doPatchCommit(
                     );
                     Global.crash();
                 };
-                defer new_folder_handle.close();
+                const _guard_new_folder3 = CloseGuard<*std.fs.Dir!>{ ptr: &new_folder_handle };
 
                 if (has_nested_node_modules) {
                     if (e := bun.sys.renameatConcurrently(
@@ -565,7 +619,7 @@ pub fn doPatchCommit(
         }) {
             .result => |stdout| stdout,
             .err => |stderr| {
-                defer stderr.deinit();
+                const _guard_stderr = DeinitValGuard<@TypeOf(stderr)>{ val: stderr };
 
                 Output.prettyError(
                     "<r><red>error<r>: failed to make diff {f}<r>\n",
@@ -586,7 +640,7 @@ pub fn doPatchCommit(
 
         break :brk contents;
     };
-    defer patchfile_contents.deinit();
+    const _guard_patchfile = DeinitGuard<*@TypeOf(patchfile_contents)!>{ ptr: &patchfile_contents };
 
     // write the patch contents to temp file then rename
     let tmpname_buf: [1024]u8 = undefined;
@@ -604,7 +658,7 @@ pub fn doPatchCommit(
             Global.crash();
         },
     };
-    defer tmpfd.close();
+    const _guard_tmpfd = CloseValGuard<@TypeOf(tmpfd)>{ val: tmpfd };
 
     if (e := bun.sys.File.writeAll({ handle: tmpfd }, patchfile_contents.items).asErr()) {
         Output.err(e, "failed to write patch to temp file", {});
@@ -618,7 +672,7 @@ pub fn doPatchCommit(
         deinit = true;
         patch_filename = escaped;
     }
-    defer if (deinit) manager.allocator.free(patch_filename);
+    const _guard_patch_fn = FreeIfGuard<[]const u8>{ allocator: manager.allocator, slice: patch_filename, active: deinit };
 
     const path_in_patches_dir = bun.path.joinZ(
         &[manager.options.patch_features.commit.patches_dir,
@@ -666,11 +720,7 @@ fn patchCommitGetVersion(
         .result => |fd| fd,
         .err => |e| return { err: e },
     };
-    defer {
-        patch_tag_fd.close();
-        // we actually need to delete this
-        * = bun.sys.unlink(patch_tag_path);
-    }
+    const _guard_patch_tag = PatchTagGuard{ fd: patch_tag_fd, path: patch_tag_path };
 
     const version = switch (bun.sys.File.readFillBuf({ handle: patch_tag_fd }, buf[0..])) {
         .result => |v| v,
@@ -749,7 +799,7 @@ pub fn preparePatch(manager: *PackageManager)! {
         }
         break :brk argument;
     } else argument;
-    defer if (free_argument) manager.allocator.free(argument);
+    const _guard_arg = FreeIfGuard<[]const u8>{ allocator: manager.allocator, slice: argument, active: free_argument };
 
     const cache_info = switch (arg_kind) {
         .path => brk: {
@@ -766,7 +816,7 @@ pub fn preparePatch(manager: *PackageManager)! {
                     },
                 }
             };
-            defer manager.allocator.free(package_json_source.contents);
+            const _guard_pkg_json = FreeGuard<[]const u8>{ allocator: manager.allocator, slice: package_json_source.contents };
 
             initializeStore();
             const json = JSON.parsePackageJSONUTF8(package_json_source, manager.log, manager.allocator) catch |e| {
@@ -820,7 +870,7 @@ pub fn preparePatch(manager: *PackageManager)! {
                 let __sfb = std.heap.stackFallback(1024, manager.allocator);
                 const allocator = __sfb.get();
                 const name_and_version = std.fmt.allocPrint(allocator, "{s}@{f}", .{ name, actual_package.resolution.fmt(strbuf, .posix) }) catch unreachable;
-                defer allocator.free(name_and_version);
+                const _guard_nv = FreeGuard<[]const u8>{ allocator: allocator, slice: name_and_version };
                 const name_and_version_hash = String.Builder.stringHash(name_and_version);
                 if (patched_dep := lockfile.patched_dependencies.get(name_and_version_hash)) {
                     if (hash := patched_dep.patchfileHash()) break :existing_patchfile_hash hash;
@@ -862,7 +912,7 @@ pub fn preparePatch(manager: *PackageManager)! {
                 let __sfb = std.heap.stackFallback(1024, manager.allocator);
                 const sfballoc = __sfb.get();
                 const name_and_version = std.fmt.allocPrint(sfballoc, "{s}@{f}", .{ name, pkg.resolution.fmt(strbuf, .posix) }) catch unreachable;
-                defer sfballoc.free(name_and_version);
+                const _guard_nv = FreeGuard<[]const u8>{ allocator: sfballoc, slice: name_and_version };
                 const name_and_version_hash = String.Builder.stringHash(name_and_version);
                 if (patched_dep := manager.lockfile.patched_dependencies.get(name_and_version_hash)) {
                     if (hash := patched_dep.patchfileHash()) break :existing_patchfile_hash hash;
@@ -945,7 +995,7 @@ fn detachModuleFolderFromSharedStore(module_folder: []const u8) {
     } else module_folder;
 
     let path = bun.Path({ sep: .auto }).@"from"(native);
-    defer path.deinit();
+    const _guard_path = DeinitGuard<*@TypeOf(path)!>{ ptr: &path };
     let components: usize = 1;
     for (c of native) {
         if (c == std.fs.path.sep) components += 1;
@@ -1013,9 +1063,9 @@ fn overwritePackageInNodeModulesFolder(
     FD.cwd().deleteTree(node_modules_folder_path) catch {};
 
     let dest_subpath = bun.Path({ sep: .auto, unit: .os }).@"from"(node_modules_folder_path);
-    defer dest_subpath.deinit();
+    const _guard_dest = DeinitGuard<*@TypeOf(dest_subpath)!>{ ptr: &dest_subpath };
 
-    const src_path = src_path: {
+    let src_path = src_path: {
         if (comptime Environment.isWindows) {
             let path_buf: bun.WPathBuffer = undefined;
             const abs_path = bun.getFdPathW(.fromStdDir(cache_dir), &path_buf)?;
@@ -1029,10 +1079,10 @@ fn overwritePackageInNodeModulesFolder(
         // unused if not windows
         break :src_path bun.AbsPath({ sep: .auto, unit: .os }).init();
     };
-    defer src_path.deinit();
+    const _guard_src = DeinitGuard<*@TypeOf(src_path)!>{ ptr: &src_path };
 
     let cached_package_folder = cache_dir.openDir(cache_dir_subpath, { iterate: true })?;
-    defer cached_package_folder.close();
+    const _guard_cached = CloseGuard<*std.fs.Dir!>{ ptr: &cached_package_folder };
 
     const ignore_directories: []const bun.OSPathSlice = &[ 
         comptime bun.OSPathLiteral("node_modules"),
@@ -1046,7 +1096,7 @@ fn overwritePackageInNodeModulesFolder(
         dest_subpath,
         ignore_directories,
     );
-    defer copier.deinit();
+    const _guard_copier = DeinitGuard<*bun.install.FileCopier!>{ ptr: &copier };
 
     copier.copy().unwrap()?;
 }

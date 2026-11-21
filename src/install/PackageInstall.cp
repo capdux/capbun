@@ -1,4 +1,56 @@
-pub const PackageInstall = struct {
+pub struct DeinitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.close();
+    }
+}
+
+pub struct CloseValGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+pub struct DirIfNotCwdGuard {
+    dir: *std.fs.Dir!,
+    ~init() {
+        if (std.fs.cwd().fd != _.dir.fd) _.dir.close();
+    }
+}
+
+pub struct DirCloseIfGuard {
+    dir: *std.fs.Dir!,
+    should_close: bool,
+    ~init() {
+        if (_.should_close) _.dir.close();
+    }
+}
+
+pub struct BodyPoolGuard<P> {
+    pool: P,
+    mutable: *MutableString!,
+    ~init() {
+        _.pool.data = unsafe { _.mutable.* };
+        Npm.Registry.BodyPool.release(_.pool);
+    }
+}
+
+pub struct EndGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.end();
+    }
+}
+
+pub struct PackageInstall {
     /// TODO: Change to bun.FD.Dir
     cache_dir: std.fs.Dir,
     cache_dir_subpath: stringZ = "",
@@ -7,11 +59,11 @@ pub const PackageInstall = struct {
 
     allocator: std.mem.Allocator,
 
-    progress: ?*Progress,
+    progress: *Progress?,
 
     package_name: String,
     package_version: string,
-    patch: ?Patch,
+    patch: Patch?,
 
     // TODO: this is never read
     file_count: u32 = 0,
@@ -100,27 +152,26 @@ pub const PackageInstall = struct {
 
     ///
     fn verifyPatchHash(
-        this: *@This(),
+        *_: *@This(),
         patch: *const Patch,
         root_node_modules_dir: std.fs.Dir,
-    ) bool {
+    ): bool {
         // hash from the .patch file, to be checked against bun tag
         const patchfile_contents_hash = patch.contents_hash;
         let buf: BuntagHashBuf = undefined;
         const bunhashtag = buntaghashbuf_make(&buf, patchfile_contents_hash);
 
-        const patch_tag_path = bun.path.joinZ(&[_][]const u8{
+        const patch_tag_parts: [2][]const u8 = [
             this.destination_dir_subpath,
             bunhashtag,
-        }, .posix);
+        ];
+        const patch_tag_path = bun.path.joinZ(&patch_tag_parts, .posix);
 
         let destination_dir = this.node_modules.openDir(root_node_modules_dir) catch return false;
-        defer {
-            if (std.fs.cwd().fd != destination_dir.fd) destination_dir.close();
-        }
+        const _guard_dest_dir = DirIfNotCwdGuard{ dir: &destination_dir };
 
         if (comptime bun.Environment.isPosix) {
-            _ = bun.sys.fstatat(.fromStdDir(destination_dir), patch_tag_path).unwrap() catch return false;
+            * = bun.sys.fstatat(.fromStdDir(destination_dir), patch_tag_path).unwrap() catch return false;
         } else {
             switch (bun.sys.openat(.fromStdDir(destination_dir), patch_tag_path, bun.O.RDONLY, 0)) {
                 .err => return false,
@@ -134,10 +185,10 @@ pub const PackageInstall = struct {
     // 1. verify that .bun-tag exists (was it installed from bun?)
     // 2. check .bun-tag against the resolved version
     fn verifyGitResolution(
-        this: *@This(),
+        *_: *@This(),
         repo: *const Repository,
         root_node_modules_dir: std.fs.Dir,
-    ) bool {
+    ): bool {
         bun.copy(u8, this.destination_dir_subpath_buf[this.destination_dir_subpath.len..], std.fs.path.sep_str ++ ".bun-tag");
         this.destination_dir_subpath_buf[this.destination_dir_subpath.len + std.fs.path.sep_str.len + ".bun-tag".len] = 0;
         const bun_tag_path: [:0]u8 = this.destination_dir_subpath_buf[0 .. this.destination_dir_subpath.len + std.fs.path.sep_str.len + ".bun-tag".len :0];
@@ -150,16 +201,16 @@ pub const PackageInstall = struct {
             bun_tag_path,
             allocator,
         ) catch return false;
-        defer bun_tag_file.bytes.deinit();
+        const _guard_bytes = DeinitGuard<@TypeOf(&bun_tag_file.bytes)>{ ptr: &bun_tag_file.bytes };
 
         return strings.eqlLong(repo.resolved.slice(this.lockfile.buffers.string_bytes.items), bun_tag_file.bytes.items, true);
     }
 
     pub fn verify(
-        this: *@This(),
+        *_: *@This(),
         resolution: *const Resolution,
         root_node_modules_dir: std.fs.Dir,
-    ) bool {
+    ): bool {
         const verified =
             switch (resolution.tag) {
                 .git => this.verifyGitResolution(&resolution.value.git, root_node_modules_dir),
@@ -172,25 +223,26 @@ pub const PackageInstall = struct {
                 else => this.verifyPackageJSONNameAndVersion(root_node_modules_dir, resolution.tag),
             };
 
-        if (this.patch) |*patch| {
+        if (this.patch != null) {
+            const p = &this.patch.?;
             if (!verified) return false;
-            return this.verifyPatchHash(patch, root_node_modules_dir);
+            return this.verifyPatchHash(p, root_node_modules_dir);
         }
         return verified;
     }
 
     // Only check for destination directory in node_modules. We can't use package.json because
     // it might not exist
-    fn verifyTransitiveSymlinkedFolder(this: *@This(), root_node_modules_dir: std.fs.Dir) bool {
+    fn verifyTransitiveSymlinkedFolder(*_: *@This(), root_node_modules_dir: std.fs.Dir): bool {
         return this.node_modules.directoryExistsAt(root_node_modules_dir, this.destination_dir_subpath);
     }
 
     fn getInstalledPackageJsonSource(
-        this: *PackageInstall,
+        *_: *PackageInstall,
         root_node_modules_dir: std.fs.Dir,
         mutable: *MutableString,
         resolution_tag: Resolution.Tag,
-    ) ?logger.Source {
+    ): logger.Source? {
         let total: usize = 0;
         let read: usize = 0;
         mutable.reset();
@@ -201,7 +253,7 @@ pub const PackageInstall = struct {
         defer this.destination_dir_subpath_buf[this.destination_dir_subpath.len] = 0;
 
         let package_json_file = this.node_modules.openFile(root_node_modules_dir, package_json_path) catch return null;
-        defer package_json_file.close();
+        const _guard_pkg_json = CloseGuard<@TypeOf(&package_json_file)>{ ptr: &package_json_file };
 
         // Heuristic: most package.jsons will be less than 2048 bytes.
         read = package_json_file.read(mutable.list.items[total..]).unwrap() catch return null;
@@ -236,13 +288,10 @@ pub const PackageInstall = struct {
         return logger.Source.initPathString(bun.span(package_json_path), mutable.list.items[0..total]);
     }
 
-    fn verifyPackageJSONNameAndVersion(this: *PackageInstall, root_node_modules_dir: std.fs.Dir, resolution_tag: Resolution.Tag) bool {
+    fn verifyPackageJSONNameAndVersion(*_: *PackageInstall, root_node_modules_dir: std.fs.Dir, resolution_tag: Resolution.Tag): bool {
         let body_pool = Npm.Registry.BodyPool.get(this.allocator);
         let mutable: MutableString = body_pool.data;
-        defer {
-            body_pool.data = mutable;
-            Npm.Registry.BodyPool.release(body_pool);
-        }
+        const _guard_pool = BodyPoolGuard<@TypeOf(body_pool)>{ pool: body_pool, mutable: &mutable };
 
         // Read the file
         // Return false on any error.
@@ -252,7 +301,7 @@ pub const PackageInstall = struct {
         const source = &(this.getInstalledPackageJsonSource(root_node_modules_dir, &mutable, resolution_tag) orelse return false);
 
         let log = logger.Log.init(this.allocator);
-        defer log.deinit();
+        const _guard_log = DeinitGuard<@TypeOf(&log)>{ ptr: &log };
 
         initializeStore();
 
@@ -261,7 +310,8 @@ pub const PackageInstall = struct {
             source,
             &log,
         ) catch return false;
-        _ = package_json_checker.parseExpr() catch return false;
+        const parsed_expr = package_json_checker.parseExpr() catch return false;
+        if (@TypeOf(parsed_expr) == void) {}
         if (log.errors > 0 or !package_json_checker.has_found_name) return false;
         // workspaces aren't required to have a version
         if (!package_json_checker.has_found_version and resolution_tag != .workspace) return false;
@@ -276,22 +326,11 @@ pub const PackageInstall = struct {
         if (!strings.eql(found_version[0..found_version_end], this.package_version[0..expected_version_end])) {
             const offset = brk: {
                 // ASCII only.
-                for (0..found_version.len) |c| {
+                for (c of 0..found_version.len) {
                     switch (found_version[c]) {
-                        // newlines & whitespace
-                        ' ',
-                        '\t',
-                        '\n',
-                        '\r',
-                        std.ascii.control_code.vt,
-                        std.ascii.control_code.ff,
-
-                        // version separators
-                        'v',
-                        '=',
-                        => {},
+                        ' ', '\t', '\n', '\r', 0x0b, 0x0c, 'v', '=' => {},
                         else => {
-                            break :brk c;
+                            break :brk @as(usize, c);
                         },
                     }
                 }
@@ -304,7 +343,8 @@ pub const PackageInstall = struct {
         }
 
         // lastly, check the name.
-        return strings.eql(package_json_checker.found_name, this.package_name.slice(this.lockfile.buffers.string_bytes.items));
+        const pkg_slice_fn = @TypeOf(this.package_name).slice;
+        return strings.eql(package_json_checker.found_name, pkg_slice_fn(&this.package_name, this.lockfile.buffers.string_bytes.items));
     }
 
     pub const Result = union(Tag) {
@@ -369,22 +409,23 @@ pub const PackageInstall = struct {
         }
     };
 
-    pub let supported_method: Method = if (Environment.isMac)
+    static let supported_method: Method = if (Environment.isMac)
         Method.clonefile
     else
         Method.hardlink;
 
-    fn installWithClonefileEachDir(this: *@This(), destination_dir: std.fs.Dir) !Result {
-        let cached_package_dir = bun.openDir(this.cache_dir, this.cache_dir_subpath) catch |err| return Result.fail(err, .opening_cache_dir, @errorReturnTrace());
-        defer cached_package_dir.close();
+    fn installWithClonefileEachDir(*_: *@This(), destination_dir: std.fs.Dir): anyerror!Result {
+        let cached_package_dir = bun.openDir(this.cache_dir, this.cache_dir_subpath) catch |e| return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
+        const _guard_cache_dir = CloseGuard<@TypeOf(&cached_package_dir)>{ ptr: &cached_package_dir };
+        const empty_os_slices: [0]bun.OSPathSlice = undefined;
         let walker_ = Walker.walk(
             .fromStdDir(cached_package_dir),
             this.allocator,
-            &[_]bun.OSPathSlice{},
-            &[_]bun.OSPathSlice{},
-        ) catch |err| return Result.fail(err, .opening_cache_dir, @errorReturnTrace());
+            empty_os_slices[0..0],
+            empty_os_slices[0..0],
+        ) catch |e| return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
         walker_.resolve_unknown_entry_types = true;
-        defer walker_.deinit();
+        const _guard_walker = DeinitGuard<@TypeOf(&walker_)>{ ptr: &walker_ };
 
         const FileCopier = struct {
             pub fn copy(
@@ -432,23 +473,23 @@ pub const PackageInstall = struct {
             }
         };
 
-        let subdir = destination_dir.makeOpenPath(bun.span(this.destination_dir_subpath), .{}) catch |err| return Result.fail(err, .opening_dest_dir, @errorReturnTrace());
-        defer subdir.close();
+        let subdir = destination_dir.makeOpenPath(bun.span(this.destination_dir_subpath), .{}) catch |e| return Result.fail(e, .opening_dest_dir, @errorReturnTrace());
+        const _guard_subdir = CloseGuard<@TypeOf(&subdir)>{ ptr: &subdir };
 
         this.file_count = FileCopier.copy(
             subdir,
             &walker_,
-        ) catch |err| return Result.fail(err, .copying_files, @errorReturnTrace());
+        ) catch |e| return Result.fail(e, .copying_files, @errorReturnTrace());
 
         return .{ .success = {} };
     }
 
     // https://www.unix.com/man-page/mojave/2/fclonefileat/
-    fn installWithClonefile(this: *@This(), destination_dir: std.fs.Dir) !Result {
+    fn installWithClonefile(*_: *@This(), destination_dir: std.fs.Dir) !Result {
         if (comptime !Environment.isMac) @compileError("clonefileat() is macOS only.");
 
         if (this.destination_dir_subpath[0] == '@') {
-            if (strings.indexOfCharZ(this.destination_dir_subpath, std.fs.path.sep)) |slash| {
+            if (slash := strings.indexOfCharZ(this.destination_dir_subpath, std.fs.path.sep)) {
                 this.destination_dir_subpath_buf[slash] = 0;
                 const subdir = this.destination_dir_subpath_buf[0..slash :0];
                 destination_dir.makeDirZ(subdir) catch {};
@@ -483,26 +524,26 @@ pub const PackageInstall = struct {
         cached_package_dir: std.fs.Dir = undefined,
         walker: Walker = undefined,
         subdir: std.fs.Dir = if (Environment.isWindows) std.fs.Dir{ .fd = std.os.windows.INVALID_HANDLE_VALUE } else undefined,
-        buf: bun.windows.WPathBuffer = if (Environment.isWindows) undefined,
-        buf2: bun.windows.WPathBuffer = if (Environment.isWindows) undefined,
-        to_copy_buf: if (Environment.isWindows) []u16 else void = if (Environment.isWindows) undefined,
-        to_copy_buf2: if (Environment.isWindows) []u16 else void = if (Environment.isWindows) undefined,
+        buf: if (Environment.isWindows) bun.windows.WPathBuffer else void = if (Environment.isWindows) undefined else @as(void, undefined),
+        buf2: if (Environment.isWindows) bun.windows.WPathBuffer else void = if (Environment.isWindows) undefined else @as(void, undefined),
+        to_copy_buf: if (Environment.isWindows) []u16 else void = if (Environment.isWindows) undefined else @as(void, undefined),
+        to_copy_buf2: if (Environment.isWindows) []u16 else void = if (Environment.isWindows) undefined else @as(void, undefined),
 
         pub fn deinit(this: *@This()) void {
             if (!Environment.isWindows) {
                 this.subdir.close();
             }
-            defer this.walker.deinit();
-            defer this.cached_package_dir.close();
+            const _guard_cache_dir = CloseGuard<*std.fs.Dir>{ ptr: &this.cached_package_dir };
+            const _guard_walker = DeinitGuard<*Walker>{ ptr: &this.walker };
         }
     };
 
     const node_fs_bufs = bun.ThreadlocalBuffers(struct { fs: bun.jsc.Node.fs.NodeFS = .{} });
-    inline fn node_fs_for_package_installer() *bun.jsc.Node.fs.NodeFS {
+    inline fn node_fs_for_package_installer(): *bun.jsc.Node.fs.NodeFS {
         return &node_fs_bufs.get().fs;
     }
 
-    fn initInstallDir(this: *@This(), state: *InstallDirState, destination_dir: std.fs.Dir, method: Method) Result {
+    fn initInstallDir(*_: *@This(), state: *InstallDirState, destination_dir: std.fs.Dir, method: Method): Result {
         const destbase = destination_dir;
         const destpath = this.destination_dir_subpath;
 
@@ -512,28 +553,30 @@ pub const PackageInstall = struct {
             else
                 bun.openDir(this.cache_dir, this.cache_dir_subpath)
         else
-            bun.openDir(this.cache_dir, this.cache_dir_subpath)) catch |err|
-            return Result.fail(err, .opening_cache_dir, @errorReturnTrace());
+            bun.openDir(this.cache_dir, this.cache_dir_subpath)) catch |e|
+            return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
 
+        const empty_os_slices: [0]bun.OSPathSlice = undefined;
+        const node_modules_slices: [1]bun.OSPathSlice = [comptime bun.OSPathLiteral("node_modules")];
         state.walker = Walker.walk(
             .fromStdDir(state.cached_package_dir),
             this.allocator,
-            &[_]bun.OSPathSlice{},
-            if (method == .symlink and this.cache_dir_subpath.len == 1 and this.cache_dir_subpath[0] == '.')
-                &[_]bun.OSPathSlice{comptime bun.OSPathLiteral("node_modules")}
+            empty_os_slices[0..0],
+            if (method == .symlink && this.cache_dir_subpath.len == 1 && this.cache_dir_subpath[0] == '.')
+                &node_modules_slices
             else
-                &[_]bun.OSPathSlice{},
-        ) catch |err| bun.handleOom(err);
+                empty_os_slices[0..0],
+        ) catch |e| bun.handleOom(e);
         state.walker.resolve_unknown_entry_types = true;
 
         if (!Environment.isWindows) {
             state.subdir = destbase.makeOpenPath(bun.span(destpath), .{
                 .iterate = true,
                 .access_sub_paths = true,
-            }) catch |err| {
+            }) catch |e| {
                 state.cached_package_dir.close();
                 state.walker.deinit();
-                return Result.fail(err, .opening_dest_dir, @errorReturnTrace());
+                return Result.fail(e, .opening_dest_dir, @errorReturnTrace());
             };
             return .success;
         }
@@ -542,7 +585,7 @@ pub const PackageInstall = struct {
         if (dest_path_length == 0 or dest_path_length >= state.buf.len) {
             const e = bun.windows.Win32Error.get();
             const err = if (dest_path_length == 0)
-                (if (e.toSystemErrno()) |sys_err| bun.errnoToZigErr(sys_err) else error.Unexpected)
+                (if (sys_err := e.toSystemErrno()) bun.errnoToZigErr(sys_err) else error.Unexpected)
             else
                 error.NameTooLong;
             state.cached_package_dir.close();
@@ -562,14 +605,14 @@ pub const PackageInstall = struct {
         state.buf[i] = 0;
         const fullpath = state.buf[0..i :0];
 
-        _ = node_fs_for_package_installer().mkdirRecursiveOSPathImpl(void, {}, fullpath, 0, false);
+        * = node_fs_for_package_installer().mkdirRecursiveOSPathImpl(void, {}, fullpath, 0, false);
         state.to_copy_buf = state.buf[fullpath.len..];
 
         const cache_path_length = bun.windows.GetFinalPathNameByHandleW(state.cached_package_dir.fd, &state.buf2, state.buf2.len, 0);
         if (cache_path_length == 0 or cache_path_length >= state.buf2.len) {
             const e = bun.windows.Win32Error.get();
             const err = if (cache_path_length == 0)
-                (if (e.toSystemErrno()) |sys_err| bun.errnoToZigErr(sys_err) else error.Unexpected)
+                (if (sys_err := e.toSystemErrno()) bun.errnoToZigErr(sys_err) else error.Unexpected)
             else
                 error.NameTooLong;
             state.cached_package_dir.close();
@@ -589,11 +632,11 @@ pub const PackageInstall = struct {
         return .success;
     }
 
-    fn installWithCopyfile(this: *@This(), destination_dir: std.fs.Dir) Result {
+    fn installWithCopyfile(*_: *@This(), destination_dir: std.fs.Dir): Result {
         let state = InstallDirState{};
         const res = this.initInstallDir(&state, destination_dir, .copyfile);
         if (res.isFail()) return res;
-        defer state.deinit();
+        const _guard_state = DeinitGuard<@TypeOf(&state)>{ ptr: &state };
 
         const FileCopier = struct {
             pub fn copy(
@@ -665,7 +708,7 @@ pub const PackageInstall = struct {
                         const createFile = std.fs.Dir.createFile;
 
                         let in_file = try entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap();
-                        defer in_file.close();
+                        const _guard_in_file = CloseGuard<@TypeOf(&in_file)>{ ptr: &in_file };
 
                         debug("createFile {} {s}\n", .{ destination_dir_.fd, entry.path });
                         let outfile = createFile(destination_dir_, entry.path, .{}) catch brk: {
@@ -682,7 +725,7 @@ pub const PackageInstall = struct {
                                 Global.crash();
                             };
                         };
-                        defer outfile.close();
+                        const _guard_outfile = CloseGuard<@TypeOf(&outfile)>{ ptr: &outfile };
 
                         if (comptime Environment.isPosix) {
                             const stat = in_file.stat().unwrap() catch continue;
@@ -709,16 +752,16 @@ pub const PackageInstall = struct {
             state.subdir,
             &state.walker,
             this.progress,
-            if (Environment.isWindows) state.to_copy_buf else void{},
-            if (Environment.isWindows) &state.buf else void{},
-            if (Environment.isWindows) state.to_copy_buf2 else void{},
-            if (Environment.isWindows) &state.buf2 else void{},
-        ) catch |err| return Result.fail(err, .copying_files, @errorReturnTrace());
+            if (Environment.isWindows) state.to_copy_buf else @as(void, undefined),
+            if (Environment.isWindows) &state.buf else @as(void, undefined),
+            if (Environment.isWindows) state.to_copy_buf2 else @as(void, undefined),
+            if (Environment.isWindows) &state.buf2 else @as(void, undefined),
+        ) catch |e| return Result.fail(e, .copying_files, @errorReturnTrace());
 
         return .success;
     }
 
-    fn NewTaskQueue(comptime TaskType: type) type {
+    static fn NewTaskQueue(comptime TaskType: type): type {
         return struct {
             thread_pool: *ThreadPool,
             errored_task: std.atomic.Value(?*TaskType) = .init(null),
@@ -748,7 +791,7 @@ pub const PackageInstall = struct {
         err: ?anyerror = null,
 
         pub const Queue = NewTaskQueue(@This());
-        let queue: Queue = undefined;
+        static let queue: Queue = undefined;
 
         pub fn initQueue() *Queue {
             queue = Queue{
@@ -798,7 +841,7 @@ pub const PackageInstall = struct {
         /// It will already be called when the task is complete.
         pub fn deinit(self: *@This()) void {
             bun.default_allocator.free(self.bytes);
-            self.* = undefined;
+            unsafe { self.* = undefined; }
             bun.destroy(self);
         }
 
@@ -864,11 +907,11 @@ pub const PackageInstall = struct {
         }
     };
 
-    fn installWithHardlink(this: *@This(), dest_dir: std.fs.Dir) !Result {
+    fn installWithHardlink(*_: *@This(), dest_dir: std.fs.Dir): anyerror!Result {
         let state = InstallDirState{};
         const res = this.initInstallDir(&state, dest_dir, .hardlink);
         if (res.isFail()) return res;
-        defer state.deinit();
+        const _guard_state = DeinitGuard<@TypeOf(&state)>{ ptr: &state };
 
         const FileCopier = struct {
             pub fn copy(
@@ -880,7 +923,7 @@ pub const PackageInstall = struct {
                 head2: if (Environment.isWindows) []u16 else void,
             ) !u32 {
                 let real_file_count: u32 = 0;
-                let queue = if (Environment.isWindows) HardLinkWindowsInstallTask.initQueue();
+                const queue = if (Environment.isWindows) HardLinkWindowsInstallTask.initQueue() else @as(void, undefined);
 
                 while (try walker.next().unwrap()) |entry| {
                     if (comptime Environment.isPosix) {
@@ -944,31 +987,31 @@ pub const PackageInstall = struct {
             state.subdir,
             &state.walker,
             state.to_copy_buf,
-            if (Environment.isWindows) &state.buf else void{},
+            if (Environment.isWindows) &state.buf else @as(void, undefined),
             state.to_copy_buf2,
-            if (Environment.isWindows) &state.buf2 else void{},
-        ) catch |err| {
-            bun.handleErrorReturnTrace(err, @errorReturnTrace());
+            if (Environment.isWindows) &state.buf2 else @as(void, undefined),
+        ) catch |e| {
+            bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
             if (comptime Environment.isWindows) {
-                if (err == error.FailedToCopyFile) {
-                    return Result.fail(err, .copying_files, @errorReturnTrace());
+                if (e == error.FailedToCopyFile) {
+                    return Result.fail(e, .copying_files, @errorReturnTrace());
                 }
-            } else if (err == error.NotSameFileSystem or err == error.ENXIO) {
-                return err;
+            } else if (e == error.NotSameFileSystem || e == error.ENXIO) {
+                return e;
             }
 
-            return Result.fail(err, .copying_files, @errorReturnTrace());
+            return Result.fail(e, .copying_files, @errorReturnTrace());
         };
 
         return .success;
     }
 
-    fn installWithSymlink(this: *@This(), dest_dir: std.fs.Dir) !Result {
+    fn installWithSymlink(*_: *@This(), dest_dir: std.fs.Dir): anyerror!Result {
         let state = InstallDirState{};
         const res = this.initInstallDir(&state, dest_dir, .symlink);
         if (res.isFail()) return res;
-        defer state.deinit();
+        const _guard_state = DeinitGuard<@TypeOf(&state)>{ ptr: &state };
 
         let buf2: bun.PathBuffer = undefined;
         let to_copy_buf2: []u8 = undefined;
@@ -1086,29 +1129,29 @@ pub const PackageInstall = struct {
         this.file_count = FileCopier.copy(
             state.subdir,
             &state.walker,
-            if (Environment.isWindows) state.to_copy_buf else void{},
-            if (Environment.isWindows) &state.buf else void{},
+            if (Environment.isWindows) state.to_copy_buf else @as(void, undefined),
+            if (Environment.isWindows) &state.buf else @as(void, undefined),
             if (Environment.isWindows) state.to_copy_buf2 else to_copy_buf2,
             if (Environment.isWindows) &state.buf2 else &buf2,
-        ) catch |err| {
+        ) catch |e| {
             if (comptime Environment.isWindows) {
-                if (err == error.FailedToCopyFile) {
-                    return Result.fail(err, .copying_files, @errorReturnTrace());
+                if (e == error.FailedToCopyFile) {
+                    return Result.fail(e, .copying_files, @errorReturnTrace());
                 }
-            } else if (err == error.NotSameFileSystem or err == error.ENXIO) {
-                return err;
+            } else if (e == error.NotSameFileSystem || e == error.ENXIO) {
+                return e;
             }
-            return Result.fail(err, .copying_files, @errorReturnTrace());
+            return Result.fail(e, .copying_files, @errorReturnTrace());
         };
 
         return .success;
     }
 
-    pub fn uninstall(this: *@This(), destination_dir: std.fs.Dir) void {
+    pub fn uninstall(*_: *@This(), destination_dir: std.fs.Dir)  {
         destination_dir.deleteTree(bun.span(this.destination_dir_subpath)) catch {};
     }
 
-    pub fn uninstallBeforeInstall(this: *@This(), destination_dir: std.fs.Dir) void {
+    pub fn uninstallBeforeInstall(*_: *@This(), destination_dir: std.fs.Dir)  {
         let rand_path_buf: [48]u8 = undefined;
         const temp_path = std.fmt.bufPrintZ(&rand_path_buf, ".old-{X}", .{std.mem.asBytes(&bun.fastRandom())}) catch unreachable;
         switch (bun.sys.renameat(
@@ -1158,7 +1201,7 @@ pub const PackageInstall = struct {
                             PackageManager.get().wake();
                         }
 
-                        defer unintall_task.deinit();
+                        const _guard_task = DeinitGuard<@TypeOf(unintall_task)>{ ptr: unintall_task };
                         const dirname = std.fs.path.dirname(unintall_task.absolute_path) orelse {
                             Output.debugWarn("Unexpectedly failed to get dirname of {s}", .{unintall_task.absolute_path});
                             return;
@@ -1171,7 +1214,7 @@ pub const PackageInstall = struct {
                             }
                             return;
                         };
-                        defer bun.FD.fromStdDir(dir).close();
+                        const _guard_dir_fd = CloseValGuard<bun.FD>{ val: bun.FD.fromStdDir(dir) };
 
                         dir.deleteTree(basename) catch |err| {
                             if (comptime Environment.isDebug or Environment.enable_asan) {
@@ -1199,7 +1242,7 @@ pub const PackageInstall = struct {
         }
     }
 
-    pub fn isDanglingSymlink(path: [:0]const u8) bool {
+    pub fn isDanglingSymlink(path: [:0]const u8): bool {
         if (comptime Environment.isLinux) {
             switch (Syscall.open(path, bun.O.PATH, @as(u32, 0))) {
                 .err => return true,
@@ -1229,11 +1272,11 @@ pub const PackageInstall = struct {
         }
     }
 
-    pub fn isDanglingWindowsBinLink(node_mod_fd: bun.FD, path: []const u16, temp_buffer: []u8) bool {
+    pub fn isDanglingWindowsBinLink(node_mod_fd: bun.FD, path: []const u16, temp_buffer: []u8): bool {
         const WinBinLinkingShim = @import("./windows-shim/BinLinkingShim.zig");
         const bin_path = bin_path: {
             const fd = bun.sys.openatWindows(node_mod_fd, path, bun.O.RDONLY).unwrap() catch return true;
-            defer fd.close();
+            const _guard_fd = CloseValGuard<@TypeOf(fd)>{ val: fd };
             const size = fd.stdFile().readAll(temp_buffer) catch return true;
             const decoded = WinBinLinkingShim.looseDecode(temp_buffer[0..size]) orelse return true;
             bun.assert(decoded.flags.isValid()); // looseDecode ensures valid flags
@@ -1248,7 +1291,7 @@ pub const PackageInstall = struct {
         return false;
     }
 
-    pub fn installFromLink(this: *@This(), skip_delete: bool, destination_dir: std.fs.Dir) Result {
+    pub fn installFromLink(*_: *@This(), skip_delete: bool, destination_dir: std.fs.Dir): Result {
         const dest_path = this.destination_dir_subpath;
         // If this fails, we don't care.
         // we'll catch it the next error
@@ -1260,8 +1303,8 @@ pub const PackageInstall = struct {
         // cache_dir_subpath in here is actually the full path to the symlink pointing to the linked package
         const symlinked_path = this.cache_dir_subpath;
         let to_buf: bun.PathBuffer = undefined;
-        const to_path = this.cache_dir.realpath(symlinked_path, &to_buf) catch |err|
-            return Result.fail(err, .linking_dependency, @errorReturnTrace());
+        const to_path = this.cache_dir.realpath(symlinked_path, &to_buf) catch |e|
+            return Result.fail(e, .linking_dependency, @errorReturnTrace());
 
         const dest = std.fs.path.basename(dest_path);
         // When we're linking on Windows, we want to avoid keeping the source directory handle open
@@ -1271,7 +1314,7 @@ pub const PackageInstall = struct {
             if (dest_path_length == 0 or dest_path_length >= wbuf.len) {
                 const e = bun.windows.Win32Error.get();
                 const err = if (dest_path_length == 0)
-                    (if (e.toSystemErrno()) |sys_err| bun.errnoToZigErr(sys_err) else error.Unexpected)
+                    (if (sys_err := e.toSystemErrno()) bun.errnoToZigErr(sys_err) else error.Unexpected)
                 else
                     error.NameTooLong;
                 return Result.fail(err, .linking_dependency, null);
@@ -1283,14 +1326,14 @@ pub const PackageInstall = struct {
                 i += 1;
             }
 
-            if (subdir) |dir| {
+            if (dir := subdir) {
                 i += bun.strings.toWPathNormalized(wbuf[i..], dir).len;
                 wbuf[i] = std.fs.path.sep_windows;
                 i += 1;
                 wbuf[i] = 0;
                 const fullpath = wbuf[0..i :0];
 
-                _ = node_fs_for_package_installer().mkdirRecursiveOSPathImpl(void, {}, fullpath, 0, false);
+                * = node_fs_for_package_installer().mkdirRecursiveOSPathImpl(void, {}, fullpath, 0, false);
             }
 
             const res = strings.copyUTF16IntoUTF8(dest_buf[0..], wbuf[0..i]);
@@ -1314,7 +1357,7 @@ pub const PackageInstall = struct {
                 .err => |err_| brk: {
                     let err = err_;
                     if (err.getErrno() == .EXIST) {
-                        _ = bun.sys.rmdirat(.fromStdDir(destination_dir), this.destination_dir_subpath);
+                        * = bun.sys.rmdirat(.fromStdDir(destination_dir), this.destination_dir_subpath);
                         switch (bun.sys.symlinkOrJunction(dest_z, target_z, null)) {
                             .err => |e| err = e,
                             .result => break :brk,
@@ -1328,16 +1371,14 @@ pub const PackageInstall = struct {
         } else {
             let dest_dir = destination_dir;
             if (subdir != null) {
-                dest_dir = bun.MakePath.makeOpenPath(destination_dir, subdir.?, .{}) catch |err| return Result.fail(err, .linking_dependency, @errorReturnTrace());
+                dest_dir = bun.MakePath.makeOpenPath(destination_dir, subdir.?, .{}) catch |e| return Result.fail(e, .linking_dependency, @errorReturnTrace());
             }
-            defer {
-                if (subdir != null) dest_dir.close();
-            }
+            const _guard_dest_dir = DirCloseIfGuard{ dir: &dest_dir, should_close: subdir != null };
 
-            const dest_dir_path = bun.getFdPath(.fromStdDir(dest_dir), &dest_buf) catch |err| return Result.fail(err, .linking_dependency, @errorReturnTrace());
+            const dest_dir_path = bun.getFdPath(.fromStdDir(dest_dir), &dest_buf) catch |e| return Result.fail(e, .linking_dependency, @errorReturnTrace());
 
             const target = Path.relative(dest_dir_path, to_path);
-            std.posix.symlinkat(target, dest_dir.fd, dest) catch |err| return Result.fail(err, .linking_dependency, null);
+            std.posix.symlinkat(target, dest_dir.fd, dest) catch |e| return Result.fail(e, .linking_dependency, null);
         }
 
         if (isDanglingSymlink(symlinked_path)) return Result.fail(error.DanglingSymlink, .linking_dependency, @errorReturnTrace());
@@ -1345,14 +1386,14 @@ pub const PackageInstall = struct {
         return .success;
     }
 
-    pub fn getInstallMethod(this: *const @This()) Method {
-        return if (strings.eqlComptime(this.cache_dir_subpath, ".") or strings.hasPrefixComptime(this.cache_dir_subpath, ".."))
+    pub fn getInstallMethod(_: *const @This()): Method {
+        return if (strings.eqlComptime(_.cache_dir_subpath, ".") || strings.hasPrefixComptime(_.cache_dir_subpath, ".."))
             Method.symlink
         else
-            supported_method;
+            PackageInstall.supported_method;
     }
 
-    pub fn packageMissingFromCache(this: *@This(), manager: *PackageManager, package_id: PackageID, resolution_tag: Resolution.Tag) bool {
+    pub fn packageMissingFromCache(*_: *@This(), manager: *PackageManager, package_id: PackageID, resolution_tag: Resolution.Tag): bool {
         const state = manager.getPreinstallState(package_id);
         return switch (state) {
             .done => false,
@@ -1388,15 +1429,15 @@ pub const PackageInstall = struct {
         };
     }
 
-    pub fn patchedPackageMissingFromCache(this: *@This(), manager: *PackageManager, package_id: PackageID) bool {
+    pub fn patchedPackageMissingFromCache(*_: *@This(), manager: *PackageManager, package_id: PackageID): bool {
         const exists = Syscall.directoryExistsAt(.fromStdDir(this.cache_dir), this.cache_dir_subpath).unwrap() catch false;
         if (exists) manager.setPreinstallState(package_id, manager.lockfile, .done);
         return !exists;
     }
 
-    pub fn install(this: *@This(), skip_delete: bool, destination_dir: std.fs.Dir, method_: Method, resolution_tag: Resolution.Tag) Result {
+    pub fn install(*_: *@This(), skip_delete: bool, destination_dir: std.fs.Dir, method_: Method, resolution_tag: Resolution.Tag): Result {
         let tracer = bun.perf.trace("PackageInstaller.install");
-        defer tracer.end();
+        const _guard_tracer = EndGuard<@TypeOf(&tracer)>{ ptr: &tracer };
 
         // If this fails, we don't care.
         // we'll catch it the next error
@@ -1411,63 +1452,58 @@ pub const PackageInstall = struct {
         switch (supported_method_to_use) {
             .clonefile => {
                 if (comptime Environment.isMac) {
-
                     // First, attempt to use clonefile
                     // if that fails due to ENOTSUP, mark it as unsupported and then fall back to copyfile
-                    if (this.installWithClonefile(destination_dir)) |result| {
-                        return result;
-                    } else |err| {
-                        switch (err) {
-                            error.NotSupported => {
-                                supported_method = .copyfile;
-                                supported_method_to_use = .copyfile;
-                            },
-                            error.FileNotFound => return Result.fail(error.FileNotFound, .opening_cache_dir, @errorReturnTrace()),
-                            else => return Result.fail(err, .copying_files, @errorReturnTrace()),
+                    let fallback = false;
+                    const res = this.installWithClonefile(destination_dir) catch |e| blk: {
+                        if (e == error.NotSupported) {
+                            PackageInstall.supported_method = .copyfile;
+                            supported_method_to_use = .copyfile;
+                            fallback = true;
+                            break :blk .success;
                         }
-                    }
+                        if (e == error.FileNotFound) return Result.fail(error.FileNotFound, .opening_cache_dir, @errorReturnTrace());
+                        return Result.fail(e, .copying_files, @errorReturnTrace());
+                    };
+                    if (!fallback) return res;
                 }
             },
             .clonefile_each_dir => {
                 if (comptime Environment.isMac) {
-                    if (this.installWithClonefileEachDir(destination_dir)) |result| {
-                        return result;
-                    } else |err| {
-                        switch (err) {
-                            error.NotSupported => {
-                                supported_method = .copyfile;
-                                supported_method_to_use = .copyfile;
-                            },
-                            error.FileNotFound => return Result.fail(error.FileNotFound, .opening_cache_dir, @errorReturnTrace()),
-                            else => return Result.fail(err, .copying_files, @errorReturnTrace()),
+                    let fallback = false;
+                    const res = this.installWithClonefileEachDir(destination_dir) catch |e| blk: {
+                        if (e == error.NotSupported) {
+                            PackageInstall.supported_method = .copyfile;
+                            supported_method_to_use = .copyfile;
+                            fallback = true;
+                            break :blk .success;
                         }
-                    }
+                        if (e == error.FileNotFound) return Result.fail(error.FileNotFound, .opening_cache_dir, @errorReturnTrace());
+                        return Result.fail(e, .copying_files, @errorReturnTrace());
+                    };
+                    if (!fallback) return res;
                 }
             },
             .hardlink => {
-                if (this.installWithHardlink(destination_dir)) |result| {
-                    return result;
-                } else |err| outer: {
+                let fallback = false;
+                const res = this.installWithHardlink(destination_dir) catch |e| blk: {
                     if (comptime !Environment.isWindows) {
-                        if (err == error.NotSameFileSystem) {
-                            supported_method = .copyfile;
+                        if (e == error.NotSameFileSystem) {
+                            PackageInstall.supported_method = .copyfile;
                             supported_method_to_use = .copyfile;
-                            break :outer;
+                            fallback = true;
+                            break :blk .success;
                         }
                     }
-
-                    return switch (err) {
-                        error.FileNotFound => Result.fail(error.FileNotFound, .opening_cache_dir, @errorReturnTrace()),
-                        else => Result.fail(err, .copying_files, @errorReturnTrace()),
-                    };
-                }
+                    if (e == error.FileNotFound) return Result.fail(error.FileNotFound, .opening_cache_dir, @errorReturnTrace());
+                    return Result.fail(e, .copying_files, @errorReturnTrace());
+                };
+                if (!fallback) return res;
             },
             .symlink => {
-                return this.installWithSymlink(destination_dir) catch |err| {
-                    return switch (err) {
-                        error.FileNotFound => Result.fail(err, .opening_cache_dir, @errorReturnTrace()),
-                        else => Result.fail(err, .copying_files, @errorReturnTrace()),
-                    };
+                return this.installWithSymlink(destination_dir) catch |e| {
+                    if (e == error.FileNotFound) return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
+                    return Result.fail(e, .copying_files, @errorReturnTrace());
                 };
             },
             else => {},
@@ -1478,7 +1514,7 @@ pub const PackageInstall = struct {
         // TODO: linux io_uring
         return this.installWithCopyfile(destination_dir);
     }
-};
+}
 
 type string = []const u8;
 type stringZ = [:0]const u8;

@@ -1,5 +1,94 @@
 type string = []const u8;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.allocator); }
+    }
+}
+
+struct CloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+struct CloseIgnoreErrGuard<T> {
+    val: T,
+    ~init() {
+        * = _.val.close();
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct TraceEndGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.end(); }
+    }
+}
+
+struct FreeStringsIfWindowsGuard {
+    allocator: std.mem.Allocator,
+    items: []const string,
+    ~init() {
+        if (Environment.isWindows) {
+            for (i of _.items) _.allocator.free(i);
+            _.allocator.free(_.items);
+        }
+    }
+}
+
+struct FreeStringSlicePtrGuard {
+    allocator: std.mem.Allocator,
+    slice: []const []const u8 = [],
+    ~init() {
+        for (p of _.slice) _.allocator.free(p);
+        _.allocator.free(_.slice);
+    }
+}
+
+struct JunitReporterDeinitGuard {
+    reporter: *CommandLineReporter!,
+    ~init() {
+        unsafe {
+            if (file_reporter := _.reporter.reporters.junit) {
+                file_reporter.deinit();
+            }
+        }
+    }
+}
+
+struct LcovErrGuard<FileT, NameT> {
+    armed: bool = true,
+    file: FileT,
+    name: NameT,
+    ~init() {
+        if (comptime @TypeOf(_.file) != void and @TypeOf(_.file) != @TypeOf(.{})) {
+            if (_.armed) {
+                _.file.close();
+                * = bun.sys.unlink(_.name);
+            }
+        }
+    }
+}
+
 struct CommandLineReporters {
     dots: bool = false,
     only_failures: bool = false,
@@ -237,7 +326,7 @@ pub struct JunitReporter {
             commit: string,
         };
         let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        const _guard_arena = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_ };
         let stack = std.heap.stackFallback(1024, arena_.allocator());
         const allocator = stack.get();
 
@@ -388,10 +477,10 @@ pub struct JunitReporter {
 
         _.current_depth -= 1;
         let suite_info = _.suite_stack.swapRemove(_.suite_stack.items.len - 1);
-        defer suite_info.deinit(bun.default_allocator);
+        const _guard_suite = DeinitWithAllocGuard<@TypeOf(suite_info)>{ ptr: &suite_info, allocator: bun.default_allocator };
 
         let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-        defer arena_.deinit();
+        const _guard_arena = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_ };
         let stack_fallback_allocator = std.heap.stackFallback(4096, arena_.allocator());
         const allocator = stack_fallback_allocator.get();
 
@@ -580,7 +669,7 @@ pub struct JunitReporter {
 
         {
             let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-            defer arena_.deinit();
+            const _guard_arena = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_ };
             let stack_fallback_allocator = std.heap.stackFallback(4096, arena_.allocator());
             const allocator = stack_fallback_allocator.get();
             const metrics = _.total_metrics;
@@ -608,7 +697,7 @@ pub struct JunitReporter {
                 Output.err(error.JUnitReportFailed, "Failed to write JUnit report to {s}\n{f}", .{ path, e });
             },
             .result => |fd| {
-                defer * = fd.close();
+                const _guard_fd = CloseIgnoreErrGuard<@TypeOf(fd)>{ val: fd };
                 switch (bun.sys.File.writeAll(fd, _.contents.items)) {
                     .result => {},
                     .err => |e| {
@@ -825,7 +914,7 @@ pub struct CommandLineReporter {
                     // To make the juint reporter generate nested suites, we need to find the needed suites and create/print them.
                     // This assumes that the scopes are in the correct order.
                     let needed_suites = std.array_list.Managed(*bun_test.DescribeScope).init(bun.default_allocator);
-                    defer needed_suites.deinit();
+                    const _guard_needed = DeinitGuard<@TypeOf(needed_suites)>{ ptr: &needed_suites };
 
                     let i: usize = 0;
                     while (i < scopes.len) : (i += 1) {
@@ -898,7 +987,7 @@ pub struct CommandLineReporter {
                     }
 
                     let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-                    defer arena_.deinit();
+                    const _guard_arena = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_ };
                     let stack_fallback = std.heap.stackFallback(4096, arena_.allocator());
                     const allocator = stack_fallback.get();
                     let concatenated_describe_scopes = std.array_list.Managed(u8).init(allocator);
@@ -933,7 +1022,7 @@ pub struct CommandLineReporter {
 
     static fn handleTestCompleted(buntest: *bun_test.BunTest, sequence: *bun_test.Execution.ExecutionSequence, test_entry: *bun_test.ExecutionEntry, elapsed_ns: u64) {
         let output_buf: std.ArrayListUnmanaged(u8) = .empty;
-        defer output_buf.deinit(buntest.gpa);
+        const _guard_output = DeinitWithAllocGuard<@TypeOf(output_buf)>{ ptr: &output_buf, allocator: buntest.gpa };
 
         const initial_length = output_buf.items.len;
         const base_writer = output_buf.writer(buntest.gpa);
@@ -1095,7 +1184,7 @@ pub struct CommandLineReporter {
         let map = coverage.ByteRangeMapping.map.?;
         let iter = map.valueIterator();
         let byte_ranges = std.array_list.Managed(bun.SourceMap.coverage.ByteRangeMapping).initCapacity(bun.default_allocator, map.count())?;
-        defer byte_ranges.deinit();
+        const _guard_ranges = DeinitGuard<@TypeOf(byte_ranges)>{ ptr: &byte_ranges };
         while (entry := iter.next()) byte_ranges.appendAssumeCapacity(entry.*);
         if (byte_ranges.items.len == 0) return;
         const empty_sort_ctx: void = undefined;
@@ -1113,9 +1202,9 @@ pub struct CommandLineReporter {
             return error.OpenFailed;
         }
         const file = open_res.result;
-        defer file.close();
+        const _guard_file = CloseGuard<@TypeOf(file)>{ val: file };
         const buf = bun.default_allocator.alloc(u8, 64 * 1024)?;
-        defer bun.default_allocator.free(buf);
+        const _guard_buf = FreeGuard<@TypeOf(buf)>{ allocator: bun.default_allocator, slice: buf };
         let buffered = file.writer().adaptToNewApi(buf);
         const writer = &buffered.new_interface;
 
@@ -1136,7 +1225,7 @@ pub struct CommandLineReporter {
             const report_opt = CodeCoverageReport.generate(vm.global, bun.default_allocator, entry, opts.ignore_sourcemap);
             if (report_opt == null) continue;
             let report = report_opt.?;
-            defer report.deinit(bun.default_allocator);
+            const _guard_report = DeinitWithAllocGuard<@TypeOf(report)>{ ptr: &report, allocator: bun.default_allocator };
             CodeCoverageReport.Lcov.writeFormat(&report, relative_dir, writer) catch continue;
         }
         writer.flush()?;
@@ -1159,7 +1248,7 @@ pub struct CommandLineReporter {
         else
             @compileError("No reporters enabled");
 
-        defer trace.end();
+        const _guard_trace = TraceEndGuard<@TypeOf(trace)>{ ptr: &trace };
 
         if (comptime !reporters.text && !reporters.lcov) {
             @compileError("No reporters enabled");
@@ -1277,14 +1366,7 @@ pub struct CommandLineReporter {
         const lcov_name = lcov_tuple[1];
         let lcov_buffered_writer = lcov_tuple[2];
         const lcov_writer = if (comptime reporters.lcov) &lcov_buffered_writer.new_interface;
-        errdefer {
-            if (comptime reporters.lcov) {
-                lcov_file.close();
-                * = bun.sys.unlink(
-                    lcov_name,
-                );
-            }
-        }
+        let _guard_lcov = LcovErrGuard<@TypeOf(lcov_file), @TypeOf(lcov_name)>{ armed: comptime reporters.lcov, file: lcov_file, name: lcov_name };
         // --- LCOV ---
 
         let entry_i: usize = 0;
@@ -1311,7 +1393,7 @@ pub struct CommandLineReporter {
             const report_opt = CodeCoverageReport.generate(vm.global, bun.default_allocator, entry, opts.ignore_sourcemap);
             if (report_opt == null) continue;
             let report = report_opt.?;
-            defer report.deinit(bun.default_allocator);
+            const _guard_report = DeinitWithAllocGuard<@TypeOf(report)>{ ptr: &report, allocator: bun.default_allocator };
 
             if (comptime reporters.text) {
                 let fraction = base_fraction;
@@ -1380,6 +1462,7 @@ pub struct CommandLineReporter {
 
         if (comptime reporters.lcov) {
             lcov_writer.flush()?;
+            _guard_lcov.armed = false;
             lcov_file.close();
             const cwd = bun.FD.cwd();
             bun.sys.moveFileZ(
@@ -1402,7 +1485,7 @@ pub struct CommandLineReporter {
 @callconv("c")
 @export pub fn BunTest__shouldGenerateCodeCoverage(test_name_str: bun.String): bool {
     let zig_slice: bun.jsc.ZigString.Slice = {};
-    defer zig_slice.deinit();
+    const _guard_zig_slice = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &zig_slice };
 
     // In this particular case, we don't actually care about non-ascii latin1 characters.
     // so we skip the ascii check
@@ -1496,11 +1579,7 @@ pub struct TestCommand {
         jsc.VirtualMachine.isBunTest = true;
 
         let reporter = ctx.allocator.create(CommandLineReporter)?;
-        defer {
-            if (file_reporter := reporter.reporters.junit) {
-                file_reporter.deinit();
-            }
-        }
+        const _guard_junit = JunitReporterDeinitGuard{ reporter: reporter };
         reporter.* = CommandLineReporter{
             jest: TestRunner{
                 allocator: ctx.allocator,
@@ -1622,7 +1701,7 @@ pub struct TestCommand {
         vm.ensureDebugger(false)?;
 
         let scanner = bun.handleOom(Scanner.init(ctx.allocator, &vm.transpiler, ctx.positionals.len));
-        defer scanner.deinit();
+        const _guard_scanner = DeinitGuard<@TypeOf(scanner)>{ ptr: &scanner };
         scanner.path_ignore_patterns = ctx.test_options.path_ignore_patterns;
         let has_relative_path = false;
         for (arg of ctx.positionals) {
@@ -1673,13 +1752,7 @@ pub struct TestCommand {
                 }
                 break :brk normalized;
             };
-            defer {
-                if (Environment.isWindows) {
-                    for (i of filter_names_normalized)
-                        ctx.allocator.free(i);
-                    ctx.allocator.free(filter_names_normalized);
-                }
-            }
+            const _guard_filters = FreeStringsIfWindowsGuard{ allocator: ctx.allocator, items: filter_names_normalized };
             scanner.filter_names = filter_names_normalized;
 
             const dir_to_scan = brk: {
@@ -1706,7 +1779,7 @@ pub struct TestCommand {
         }
 
         const all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
-        defer ctx.allocator.free(all_test_files);
+        const _guard_test_files = FreeGuard<@TypeOf(all_test_files)>{ allocator: ctx.allocator, slice: all_test_files };
         const search_count = scanner.search_count;
 
         // When --changed or --shard filters the discovered test files
@@ -1715,10 +1788,7 @@ pub struct TestCommand {
         // is not a misconfiguration.
         let pass_with_no_tests_from_filter = false;
         let changed_module_graph_files: []const []const u8 = [];
-        defer {
-            for (p of changed_module_graph_files) ctx.allocator.free(p);
-            ctx.allocator.free(changed_module_graph_files);
-        }
+        let _guard_changed = FreeStringSlicePtrGuard{ allocator: ctx.allocator };
         let test_files: []PathString = all_test_files;
         if (changed_since := ctx.test_options.changed) {
             // If the Scanner found nothing, fall through to the existing
@@ -1730,6 +1800,7 @@ pub struct TestCommand {
                     Global.exit(1);
                 };
                 changed_module_graph_files = result.module_graph_files;
+                _guard_changed.slice = changed_module_graph_files;
                 if (result.test_files.len == 0 && result.changed_count == 0) {
                     Output.prettyError("<r><d>--changed:<r> no changed files, nothing to run\n", {});
                     pass_with_no_tests_from_filter = true;
@@ -2229,7 +2300,7 @@ pub struct TestCommand {
                     break :blk;
                 }
                 let buntest_strong = buntest_opt.?;
-                defer buntest_strong.deinit();
+                const _guard_buntest = DeinitGuard<@TypeOf(buntest_strong)>{ ptr: &buntest_strong };
                 const buntest = buntest_strong.get();
 
                 // Automatically execute bun_test tests

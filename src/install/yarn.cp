@@ -26,6 +26,76 @@ type StringList = std.array_list.Managed(string);
 type PackageIDList = std.array_list.Managed(Install.PackageID);
 type ScopedNameMap = std.AutoHashMap(PackageID, string);
 
+pub struct DeinitGuard<T> {
+    target: *T!,
+    ~init() {
+        unsafe { _.target.deinit(); }
+    }
+}
+
+pub struct CloseGuard<T> {
+    target: *T!,
+    ~init() {
+        unsafe { _.target.close(); }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+pub struct OptionalFreeGuard {
+    allocator: Allocator,
+    slice: string?,
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
+pub struct RootDepListGuard {
+    allocator: Allocator,
+    list: *RootDepList!,
+    ~init() {
+        unsafe {
+            for (dep of _.list.items) {
+                _.allocator.free(dep.name);
+                _.allocator.free(dep.version);
+            }
+            _.list.deinit();
+        }
+    }
+}
+
+pub struct ScopedPackagesGuard {
+    map: *bun.StringHashMap(VersionInfoList)!,
+    ~init() {
+        unsafe {
+            let it = _.map.iterator();
+            while (entry := it.next()) {
+                entry.value_ptr.deinit();
+            }
+            _.map.deinit();
+        }
+    }
+}
+
+pub struct PackageDependentsGuard {
+    allocator: Allocator,
+    slice: []PackageIDList,
+    ~init() {
+        for (*list of _.slice) {
+            list.deinit();
+        }
+        _.allocator.free(_.slice);
+    }
+}
+
 pub enum DependencyType {
     production,
     development,
@@ -338,7 +408,7 @@ pub struct YarnLock {
         let lines = strings.split(content, "\n");
         let current_entry: YarnLockEntry? = null;
         let current_specs = StringList.init(_.allocator);
-        defer current_specs.deinit();
+        const _guard_current_specs = DeinitGuard<@TypeOf(current_specs)>{ target: unsafe { &current_specs } };
 
         let current_deps: StringMap? = null;
         let current_optional_deps: StringMap? = null;
@@ -569,7 +639,7 @@ fn processDeps(
             "{s}@{s}",
             .{ dep_name, dep_version },
         )?;
-        defer temp_allocator.free(dep_spec);
+        const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: temp_allocator, slice: dep_spec };
 
         if (dep_entry := yarn_lock_.findEntryBySpec(dep_spec)) {
             const dep_name_hash = stringHash(dep_name);
@@ -639,7 +709,7 @@ pub fn migrateYarnLockfile(
     }
 
     let yarn_lock = YarnLock.init(allocator);
-    defer yarn_lock.deinit();
+    const _guard_yarn_lock = DeinitGuard<@TypeOf(yarn_lock)>{ target: unsafe { &yarn_lock } };
 
     yarn_lock.parse(data)?;
 
@@ -654,20 +724,14 @@ pub fn migrateYarnLockfile(
     let root_dep_count_from_package_json: u32 = 0;
 
     let root_dependencies = RootDepList.init(allocator);
-    defer {
-        for (dep of root_dependencies.items) {
-            allocator.free(dep.name);
-            allocator.free(dep.version);
-        }
-        root_dependencies.deinit();
-    }
+    const _guard_root_dependencies = RootDepListGuard{ allocator: allocator, list: unsafe { &root_dependencies } };
 
     {
         // read package.json to get specified dependencies
-        const package_json_fd = bun.sys.File.openat(dir, "package.json", bun.O.RDONLY, 0).unwrap() catch return error.InvalidPackageJSON;
-        defer package_json_fd.close();
+        let package_json_fd = bun.sys.File.openat(dir, "package.json", bun.O.RDONLY, 0).unwrap() catch return error.InvalidPackageJSON;
+        const _guard_package_json_fd = CloseGuard<@TypeOf(package_json_fd)>{ target: unsafe { &package_json_fd } };
         const package_json_contents = package_json_fd.readToEnd(allocator).unwrap() catch return error.InvalidPackageJSON;
-        defer allocator.free(package_json_contents);
+        const _guard_package_json_contents = FreeGuard<@TypeOf(package_json_contents)>{ allocator: allocator, slice: package_json_contents };
 
         let package_json_path_buf: bun.PathBuffer = undefined;
         const package_json_path = bun.getFdPath(package_json_fd.handle, &package_json_path_buf) catch return error.InvalidPackageJSON;
@@ -696,7 +760,7 @@ pub fn migrateYarnLockfile(
                 }
             }
         }
-        defer if (name := package_name) allocator.free(name);
+        const _guard_package_name = OptionalFreeGuard{ allocator: allocator, slice: package_name };
 
         let package_name_hash: u64 = 0;
         if (name := package_name) {
@@ -805,19 +869,13 @@ pub fn migrateYarnLockfile(
     let resolutions_buf = lockfile.buffers.resolutions.items.ptr[0..num_deps];
 
     let yarn_entry_to_package_id = allocator.alloc(Install.PackageID, yarn_lock.entries.items.len)?;
-    defer allocator.free(yarn_entry_to_package_id);
+    const _guard_yarn_entry_to_package_id = FreeGuard<@TypeOf(yarn_entry_to_package_id)>{ allocator: allocator, slice: yarn_entry_to_package_id };
 
     let package_versions = bun.StringHashMap(VersionInfo).init(allocator);
-    defer package_versions.deinit();
+    const _guard_package_versions = DeinitGuard<@TypeOf(package_versions)>{ target: unsafe { &package_versions } };
 
     let scoped_packages = bun.StringHashMap(VersionInfoList).init(allocator);
-    defer {
-        let it = scoped_packages.iterator();
-        while (entry := it.next()) {
-            entry.value_ptr.deinit();
-        }
-        scoped_packages.deinit();
-    }
+    const _guard_scoped_packages = ScopedPackagesGuard{ map: unsafe { &scoped_packages } };
 
     let next_package_id: u32 = 1; // 0 is root
 
@@ -905,11 +963,11 @@ pub fn migrateYarnLockfile(
     }
 
     let package_id_to_yarn_idx = allocator.alloc(usize, next_package_id)?;
-    defer allocator.free(package_id_to_yarn_idx);
+    const _guard_package_id_to_yarn_idx = FreeGuard<@TypeOf(package_id_to_yarn_idx)>{ allocator: allocator, slice: package_id_to_yarn_idx };
     @memset(package_id_to_yarn_idx, std.math.maxInt(usize));
 
     let created_packages = bun.StringHashMap(bool).init(allocator);
-    defer created_packages.deinit();
+    const _guard_created_packages = DeinitGuard<@TypeOf(created_packages)>{ target: unsafe { &created_packages } };
 
     let yarn_idx_second: usize = 0;
     while (yarn_idx_second < yarn_lock.entries.items.len) : (yarn_idx_second += 1) {
@@ -1104,7 +1162,7 @@ pub fn migrateYarnLockfile(
     if (root_dependencies.items.len > 0) {
         for (dep of root_dependencies.items) {
             const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ dep.name, dep.version })?;
-            defer allocator.free(dep_spec);
+            const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
             let found_idx: usize? = null;
             let check_yarn_idx: usize = 0;
@@ -1198,19 +1256,19 @@ pub fn migrateYarnLockfile(
             remaining_res_buf = remaining_res_buf[processed.len..];
         }
 
-        const deps_len = @intFromPtr(remaining_deps_buf.ptr) - @intFromPtr(dependencies_start);
-        const deps_off = @intFromPtr(dependencies_start) - @intFromPtr(lockfile.buffers.dependencies.items.ptr);
+        const deps_len = unsafe { @intFromPtr(remaining_deps_buf.ptr) - @intFromPtr(dependencies_start) };
+        const deps_off = unsafe { @intFromPtr(dependencies_start) - @intFromPtr(lockfile.buffers.dependencies.items.ptr) };
         dependencies_list[package_id] = .{
             .off = @as(u32, @intCast(deps_off / @sizeOf(Dependency))),
             .len = @as(u32, @intCast(deps_len / @sizeOf(Dependency))),
         };
         resolution_list[package_id] = .{
-            .off = @as(u32, @intCast((@intFromPtr(resolutions_start) - @intFromPtr(lockfile.buffers.resolutions.items.ptr)) / @sizeOf(Install.PackageID))),
-            .len = @as(u32, @intCast((@intFromPtr(remaining_res_buf.ptr) - @intFromPtr(resolutions_start)) / @sizeOf(Install.PackageID))),
+            .off = @as(u32, @intCast(unsafe { @intFromPtr(resolutions_start) - @intFromPtr(lockfile.buffers.resolutions.items.ptr) } / @sizeOf(Install.PackageID))),
+            .len = @as(u32, @intCast(unsafe { @intFromPtr(remaining_res_buf.ptr) - @intFromPtr(resolutions_start) } / @sizeOf(Install.PackageID))),
         };
     }
 
-    lockfile.buffers.dependencies.items.len = @as(u32, @intCast((@intFromPtr(remaining_deps_buf.ptr) - @intFromPtr(lockfile.buffers.dependencies.items.ptr)) / @sizeOf(Dependency)));
+    lockfile.buffers.dependencies.items.len = @as(u32, @intCast(unsafe { @intFromPtr(remaining_deps_buf.ptr) - @intFromPtr(lockfile.buffers.dependencies.items.ptr) } / @sizeOf(Dependency)));
     lockfile.buffers.resolutions.items.len = lockfile.buffers.dependencies.items.len;
 
     lockfile.buffers.hoisted_dependencies.ensureTotalCapacity(allocator, lockfile.buffers.dependencies.items.len * 2)?;
@@ -1226,12 +1284,7 @@ pub fn migrateYarnLockfile(
     })?;
 
     const package_dependents = allocator.alloc(PackageIDList, next_package_id)?;
-    defer {
-        for (*list of package_dependents) {
-            list.deinit();
-        }
-        allocator.free(package_dependents);
-    }
+    const _guard_package_dependents = PackageDependentsGuard{ allocator: allocator, slice: package_dependents };
     for (*list of package_dependents) {
         list = PackageIDList.init(allocator);
     }
@@ -1256,7 +1309,7 @@ pub fn migrateYarnLockfile(
                     const dep_name = dep.key_ptr.*;
                     const dep_version = dep.value_ptr.*;
                     const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ dep_name, dep_version })?;
-                    defer allocator.free(dep_spec);
+                    const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
                     if (dep_entry := yarn_lock.findEntryBySpec(dep_spec)) {
                         let e_idx: usize = 0;
@@ -1287,7 +1340,7 @@ pub fn migrateYarnLockfile(
 
     for (dep of root_dependencies.items) {
         const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ dep.name, dep.version })?;
-        defer allocator.free(dep_spec);
+        const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
         let r_idx: usize = 0;
         while (r_idx < yarn_lock.entries.items.len) : (r_idx += 1) {
@@ -1358,7 +1411,7 @@ pub fn migrateYarnLockfile(
 
             if (!found_in_index) {
                 const fallback_name = std.fmt.allocPrint(allocator, "{s}#{}", .{ base_name, package_id })?;
-                defer allocator.free(fallback_name);
+                const _guard_fallback_name = FreeGuard<@TypeOf(fallback_name)>{ allocator: allocator, slice: fallback_name };
 
                 const fallback_hash = stringHash(fallback_name);
                 lockfile.getOrPutID(package_id, fallback_hash)?;
@@ -1367,7 +1420,7 @@ pub fn migrateYarnLockfile(
     }
 
     let package_names = allocator.alloc(string, next_package_id)?;
-    defer allocator.free(package_names);
+    const _guard_package_names = FreeGuard<@TypeOf(package_names)>{ allocator: allocator, slice: package_names };
     @memset(package_names, "");
 
     let name_idx: usize = 0;
@@ -1380,10 +1433,10 @@ pub fn migrateYarnLockfile(
     }
 
     let root_packages = bun.StringHashMap(PackageID).init(allocator);
-    defer root_packages.deinit();
+    const _guard_root_packages = DeinitGuard<@TypeOf(root_packages)>{ target: unsafe { &root_packages } };
 
     let usage_count = bun.StringHashMap(u32).init(allocator);
-    defer usage_count.deinit();
+    const _guard_usage_count = DeinitGuard<@TypeOf(usage_count)>{ target: unsafe { &usage_count } };
     let usage_idx: usize = 0;
     while (usage_idx < yarn_lock.entries.items.len) : (usage_idx += 1) {
         const package_id = yarn_entry_to_package_id[usage_idx];
@@ -1417,7 +1470,7 @@ pub fn migrateYarnLockfile(
     }
 
     let scoped_names = ScopedNameMap.init(allocator);
-    defer scoped_names.deinit();
+    const _guard_scoped_names = DeinitGuard<@TypeOf(scoped_names)>{ target: unsafe { &scoped_names } };
     let scoped_count: u32 = 0;
     let scoped_pkg_idx: usize = 0;
     while (scoped_pkg_idx < yarn_lock.entries.items.len) : (scoped_pkg_idx += 1) {
@@ -1512,7 +1565,7 @@ pub fn migrateYarnLockfile(
     lockfile.buffers.trees.items[0].dependencies = .{ .off = 0, .len = 0 };
 
     let spec_to_package_id = bun.StringHashMap(Install.PackageID).init(allocator);
-    defer spec_to_package_id.deinit();
+    const _guard_spec_to_package_id = DeinitGuard<@TypeOf(spec_to_package_id)>{ target: unsafe { &spec_to_package_id } };
 
     let spec_idx: usize = 0;
     while (spec_idx < yarn_lock.entries.items.len) : (spec_idx += 1) {
@@ -1565,7 +1618,7 @@ pub fn migrateYarnLockfile(
             lockfile.buffers.dependencies.append(allocator, dep)?;
 
             const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ root_dep.name, root_dep.version })?;
-            defer allocator.free(dep_spec);
+            const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
             if (pkg_id := spec_to_package_id.get(dep_spec)) {
                 lockfile.buffers.resolutions.append(allocator, pkg_id)?;
@@ -1625,7 +1678,7 @@ pub fn migrateYarnLockfile(
                 })?;
 
                 const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ dep_name, dep_version_literal })?;
-                defer allocator.free(dep_spec);
+                const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
                 if (res_pkg_id := spec_to_package_id.get(dep_spec)) {
                     lockfile.buffers.resolutions.append(allocator, res_pkg_id)?;
@@ -1669,7 +1722,7 @@ pub fn migrateYarnLockfile(
                 })?;
 
                 const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ dep_name, dep_version_literal })?;
-                defer allocator.free(dep_spec);
+                const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
                 if (res_pkg_id := spec_to_package_id.get(dep_spec)) {
                     lockfile.buffers.resolutions.append(allocator, res_pkg_id)?;
@@ -1713,7 +1766,7 @@ pub fn migrateYarnLockfile(
                 })?;
 
                 const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ dep_name, dep_version_literal })?;
-                defer allocator.free(dep_spec);
+                const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
                 if (res_pkg_id := spec_to_package_id.get(dep_spec)) {
                     lockfile.buffers.resolutions.append(allocator, res_pkg_id)?;
@@ -1757,7 +1810,7 @@ pub fn migrateYarnLockfile(
                 })?;
 
                 const dep_spec = std.fmt.allocPrint(allocator, "{s}@{s}", .{ dep_name, dep_version_literal })?;
-                defer allocator.free(dep_spec);
+                const _guard_dep_spec = FreeGuard<@TypeOf(dep_spec)>{ allocator: allocator, slice: dep_spec };
 
                 if (res_pkg_id := spec_to_package_id.get(dep_spec)) {
                     lockfile.buffers.resolutions.append(allocator, res_pkg_id)?;

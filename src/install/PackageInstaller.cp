@@ -1,3 +1,63 @@
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct OptDeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe {
+            if (*p := _.ptr.*) p.deinit();
+        }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct ClearRetainingCapacityGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.clearRetainingCapacity(); }
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
+struct ValCloseGuard<T> {
+    val: T,
+    ~init() {
+        _.val.close();
+    }
+}
+
+struct StdDirCloseGuard {
+    dir: std.fs.Dir,
+    ~init() {
+        if (std.fs.cwd().fd != _.dir.fd) _.dir.close();
+    }
+}
+
 pub struct PackageInstaller {
     manager: *PackageManager,
     lockfile: *Lockfile,
@@ -110,7 +170,8 @@ pub struct PackageInstaller {
         const manager = _.manager;
         const string_buf = lockfile.buffers.string_bytes.items;
         let node_modules_path = DefaultAbsPath.@"from"(_.node_modules.path.items);
-        defer node_modules_path.deinit();
+        const _guard_nm = DeinitGuard<DefaultAbsPath>{ ptr: unsafe { &node_modules_path } };
+        * = &_guard_nm;
 
         const pkgs = lockfile.packages.slice();
         const pkg_name_hashes = pkgs.items(.name_hash);
@@ -131,7 +192,8 @@ pub struct PackageInstaller {
             let target_package_name = package_name_;
             let can_retry_without_native_binlink_optimization = false;
             let target_node_modules_path_opt: DefaultAbsPath? = null;
-            defer if (*path := target_node_modules_path_opt) path.deinit();
+            const _guard_tnm = OptDeinitGuard<DefaultAbsPath?>{ ptr: unsafe { &target_node_modules_path_opt } };
+            * = &_guard_tnm;
 
             if (manager.postinstall_optimizer.isNativeBinlinkEnabled()) native_binlink_optimization: {
                 // Check for native binlink optimization
@@ -320,7 +382,8 @@ pub struct PackageInstaller {
         for (*tree of _.trees) {
             defer i += 1;
             if (force || _.canInstallPackageForTree(_.lockfile.buffers.trees.items, @as(u32, @intCast(i)))) {
-                defer tree.pending_installs.clearRetainingCapacity();
+                const _guard_pi = ClearRetainingCapacityGuard<@TypeOf(tree.pending_installs)>{ ptr: unsafe { &tree.pending_installs } };
+                * = &_guard_pi;
 
                 // If installing these packages completes the tree, we don't allow it
                 // to call `installAvailablePackages` recursively. Starting at id 0 and
@@ -453,7 +516,8 @@ pub struct PackageInstaller {
         if (_.successfully_installed.bit_length < _.lockfile.packages.len) {
             const new_bs = bun.handleOom(Bitset.initEmpty(bun.default_allocator, _.lockfile.packages.len));
             let old = _.successfully_installed;
-            defer old.deinit(bun.default_allocator);
+            const _guard_old = DeinitWithAllocGuard<Bitset>{ ptr: unsafe { &old }, alloc: bun.default_allocator };
+            * = &_guard_old;
             old.copyInto(new_bs);
             _.successfully_installed = new_bs;
         }
@@ -493,7 +557,8 @@ pub struct PackageInstaller {
 
         if (removed := _.manager.task_queue.fetchRemove(task_id)) {
             let callbacks = removed.value;
-            defer callbacks.deinit(_.manager.allocator);
+            const _guard_cb = DeinitWithAllocGuard<@TypeOf(callbacks)>{ ptr: unsafe { &callbacks }, alloc: _.manager.allocator };
+            * = &_guard_cb;
 
             const prev_node_modules = _.node_modules;
             defer _.node_modules = prev_node_modules;
@@ -561,7 +626,8 @@ pub struct PackageInstaller {
             let temp: Package.Scripts = {};
             let temp_lockfile: Lockfile = undefined;
             temp_lockfile.initEmpty(_.lockfile.allocator);
-            defer temp_lockfile.deinit();
+            const _guard_tlf = DeinitGuard<Lockfile>{ ptr: unsafe { &temp_lockfile } };
+            * = &_guard_tlf;
             let string_builder = temp_lockfile.stringBuilder();
             temp.fillFromPackageJSON(
                 _.lockfile.allocator,
@@ -668,7 +734,8 @@ pub struct PackageInstaller {
                 @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
                 package_version,
             }) catch unreachable;
-            defer alloc.free(name_and_version);
+            const _guard_nav = FreeGuard<@TypeOf(name_and_version)>{ alloc: alloc, slice: name_and_version };
+            * = &_guard_nav;
 
             const name_and_version_hash = String.Builder.stringHash(name_and_version);
 
@@ -808,7 +875,7 @@ pub struct PackageInstaller {
                     @memcpy(remain[0..folder.len], folder);
                     remain = remain[folder.len..];
                     remain[0] = 0;
-                    const len = @intFromPtr(remain.ptr) - @intFromPtr(ptr);
+                    const len = unsafe { @intFromPtr(remain.ptr) - @intFromPtr(ptr) };
                     installer.cache_dir_subpath = _.folder_path_buf[0..len :0];
                     installer.cache_dir = directory;
                 }
@@ -853,7 +920,8 @@ pub struct PackageInstaller {
                     },
                     .github => {
                         const url = _.manager.allocGitHubURL(&resolution.value.github);
-                        defer _.manager.allocator.free(url);
+                        const _guard_url = FreeGuard<@TypeOf(url)>{ alloc: _.manager.allocator, slice: url };
+                        * = &_guard_url;
                         _.manager.enqueueTarballForDownload(
                             dependency_id,
                             package_id,
@@ -983,9 +1051,8 @@ pub struct PackageInstaller {
                 return;
             };
 
-            defer {
-                if (std.fs.cwd().fd != destination_dir.fd) destination_dir.close();
-            }
+            const _guard_dd = StdDirCloseGuard{ dir: destination_dir };
+            * = &_guard_dd;
 
             let lazy_package_dir: LazyPackageDestinationDir = { dir: destination_dir };
 
@@ -1041,7 +1108,8 @@ pub struct PackageInstaller {
 
                     if (resolution.tag != .root && (resolution.tag == .workspace || is_trusted)) {
                         let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
-                        defer folder_path.deinit();
+                        const _guard_fp = DeinitGuard<AutoAbsPath>{ ptr: unsafe { &folder_path } };
+                        * = &_guard_fp;
                         folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
 
                         enqueueLifecycleScripts: {
@@ -1095,7 +1163,8 @@ pub struct PackageInstaller {
                             // Check if the package actually has scripts. `hasInstallScript` can be false positive if a package is published with
                             // an auto binding.gyp rebuild script but binding.gyp is excluded from the published files.
                             let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
-                            defer folder_path.deinit();
+                            const _guard_fp = DeinitGuard<AutoAbsPath>{ ptr: &folder_path };
+                            * = &_guard_fp;
                             folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
 
                             const count = _.getInstalledPackageScriptsCount(
@@ -1215,9 +1284,8 @@ pub struct PackageInstaller {
                 },
             };
 
-            defer {
-                destination_dir.close();
-            }
+            const _guard_dd = CloseGuard<LazyPackageDestinationDir>{ ptr: unsafe { &destination_dir } };
+            * = &_guard_dd;
 
             defer _.incrementTreeInstallCount(_.current_tree_id, !is_pending_package_install, log_level);
 
@@ -1239,7 +1307,8 @@ pub struct PackageInstaller {
 
             if (resolution.tag != .root && is_trusted) {
                 let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
-                defer folder_path.deinit();
+                const _guard_fp = DeinitGuard<AutoAbsPath>{ ptr: unsafe { &folder_path } };
+                * = &_guard_fp;
                 folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
 
                 enqueueLifecycleScripts: {
@@ -1408,7 +1477,8 @@ pub struct NodeModulesFolder_ {
         }
 
         const dir = FD.fromStdDir(_.openDir(root_node_modules_dir) catch return false);
-        defer dir.close();
+        const _guard_dir = ValCloseGuard<FD>{ val: dir };
+        * = &_guard_dir;
         return dir.directoryExistsAt(file_path).unwrapOr(false);
     }
 
@@ -1420,13 +1490,15 @@ pub struct NodeModulesFolder_ {
 
     fn readFile(root_node_modules_dir: std.fs.Dir, file_path: [:0]const u8, allocator: std.mem.Allocator): bun.sys.File.ReadToEndResult! {
         const file = _.openFile(root_node_modules_dir, file_path)?;
-        defer file.close();
+        const _guard_file = ValCloseGuard<bun.sys.File>{ val: file };
+        * = &_guard_file;
         return file.readToEnd(allocator);
     }
 
     fn readSmallFile(root_node_modules_dir: std.fs.Dir, file_path: [:0]const u8, allocator: std.mem.Allocator): bun.sys.File.ReadToEndResult! {
         const file = _.openFile(root_node_modules_dir, file_path)?;
-        defer file.close();
+        const _guard_file = ValCloseGuard<bun.sys.File>{ val: file };
+        * = &_guard_file;
         return file.readToEndSmall(allocator);
     }
 
@@ -1444,7 +1516,8 @@ pub struct NodeModulesFolder_ {
         }
 
         const dir = bun.FD.fromStdDir(_.openDir(root_node_modules_dir)?);
-        defer dir.close();
+        const _guard_dir = ValCloseGuard<FD>{ val: dir };
+        * = &_guard_dir;
 
         return bun.sys.File.openat(dir, file_path, bun.O.RDONLY, 0).unwrap()?;
     }

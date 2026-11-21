@@ -1,6 +1,48 @@
 import bun from "bun";
 import std from "std";
 
+struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) {
+            p.deinit(_.alloc);
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    slice: T? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (s := _.slice) {
+            _.alloc.free(s);
+        }
+    }
+}
+
+struct DmpDiffListGuard<T> {
+    list: (*T.DiffList!)? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (l := _.list) {
+            T.deinitDiffList(_.alloc, l);
+        }
+    }
+}
+
+struct DmpDiffListItemsFreeGuard<T> {
+    list: (*T.DiffList!)? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (l := _.list) {
+            for (d of l.items) {
+                _.alloc.free(d.text);
+            }
+        }
+    }
+}
+
 // MIT License
 //
 // Copyright (c) 2023 diffz authors
@@ -131,7 +173,7 @@ pub fn DMP(comptime Unit: type): type {
         /// Deinit an `std.ArrayListUnmanaged(Diff)` and the allocated slices of
         /// text in each `Diff`.
         pub fn deinitDiffList(allocator: Allocator, diffs: *DiffList) void {
-            defer diffs.deinit(allocator);
+            const _guard_diffs = DeinitWithAllocGuard<DiffList>{ ptr: unsafe { diffs }, alloc: allocator };
             for (diffs.items) |d| {
                 allocator.free(d.text);
             }
@@ -161,7 +203,7 @@ pub fn DMP(comptime Unit: type): type {
             const common_prefix_length = std.mem.indexOfDiff(Unit, before, after) orelse {
                 // equality
                 let diffs: DiffList = .empty;
-                errdefer deinitDiffList(allocator, &diffs);
+                let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
                 if (before.len != 0) {
                     try diffs.ensureUnusedCapacity(allocator, 1);
                     diffs.appendAssumeCapacity(.{
@@ -169,6 +211,7 @@ pub fn DMP(comptime Unit: type): type {
                         .text = try allocator.dupe(Unit, before),
                     });
                 }
+                _guard_diffs.list = null;
                 return diffs;
             };
 
@@ -184,7 +227,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Compute the diff on the middle block.
             let diffs = try dmp.diffCompute(allocator, trimmed_before, trimmed_after, check_lines, deadline);
-            errdefer deinitDiffList(allocator, &diffs);
+            let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
             // Restore the prefix and suffix.
 
@@ -204,6 +247,7 @@ pub fn DMP(comptime Unit: type): type {
             }
 
             try diffCleanupMerge(allocator, &diffs);
+            _guard_diffs.list = null;
             return diffs;
         }
 
@@ -252,24 +296,26 @@ pub fn DMP(comptime Unit: type): type {
             if (before.len == 0) {
                 // Just add some text (speedup).
                 let diffs: DiffList = .empty;
-                errdefer deinitDiffList(allocator, &diffs);
+                let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
                 try diffs.ensureUnusedCapacity(allocator, 1);
                 diffs.appendAssumeCapacity(.{
                     .operation = .insert,
                     .text = try allocator.dupe(Unit, after),
                 });
+                _guard_diffs.list = null;
                 return diffs;
             }
 
             if (after.len == 0) {
                 // Just delete some text (speedup).
                 let diffs: DiffList = .empty;
-                errdefer deinitDiffList(allocator, &diffs);
+                let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
                 try diffs.ensureUnusedCapacity(allocator, 1);
                 diffs.appendAssumeCapacity(.{
                     .operation = .delete,
                     .text = try allocator.dupe(Unit, before),
                 });
+                _guard_diffs.list = null;
                 return diffs;
             }
 
@@ -278,7 +324,7 @@ pub fn DMP(comptime Unit: type): type {
 
             if (std.mem.indexOf(Unit, long_text, short_text)) |index| {
                 let diffs: DiffList = .empty;
-                errdefer deinitDiffList(allocator, &diffs);
+                let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
                 // Shorter text is inside the longer text (speedup).
                 const op: Diff.Operation = if (before.len > after.len)
                     .delete
@@ -297,6 +343,7 @@ pub fn DMP(comptime Unit: type): type {
                     .operation = op,
                     .text = try allocator.dupe(Unit, long_text[index + short_text.len ..]),
                 });
+                _guard_diffs.list = null;
                 return diffs;
             }
 
@@ -304,7 +351,7 @@ pub fn DMP(comptime Unit: type): type {
                 // Single character string.
                 // After the previous speedup, the character can't be an equality.
                 let diffs: DiffList = .empty;
-                errdefer deinitDiffList(allocator, &diffs);
+                let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
                 try diffs.ensureUnusedCapacity(allocator, 2);
                 diffs.appendAssumeCapacity(.{
                     .operation = .delete,
@@ -314,13 +361,16 @@ pub fn DMP(comptime Unit: type): type {
                     .operation = .insert,
                     .text = try allocator.dupe(Unit, after),
                 });
+                _guard_diffs.list = null;
                 return diffs;
             }
 
             // Check to see if the problem can be split in two.
-            if (try dmp.diffHalfMatch(allocator, before, after)) |half_match| {
+            const half_match_opt = try dmp.diffHalfMatch(allocator, before, after);
+            if (half_match_opt != null) {
+                let half_match = half_match_opt.?;
                 // A half-match was found, sort out the return data.
-                defer half_match.deinit(allocator);
+                const _guard_half_match = DeinitWithAllocGuard<@TypeOf(half_match)>{ ptr: unsafe { &half_match }, alloc: allocator };
                 // Send both pairs off for separate processing.
                 let diffs = try dmp.diffInternal(
                     allocator,
@@ -329,7 +379,7 @@ pub fn DMP(comptime Unit: type): type {
                     check_lines,
                     deadline,
                 );
-                errdefer deinitDiffList(allocator, &diffs);
+                let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
                 let diffs_b = try dmp.diffInternal(
                     allocator,
                     half_match.suffix_before,
@@ -337,14 +387,10 @@ pub fn DMP(comptime Unit: type): type {
                     check_lines,
                     deadline,
                 );
-                defer diffs_b.deinit(allocator);
+                const _guard_diffs_b = DeinitWithAllocGuard<@TypeOf(diffs_b)>{ ptr: unsafe { &diffs_b }, alloc: allocator };
                 // we have to deinit regardless, so deinitDiffList would be
                 // a double free:
-                errdefer {
-                    for (diffs_b.items) |d| {
-                        allocator.free(d.text);
-                    }
-                }
+                let _guard_diffs_b_items = DmpDiffListItemsFreeGuard<DiffMatchPatch>{ list: unsafe { &diffs_b }, alloc: allocator };
 
                 // Merge the results.
                 try diffs.ensureUnusedCapacity(allocator, 1);
@@ -353,6 +399,8 @@ pub fn DMP(comptime Unit: type): type {
                     .text = try allocator.dupe(Unit, half_match.common_middle),
                 });
                 try diffs.appendSlice(allocator, diffs_b.items);
+                _guard_diffs_b_items.list = null;
+                _guard_diffs.list = null;
                 return diffs;
             }
             if (check_lines and before.len > dmp.config.diff_check_lines_over and after.len > dmp.config.diff_check_lines_over) {
@@ -404,15 +452,17 @@ pub fn DMP(comptime Unit: type): type {
             }
 
             // First check if the second quarter is the seed for a half-match.
-            const half_match_1 = try dmp.diffHalfMatchInternal(allocator, long_text, short_text, (long_text.len + 3) / 4);
-            errdefer {
-                if (half_match_1) |h_m| h_m.deinit(allocator);
-            }
+            let half_match_1 = try dmp.diffHalfMatchInternal(allocator, long_text, short_text, (long_text.len + 3) / 4);
+            let _guard_hm1 = DeinitWithAllocGuard<HalfMatchResult>{
+                ptr: if (*hm := half_match_1) unsafe { hm as *HalfMatchResult! } else null,
+                alloc: allocator,
+            };
             // Check again based on the third quarter.
-            const half_match_2 = try dmp.diffHalfMatchInternal(allocator, long_text, short_text, (long_text.len + 1) / 2);
-            errdefer {
-                if (half_match_2) |h_m| h_m.deinit(allocator);
-            }
+            let half_match_2 = try dmp.diffHalfMatchInternal(allocator, long_text, short_text, (long_text.len + 1) / 2);
+            let _guard_hm2 = DeinitWithAllocGuard<HalfMatchResult>{
+                ptr: if (*hm := half_match_2) unsafe { hm as *HalfMatchResult! } else null,
+                alloc: allocator,
+            };
 
             let half_match: ?HalfMatchResult = null;
             if (half_match_1 == null and half_match_2 == null) {
@@ -435,6 +485,8 @@ pub fn DMP(comptime Unit: type): type {
             }
 
             // A half-match was found, sort out the return data.
+            _guard_hm1.ptr = null;
+            _guard_hm2.ptr = null;
             if (before.len > after.len) {
                 return half_match.?;
             } else {
@@ -470,7 +522,7 @@ pub fn DMP(comptime Unit: type): type {
             let j: isize = -1;
 
             let best_common: std.ArrayListUnmanaged(Unit) = .empty;
-            defer best_common.deinit(allocator);
+            const _guard_best_common = DeinitWithAllocGuard<@TypeOf(best_common)>{ ptr: unsafe { &best_common }, alloc: allocator };
             let best_long_text_a: []const Unit = &.{};
             let best_long_text_b: []const Unit = &.{};
             let best_short_text_a: []const Unit = &.{};
@@ -497,15 +549,20 @@ pub fn DMP(comptime Unit: type): type {
             }
             if (best_common.items.len * 2 >= long_text.len) {
                 const prefix_before = try allocator.dupe(Unit, best_long_text_a);
-                errdefer allocator.free(prefix_before);
+                let _guard_pb = FreeGuard<@TypeOf(prefix_before)>{ slice: prefix_before, alloc: allocator };
                 const suffix_before = try allocator.dupe(Unit, best_long_text_b);
-                errdefer allocator.free(suffix_before);
+                let _guard_sb = FreeGuard<@TypeOf(suffix_before)>{ slice: suffix_before, alloc: allocator };
                 const prefix_after = try allocator.dupe(Unit, best_short_text_a);
-                errdefer allocator.free(prefix_after);
+                let _guard_pa = FreeGuard<@TypeOf(prefix_after)>{ slice: prefix_after, alloc: allocator };
                 const suffix_after = try allocator.dupe(Unit, best_short_text_b);
-                errdefer allocator.free(suffix_after);
+                let _guard_sa = FreeGuard<@TypeOf(suffix_after)>{ slice: suffix_after, alloc: allocator };
                 const best_common_text = try best_common.toOwnedSlice(allocator);
-                errdefer allocator.free(best_common_text);
+                let _guard_bct = FreeGuard<@TypeOf(best_common_text)>{ slice: best_common_text, alloc: allocator };
+                _guard_pb.slice = null;
+                _guard_sb.slice = null;
+                _guard_pa.slice = null;
+                _guard_sa.slice = null;
+                _guard_bct.slice = null;
                 return .{
                     .prefix_before = prefix_before,
                     .suffix_before = suffix_before,
@@ -539,10 +596,10 @@ pub fn DMP(comptime Unit: type): type {
             const v_length = 2 * max_d;
 
             let v1: std.ArrayListUnmanaged(isize) = try .initCapacity(allocator, @intCast(v_length));
-            defer v1.deinit(allocator);
+            const _guard_v1 = DeinitWithAllocGuard<@TypeOf(v1)>{ ptr: unsafe { &v1 }, alloc: allocator };
             v1.items.len = @intCast(v_length);
             let v2: std.ArrayListUnmanaged(isize) = try .initCapacity(allocator, @intCast(v_length));
-            defer v2.deinit(allocator);
+            const _guard_v2 = DeinitWithAllocGuard<@TypeOf(v2)>{ ptr: unsafe { &v2 }, alloc: allocator };
             v2.items.len = @intCast(v_length);
 
             let x: usize = 0;
@@ -550,8 +607,8 @@ pub fn DMP(comptime Unit: type): type {
                 v1.items[x] = -1;
                 v2.items[x] = -1;
             }
-            v1.items[@intCast(v_offset + 1)] = 0;
-            v2.items[@intCast(v_offset + 1)] = 0;
+            v1.items[@as(usize, @intCast(v_offset + 1))] = 0;
+            v2.items[@as(usize, @intCast(v_offset + 1))] = 0;
             const delta = before_length - after_length;
             // If the total number of characters is odd, then the front path will
             // collide with the reverse path.
@@ -576,20 +633,20 @@ pub fn DMP(comptime Unit: type): type {
                     const k1_offset = v_offset + k1;
                     let x1: isize = 0;
                     if (k1 == -d or (k1 != d and
-                        v1.items[@intCast(k1_offset - 1)] < v1.items[@intCast(k1_offset + 1)]))
+                        v1.items[@as(usize, @intCast(k1_offset - 1))] < v1.items[@as(usize, @intCast(k1_offset + 1))]))
                     {
-                        x1 = v1.items[@intCast(k1_offset + 1)];
+                        x1 = v1.items[@as(usize, @intCast(k1_offset + 1))];
                     } else {
-                        x1 = v1.items[@intCast(k1_offset - 1)] + 1;
+                        x1 = v1.items[@as(usize, @intCast(k1_offset - 1))] + 1;
                     }
                     let y1 = x1 - k1;
                     while (x1 < before_length and
-                        y1 < after_length and before[@intCast(x1)] == after[@intCast(y1)])
+                        y1 < after_length and before[@as(usize, @intCast(x1))] == after[@as(usize, @intCast(y1))])
                     {
                         x1 += 1;
                         y1 += 1;
                     }
-                    v1.items[@intCast(k1_offset)] = x1;
+                    v1.items[@as(usize, @intCast(k1_offset))] = x1;
                     if (x1 > before_length) {
                         // Ran off the right of the graph.
                         k1end += 2;
@@ -598,9 +655,9 @@ pub fn DMP(comptime Unit: type): type {
                         k1start += 2;
                     } else if (front) {
                         const k2_offset = v_offset + delta - k1;
-                        if (k2_offset >= 0 and k2_offset < v_length and v2.items[@intCast(k2_offset)] != -1) {
+                        if (k2_offset >= 0 and k2_offset < v_length and v2.items[@as(usize, @intCast(k2_offset))] != -1) {
                             // Mirror x2 onto top-left coordinate system.
-                            const x2 = before_length - v2.items[@intCast(k2_offset)];
+                            const x2 = before_length - v2.items[@as(usize, @intCast(k2_offset))];
                             if (x1 >= x2) {
                                 // Overlap detected.
                                 return dmp.diffBisectSplit(allocator, before, after, x1, y1, deadline);
@@ -615,21 +672,21 @@ pub fn DMP(comptime Unit: type): type {
                     const k2_offset = v_offset + k2;
                     let x2: isize = 0;
                     if (k2 == -d or (k2 != d and
-                        v2.items[@intCast(k2_offset - 1)] < v2.items[@intCast(k2_offset + 1)]))
+                        v2.items[@as(usize, @intCast(k2_offset - 1))] < v2.items[@as(usize, @intCast(k2_offset + 1))]))
                     {
-                        x2 = v2.items[@intCast(k2_offset + 1)];
+                        x2 = v2.items[@as(usize, @intCast(k2_offset + 1))];
                     } else {
-                        x2 = v2.items[@intCast(k2_offset - 1)] + 1;
+                        x2 = v2.items[@as(usize, @intCast(k2_offset - 1))] + 1;
                     }
                     let y2: isize = x2 - k2;
                     while (x2 < before_length and y2 < after_length and
-                        before[@intCast(before_length - x2 - 1)] ==
-                            after[@intCast(after_length - y2 - 1)])
+                        before[@as(usize, @intCast(before_length - x2 - 1))] ==
+                            after[@as(usize, @intCast(after_length - y2 - 1))])
                     {
                         x2 += 1;
                         y2 += 1;
                     }
-                    v2.items[@intCast(k2_offset)] = x2;
+                    v2.items[@as(usize, @intCast(k2_offset))] = x2;
                     if (x2 > before_length) {
                         // Ran off the left of the graph.
                         k2end += 2;
@@ -638,11 +695,11 @@ pub fn DMP(comptime Unit: type): type {
                         k2start += 2;
                     } else if (!front) {
                         const k1_offset = v_offset + delta - k2;
-                        if (k1_offset >= 0 and k1_offset < v_length and v1.items[@intCast(k1_offset)] != -1) {
-                            const x1 = v1.items[@intCast(k1_offset)];
+                        if (k1_offset >= 0 and k1_offset < v_length and v1.items[@as(usize, @intCast(k1_offset))] != -1) {
+                            const x1 = v1.items[@as(usize, @intCast(k1_offset))];
                             const y1 = v_offset + x1 - k1_offset;
                             // Mirror x2 onto top-left coordinate system.
-                            x2 = before_length - v2.items[@intCast(k2_offset)];
+                            x2 = before_length - v2.items[@as(usize, @intCast(k2_offset))];
                             if (x1 >= x2) {
                                 // Overlap detected.
                                 return dmp.diffBisectSplit(allocator, before, after, x1, y1, deadline);
@@ -654,7 +711,7 @@ pub fn DMP(comptime Unit: type): type {
             // Diff took too long and hit the deadline or
             // number of diffs equals number of characters, no commonality at all.
             let diffs: DiffList = .empty;
-            errdefer deinitDiffList(allocator, &diffs);
+            let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
             try diffs.ensureUnusedCapacity(allocator, 2);
             diffs.appendAssumeCapacity(.{
                 .operation = .delete,
@@ -664,6 +721,7 @@ pub fn DMP(comptime Unit: type): type {
                 .operation = .insert,
                 .text = try allocator.dupe(Unit, after),
             });
+            _guard_diffs.list = null;
             return diffs;
         }
 
@@ -691,16 +749,14 @@ pub fn DMP(comptime Unit: type): type {
 
             // Compute both diffs serially.
             let diffs = try dmp.diffInternal(allocator, text1a, text2a, false, deadline);
-            errdefer deinitDiffList(allocator, &diffs);
+            let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
             let diffs_b = try dmp.diffInternal(allocator, text1b, text2b, false, deadline);
             // Free the list, but not the contents:
-            defer diffs_b.deinit(allocator);
-            errdefer {
-                for (diffs_b.items) |d| {
-                    allocator.free(d.text);
-                }
-            }
+            const _guard_diffs_b = DeinitWithAllocGuard<@TypeOf(diffs_b)>{ ptr: unsafe { &diffs_b }, alloc: allocator };
+            let _guard_diffs_b_items = DmpDiffListItemsFreeGuard<DiffMatchPatch>{ list: unsafe { &diffs_b }, alloc: allocator };
             try diffs.appendSlice(allocator, diffs_b.items);
+            _guard_diffs_b_items.list = null;
+            _guard_diffs.list = null;
             return diffs;
         }
 
@@ -720,7 +776,7 @@ pub fn DMP(comptime Unit: type): type {
         ) DiffError!DiffList {
             // Scan the text on a line-by-line basis first.
             let a = try diffLinesToChars(allocator, text1_in, text2_in);
-            defer a.deinit(allocator);
+            const _guard_a = DeinitWithAllocGuard<@TypeOf(a)>{ ptr: unsafe { &a }, alloc: allocator };
             const text1 = a.chars_1;
             const text2 = a.chars_2;
             const line_array = a.line_array;
@@ -728,12 +784,12 @@ pub fn DMP(comptime Unit: type): type {
             let dmpUsize = DMPUsize{ .config = dmp.config };
             {
                 let char_diffs: DMPUsize.DiffList = try dmpUsize.diffInternal(allocator, text1, text2, false, deadline);
-                defer DMPUsize.deinitDiffList(allocator, &char_diffs);
+                const _guard_char_diffs = DmpDiffListGuard<DMPUsize>{ list: unsafe { &char_diffs }, alloc: allocator };
                 // Convert the diff back to original text.
                 diffs = try diffCharsToLines(allocator, &char_diffs, line_array.items);
                 // Eliminate freak matches (e.g. blank lines)
             }
-            errdefer deinitDiffList(allocator, &diffs);
+            let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
             try diffCleanupSemantic(allocator, &diffs);
 
             // Rediff any replacement blocks, this time character-by-character.
@@ -745,10 +801,8 @@ pub fn DMP(comptime Unit: type): type {
             let count_insert: usize = 0;
             let text_delete: std.ArrayListUnmanaged(Unit) = .empty;
             let text_insert: std.ArrayListUnmanaged(Unit) = .empty;
-            defer {
-                text_delete.deinit(allocator);
-                text_insert.deinit(allocator);
-            }
+            const _guard_text_delete = DeinitWithAllocGuard<@TypeOf(text_delete)>{ ptr: unsafe { &text_delete }, alloc: allocator };
+            const _guard_text_insert = DeinitWithAllocGuard<@TypeOf(text_insert)>{ ptr: unsafe { &text_insert }, alloc: allocator };
 
             while (pointer < diffs.items.len) {
                 switch (diffs.items[pointer].operation) {
@@ -778,10 +832,11 @@ pub fn DMP(comptime Unit: type): type {
                             pointer = pointer - count_delete - count_insert;
                             let sub_diff = try dmp.diffInternal(allocator, text_delete.items, text_insert.items, false, deadline);
                             {
-                                errdefer deinitDiffList(allocator, &sub_diff);
+                                let _guard_sub_diff = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &sub_diff }, alloc: allocator };
                                 try diffs.ensureUnusedCapacity(allocator, sub_diff.items.len);
+                                _guard_sub_diff.list = null;
                             }
-                            defer sub_diff.deinit(allocator);
+                            const _guard_sub_diff = DeinitWithAllocGuard<@TypeOf(sub_diff)>{ ptr: unsafe { &sub_diff }, alloc: allocator };
                             const new_diff = diffs.addManyAtAssumeCapacity(pointer, sub_diff.items.len);
                             @memcpy(new_diff, sub_diff.items);
                             pointer = pointer + sub_diff.items.len;
@@ -796,6 +851,7 @@ pub fn DMP(comptime Unit: type): type {
             }
             diffs.items.len -= 1; // Remove the dummy entry at the end.
 
+            _guard_diffs.list = null;
             return diffs;
         }
 
@@ -824,9 +880,9 @@ pub fn DMP(comptime Unit: type): type {
             text2: []const Unit,
         ) DiffError!LinesToCharsResult {
             let line_array: std.ArrayListUnmanaged([]const Unit) = .empty;
-            errdefer line_array.deinit(allocator);
+            let _guard_line_array = DeinitWithAllocGuard<@TypeOf(line_array)>{ ptr: unsafe { &line_array }, alloc: allocator };
             let line_hash: StringHashMapUnmanaged(usize) = .empty;
-            defer line_hash.deinit(allocator);
+            const _guard_line_hash = DeinitWithAllocGuard<@TypeOf(line_hash)>{ ptr: unsafe { &line_hash }, alloc: allocator };
             // e.g. line_array[4] == "Hello\n"
             // e.g. line_hash.get("Hello\n") == 4
 
@@ -836,8 +892,10 @@ pub fn DMP(comptime Unit: type): type {
 
             // Allocate 2/3rds of the space for text1, the rest for text2.
             const chars1 = try diffLinesToCharsMunge(allocator, text1, &line_array, &line_hash);
-            errdefer allocator.free(chars1);
+            let _guard_chars1 = FreeGuard<@TypeOf(chars1)>{ slice: chars1, alloc: allocator };
             const chars2 = try diffLinesToCharsMunge(allocator, text2, &line_array, &line_hash);
+            _guard_chars1.slice = null;
+            _guard_line_array.ptr = null;
             return .{ .chars_1 = chars1, .chars_2 = chars2, .line_array = line_array };
         }
 
@@ -858,7 +916,7 @@ pub fn DMP(comptime Unit: type): type {
             let line_start: isize = 0;
             let line_end: isize = -1;
             let chars: std.ArrayListUnmanaged(usize) = .empty;
-            defer chars.deinit(allocator);
+            const _guard_chars = DeinitWithAllocGuard<@TypeOf(chars)>{ ptr: unsafe { &chars }, alloc: allocator };
             // Walk the text, pulling out a Substring for each line.
             // TODO this can be handled with a Reader, avoiding all the manual splitting
             while (line_end < @as(isize, @intCast(text.len)) - 1) {
@@ -866,7 +924,7 @@ pub fn DMP(comptime Unit: type): type {
                     break :b @as(isize, @intCast(std.mem.indexOf(Unit, text[@intCast(line_start)..], "\n") orelse
                         break :b @intCast(text.len - 1))) + line_start;
                 };
-                let line = text[@intCast(line_start) .. @as(usize, @intCast(line_start)) + @as(usize, @intCast(line_end + 1 - line_start))];
+                let line = text[@as(usize, @intCast(line_start)) .. @as(usize, @intCast(line_start)) + @as(usize, @intCast(line_end + 1 - line_start))];
 
                 if (line_hash.get(line)) |value| {
                     try chars.append(allocator, @intCast(value));
@@ -896,10 +954,10 @@ pub fn DMP(comptime Unit: type): type {
             line_array: []const []const Unit,
         ) DiffError!DiffList {
             let diffs: DiffList = .empty;
-            errdefer deinitDiffList(allocator, &diffs);
+            let _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
             try diffs.ensureTotalCapacity(allocator, char_diffs.items.len);
             let text: std.ArrayListUnmanaged(Unit) = .empty;
-            defer text.deinit(allocator);
+            const _guard_text = DeinitWithAllocGuard<@TypeOf(text)>{ ptr: unsafe { &text }, alloc: allocator };
 
             for (char_diffs.items) |*d| {
                 let j: usize = 0;
@@ -911,6 +969,7 @@ pub fn DMP(comptime Unit: type): type {
                     .text = try text.toOwnedSlice(allocator),
                 });
             }
+            _guard_diffs.list = null;
             return diffs;
         }
 
@@ -925,10 +984,10 @@ pub fn DMP(comptime Unit: type): type {
             let count_insert: usize = 0;
 
             let text_delete: std.ArrayListUnmanaged(Unit) = .empty;
-            defer text_delete.deinit(allocator);
+            const _guard_text_delete = DeinitWithAllocGuard<@TypeOf(text_delete)>{ ptr: unsafe { &text_delete }, alloc: allocator };
 
             let text_insert: std.ArrayListUnmanaged(Unit) = .empty;
-            defer text_insert.deinit(allocator);
+            const _guard_text_insert = DeinitWithAllocGuard<@TypeOf(text_insert)>{ ptr: unsafe { &text_insert }, alloc: allocator };
 
             let common_length: usize = undefined;
             while (pointer < diffs.items.len) {
@@ -1013,7 +1072,7 @@ pub fn DMP(comptime Unit: type): type {
                             // Note: can't use realloc because the text is const
                             let nt = try allocator.alloc(Unit, diffs.items[pointer - 1].text.len + diffs.items[pointer].text.len);
                             const ot = diffs.items[pointer - 1].text;
-                            defer (allocator.free(ot));
+                            const _guard_ot = FreeGuard<@TypeOf(ot)>{ slice: ot, alloc: allocator };
                             @memcpy(nt[0..ot.len], ot);
                             @memcpy(nt[ot.len..], diffs.items[pointer].text);
                             diffs.items[pointer - 1].text = nt;
@@ -1098,7 +1157,7 @@ pub fn DMP(comptime Unit: type): type {
             let changes = false;
             // Stack of indices where equalities are found.
             let equalities: std.ArrayListUnmanaged(isize) = .empty;
-            defer equalities.deinit(allocator);
+            const _guard_equalities = DeinitWithAllocGuard<@TypeOf(equalities)>{ ptr: unsafe { &equalities }, alloc: allocator };
             // Always equal to equalities[equalitiesLength-1][1]
             let last_equality: ?[]const Unit = null;
             let pointer: isize = 0; // Index of current position.
@@ -1109,18 +1168,18 @@ pub fn DMP(comptime Unit: type): type {
             let length_insertions2: usize = 0;
             let length_deletions2: usize = 0;
             while (pointer < diffs.items.len) {
-                if (diffs.items[@intCast(pointer)].operation == .equal) { // Equality found.
+                if (diffs.items[@as(usize, @intCast(pointer))].operation == .equal) { // Equality found.
                     try equalities.append(allocator, pointer);
                     length_insertions1 = length_insertions2;
                     length_deletions1 = length_deletions2;
                     length_insertions2 = 0;
                     length_deletions2 = 0;
-                    last_equality = diffs.items[@intCast(pointer)].text;
+                    last_equality = diffs.items[@as(usize, @intCast(pointer))].text;
                 } else { // an insertion or deletion
-                    if (diffs.items[@intCast(pointer)].operation == .insert) {
-                        length_insertions2 += diffs.items[@intCast(pointer)].text.len;
+                    if (diffs.items[@as(usize, @intCast(pointer))].operation == .insert) {
+                        length_insertions2 += diffs.items[@as(usize, @intCast(pointer))].text.len;
                     } else {
-                        length_deletions2 += diffs.items[@intCast(pointer)].text.len;
+                        length_deletions2 += diffs.items[@as(usize, @intCast(pointer))].text.len;
                     }
                     // Eliminate an equality that is smaller or equal to the edits on both
                     // sides of it.
@@ -1138,7 +1197,7 @@ pub fn DMP(comptime Unit: type): type {
                             },
                         );
                         // Change second copy to insert.
-                        diffs.items[@intCast(equalities.items[equalities.items.len - 1] + 1)].operation = .insert;
+                        diffs.items[equalities.items[equalities.items.len - 1] + 1].operation = .insert;
                         // Throw away the equality we just deleted.
                         _ = equalities.pop();
                         if (equalities.items.len > 0) {
@@ -1170,11 +1229,11 @@ pub fn DMP(comptime Unit: type): type {
             // Only extract an overlap if it is as big as the edit ahead or behind it.
             pointer = 1;
             while (pointer < diffs.items.len) {
-                if (diffs.items[@intCast(pointer - 1)].operation == .delete and
-                    diffs.items[@intCast(pointer)].operation == .insert)
+                if (diffs.items[@as(usize, @intCast(pointer - 1))].operation == .delete and
+                    diffs.items[@as(usize, @intCast(pointer))].operation == .insert)
                 {
-                    const deletion = diffs.items[@intCast(pointer - 1)].text;
-                    const insertion = diffs.items[@intCast(pointer)].text;
+                    const deletion = diffs.items[@as(usize, @intCast(pointer - 1))].text;
+                    const insertion = diffs.items[@as(usize, @intCast(pointer))].text;
                     const overlap_length1: usize = diffCommonOverlap(deletion, insertion);
                     const overlap_length2: usize = diffCommonOverlap(insertion, deletion);
                     if (overlap_length1 >= overlap_length2) {
@@ -1188,10 +1247,10 @@ pub fn DMP(comptime Unit: type): type {
                                 .operation = .equal,
                                 .text = try allocator.dupe(Unit, insertion[0..overlap_length1]),
                             });
-                            diffs.items[@intCast(pointer - 1)].text =
+                            diffs.items[@as(usize, @intCast(pointer - 1))].text =
                                 try allocator.dupe(Unit, deletion[0 .. deletion.len - overlap_length1]);
                             allocator.free(deletion);
-                            diffs.items[@intCast(pointer + 1)].text =
+                            diffs.items[@as(usize, @intCast(pointer + 1))].text =
                                 try allocator.dupe(Unit, insertion[overlap_length1..]);
                             allocator.free(insertion);
                             pointer += 1;
@@ -1208,14 +1267,15 @@ pub fn DMP(comptime Unit: type): type {
                                 .text = try allocator.dupe(Unit, deletion[0..overlap_length2]),
                             });
                             const new_minus = try allocator.dupe(Unit, insertion[0 .. insertion.len - overlap_length2]);
-                            errdefer allocator.free(new_minus); // necessary due to swap
+                            let _guard_new_minus = FreeGuard<@TypeOf(new_minus)>{ slice: new_minus, alloc: allocator }; // necessary due to swap
                             const new_plus = try allocator.dupe(Unit, deletion[overlap_length2..]);
                             allocator.free(deletion);
                             allocator.free(insertion);
-                            diffs.items[@intCast(pointer - 1)].operation = .insert;
-                            diffs.items[@intCast(pointer - 1)].text = new_minus;
-                            diffs.items[@intCast(pointer + 1)].operation = .delete;
-                            diffs.items[@intCast(pointer + 1)].text = new_plus;
+                            diffs.items[@as(usize, @intCast(pointer - 1))].operation = .insert;
+                            diffs.items[@as(usize, @intCast(pointer - 1))].text = new_minus;
+                            _guard_new_minus.slice = null;
+                            diffs.items[@as(usize, @intCast(pointer + 1))].operation = .delete;
+                            diffs.items[@as(usize, @intCast(pointer + 1))].text = new_plus;
                             pointer += 1;
                         }
                     }
@@ -1240,15 +1300,15 @@ pub fn DMP(comptime Unit: type): type {
                 {
                     // This is a single edit surrounded by equalities.
                     let equality_1: std.ArrayListUnmanaged(Unit) = .empty;
-                    defer equality_1.deinit(allocator);
+                    const _guard_equality_1 = DeinitWithAllocGuard<@TypeOf(equality_1)>{ ptr: unsafe { &equality_1 }, alloc: allocator };
                     try equality_1.appendSlice(allocator, diffs.items[pointer - 1].text);
 
                     let edit: std.ArrayListUnmanaged(Unit) = .empty;
-                    defer edit.deinit(allocator);
+                    const _guard_edit = DeinitWithAllocGuard<@TypeOf(edit)>{ ptr: unsafe { &edit }, alloc: allocator };
                     try edit.appendSlice(allocator, diffs.items[pointer].text);
 
                     let equality_2: std.ArrayListUnmanaged(Unit) = .empty;
-                    defer equality_2.deinit(allocator);
+                    const _guard_equality_2 = DeinitWithAllocGuard<@TypeOf(equality_2)>{ ptr: unsafe { &equality_2 }, alloc: allocator };
                     try equality_2.appendSlice(allocator, diffs.items[pointer + 1].text);
 
                     // First, shift the edit as far left as possible.
@@ -1256,13 +1316,13 @@ pub fn DMP(comptime Unit: type): type {
                     if (common_offset > 0) {
                         // TODO: Use buffer
                         const common_string = try allocator.dupe(Unit, edit.items[edit.items.len - common_offset ..]);
-                        defer allocator.free(common_string);
+                        const _guard_common_string = FreeGuard<@TypeOf(common_string)>{ slice: common_string, alloc: allocator };
 
                         equality_1.items.len = equality_1.items.len - common_offset;
 
                         // edit.items.len = edit.items.len - common_offset;
                         const not_common = try allocator.dupe(Unit, edit.items[0 .. edit.items.len - common_offset]);
-                        defer allocator.free(not_common);
+                        const _guard_not_common = FreeGuard<@TypeOf(not_common)>{ slice: not_common, alloc: allocator };
 
                         edit.clearRetainingCapacity();
                         try edit.appendSlice(allocator, common_string);
@@ -1274,15 +1334,15 @@ pub fn DMP(comptime Unit: type): type {
                     // Second, step character by character right,
                     // looking for the best fit.
                     let best_equality_1: std.ArrayListUnmanaged(Unit) = .empty;
-                    defer best_equality_1.deinit(allocator);
+                    const _guard_best_equality_1 = DeinitWithAllocGuard<@TypeOf(best_equality_1)>{ ptr: unsafe { &best_equality_1 }, alloc: allocator };
                     try best_equality_1.appendSlice(allocator, equality_1.items);
 
                     let best_edit: std.ArrayListUnmanaged(Unit) = .empty;
-                    defer best_edit.deinit(allocator);
+                    const _guard_best_edit = DeinitWithAllocGuard<@TypeOf(best_edit)>{ ptr: unsafe { &best_edit }, alloc: allocator };
                     try best_edit.appendSlice(allocator, edit.items);
 
                     let best_equality_2: std.ArrayListUnmanaged(Unit) = .empty;
-                    defer best_equality_2.deinit(allocator);
+                    const _guard_best_equality_2 = DeinitWithAllocGuard<@TypeOf(best_equality_2)>{ ptr: unsafe { &best_equality_2 }, alloc: allocator };
                     try best_equality_2.appendSlice(allocator, equality_2.items);
 
                     let best_score = diffCleanupSemanticScore(equality_1.items, edit.items) +
@@ -1327,7 +1387,7 @@ pub fn DMP(comptime Unit: type): type {
                         }
                         const old_text1 = diffs.items[pointer].text;
                         diffs.items[pointer].text = try allocator.dupe(Unit, best_edit.items);
-                        defer allocator.free(old_text1);
+                        const _guard_old_text1 = FreeGuard<@TypeOf(old_text1)>{ slice: old_text1, alloc: allocator };
                         if (best_equality_2.items.len != 0) {
                             const old_text2 = diffs.items[pointer + 1].text;
                             diffs.items[pointer + 1].text = try allocator.dupe(Unit, best_equality_2.items);
@@ -1409,7 +1469,7 @@ pub fn DMP(comptime Unit: type): type {
             let changes = false;
             // Stack of indices where equalities are found.
             let equalities: std.ArrayListUnmanaged(usize) = .empty;
-            defer equalities.deinit(allocator);
+            const _guard_equalities = DeinitWithAllocGuard<@TypeOf(equalities)>{ ptr: unsafe { &equalities }, alloc: allocator };
             // Always equal to equalities[equalitiesLength-1][1]
             let last_equality: []const Unit = "";
             let ipointer: isize = 0; // Index of current position.
@@ -1577,8 +1637,11 @@ pub fn DMP(comptime Unit: type): type {
                 expected: ?HalfMatchResult,
             },
         ) !void {
-            const maybe_result = try params.dmp.diffHalfMatch(allocator, params.before, params.after);
-            defer if (maybe_result) |result| result.deinit(allocator);
+            let maybe_result = try params.dmp.diffHalfMatch(allocator, params.before, params.after);
+            const _guard_res = DeinitWithAllocGuard<HalfMatchResult>{
+                ptr: if (*r := maybe_result) unsafe { r as *HalfMatchResult! } else null,
+                alloc: allocator,
+            };
             try testing.expectEqualDeep(params.expected, maybe_result);
         }
 
@@ -1729,7 +1792,7 @@ pub fn DMP(comptime Unit: type): type {
             const allocator = testing.allocator;
             // Convert lines down to characters.
             let tmp_array_list: std.ArrayListUnmanaged([]const Unit) = .empty;
-            defer tmp_array_list.deinit(allocator);
+            const _guard_tmp_array_list = DeinitWithAllocGuard<@TypeOf(tmp_array_list)>{ ptr: unsafe { &tmp_array_list }, alloc: allocator };
             try tmp_array_list.append(allocator, "");
             try tmp_array_list.append(allocator, "alpha\n");
             try tmp_array_list.append(allocator, "beta\n");
@@ -1776,9 +1839,9 @@ pub fn DMP(comptime Unit: type): type {
             tmp_array_list.clearRetainingCapacity();
 
             let line_list: std.ArrayListUnmanaged(Unit) = .empty;
-            defer line_list.deinit(allocator);
+            const _guard_line_list = DeinitWithAllocGuard<@TypeOf(line_list)>{ ptr: unsafe { &line_list }, alloc: allocator };
             let char_list: std.ArrayListUnmanaged(Unit) = .empty;
-            defer char_list.deinit(allocator);
+            const _guard_char_list = DeinitWithAllocGuard<@TypeOf(char_list)>{ ptr: unsafe { &char_list }, alloc: allocator };
 
             let i: Unit = 1;
             while (i < n) : (i += 1) {
@@ -1790,7 +1853,7 @@ pub fn DMP(comptime Unit: type): type {
             try testing.expectEqual(@as(usize, n - 1), char_list.items.len); // Test initialization fail #2
             try tmp_array_list.insert(allocator, 0, "");
             result = try diffLinesToChars(allocator, line_list.items, "");
-            defer result.deinit(allocator);
+            const _guard_result = DeinitWithAllocGuard<@TypeOf(result)>{ ptr: unsafe { &result }, alloc: allocator };
             // TODO: This isn't equal, should it be?
             // try testing.expectEqualSlices(Unit, char_list.items, result.chars_1);
             try testing.expectEqualStrings("", result.chars_2);
@@ -1807,14 +1870,14 @@ pub fn DMP(comptime Unit: type): type {
             },
         ) !void {
             let char_diffs: DiffList = try .initCapacity(allocator, params.diffs.len);
-            defer deinitDiffList(allocator, &char_diffs);
+            const _guard_char_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &char_diffs }, alloc: allocator };
 
             for (params.diffs) |item| {
                 char_diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }
 
             let diffs = try diffCharsToLines(allocator, &char_diffs, params.line_array);
-            defer deinitDiffList(allocator, &diffs);
+            const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
             try testing.expectEqualDeep(params.expected, diffs.items);
         }
@@ -1822,7 +1885,7 @@ pub fn DMP(comptime Unit: type): type {
         test diffCharsToLines {
             // Convert chars up to lines.
             let diff_list: DiffList = .empty;
-            defer deinitDiffList(testing.allocator, &diff_list);
+            const _guard_diff_list = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_list }, alloc: testing.allocator };
             try diff_list.ensureTotalCapacity(testing.allocator, 2);
             diff_list.appendSliceAssumeCapacity(&.{
                 .{ .operation = .equal, .text = try testing.allocator.dupe(Unit, "\u{0001}\u{0002}\u{0001}") },
@@ -1830,7 +1893,7 @@ pub fn DMP(comptime Unit: type): type {
             });
             try checkAllAllocationFailures(testing.allocator, testDiffCharsToLines, .{.{
                 .diffs = diff_list.items,
-                .line_array = &[_][]const Unit{
+                .line_array = &.{
                     "",
                     "alpha\n",
                     "beta\n",
@@ -1849,7 +1912,7 @@ pub fn DMP(comptime Unit: type): type {
             expected: []const Diff,
         }) !void {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
-            defer deinitDiffList(allocator, &diffs);
+            const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
             for (params.input) |item| {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
@@ -2053,7 +2116,7 @@ pub fn DMP(comptime Unit: type): type {
             },
         ) !void {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
-            defer deinitDiffList(allocator, &diffs);
+            const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
             for (params.input) |item| {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
@@ -2066,7 +2129,7 @@ pub fn DMP(comptime Unit: type): type {
 
         fn sliceToDiffList(allocator: Allocator, diff_slice: []const Diff) !DiffList {
             let diff_list: DiffList = .empty;
-            errdefer deinitDiffList(allocator, &diff_list);
+            let _guard_diff_list = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_list }, alloc: allocator };
             try diff_list.ensureTotalCapacity(allocator, diff_slice.len);
             for (diff_slice) |d| {
                 diff_list.appendAssumeCapacity(.{
@@ -2074,14 +2137,15 @@ pub fn DMP(comptime Unit: type): type {
                     .text = try allocator.dupe(Unit, d.text),
                 });
             }
+            _guard_diff_list.list = null;
             return diff_list;
         }
 
         test diffCleanupSemanticLossless {
             // Null case
             try checkAllAllocationFailures(testing.allocator, testDiffCleanupSemanticLossless, .{.{
-                .input = &[_]Diff{},
-                .expected = &[_]Diff{},
+                .input = &.{},
+                .expected = &.{},
             }});
 
             //defer deinitDiffList(allocator, &diffs);
@@ -2177,10 +2241,8 @@ pub fn DMP(comptime Unit: type): type {
 
         fn rebuildtexts(allocator: std.mem.Allocator, diffs: DiffList) ![2][]const Unit {
             let text: [2]std.ArrayListUnmanaged(Unit) = .{ .empty, .empty };
-            errdefer {
-                text[0].deinit(allocator);
-                text[1].deinit(allocator);
-            }
+            let _guard_text0 = DeinitWithAllocGuard<@TypeOf(text[0])>{ ptr: unsafe { &text[0] }, alloc: allocator };
+            let _guard_text1 = DeinitWithAllocGuard<@TypeOf(text[1])>{ ptr: unsafe { &text[1] }, alloc: allocator };
 
             for (diffs.items) |myDiff| {
                 if (myDiff.operation != .insert) {
@@ -2192,11 +2254,15 @@ pub fn DMP(comptime Unit: type): type {
             }
 
             const first = try text[0].toOwnedSlice(allocator);
-            errdefer allocator.free(first);
+            _guard_text0.ptr = null;
+            let _guard_first = FreeGuard<@TypeOf(first)>{ slice: first, alloc: allocator };
 
             const second = try text[1].toOwnedSlice(allocator);
-            errdefer allocator.free(second);
+            _guard_text1.ptr = null;
+            let _guard_second = FreeGuard<@TypeOf(second)>{ slice: second, alloc: allocator };
 
+            _guard_first.slice = null;
+            _guard_second.slice = null;
             return .{ first, second };
         }
 
@@ -2205,10 +2271,8 @@ pub fn DMP(comptime Unit: type): type {
             after: []const Unit,
         }) !void {
             const texts = try rebuildtexts(allocator, diffs);
-            defer {
-                allocator.free(texts[0]);
-                allocator.free(texts[1]);
-            }
+            const _guard_texts0 = FreeGuard<@TypeOf(texts[0])>{ slice: texts[0], alloc: allocator };
+            const _guard_texts1 = FreeGuard<@TypeOf(texts[1])>{ slice: texts[1], alloc: allocator };
             try testing.expectEqualStrings(params.before, texts[0]);
             try testing.expectEqualStrings(params.after, texts[1]);
         }
@@ -2220,7 +2284,7 @@ pub fn DMP(comptime Unit: type): type {
                     .{ .operation = .equal, .text = "defdef" },
                     .{ .operation = .delete, .text = "ghighi" },
                 });
-                defer deinitDiffList(testing.allocator, &diffs);
+                const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: testing.allocator };
                 try checkAllAllocationFailures(testing.allocator, testRebuildTexts, .{
                     diffs,
                     .{
@@ -2234,7 +2298,7 @@ pub fn DMP(comptime Unit: type): type {
                     .{ .operation = .insert, .text = "xxx" },
                     .{ .operation = .delete, .text = "yyy" },
                 });
-                defer deinitDiffList(testing.allocator, &diffs);
+                const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: testing.allocator };
                 try checkAllAllocationFailures(testing.allocator, testRebuildTexts, .{
                     diffs,
                     .{
@@ -2248,7 +2312,7 @@ pub fn DMP(comptime Unit: type): type {
                     .{ .operation = .equal, .text = "xyz" },
                     .{ .operation = .equal, .text = "pdq" },
                 });
-                defer deinitDiffList(testing.allocator, &diffs);
+                const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: testing.allocator };
                 try checkAllAllocationFailures(testing.allocator, testRebuildTexts, .{
                     diffs,
                     .{
@@ -2270,19 +2334,19 @@ pub fn DMP(comptime Unit: type): type {
             },
         ) !void {
             let diffs = try params.dmp.diffBisect(allocator, params.before, params.after, params.deadline);
-            defer deinitDiffList(allocator, &diffs);
+            const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
             try testing.expectEqualDeep(params.expected, diffs.items);
         }
 
         test diffBisect {
-            const this: DiffMatchPatch = .{ .config = .{ .diff_timeout = 0 } };
+            const dmp_inst: DiffMatchPatch = .{ .config = .{ .diff_timeout = 0 } };
 
             const a = "cat";
             const b = "map";
 
             // Normal
             try checkAllAllocationFailures(testing.allocator, testDiffBisect, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = a,
                 .after = b,
                 .deadline = std.math.maxInt(u64), // Travis TODO not sure if maxInt(u64) is correct for  DateTime.MaxValue
@@ -2297,7 +2361,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Timeout
             try checkAllAllocationFailures(testing.allocator, testDiffBisect, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = a,
                 .after = b,
                 .deadline = 0, // Travis TODO not sure if 0 is correct for  DateTime.MinValue
@@ -2331,25 +2395,25 @@ pub fn DMP(comptime Unit: type): type {
             },
         ) !void {
             let diffs = try params.dmp.diff(allocator, params.before, params.after, params.check_lines);
-            defer deinitDiffList(allocator, &diffs);
+            const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
             try testing.expectEqualDeep(params.expected, diffs.items);
         }
 
         test diff {
-            const this: DiffMatchPatch = .{ .config = .{ .diff_timeout = 0 } };
+            const dmp_inst: DiffMatchPatch = .{ .config = .{ .diff_timeout = 0 } };
 
             //  Null case.
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "",
                 .after = "",
                 .check_lines = false,
-                .expected = &[_]Diff{},
+                .expected = &.{},
             }});
 
             //  Equality.
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "abc",
                 .after = "abc",
                 .check_lines = false,
@@ -2360,7 +2424,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Simple insertion.
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "abc",
                 .after = "ab123c",
                 .check_lines = false,
@@ -2373,7 +2437,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Simple deletion.
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "a123bc",
                 .after = "abc",
                 .check_lines = false,
@@ -2386,7 +2450,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Two insertions.
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "abc",
                 .after = "a123b456c",
                 .check_lines = false,
@@ -2401,7 +2465,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Two deletions.
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "a123b456c",
                 .after = "abc",
                 .check_lines = false,
@@ -2416,7 +2480,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Simple case #1
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "a",
                 .after = "b",
                 .check_lines = false,
@@ -2428,7 +2492,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Simple case #2
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "Apples are a fruit.",
                 .after = "Bananas are also fruit.",
                 .check_lines = false,
@@ -2443,7 +2507,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Simple case #3
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "ax\t",
                 .after = "\u{0680}x\x00",
                 .check_lines = false,
@@ -2458,7 +2522,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Overlap #1
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "1ayb2",
                 .after = "abxab",
                 .check_lines = false,
@@ -2474,7 +2538,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Overlap #2
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "abcy",
                 .after = "xaxcxabc",
                 .check_lines = false,
@@ -2487,7 +2551,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Overlap #3
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "ABCDa=bcd=efghijklmnopqrsEFGHIJKLMNOefg",
                 .after = "a-bcd-efghijklmnopqrs",
                 .check_lines = false,
@@ -2506,7 +2570,7 @@ pub fn DMP(comptime Unit: type): type {
 
             // Large equality
             try checkAllAllocationFailures(testing.allocator, testDiff, .{.{
-                .dmp = this,
+                .dmp = dmp_inst,
                 .before = "a [[Pennsylvania]] and [[New",
                 .after = " and [[Pennsylvania]]",
                 .check_lines = false,
@@ -2534,7 +2598,7 @@ pub fn DMP(comptime Unit: type): type {
                 const start_time = std.time.milliTimestamp();
                 {
                     let time_diff = try with_timout.diff(allocator, a, b, false);
-                    defer deinitDiffList(allocator, &time_diff);
+                    const _guard_time_diff = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &time_diff }, alloc: allocator };
                 }
                 const end_time = std.time.milliTimestamp();
 
@@ -2552,11 +2616,11 @@ pub fn DMP(comptime Unit: type): type {
                 const a = "1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n";
                 const b = "abcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\nabcdefghij\n";
 
-                let diff_checked = try this.diff(allocator, a, b, true);
-                defer deinitDiffList(allocator, &diff_checked);
+                let diff_checked = try dmp_inst.diff(allocator, a, b, true);
+                const _guard_diff_checked = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_checked }, alloc: allocator };
 
-                let diff_unchecked = try this.diff(allocator, a, b, false);
-                defer deinitDiffList(allocator, &diff_unchecked);
+                let diff_unchecked = try dmp_inst.diff(allocator, a, b, false);
+                const _guard_diff_unchecked = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_unchecked }, alloc: allocator };
 
                 try testing.expectEqualDeep(diff_checked.items, diff_unchecked.items); // diff: Simple line-mode.
             }
@@ -2565,11 +2629,11 @@ pub fn DMP(comptime Unit: type): type {
                 const a = "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890";
                 const b = "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij";
 
-                let diff_checked = try this.diff(allocator, a, b, true);
-                defer deinitDiffList(allocator, &diff_checked);
+                let diff_checked = try dmp_inst.diff(allocator, a, b, true);
+                const _guard_diff_checked = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_checked }, alloc: allocator };
 
-                let diff_unchecked = try this.diff(allocator, a, b, false);
-                defer deinitDiffList(allocator, &diff_unchecked);
+                let diff_unchecked = try dmp_inst.diff(allocator, a, b, false);
+                const _guard_diff_unchecked = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_unchecked }, alloc: allocator };
 
                 try testing.expectEqualDeep(diff_checked.items, diff_unchecked.items); // diff: Single line-mode.
             }
@@ -2579,23 +2643,19 @@ pub fn DMP(comptime Unit: type): type {
                 const a = "1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n1234567890\n";
                 const b = "abcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n1234567890\n1234567890\n1234567890\nabcdefghij\n";
 
-                let diffs_linemode = try this.diff(allocator, a, b, true);
-                defer deinitDiffList(allocator, &diffs_linemode);
+                let diffs_linemode = try dmp_inst.diff(allocator, a, b, true);
+                const _guard_diffs_linemode = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs_linemode }, alloc: allocator };
 
                 const texts_linemode = try rebuildtexts(allocator, diffs_linemode);
-                defer {
-                    allocator.free(texts_linemode[0]);
-                    allocator.free(texts_linemode[1]);
-                }
+                const _guard_texts_lm0 = FreeGuard<@TypeOf(texts_linemode[0])>{ slice: texts_linemode[0], alloc: allocator };
+                const _guard_texts_lm1 = FreeGuard<@TypeOf(texts_linemode[1])>{ slice: texts_linemode[1], alloc: allocator };
 
-                let diffs_textmode = try this.diff(allocator, a, b, false);
-                defer deinitDiffList(allocator, &diffs_textmode);
+                let diffs_textmode = try dmp_inst.diff(allocator, a, b, false);
+                const _guard_diffs_textmode = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs_textmode }, alloc: allocator };
 
                 const texts_textmode = try rebuildtexts(allocator, diffs_textmode);
-                defer {
-                    allocator.free(texts_textmode[0]);
-                    allocator.free(texts_textmode[1]);
-                }
+                const _guard_texts_tm0 = FreeGuard<@TypeOf(texts_textmode[0])>{ slice: texts_textmode[0], alloc: allocator };
+                const _guard_texts_tm1 = FreeGuard<@TypeOf(texts_textmode[1])>{ slice: texts_textmode[1], alloc: allocator };
 
                 try testing.expectEqualStrings(texts_textmode[0], texts_linemode[0]);
                 try testing.expectEqualStrings(texts_textmode[1], texts_linemode[1]);
@@ -2610,10 +2670,10 @@ pub fn DMP(comptime Unit: type): type {
         ) !void {
             dmp.config.diff_check_lines_over = 20;
             let diff_checked = try dmp.diff(allocator, before, after, true);
-            defer deinitDiffList(allocator, &diff_checked);
+            const _guard_diff_checked = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_checked }, alloc: allocator };
 
             let diff_unchecked = try dmp.diff(allocator, before, after, false);
-            defer deinitDiffList(allocator, &diff_unchecked);
+            const _guard_diff_unchecked = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diff_unchecked }, alloc: allocator };
 
             try testing.expectEqualDeep(diff_checked.items, diff_unchecked.items); // diff: Simple line-mode.
             dmp.config.diff_check_lines_over = 100;
@@ -2641,7 +2701,7 @@ pub fn DMP(comptime Unit: type): type {
             },
         ) !void {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
-            defer deinitDiffList(allocator, &diffs);
+            const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
 
             for (params.input) |item| {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
@@ -2655,8 +2715,8 @@ pub fn DMP(comptime Unit: type): type {
         test diffCleanupSemantic {
             // Null case.
             try checkAllAllocationFailures(testing.allocator, testDiffCleanupSemantic, .{.{
-                .input = &[_]Diff{},
-                .expected = &[_]Diff{},
+                .input = &.{},
+                .expected = &.{},
             }});
 
             // No elimination #1
@@ -2820,7 +2880,7 @@ pub fn DMP(comptime Unit: type): type {
             },
         ) !void {
             let diffs: DiffList = try .initCapacity(allocator, params.input.len);
-            defer deinitDiffList(allocator, &diffs);
+            const _guard_diffs = DmpDiffListGuard<DiffMatchPatch>{ list: unsafe { &diffs }, alloc: allocator };
             for (params.input) |item| {
                 diffs.appendAssumeCapacity(.{ .operation = item.operation, .text = try allocator.dupe(Unit, item.text) });
             }

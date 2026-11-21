@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 comptime {
     _ = &Server__setIdleTimeout;
     _ = NodeHTTPResponse.create;
@@ -67,7 +68,154 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn OptDeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn DeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        alloc: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit(self.alloc);
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deref();
+                }
+        }
+    };
+}
+
+pub fn OptDerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deref();
+                    }
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime S: type) type {
+    return struct {
+        alloc: Allocator,
+        slice: S,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.alloc.free(self.slice);
+        }
+    };
+}
+
+pub fn OptFreeGuard(comptime S: type) type {
+    return struct {
+        alloc: Allocator,
+        slice: ?S,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.alloc.free(s);
+                }
+        }
+    };
+}
+
+pub fn PathBufferGuard(comptime T: type) type {
+    return struct {
+        buf: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = bun.path_buffer_pool.put(self.buf);
+        }
+    };
+}
+
+pub fn UserRoutesDeinitGuard(comptime T: type) type {
+    return struct {
+        routes: *std.ArrayListUnmanaged(T),
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    for (self.routes.items) |*r| {
+                        _ = &r;
+                        _ = (r.*).route.deinit();
+                    }
+                    _ = self.routes.deinit(bun.default_allocator);
+                }
+        }
+    };
+}
 
 pub const ServerAllConnectionsClosedTask = struct {
     globalObject: *jsc.JSGlobalObject,
@@ -89,9 +237,13 @@ pub fn runFromJSThread(self: *ServerAllConnectionsClosedTask, vm: *jsc.VirtualMa
             }
             var promise = self.promise;
             _ = &promise;
-            defer {
-            _ = promise.deinit();
-            }
+            var _guard_promise = DeinitGuard(@TypeOf(promise)){ .ptr = (blk: {
+            break :blk (&promise);
+
+}) };
+            _ = &_guard_promise;
+            var ___guard_promise_moved = false; _ = &___guard_promise_moved;
+            defer if (!___guard_promise_moved) { ___guard_promise_moved = true; const __T = @TypeOf(_guard_promise); if (@typeInfo(__T) == .optional) { if (_guard_promise) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_promise.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_promise; _drop_val.__cp_deinit(); } };
             _ = bun.destroy(self);
             if ((!vm.isShuttingDown())) {
                 _ = try promise.resolve(globalObject, .js_undefined);
@@ -191,14 +343,22 @@ pub fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const 
             }
             var path_string = try bun.String.fromJS(path_val, init_ctx.global);
             _ = &path_string;
-            defer {
-            _ = path_string.deref();
-            }
+            var _guard_path_string = DerefGuard(bun.String){ .ptr = (blk: {
+            break :blk (&path_string);
+
+}) };
+            _ = &_guard_path_string;
+            var ___guard_path_string_moved = false; _ = &___guard_path_string_moved;
+            defer if (!___guard_path_string_moved) { ___guard_path_string_moved = true; const __T = @TypeOf(_guard_path_string); if (@typeInfo(__T) == .optional) { if (_guard_path_string) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_path_string.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_path_string; _drop_val.__cp_deinit(); } };
             var path = jsc.Node.PathOrFileDescriptor{ .path = try jsc.Node.PathLike.fromBunString(init_ctx.global, (&path_string), false, bun.default_allocator) };
             _ = &path;
-            defer {
-            _ = path.deinit();
-            }
+            var _guard_path = DeinitGuard(jsc.Node.PathOrFileDescriptor){ .ptr = (blk: {
+            break :blk (&path);
+
+}) };
+            _ = &_guard_path;
+            var ___guard_path_moved = false; _ = &___guard_path_moved;
+            defer if (!___guard_path_moved) { ___guard_path_moved = true; const __T = @TypeOf(_guard_path); if (@typeInfo(__T) == .optional) { if (_guard_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_path; _drop_val.__cp_deinit(); } };
             const cwd = (if (bun.StandaloneModuleGraph.isBunStandaloneFilePath(path.path.slice())) bun.StandaloneModuleGraph.targetBasePublicPath(bun.Environment.os, "root/") else bun.fs.FileSystem.instance.top_level_dir);
             const parts: [1][]const u8 = .{ path.path.slice() };
             const abs_path = bun.fs.FileSystem.instance.abs((&parts));
@@ -216,9 +376,13 @@ pub fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const 
             const is_index_route = bun.strings.eql(path.path.slice(), index_path);
             var builder = std.array_list.Managed(u8).init(bun.default_allocator);
             _ = &builder;
-            defer {
-            _ = builder.deinit();
-            }
+            var _guard_builder = DeinitGuard(@TypeOf(builder)){ .ptr = (blk: {
+            break :blk (&builder);
+
+}) };
+            _ = &_guard_builder;
+            var ___guard_builder_moved = false; _ = &___guard_builder_moved;
+            defer if (!___guard_builder_moved) { ___guard_builder_moved = true; const __T = @TypeOf(_guard_builder); if (@typeInfo(__T) == .optional) { if (_guard_builder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_builder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_builder; _drop_val.__cp_deinit(); } };
             if ((!strings.hasPrefixComptime(relative_path, "/"))) {
                 _ = try builder.append(47);
             }
@@ -229,12 +393,10 @@ pub fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const 
             }
             const headers_val = headers_opt.?;
             const fetch_headers = try jsc.WebCore.FetchHeaders.createFromJS(init_ctx.global, headers_val);
-            defer {
-            if (fetch_headers) |headers| {
-                _ = &headers;
-                _ = headers.deref();
-            }
-            }
+            var _guard_fetch_headers = OptDerefGuard(jsc.WebCore.FetchHeaders){ .ptr = fetch_headers };
+            _ = &_guard_fetch_headers;
+            var ___guard_fetch_headers_moved = false; _ = &___guard_fetch_headers_moved;
+            defer if (!___guard_fetch_headers_moved) { ___guard_fetch_headers_moved = true; const __T = @TypeOf(_guard_fetch_headers); if (@typeInfo(__T) == .optional) { if (_guard_fetch_headers) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fetch_headers.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fetch_headers; _drop_val.__cp_deinit(); } };
             if (init_ctx.global.hasException()) {
                 return error.JSError;
             }
@@ -258,10 +420,15 @@ pub fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitCon
             if ((index_opt == null)) {
                 return null;
             }
-            const index = index_opt.?;
-            defer {
-            _ = index.deinit();
-            }
+            var index = index_opt.?;
+            _ = &index;
+            var _guard_index = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+            break :blk (&index);
+
+}) };
+            _ = &_guard_index;
+            var ___guard_index_moved = false; _ = &___guard_index_moved;
+            defer if (!___guard_index_moved) { ___guard_index_moved = true; const __T = @TypeOf(_guard_index); if (@typeInfo(__T) == .optional) { if (_guard_index) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_index.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_index; _drop_val.__cp_deinit(); } };
             const files_opt = try argument.getArray(init_ctx.global, "files");
             if ((files_opt == null)) {
                 return null;
@@ -341,13 +508,18 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
                         _ = &style_val;
                         style = try FrameworkRouter.Style.fromJS(style_val, global);
                     }
-                    errdefer {
-                    _ = style.deinit();
-                    }
+                    var _guard_style = OptDeinitGuard(FrameworkRouter.Style){ .ptr = (blk: {
+                    break :blk (&style);
+
+}) };
+                    _ = &_guard_style;
+                    var ___guard_style_moved = false; _ = &___guard_style_moved;
+                    defer if (!___guard_style_moved) { ___guard_style_moved = true; const __T = @TypeOf(_guard_style); if (@typeInfo(__T) == .optional) { if (_guard_style) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_style.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_style; _drop_val.__cp_deinit(); } };
                     if ((!bun.strings.endsWith(path, "/*"))) {
                         return global.throwInvalidArguments("To mount a directory, make sure the path ends in `/*`", .{});
                     }
                     _ = try init_ctx.framework_router_list.append(.{ .root = relative_root, .style = style, .prefix = (if ((path.len == 2)) "/" else path[0..(path.len - 2)]), .entry_client = "bun-framework-react/client.tsx", .entry_server = "bun-framework-react/server.tsx", .ignore_underscores = true, .ignore_dirs = (&.{ "node_modules", ".git" }), .extensions = (&.{ ".tsx", ".jsx" }), .allow_layouts = true });
+                    _guard_style.ptr = null;
                     const limit = std.math.maxInt(@typeInfo(FrameworkRouter.Type.Index).@"enum".tag_type);
                     if ((init_ctx.framework_router_list.items.len > limit)) {
                         return global.throwInvalidArguments("Too many framework routers. Maximum is {d}.", .{ limit });
@@ -367,13 +539,13 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
             return .{ .static = static_route };
     }
     pub const ServerInitContext = struct {
-            arena: std.heap.ArenaAllocator,
-            dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
-            js_string_allocations: bun.bake.StringRefList,
-            global: *jsc.JSGlobalObject,
-            framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
-            user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
-        };
+        arena: std.heap.ArenaAllocator,
+        dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
+        js_string_allocations: bun.bake.StringRefList,
+        global: *jsc.JSGlobalObject,
+        framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
+        user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
+    };
 };
 pub const ServerConfig = @import("./ServerConfig.zig");
 pub const ServerWebSocket = @import("./ServerWebSocket.zig");
@@ -382,233 +554,253 @@ const ServePlugins = struct {
     state: State,
     ref_count: RefCount,
 
-    /// Reference count is incremented while there are other objects that are waiting on plugin loads.
+pub fn init(plugins: []const []const u8) *ServePlugins {
+            return bun.new(ServePlugins, .{ .ref_count = .init(), .state = .{ .unqueued = plugins } });
+    }
+
+pub fn deinit(self: *@This()) void {
+            switch (self.state) {
+.unqueued => {
+
+},
+.pending => {
+_ = assert(false);
+},
+.loaded => |loaded| {
+_ = loaded.deinit();
+},
+.err => {
+
+},
+}
+            _ = bun.destroy(self);
+    }
+
+pub fn getOrStartLoad(self: *@This(), global: *jsc.JSGlobalObject, cb: Callback) bun.JSError!GetOrStartLoadResult {
+            while (true) {
+                switch (self.state) {
+.unqueued => {
+_ = try self.loadAndResolvePlugins(global);
+                continue;
+},
+.pending => |*pending| {
+switch (cb) {
+.html_bundle_route => |route| {
+_ = route.ref();
+                _ = try pending.html_bundle_routes.append(bun.default_allocator, route);
+},
+.dev_server => |server| {
+_ = assert(((pending.dev_server == null) or (pending.dev_server == server)));
+                pending.dev_server = server;
+},
+}
+                return .pending;
+},
+.loaded => |plugins| {
+return .{ .ready = plugins };
+},
+.err => {
+return .err;
+},
+}
+            }
+    }
+
+pub extern "c" fn JSBundlerPlugin__loadAndResolvePluginsForServe(plugin: *bun.jsc.API.JSBundler.Plugin, plugins: jsc.JSValue, bunfig_folder: jsc.JSValue) callconv(.c) JSValue;
+
+pub fn loadAndResolvePlugins(self: *@This(), global: *jsc.JSGlobalObject) bun.JSError!void {
+            _ = bun.assert((self.state == .unqueued));
+            const plugin_list = self.state.unqueued;
+            const bunfig_folder = bun.path.dirname(global.bunVM().transpiler.options.bunfig_path, .auto);
+            _ = self.ref();
+            var _guard_this = DerefGuard(ServePlugins){ .ptr = self };
+            _ = &_guard_this;
+            var ___guard_this_moved = false; _ = &___guard_this_moved;
+            defer if (!___guard_this_moved) { ___guard_this_moved = true; const __T = @TypeOf(_guard_this); if (@typeInfo(__T) == .optional) { if (_guard_this) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_this.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_this; _drop_val.__cp_deinit(); } };
+            const plugin = bun.jsc.API.JSBundler.Plugin.create(global, .browser);
+            var sfb = std.heap.stackFallback((@sizeOf(bun.String) * 4), bun.default_allocator);
+            _ = &sfb;
+            const alloc = sfb.get();
+            const bunstring_array = bun.handleOom(alloc.alloc(bun.String, plugin_list.len));
+            var _guard_bunstring_array = FreeGuard(@TypeOf(bunstring_array)){ .alloc = alloc, .slice = bunstring_array };
+            _ = &_guard_bunstring_array;
+            var ___guard_bunstring_array_moved = false; _ = &___guard_bunstring_array_moved;
+            defer if (!___guard_bunstring_array_moved) { ___guard_bunstring_array_moved = true; const __T = @TypeOf(_guard_bunstring_array); if (@typeInfo(__T) == .optional) { if (_guard_bunstring_array) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstring_array.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstring_array; _drop_val.__cp_deinit(); } };
+            for (plugin_list, bunstring_array) |raw_plugin, *out| {
+                _ = &raw_plugin;
+                _ = &out;
+                out.* = bun.String.init(raw_plugin);
+            }
+            const plugin_js_array = try bun.String.toJSArray(global, bunstring_array);
+            const bunfig_folder_bunstr = try bun.String.createUTF8ForJS(global, bunfig_folder);
+            self.state = .{ .pending = .{ .promise = jsc.JSPromise.Strong.init(global), .plugin = plugin, .html_bundle_routes = .empty, .dev_server = null } };
+            _ = global.bunVM().eventLoop().enter();
+            const result = try bun.jsc.fromJSHostCall(global, @src(), JSBundlerPlugin__loadAndResolvePluginsForServe, .{ plugin, plugin_js_array, bunfig_folder_bunstr });
+            _ = global.bunVM().eventLoop().exit();
+            if (global.tryTakeException()) |e| {
+                _ = &e;
+                _ = handleOnReject(self, global, e);
+                return;
+            }
+            if ((!result.isEmptyOrUndefinedOrNull())) {
+                if (result.asAnyPromise()) |promise| {
+                    _ = &promise;
+                    switch (promise.status()) {
+.pending => {
+_ = self.ref();
+                    const promise_value = promise.asValue();
+                    _ = self.state.pending.promise.strong.set(global, promise_value);
+                    _ = try promise_value.then(global, self, onResolveImpl, onRejectImpl);
+                    return;
+},
+.fulfilled => {
+_ = handleOnResolve(self);
+                    return;
+},
+.rejected => {
+var pm = promise;
+                    _ = &pm;
+                    const value = pm.result(global.vm());
+                    _ = handleOnReject(self, global, value);
+                    return;
+},
+}
+                }
+                if (result.toError()) |e| {
+                    _ = &e;
+                    _ = handleOnReject(self, global, e);
+                } else {
+                    _ = handleOnResolve(self);
+                }
+            }
+    }
+
+pub fn onResolveImpl(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+            _ = ctxLog("onResolve", .{});
+            const args_arr_p = callframe.argumentsAsArray(2);
+            const plugins_result = args_arr_p[0];
+            const plugins_js = args_arr_p[1];
+            var plugins = plugins_js.asPromisePtr(ServePlugins);
+            _ = &plugins;
+            var _guard_plugins = DerefGuard(ServePlugins){ .ptr = plugins };
+            _ = &_guard_plugins;
+            var ___guard_plugins_moved = false; _ = &___guard_plugins_moved;
+            defer if (!___guard_plugins_moved) { ___guard_plugins_moved = true; const __T = @TypeOf(_guard_plugins); if (@typeInfo(__T) == .optional) { if (_guard_plugins) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_plugins.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_plugins; _drop_val.__cp_deinit(); } };
+            _ = plugins_result.ensureStillAlive();
+            _ = handleOnResolve(plugins);
+            return JSValue.js_undefined;
+    }
+
+pub fn handleOnResolve(self: *@This()) void {
+            _ = bun.assert((self.state == .pending));
+            const pending = (&self.state.pending);
+            const plugin = pending.plugin;
+            const dev_server = pending.dev_server;
+            var html_bundle_routes = pending.html_bundle_routes;
+            _ = &html_bundle_routes;
+            pending.html_bundle_routes = .empty;
+            var _guard_html_bundle_routes = DeinitWithAllocGuard(@TypeOf(html_bundle_routes)){ .ptr = (blk: {
+            break :blk (&html_bundle_routes);
+
+}), .alloc = bun.default_allocator };
+            _ = &_guard_html_bundle_routes;
+            var ___guard_html_bundle_routes_moved = false; _ = &___guard_html_bundle_routes_moved;
+            defer if (!___guard_html_bundle_routes_moved) { ___guard_html_bundle_routes_moved = true; const __T = @TypeOf(_guard_html_bundle_routes); if (@typeInfo(__T) == .optional) { if (_guard_html_bundle_routes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_html_bundle_routes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_html_bundle_routes; _drop_val.__cp_deinit(); } };
+            _ = pending.promise.deinit();
+            self.state = .{ .loaded = plugin };
+            for (html_bundle_routes.items) |route| {
+                _ = &route;
+                _ = bun.handleOom(route.onPluginsResolved(plugin));
+                _ = route.deref();
+            }
+            if (dev_server) |server| {
+                _ = &server;
+                _ = bun.handleOom(server.onPluginsResolved(plugin));
+            }
+    }
+
+pub fn onRejectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+            _ = ctxLog("onReject", .{});
+            const args_arr_e = callframe.argumentsAsArray(2);
+            const error_js = args_arr_e[0];
+            const plugin_js = args_arr_e[1];
+            const plugins = plugin_js.asPromisePtr(ServePlugins);
+            var _guard_plugins = DerefGuard(ServePlugins){ .ptr = plugins };
+            _ = &_guard_plugins;
+            var ___guard_plugins_moved = false; _ = &___guard_plugins_moved;
+            defer if (!___guard_plugins_moved) { ___guard_plugins_moved = true; const __T = @TypeOf(_guard_plugins); if (@typeInfo(__T) == .optional) { if (_guard_plugins) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_plugins.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_plugins; _drop_val.__cp_deinit(); } };
+            _ = handleOnReject(plugins, globalThis, error_js);
+            return JSValue.js_undefined;
+    }
+
+pub fn handleOnReject(self: *@This(), global: *jsc.JSGlobalObject, err: JSValue) void {
+            _ = bun.assert((self.state == .pending));
+            const pending = (&self.state.pending);
+            const dev_server = pending.dev_server;
+            var html_bundle_routes = pending.html_bundle_routes;
+            _ = &html_bundle_routes;
+            pending.html_bundle_routes = .empty;
+            var _guard_html_bundle_routes = DeinitWithAllocGuard(@TypeOf(html_bundle_routes)){ .ptr = (blk: {
+            break :blk (&html_bundle_routes);
+
+}), .alloc = bun.default_allocator };
+            _ = &_guard_html_bundle_routes;
+            var ___guard_html_bundle_routes_moved = false; _ = &___guard_html_bundle_routes_moved;
+            defer if (!___guard_html_bundle_routes_moved) { ___guard_html_bundle_routes_moved = true; const __T = @TypeOf(_guard_html_bundle_routes); if (@typeInfo(__T) == .optional) { if (_guard_html_bundle_routes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_html_bundle_routes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_html_bundle_routes; _drop_val.__cp_deinit(); } };
+            _ = pending.plugin.deinit();
+            _ = pending.promise.deinit();
+            self.state = .err;
+            for (html_bundle_routes.items) |route| {
+                _ = &route;
+                _ = bun.handleOom(route.onPluginsRejected());
+                _ = route.deref();
+            }
+            if (dev_server) |server| {
+                _ = &server;
+                _ = bun.handleOom(server.onPluginsRejected());
+            }
+            _ = Output.errGeneric("Failed to load plugins for Bun.serve:", .{});
+            _ = global.bunVM().runErrorHandler(err, null);
+    }
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
-
     pub const State = union(enum) {
-        unqueued: []const []const u8,
-        pending: struct {
-            /// Promise may be empty if the plugin load finishes synchronously.
-            plugin: *bun.jsc.API.JSBundler.Plugin,
-            promise: jsc.JSPromise.Strong,
-            html_bundle_routes: std.ArrayListUnmanaged(*HTMLBundle.Route),
-            dev_server: ?*bun.bake.DevServer,
-        },
-        loaded: *bun.jsc.API.JSBundler.Plugin,
-        /// Error information is not stored as it is already reported.
-        err,
-    };
-
+            unqueued: []const []const u8,
+            pending: struct {
+                /// Promise may be empty if the plugin load finishes synchronously.
+                plugin: *bun.jsc.API.JSBundler.Plugin,
+                promise: jsc.JSPromise.Strong,
+                html_bundle_routes: std.ArrayListUnmanaged(*HTMLBundle.Route),
+                dev_server: ?*bun.bake.DevServer,
+            },
+            loaded: *bun.jsc.API.JSBundler.Plugin,
+            /// Error information is not stored as it is already reported.
+            err,
+        };
     pub const GetOrStartLoadResult = union(enum) {
-        /// null = no plugins, used by server implementation
-        ready: ?*bun.jsc.API.JSBundler.Plugin,
-        pending,
-        err,
-    };
-
+            /// null = no plugins, used by server implementation
+            ready: ?*bun.jsc.API.JSBundler.Plugin,
+            pending,
+            err,
+        };
     pub const Callback = union(enum) {
         html_bundle_route: *HTMLBundle.Route,
         dev_server: *bun.bake.DevServer,
     };
-
-    pub fn init(plugins: []const []const u8) *ServePlugins {
-        return bun.new(ServePlugins, .{ .ref_count = .init(), .state = .{ .unqueued = plugins } });
-    }
-
-    fn deinit(this: *ServePlugins) void {
-        switch (this.state) {
-            .unqueued => {},
-            .pending => assert(false), // should have one ref while pending!
-            .loaded => |loaded| loaded.deinit(),
-            .err => {},
-        }
-        bun.destroy(this);
-    }
-
-    pub fn getOrStartLoad(this: *ServePlugins, global: *jsc.JSGlobalObject, cb: Callback) bun.JSError!GetOrStartLoadResult {
-        sw: switch (this.state) {
-            .unqueued => {
-                try this.loadAndResolvePlugins(global);
-                continue :sw this.state; // could jump to any branch if synchronously resolved
-            },
-            .pending => |*pending| {
-                switch (cb) {
-                    .html_bundle_route => |route| {
-                        route.ref();
-                        try pending.html_bundle_routes.append(bun.default_allocator, route);
-                    },
-                    .dev_server => |server| {
-                        assert(pending.dev_server == null or pending.dev_server == server); // one dev server per server
-                        pending.dev_server = server;
-                    },
-                }
-                return .pending;
-            },
-            .loaded => |plugins| return .{ .ready = plugins },
-            .err => return .err,
-        }
-    }
-
-    extern fn JSBundlerPlugin__loadAndResolvePluginsForServe(
-        plugin: *bun.jsc.API.JSBundler.Plugin,
-        plugins: jsc.JSValue,
-        bunfig_folder: jsc.JSValue,
-    ) JSValue;
-
-    fn loadAndResolvePlugins(this: *ServePlugins, global: *jsc.JSGlobalObject) bun.JSError!void {
-        bun.assert(this.state == .unqueued);
-        const plugin_list = this.state.unqueued;
-        const bunfig_folder = bun.path.dirname(global.bunVM().transpiler.options.bunfig_path, .auto);
-
-        this.ref();
-        defer this.deref();
-
-        const plugin = bun.jsc.API.JSBundler.Plugin.create(global, .browser);
-        var sfb = std.heap.stackFallback(@sizeOf(bun.String) * 4, bun.default_allocator);
-        const alloc = sfb.get();
-        const bunstring_array = bun.handleOom(alloc.alloc(bun.String, plugin_list.len));
-        defer alloc.free(bunstring_array);
-        for (plugin_list, bunstring_array) |raw_plugin, *out| {
-            out.* = bun.String.init(raw_plugin);
-        }
-        const plugin_js_array = try bun.String.toJSArray(global, bunstring_array);
-        const bunfig_folder_bunstr = try bun.String.createUTF8ForJS(global, bunfig_folder);
-
-        this.state = .{ .pending = .{
-            .promise = jsc.JSPromise.Strong.init(global),
-            .plugin = plugin,
-            .html_bundle_routes = .empty,
-            .dev_server = null,
-        } };
-
-        global.bunVM().eventLoop().enter();
-        const result = try bun.jsc.fromJSHostCall(global, @src(), JSBundlerPlugin__loadAndResolvePluginsForServe, .{ plugin, plugin_js_array, bunfig_folder_bunstr });
-        global.bunVM().eventLoop().exit();
-
-        // handle the case where js synchronously throws an error
-        if (global.tryTakeException()) |e| {
-            handleOnReject(this, global, e);
-            return;
-        }
-
-        if (!result.isEmptyOrUndefinedOrNull()) {
-            // handle the case where js returns a promise
-            if (result.asAnyPromise()) |promise| {
-                switch (promise.status()) {
-                    // promise not fulfilled yet
-                    .pending => {
-                        this.ref();
-                        const promise_value = promise.asValue();
-                        this.state.pending.promise.strong.set(global, promise_value);
-                        try promise_value.then(global, this, onResolveImpl, onRejectImpl);
-                        return;
-                    },
-                    .fulfilled => {
-                        handleOnResolve(this);
-                        return;
-                    },
-                    .rejected => {
-                        var pm = promise;
-                        const value = pm.result(global.vm());
-                        handleOnReject(this, global, value);
-                        return;
-                    },
-                }
-            }
-
-            if (result.toError()) |e| {
-                handleOnReject(this, global, e);
-            } else {
-                handleOnResolve(this);
-            }
-        }
-    }
-
     pub const onResolve = jsc.toJSHostFn(onResolveImpl);
     pub const onReject = jsc.toJSHostFn(onRejectImpl);
-
-    pub fn onResolveImpl(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-        ctxLog("onResolve", .{});
-
-        const plugins_result, const plugins_js = callframe.argumentsAsArray(2);
-        var plugins = plugins_js.asPromisePtr(ServePlugins);
-        defer plugins.deref();
-        plugins_result.ensureStillAlive();
-
-        handleOnResolve(plugins);
-
-        return JSValue.js_undefined;
-    }
-
-    pub fn handleOnResolve(this: *ServePlugins) void {
-        bun.assert(this.state == .pending);
-        const pending = &this.state.pending;
-        const plugin = pending.plugin;
-        const dev_server = pending.dev_server;
-        var html_bundle_routes = pending.html_bundle_routes;
-        pending.html_bundle_routes = .empty;
-        defer html_bundle_routes.deinit(bun.default_allocator);
-
-        pending.promise.deinit();
-
-        this.state = .{ .loaded = plugin };
-
-        for (html_bundle_routes.items) |route| {
-            bun.handleOom(route.onPluginsResolved(plugin));
-            route.deref();
-        }
-        if (dev_server) |server| {
-            bun.handleOom(server.onPluginsResolved(plugin));
-        }
-    }
-
-    pub fn onRejectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-        ctxLog("onReject", .{});
-
-        const error_js, const plugin_js = callframe.argumentsAsArray(2);
-        const plugins = plugin_js.asPromisePtr(ServePlugins);
-        defer plugins.deref();
-        handleOnReject(plugins, globalThis, error_js);
-
-        return JSValue.js_undefined;
-    }
-
-    pub fn handleOnReject(this: *ServePlugins, global: *jsc.JSGlobalObject, err: JSValue) void {
-        bun.assert(this.state == .pending);
-        const pending = &this.state.pending;
-        const dev_server = pending.dev_server;
-        var html_bundle_routes = pending.html_bundle_routes;
-        pending.html_bundle_routes = .empty;
-        defer html_bundle_routes.deinit(bun.default_allocator);
-        pending.plugin.deinit();
-        pending.promise.deinit();
-
-        this.state = .err;
-
-        for (html_bundle_routes.items) |route| {
-            bun.handleOom(route.onPluginsRejected());
-            route.deref();
-        }
-        if (dev_server) |server| {
-            bun.handleOom(server.onPluginsRejected());
-        }
-
-        Output.errGeneric("Failed to load plugins for Bun.serve:", .{});
-        global.bunVM().runErrorHandler(err, null);
-    }
-
     comptime {
-        @export(&onResolve, .{ .name = "BunServe__onResolvePlugins" });
-        @export(&onReject, .{ .name = "BunServe__onRejectPlugins" });
-    }
+            @export(&onResolve, .{ .name = "BunServe__onResolvePlugins" });
+            @export(&onReject, .{ .name = "BunServe__onRejectPlugins" });
+        }
 };
 const PluginsResult = union(enum) {
     pending,
     found: ?*bun.jsc.API.JSBundler.Plugin,
     err,
 };
+var did_send_idletimeout_warning_once: bool = false;
 pub const AnyRequestContext = @import("./AnyRequestContext.zig");
 pub const NewRequestContext = @import("./RequestContext.zig").NewRequestContext;
 pub const SavedRequest = struct {
@@ -1193,2016 +1385,1809 @@ pub fn writeStatus(comptime ssl: bool, resp_ptr: ?*uws.NewApp(ssl).Response, sta
         }
 }
 
+pub fn PreparedRequestFor(comptime Ctx: type) type {
+        return struct {
+    js_request: JSValue,
+    request_object: *Request,
+    ctx: *Ctx,
+
+pub fn save(prepared: @This(), global: *jsc.JSGlobalObject, req: *Ctx.Req, resp: *Ctx.Resp) SavedRequest {
+            if (comptime Ctx.is_h3) {
+                _ = @compileError("PreparedRequest.save is HTTP/1-only");
+            }
+            _ = prepared.ctx.toAsync(req, prepared.request_object);
+            return .{ .js_request = .create(prepared.js_request, global), .request = prepared.request_object, .ctx = AnyRequestContext.init(prepared.ctx), .response = uws.AnyResponse.init(resp) };
+    }
+};
+}
+
 pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind: DevelopmentKind) type {
         return struct {
-        pub const js = switch (protocol_enum) {
-            .http => switch (development_kind) {
-                .debug => bun.jsc.Codegen.JSDebugHTTPServer,
-                .production => bun.jsc.Codegen.JSHTTPServer,
-            },
-            .https => switch (development_kind) {
-                .debug => bun.jsc.Codegen.JSDebugHTTPSServer,
-                .production => bun.jsc.Codegen.JSHTTPSServer,
-            },
-        };
-        pub const fromJS = js.fromJS;
-        pub const toJS = js.toJS;
-        pub const toJSDirect = js.toJSDirect;
-
-        pub const new = bun.TrivialNew(@This());
-
-        pub const ssl_enabled = protocol_enum == .https;
-        pub const debug_mode = development_kind == .debug;
-
-        const ThisServer = @This();
-        pub const RequestContext = NewRequestContext(ssl_enabled, debug_mode, @This(), false);
-        const has_h3 = ssl_enabled;
-        pub const H3RequestContext = if (has_h3) NewRequestContext(ssl_enabled, debug_mode, @This(), true) else void;
-
-        pub const App = uws.NewApp(ssl_enabled);
-        app: ?*App = null,
-        listener: ?*uws.ListenSocket = null,
-        h3_app: if (has_h3) ?*uws.H3.App else void = if (has_h3) null else {},
-        h3_listener: if (has_h3) ?*uws.H3.ListenSocket else void = if (has_h3) null else {},
-        /// Cached `h3=":<port>"; ma=86400` value for Alt-Svc on H1 responses;
-        /// formatted once in onH3Listen so renderMetadata doesn't reformat.
-        h3_alt_svc: if (has_h3) [:0]const u8 else void = if (has_h3) "" else {},
-        js_value: jsc.JSRef = jsc.JSRef.empty(),
-        /// Potentially null before listen() is called, and once .destroy() is called.
-        vm: *jsc.VirtualMachine,
-        globalThis: *JSGlobalObject,
-        base_url_string_for_joining: string = "",
-        config: ServerConfig = ServerConfig{},
-        pending_requests: usize = 0,
-        request_pool_allocator: *RequestContext.RequestContextStackAllocator = undefined,
-        h3_request_pool_allocator: if (has_h3) *H3RequestContext.RequestContextStackAllocator else void = if (has_h3) undefined else {},
-        all_closed_promise: jsc.JSPromise.Strong = .{},
-
-        listen_callback: jsc.AnyTask = undefined,
-        allocator: std.mem.Allocator,
-        poll_ref: Async.KeepAlive = .{},
-
-        flags: packed struct(u3) {
+    app: ?*App = null,
+    listener: ?*uws.ListenSocket = null,
+    h3_app: if (has_h3) ?*uws.H3.App else void = (if (has_h3) null else ({
+})),
+    h3_listener: if (has_h3) ?*uws.H3.ListenSocket else void = (if (has_h3) null else ({
+})),
+    h3_alt_svc: if (has_h3) [:0]const u8 else void = (if (has_h3) "" else ({
+})),
+    js_value: jsc.JSRef = jsc.JSRef.empty(),
+    vm: *jsc.VirtualMachine,
+    globalThis: *JSGlobalObject,
+    base_url_string_for_joining: []const u8 = "",
+    config: ServerConfig = ServerConfig{  },
+    pending_requests: usize = 0,
+    request_pool_allocator: *RequestContext.RequestContextStackAllocator = undefined,
+    h3_request_pool_allocator: if (has_h3) *H3RequestContext.RequestContextStackAllocator else void = (if (has_h3) undefined else ({
+})),
+    all_closed_promise: jsc.JSPromise.Strong = .{},
+    listen_callback: jsc.AnyTask = undefined,
+    allocator: std.mem.Allocator,
+    poll_ref: Async.KeepAlive = .{},
+    flags: packed struct(u3) {
             deinit_scheduled: bool = false,
             terminated: bool = false,
             has_handled_all_closed_promise: bool = false,
         } = .{},
+    plugins: ?*ServePlugins = null,
+    dev_server: ?*bun.bake.DevServer,
+    user_routes: std.ArrayListUnmanaged(UserRoute) = .{},
+    on_clienterror: jsc.Strong.Optional = .empty,
+    inspector_server_id: jsc.Debugger.DebuggerId = .init(0),
 
-        plugins: ?*ServePlugins = null,
-
-        dev_server: ?*bun.bake.DevServer,
-
-        /// These associate a route to the index in RouteList.cpp.
-        /// User routes may get applied multiple times due to SNI.
-        /// So we have to store it.
-        user_routes: std.ArrayListUnmanaged(UserRoute) = .{},
-
-        on_clienterror: jsc.Strong.Optional = .empty,
-
-        inspector_server_id: jsc.Debugger.DebuggerId = .init(0),
-
-        pub const doStop = host_fn.wrapInstanceMethod(ThisServer, "stopFromJS", false);
-
-        pub const dispose = host_fn.wrapInstanceMethod(ThisServer, "disposeFromJS", false);
-
-        pub const doUpgrade = host_fn.wrapInstanceMethod(ThisServer, "onUpgrade", false);
-
-        pub const doPublish = host_fn.wrapInstanceMethod(ThisServer, "publish", false);
-
-        pub const doReload = onReload;
-
-        pub const doFetch = onFetch;
-
-        pub const doRequestIP = host_fn.wrapInstanceMethod(ThisServer, "requestIP", false);
-
-        pub const doTimeout = timeout;
-
-        pub const UserRoute = struct {
-            id: u32,
-            server: *ThisServer,
-            route: ServerConfig.RouteDeclaration,
-
-            pub fn deinit(this: *UserRoute) void {
-                this.route.deinit();
-            }
-        };
-
-        /// Returns:
-        /// - .ready if no plugin has to be loaded
-        /// - .err if there is a cached failure. Currently, this requires restarting the entire server.
-        /// - .pending if `callback` was stored. It will call `onPluginsResolved` or `onPluginsRejected` later.
-        pub fn getOrLoadPlugins(server: *ThisServer, callback: ServePlugins.Callback) ServePlugins.GetOrStartLoadResult {
+pub fn getOrLoadPlugins(server: *ThisServer, callback: ServePlugins.Callback) ServePlugins.GetOrStartLoadResult {
             if (server.plugins) |p| {
-                return p.getOrStartLoad(server.globalThis, callback) catch |err| switch (err) {
-                    error.JSError => std.debug.panic("unhandled exception from ServePlugins.getStartOrLoad", .{}),
-                    error.OutOfMemory => bun.outOfMemory(),
-                    error.JSTerminated => std.debug.panic("unhandled exception from ServePlugins.getStartOrLoad", .{}),
-                };
+                _ = &p;
+                return (blk_catch_0: { break :blk_catch_0 ((p.getOrStartLoad(server.globalThis, callback)) catch |err| { _ = &err; break :blk_catch_0 (__sw_blk_0: { const __disc_0 = err; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .JSError)) {  break :__sw_blk_0 cp_val(std.debug.panic("unhandled exception from ServePlugins.getStartOrLoad", .{})); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  break :__sw_blk_0 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .JSTerminated)) {  break :__sw_blk_0 cp_val(std.debug.panic("unhandled exception from ServePlugins.getStartOrLoad", .{})); } }  unreachable; }); }); });
             }
-            // no plugins
             return .{ .ready = null };
-        }
+    }
 
-        pub fn doSubscriberCount(this: *ThisServer, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+pub fn doSubscriberCount(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments_old(1);
-            if (arguments.len < 1) {
+            if ((arguments.len < 1)) {
                 return globalThis.throwNotEnoughArguments("subscriberCount", 1, 0);
             }
-
             if (arguments.ptr[0].isEmptyOrUndefinedOrNull()) {
                 return globalThis.throwInvalidArguments("subscriberCount requires a topic name as a string", .{});
             }
-
             var topic = try arguments.ptr[0].toSlice(globalThis, bun.default_allocator);
-            defer topic.deinit();
+            _ = &topic;
+            var _guard_topic = DeinitGuard(@TypeOf(topic)){ .ptr = (blk: {
+            break :blk (&topic);
 
-            if (topic.len == 0) {
+}) };
+            _ = &_guard_topic;
+            var ___guard_topic_moved = false; _ = &___guard_topic_moved;
+            defer if (!___guard_topic_moved) { ___guard_topic_moved = true; const __T = @TypeOf(_guard_topic); if (@typeInfo(__T) == .optional) { if (_guard_topic) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_topic.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_topic; _drop_val.__cp_deinit(); } };
+            if ((topic.len == 0)) {
                 return JSValue.jsNumber(0);
             }
+            return JSValue.jsNumber(self.app.?.numSubscribers(topic.slice()));
+    }
 
-            return JSValue.jsNumber((this.app.?.numSubscribers(topic.slice())));
-        }
-
-        pub fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*ThisServer {
+pub fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!*ThisServer {
             return globalThis.throw2("Server() is not a constructor", .{});
-        }
+    }
 
-        pub fn jsValueAssertAlive(server: *ThisServer) jsc.JSValue {
-            bun.assert(server.js_value.isNotEmpty());
-            return server.js_value.tryGet().?;
-        }
+pub fn jsValueAssertAlive(server: *ThisServer) jsc.JSValue {
+            _ = bun.assert(server.js_value.isNotEmpty());
+            return (server.js_value.tryGet()).?;
+    }
 
-        pub fn requestIP(this: *ThisServer, request: *jsc.WebCore.Request) bun.JSError!jsc.JSValue {
-            if (this.config.address == .unix) return JSValue.jsNull();
-            const info = request.request_context.getRemoteSocketInfo() orelse return JSValue.jsNull();
-            return SocketAddress.createDTO(this.globalThis, info.ip, @intCast(info.port), info.is_ipv6);
-        }
-
-        pub fn memoryCost(this: *ThisServer) usize {
-            return @sizeOf(ThisServer) +
-                this.base_url_string_for_joining.len +
-                this.config.memoryCost() +
-                (if (this.dev_server) |dev| dev.memoryCost() else 0);
-        }
-
-        pub fn timeout(this: *ThisServer, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            const arguments = callframe.arguments_old(2).slice();
-            if (arguments.len < 2 or arguments[0].isEmptyOrUndefinedOrNull()) {
-                return globalObject.throwNotEnoughArguments("timeout", 2, arguments.len);
-            }
-
-            const seconds = arguments[1];
-
-            if (this.config.address == .unix) {
+pub fn requestIP(self: *@This(), request: *jsc.WebCore.Request) bun.JSError!jsc.JSValue {
+            if ((self.config.address == .unix)) {
                 return JSValue.jsNull();
             }
+            const info = ((request.request_context.getRemoteSocketInfo()) orelse { return JSValue.jsNull(); });
+            return SocketAddress.createDTO(self.globalThis, info.ip, @intCast(info.port), info.is_ipv6);
+    }
 
-            if (!seconds.isNumber()) {
-                return this.globalThis.throw("timeout() requires a number", .{});
+pub fn memoryCost(self: *@This()) usize {
+            return (((@sizeOf(ThisServer) + self.base_url_string_for_joining.len) + self.config.memoryCost()) + (if (self.dev_server) |dev| dev.memoryCost() else 0));
+    }
+
+pub fn timeout(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const arguments = callframe.arguments_old(2).slice();
+            if (((arguments.len < 2) or arguments[0].isEmptyOrUndefinedOrNull())) {
+                return globalObject.throwNotEnoughArguments("timeout", 2, arguments.len);
+            }
+            const seconds = arguments[1];
+            if ((self.config.address == .unix)) {
+                return JSValue.jsNull();
+            }
+            if ((!seconds.isNumber())) {
+                return self.globalThis.throw("timeout() requires a number", .{});
             }
             const value = seconds.to(c_uint);
-
             if (arguments[0].as(Request)) |request| {
+                _ = &request;
                 _ = request.request_context.setTimeout(value);
-            } else if (arguments[0].as(NodeHTTPResponse)) |response| {
-                response.setTimeout(@truncate(value % 255));
             } else {
-                return this.globalThis.throwInvalidArguments("timeout() requires a Request object", .{});
+                if (arguments[0].as(NodeHTTPResponse)) |response| {
+                    _ = &response;
+                    _ = response.setTimeout(@truncate((value % 255)));
+                } else {
+                    return self.globalThis.throwInvalidArguments("timeout() requires a Request object", .{});
+                }
             }
-
             return JSValue.js_undefined;
-        }
+    }
 
-        pub fn setIdleTimeout(this: *ThisServer, seconds: c_uint) void {
-            this.config.idleTimeout = @truncate(@min(seconds, 255));
-        }
+pub fn setIdleTimeout(self: *@This(), seconds: c_uint) void {
+            self.config.idleTimeout = @truncate(@min(seconds, 255));
+    }
 
-        pub fn setFlags(this: *ThisServer, require_host_header: bool, use_strict_method_validation: bool) void {
-            if (this.app) |app| {
-                app.setFlags(require_host_header, use_strict_method_validation);
+pub fn setFlags(self: *@This(), require_host_header: bool, use_strict_method_validation: bool) void {
+            if (self.app) |app| {
+                _ = &app;
+                _ = app.setFlags(require_host_header, use_strict_method_validation);
             }
-        }
+    }
 
-        pub fn setMaxHTTPHeaderSize(this: *ThisServer, max_header_size: u64) void {
-            if (this.app) |app| {
-                app.setMaxHTTPHeaderSize(max_header_size);
+pub fn setMaxHTTPHeaderSize(self: *@This(), max_header_size: u64) void {
+            if (self.app) |app| {
+                _ = &app;
+                _ = app.setMaxHTTPHeaderSize(max_header_size);
             }
-        }
+    }
 
-        pub fn appendStaticRoute(this: *ThisServer, path: []const u8, route: AnyRoute, method: HTTP.Method.Optional) !void {
-            try this.config.appendStaticRoute(path, route, method);
-        }
+pub fn appendStaticRoute(self: *@This(), path: []const u8, route: AnyRoute, method: HTTP.Method.Optional) !void {
+            _ = try self.config.appendStaticRoute(path, route, method);
+    }
 
-        pub fn publish(this: *ThisServer, globalThis: *jsc.JSGlobalObject, topic: ZigString, message_value: JSValue, compress_value: ?JSValue) bun.JSError!JSValue {
-            if (this.config.websocket == null)
+pub fn publish(self: *@This(), globalThis: *jsc.JSGlobalObject, topic: ZigString, message_value: JSValue, compress_value: ?JSValue) bun.JSError!JSValue {
+            if ((self.config.websocket == null)) {
                 return JSValue.jsNumber(0);
-
-            const app = this.app.?;
-
-            if (topic.len == 0) {
-                httplog("publish() topic invalid", .{});
+            }
+            const app: *App = self.app.?;
+            if ((topic.len == 0)) {
+                _ = httplog("publish() topic invalid", .{});
                 return globalThis.throw("publish requires a topic string", .{});
             }
-
             var topic_slice = topic.toSlice(bun.default_allocator);
-            defer topic_slice.deinit();
-            if (topic_slice.len == 0) {
+            _ = &topic_slice;
+            var _guard_topic_slice = DeinitGuard(@TypeOf(topic_slice)){ .ptr = (blk: {
+            break :blk (&topic_slice);
+
+}) };
+            _ = &_guard_topic_slice;
+            var ___guard_topic_slice_moved = false; _ = &___guard_topic_slice_moved;
+            defer if (!___guard_topic_slice_moved) { ___guard_topic_slice_moved = true; const __T = @TypeOf(_guard_topic_slice); if (@typeInfo(__T) == .optional) { if (_guard_topic_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_topic_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_topic_slice; _drop_val.__cp_deinit(); } };
+            if ((topic_slice.len == 0)) {
                 return globalThis.throw("publish requires a non-empty topic", .{});
             }
-
-            // https://github.com/ziglang/zig/issues/24563
-            const compress_js = compress_value orelse .true;
+            const compress_js = ((compress_value) orelse (.true));
             const compress = compress_js.toBoolean();
-
             if (message_value.asArrayBuffer(globalThis)) |buffer| {
-                return JSValue.jsNumber(
-                    // if 0, return 0
-                    // else return number of bytes sent
-                    @as(i32, @intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer.slice(), .binary, compress))) * @as(i32, @intCast(@as(u31, @truncate(buffer.len)))),
-                );
+                _ = &buffer;
+                return JSValue.jsNumber(((if (comptime @typeInfo(@TypeOf(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer.slice(), .binary, compress)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer.slice(), .binary, compress)))) else cp_cast_int(i32, @intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer.slice(), .binary, compress)))) * @as(i32, @intCast(@as(u31, @truncate(buffer.len))))));
             }
-
             {
                 var js_string = try message_value.toJSString(globalThis);
+                _ = &js_string;
                 const view = js_string.view(globalThis);
-                const slice = view.toSlice(bun.default_allocator);
-                defer slice.deinit();
+                var slice = view.toSlice(bun.default_allocator);
+                _ = &slice;
+                var _guard_slice = DeinitGuard(@TypeOf(slice)){ .ptr = (blk: {
+                break :blk (&slice);
 
-                defer js_string.ensureStillAlive();
-
+}) };
+                _ = &_guard_slice;
+                var ___guard_slice_moved = false; _ = &___guard_slice_moved;
+                defer if (!___guard_slice_moved) { ___guard_slice_moved = true; const __T = @TypeOf(_guard_slice); if (@typeInfo(__T) == .optional) { if (_guard_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_slice; _drop_val.__cp_deinit(); } };
+                defer {
+                _ = js_string.ensureStillAlive();
+                }
                 const buffer = slice.slice();
-                return JSValue.jsNumber(
-                    // if 0, return 0
-                    // else return number of bytes sent
-                    @as(i32, @intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer, .text, compress))) * @as(i32, @intCast(@as(u31, @truncate(buffer.len)))),
-                );
+                return JSValue.jsNumber(((if (comptime @typeInfo(@TypeOf(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer, .text, compress)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer, .text, compress)))) else cp_cast_int(i32, @intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer, .text, compress)))) * @as(i32, @intCast(@as(u31, @truncate(buffer.len))))));
             }
-        }
+    }
 
-        pub fn onUpgrade(this: *ThisServer, globalThis: *jsc.JSGlobalObject, object: jsc.JSValue, optional: ?JSValue) bun.JSError!JSValue {
-            if (this.config.websocket == null) {
+pub fn onUpgrade(self: *@This(), globalThis: *jsc.JSGlobalObject, object: jsc.JSValue, optional: ?JSValue) bun.JSError!JSValue {
+            if ((self.config.websocket == null)) {
                 return globalThis.throwInvalidArguments("To enable websocket support, set the \"websocket\" object in Bun.serve({})", .{});
             }
-
-            if (this.flags.terminated) {
+            if (self.flags.terminated) {
                 return JSValue.false;
             }
-
             if (object.as(NodeHTTPResponse)) |nodeHttpResponse| {
-                if (nodeHttpResponse.flags.ended or nodeHttpResponse.flags.socket_closed) {
+                _ = &nodeHttpResponse;
+                if ((nodeHttpResponse.flags.ended or nodeHttpResponse.flags.socket_closed)) {
                     return JSValue.false;
                 }
-
                 var data_value = jsc.JSValue.zero;
-
-                // if we converted a HeadersInit to a Headers object, we need to free it
-                var fetch_headers_to_deref: ?*WebCore.FetchHeaders = null;
-
-                defer {
-                    if (fetch_headers_to_deref) |fh| {
-                        fh.deref();
-                    }
-                }
-
+                _ = &data_value;
+                var _guard_fetch_headers_to_deref = OptDerefGuard(WebCore.FetchHeaders){ .ptr = null };
+                _ = &_guard_fetch_headers_to_deref;
+                var ___guard_fetch_headers_to_deref_moved = false; _ = &___guard_fetch_headers_to_deref_moved;
+                defer if (!___guard_fetch_headers_to_deref_moved) { ___guard_fetch_headers_to_deref_moved = true; const __T = @TypeOf(_guard_fetch_headers_to_deref); if (@typeInfo(__T) == .optional) { if (_guard_fetch_headers_to_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fetch_headers_to_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fetch_headers_to_deref; _drop_val.__cp_deinit(); } };
                 var sec_websocket_protocol = ZigString.Empty;
+                _ = &sec_websocket_protocol;
                 var sec_websocket_extensions = ZigString.Empty;
-
-                // Owned backing storage for the above when they come from options.headers.
-                // fastGet returns a ZigString that borrows from the header map entry's
-                // StringImpl, which fastRemove then frees — so we must copy the bytes
-                // before removing the entry.
+                _ = &sec_websocket_extensions;
                 var sec_websocket_protocol_owned = ZigString.Slice.empty;
-                defer sec_websocket_protocol_owned.deinit();
-                var sec_websocket_extensions_owned = ZigString.Slice.empty;
-                defer sec_websocket_extensions_owned.deinit();
+                _ = &sec_websocket_protocol_owned;
+                var _guard_ws_proto_owned = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+                break :blk (&sec_websocket_protocol_owned);
 
+}) };
+                _ = &_guard_ws_proto_owned;
+                var ___guard_ws_proto_owned_moved = false; _ = &___guard_ws_proto_owned_moved;
+                defer if (!___guard_ws_proto_owned_moved) { ___guard_ws_proto_owned_moved = true; const __T = @TypeOf(_guard_ws_proto_owned); if (@typeInfo(__T) == .optional) { if (_guard_ws_proto_owned) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_proto_owned.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_proto_owned; _drop_val.__cp_deinit(); } };
+                var sec_websocket_extensions_owned = ZigString.Slice.empty;
+                _ = &sec_websocket_extensions_owned;
+                var _guard_ws_ext_owned = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+                break :blk (&sec_websocket_extensions_owned);
+
+}) };
+                _ = &_guard_ws_ext_owned;
+                var ___guard_ws_ext_owned_moved = false; _ = &___guard_ws_ext_owned_moved;
+                defer if (!___guard_ws_ext_owned_moved) { ___guard_ws_ext_owned_moved = true; const __T = @TypeOf(_guard_ws_ext_owned); if (@typeInfo(__T) == .optional) { if (_guard_ws_ext_owned) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_ext_owned.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_ext_owned; _drop_val.__cp_deinit(); } };
                 if (optional) |opts| {
-                    getter: {
-                        if (opts.isEmptyOrUndefinedOrNull()) {
+                    _ = &opts;
+                    _ = getter: {
+                    if (opts.isEmptyOrUndefinedOrNull()) {
+                        break :getter;
+                    }
+                    if ((!opts.isObject())) {
+                        return globalThis.throwInvalidArguments("upgrade options must be an object", .{});
+                    }
+                    if (try opts.fastGet(globalThis, .data)) |headers_value| {
+                        _ = &headers_value;
+                        data_value = headers_value;
+                    }
+                    if (globalThis.hasException()) {
+                        return error.JSError;
+                    }
+                    if (try opts.fastGet(globalThis, .headers)) |headers_value| {
+                        _ = &headers_value;
+                        if (headers_value.isEmptyOrUndefinedOrNull()) {
                             break :getter;
                         }
-
-                        if (!opts.isObject()) {
-                            return globalThis.throwInvalidArguments("upgrade options must be an object", .{});
+                        var fetch_headers_to_use: *WebCore.FetchHeaders = ((headers_value.as(WebCore.FetchHeaders)) orelse (((brk: {
+                        if (headers_value.isObject()) {
+                            if (try WebCore.FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_headers| {
+                                _ = &fetch_headers;
+                                _guard_fetch_headers_to_deref.ptr = fetch_headers;
+                                break :brk fetch_headers;
+                            }
                         }
-
-                        if (try opts.fastGet(globalThis, .data)) |headers_value| {
-                            data_value = headers_value;
+                        break :brk null;
+}) orelse {
+                        if ((!globalThis.hasException())) {
+                            return globalThis.throwInvalidArguments("upgrade options.headers must be a Headers or an object", .{});
                         }
-
+                        return error.JSError;
+})));
+                        _ = &fetch_headers_to_use;
                         if (globalThis.hasException()) {
                             return error.JSError;
                         }
-
-                        if (try opts.fastGet(globalThis, .headers)) |headers_value| {
-                            if (headers_value.isEmptyOrUndefinedOrNull()) {
-                                break :getter;
-                            }
-
-                            var fetch_headers_to_use: *WebCore.FetchHeaders = headers_value.as(WebCore.FetchHeaders) orelse brk: {
-                                if (headers_value.isObject()) {
-                                    if (try WebCore.FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_headers| {
-                                        fetch_headers_to_deref = fetch_headers;
-                                        break :brk fetch_headers;
-                                    }
-                                }
-                                break :brk null;
-                            } orelse {
-                                if (!globalThis.hasException()) {
-                                    return globalThis.throwInvalidArguments("upgrade options.headers must be a Headers or an object", .{});
-                                }
-                                return error.JSError;
-                            };
-
-                            if (globalThis.hasException()) {
-                                return error.JSError;
-                            }
-
-                            if (fetch_headers_to_use.fastGet(.SecWebSocketProtocol)) |protocol| {
-                                // Clone before fastRemove frees the backing StringImpl.
-                                sec_websocket_protocol_owned = bun.handleOom(protocol.toSliceClone(bun.default_allocator));
-                                sec_websocket_protocol = sec_websocket_protocol_owned.toZigString();
-                                // Remove from headers so it's not written twice (once here and once by upgrade())
-                                fetch_headers_to_use.fastRemove(.SecWebSocketProtocol);
-                            }
-
-                            if (fetch_headers_to_use.fastGet(.SecWebSocketExtensions)) |extensions| {
-                                // Clone before fastRemove frees the backing StringImpl.
-                                sec_websocket_extensions_owned = bun.handleOom(extensions.toSliceClone(bun.default_allocator));
-                                sec_websocket_extensions = sec_websocket_extensions_owned.toZigString();
-                                // Remove from headers so it's not written twice (once here and once by upgrade())
-                                fetch_headers_to_use.fastRemove(.SecWebSocketExtensions);
-                            }
-                            if (nodeHttpResponse.raw_response) |raw_response| {
-                                // we must write the status first so that 200 OK isn't written
-                                raw_response.writeStatus("101 Switching Protocols");
-                                fetch_headers_to_use.toUWSResponse(uws.ResponseKind.from(ssl_enabled, false), raw_response.socket());
-                            }
+                        if (fetch_headers_to_use.fastGet(.SecWebSocketProtocol)) |protocol| {
+                            _ = &protocol;
+                            sec_websocket_protocol_owned = bun.handleOom(protocol.toSliceClone(bun.default_allocator));
+                            sec_websocket_protocol = sec_websocket_protocol_owned.toZigString();
+                            _ = fetch_headers_to_use.fastRemove(.SecWebSocketProtocol);
                         }
-
-                        if (globalThis.hasException()) {
-                            return error.JSError;
+                        if (fetch_headers_to_use.fastGet(.SecWebSocketExtensions)) |extensions| {
+                            _ = &extensions;
+                            sec_websocket_extensions_owned = bun.handleOom(extensions.toSliceClone(bun.default_allocator));
+                            sec_websocket_extensions = sec_websocket_extensions_owned.toZigString();
+                            _ = fetch_headers_to_use.fastRemove(.SecWebSocketExtensions);
+                        }
+                        if (nodeHttpResponse.raw_response) |raw_response| {
+                            _ = &raw_response;
+                            _ = raw_response.writeStatus("101 Switching Protocols");
+                            _ = fetch_headers_to_use.toUWSResponse(uws.ResponseKind.from(ssl_enabled, false), raw_response.socket());
                         }
                     }
+                    if (globalThis.hasException()) {
+                        return error.JSError;
+                    }
+};
                 }
                 return .jsBoolean(nodeHttpResponse.upgrade(data_value, sec_websocket_protocol, sec_websocket_extensions));
             }
-
-            var request = object.as(Request) orelse {
-                return globalThis.throwInvalidArguments("upgrade requires a Request object", .{});
-            };
-
-            var upgrader = request.request_context.get(RequestContext) orelse return JSValue.false;
-
+            var request = ((object.as(Request)) orelse {
+            return globalThis.throwInvalidArguments("upgrade requires a Request object", .{});
+});
+            _ = &request;
+            var upgrader = ((request.request_context.get(RequestContext)) orelse { return JSValue.false; });
+            _ = &upgrader;
             if (upgrader.isAbortedOrEnded()) {
                 return JSValue.false;
             }
+            if (((upgrader.upgrade_context == null) or ((blk: {
+            break :blk @intFromPtr(upgrader.upgrade_context);
 
-            if (upgrader.upgrade_context == null or @intFromPtr(upgrader.upgrade_context) == std.math.maxInt(usize)) {
+}) == std.math.maxInt(usize)))) {
                 return JSValue.false;
             }
-
             const resp = upgrader.resp.?;
             const ctx = upgrader.upgrade_context.?;
-
-            // Keep the upgrader alive across option getters below, which run
-            // arbitrary user JS. A re-entrant server.upgrade(req) from a getter
-            // would otherwise be able to deref this context out from under us.
-            upgrader.ref();
-            defer upgrader.deref();
-
+            _ = upgrader.ref();
+            var _guard_upgrader = DerefGuard(@TypeOf(upgrader.*)){ .ptr = upgrader };
+            _ = &_guard_upgrader;
+            var ___guard_upgrader_moved = false; _ = &___guard_upgrader_moved;
+            defer if (!___guard_upgrader_moved) { ___guard_upgrader_moved = true; const __T = @TypeOf(_guard_upgrader); if (@typeInfo(__T) == .optional) { if (_guard_upgrader) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_upgrader.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_upgrader; _drop_val.__cp_deinit(); } };
             var sec_websocket_key_str = ZigString.Empty;
-
+            _ = &sec_websocket_key_str;
             var sec_websocket_protocol = ZigString.Empty;
-
+            _ = &sec_websocket_protocol;
             var sec_websocket_extensions = ZigString.Empty;
-
-            // Owned backing storage for sec_websocket_key/protocol/extensions.
-            //
-            // fastGet on request.headers returns a ZigString that borrows from the header map
-            // entry's StringImpl. Before we use these values we call opts.data / opts.headers
-            // getters, which run arbitrary user JS — that JS can mutate request.headers
-            // (set/delete Sec-WebSocket-*), freeing the StringImpl out from under the borrowed
-            // slice. Clone into owned storage so the bytes stay valid across the getter calls
-            // below and the later resp.upgrade().
-            //
-            // The options.headers path reuses the protocol/extensions slots (and frees the
-            // previous clone first) since fastRemove there would likewise free the backing
-            // StringImpl.
+            _ = &sec_websocket_extensions;
             var sec_websocket_key_owned = ZigString.Slice.empty;
-            defer sec_websocket_key_owned.deinit();
-            var sec_websocket_protocol_owned = ZigString.Slice.empty;
-            defer sec_websocket_protocol_owned.deinit();
-            var sec_websocket_extensions_owned = ZigString.Slice.empty;
-            defer sec_websocket_extensions_owned.deinit();
+            _ = &sec_websocket_key_owned;
+            var _guard_ws_key_owned = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+            break :blk (&sec_websocket_key_owned);
 
+}) };
+            _ = &_guard_ws_key_owned;
+            var ___guard_ws_key_owned_moved = false; _ = &___guard_ws_key_owned_moved;
+            defer if (!___guard_ws_key_owned_moved) { ___guard_ws_key_owned_moved = true; const __T = @TypeOf(_guard_ws_key_owned); if (@typeInfo(__T) == .optional) { if (_guard_ws_key_owned) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_key_owned.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_key_owned; _drop_val.__cp_deinit(); } };
+            var sec_websocket_protocol_owned = ZigString.Slice.empty;
+            _ = &sec_websocket_protocol_owned;
+            var _guard_ws_proto_owned = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+            break :blk (&sec_websocket_protocol_owned);
+
+}) };
+            _ = &_guard_ws_proto_owned;
+            var ___guard_ws_proto_owned_moved = false; _ = &___guard_ws_proto_owned_moved;
+            defer if (!___guard_ws_proto_owned_moved) { ___guard_ws_proto_owned_moved = true; const __T = @TypeOf(_guard_ws_proto_owned); if (@typeInfo(__T) == .optional) { if (_guard_ws_proto_owned) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_proto_owned.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_proto_owned; _drop_val.__cp_deinit(); } };
+            var sec_websocket_extensions_owned = ZigString.Slice.empty;
+            _ = &sec_websocket_extensions_owned;
+            var _guard_ws_ext_owned = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+            break :blk (&sec_websocket_extensions_owned);
+
+}) };
+            _ = &_guard_ws_ext_owned;
+            var ___guard_ws_ext_owned_moved = false; _ = &___guard_ws_ext_owned_moved;
+            defer if (!___guard_ws_ext_owned_moved) { ___guard_ws_ext_owned_moved = true; const __T = @TypeOf(_guard_ws_ext_owned); if (@typeInfo(__T) == .optional) { if (_guard_ws_ext_owned) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_ext_owned.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_ext_owned; _drop_val.__cp_deinit(); } };
             if (request.getFetchHeaders()) |head| {
+                _ = &head;
                 if (head.fastGet(.SecWebSocketKey)) |key| {
+                    _ = &key;
                     sec_websocket_key_owned = bun.handleOom(key.toSliceClone(bun.default_allocator));
                     sec_websocket_key_str = sec_websocket_key_owned.toZigString();
                 }
                 if (head.fastGet(.SecWebSocketProtocol)) |protocol| {
+                    _ = &protocol;
                     sec_websocket_protocol_owned = bun.handleOom(protocol.toSliceClone(bun.default_allocator));
                     sec_websocket_protocol = sec_websocket_protocol_owned.toZigString();
                 }
                 if (head.fastGet(.SecWebSocketExtensions)) |extensions| {
+                    _ = &extensions;
                     sec_websocket_extensions_owned = bun.handleOom(extensions.toSliceClone(bun.default_allocator));
                     sec_websocket_extensions = sec_websocket_extensions_owned.toZigString();
                 }
             }
-
             if (upgrader.req) |req| {
-                if (sec_websocket_key_str.len == 0) {
-                    sec_websocket_key_str = ZigString.init(req.header("sec-websocket-key") orelse "");
+                _ = &req;
+                if ((sec_websocket_key_str.len == 0)) {
+                    sec_websocket_key_str = ZigString.init(((req.header("sec-websocket-key")) orelse ("")));
                 }
-                if (sec_websocket_protocol.len == 0) {
-                    sec_websocket_protocol = ZigString.init(req.header("sec-websocket-protocol") orelse "");
+                if ((sec_websocket_protocol.len == 0)) {
+                    sec_websocket_protocol = ZigString.init(((req.header("sec-websocket-protocol")) orelse ("")));
                 }
-
-                if (sec_websocket_extensions.len == 0) {
-                    sec_websocket_extensions = ZigString.init(req.header("sec-websocket-extensions") orelse "");
+                if ((sec_websocket_extensions.len == 0)) {
+                    sec_websocket_extensions = ZigString.init(((req.header("sec-websocket-extensions")) orelse ("")));
                 }
             }
-
-            if (sec_websocket_key_str.len == 0) {
+            if ((sec_websocket_key_str.len == 0)) {
                 return JSValue.false;
             }
-
-            if (sec_websocket_protocol.len > 0) {
-                sec_websocket_protocol.markUTF8();
+            if ((sec_websocket_protocol.len > 0)) {
+                _ = sec_websocket_protocol.markUTF8();
             }
-
-            if (sec_websocket_extensions.len > 0) {
-                sec_websocket_extensions.markUTF8();
+            if ((sec_websocket_extensions.len > 0)) {
+                _ = sec_websocket_extensions.markUTF8();
             }
-
             var data_value = jsc.JSValue.zero;
-
-            // if we converted a HeadersInit to a Headers object, we need to free it
-            var fetch_headers_to_deref: ?*WebCore.FetchHeaders = null;
-
-            defer {
-                if (fetch_headers_to_deref) |fh| {
-                    fh.deref();
-                }
-            }
-
+            _ = &data_value;
+            var _guard_fetch_headers_to_deref = OptDerefGuard(WebCore.FetchHeaders){ .ptr = null };
+            _ = &_guard_fetch_headers_to_deref;
+            var ___guard_fetch_headers_to_deref_moved = false; _ = &___guard_fetch_headers_to_deref_moved;
+            defer if (!___guard_fetch_headers_to_deref_moved) { ___guard_fetch_headers_to_deref_moved = true; const __T = @TypeOf(_guard_fetch_headers_to_deref); if (@typeInfo(__T) == .optional) { if (_guard_fetch_headers_to_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fetch_headers_to_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fetch_headers_to_deref; _drop_val.__cp_deinit(); } };
             var fetch_headers_to_use: ?*WebCore.FetchHeaders = null;
-
+            _ = &fetch_headers_to_use;
             if (optional) |opts| {
-                getter: {
-                    if (opts.isEmptyOrUndefinedOrNull()) {
+                _ = &opts;
+                _ = getter: {
+                if (opts.isEmptyOrUndefinedOrNull()) {
+                    break :getter;
+                }
+                if ((!opts.isObject())) {
+                    return globalThis.throwInvalidArguments("upgrade options must be an object", .{});
+                }
+                if (try opts.fastGet(globalThis, .data)) |headers_value| {
+                    _ = &headers_value;
+                    data_value = headers_value;
+                }
+                if (globalThis.hasException()) {
+                    return error.JSError;
+                }
+                if (try opts.fastGet(globalThis, .headers)) |headers_value| {
+                    _ = &headers_value;
+                    if (headers_value.isEmptyOrUndefinedOrNull()) {
                         break :getter;
                     }
-
-                    if (!opts.isObject()) {
-                        return globalThis.throwInvalidArguments("upgrade options must be an object", .{});
+                    fetch_headers_to_use = ((headers_value.as(WebCore.FetchHeaders)) orelse (((brk: {
+                    if (headers_value.isObject()) {
+                        if (try WebCore.FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_headers| {
+                            _ = &fetch_headers;
+                            _guard_fetch_headers_to_deref.ptr = fetch_headers;
+                            break :brk fetch_headers;
+                        }
                     }
-
-                    if (try opts.fastGet(globalThis, .data)) |headers_value| {
-                        data_value = headers_value;
+                    break :brk null;
+}) orelse {
+                    if ((!globalThis.hasException())) {
+                        return globalThis.throwInvalidArguments("upgrade options.headers must be a Headers or an object", .{});
                     }
-
+                    return error.JSError;
+})));
                     if (globalThis.hasException()) {
                         return error.JSError;
                     }
-
-                    if (try opts.fastGet(globalThis, .headers)) |headers_value| {
-                        if (headers_value.isEmptyOrUndefinedOrNull()) {
-                            break :getter;
-                        }
-
-                        fetch_headers_to_use = headers_value.as(WebCore.FetchHeaders) orelse brk: {
-                            if (headers_value.isObject()) {
-                                if (try WebCore.FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_headers| {
-                                    fetch_headers_to_deref = fetch_headers;
-                                    break :brk fetch_headers;
-                                }
-                            }
-                            break :brk null;
-                        } orelse {
-                            if (!globalThis.hasException()) {
-                                return globalThis.throwInvalidArguments("upgrade options.headers must be a Headers or an object", .{});
-                            }
-                            return error.JSError;
-                        };
-
-                        if (globalThis.hasException()) {
-                            return error.JSError;
-                        }
-
-                        if (fetch_headers_to_use.?.fastGet(.SecWebSocketProtocol)) |protocol| {
-                            // Clone before fastRemove frees the backing StringImpl.
-                            sec_websocket_protocol_owned.deinit();
-                            sec_websocket_protocol_owned = bun.handleOom(protocol.toSliceClone(bun.default_allocator));
-                            sec_websocket_protocol = sec_websocket_protocol_owned.toZigString();
-                            // Remove from headers so it's not written twice (once here and once by upgrade())
-                            fetch_headers_to_use.?.fastRemove(.SecWebSocketProtocol);
-                        }
-
-                        if (fetch_headers_to_use.?.fastGet(.SecWebSocketExtensions)) |extensions| {
-                            // Clone before fastRemove frees the backing StringImpl.
-                            sec_websocket_extensions_owned.deinit();
-                            sec_websocket_extensions_owned = bun.handleOom(extensions.toSliceClone(bun.default_allocator));
-                            sec_websocket_extensions = sec_websocket_extensions_owned.toZigString();
-                            // Remove from headers so it's not written twice (once here and once by upgrade())
-                            fetch_headers_to_use.?.fastRemove(.SecWebSocketExtensions);
-                        }
+                    if (fetch_headers_to_use.?.fastGet(.SecWebSocketProtocol)) |protocol| {
+                        _ = &protocol;
+                        _ = sec_websocket_protocol_owned.deinit();
+                        sec_websocket_protocol_owned = bun.handleOom(protocol.toSliceClone(bun.default_allocator));
+                        sec_websocket_protocol = sec_websocket_protocol_owned.toZigString();
+                        _ = fetch_headers_to_use.?.fastRemove(.SecWebSocketProtocol);
                     }
-
-                    if (globalThis.hasException()) {
-                        return error.JSError;
+                    if (fetch_headers_to_use.?.fastGet(.SecWebSocketExtensions)) |extensions| {
+                        _ = &extensions;
+                        _ = sec_websocket_extensions_owned.deinit();
+                        sec_websocket_extensions_owned = bun.handleOom(extensions.toSliceClone(bun.default_allocator));
+                        sec_websocket_extensions = sec_websocket_extensions_owned.toZigString();
+                        _ = fetch_headers_to_use.?.fastRemove(.SecWebSocketExtensions);
                     }
                 }
+                if (globalThis.hasException()) {
+                    return error.JSError;
+                }
+};
             }
-
-            // Option getters above may have run arbitrary JS, including a
-            // re-entrant server.upgrade(req) on this same request. If that
-            // happened the upgrade has already been consumed and the cached
-            // `resp`/`ctx` locals now point at a socket that has been turned
-            // into a WebSocket — using them again would be UB.
-            if (upgrader.isAbortedOrEnded() or upgrader.didUpgradeWebSocket()) {
+            if ((upgrader.isAbortedOrEnded() or upgrader.didUpgradeWebSocket())) {
                 return JSValue.false;
             }
-
             var cookies_to_write: ?*WebCore.CookieMap = null;
+            _ = &cookies_to_write;
             if (upgrader.cookies) |cookies| {
+                _ = &cookies;
                 upgrader.cookies = null;
                 cookies_to_write = cookies;
             }
-            defer {
-                if (cookies_to_write) |cookies| {
-                    cookies.deref();
-                }
-            }
-
-            // Write status, custom headers, and cookies in one place
-            if (fetch_headers_to_use != null or cookies_to_write != null) {
-                // we must write the status first so that 200 OK isn't written
-                resp.writeStatus("101 Switching Protocols");
-
+            var _guard_cookies = OptDerefGuard(WebCore.CookieMap){ .ptr = cookies_to_write };
+            _ = &_guard_cookies;
+            var ___guard_cookies_moved = false; _ = &___guard_cookies_moved;
+            defer if (!___guard_cookies_moved) { ___guard_cookies_moved = true; const __T = @TypeOf(_guard_cookies); if (@typeInfo(__T) == .optional) { if (_guard_cookies) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cookies.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cookies; _drop_val.__cp_deinit(); } };
+            if (((fetch_headers_to_use != null) or (cookies_to_write != null))) {
+                _ = resp.writeStatus("101 Switching Protocols");
                 if (fetch_headers_to_use) |headers| {
-                    headers.toUWSResponse(uws.ResponseKind.from(ssl_enabled, false), resp);
+                    _ = &headers;
+                    _ = headers.toUWSResponse(uws.ResponseKind.from(ssl_enabled, false), resp);
                 }
-
                 if (cookies_to_write) |cookies| {
-                    try cookies.write(globalThis, uws.ResponseKind.from(ssl_enabled, false), @ptrCast(resp));
+                    _ = &cookies;
+                    _ = try cookies.write(globalThis, uws.ResponseKind.from(ssl_enabled, false), (blk: {
+                    break :blk @ptrCast(resp);
+
+}));
                 }
             }
-
-            // --- After this point, do not throw an exception
-            // See https://github.com/oven-sh/bun/issues/1339
-
-            // obviously invalid pointer marks it as used
             upgrader.upgrade_context = @ptrFromInt(std.math.maxInt(usize));
             const signal = upgrader.signal;
             upgrader.signal = null;
             upgrader.resp = null;
             request.request_context = AnyRequestContext.Null;
-            upgrader.request_weakref.deref();
-
-            data_value.ensureStillAlive();
-            const ws = ServerWebSocket.init(&this.config.websocket.?.handler, data_value, signal);
-            data_value.ensureStillAlive();
-
+            _ = upgrader.request_weakref.deref();
+            _ = data_value.ensureStillAlive();
+            const ws = ServerWebSocket.init((&self.config.websocket.?.handler), data_value, signal);
+            _ = data_value.ensureStillAlive();
             var sec_websocket_protocol_str = sec_websocket_protocol.toSlice(bun.default_allocator);
-            defer sec_websocket_protocol_str.deinit();
+            _ = &sec_websocket_protocol_str;
+            var _guard_ws_proto_str = DeinitGuard(@TypeOf(sec_websocket_protocol_str)){ .ptr = (blk: {
+            break :blk (&sec_websocket_protocol_str);
+
+}) };
+            _ = &_guard_ws_proto_str;
+            var ___guard_ws_proto_str_moved = false; _ = &___guard_ws_proto_str_moved;
+            defer if (!___guard_ws_proto_str_moved) { ___guard_ws_proto_str_moved = true; const __T = @TypeOf(_guard_ws_proto_str); if (@typeInfo(__T) == .optional) { if (_guard_ws_proto_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_proto_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_proto_str; _drop_val.__cp_deinit(); } };
             var sec_websocket_extensions_str = sec_websocket_extensions.toSlice(bun.default_allocator);
-            defer sec_websocket_extensions_str.deinit();
+            _ = &sec_websocket_extensions_str;
+            var _guard_ws_ext_str = DeinitGuard(@TypeOf(sec_websocket_extensions_str)){ .ptr = (blk: {
+            break :blk (&sec_websocket_extensions_str);
 
-            resp.clearAborted();
-            resp.clearOnData();
-            resp.clearOnWritable();
-            resp.clearTimeout();
-
-            upgrader.deref();
-
-            _ = resp.upgrade(
-                *ServerWebSocket,
-                ws,
-                sec_websocket_key_str.slice(),
-                sec_websocket_protocol_str.slice(),
-                sec_websocket_extensions_str.slice(),
-                ctx,
-            );
-
+}) };
+            _ = &_guard_ws_ext_str;
+            var ___guard_ws_ext_str_moved = false; _ = &___guard_ws_ext_str_moved;
+            defer if (!___guard_ws_ext_str_moved) { ___guard_ws_ext_str_moved = true; const __T = @TypeOf(_guard_ws_ext_str); if (@typeInfo(__T) == .optional) { if (_guard_ws_ext_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_ext_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_ext_str; _drop_val.__cp_deinit(); } };
+            _ = resp.clearAborted();
+            _ = resp.clearOnData();
+            _ = resp.clearOnWritable();
+            _ = resp.clearTimeout();
+            _ = upgrader.deref();
+            _ = resp.upgrade(*ServerWebSocket, ws, sec_websocket_key_str.slice(), sec_websocket_protocol_str.slice(), sec_websocket_extensions_str.slice(), ctx);
             return JSValue.true;
-        }
+    }
 
-        pub fn onReloadFromZig(this: *ThisServer, new_config: *ServerConfig, globalThis: *jsc.JSGlobalObject) void {
-            httplog("onReload", .{});
-
-            this.app.?.clearRoutes();
-            if (comptime has_h3) if (this.h3_app) |h3a| h3a.clearRoutes();
-
-            // only reload those two, but ignore if they're not specified.
-            if (this.config.onRequest != new_config.onRequest and (new_config.onRequest != .zero and !new_config.onRequest.isUndefined())) {
-                this.config.onRequest.unprotect();
-                this.config.onRequest = new_config.onRequest;
-            }
-            if (this.config.onNodeHTTPRequest != new_config.onNodeHTTPRequest) {
-                this.config.onNodeHTTPRequest.unprotect();
-                this.config.onNodeHTTPRequest = new_config.onNodeHTTPRequest;
-            }
-            if (this.config.onError != new_config.onError and (new_config.onError != .zero and !new_config.onError.isUndefined())) {
-                this.config.onError.unprotect();
-                this.config.onError = new_config.onError;
-            }
-
-            if (new_config.websocket) |*ws| {
-                ws.handler.flags.ssl = ssl_enabled;
-                if (ws.handler.onMessage != .zero or ws.handler.onOpen != .zero) {
-                    if (this.config.websocket) |old_ws| {
-                        old_ws.unprotect();
-                    }
-
-                    ws.globalObject = globalThis;
-                    this.config.websocket = ws.*;
-                } else {
-                    // We don't replace the existing websocket config here, but
-                    // the new one was already protected in WebSocketServerContext.onCreate.
-                    // Unprotect the discarded handlers so they don't leak.
-                    ws.unprotect();
+pub fn onReloadFromZig(self: *@This(), new_config: *ServerConfig, globalThis: *jsc.JSGlobalObject) void {
+            _ = httplog("onReload", .{});
+            _ = self.app.?.clearRoutes();
+            if (comptime has_h3) {
+                if (self.h3_app) |h3a| {
+                    _ = &h3a;
+                    _ = h3a.clearRoutes();
                 }
             }
-
-            // These get re-applied when we set the static routes again.
-            if (this.dev_server) |dev_server| {
-                // Prevent a use-after-free in the hash table keys.
-                dev_server.html_router.clear();
+            if (((self.config.onRequest != new_config.onRequest) and ((new_config.onRequest != .zero) and (!new_config.onRequest.isUndefined())))) {
+                _ = self.config.onRequest.unprotect();
+                self.config.onRequest = new_config.onRequest;
+            }
+            if ((self.config.onNodeHTTPRequest != new_config.onNodeHTTPRequest)) {
+                _ = self.config.onNodeHTTPRequest.unprotect();
+                self.config.onNodeHTTPRequest = new_config.onNodeHTTPRequest;
+            }
+            if (((self.config.onError != new_config.onError) and ((new_config.onError != .zero) and (!new_config.onError.isUndefined())))) {
+                _ = self.config.onError.unprotect();
+                self.config.onError = new_config.onError;
+            }
+            if (new_config.websocket) |*ws| {
+                _ = &ws;
+                (ws.*).handler.flags.ssl = ssl_enabled;
+                if ((((ws.*).handler.onMessage != .zero) or ((ws.*).handler.onOpen != .zero))) {
+                    if (self.config.websocket) |old_ws| {
+                        _ = &old_ws;
+                        _ = old_ws.unprotect();
+                    }
+                    (ws.*).globalObject = globalThis;
+                    self.config.websocket = (ws.*);
+                } else {
+                    _ = (ws.*).unprotect();
+                }
+            }
+            if (self.dev_server) |dev_server| {
+                _ = &dev_server;
+                _ = dev_server.html_router.clear();
                 dev_server.html_router.fallback = null;
             }
-
-            var static_routes = this.config.static_routes;
-            this.config.static_routes = .init(bun.default_allocator);
+            var static_routes = self.config.static_routes;
+            _ = &static_routes;
+            self.config.static_routes = .init(bun.default_allocator);
             for (static_routes.items) |*route| {
-                route.deinit();
+                _ = &route;
+                _ = route.deinit();
             }
-            static_routes.deinit();
-            this.config.static_routes = new_config.static_routes;
-
-            for (this.config.negative_routes.items) |route| {
-                bun.default_allocator.free(route);
+            _ = static_routes.deinit();
+            self.config.static_routes = new_config.static_routes;
+            for (self.config.negative_routes.items) |route| {
+                _ = &route;
+                _ = bun.default_allocator.free(route);
             }
-            this.config.negative_routes.clearAndFree();
-            this.config.negative_routes = new_config.negative_routes;
-
+            _ = self.config.negative_routes.clearAndFree();
+            self.config.negative_routes = new_config.negative_routes;
             if (new_config.had_routes_object) {
-                for (this.config.user_routes_to_build.items) |*route| {
-                    route.deinit();
+                for (self.config.user_routes_to_build.items) |*route| {
+                    _ = &route;
+                    _ = (route.*).deinit();
                 }
-                this.config.user_routes_to_build.clearAndFree();
-                this.config.user_routes_to_build = new_config.user_routes_to_build;
-                for (this.user_routes.items) |*route| {
-                    route.deinit();
+                _ = self.config.user_routes_to_build.clearAndFree();
+                self.config.user_routes_to_build = new_config.user_routes_to_build;
+                for (self.user_routes.items) |*route| {
+                    _ = &route;
+                    _ = (route.*).deinit();
                 }
-                this.user_routes.clearAndFree(bun.default_allocator);
+                _ = self.user_routes.clearAndFree(bun.default_allocator);
             }
-
-            const route_list_value = this.setRoutes();
+            const route_list_value = self.setRoutes();
             if (new_config.had_routes_object) {
-                if (this.js_value.tryGet()) |server_js_value| {
-                    if (server_js_value != .zero) {
-                        js.gc.routeList.set(server_js_value, globalThis, route_list_value);
+                if (self.js_value.tryGet()) |server_js_value| {
+                    _ = &server_js_value;
+                    if ((server_js_value != .zero)) {
+                        _ = js.gc.routeList.set(server_js_value, globalThis, route_list_value);
                     }
                 }
             }
-
-            if (this.inspector_server_id.toOptional().unwrap() != null) {
-                if (this.vm.debugger) |*debugger| {
-                    debugger.http_server_agent.notifyServerRoutesUpdated(
-                        AnyServer.from(this),
-                    ) catch |err| bun.handleOom(err);
+            if ((self.inspector_server_id.toOptional().unwrap() != null)) {
+                if (self.vm.debugger) |*debugger| {
+                    _ = &debugger;
+                    _ = (blk_catch_1: { break :blk_catch_1 (((debugger.*).http_server_agent.notifyServerRoutesUpdated(AnyServer.from(self))) catch |err| { _ = &err; break :blk_catch_1 bun.handleOom(err); }); });
                 }
             }
-        }
+    }
 
-        pub fn reloadStaticRoutes(this: *ThisServer) !bool {
-            if (this.app == null) {
-                // Static routes will get cleaned up when the server is stopped
+pub fn reloadStaticRoutes(self: *@This()) !bool {
+            if ((self.app == null)) {
                 return false;
             }
-            this.config = try this.config.cloneForReloadingStaticRoutes();
-            this.app.?.clearRoutes();
-            if (comptime has_h3) if (this.h3_app) |h3a| h3a.clearRoutes();
-            const route_list_value = this.setRoutes();
-            if (route_list_value != .zero) {
-                if (this.js_value.tryGet()) |server_js_value| {
-                    if (server_js_value != .zero) {
-                        js.gc.routeList.set(server_js_value, this.globalThis, route_list_value);
+            self.config = try self.config.cloneForReloadingStaticRoutes();
+            _ = self.app.?.clearRoutes();
+            if (comptime has_h3) {
+                if (self.h3_app) |h3a| {
+                    _ = &h3a;
+                    _ = h3a.clearRoutes();
+                }
+            }
+            const route_list_value = self.setRoutes();
+            if ((route_list_value != .zero)) {
+                if (self.js_value.tryGet()) |server_js_value| {
+                    _ = &server_js_value;
+                    if ((server_js_value != .zero)) {
+                        _ = js.gc.routeList.set(server_js_value, self.globalThis, route_list_value);
                     }
                 }
             }
             return true;
-        }
+    }
 
-        pub fn onReload(this: *ThisServer, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+pub fn onReload(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments();
-            if (arguments.len < 1) {
+            if ((arguments.len < 1)) {
                 return globalThis.throwNotEnoughArguments("reload", 1, 0);
             }
-
             var args_slice = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
-            defer args_slice.deinit();
+            _ = &args_slice;
+            var _guard_args_slice = DeinitGuard(jsc.CallFrame.ArgumentsSlice){ .ptr = (blk: {
+            break :blk (&args_slice);
 
+}) };
+            _ = &_guard_args_slice;
+            var ___guard_args_slice_moved = false; _ = &___guard_args_slice_moved;
+            defer if (!___guard_args_slice_moved) { ___guard_args_slice_moved = true; const __T = @TypeOf(_guard_args_slice); if (@typeInfo(__T) == .optional) { if (_guard_args_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_args_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_args_slice; _drop_val.__cp_deinit(); } };
             var new_config: ServerConfig = .{};
-            try ServerConfig.fromJS(globalThis, &new_config, &args_slice, .{
-                .allow_bake_config = false,
-                .is_fetch_required = true,
-                .has_user_routes = this.user_routes.items.len > 0,
-            });
+            _ = &new_config;
+            _ = try ServerConfig.fromJS(globalThis, (&new_config), (&args_slice), .{ .allow_bake_config = false, .is_fetch_required = true, .has_user_routes = (self.user_routes.items.len > 0) });
             if (globalThis.hasException()) {
-                new_config.deinit();
+                _ = new_config.deinit();
                 return error.JSError;
             }
+            _ = self.onReloadFromZig((&new_config), globalThis);
+            return ((self.js_value.tryGet()) orelse (.js_undefined));
+    }
 
-            this.onReloadFromZig(&new_config, globalThis);
-
-            return this.js_value.tryGet() orelse .js_undefined;
-        }
-
-        pub fn onFetch(this: *ThisServer, ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            jsc.markBinding(@src());
-
-            if (this.config.onRequest == .zero) {
+pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            if ((self.config.onRequest == .zero)) {
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() requires the server to have a fetch handler").toErrorInstance(ctx));
             }
-
             const arguments = callframe.arguments_old(2).slice();
-            if (arguments.len == 0) {
+            if ((arguments.len == 0)) {
                 const fetch_error = WebCore.Fetch.fetch_error_no_args;
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init(fetch_error).toErrorInstance(ctx));
             }
-
             var headers: ?*WebCore.FetchHeaders = null;
+            _ = &headers;
             var method = HTTP.Method.GET;
+            _ = &method;
             var args = jsc.CallFrame.ArgumentsSlice.init(ctx.bunVM(), arguments);
-            defer args.deinit();
+            _ = &args;
+            var _guard_args = DeinitGuard(jsc.CallFrame.ArgumentsSlice){ .ptr = (blk: {
+            break :blk (&args);
 
-            var first_arg = args.nextEat().?;
-            var body: jsc.WebCore.Body.Value = .{ .Null = {} };
+}) };
+            _ = &_guard_args;
+            var ___guard_args_moved = false; _ = &___guard_args_moved;
+            defer if (!___guard_args_moved) { ___guard_args_moved = true; const __T = @TypeOf(_guard_args); if (@typeInfo(__T) == .optional) { if (_guard_args) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_args.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_args; _drop_val.__cp_deinit(); } };
+            var first_arg = (args.nextEat()).?;
+            _ = &first_arg;
+            var body: jsc.WebCore.Body.Value = .Null;
+            _ = &body;
             var existing_request: WebCore.Request = undefined;
-            // TODO: set Host header
-            // TODO: set User-Agent header
-            // TODO: unify with fetch() implementation.
+            _ = &existing_request;
             if (first_arg.isString()) {
-                const url_zig_str = try arguments[0].toSlice(ctx, bun.default_allocator);
-                defer url_zig_str.deinit();
-                const temp_url_str = url_zig_str.slice();
+                var url_zig_str = try arguments[0].toSlice(ctx, bun.default_allocator);
+                _ = &url_zig_str;
+                var _guard_url_zig_str = DeinitGuard(@TypeOf(url_zig_str)){ .ptr = (blk: {
+                break :blk (&url_zig_str);
 
-                if (temp_url_str.len == 0) {
+}) };
+                _ = &_guard_url_zig_str;
+                var ___guard_url_zig_str_moved = false; _ = &___guard_url_zig_str_moved;
+                defer if (!___guard_url_zig_str_moved) { ___guard_url_zig_str_moved = true; const __T = @TypeOf(_guard_url_zig_str); if (@typeInfo(__T) == .optional) { if (_guard_url_zig_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_url_zig_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_url_zig_str; _drop_val.__cp_deinit(); } };
+                const temp_url_str = url_zig_str.slice();
+                if ((temp_url_str.len == 0)) {
                     const fetch_error = jsc.WebCore.Fetch.fetch_error_blank_url;
                     return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init(fetch_error).toErrorInstance(ctx));
                 }
-
                 var url = URL.parse(temp_url_str);
-
-                // Both branches produce a heap-owned buffer that `url.href` borrows.
-                // `bun.String.cloneUTF8(url.href)` below makes its own copy, so this
-                // buffer must be freed before we leave the block.
-                const owned_url_buf: []const u8 = if (url.hostname.len == 0)
-                    bun.handleOom(strings.append(this.allocator, this.base_url_string_for_joining, url.pathname))
-                else
-                    bun.handleOom(this.allocator.dupe(u8, temp_url_str));
-                defer this.allocator.free(owned_url_buf);
+                _ = &url;
+                const owned_url_buf: []const u8 = (if ((url.hostname.len == 0)) bun.handleOom(strings.append(self.allocator, self.base_url_string_for_joining, url.pathname)) else bun.handleOom(self.allocator.dupe(u8, temp_url_str)));
+                var _guard_owned_url_buf = FreeGuard(@TypeOf(owned_url_buf)){ .alloc = self.allocator, .slice = owned_url_buf };
+                _ = &_guard_owned_url_buf;
+                var ___guard_owned_url_buf_moved = false; _ = &___guard_owned_url_buf_moved;
+                defer if (!___guard_owned_url_buf_moved) { ___guard_owned_url_buf_moved = true; const __T = @TypeOf(_guard_owned_url_buf); if (@typeInfo(__T) == .optional) { if (_guard_owned_url_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_owned_url_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_owned_url_buf; _drop_val.__cp_deinit(); } };
                 url = URL.parse(owned_url_buf);
-
-                if (arguments.len >= 2 and arguments[1].isObject()) {
+                if (((arguments.len >= 2) and arguments[1].isObject())) {
                     var opts = arguments[1];
+                    _ = &opts;
                     if (try opts.fastGet(ctx, .method)) |method_| {
+                        _ = &method_;
                         var slice_ = try method_.toSlice(ctx, bun.default_allocator);
-                        defer slice_.deinit();
-                        method = HTTP.Method.which(slice_.slice()) orelse method;
-                    }
+                        _ = &slice_;
+                        var _guard_slice = DeinitGuard(@TypeOf(slice_)){ .ptr = (blk: {
+                        break :blk (&slice_);
 
+}) };
+                        _ = &_guard_slice;
+                        var ___guard_slice_moved = false; _ = &___guard_slice_moved;
+                        defer if (!___guard_slice_moved) { ___guard_slice_moved = true; const __T = @TypeOf(_guard_slice); if (@typeInfo(__T) == .optional) { if (_guard_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_slice; _drop_val.__cp_deinit(); } };
+                        method = ((HTTP.Method.which(slice_.slice())) orelse (method));
+                    }
                     if (try opts.fastGet(ctx, .headers)) |headers_| {
+                        _ = &headers_;
                         if (headers_.as(WebCore.FetchHeaders)) |headers__| {
+                            _ = &headers__;
                             headers = headers__;
-                        } else if (try WebCore.FetchHeaders.createFromJS(ctx, headers_)) |headers__| {
-                            headers = headers__;
+                        } else {
+                            if (try WebCore.FetchHeaders.createFromJS(ctx, headers_)) |headers__| {
+                                _ = &headers__;
+                                headers = headers__;
+                            }
                         }
                     }
-
                     if (try opts.fastGet(ctx, .body)) |body__| {
-                        if (Blob.get(ctx, body__, true, false)) |new_blob| {
-                            body = .{ .Blob = new_blob };
-                        } else |_| {
-                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx));
-                        }
+                        _ = &body__;
                     }
                 }
-
-                existing_request = Request.init2(
-                    bun.String.cloneUTF8(url.href),
-                    headers,
-                    bun.handleOom(this.vm.initRequestBodyValue(body)),
-                    method,
-                );
-            } else if (first_arg.as(Request)) |request_| {
-                try request_.cloneInto(
-                    &existing_request,
-                    bun.default_allocator,
-                    ctx,
-                    false,
-                );
+                existing_request = Request.init2(bun.String.cloneUTF8(url.href), headers, bun.handleOom(self.vm.initRequestBodyValue(body)), method);
             } else {
-                const fetch_error = jsc.WebCore.Fetch.fetch_type_error_strings.get(bun.jsc.C.JSValueGetType(ctx, first_arg.asRef()));
-                const err = ctx.toTypeError(.INVALID_ARG_TYPE, "{s}", .{fetch_error});
-
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, err);
+                if (first_arg.as(Request)) |request_| {
+                    _ = &request_;
+                    _ = try request_.cloneInto((&existing_request), bun.default_allocator, ctx, false);
+                } else {
+                    const fetch_error = jsc.WebCore.Fetch.fetch_type_error_strings.get(bun.jsc.C.JSValueGetType(ctx, first_arg.asRef()));
+                    const err = ctx.toTypeError(.INVALID_ARG_TYPE, "{s}", .{ fetch_error });
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, err);
+                }
             }
-
             var request = Request.new(existing_request);
-
-            bun.assert(this.config.onRequest != .zero); // confirmed above
-            const response_value = this.config.onRequest.call(
-                this.globalThis,
-                this.jsValueAssertAlive(),
-                &[_]jsc.JSValue{request.toJS(this.globalThis)},
-            ) catch |err| this.globalThis.takeException(err);
-
+            _ = &request;
+            _ = bun.assert((self.config.onRequest != .zero));
+            const req_args: [1]jsc.JSValue = .{ request.toJS(self.globalThis) };
+            const response_value = (blk_catch_2: { break :blk_catch_2 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&req_args))) catch |err| { _ = &err; break :blk_catch_2 self.globalThis.takeException(err); }); });
             if (response_value.isAnyError()) {
                 return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, response_value);
             }
-
             if (response_value.isEmptyOrUndefinedOrNull()) {
                 return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() returned an empty value").toErrorInstance(ctx));
             }
-
-            if (response_value.asAnyPromise() != null) {
+            if ((response_value.asAnyPromise() != null)) {
                 return response_value;
             }
-
             if (response_value.as(jsc.WebCore.Response)) |resp| {
-                resp.setUrl(existing_request.url.clone());
+                _ = &resp;
+                _ = resp.setUrl(existing_request.url.clone());
             }
             return jsc.JSPromise.resolvedPromiseValue(ctx, response_value);
-        }
+    }
 
-        pub fn closeIdleConnections(this: *ThisServer, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            _ = globalObject;
-            _ = callframe;
-            if (this.app == null) return JSValue.js_undefined;
-            this.app.?.closeIdleConnections();
+pub fn closeIdleConnections(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = &globalObject;
+            _ = &callframe;
+            if ((self.app == null)) {
+                return JSValue.js_undefined;
+            }
+            _ = self.app.?.closeIdleConnections();
             return JSValue.js_undefined;
-        }
+    }
 
-        pub fn stopFromJS(this: *ThisServer, abruptly: ?JSValue) jsc.JSValue {
-            const rc = this.getAllClosedPromise(this.globalThis);
-
-            if (this.hasListener()) {
+pub fn stopFromJS(self: *@This(), abruptly: ?JSValue) jsc.JSValue {
+            const rc = self.getAllClosedPromise(self.globalThis);
+            if (self.hasListener()) {
                 const abrupt = brk: {
-                    if (abruptly) |val| {
-                        if (val.isBoolean() and val.toBoolean()) {
-                            break :brk true;
-                        }
+                if (abruptly) |val| {
+                    _ = &val;
+                    if ((val.isBoolean() and val.toBoolean())) {
+                        break :brk true;
                     }
-                    break :brk false;
-                };
-
-                this.stop(abrupt);
+                }
+                break :brk false;
+};
+                _ = self.stop(abrupt);
             }
-
             return rc;
-        }
+    }
 
-        pub fn disposeFromJS(this: *ThisServer) jsc.JSValue {
-            if (this.hasListener()) {
-                this.stop(true);
+pub fn disposeFromJS(self: *@This()) jsc.JSValue {
+            if (self.hasListener()) {
+                _ = self.stop(true);
             }
-
             return .js_undefined;
-        }
+    }
 
-        pub fn getPort(this: *ThisServer, _: *jsc.JSGlobalObject) jsc.JSValue {
-            switch (this.config.address) {
-                .unix => return .js_undefined,
-                else => {},
+pub fn getPort(self: *@This(), _: *jsc.JSGlobalObject) jsc.JSValue {
+            switch (self.config.address) {
+.unix => {
+return .js_undefined;
+},
+else => {
+
+},
+}
+            if (self.listener) |listener| {
+                _ = &listener;
+                return jsc.JSValue.jsNumber(listener.getLocalPort());
             }
-
-            if (this.listener) |listener| return jsc.JSValue.jsNumber(listener.getLocalPort());
             if (comptime has_h3) {
-                if (this.h3_listener) |h3l| return jsc.JSValue.jsNumber(h3l.getLocalPort());
+                if (self.h3_listener) |h3l| {
+                    _ = &h3l;
+                    return jsc.JSValue.jsNumber(h3l.getLocalPort());
+                }
             }
-            return jsc.JSValue.jsNumber(this.config.address.tcp.port);
-        }
+            return jsc.JSValue.jsNumber(self.config.address.tcp.port);
+    }
 
-        pub fn getId(this: *ThisServer, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-            return bun.String.createUTF8ForJS(globalThis, this.config.id);
-        }
+pub fn getId(self: *@This(), globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            return bun.String.createUTF8ForJS(globalThis, self.config.id);
+    }
 
-        pub fn getPendingRequests(this: *ThisServer, _: *jsc.JSGlobalObject) jsc.JSValue {
-            return jsc.JSValue.jsNumber(@as(i32, @intCast(@as(u31, @truncate(this.pending_requests)))));
-        }
+pub fn getPendingRequests(self: *@This(), _: *jsc.JSGlobalObject) jsc.JSValue {
+            return jsc.JSValue.jsNumber(@as(i32, @intCast(@as(u31, @truncate(self.pending_requests)))));
+    }
 
-        pub fn getPendingWebSockets(this: *ThisServer, _: *jsc.JSGlobalObject) jsc.JSValue {
-            return jsc.JSValue.jsNumber(@as(i32, @intCast(@as(u31, @truncate(this.activeSocketsCount())))));
-        }
+pub fn getPendingWebSockets(self: *@This(), _: *jsc.JSGlobalObject) jsc.JSValue {
+            return jsc.JSValue.jsNumber(@as(i32, @intCast(@as(u31, @truncate(self.activeSocketsCount())))));
+    }
 
-        pub fn getAddress(this: *ThisServer, globalThis: *JSGlobalObject) bun.JSError!jsc.JSValue {
-            switch (this.config.address) {
-                .unix => |unix| {
-                    var value = bun.String.cloneUTF8(unix);
-                    defer value.deref();
-                    return value.toJS(globalThis);
-                },
-                .tcp => {
-                    var port: u16 = this.config.address.tcp.port;
+pub fn getAddress(self: *@This(), globalThis: *JSGlobalObject) bun.JSError!jsc.JSValue {
+            switch (self.config.address) {
+.unix => |unix| {
+var value = bun.String.cloneUTF8(unix);
+            _ = &value;
+            var _guard_value = DerefGuard(bun.String){ .ptr = (blk: {
+            break :blk (&value);
 
-                    if (this.listener) |listener| {
-                        port = @intCast(listener.getLocalPort());
-
-                        var buf: [64]u8 = [_]u8{0} ** 64;
-                        var listener_socket = listener.socket(ssl_enabled);
-                        const address_bytes = listener_socket.localAddress(&buf) orelse return JSValue.jsNull();
-                        var addr = SocketAddress.init(address_bytes, port) catch {
-                            @branchHint(.unlikely);
-                            return JSValue.jsNull();
-                        };
-                        return addr.intoDTO(this.globalThis);
-                    }
-                    if (comptime has_h3) if (this.h3_listener) |h3l| {
-                        port = @intCast(h3l.getLocalPort());
-                        var buf: [64]u8 = [_]u8{0} ** 64;
-                        const address_bytes = h3l.getLocalAddress(&buf) orelse return JSValue.jsNull();
-                        var addr = SocketAddress.init(address_bytes, port) catch {
-                            @branchHint(.unlikely);
-                            return JSValue.jsNull();
-                        };
-                        return addr.intoDTO(this.globalThis);
-                    };
-                    return JSValue.jsNull();
-                },
+}) };
+            _ = &_guard_value;
+            var ___guard_value_moved = false; _ = &___guard_value_moved;
+            defer if (!___guard_value_moved) { ___guard_value_moved = true; const __T = @TypeOf(_guard_value); if (@typeInfo(__T) == .optional) { if (_guard_value) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_value.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_value; _drop_val.__cp_deinit(); } };
+            return value.toJS(globalThis);
+},
+.tcp => {
+var port: u16 = self.config.address.tcp.port;
+            _ = &port;
+            if (self.listener) |listener| {
+                _ = &listener;
+                port = @intCast(listener.getLocalPort());
+                var buf: [64]u8 = undefined;
+                _ = &buf;
+                _ = @memset((&buf), 0);
+                var listener_socket = listener.socket(ssl_enabled);
+                _ = &listener_socket;
+                const address_bytes = ((listener_socket.localAddress((&buf))) orelse { return JSValue.jsNull(); });
+                var addr = (blk_catch_3: { break :blk_catch_3 ((SocketAddress.init(address_bytes, port)) catch |__ce_3| { _ = &__ce_3; return JSValue.jsNull(); }); });
+                _ = &addr;
+                return addr.intoDTO(self.globalThis);
             }
-        }
+            if (comptime has_h3) {
+                if (self.h3_listener) |h3l| {
+                    _ = &h3l;
+                    port = @intCast(h3l.getLocalPort());
+                    var buf: [64]u8 = undefined;
+                    _ = &buf;
+                    _ = @memset((&buf), 0);
+                    const address_bytes = ((h3l.getLocalAddress((&buf))) orelse { return JSValue.jsNull(); });
+                    var addr = (blk_catch_4: { break :blk_catch_4 ((SocketAddress.init(address_bytes, port)) catch |__ce_4| { _ = &__ce_4; return JSValue.jsNull(); }); });
+                    _ = &addr;
+                    return addr.intoDTO(self.globalThis);
+                }
+            }
+            return JSValue.jsNull();
+},
+}
+    }
 
-        pub fn getURLAsString(this: *const ThisServer) bun.OOM!bun.String {
-            const fmt = switch (this.config.address) {
-                .unix => |unix| brk: {
-                    if (unix.len > 1 and unix[0] == 0) {
-                        // abstract domain socket, let's give it an "abstract" URL
-                        break :brk bun.fmt.URLFormatter{
-                            .proto = .abstract,
-                            .hostname = unix[1..],
-                        };
-                    }
-
-                    break :brk bun.fmt.URLFormatter{
-                        .proto = .unix,
-                        .hostname = unix,
-                    };
-                },
-                .tcp => |tcp| blk: {
-                    var port: u16 = tcp.port;
-                    if (this.listener) |listener| {
-                        port = @intCast(listener.getLocalPort());
-                    } else if (comptime has_h3) if (this.h3_listener) |h3l| {
+pub fn getURLAsString(self: *const @This()) bun.OOM!bun.String {
+            const fmt = (switch (self.config.address) {
+.unix => |unix| brk: {
+            if (((unix.len > 1) and (unix[0] == 0))) {
+                break :brk bun.fmt.URLFormatter{ .proto = .abstract, .hostname = unix[1..] };
+            }
+            break :brk bun.fmt.URLFormatter{ .proto = .unix, .hostname = unix };
+},
+.tcp => |tcp| tcp_blk: {
+            var port: u16 = tcp.port;
+            _ = &port;
+            if (self.listener) |listener| {
+                _ = &listener;
+                port = @intCast(listener.getLocalPort());
+            } else {
+                if (comptime has_h3) {
+                    if (self.h3_listener) |h3l| {
+                        _ = &h3l;
                         port = @intCast(h3l.getLocalPort());
-                    };
-                    var fmt = bun.fmt.URLFormatter{
-                        .proto = if (comptime ssl_enabled) .https else .http,
-                        .hostname = null,
-                        .port = port,
-                    };
-                    if (tcp.hostname != null) {
-                        fmt.hostname = bun.sliceTo(@constCast(tcp.hostname.?), 0);
                     }
-                    break :blk fmt;
-                },
-            };
+                }
+            }
+            var fmt = bun.fmt.URLFormatter{ .proto = (if (comptime ssl_enabled) .https else .http), .hostname = null, .port = port };
+            _ = &fmt;
+            if ((tcp.hostname != null)) {
+                fmt.hostname = bun.sliceTo((blk: {
+                break :blk @constCast(tcp.hostname.?);
 
-            const buf = try std.fmt.allocPrint(default_allocator, "{f}", .{fmt});
-            defer default_allocator.free(buf);
-
+}), 0);
+            }
+            break :tcp_blk fmt;
+},
+});
+            const buf = try std.fmt.allocPrint(default_allocator, "{f}", .{ fmt });
+            var _guard_buf = FreeGuard(@TypeOf(buf)){ .alloc = default_allocator, .slice = buf };
+            _ = &_guard_buf;
+            var ___guard_buf_moved = false; _ = &___guard_buf_moved;
+            defer if (!___guard_buf_moved) { ___guard_buf_moved = true; const __T = @TypeOf(_guard_buf); if (@typeInfo(__T) == .optional) { if (_guard_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf; _drop_val.__cp_deinit(); } };
             return bun.String.cloneUTF8(buf);
-        }
+    }
 
-        pub fn getURL(this: *ThisServer, globalThis: *JSGlobalObject) bun.OOM!jsc.JSValue {
-            var url = try this.getURLAsString();
-            defer url.deref();
+pub fn getURL(self: *@This(), globalThis: *JSGlobalObject) bun.OOM!jsc.JSValue {
+            var url = try self.getURLAsString();
+            _ = &url;
+            var _guard_url = DerefGuard(bun.String){ .ptr = (blk: {
+            break :blk (&url);
 
+}) };
+            _ = &_guard_url;
+            var ___guard_url_moved = false; _ = &___guard_url_moved;
+            defer if (!___guard_url_moved) { ___guard_url_moved = true; const __T = @TypeOf(_guard_url); if (@typeInfo(__T) == .optional) { if (_guard_url) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_url.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_url; _drop_val.__cp_deinit(); } };
             return url.toJSDOMURL(globalThis);
-        }
+    }
 
-        pub fn getHostname(this: *ThisServer, globalThis: *JSGlobalObject) !jsc.JSValue {
-            switch (this.config.address) {
-                .unix => return JSValue.js_undefined,
-                .tcp => {},
-            }
+pub fn getHostname(self: *@This(), globalThis: *JSGlobalObject) bun.JSError!jsc.JSValue {
+            switch (self.config.address) {
+.unix => {
+return JSValue.js_undefined;
+},
+.tcp => {
+
+},
+}
             {
-                if (this.listener) |listener| {
-                    var buf: [1024]u8 = [_]u8{0} ** 1024;
-
+                if (self.listener) |listener| {
+                    _ = &listener;
+                    var buf: [1024]u8 = undefined;
+                    _ = &buf;
+                    _ = @memset((&buf), 0);
                     var listener_socket = listener.socket(ssl_enabled);
+                    _ = &listener_socket;
                     if (listener_socket.remoteAddress(buf[0..1024])) |addr| {
-                        if (addr.len > 0) {
+                        _ = &addr;
+                        if ((addr.len > 0)) {
                             return bun.String.createUTF8ForJS(globalThis, addr);
                         }
                     }
                 }
                 {
-                    switch (this.config.address) {
-                        .tcp => |tcp| {
-                            if (tcp.hostname) |hostname| {
-                                return bun.String.createUTF8ForJS(globalThis, bun.sliceTo(hostname, 0));
-                            } else {
-                                return bun.String.static("localhost").toJS(globalThis);
-                            }
-                        },
-                        .unix => unreachable,
+                    switch (self.config.address) {
+.tcp => |tcp| {
+if (tcp.hostname) |hostname| {
+                        _ = &hostname;
+                        return bun.String.createUTF8ForJS(globalThis, bun.sliceTo(hostname, 0));
+                    } else {
+                        return bun.String.static("localhost").toJS(globalThis);
                     }
+},
+.unix => {
+_ = unreachable;
+},
+}
                 }
             }
-            @panic("unreachable");
-        }
+            _ = @panic("unreachable");
+    }
 
-        pub fn getProtocol(this: *ThisServer, globalThis: *JSGlobalObject) bun.JSError!jsc.JSValue {
-            _ = this;
-            return bun.String.static(if (ssl_enabled) "https" else "http").toJS(globalThis);
-        }
+pub fn getProtocol(self: *@This(), globalThis: *JSGlobalObject) bun.JSError!jsc.JSValue {
+            _ = self;
+            return bun.String.static((if (ssl_enabled) "https" else "http")).toJS(globalThis);
+    }
 
-        pub fn getDevelopment(_: *ThisServer, _: *jsc.JSGlobalObject) jsc.JSValue {
+pub fn getDevelopment(_: *ThisServer, _: *jsc.JSGlobalObject) jsc.JSValue {
             return jsc.JSValue.jsBoolean(debug_mode);
-        }
+    }
 
-        pub fn onStaticRequestComplete(this: *ThisServer) void {
-            this.pending_requests -= 1;
-            this.deinitIfWeCan();
-        }
+pub fn onStaticRequestComplete(self: *@This()) void {
+            self.pending_requests = (self.pending_requests - 1);
+            _ = self.deinitIfWeCan();
+    }
 
-        pub fn onRequestComplete(this: *ThisServer) void {
-            this.vm.eventLoop().processGCTimer();
+pub fn onRequestComplete(self: *@This()) void {
+            _ = self.vm.eventLoop().processGCTimer();
+            self.pending_requests = (self.pending_requests - 1);
+            _ = self.deinitIfWeCan();
+    }
 
-            this.pending_requests -= 1;
-            this.deinitIfWeCan();
-        }
+pub fn finalize(self: *@This()) void {
+            _ = httplog("finalize", .{});
+            _ = self.js_value.finalize();
+            _ = self.deinitIfWeCan();
+    }
 
-        pub fn finalize(this: *ThisServer) void {
-            httplog("finalize", .{});
-            this.js_value.finalize();
-            this.deinitIfWeCan();
-        }
-
-        pub fn activeSocketsCount(this: *const ThisServer) u32 {
-            const websocket = &(this.config.websocket orelse return 0);
+pub fn activeSocketsCount(self: *const @This()) u32 {
+            const websocket = (&((self.config.websocket) orelse { return 0; }));
             return @as(u32, @truncate(websocket.handler.active_connections));
-        }
+    }
 
-        pub fn hasActiveWebSockets(this: *const ThisServer) bool {
-            return this.activeSocketsCount() > 0;
-        }
+pub fn hasActiveWebSockets(self: *const @This()) bool {
+            return (self.activeSocketsCount() > 0);
+    }
 
-        /// True while either the TCP listen socket or (http1: false) the QUIC
-        /// listen socket is bound. The lifecycle code uses this rather than
-        /// `this.listener != null` so an HTTP/3-only server is still treated as
-        /// running.
-        pub fn hasListener(this: *const ThisServer) bool {
-            if (this.listener != null) return true;
-            if (comptime has_h3) if (this.h3_listener != null) return true;
+pub fn hasListener(self: *const @This()) bool {
+            if ((self.listener != null)) {
+                return true;
+            }
+            if (comptime has_h3) {
+                if ((self.h3_listener != null)) {
+                    return true;
+                }
+            }
             return false;
-        }
+    }
 
-        pub fn getAllClosedPromise(this: *ThisServer, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
-            if (!this.hasListener() and this.pending_requests == 0) {
+pub fn getAllClosedPromise(self: *@This(), globalThis: *jsc.JSGlobalObject) jsc.JSValue {
+            if (((!self.hasListener()) and (self.pending_requests == 0))) {
                 return jsc.JSPromise.resolvedPromise(globalThis, .js_undefined).toJS();
             }
-            const prom = &this.all_closed_promise;
+            const prom = (&self.all_closed_promise);
             if (prom.strong.has()) {
                 return prom.value();
             }
             prom.* = jsc.JSPromise.Strong.init(globalThis);
             return prom.value();
-        }
+    }
 
-        pub fn deinitIfWeCan(this: *ThisServer) void {
-            if (Environment.enable_logs)
-                httplog("deinitIfWeCan. requests={d}, listener={s}, websockets={s}, has_handled_all_closed_promise={}, all_closed_promise={s}, has_js_deinited={}", .{
-                    this.pending_requests,
-                    if (this.listener == null) "null" else "some",
-                    if (this.hasActiveWebSockets()) "active" else "no",
-                    this.flags.has_handled_all_closed_promise,
-                    if (this.all_closed_promise.strong.has()) "has" else "no",
-                    this.js_value == .finalized,
-                });
-
-            const vm = this.globalThis.bunVM();
-
-            if (this.pending_requests == 0 and
-                !this.hasListener() and
-                !this.hasActiveWebSockets() and
-                !this.flags.has_handled_all_closed_promise and
-                this.all_closed_promise.strong.has())
-            {
-                httplog("schedule other promise", .{});
-
-                // use a flag here instead of `this.all_closed_promise.get().isHandled(vm)` to prevent the race condition of this block being called
-                // again before the task has run.
-                this.flags.has_handled_all_closed_promise = true;
-
-                ServerAllConnectionsClosedTask.schedule(.{
-                    .globalObject = this.globalThis,
-                    // Duplicate the Strong handle so that we can hold two independent strong references to it.
-                    .promise = .{
-                        .strong = .create(this.all_closed_promise.value(), this.globalThis),
-                    },
-                    .tracker = jsc.Debugger.AsyncTaskTracker.init(vm),
-                }, vm);
+pub fn deinitIfWeCan(self: *@This()) void {
+            if (Environment.enable_logs) {
+                _ = httplog("deinitIfWeCan. requests={d}, listener={s}, websockets={s}, has_handled_all_closed_promise={}, all_closed_promise={s}, has_js_deinited={}", .{ self.pending_requests, (if ((self.listener == null)) "null" else "some"), (if (self.hasActiveWebSockets()) "active" else "no"), self.flags.has_handled_all_closed_promise, (if (self.all_closed_promise.strong.has()) "has" else "no"), (self.js_value == .finalized) });
             }
-            if (this.pending_requests == 0 and
-                !this.hasListener() and
-                !this.hasActiveWebSockets())
-            {
-                if (this.config.websocket) |*ws| {
-                    ws.handler.app = null;
+            const vm = self.globalThis.bunVM();
+            if ((((((self.pending_requests == 0) and (!self.hasListener())) and (!self.hasActiveWebSockets())) and (!self.flags.has_handled_all_closed_promise)) and self.all_closed_promise.strong.has())) {
+                _ = httplog("schedule other promise", .{});
+                self.flags.has_handled_all_closed_promise = true;
+                _ = ServerAllConnectionsClosedTask.schedule(.{ .globalObject = self.globalThis, .promise = .{ .strong = .create(self.all_closed_promise.value(), self.globalThis) }, .tracker = jsc.Debugger.AsyncTaskTracker.init(vm) }, vm);
+            }
+            if ((((self.pending_requests == 0) and (!self.hasListener())) and (!self.hasActiveWebSockets()))) {
+                if (self.config.websocket) |*ws| {
+                    _ = &ws;
+                    (ws.*).handler.app = null;
                 }
-                this.unref();
-
-                // Detach DevServer. This is needed because there are aggressive
-                // tests that check for DevServer memory soundness. This reveals
-                // a larger problem, that it seems that some objects like Server
-                // should be detachable from their JSValue, so that when the
-                // native handle is done, keeping the JS binding doesn't use
-                // `this.memoryCost()` bytes.
-                if (this.dev_server) |dev| {
-                    this.dev_server = null;
-                    if (this.app) |app| app.clearRoutes();
-                    dev.deinit();
+                _ = self.unref();
+                if (self.dev_server) |dev| {
+                    _ = &dev;
+                    self.dev_server = null;
+                    if (self.app) |app| {
+                        _ = &app;
+                        _ = app.clearRoutes();
+                    }
+                    _ = dev.deinit();
                 }
-
-                // Only free the memory if the JS reference has been freed too
-                if (this.js_value == .finalized) {
-                    this.scheduleDeinit();
+                if ((self.js_value == .finalized)) {
+                    _ = self.scheduleDeinit();
                 }
             }
-        }
+    }
 
-        pub fn stopListening(this: *ThisServer, abrupt: bool) void {
-            httplog("stopListening", .{});
+pub fn stopListening(self: *@This(), abrupt: bool) void {
+            _ = httplog("stopListening", .{});
             if (comptime has_h3) {
-                if (this.h3_listener) |h3l| {
-                    this.h3_listener = null;
-                    // Graceful: GOAWAY + drain via the still-open UDP socket;
-                    // the engine rejects new conns and the timer keeps in-flight
-                    // streams progressing until deinit. Abrupt: close the fd now.
-                    if (!abrupt) {
-                        if (this.h3_app) |h3a| h3a.close();
+                if (self.h3_listener) |h3l| {
+                    _ = &h3l;
+                    self.h3_listener = null;
+                    if ((!abrupt)) {
+                        if (self.h3_app) |h3a| {
+                            _ = &h3a;
+                            _ = h3a.close();
+                        }
                     } else {
-                        h3l.close();
+                        _ = h3l.close();
                     }
                 }
             }
-            var listener = this.listener orelse {
-                if (comptime has_h3) {
-                    if (this.h3_app != null) {
-                        this.unref();
-                        this.notifyInspectorServerStopped();
-                        if (abrupt) this.flags.terminated = true;
+            var listener = ((self.listener) orelse {
+            if (comptime has_h3) {
+                if ((self.h3_app != null)) {
+                    _ = self.unref();
+                    _ = self.notifyInspectorServerStopped();
+                    if (abrupt) {
+                        self.flags.terminated = true;
                     }
                 }
-                return;
-            };
-            this.listener = null;
-            this.unref();
-
-            if (!ssl_enabled)
-                this.vm.removeListeningSocketForWatchMode(listener.socket(ssl_enabled).fd());
-
-            this.notifyInspectorServerStopped();
-
-            if (this.config.address == .unix) {
-                const path = this.config.address.unix;
-                if (path.len > 0 and path[0] != 0) {
+            }
+            return;
+});
+            _ = &listener;
+            self.listener = null;
+            _ = self.unref();
+            if ((!ssl_enabled)) {
+                _ = self.vm.removeListeningSocketForWatchMode(listener.socket(ssl_enabled).fd());
+            }
+            _ = self.notifyInspectorServerStopped();
+            if ((self.config.address == .unix)) {
+                const path = self.config.address.unix;
+                if (((path.len > 0) and (path[0] != 0))) {
                     _ = bun.sys.unlink(path);
                 }
             }
-
-            if (!abrupt) {
-                listener.close();
-            } else if (!this.flags.terminated) {
-                if (this.config.websocket) |*ws| {
-                    ws.handler.app = null;
-                }
-                this.flags.terminated = true;
-                this.app.?.close();
-            }
-        }
-
-        pub fn stop(this: *ThisServer, abrupt: bool) void {
-            if (this.js_value.isNotEmpty()) {
-                this.js_value.downgrade();
-            }
-            if (this.config.allow_hot and this.config.id.len > 0) {
-                if (this.globalThis.bunVM().hotMap()) |hot| {
-                    hot.remove(this.config.id);
+            if ((!abrupt)) {
+                _ = listener.close();
+            } else {
+                if ((!self.flags.terminated)) {
+                    if (self.config.websocket) |*ws| {
+                        _ = &ws;
+                        (ws.*).handler.app = null;
+                    }
+                    self.flags.terminated = true;
+                    _ = self.app.?.close();
                 }
             }
+    }
 
-            this.stopListening(abrupt);
-            this.deinitIfWeCan();
-        }
+pub fn stop(self: *@This(), abrupt: bool) void {
+            if (self.js_value.isNotEmpty()) {
+                _ = self.js_value.downgrade();
+            }
+            if ((self.config.allow_hot and (self.config.id.len > 0))) {
+                if (self.globalThis.bunVM().hotMap()) |hot| {
+                    _ = &hot;
+                    _ = hot.remove(self.config.id);
+                }
+            }
+            _ = self.stopListening(abrupt);
+            _ = self.deinitIfWeCan();
+    }
 
-        pub fn scheduleDeinit(this: *ThisServer) void {
-            if (this.flags.deinit_scheduled) {
-                httplog("scheduleDeinit (again)", .{});
+pub fn scheduleDeinit(self: *@This()) void {
+            if (self.flags.deinit_scheduled) {
+                _ = httplog("scheduleDeinit (again)", .{});
                 return;
             }
-            this.flags.deinit_scheduled = true;
-            httplog("scheduleDeinit", .{});
-
-            if (!this.flags.terminated) {
-                // App.close can cause finalizers to run.
-                // scheduleDeinit can be called inside a finalizer.
-                // Therefore, we split it into two tasks.
-                this.flags.terminated = true;
-                const task = bun.default_allocator.create(jsc.AnyTask) catch unreachable;
-                task.* = jsc.AnyTask.New(App, App.close).init(this.app.?);
-                this.vm.enqueueTask(jsc.Task.init(task));
+            self.flags.deinit_scheduled = true;
+            _ = httplog("scheduleDeinit", .{});
+            if ((!self.flags.terminated)) {
+                self.flags.terminated = true;
+                const task = ((bun.default_allocator.create(jsc.AnyTask)) catch unreachable);
+                task.* = jsc.AnyTask.New(App, App.close).init(self.app.?);
+                _ = self.vm.enqueueTask(jsc.Task.init(task));
             }
+            const task = ((bun.default_allocator.create(jsc.AnyTask)) catch unreachable);
+            task.* = jsc.AnyTask.New(ThisServer, deinit).init(self);
+            _ = self.vm.enqueueTask(jsc.Task.init(task));
+    }
 
-            const task = bun.default_allocator.create(jsc.AnyTask) catch unreachable;
-            task.* = jsc.AnyTask.New(ThisServer, deinit).init(this);
-            this.vm.enqueueTask(jsc.Task.init(task));
-        }
-
-        fn notifyInspectorServerStopped(this: *ThisServer) void {
-            if (this.inspector_server_id.toOptional().unwrap() != null) {
+pub fn notifyInspectorServerStopped(self: *@This()) void {
+            if ((self.inspector_server_id.toOptional().unwrap() != null)) {
                 @branchHint(.unlikely);
-                if (this.vm.debugger) |*debugger| {
-                    @branchHint(.unlikely);
-                    debugger.http_server_agent.notifyServerStopped(
-                        AnyServer.from(this),
-                    );
-                    this.inspector_server_id = .init(0);
+                if (self.vm.debugger) |*debugger| {
+                    _ = &debugger;
+                    _ = (debugger.*).http_server_agent.notifyServerStopped(AnyServer.from(self));
+                    self.inspector_server_id = .init(0);
                 }
             }
-        }
+    }
 
-        pub fn deinit(this: *ThisServer) void {
-            httplog("deinit", .{});
-
-            // This should've already been handled in stopListening
-            // However, when the JS VM terminates, it hypothetically might not call stopListening
-            this.notifyInspectorServerStopped();
-
-            this.all_closed_promise.deinit();
-            for (this.user_routes.items) |*user_route| {
-                user_route.deinit();
+pub fn deinit(self: *@This()) void {
+            _ = httplog("deinit", .{});
+            _ = self.notifyInspectorServerStopped();
+            _ = self.all_closed_promise.deinit();
+            for (self.user_routes.items) |*user_route| {
+                _ = &user_route;
+                _ = (user_route.*).deinit();
             }
-            this.user_routes.deinit(bun.default_allocator);
-
-            this.config.deinit();
-
-            this.on_clienterror.deinit();
+            _ = self.user_routes.deinit(bun.default_allocator);
+            _ = self.config.deinit();
+            _ = self.on_clienterror.deinit();
             if (comptime has_h3) {
-                if (this.h3_app) |h3a| {
-                    this.h3_app = null;
-                    h3a.destroy();
+                if (self.h3_app) |h3a| {
+                    _ = &h3a;
+                    self.h3_app = null;
+                    _ = h3a.destroy();
                 }
             }
-            if (comptime has_h3) if (this.h3_alt_svc.len > 0)
-                bun.default_allocator.free(this.h3_alt_svc);
-            if (this.app) |app| {
-                this.app = null;
-                app.destroy();
+            if (comptime has_h3) {
+                if ((self.h3_alt_svc.len > 0)) {
+                    _ = bun.default_allocator.free(self.h3_alt_svc);
+                }
             }
-
-            if (this.dev_server) |dev_server| {
-                dev_server.deinit();
+            if (self.app) |app| {
+                _ = &app;
+                self.app = null;
+                _ = app.destroy();
             }
-
-            if (this.plugins) |plugins| {
-                plugins.deref();
+            if (self.dev_server) |dev_server| {
+                _ = &dev_server;
+                _ = dev_server.deinit();
             }
+            if (self.plugins) |plugins| {
+                _ = &plugins;
+                _ = plugins.deref();
+            }
+            _ = bun.destroy(self);
+    }
 
-            bun.destroy(this);
-        }
-
-        pub fn init(config: *ServerConfig, global: *JSGlobalObject) bun.JSOOM!*ThisServer {
+pub fn init(config: *ServerConfig, global: *JSGlobalObject) bun.JSOOM!*ThisServer {
             const base_url = try bun.default_allocator.dupe(u8, strings.trim(config.base_url.href, "/"));
-            errdefer bun.default_allocator.free(base_url);
-
+            var _guard_base_url = OptFreeGuard(@TypeOf(base_url)){ .alloc = bun.default_allocator, .slice = base_url };
+            _ = &_guard_base_url;
+            var ___guard_base_url_moved = false; _ = &___guard_base_url_moved;
+            defer if (!___guard_base_url_moved) { ___guard_base_url_moved = true; const __T = @TypeOf(_guard_base_url); if (@typeInfo(__T) == .optional) { if (_guard_base_url) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_base_url.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_base_url; _drop_val.__cp_deinit(); } };
             var dev_server: ?*bun.bake.DevServer = null;
-            if (config.bake != null) {
-                dev_server = try bun.bake.DevServer.init(.{
-                    .arena = config.bake.?.arena.allocator(),
-                    .root = config.bake.?.root,
-                    .framework = config.bake.?.framework,
-                    .bundler_options = config.bake.?.bundler_options,
-                    .vm = global.bunVM(),
-                    .broadcast_console_log_from_browser_to_server = config.broadcast_console_log_from_browser_to_server_for_bake,
-                });
+            _ = &dev_server;
+            if ((config.bake != null)) {
+                dev_server = try bun.bake.DevServer.init(.{ .arena = config.bake.?.arena.allocator(), .root = config.bake.?.root, .framework = config.bake.?.framework, .bundler_options = config.bake.?.bundler_options, .vm = global.bunVM(), .broadcast_console_log_from_browser_to_server = config.broadcast_console_log_from_browser_to_server_for_bake });
             }
-            errdefer if (dev_server) |d| d.deinit();
-
-            var server = ThisServer.new(.{
-                .globalThis = global,
-                .config = config.*,
-                .base_url_string_for_joining = base_url,
-                .vm = jsc.VirtualMachine.get(),
-                .allocator = bun.default_allocator,
-                .dev_server = dev_server,
-            });
-
-            if (RequestContext.pool == null) {
-                RequestContext.pool = bun.create(
-                    server.allocator,
-                    RequestContext.RequestContextStackAllocator,
-                    RequestContext.RequestContextStackAllocator.init(bun.typedAllocator(RequestContext)),
-                );
+            var _guard_dev_server = OptDeinitGuard(bun.bake.DevServer){ .ptr = dev_server };
+            _ = &_guard_dev_server;
+            var ___guard_dev_server_moved = false; _ = &___guard_dev_server_moved;
+            defer if (!___guard_dev_server_moved) { ___guard_dev_server_moved = true; const __T = @TypeOf(_guard_dev_server); if (@typeInfo(__T) == .optional) { if (_guard_dev_server) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dev_server.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dev_server; _drop_val.__cp_deinit(); } };
+            var server = ThisServer.new(.{ .globalThis = global, .config = config.*, .base_url_string_for_joining = base_url, .vm = jsc.VirtualMachine.get(), .allocator = bun.default_allocator, .dev_server = dev_server });
+            _ = &server;
+            if ((RequestContext.pool == null)) {
+                RequestContext.pool = bun.create(server.allocator, RequestContext.RequestContextStackAllocator, RequestContext.RequestContextStackAllocator.init(bun.typedAllocator(RequestContext)));
             }
-
             server.request_pool_allocator = RequestContext.pool.?;
-
             if (comptime has_h3) {
-                if (H3RequestContext.pool == null) {
-                    H3RequestContext.pool = bun.create(
-                        server.allocator,
-                        H3RequestContext.RequestContextStackAllocator,
-                        H3RequestContext.RequestContextStackAllocator.init(bun.typedAllocator(H3RequestContext)),
-                    );
+                if ((H3RequestContext.pool == null)) {
+                    H3RequestContext.pool = bun.create(server.allocator, H3RequestContext.RequestContextStackAllocator, H3RequestContext.RequestContextStackAllocator.init(bun.typedAllocator(H3RequestContext)));
                 }
                 server.h3_request_pool_allocator = H3RequestContext.pool.?;
             }
-
             if (comptime ssl_enabled) {
-                analytics.Features.https_server += 1;
+                analytics.Features.https_server = (analytics.Features.https_server + 1);
             } else {
-                analytics.Features.http_server += 1;
+                analytics.Features.http_server = (analytics.Features.http_server + 1);
             }
-
+            _guard_base_url.slice = null;
+            _guard_dev_server.ptr = null;
             return server;
-        }
+    }
 
-        noinline fn onListenFailed(this: *ThisServer) void {
-            httplog("onListenFailed", .{});
-
-            const globalThis = this.globalThis;
-
+pub noinline fn onListenFailed(self: *@This()) void {
+            _ = httplog("onListenFailed", .{});
+            const globalThis = self.globalThis;
             var error_instance = jsc.JSValue.zero;
+            _ = &error_instance;
             var output_buf: [4096]u8 = undefined;
-
+            _ = &output_buf;
             if (comptime ssl_enabled) {
-                output_buf[0] = 0;
+                output_buf[cp_cast_int(usize, 0)] = 0;
                 var written: usize = 0;
-                var ssl_error = BoringSSL.ERR_get_error();
-                while (ssl_error != 0 and written < output_buf.len) : (ssl_error = BoringSSL.ERR_get_error()) {
-                    if (written > 0) {
-                        output_buf[written] = '\n';
-                        written += 1;
+                _ = &written;
+                const get_ssl_err = BoringSSL.ERR_get_error;
+                var ssl_error = get_ssl_err();
+                _ = &ssl_error;
+                while (((ssl_error != 0) and (written < output_buf.len))) : (ssl_error = get_ssl_err()) {
+                    if ((written > 0)) {
+                        output_buf[cp_cast_int(usize, written)] = 10;
+                        written = (written + 1);
                     }
-
-                    if (BoringSSL.ERR_reason_error_string(
-                        ssl_error,
-                    )) |reason_ptr| {
+                    if (BoringSSL.ERR_reason_error_string(ssl_error)) |reason_ptr| {
+                        _ = &reason_ptr;
                         const reason = std.mem.span(reason_ptr);
-                        if (reason.len == 0) {
+                        if ((reason.len == 0)) {
                             break;
                         }
-                        @memcpy(output_buf[written..][0..reason.len], reason);
-                        written += reason.len;
+                        _ = @memcpy(output_buf[written..][0..reason.len], reason);
+                        written = (written + reason.len);
                     }
-
-                    if (BoringSSL.ERR_func_error_string(
-                        ssl_error,
-                    )) |reason_ptr| {
+                    if (BoringSSL.ERR_func_error_string(ssl_error)) |reason_ptr| {
+                        _ = &reason_ptr;
                         const reason = std.mem.span(reason_ptr);
-                        if (reason.len > 0) {
-                            output_buf[written..][0.." via ".len].* = " via ".*;
-                            written += " via ".len;
-                            @memcpy(output_buf[written..][0..reason.len], reason);
-                            written += reason.len;
+                        if ((reason.len > 0)) {
+                            (output_buf[written..][0.." via ".len]).* = (" via ").*;
+                            written = (written + " via ".len);
+                            _ = @memcpy(output_buf[written..][0..reason.len], reason);
+                            written = (written + reason.len);
                         }
                     }
-
-                    if (BoringSSL.ERR_lib_error_string(
-                        ssl_error,
-                    )) |reason_ptr| {
+                    if (BoringSSL.ERR_lib_error_string(ssl_error)) |reason_ptr| {
+                        _ = &reason_ptr;
                         const reason = std.mem.span(reason_ptr);
-                        if (reason.len > 0) {
-                            output_buf[written..][0] = ' ';
-                            written += 1;
-                            @memcpy(output_buf[written..][0..reason.len], reason);
-                            written += reason.len;
+                        if ((reason.len > 0)) {
+                            output_buf[written..][cp_cast_int(usize, 0)] = 32;
+                            written = (written + 1);
+                            _ = @memcpy(output_buf[written..][0..reason.len], reason);
+                            written = (written + reason.len);
                         }
                     }
                 }
-
-                if (written > 0) {
+                if ((written > 0)) {
                     const message = output_buf[0..written];
-                    error_instance = globalThis.createErrorInstance("OpenSSL {s}", .{message});
-                    BoringSSL.ERR_clear_error();
+                    error_instance = globalThis.createErrorInstance("OpenSSL {s}", .{ message });
+                    _ = BoringSSL.ERR_clear_error;
                 }
             }
-
-            if (error_instance == .zero) {
-                switch (this.config.address) {
-                    .tcp => |tcp| {
-                        error_set: {
-                            if (comptime Environment.isLinux) {
-                                const rc: i32 = -1;
-                                const code = Sys.getErrno(rc);
-                                if (code == bun.sys.E.ACCES) {
-                                    error_instance = (jsc.SystemError{
-                                        .message = bun.String.init(std.fmt.bufPrint(&output_buf, "permission denied {s}:{d}", .{ tcp.hostname orelse "0.0.0.0", tcp.port }) catch "Failed to start server"),
-                                        .code = bun.String.static("EACCES"),
-                                        .syscall = bun.String.static("listen"),
-                                    }).toErrorInstance(globalThis);
-                                    break :error_set;
-                                }
-                            }
-                            error_instance = (jsc.SystemError{
-                                .message = bun.String.init(std.fmt.bufPrint(&output_buf, "Failed to start server. Is port {d} in use?", .{tcp.port}) catch "Failed to start server"),
-                                .code = bun.String.static("EADDRINUSE"),
-                                .syscall = bun.String.static("listen"),
-                            }).toErrorInstance(globalThis);
-                        }
-                    },
-                    .unix => |unix| {
-                        switch (bun.sys.getErrno(@as(i32, -1))) {
-                            .SUCCESS => {
-                                error_instance = (jsc.SystemError{
-                                    .message = bun.String.init(std.fmt.bufPrint(&output_buf, "Failed to listen on unix socket {f}", .{bun.fmt.QuotedFormatter{ .text = unix }}) catch "Failed to start server"),
-                                    .code = bun.String.static("EADDRINUSE"),
-                                    .syscall = bun.String.static("listen"),
-                                }).toErrorInstance(globalThis);
-                            },
-                            else => |e| {
-                                var sys_err = bun.sys.Error.fromCode(e, .listen);
-                                sys_err.path = unix;
-                                error_instance = sys_err.toJS(globalThis) catch return;
-                            },
-                        }
-                    },
+            if ((error_instance == .zero)) {
+                switch (self.config.address) {
+.tcp => |tcp| {
+_ = error_set: {
+                if (comptime Environment.isLinux) {
+                    const rc: i32 = -1;
+                    const code = Sys.getErrno(rc);
+                    if ((code == bun.sys.E.ACCES)) {
+                        error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_7: { break :blk_catch_7 ((std.fmt.bufPrint((&output_buf), "permission denied {s}:{d}", .{ ((tcp.hostname) orelse ("0.0.0.0")), tcp.port })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 "Failed to start server"; }); })), .code = bun.String.static("EACCES"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
+                        break :error_set;
+                    }
                 }
+                error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_9: { break :blk_catch_9 ((std.fmt.bufPrint((&output_buf), "Failed to start server. Is port {d} in use?", .{ tcp.port })) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 "Failed to start server"; }); })), .code = bun.String.static("EADDRINUSE"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
+};
+},
+.unix => |unix| {
+switch (bun.sys.getErrno((if (comptime @typeInfo(@TypeOf(-1)) == .@"enum") cp_cast_int(i32, @intFromEnum(-1)) else cp_cast_int(i32, -1)))) {
+.SUCCESS => {
+error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_11: { break :blk_catch_11 ((std.fmt.bufPrint((&output_buf), "Failed to listen on unix socket {f}", .{ bun.fmt.QuotedFormatter{ .text = unix } })) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 "Failed to start server"; }); })), .code = bun.String.static("EADDRINUSE"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
+},
+else => |e| {
+var sys_err = bun.sys.Error.fromCode(e, .listen);
+                _ = &sys_err;
+                sys_err.path = unix;
+                error_instance = (blk_catch_13: { break :blk_catch_13 ((sys_err.toJS(globalThis)) catch |__ce_13| { _ = &__ce_13; return; }); });
+},
+}
+},
+}
             }
+            _ = error_instance.ensureStillAlive();
+            switch (globalThis.throwValue(error_instance)) {
+else => {
 
-            error_instance.ensureStillAlive();
-            globalThis.throwValue(error_instance) catch {};
-        }
+},
+}
+    }
 
-        pub fn onListen(this: *ThisServer, socket: ?*uws.ListenSocket) void {
-            if (socket == null) {
-                return this.onListenFailed();
+pub fn onListen(self: *@This(), socket: ?*uws.ListenSocket) void {
+            if ((socket == null)) {
+                return self.onListenFailed();
             }
+            self.listener = socket;
+            self.vm.event_loop_handle = Async.Loop.get();
+            if ((!ssl_enabled)) {
+                _ = self.vm.addListeningSocketForWatchMode(socket.?.socket(ssl_enabled).fd());
+            }
+    }
 
-            this.listener = socket;
-            this.vm.event_loop_handle = Async.Loop.get();
-            if (!ssl_enabled)
-                this.vm.addListeningSocketForWatchMode(socket.?.socket(ssl_enabled).fd());
-        }
+pub fn h3AltSvc(self: *@This()) ?[]const u8 {
+            if (comptime (!has_h3)) {
+                return null;
+            }
+            return (if ((self.h3_alt_svc.len > 0)) self.h3_alt_svc else null);
+    }
 
-        pub fn h3AltSvc(this: *ThisServer) ?[]const u8 {
-            if (comptime !has_h3) return null;
-            return if (this.h3_alt_svc.len > 0) this.h3_alt_svc else null;
-        }
-
-        pub fn onH3Listen(this: *ThisServer, socket: ?*uws.H3.ListenSocket) void {
-            if (comptime !has_h3) unreachable;
-            this.h3_listener = socket;
+pub fn onH3Listen(self: *@This(), socket: ?*uws.H3.ListenSocket) void {
+            if (comptime (!has_h3)) {
+                _ = unreachable;
+            }
+            self.h3_listener = socket;
             if (socket) |s| {
-                this.h3_alt_svc = std.fmt.allocPrintSentinel(
-                    bun.default_allocator,
-                    "h3=\":{d}\"; ma=86400",
-                    .{s.getLocalPort()},
-                    0,
-                ) catch "";
+                _ = &s;
+                self.h3_alt_svc = (blk_catch_14: { break :blk_catch_14 ((std.fmt.allocPrintSentinel(bun.default_allocator, "h3=\":{d}\"; ma=86400", .{ s.getLocalPort() }, 0)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 ""; }); });
             }
-        }
+    }
 
-        pub fn onH3Request(this: *ThisServer, req: *uws.H3.Request, resp: *uws.H3.Response) void {
-            if (comptime !has_h3) unreachable;
-            if (this.config.onRequest == .zero) return onH3404(this, req, resp);
-            this.onRequestFor(H3RequestContext, req, resp);
-        }
+pub fn onH3Request(self: *@This(), req: *uws.H3.Request, resp: *uws.H3.Response) void {
+            if (comptime (!has_h3)) {
+                _ = unreachable;
+            }
+            if ((self.config.onRequest == .zero)) {
+                return onH3404(self, req, resp);
+            }
+            _ = self.onRequestFor(H3RequestContext, req, resp);
+    }
 
-        pub fn onH3UserRouteRequest(user_route: *UserRoute, req: *uws.H3.Request, resp: *uws.H3.Response) void {
-            if (comptime !has_h3) unreachable;
-            onUserRouteRequestFor(H3RequestContext, user_route, req, resp);
-        }
+pub fn onH3UserRouteRequest(user_route: *UserRoute, req: *uws.H3.Request, resp: *uws.H3.Response) void {
+            if (comptime (!has_h3)) {
+                _ = unreachable;
+            }
+            _ = onUserRouteRequestFor(H3RequestContext, user_route, req, resp);
+    }
 
-        pub fn onH3404(_: *ThisServer, _: *uws.H3.Request, resp: *uws.H3.Response) void {
-            if (comptime !has_h3) unreachable;
-            resp.writeStatus("404 Not Found");
-            resp.end("", false);
-        }
+pub fn onH3404(_: *ThisServer, _: *uws.H3.Request, resp: *uws.H3.Response) void {
+            if (comptime (!has_h3)) {
+                _ = unreachable;
+            }
+            _ = resp.writeStatus("404 Not Found");
+            _ = resp.end("", false);
+    }
 
-        pub fn ref(this: *ThisServer) void {
-            if (this.poll_ref.isActive()) return;
+pub fn ref(self: *@This()) void {
+            if (self.poll_ref.isActive()) {
+                return;
+            }
+            _ = self.poll_ref.ref(self.vm);
+    }
 
-            this.poll_ref.ref(this.vm);
-        }
+pub fn unref(self: *@This()) void {
+            if ((!self.poll_ref.isActive())) {
+                return;
+            }
+            _ = self.poll_ref.unref(self.vm);
+    }
 
-        pub fn unref(this: *ThisServer) void {
-            if (!this.poll_ref.isActive()) return;
-
-            this.poll_ref.unref(this.vm);
-        }
-
-        pub fn doRef(this: *ThisServer, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+pub fn doRef(self: *@This(), _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const this_value = callframe.this();
-            this.ref();
-
+            _ = self.ref();
             return this_value;
-        }
+    }
 
-        pub fn doUnref(this: *ThisServer, _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+pub fn doUnref(self: *@This(), _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const this_value = callframe.this();
-            this.unref();
-
+            _ = self.unref();
             return this_value;
-        }
+    }
 
-        pub fn onBunInfoRequest(this: *ThisServer, req: *uws.Request, resp: *App.Response) void {
-            jsc.markBinding(@src());
-            this.pending_requests += 1;
-            defer this.pending_requests -= 1;
-            req.setYield(false);
-            var stack_fallback = std.heap.stackFallback(8192, this.allocator);
+pub fn onBunInfoRequest(self: *@This(), req: *uws.Request, resp: *App.Response) void {
+            _ = jsc.markBinding(@src());
+            self.pending_requests = (self.pending_requests + 1);
+            defer {
+            self.pending_requests = (self.pending_requests - 1);
+            }
+            _ = req.setYield(false);
+            var stack_fallback = std.heap.stackFallback(8192, self.allocator);
+            _ = &stack_fallback;
             const allocator = stack_fallback.get();
-
             const buffer_writer = js_printer.BufferWriter.init(allocator);
             var writer = js_printer.BufferPrinter.init(buffer_writer);
-            defer writer.ctx.buffer.deinit();
-            const source = &logger.Source.initEmptyFile("info.json");
-            _ = js_printer.printJSON(
-                *js_printer.BufferPrinter,
-                &writer,
-                bun.Global.BunInfo.generate(*Transpiler, &jsc.VirtualMachine.get().transpiler, allocator) catch unreachable,
-                source,
-                .{ .mangled_props = null },
-            ) catch unreachable;
+            _ = &writer;
+            var _guard_writer_buf = DeinitGuard(@TypeOf(writer.ctx.buffer)){ .ptr = (blk: {
+            break :blk (&writer.ctx.buffer);
 
-            resp.writeStatus("200 OK");
-            resp.writeHeader("Content-Type", MimeType.json.value);
-            resp.writeHeader("Cache-Control", "public, max-age=3600");
-            resp.writeHeaderInt("Age", 0);
+}) };
+            _ = &_guard_writer_buf;
+            var ___guard_writer_buf_moved = false; _ = &___guard_writer_buf_moved;
+            defer if (!___guard_writer_buf_moved) { ___guard_writer_buf_moved = true; const __T = @TypeOf(_guard_writer_buf); if (@typeInfo(__T) == .optional) { if (_guard_writer_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_writer_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_writer_buf; _drop_val.__cp_deinit(); } };
+            const source = (&logger.Source.initEmptyFile("info.json"));
+            _ = ((js_printer.printJSON(*js_printer.BufferPrinter, (&writer), ((bun.Global.BunInfo.generate(*Transpiler, (&jsc.VirtualMachine.get().transpiler), allocator)) catch unreachable), source, .{ .mangled_props = null })) catch unreachable);
+            _ = resp.writeStatus("200 OK");
+            _ = resp.writeHeader("Content-Type", (if (@typeInfo(@TypeOf(MimeType.json)) == .@"enum") @intFromEnum(MimeType.json) else MimeType.json.value));
+            _ = resp.writeHeader("Cache-Control", "public, max-age=3600");
+            _ = resp.writeHeaderInt("Age", 0);
             const buffer = writer.ctx.written;
-            resp.end(buffer, false);
-        }
+            _ = resp.end(buffer, false);
+    }
 
-        pub fn onPendingRequest(this: *ThisServer) void {
-            this.pending_requests += 1;
-        }
+pub fn onPendingRequest(self: *@This()) void {
+            self.pending_requests = (self.pending_requests + 1);
+    }
 
-        pub fn onNodeHTTPRequestWithUpgradeCtx(this: *ThisServer, req: *uws.Request, resp: *App.Response, upgrade_ctx: ?*uws.WebSocketUpgradeContext) void {
-            this.onPendingRequest();
+pub fn onNodeHTTPRequestWithUpgradeCtx(self: *@This(), req: *uws.Request, resp: *App.Response, upgrade_ctx: ?*uws.WebSocketUpgradeContext) void {
+            _ = self.onPendingRequest();
             if (comptime Environment.isDebug) {
-                this.vm.eventLoop().debug.enter();
+                _ = self.vm.eventLoop().debug.enter();
             }
             defer {
+            {
                 if (comptime Environment.isDebug) {
-                    this.vm.eventLoop().debug.exit();
+                    _ = self.vm.eventLoop().debug.exit();
                 }
             }
-            req.setYield(false);
-            resp.timeout(this.config.idleTimeout);
-
-            const globalThis = this.globalThis;
-            const thisObject: JSValue = this.js_value.tryGet() orelse .js_undefined;
-            const vm = this.vm;
-
+            }
+            _ = req.setYield(false);
+            _ = resp.timeout(self.config.idleTimeout);
+            const globalThis = self.globalThis;
+            const thisObject: JSValue = ((self.js_value.tryGet()) orelse (.js_undefined));
+            const vm = self.vm;
             var node_http_response: ?*NodeHTTPResponse = null;
-            var is_async = false;
-            defer {
-                if (!is_async) {
-                    if (node_http_response) |node_response| {
-                        node_response.deref();
-                    }
-                }
-            }
+            _ = &node_http_response;
+            var _guard_node_http_response = OptDerefGuard(NodeHTTPResponse){ .ptr = null };
+            _ = &_guard_node_http_response;
+            var ___guard_node_http_response_moved = false; _ = &___guard_node_http_response_moved;
+            defer if (!___guard_node_http_response_moved) { ___guard_node_http_response_moved = true; const __T = @TypeOf(_guard_node_http_response); if (@typeInfo(__T) == .optional) { if (_guard_node_http_response) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_node_http_response.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_node_http_response; _drop_val.__cp_deinit(); } };
+            const result: JSValue = (blk_catch_17: { break :blk_catch_17 ((bun.jsc.fromJSHostCall(globalThis, @src(), onNodeHTTPRequestFn, .{ (blk: {
+            break :blk @intFromPtr(AnyServer.from(self).ptr.ptr());
 
-            const result: JSValue = bun.jsc.fromJSHostCall(globalThis, @src(), onNodeHTTPRequestFn, .{
-                @intFromPtr(AnyServer.from(this).ptr.ptr()),
-                globalThis,
-                thisObject,
-                this.config.onNodeHTTPRequest,
-                if (bun.http.Method.find(req.method())) |method|
-                    method.toJS(globalThis)
-                else
-                    .js_undefined,
-                req,
-                resp,
-                upgrade_ctx,
-                &node_http_response,
-            }) catch globalThis.takeException(error.JSError);
-
+}), globalThis, thisObject, self.config.onNodeHTTPRequest, (if (bun.http.Method.find(req.method())) |method| method.toJS(globalThis) else .js_undefined), req, resp, upgrade_ctx, (&node_http_response) })) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 globalThis.takeException(error.JSError); }); });
+            _guard_node_http_response.ptr = node_http_response;
             const HTTPResult = union(enum) {
-                rejection: jsc.JSValue,
-                exception: jsc.JSValue,
-                success: void,
-                pending: jsc.JSValue,
-            };
+    rejection: jsc.JSValue,
+    exception: jsc.JSValue,
+    success: void,
+    pending: jsc.JSValue,
+};
             var strong_promise: jsc.Strong.Optional = .empty;
+            _ = &strong_promise;
             var needs_to_drain = true;
-
+            _ = &needs_to_drain;
             defer {
+            {
                 if (needs_to_drain) {
-                    vm.drainMicrotasks();
+                    _ = vm.drainMicrotasks();
                 }
             }
-            defer strong_promise.deinit();
+            }
+            var _guard_strong_promise = DeinitGuard(jsc.Strong.Optional){ .ptr = (blk: {
+            break :blk (&strong_promise);
+
+}) };
+            _ = &_guard_strong_promise;
+            var ___guard_strong_promise_moved = false; _ = &___guard_strong_promise_moved;
+            defer if (!___guard_strong_promise_moved) { ___guard_strong_promise_moved = true; const __T = @TypeOf(_guard_strong_promise); if (@typeInfo(__T) == .optional) { if (_guard_strong_promise) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_strong_promise.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_strong_promise; _drop_val.__cp_deinit(); } };
             const http_result: HTTPResult = brk: {
-                if (result.toError()) |err| {
-                    break :brk .{ .exception = err };
+            if (result.toError()) |err| {
+                _ = &err;
+                break :brk .{ .exception = err };
+            }
+            if (result.asAnyPromise()) |promise| {
+                _ = &promise;
+                if ((promise.status() == .pending)) {
+                    _ = strong_promise.set(globalThis, result);
+                    needs_to_drain = false;
+                    _ = vm.drainMicrotasks();
                 }
-
-                if (result.asAnyPromise()) |promise| {
-                    if (promise.status() == .pending) {
-                        strong_promise.set(globalThis, result);
-                        needs_to_drain = false;
-                        vm.drainMicrotasks();
+                switch (promise.status()) {
+.fulfilled => {
+_ = globalThis.handleRejectedPromises();
+                break :brk .success;
+},
+.rejected => {
+var pm = promise;
+                _ = &pm;
+                _ = pm.setHandled(globalThis.vm());
+                break :brk .{ .rejection = pm.result(globalThis.vm()) };
+},
+.pending => {
+_ = globalThis.handleRejectedPromises();
+                if (node_http_response) |node_response| {
+                    _ = &node_response;
+                    if (((node_response.flags.request_has_completed or node_response.flags.socket_closed) or node_response.flags.upgraded)) {
+                        _ = strong_promise.deinit();
+                        break :brk .success;
                     }
-
-                    switch (promise.status()) {
-                        .fulfilled => {
-                            globalThis.handleRejectedPromises();
-                            break :brk .{ .success = {} };
-                        },
-                        .rejected => {
-                            var pm = promise;
-                            pm.setHandled(globalThis.vm());
-                            break :brk .{ .rejection = pm.result(globalThis.vm()) };
-                        },
-                        .pending => {
-                            globalThis.handleRejectedPromises();
-                            if (node_http_response) |node_response| {
-                                if (node_response.flags.request_has_completed or node_response.flags.socket_closed or node_response.flags.upgraded) {
-                                    strong_promise.deinit();
-                                    break :brk .{ .success = {} };
-                                }
-
-                                const strong_self = node_response.getThisValue();
-
-                                if (strong_self.isEmptyOrUndefinedOrNull()) {
-                                    strong_promise.deinit();
-                                    break :brk .{ .success = {} };
-                                }
-
-                                node_response.promise = strong_promise;
-                                strong_promise = .empty;
-                                result.then2(globalThis, strong_self, NodeHTTPResponse.Bun__NodeHTTPRequest__onResolve, NodeHTTPResponse.Bun__NodeHTTPRequest__onReject) catch {}; // TODO: properly propagate exception upwards
-                                is_async = true;
-                            }
-
-                            break :brk .{ .pending = result };
-                        },
+                    const strong_self = node_response.getThisValue();
+                    if (strong_self.isEmptyOrUndefinedOrNull()) {
+                        _ = strong_promise.deinit();
+                        break :brk .success;
                     }
+                    node_response.promise = strong_promise;
+                    strong_promise = .empty;
+                    _ = (blk_catch_18: { break :blk_catch_18 ((result.then2(globalThis, strong_self, NodeHTTPResponse.Bun__NodeHTTPRequest__onResolve, NodeHTTPResponse.Bun__NodeHTTPRequest__onReject)) catch |__ce_18| { _ = &__ce_18;  }); });
+                    _guard_node_http_response.ptr = null;
                 }
-
-                break :brk .{ .success = {} };
-            };
-
+                break :brk .{ .pending = result };
+},
+}
+            }
+            break :brk .success;
+};
             switch (http_result) {
-                .exception, .rejection => |err| {
-                    _ = vm.uncaughtException(globalThis, err, http_result == .rejection);
-
-                    if (node_http_response) |node_response| {
-                        if (!node_response.flags.upgraded and node_response.raw_response != null) {
-                            const raw_response = node_response.raw_response.?;
-                            if (!node_response.flags.request_has_completed and raw_response.state().isResponsePending()) {
-                                if (raw_response.state().isHttpStatusCalled()) {
-                                    raw_response.writeStatus("500 Internal Server Error");
-                                    raw_response.endWithoutBody(true);
-                                } else {
-                                    raw_response.endStream(true);
-                                }
-                            }
-                        }
-                        node_response.onRequestComplete();
-                    }
-                },
-                .success => {},
-                .pending => {},
-            }
-
+.exception, .rejection => |err| {
+_ = vm.uncaughtException(globalThis, err, (http_result == .rejection));
             if (node_http_response) |node_response| {
-                if (!node_response.flags.upgraded and node_response.raw_response != null) {
+                _ = &node_response;
+                if (((!node_response.flags.upgraded) and (node_response.raw_response != null))) {
                     const raw_response = node_response.raw_response.?;
-                    if (!node_response.flags.request_has_completed and raw_response.state().isResponsePending()) {
-                        node_response.setOnAbortedHandler();
+                    if (((!node_response.flags.request_has_completed) and raw_response.state().isResponsePending())) {
+                        if (raw_response.state().isHttpStatusCalled()) {
+                            _ = raw_response.writeStatus("500 Internal Server Error");
+                            _ = raw_response.endWithoutBody(true);
+                        } else {
+                            _ = raw_response.endStream(true);
+                        }
                     }
-                    // If we ended the response without attaching an ondata handler, we discard the body read stream
-                    else if (http_result != .pending) {
-                        node_response.maybeStopReadingBody(vm, node_response.getThisValue());
+                }
+                _ = node_response.onRequestComplete();
+            }
+},
+.success => {
+
+},
+.pending => {
+
+},
+}
+            if (node_http_response) |node_response| {
+                _ = &node_response;
+                if (((!node_response.flags.upgraded) and (node_response.raw_response != null))) {
+                    const raw_response = node_response.raw_response.?;
+                    if (((!node_response.flags.request_has_completed) and raw_response.state().isResponsePending())) {
+                        _ = node_response.setOnAbortedHandler();
+                    } else {
+                        if ((http_result != .pending)) {
+                            _ = node_response.maybeStopReadingBody(vm, node_response.getThisValue());
+                        }
                     }
                 }
             }
-        }
+    }
 
-        pub fn onNodeHTTPRequest(this: *ThisServer, req: *uws.Request, resp: *App.Response) void {
-            jsc.markBinding(@src());
-            onNodeHTTPRequestWithUpgradeCtx(this, req, resp, null);
-        }
+pub fn onNodeHTTPRequest(self: *@This(), req: *uws.Request, resp: *App.Response) void {
+            _ = jsc.markBinding(@src());
+            _ = onNodeHTTPRequestWithUpgradeCtx(self, req, resp, null);
+    }
 
-        const onNodeHTTPRequestFn = if (ssl_enabled)
-            NodeHTTPServer__onRequest_https
-        else
-            NodeHTTPServer__onRequest_http;
+pub fn setUsingCustomExpectHandler(self: *@This(), value: bool) void {
+            _ = NodeHTTP_setUsingCustomExpectHandler(ssl_enabled, self.app.?, value);
+    }
 
-        pub fn setUsingCustomExpectHandler(this: *ThisServer, value: bool) void {
-            NodeHTTP_setUsingCustomExpectHandler(ssl_enabled, this.app.?, value);
-        }
-
-        var did_send_idletimeout_warning_once = false;
-        fn onTimeoutForIdleWarn(_: *void, _: ?*void) void {
-            if (debug_mode and !did_send_idletimeout_warning_once) {
-                if (!bun.cli.Command.get().debug.silent) {
+pub fn onTimeoutForIdleWarn(_: *void, _: ?*void) void {
+            if ((debug_mode and (!did_send_idletimeout_warning_once))) {
+                if ((!bun.cli.Command.get().debug.silent)) {
                     did_send_idletimeout_warning_once = true;
-                    Output.prettyErrorln("<r><yellow>[Bun.serve]<r><d>:<r> request timed out after 10 seconds. Pass <d><cyan>`idleTimeout`<r> to configure.", .{});
-                    Output.flush();
+                    _ = Output.prettyErrorln("<r><yellow>[Bun.serve]<r><d>:<r> request timed out after 10 seconds. Pass <d><cyan>`idleTimeout`<r> to configure.", .{});
+                    _ = Output.flush();
                 }
             }
-        }
+    }
 
-        fn shouldAddTimeoutHandlerForWarning(server: *ThisServer) bool {
+pub fn shouldAddTimeoutHandlerForWarning(server: *ThisServer) bool {
             if (comptime debug_mode) {
-                if (!did_send_idletimeout_warning_once and !bun.cli.Command.get().debug.silent) {
-                    return !server.config.has_idleTimeout;
+                if (((!did_send_idletimeout_warning_once) and (!bun.cli.Command.get().debug.silent))) {
+                    return (!server.config.has_idleTimeout);
                 }
             }
-
             return false;
-        }
+    }
 
-        pub fn onUserRouteRequest(user_route: *UserRoute, req: *uws.Request, resp: *App.Response) void {
-            onUserRouteRequestFor(RequestContext, user_route, req, resp);
-        }
+pub fn onUserRouteRequest(user_route: *UserRoute, req: *uws.Request, resp: *App.Response) void {
+            _ = onUserRouteRequestFor(RequestContext, user_route, req, resp);
+    }
 
-        fn onUserRouteRequestFor(comptime Ctx: type, user_route: *UserRoute, req: *Ctx.Req, resp: *Ctx.Resp) void {
+pub fn onUserRouteRequestFor(comptime Ctx: type, user_route: *UserRoute, req: *Ctx.Req, resp: *Ctx.Resp) void {
             const server = user_route.server;
             const index = user_route.id;
-
             var should_deinit_context = false;
-            var prepared = server.prepareJsRequestContextFor(Ctx, req, resp, &should_deinit_context, .no, switch (user_route.route.method) {
-                .any => null,
-                .specific => |m| m,
-            }) orelse return;
+            _ = &should_deinit_context;
+            var prepared = ((server.prepareJsRequestContextFor(Ctx, req, resp, (&should_deinit_context), .no, (switch (user_route.route.method) {
+.any => null,
+.specific => |m| m,
+}))) orelse { return; });
+            _ = &prepared;
+            const server_request_list = (js.routeListGetCached(server.jsValueAssertAlive())).?;
+            const callRoute = (if (Ctx.is_h3) Bun__ServerRouteList__callRouteH3 else Bun__ServerRouteList__callRoute);
+            const response_value = (blk_catch_19: { break :blk_catch_19 ((bun.jsc.fromJSHostCall(server.globalThis, @src(), callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, (&prepared.js_request), req })) catch |err| { _ = &err; break :blk_catch_19 server.globalThis.takeException(err); }); });
+            _ = server.handleRequestFor(Ctx, (&should_deinit_context), prepared, req, response_value);
+    }
 
-            const server_request_list = js.routeListGetCached(server.jsValueAssertAlive()).?;
-            const callRoute = if (Ctx.is_h3) Bun__ServerRouteList__callRouteH3 else Bun__ServerRouteList__callRoute;
-            const response_value = bun.jsc.fromJSHostCall(server.globalThis, @src(), callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, &prepared.js_request, req }) catch |err| server.globalThis.takeException(err);
+pub fn handleRequest(self: *@This(), should_deinit_context: *bool, prepared: PreparedRequest, req: *uws.Request, response_value: jsc.JSValue) void {
+            _ = self.handleRequestFor(RequestContext, should_deinit_context, prepared, req, response_value);
+    }
 
-            server.handleRequestFor(Ctx, &should_deinit_context, prepared, req, response_value);
-        }
-
-        fn handleRequest(this: *ThisServer, should_deinit_context: *bool, prepared: PreparedRequest, req: *uws.Request, response_value: jsc.JSValue) void {
-            this.handleRequestFor(RequestContext, should_deinit_context, prepared, req, response_value);
-        }
-
-        fn handleRequestFor(this: *ThisServer, comptime Ctx: type, should_deinit_context: *bool, prepared: PreparedRequestFor(Ctx), req: *Ctx.Req, response_value: jsc.JSValue) void {
+pub fn handleRequestFor(self: *@This(), comptime Ctx: type, should_deinit_context: *bool, prepared: PreparedRequestFor(Ctx), req: *Ctx.Req, response_value: jsc.JSValue) void {
             const ctx = prepared.ctx;
-
             defer {
-                // uWS request will not live longer than this function
-                prepared.request_object.request_context.detachRequest();
+            {
+                _ = prepared.request_object.request_context.detachRequest();
             }
-
-            ctx.onResponse(this, prepared.js_request, response_value);
-            // Reference in the stack here in case it is not for whatever reason
-            prepared.js_request.ensureStillAlive();
-
+            }
+            _ = ctx.onResponse(self, prepared.js_request, response_value);
+            _ = prepared.js_request.ensureStillAlive();
             ctx.defer_deinit_until_callback_completes = null;
-
             if (should_deinit_context.*) {
-                ctx.deinit();
+                _ = ctx.deinit();
                 return;
             }
-
             if (ctx.shouldRenderMissing()) {
-                ctx.renderMissing();
+                _ = ctx.renderMissing();
                 return;
             }
+            _ = ctx.toAsync(req, prepared.request_object);
+    }
 
-            // The request is asynchronous, and all information from `req` must be copied
-            // since the provided uws.Request will be re-used for future requests (stack allocated).
-            ctx.toAsync(req, prepared.request_object);
-        }
+pub fn onRequest(self: *@This(), req: *uws.Request, resp: *App.Response) void {
+            _ = self.onRequestFor(RequestContext, req, resp);
+    }
 
-        pub fn onRequest(this: *ThisServer, req: *uws.Request, resp: *App.Response) void {
-            this.onRequestFor(RequestContext, req, resp);
-        }
-
-        fn onRequestFor(this: *ThisServer, comptime Ctx: type, req: *Ctx.Req, resp: *Ctx.Resp) void {
+pub fn onRequestFor(self: *@This(), comptime Ctx: type, req: *Ctx.Req, resp: *Ctx.Resp) void {
             var should_deinit_context = false;
-            const prepared = this.prepareJsRequestContextFor(Ctx, req, resp, &should_deinit_context, .yes, null) orelse return;
+            _ = &should_deinit_context;
+            const prepared = ((self.prepareJsRequestContextFor(Ctx, req, resp, (&should_deinit_context), .yes, null)) orelse { return; });
+            _ = bun.assert((self.config.onRequest != .zero));
+            const js_value = self.jsValueAssertAlive();
+            const response_value = (blk_catch_20: { break :blk_catch_20 ((self.config.onRequest.call(self.globalThis, js_value, (&.{ prepared.js_request, js_value }))) catch |err| { _ = &err; break :blk_catch_20 self.globalThis.takeException(err); }); });
+            _ = self.handleRequestFor(Ctx, (&should_deinit_context), prepared, req, response_value);
+    }
 
-            bun.assert(this.config.onRequest != .zero);
-
-            const js_value = this.jsValueAssertAlive();
-            const response_value = this.config.onRequest.call(
-                this.globalThis,
-                js_value,
-                &.{ prepared.js_request, js_value },
-            ) catch |err|
-                this.globalThis.takeException(err);
-
-            this.handleRequestFor(Ctx, &should_deinit_context, prepared, req, response_value);
-        }
-
-        pub fn onSavedRequest(
-            this: *ThisServer,
-            req: SavedRequest.Union,
-            resp: *App.Response,
-            callback: JSValue,
-            comptime arg_count: comptime_int,
-            extra_args: [arg_count]JSValue,
-        ) void {
-            const prepared: PreparedRequest = switch (req) {
-                .stack => |r| this.prepareJsRequestContext(r, resp, null, .bake, null) orelse return,
-                .saved => |data| .{
-                    .js_request = data.js_request.get() orelse @panic("Request was unexpectedly freed"),
-                    .request_object = data.request,
-                    .ctx = data.ctx.tagged_pointer.as(RequestContext),
-                },
-            };
+pub fn onSavedRequest(self: *@This(), req: SavedRequest.Union, resp: *App.Response, callback: JSValue, comptime arg_count: comptime_int, extra_args: [arg_count]JSValue) void {
+            var prepared: PreparedRequest = undefined;
+            _ = &prepared;
+            if ((req == .stack)) {
+                prepared = ((self.prepareJsRequestContext(req.stack, resp, null, .bake, null)) orelse { return; });
+            } else {
+                const data = req.saved;
+                prepared = .{ .js_request = ((data.js_request.get()) orelse (@panic("Request was unexpectedly freed"))), .request_object = data.request, .ctx = data.ctx.tagged_pointer.as(RequestContext) };
+            }
             const ctx = prepared.ctx;
-
-            bun.assert(callback != .zero);
-            const args = .{prepared.js_request} ++ extra_args;
-            const response_value = callback.call(
-                this.globalThis,
-                this.jsValueAssertAlive(),
-                &args,
-            ) catch |err|
-                this.globalThis.takeException(err);
-
-            defer if (req == .stack) {
-                // uWS request will not live longer than this function
-                prepared.request_object.request_context.detachRequest();
-            };
+            _ = bun.assert((callback != .zero));
+            const args = (.{ prepared.js_request } ++ extra_args);
+            const response_value = (blk_catch_21: { break :blk_catch_21 ((callback.call(self.globalThis, self.jsValueAssertAlive(), (&args))) catch |err| { _ = &err; break :blk_catch_21 self.globalThis.takeException(err); }); });
+            defer {
+            if ((req == .stack)) {
+                _ = prepared.request_object.request_context.detachRequest();
+            }
+            }
             const original_state = ctx.defer_deinit_until_callback_completes;
             var should_deinit_context = false;
-            ctx.defer_deinit_until_callback_completes = &should_deinit_context;
-            ctx.onResponse(this, prepared.js_request, response_value);
+            _ = &should_deinit_context;
+            ctx.defer_deinit_until_callback_completes = (&should_deinit_context);
+            _ = ctx.onResponse(self, prepared.js_request, response_value);
             ctx.defer_deinit_until_callback_completes = original_state;
-
-            // Reference in the stack here in case it is not for whatever reason
-            prepared.js_request.ensureStillAlive();
-
+            _ = prepared.js_request.ensureStillAlive();
             if (should_deinit_context) {
-                ctx.deinit();
+                _ = ctx.deinit();
                 return;
             }
-
             if (ctx.shouldRenderMissing()) {
-                ctx.renderMissing();
+                _ = ctx.renderMissing();
                 return;
             }
-
-            // The request is asynchronous, and all information from `req` must be copied
-            // since the provided uws.Request will be re-used for future requests (stack allocated).
             switch (req) {
-                .stack => |r| ctx.toAsync(r, prepared.request_object),
-                .saved => {}, // info already copied
+.stack => |r| {
+_ = ctx.toAsync(r, prepared.request_object);
+},
+.saved => {
+
+},
+}
+    }
+
+pub fn prepareJsRequestContext(self: *@This(), req: *uws.Request, resp: *App.Response, should_deinit_context: ?*bool, create_js_request: CreateJsRequest, method: ?bun.http.Method) ?PreparedRequest {
+            return self.prepareJsRequestContextFor(RequestContext, req, resp, should_deinit_context, create_js_request, method);
+    }
+
+pub fn prepareJsRequestContextFor(self: *@This(), comptime Ctx: type, req: *Ctx.Req, resp: *Ctx.Resp, should_deinit_context: ?*bool, create_js_request: CreateJsRequest, method: ?bun.http.Method) ?PreparedRequestFor(Ctx) {
+            _ = jsc.markBinding(@src());
+            if (comptime Ctx.is_h3) {
+                if ((req.header("transfer-encoding") != null)) {
+                    _ = resp.writeStatus("400 Bad Request");
+                    _ = resp.endWithoutBody(false);
+                    return null;
+                }
             }
-        }
-
-        pub const PreparedRequest = PreparedRequestFor(RequestContext);
-
-        fn PreparedRequestFor(comptime Ctx: type) type {
-            return struct {
-                js_request: JSValue,
-                request_object: *Request,
-                ctx: *Ctx,
-
-                /// This is used by DevServer for deferring calling the JS handler
-                /// to until the bundle is actually ready.
-                pub fn save(
-                    prepared: @This(),
-                    global: *jsc.JSGlobalObject,
-                    req: *Ctx.Req,
-                    resp: *Ctx.Resp,
-                ) SavedRequest {
-                    if (comptime Ctx.is_h3) @compileError("PreparedRequest.save is HTTP/1-only");
-                    // By saving a request, all information from `req` must be
-                    // copied since the provided uws.Request will be re-used for
-                    // future requests (stack allocated).
-                    prepared.ctx.toAsync(req, prepared.request_object);
-
-                    return .{
-                        .js_request = .create(prepared.js_request, global),
-                        .request = prepared.request_object,
-                        .ctx = AnyRequestContext.init(prepared.ctx),
-                        .response = uws.AnyResponse.init(resp),
-                    };
-                }
-            };
-        }
-
-        const CreateJsRequest = enum { yes, no, bake };
-
-        pub fn prepareJsRequestContext(
-            this: *ThisServer,
-            req: *uws.Request,
-            resp: *App.Response,
-            should_deinit_context: ?*bool,
-            create_js_request: CreateJsRequest,
-            method: ?bun.http.Method,
-        ) ?PreparedRequest {
-            return this.prepareJsRequestContextFor(RequestContext, req, resp, should_deinit_context, create_js_request, method);
-        }
-
-        fn prepareJsRequestContextFor(
-            this: *ThisServer,
-            comptime Ctx: type,
-            req: *Ctx.Req,
-            resp: *Ctx.Resp,
-            should_deinit_context: ?*bool,
-            create_js_request: CreateJsRequest,
-            method: ?bun.http.Method,
-        ) ?PreparedRequestFor(Ctx) {
-            jsc.markBinding(@src());
-
-            // We need to register the handler immediately since uSockets will not buffer.
-            //
-            // We first validate the self-reported request body length so that
-            // we avoid needing to worry as much about what memory to free.
-            // RFC 9114 §4.2: an HTTP/3 message containing a transfer-encoding
-            // header field is malformed.
-            if (comptime Ctx.is_h3) if (req.header("transfer-encoding") != null) {
-                resp.writeStatus("400 Bad Request");
-                resp.endWithoutBody(false);
-                return null;
-            };
-
             const request_body_length: ?usize = request_body_length: {
-                if ((HTTP.Method.which(req.method()) orelse HTTP.Method.OPTIONS).hasRequestBody()) {
-                    const len: usize = brk: {
-                        if (req.header("content-length")) |content_length| {
-                            break :brk std.fmt.parseInt(usize, content_length, 10) catch 0;
-                        }
-
-                        break :brk 0;
-                    };
-
-                    // Abort the request very early. For H3 a per-request error
-                    // is a stream error (RFC 9114 §4.1.2); close_connection
-                    // would CONNECTION_CLOSE every sibling stream on the conn.
-                    if (len > this.config.max_request_body_size) {
-                        resp.writeStatus("413 Request Entity Too Large");
-                        resp.endWithoutBody(comptime !Ctx.is_h3);
-                        return null;
-                    }
-
-                    break :request_body_length len;
+            if (((HTTP.Method.which(req.method())) orelse (HTTP.Method.OPTIONS)).hasRequestBody()) {
+                const len: usize = brk: {
+                if (req.header("content-length")) |content_length| {
+                    _ = &content_length;
+                    break :brk (blk_catch_22: { break :blk_catch_22 ((std.fmt.parseInt(usize, content_length, 10)) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 0; }); });
                 }
-
-                break :request_body_length null;
-            };
-
-            this.onPendingRequest();
-
+                break :brk 0;
+};
+                if ((len > self.config.max_request_body_size)) {
+                    _ = resp.writeStatus("413 Request Entity Too Large");
+                    _ = resp.endWithoutBody((comptime (!Ctx.is_h3)));
+                    return null;
+                }
+                break :request_body_length len;
+            }
+            break :request_body_length null;
+};
+            _ = self.onPendingRequest();
             if (comptime Environment.isDebug) {
-                this.vm.eventLoop().debug.enter();
+                _ = self.vm.eventLoop().debug.enter();
             }
             defer {
+            {
                 if (comptime Environment.isDebug) {
-                    this.vm.eventLoop().debug.exit();
+                    _ = self.vm.eventLoop().debug.exit();
                 }
             }
-            req.setYield(false);
-            resp.timeout(this.config.idleTimeout);
-
-            // Since we do timeouts by default, we should tell the user when
-            // this happens - but limit it to only warn once.
-            if (shouldAddTimeoutHandlerForWarning(this)) {
-                // We need to pass it a pointer, any pointer should do.
-                resp.onTimeout(&did_send_idletimeout_warning_once, struct {
-                    fn warn(p: *void, _: *Ctx.Resp) void {
-                        onTimeoutForIdleWarn(p, null);
-                    }
-                }.warn);
             }
+            _ = req.setYield(false);
+            _ = resp.timeout(self.config.idleTimeout);
+            if (shouldAddTimeoutHandlerForWarning(self)) {
+                _ = resp.onTimeout((&did_send_idletimeout_warning_once), (struct {
 
-            const pool_allocator = if (comptime Ctx.is_h3) this.h3_request_pool_allocator else this.request_pool_allocator;
+pub fn warn(p: *void, _: *Ctx.Resp) void {
+            _ = onTimeoutForIdleWarn(p, null);
+    }
+}).warn);
+            }
+            const pool_allocator = (if (comptime Ctx.is_h3) self.h3_request_pool_allocator else self.request_pool_allocator);
             const ctx = bun.handleOom(pool_allocator.tryGet());
-            ctx.create(this, req, resp, should_deinit_context, method);
-            this.vm.jsc_vm.reportExtraMemory(@sizeOf(Ctx));
-            const body = this.vm.initRequestBodyValue(.{ .Null = {} }) catch unreachable;
-
+            _ = ctx.create(self, req, resp, should_deinit_context, method);
+            _ = self.vm.jsc_vm.reportExtraMemory(@sizeOf(Ctx));
+            const body = ((self.vm.initRequestBodyValue(.Null)) catch unreachable);
             ctx.request_body = body;
-            var signal = jsc.WebCore.AbortSignal.new(this.globalThis);
+            var signal = jsc.WebCore.AbortSignal.new(self.globalThis);
+            _ = &signal;
             ctx.signal = signal;
-            signal.pendingActivityRef();
-
-            const request_object = Request.new(Request.init(
-                ctx.method,
-                AnyRequestContext.init(ctx),
-                ssl_enabled,
-                signal.ref(),
-                body.ref(),
-            ));
+            _ = signal.pendingActivityRef();
+            const request_object = Request.new(Request.init(ctx.method, AnyRequestContext.init(ctx), ssl_enabled, signal.ref(), body.ref()));
             ctx.request_weakref = .initRef(request_object);
-
-            // The lazy `getRequest()` path that backs Request.url / .headers
-            // is `*uws.Request`-typed; for HTTP/3 we populate both eagerly so
-            // the rest of the pipeline never needs to know which transport
-            // delivered the bytes.
             if (comptime Ctx.is_h3) {
-                request_object.setFetchHeaders(.createFromH3(req));
+                _ = request_object.setFetchHeaders(.createFromH3(req));
                 const path = req.url();
-                if (path.len > 0 and path[0] == '/') {
+                if (((path.len > 0) and (path[0] == 47))) {
                     if (req.header("host")) |host| {
+                        _ = &host;
                         const fmt = bun.fmt.HostFormatter{ .is_https = true, .host = host };
                         request_object.url = bun.handleOom(bun.String.createFormat("https://{f}{s}", .{ fmt, path }));
                     } else {
@@ -3213,740 +3198,738 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 }
                 ctx.req = null;
             }
-
             if (comptime debug_mode) {
                 ctx.flags.is_web_browser_navigation = brk: {
-                    if (req.header("sec-fetch-dest")) |fetch_dest| {
-                        if (strings.eqlComptime(fetch_dest, "document")) {
-                            break :brk true;
-                        }
+                if (req.header("sec-fetch-dest")) |fetch_dest| {
+                    _ = &fetch_dest;
+                    if (strings.eqlComptime(fetch_dest, "document")) {
+                        break :brk true;
                     }
-
-                    break :brk false;
-                };
+                }
+                break :brk false;
+};
             }
-
             if (request_body_length) |req_len| {
+                _ = &req_len;
                 ctx.request_body_content_len = req_len;
-                ctx.flags.is_transfer_encoding = req.header("transfer-encoding") != null;
-                // HTTP/3 (RFC 9114 §4.2.2): Content-Length is optional and
-                // Transfer-Encoding is forbidden; the body is terminated by
-                // the QUIC stream FIN, so always arm onData for body methods.
-                if (req_len > 0 or ctx.flags.is_transfer_encoding or comptime Ctx.is_h3) {
-                    // we defer pre-allocating the body until we receive the first chunk
-                    // that way if the client is lying about how big the body is or the client aborts
-                    // we don't waste memory
-                    ctx.request_body.?.value = .{
-                        .Locked = .{
-                            .task = ctx,
-                            .global = this.globalThis,
-                            .onStartBuffering = Ctx.onStartBufferingCallback,
-                            .onStartStreaming = Ctx.onStartStreamingRequestBodyCallback,
-                            .onReadableStreamAvailable = Ctx.onRequestBodyReadableStreamAvailable,
-                        },
-                    };
+                ctx.flags.is_transfer_encoding = (req.header("transfer-encoding") != null);
+                if ((((req_len > 0) or ctx.flags.is_transfer_encoding) or (comptime Ctx.is_h3))) {
+                    (if (@typeInfo(@TypeOf(ctx.request_body.?)) == .@"enum") @intFromEnum(ctx.request_body.?) else ctx.request_body.?.value) = .{ .Locked = .{ .task = ctx, .global = self.globalThis, .onStartBuffering = Ctx.onStartBufferingCallback, .onStartStreaming = Ctx.onStartStreamingRequestBodyCallback, .onReadableStreamAvailable = Ctx.onRequestBodyReadableStreamAvailable } };
                     ctx.flags.is_waiting_for_request_body = true;
-
-                    resp.onData(ctx, Ctx.onBufferedBodyChunk);
+                    _ = resp.onData(ctx, Ctx.onBufferedBodyChunk);
                 }
             }
+            return .{ .js_request = (switch (create_js_request) {
+.yes => request_object.toJS(self.globalThis),
+.bake => (blk_catch_24: { break :blk_catch_24 ((request_object.toJSForBake(self.globalThis)) catch |err| { _ = &err; break :blk_catch_24 (__sw_blk_5: { const __disc_5 = err; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  break :__sw_blk_5 cp_val(bun.outOfMemory()); } } {  return null; }  unreachable; }); }); }),
+.no => .zero,
+}), .request_object = request_object, .ctx = ctx };
+    }
 
-            return .{
-                .js_request = switch (create_js_request) {
-                    .yes => request_object.toJS(this.globalThis),
-                    .bake => request_object.toJSForBake(this.globalThis) catch |err| switch (err) {
-                        error.OutOfMemory => bun.outOfMemory(),
-                        else => return null,
-                    },
-                    .no => .zero,
-                },
-                .request_object = request_object,
-                .ctx = ctx,
-            };
-        }
-
-        fn upgradeWebSocketUserRoute(this: *UserRoute, resp: *App.Response, req: *uws.Request, upgrade_ctx: *uws.WebSocketUpgradeContext, method: ?bun.http.Method) void {
-            const server = this.server;
-            const index = this.id;
-
+pub fn upgradeWebSocketUserRoute(self: *UserRoute, resp: *App.Response, req: *uws.Request, upgrade_ctx: *uws.WebSocketUpgradeContext, method: ?bun.http.Method) void {
+            const server = self.server;
+            const index = self.id;
             var should_deinit_context = false;
-            var prepared = server.prepareJsRequestContext(req, resp, &should_deinit_context, .no, method) orelse return;
-            prepared.ctx.upgrade_context = upgrade_ctx; // set the upgrade context
-            const server_request_list = js.routeListGetCached(server.jsValueAssertAlive()).?;
-            const response_value = bun.jsc.fromJSHostCall(server.globalThis, @src(), Bun__ServerRouteList__callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, &prepared.js_request, req }) catch |err| server.globalThis.takeException(err);
+            _ = &should_deinit_context;
+            var prepared = ((server.prepareJsRequestContext(req, resp, (&should_deinit_context), .no, method)) orelse { return; });
+            _ = &prepared;
+            prepared.ctx.upgrade_context = upgrade_ctx;
+            const server_request_list = (js.routeListGetCached(server.jsValueAssertAlive())).?;
+            const response_value = (blk_catch_25: { break :blk_catch_25 ((bun.jsc.fromJSHostCall(server.globalThis, @src(), Bun__ServerRouteList__callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, (&prepared.js_request), req })) catch |err| { _ = &err; break :blk_catch_25 server.globalThis.takeException(err); }); });
+            _ = server.handleRequest((&should_deinit_context), prepared, req, response_value);
+    }
 
-            server.handleRequest(&should_deinit_context, prepared, req, response_value);
-        }
+pub fn onWebSocketUpgrade(self: *@This(), resp: *App.Response, req: *uws.Request, upgrade_ctx: *uws.WebSocketUpgradeContext, id: usize) void {
+            _ = jsc.markBinding(@src());
+            if ((id == 1)) {
+                _ = upgradeWebSocketUserRoute((blk: {
+                break :blk @ptrCast(self);
 
-        pub fn onWebSocketUpgrade(this: *ThisServer, resp: *App.Response, req: *uws.Request, upgrade_ctx: *uws.WebSocketUpgradeContext, id: usize) void {
-            jsc.markBinding(@src());
-            if (id == 1) {
-                // This is actually a UserRoute if id is 1 so it's safe to cast
-                upgradeWebSocketUserRoute(@ptrCast(this), resp, req, upgrade_ctx, null);
+}), resp, req, upgrade_ctx, null);
                 return;
             }
-            // Access `this` as *ThisServer only if id is 0
-            bun.assert(id == 0);
-            if (this.config.onNodeHTTPRequest != .zero) {
-                onNodeHTTPRequestWithUpgradeCtx(this, req, resp, upgrade_ctx);
+            _ = bun.assert((id == 0));
+            if ((self.config.onNodeHTTPRequest != .zero)) {
+                _ = onNodeHTTPRequestWithUpgradeCtx(self, req, resp, upgrade_ctx);
                 return;
             }
-            if (this.config.onRequest == .zero) {
-                // require fetch method to be set otherwise we dont know what route to call
-                // this should be the fallback in case no route is provided to upgrade
-                resp.writeStatus("403 Forbidden");
-                resp.endWithoutBody(true);
+            if ((self.config.onRequest == .zero)) {
+                _ = resp.writeStatus("403 Forbidden");
+                _ = resp.endWithoutBody(true);
                 return;
             }
-            this.pending_requests += 1;
-            req.setYield(false);
-            var ctx = bun.handleOom(this.request_pool_allocator.tryGet());
+            self.pending_requests = (self.pending_requests + 1);
+            _ = req.setYield(false);
+            var ctx = bun.handleOom(self.request_pool_allocator.tryGet());
+            _ = &ctx;
             var should_deinit_context = false;
-            ctx.create(this, req, resp, &should_deinit_context, null);
-            var body = this.vm.initRequestBodyValue(.{ .Null = {} }) catch unreachable;
-
+            _ = &should_deinit_context;
+            _ = ctx.create(self, req, resp, (&should_deinit_context), null);
+            var body = ((self.vm.initRequestBodyValue(.Null)) catch unreachable);
+            _ = &body;
             ctx.request_body = body;
-            var signal = jsc.WebCore.AbortSignal.new(this.globalThis);
+            var signal = jsc.WebCore.AbortSignal.new(self.globalThis);
+            _ = &signal;
             ctx.signal = signal;
-            signal.pendingActivityRef();
-
-            var request_object = Request.new(Request.init(
-                ctx.method,
-                AnyRequestContext.init(ctx),
-                ssl_enabled,
-                signal.ref(),
-                body.ref(),
-            ));
+            _ = signal.pendingActivityRef();
+            var request_object = Request.new(Request.init(ctx.method, AnyRequestContext.init(ctx), ssl_enabled, signal.ref(), body.ref()));
+            _ = &request_object;
             ctx.upgrade_context = upgrade_ctx;
             ctx.request_weakref = .initRef(request_object);
-            // We keep the Request object alive for the duration of the request so that we can remove the pointer to the UWS request object.
-            var args = [_]jsc.JSValue{
-                request_object.toJS(this.globalThis),
-                this.jsValueAssertAlive(),
-            };
+            var args: [2]jsc.JSValue = .{ request_object.toJS(self.globalThis), self.jsValueAssertAlive() };
+            _ = &args;
             const request_value = args[0];
-            request_value.ensureStillAlive();
-
-            const response_value = this.config.onRequest.call(this.globalThis, this.jsValueAssertAlive(), &args) catch |err|
-                this.globalThis.takeException(err);
+            _ = request_value.ensureStillAlive();
+            const response_value = (blk_catch_27: { break :blk_catch_27 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&args))) catch |err| { _ = &err; break :blk_catch_27 self.globalThis.takeException(err); }); });
             defer {
-                // uWS request will not live longer than this function
-                request_object.request_context.detachRequest();
+            {
+                _ = request_object.request_context.detachRequest();
             }
-            ctx.onResponse(
-                this,
-                request_value,
-                response_value,
-            );
-
+            }
+            _ = ctx.onResponse(self, request_value, response_value);
             ctx.defer_deinit_until_callback_completes = null;
-
             if (should_deinit_context) {
-                ctx.deinit();
+                _ = ctx.deinit();
                 return;
             }
-
             if (ctx.shouldRenderMissing()) {
-                ctx.renderMissing();
+                _ = ctx.renderMissing();
                 return;
             }
+            _ = ctx.toAsync(req, request_object);
+    }
 
-            ctx.toAsync(req, request_object);
-        }
-
-        // https://chromium.googlesource.com/devtools/devtools-frontend/+/main/docs/ecosystem/automatic_workspace_folders.md
-        fn onChromeDevToolsJSONRequest(this: *ThisServer, req: *uws.Request, resp: *App.Response) void {
-            if (comptime Environment.enable_logs)
-                httplog("{s} - {s}", .{ req.method(), req.url() });
-
+pub fn onChromeDevToolsJSONRequest(self: *@This(), req: *uws.Request, resp: *App.Response) void {
+            if (comptime Environment.enable_logs) {
+                _ = httplog("{s} - {s}", .{ req.method(), req.url() });
+            }
             const authorized = brk: {
-                if (this.dev_server == null)
-                    break :brk false;
-
-                if (resp.getRemoteSocketInfo()) |*address| {
-                    // IPv4 loopback addresses
-                    if (strings.startsWith(address.ip, "127.")) {
-                        break :brk true;
-                    }
-
-                    // IPv6 loopback addresses
-                    if (strings.startsWith(address.ip, "::ffff:127.") or
-                        strings.startsWith(address.ip, "::1") or
-                        strings.eqlComptime(address.ip, "0:0:0:0:0:0:0:1"))
-                    {
-                        break :brk true;
-                    }
-                }
-
+            if ((self.dev_server == null)) {
                 break :brk false;
-            };
-
-            if (!authorized) {
-                req.setYield(true);
+            }
+            if (resp.getRemoteSocketInfo()) |*address| {
+                _ = &address;
+                if (strings.startsWith((address.*).ip, "127.")) {
+                    break :brk true;
+                }
+                if (((strings.startsWith((address.*).ip, "::ffff:127.") or strings.startsWith((address.*).ip, "::1")) or strings.eqlComptime((address.*).ip, "0:0:0:0:0:0:0:1"))) {
+                    break :brk true;
+                }
+            }
+            break :brk false;
+};
+            if ((!authorized)) {
+                _ = req.setYield(true);
                 return;
             }
-
-            // They need a 16 byte uuid. It needs to be somewhat consistent. We don't want to store this field anywhere.
-
-            // So we first use a hash of the main field:
             const first_hash_segment: [8]u8 = brk: {
-                const buffer = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(buffer);
-                const main = jsc.VirtualMachine.get().main;
-                const len = @min(main.len, buffer.len);
-                break :brk @bitCast(bun.hash(bun.strings.copyLowercase(main[0..len], buffer[0..len])));
-            };
-
-            // And then we use a hash of their project root directory:
+            const buffer = bun.path_buffer_pool.get();
+            var _guard_buf1 = PathBufferGuard(@TypeOf(buffer)){ .buf = buffer };
+            _ = &_guard_buf1;
+            var ___guard_buf1_moved = false; _ = &___guard_buf1_moved;
+            defer if (!___guard_buf1_moved) { ___guard_buf1_moved = true; const __T = @TypeOf(_guard_buf1); if (@typeInfo(__T) == .optional) { if (_guard_buf1) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf1.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf1; _drop_val.__cp_deinit(); } };
+            const main = jsc.VirtualMachine.get().main;
+            const len = @min(main.len, buffer.len);
+            break :brk @bitCast(bun.hash(bun.strings.copyLowercase(main[0..len], buffer[0..len])));
+};
             const second_hash_segment: [8]u8 = brk: {
-                const buffer = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(buffer);
-                const root = this.dev_server.?.root;
-                const len = @min(root.len, buffer.len);
-                break :brk @bitCast(bun.hash(bun.strings.copyLowercase(root[0..len], buffer[0..len])));
-            };
+            const buffer = bun.path_buffer_pool.get();
+            var _guard_buf2 = PathBufferGuard(@TypeOf(buffer)){ .buf = buffer };
+            _ = &_guard_buf2;
+            var ___guard_buf2_moved = false; _ = &___guard_buf2_moved;
+            defer if (!___guard_buf2_moved) { ___guard_buf2_moved = true; const __T = @TypeOf(_guard_buf2); if (@typeInfo(__T) == .optional) { if (_guard_buf2) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf2.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf2; _drop_val.__cp_deinit(); } };
+            const root = self.dev_server.?.root;
+            const len = @min(root.len, buffer.len);
+            break :brk @bitCast(bun.hash(bun.strings.copyLowercase(root[0..len], buffer[0..len])));
+};
+            const hash_bytes: [16]u8 = (first_hash_segment ++ second_hash_segment);
+            const uuid = bun.UUID.initWith((&hash_bytes));
+            const json_string = (blk_catch_28: { break :blk_catch_28 ((std.fmt.allocPrint(bun.default_allocator, "{{ \"workspace\": {{ \"root\": {f}, \"uuid\": \"{f}\" }} }}", .{ bun.fmt.formatJSONStringUTF8(self.dev_server.?.root, .{}), uuid })) catch |err| { _ = &err; break :blk_catch_28 bun.handleOom(err); }); });
+            var _guard_json_string = FreeGuard(@TypeOf(json_string)){ .alloc = bun.default_allocator, .slice = json_string };
+            _ = &_guard_json_string;
+            var ___guard_json_string_moved = false; _ = &___guard_json_string_moved;
+            defer if (!___guard_json_string_moved) { ___guard_json_string_moved = true; const __T = @TypeOf(_guard_json_string); if (@typeInfo(__T) == .optional) { if (_guard_json_string) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_json_string.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_json_string; _drop_val.__cp_deinit(); } };
+            _ = resp.writeStatus("200 OK");
+            _ = resp.writeHeader("Content-Type", "application/json");
+            _ = resp.end(json_string, resp.shouldCloseConnection());
+    }
 
-            // We combine it together to get a 16 byte uuid.
-            const hash_bytes: [16]u8 = first_hash_segment ++ second_hash_segment;
-            const uuid = bun.UUID.initWith(&hash_bytes);
-
-            // interface DevToolsJSON {
-            //   workspace?: {
-            //     root: string,
-            //     uuid: string,
-            //   }
-            // }
-            const json_string = std.fmt.allocPrint(bun.default_allocator, "{{ \"workspace\": {{ \"root\": {f}, \"uuid\": \"{f}\" }} }}", .{
-                bun.fmt.formatJSONStringUTF8(this.dev_server.?.root, .{}),
-                uuid,
-            }) catch |err| bun.handleOom(err);
-            defer bun.default_allocator.free(json_string);
-
-            resp.writeStatus("200 OK");
-            resp.writeHeader("Content-Type", "application/json");
-            resp.end(json_string, resp.shouldCloseConnection());
-        }
-
-        fn setRoutes(this: *ThisServer) jsc.JSValue {
+pub fn setRoutes(self: *@This()) jsc.JSValue {
             var route_list_value = jsc.JSValue.zero;
-            const app = this.app.?;
-            const any_server = AnyServer.from(this);
-            const dev_server = this.dev_server;
+            _ = &route_list_value;
+            const app: *App = self.app.?;
+            const any_server = AnyServer.from(self);
+            const dev_server = self.dev_server;
+            var should_add_chrome_devtools_json_route = (((debug_mode and self.config.allow_hot) and (dev_server != null)) and self.config.enable_chrome_devtools_automatic_workspace_folders);
+            _ = &should_add_chrome_devtools_json_route;
+            const chrome_devtools_route: []const u8 = "/.well-known/appspecific/com.chrome.devtools.json";
+            if ((self.config.user_routes_to_build.items.len > 0)) {
+                var user_routes_to_build_list = self.config.user_routes_to_build.moveToUnmanaged();
+                _ = &user_routes_to_build_list;
+                var old_user_routes = self.user_routes;
+                _ = &old_user_routes;
+                var _guard_old_user_routes = UserRoutesDeinitGuard(UserRoute){ .routes = (blk: {
+                break :blk (&old_user_routes);
 
-            // https://chromium.googlesource.com/devtools/devtools-frontend/+/main/docs/ecosystem/automatic_workspace_folders.md
-            // Only enable this when we're using the dev server.
-            var should_add_chrome_devtools_json_route = debug_mode and this.config.allow_hot and dev_server != null and this.config.enable_chrome_devtools_automatic_workspace_folders;
-            const chrome_devtools_route = "/.well-known/appspecific/com.chrome.devtools.json";
-
-            // --- 1. Handle user_routes_to_build (dynamic JS routes) ---
-            // (This part remains conceptually the same: populate this.user_routes and route_list_value
-            //  Crucially, ServerConfig.fromJS must ensure `route.method` is correctly .specific or .any)
-            if (this.config.user_routes_to_build.items.len > 0) {
-                var user_routes_to_build_list = this.config.user_routes_to_build.moveToUnmanaged();
-                var old_user_routes = this.user_routes;
-                defer {
-                    for (old_user_routes.items) |*r| r.route.deinit();
-                    old_user_routes.deinit(bun.default_allocator);
-                }
-                this.user_routes = std.ArrayListUnmanaged(UserRoute).initCapacity(bun.default_allocator, user_routes_to_build_list.items.len) catch @panic("OOM");
-                const paths_zig = bun.default_allocator.alloc(ZigString, user_routes_to_build_list.items.len) catch @panic("OOM");
-                defer bun.default_allocator.free(paths_zig);
-                const callbacks_js = bun.default_allocator.alloc(jsc.JSValue, user_routes_to_build_list.items.len) catch @panic("OOM");
-                defer bun.default_allocator.free(callbacks_js);
-
+}) };
+                _ = &_guard_old_user_routes;
+                var ___guard_old_user_routes_moved = false; _ = &___guard_old_user_routes_moved;
+                defer if (!___guard_old_user_routes_moved) { ___guard_old_user_routes_moved = true; const __T = @TypeOf(_guard_old_user_routes); if (@typeInfo(__T) == .optional) { if (_guard_old_user_routes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_old_user_routes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_old_user_routes; _drop_val.__cp_deinit(); } };
+                self.user_routes = (blk_catch_29: { break :blk_catch_29 ((std.ArrayListUnmanaged(UserRoute).initCapacity(bun.default_allocator, user_routes_to_build_list.items.len)) catch |__ce_29| { _ = &__ce_29; @panic("OOM"); }); });
+                const paths_zig = (blk_catch_30: { break :blk_catch_30 ((bun.default_allocator.alloc(ZigString, user_routes_to_build_list.items.len)) catch |__ce_30| { _ = &__ce_30; @panic("OOM"); }); });
+                var _guard_paths_zig = FreeGuard(@TypeOf(paths_zig)){ .alloc = bun.default_allocator, .slice = paths_zig };
+                _ = &_guard_paths_zig;
+                var ___guard_paths_zig_moved = false; _ = &___guard_paths_zig_moved;
+                defer if (!___guard_paths_zig_moved) { ___guard_paths_zig_moved = true; const __T = @TypeOf(_guard_paths_zig); if (@typeInfo(__T) == .optional) { if (_guard_paths_zig) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_paths_zig.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_paths_zig; _drop_val.__cp_deinit(); } };
+                const callbacks_js = (blk_catch_31: { break :blk_catch_31 ((bun.default_allocator.alloc(jsc.JSValue, user_routes_to_build_list.items.len)) catch |__ce_31| { _ = &__ce_31; @panic("OOM"); }); });
+                var _guard_callbacks_js = FreeGuard(@TypeOf(callbacks_js)){ .alloc = bun.default_allocator, .slice = callbacks_js };
+                _ = &_guard_callbacks_js;
+                var ___guard_callbacks_js_moved = false; _ = &___guard_callbacks_js_moved;
+                defer if (!___guard_callbacks_js_moved) { ___guard_callbacks_js_moved = true; const __T = @TypeOf(_guard_callbacks_js); if (@typeInfo(__T) == .optional) { if (_guard_callbacks_js) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_callbacks_js.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_callbacks_js; _drop_val.__cp_deinit(); } };
                 for (user_routes_to_build_list.items, paths_zig, callbacks_js, 0..) |*builder, *p_zig, *cb_js, i| {
+                    _ = &builder;
+                    _ = &p_zig;
+                    _ = &cb_js;
+                    _ = &i;
                     p_zig.* = ZigString.init(builder.route.path);
-                    cb_js.* = builder.callback.get().?;
-                    this.user_routes.appendAssumeCapacity(.{
-                        .id = @truncate(i),
-                        .server = this,
-                        .route = builder.route,
-                    });
-                    builder.route = .{}; // Mark as moved
+                    cb_js.* = (builder.callback.get()).?;
+                    _ = self.user_routes.appendAssumeCapacity(.{ .id = @truncate(i), .server = self, .route = builder.route });
+                    builder.route = .{};
                 }
-                route_list_value = Bun__ServerRouteList__create(this.globalThis, callbacks_js.ptr, paths_zig.ptr, user_routes_to_build_list.items.len);
-                for (user_routes_to_build_list.items) |*builder| builder.deinit();
-                user_routes_to_build_list.deinit(bun.default_allocator);
+                route_list_value = Bun__ServerRouteList__create(self.globalThis, callbacks_js.ptr, paths_zig.ptr, user_routes_to_build_list.items.len);
+                for (user_routes_to_build_list.items) |*builder| {
+                    _ = &builder;
+                    _ = builder.deinit();
+                }
+                _ = user_routes_to_build_list.deinit(bun.default_allocator);
             }
-
-            // --- 2. Setup WebSocket handler's app reference ---
-            if (this.config.websocket) |*websocket| {
-                websocket.globalObject = this.globalThis;
-                websocket.handler.app = app;
-                websocket.handler.flags.ssl = ssl_enabled;
+            if (self.config.websocket) |*websocket| {
+                _ = &websocket;
+                (websocket.*).globalObject = self.globalThis;
+                (websocket.*).handler.app = self.app;
+                (websocket.*).handler.flags.ssl = ssl_enabled;
             }
-
-            // --- 3. Register compiled user routes (this.user_routes) & Track "/*" Coverage ---
             var star_methods_covered_by_user = bun.http.Method.Set.initEmpty();
-            var has_any_user_route_for_star_path = false; // True if "/*" path appears in user_routes at all
+            _ = &star_methods_covered_by_user;
+            var has_any_user_route_for_star_path = false;
+            _ = &has_any_user_route_for_star_path;
             var has_any_ws_route_for_star_path = false;
-
-            for (this.user_routes.items) |*user_route| {
-                const is_star_path = strings.eqlComptime(user_route.route.path, "/*");
+            _ = &has_any_ws_route_for_star_path;
+            for (self.user_routes.items) |*user_route| {
+                _ = &user_route;
+                const is_star_path = strings.eqlComptime((user_route.*).route.path, "/*");
                 if (is_star_path) {
                     has_any_user_route_for_star_path = true;
                 }
-
                 if (should_add_chrome_devtools_json_route) {
-                    if (strings.eqlComptime(user_route.route.path, chrome_devtools_route) or strings.hasPrefix(user_route.route.path, "/.well-known/")) {
+                    if ((strings.eqlComptime((user_route.*).route.path, chrome_devtools_route) or strings.hasPrefix((user_route.*).route.path, "/.well-known/"))) {
                         should_add_chrome_devtools_json_route = false;
                     }
                 }
-
-                // Register HTTP routes
-                switch (user_route.route.method) {
-                    .any => {
-                        app.any(user_route.route.path, user_route, onUserRouteRequest);
-                        if (comptime has_h3) {
-                            if (this.h3_app) |h3_app| h3_app.any(user_route.route.path, user_route, onH3UserRouteRequest);
-                        }
-                        if (is_star_path) {
-                            star_methods_covered_by_user = .initFull();
-                        }
-
-                        if (this.config.websocket) |*websocket| {
-                            if (is_star_path) {
-                                has_any_ws_route_for_star_path = true;
-                            }
-                            app.ws(
-                                user_route.route.path,
-                                user_route,
-                                1, // id 1 means is a user route
-                                ServerWebSocket.behavior(ThisServer, ssl_enabled, websocket.toBehavior()),
-                            );
-                        }
-                    },
-                    .specific => |method_val| { // method_val is HTTP.Method here
-                        app.method(method_val, user_route.route.path, user_route, onUserRouteRequest);
-                        if (comptime has_h3) {
-                            if (this.h3_app) |h3_app| h3_app.method(method_val, user_route.route.path, user_route, onH3UserRouteRequest);
-                        }
-                        if (is_star_path) {
-                            star_methods_covered_by_user.insert(method_val);
-                        }
-
-                        // Setup user websocket in the route if needed.
-                        if (this.config.websocket) |*websocket| {
-                            // Websocket upgrade is a GET request
-                            if (method_val == .GET) {
-                                app.ws(
-                                    user_route.route.path,
-                                    user_route,
-                                    1, // id 1 means is a user route
-                                    ServerWebSocket.behavior(ThisServer, ssl_enabled, websocket.toBehavior()),
-                                );
-                            }
-                        }
-                    },
-                }
-            }
-
-            // --- 4. Register negative routes ---
-            for (this.config.negative_routes.items) |route_path| {
-                app.head(route_path, this, onRequest);
-                app.any(route_path, this, onRequest);
+                switch ((user_route.*).route.method) {
+.any => {
+_ = app.any((user_route.*).route.path, (&(user_route.*)), onUserRouteRequest);
                 if (comptime has_h3) {
-                    if (this.h3_app) |h3_app| {
-                        h3_app.head(route_path, this, onH3Request);
-                        h3_app.any(route_path, this, onH3Request);
+                    if (self.h3_app) |h3_app| {
+                        _ = &h3_app;
+                        _ = h3_app.any((user_route.*).route.path, (&(user_route.*)), onH3UserRouteRequest);
+                    }
+                }
+                if (is_star_path) {
+                    star_methods_covered_by_user = .initFull();
+                }
+                if (self.config.websocket) |*websocket| {
+                    _ = &websocket;
+                    if (is_star_path) {
+                        has_any_ws_route_for_star_path = true;
+                    }
+                    _ = app.ws((user_route.*).route.path, (&(user_route.*)), 1, ServerWebSocket.behavior(ThisServer, ssl_enabled, (websocket.*).toBehavior()));
+                }
+},
+.specific => |method_val| {
+_ = app.method(method_val, (user_route.*).route.path, (&(user_route.*)), onUserRouteRequest);
+                if (comptime has_h3) {
+                    if (self.h3_app) |h3_app| {
+                        _ = &h3_app;
+                        _ = h3_app.method(method_val, (user_route.*).route.path, (&(user_route.*)), onH3UserRouteRequest);
+                    }
+                }
+                if (is_star_path) {
+                    _ = star_methods_covered_by_user.insert(method_val);
+                }
+                if (self.config.websocket) |*websocket| {
+                    _ = &websocket;
+                    if ((method_val == .GET)) {
+                        _ = app.ws((user_route.*).route.path, (&(user_route.*)), 1, ServerWebSocket.behavior(ThisServer, ssl_enabled, (websocket.*).toBehavior()));
+                    }
+                }
+},
+}
+            }
+            for (self.config.negative_routes.items) |route_path| {
+                _ = &route_path;
+                _ = app.head(route_path, self, onRequest);
+                _ = app.any(route_path, self, onRequest);
+                if (comptime has_h3) {
+                    if (self.h3_app) |h3_app| {
+                        _ = &h3_app;
+                        _ = h3_app.head(route_path, self, onH3Request);
+                        _ = h3_app.any(route_path, self, onH3Request);
                     }
                 }
             }
-
-            // --- 5. Register static routes & Track "/*" Coverage ---
-            var needs_plugins = dev_server != null;
+            var needs_plugins = (dev_server != null);
+            _ = &needs_plugins;
             var has_static_route_for_star_path = false;
-
-            if (this.config.static_routes.items.len > 0) {
-                for (this.config.static_routes.items) |*entry| {
-                    if (strings.eqlComptime(entry.path, "/*")) {
+            _ = &has_static_route_for_star_path;
+            if ((self.config.static_routes.items.len > 0)) {
+                for (self.config.static_routes.items) |*entry| {
+                    _ = &entry;
+                    if (strings.eqlComptime((entry.*).path, "/*")) {
                         has_static_route_for_star_path = true;
-                        switch (entry.method) {
-                            .any => {
-                                star_methods_covered_by_user = .initFull();
-                            },
-                            .method => |method| {
-                                star_methods_covered_by_user.setUnion(method);
-                            },
-                        }
+                        switch ((entry.*).method) {
+.any => {
+star_methods_covered_by_user = .initFull();
+},
+.method => |method| {
+_ = star_methods_covered_by_user.setUnion(method);
+},
+}
                     }
-
                     if (should_add_chrome_devtools_json_route) {
-                        if (strings.eqlComptime(entry.path, chrome_devtools_route) or strings.hasPrefix(entry.path, "/.well-known/")) {
+                        if ((strings.eqlComptime((entry.*).path, chrome_devtools_route) or strings.hasPrefix((entry.*).path, "/.well-known/"))) {
                             should_add_chrome_devtools_json_route = false;
                         }
                     }
+                    switch ((entry.*).route) {
+.static => |static_route| {
+_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, *StaticRoute, static_route, (entry.*).path, (entry.*).method);
+                    if (comptime has_h3) {
+                        if (self.h3_app) |h3_app| {
+                            _ = &h3_app;
+                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, *StaticRoute, static_route, (entry.*).path, (entry.*).method);
+                        }
+                    }
+},
+.file => |file_route| {
+_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, *FileRoute, file_route, (entry.*).path, (entry.*).method);
+                    if (comptime has_h3) {
+                        if (self.h3_app) |h3_app| {
+                            _ = &h3_app;
+                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, *FileRoute, file_route, (entry.*).path, (entry.*).method);
+                        }
+                    }
+},
+.html => |html_bundle_route| {
+_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, *HTMLBundle.Route, html_bundle_route.data, (entry.*).path, (entry.*).method);
+                    if (comptime has_h3) {
+                        if (self.h3_app) |h3_app| {
+                            _ = &h3_app;
+                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, *HTMLBundle.Route, html_bundle_route.data, (entry.*).path, (entry.*).method);
+                        }
+                    }
+                    if (dev_server) |dev| {
+                        _ = &dev;
+                        _ = bun.handleOom(dev.html_router.put(dev.allocator(), (entry.*).path, html_bundle_route.data));
+                    }
+                    needs_plugins = true;
+},
+.framework_router => {
 
-                    switch (entry.route) {
-                        .static => |static_route| {
-                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, app, *StaticRoute, static_route, entry.path, entry.method);
-                            if (comptime has_h3) if (this.h3_app) |h3_app|
-                                ServerConfig.applyStaticRouteH3(any_server, h3_app, *StaticRoute, static_route, entry.path, entry.method);
-                        },
-                        .file => |file_route| {
-                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, app, *FileRoute, file_route, entry.path, entry.method);
-                            if (comptime has_h3) if (this.h3_app) |h3_app|
-                                ServerConfig.applyStaticRouteH3(any_server, h3_app, *FileRoute, file_route, entry.path, entry.method);
-                        },
-                        .html => |html_bundle_route| {
-                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, app, *HTMLBundle.Route, html_bundle_route.data, entry.path, entry.method);
-                            if (comptime has_h3) if (this.h3_app) |h3_app|
-                                ServerConfig.applyStaticRouteH3(any_server, h3_app, *HTMLBundle.Route, html_bundle_route.data, entry.path, entry.method);
-                            if (dev_server) |dev| {
-                                bun.handleOom(dev.html_router.put(dev.allocator(), entry.path, html_bundle_route.data));
-                            }
-                            needs_plugins = true;
-                        },
-                        .framework_router => {},
+},
+}
+                }
+            }
+            if ((needs_plugins and (self.plugins == null))) {
+                if (self.vm.transpiler.options.serve_plugins) |serve_plugins_config| {
+                    _ = &serve_plugins_config;
+                    if ((serve_plugins_config.len > 0)) {
+                        self.plugins = ServePlugins.init(serve_plugins_config);
                     }
                 }
             }
-
-            // --- 6. Initialize plugins if needed ---
-            if (needs_plugins and this.plugins == null) {
-                if (this.vm.transpiler.options.serve_plugins) |serve_plugins_config| {
-                    if (serve_plugins_config.len > 0) {
-                        this.plugins = ServePlugins.init(serve_plugins_config);
-                    }
-                }
-            }
-
-            // --- 7. Debug mode specific routes ---
             if (debug_mode) {
-                app.get("/bun:info", this, onBunInfoRequest);
+                _ = app.get("/bun:info", self, onBunInfoRequest);
             }
-
-            // Snapshot "/*" coverage from user/static routes before DevServer
-            // (which is H1-only and not mirrored to the H3 router) marks it
-            // as full.
             const h3_star_covered = star_methods_covered_by_user;
             _ = &h3_star_covered;
-
-            // --- 8. Handle DevServer routes & Track "/*" Coverage ---
             var has_dev_server_for_star_path = false;
+            _ = &has_dev_server_for_star_path;
             if (dev_server) |dev| {
-                // dev.setRoutes might register its own "/*" HTTP handler
-                has_dev_server_for_star_path = bun.handleOom(dev.setRoutes(this));
+                _ = &dev;
+                has_dev_server_for_star_path = bun.handleOom(dev.setRoutes(self));
                 if (has_dev_server_for_star_path) {
-                    // Assume dev server "/*" covers all methods if it exists
                     star_methods_covered_by_user = .initFull();
                 }
             }
-
-            // Setup user websocket fallback route aka fetch function if fetch is not provided will respond with 403.
-            if (!has_any_ws_route_for_star_path) {
-                if (this.config.websocket) |*websocket| {
-                    app.ws(
-                        "/*",
-                        this,
-                        0, // id 0 means is a fallback route and ctx is the server
-                        ServerWebSocket.behavior(ThisServer, ssl_enabled, websocket.toBehavior()),
-                    );
+            if ((!has_any_ws_route_for_star_path)) {
+                if (self.config.websocket) |*websocket| {
+                    _ = &websocket;
+                    _ = app.ws("/*", self, 0, ServerWebSocket.behavior(ThisServer, ssl_enabled, (websocket.*).toBehavior()));
                 }
             }
-
-            // --- 9. Consolidated "/*" HTTP Fallback Registration ---
             if (star_methods_covered_by_user.eql(bun.http.Method.Set.initFull())) {
-                // User/Static/Dev has already provided a "/*" handler for ALL methods.
-                // No further global "/*" HTTP fallback needed.
-            } else if (has_any_user_route_for_star_path or has_static_route_for_star_path or has_dev_server_for_star_path) {
-                // A "/*" route exists, but doesn't cover all methods.
-                // Apply the global handler to the *remaining* methods for "/*".
-                // So we flip the bits for the methods that are not covered by the user/static/dev routes
-                star_methods_covered_by_user.toggleAll();
-                var iter = star_methods_covered_by_user.iterator();
-                while (iter.next()) |method_to_cover| {
-                    switch (this.config.onNodeHTTPRequest) {
-                        .zero => switch (this.config.onRequest) {
-                            .zero => app.method(method_to_cover, "/*", this, on404),
-                            else => app.method(method_to_cover, "/*", this, onRequest),
-                        },
-                        else => app.method(method_to_cover, "/*", this, onNodeHTTPRequest),
-                    }
-                }
             } else {
-                switch (this.config.onNodeHTTPRequest) {
-                    .zero => switch (this.config.onRequest) {
-                        .zero => app.any("/*", this, on404),
-                        else => app.any("/*", this, onRequest),
-                    },
-                    else => app.any("/*", this, onNodeHTTPRequest),
+                if (((has_any_user_route_for_star_path or has_static_route_for_star_path) or has_dev_server_for_star_path)) {
+                    _ = star_methods_covered_by_user.toggleAll();
+                    var iter = star_methods_covered_by_user.iterator();
+                    _ = &iter;
+                    while (iter.next()) |method_to_cover| {
+                        switch (self.config.onNodeHTTPRequest) {
+.zero => {
+switch (self.config.onRequest) {
+.zero => {
+_ = app.method(method_to_cover, "/*", self, on404);
+},
+else => {
+_ = app.method(method_to_cover, "/*", self, onRequest);
+},
+}
+},
+else => {
+_ = app.method(method_to_cover, "/*", self, onNodeHTTPRequest);
+},
+}
+                    }
+                } else {
+                    switch (self.config.onNodeHTTPRequest) {
+.zero => {
+switch (self.config.onRequest) {
+.zero => {
+_ = app.any("/*", self, on404);
+},
+else => {
+_ = app.any("/*", self, onRequest);
+},
+}
+},
+else => {
+_ = app.any("/*", self, onNodeHTTPRequest);
+},
+}
                 }
             }
-
-            // H3 fallback — same three-way as H1 above, but driven by
-            // user/static "/*" coverage only (DevServer routes are not mirrored
-            // to H3). h3_app.any("/*") would overwrite a user .any "/*"
-            // mirrored at line 2714, so skip when coverage is already full;
-            // for method-specific "/*" routes fill the complement per method.
             if (comptime has_h3) {
-                if (this.h3_app) |h3_app| {
+                if (self.h3_app) |h3_app| {
+                    _ = &h3_app;
                     if (h3_star_covered.eql(bun.http.Method.Set.initFull())) {
-                        // user/static "/*" already covers every method
-                    } else if (has_any_user_route_for_star_path or has_static_route_for_star_path) {
-                        var uncovered = h3_star_covered;
-                        uncovered.toggleAll();
-                        var iter = uncovered.iterator();
-                        while (iter.next()) |m| {
-                            if (this.config.onRequest != .zero) {
-                                h3_app.method(m, "/*", this, onH3Request);
-                            } else {
-                                h3_app.method(m, "/*", this, onH3404);
-                            }
-                        }
-                    } else if (this.config.onRequest != .zero) {
-                        h3_app.any("/*", this, onH3Request);
                     } else {
-                        h3_app.any("/*", this, onH3404);
+                        if ((has_any_user_route_for_star_path or has_static_route_for_star_path)) {
+                            var uncovered = h3_star_covered;
+                            _ = &uncovered;
+                            _ = uncovered.toggleAll();
+                            var iter = uncovered.iterator();
+                            _ = &iter;
+                            while (iter.next()) |m| {
+                                if ((self.config.onRequest != .zero)) {
+                                    _ = h3_app.method(m, "/*", self, onH3Request);
+                                } else {
+                                    _ = h3_app.method(m, "/*", self, onH3404);
+                                }
+                            }
+                        } else {
+                            if ((self.config.onRequest != .zero)) {
+                                _ = h3_app.any("/*", self, onH3Request);
+                            } else {
+                                _ = h3_app.any("/*", self, onH3404);
+                            }
+                        }
                     }
                 }
             }
-
             if (should_add_chrome_devtools_json_route) {
-                app.get(chrome_devtools_route, this, onChromeDevToolsJSONRequest);
+                _ = app.get(chrome_devtools_route, self, onChromeDevToolsJSONRequest);
             }
-
-            // If onNodeHTTPRequest is configured, it might be needed for Node.js compatibility layer
-            // for specific Node API routes, even if it's not the main "/*" handler.
-            if (this.config.onNodeHTTPRequest != .zero) {
-                NodeHTTP_assignOnNodeJSCompat(ssl_enabled, app);
+            if ((self.config.onNodeHTTPRequest != .zero)) {
+                _ = NodeHTTP_assignOnNodeJSCompat(ssl_enabled, self.app.?);
             }
-
             return route_list_value;
-        }
+    }
 
-        pub fn on404(_: *ThisServer, req: *uws.Request, resp: *App.Response) void {
-            if (comptime Environment.enable_logs)
-                httplog("{s} - {s} 404", .{ req.method(), req.url() });
+pub fn on404(_: *ThisServer, req: *uws.Request, resp: *App.Response) void {
+            if (comptime Environment.enable_logs) {
+                _ = httplog("{s} - {s} 404", .{ req.method(), req.url() });
+            }
+            _ = resp.writeStatus("404 Not Found");
+            _ = resp.end("", false);
+    }
 
-            resp.writeStatus("404 Not Found");
-
-            // Rely on browser default page for now.
-            resp.end("", false);
-        }
-
-        // TODO: make this return JSError!void, and do not deinitialize on synchronous failure, to allow errdefer in caller scope
-        pub fn listen(this: *ThisServer) jsc.JSValue {
-            httplog("listen", .{});
-            var app: *App = undefined;
-            const globalThis = this.globalThis;
+pub fn listen(self: *@This()) jsc.JSValue {
+            _ = httplog("listen", .{});
+            const globalThis = self.globalThis;
             var route_list_value = jsc.JSValue.zero;
+            _ = &route_list_value;
             if (ssl_enabled) {
-                bun.BoringSSL.load();
-                const ssl_config = this.config.ssl_config orelse @panic("Assertion failure: ssl_config");
+                _ = bun.BoringSSL.load();
+                const ssl_config = ((self.config.ssl_config) orelse (@panic("Assertion failure: ssl_config")));
                 const ssl_options = ssl_config.asUSockets();
+                const ssl_app = ((App.create(ssl_options)) orelse {
+                if ((!globalThis.hasException())) {
+                    if ((!throwSSLErrorIfNecessary(globalThis))) {
+                        switch (globalThis.throw("Failed to create HTTP server", .{})) {
+else => {
 
-                app = App.create(ssl_options) orelse {
-                    if (!globalThis.hasException()) {
-                        if (!throwSSLErrorIfNecessary(globalThis)) {
-                            globalThis.throw("Failed to create HTTP server", .{}) catch {};
-                        }
+},
+}
                     }
-
-                    this.app = null;
-                    this.deinit();
-                    return .zero;
-                };
-
-                this.app = app;
-
+                }
+                self.app = null;
+                _ = self.deinit();
+                return .zero;
+});
+                self.app = ssl_app;
                 if (comptime has_h3) {
-                    if (this.config.http3) {
-                        this.h3_app = uws.H3.App.create(ssl_options, this.config.idleTimeout) orelse {
-                            if (!globalThis.hasException()) {
-                                globalThis.throw("Failed to create HTTP/3 server", .{}) catch {};
-                            }
-                            this.deinit();
-                            return .zero;
-                        };
+                    if (self.config.http3) {
+                        self.h3_app = ((uws.H3.App.create(ssl_options, self.config.idleTimeout)) orelse {
+                        if ((!globalThis.hasException())) {
+                            switch (globalThis.throw("Failed to create HTTP/3 server", .{})) {
+else => {
+
+},
+}
+                        }
+                        _ = self.deinit();
+                        return .zero;
+});
                     }
                 }
-
-                route_list_value = this.setRoutes();
-
-                // add serverName to the SSL context using default ssl options
+                route_list_value = self.setRoutes();
                 if (ssl_config.server_name) |server_name_ptr| {
+                    _ = &server_name_ptr;
                     const server_name: [:0]const u8 = std.mem.span(server_name_ptr);
-                    if (server_name.len > 0) {
-                        app.addServerNameWithOptions(@constCast(server_name.ptr), ssl_options) catch {
-                            if (!globalThis.hasException()) {
-                                if (!throwSSLErrorIfNecessary(globalThis)) {
-                                    globalThis.throw("Failed to add serverName: {s}", .{server_name}) catch {};
-                                }
+                    if ((server_name.len > 0)) {
+                        _ = (blk_catch_32: { break :blk_catch_32 ((self.app.?.addServerNameWithOptions((blk: {
+                        break :blk @constCast(server_name.ptr);
+
+}), ssl_options)) catch |__ce_32| { _ = &__ce_32; if ((!globalThis.hasException())) {
+                            if ((!throwSSLErrorIfNecessary(globalThis))) {
+                                switch (globalThis.throw("Failed to add serverName: {s}", .{ server_name })) {
+else => {
+
+},
+}
                             }
-
-                            this.deinit();
-                            return .zero;
-                        };
+                        }
+                        _ = self.deinit();
+                        return .zero; }); });
                         if (throwSSLErrorIfNecessary(globalThis)) {
-                            this.deinit();
+                            _ = self.deinit();
                             return .zero;
                         }
+                        _ = self.app.?.domain((blk: {
+                        break :blk @constCast(server_name.ptr);
 
-                        app.domain(@constCast(server_name.ptr));
+}));
                         if (throwSSLErrorIfNecessary(globalThis)) {
-                            this.deinit();
+                            _ = self.deinit();
                             return .zero;
                         }
-
-                        // Ensure the routes are set for that domain name.
-                        _ = this.setRoutes();
+                        _ = self.setRoutes();
                     }
                 }
-
-                // apply SNI routes if any
-                if (this.config.sni) |*sni| {
+                if (self.config.sni) |*sni| {
+                    _ = &sni;
                     for (sni.slice()) |*sni_ssl_config| {
+                        _ = &sni_ssl_config;
                         const sni_servername: [:0]const u8 = std.mem.span(sni_ssl_config.server_name.?);
-                        if (sni_servername.len > 0) {
-                            if (comptime has_h3) if (this.h3_app) |h3a|
-                                h3a.addServerNameWithOptions(sni_servername, sni_ssl_config.asUSockets()) catch {
-                                    if (!globalThis.hasException()) {
-                                        globalThis.throw("Failed to add serverName \"{s}\" for HTTP/3", .{sni_servername}) catch {};
+                        if ((sni_servername.len > 0)) {
+                            if (comptime has_h3) {
+                                if (self.h3_app) |h3a| {
+                                    _ = &h3a;
+                                    _ = (blk_catch_33: { break :blk_catch_33 ((h3a.addServerNameWithOptions(sni_servername, sni_ssl_config.asUSockets())) catch |__ce_33| { _ = &__ce_33; if ((!globalThis.hasException())) {
+                                        switch (globalThis.throw("Failed to add serverName \"{s}\" for HTTP/3", .{ sni_servername })) {
+else => {
+
+},
+}
                                     }
-                                    this.deinit();
-                                    return .zero;
-                                };
-                            app.addServerNameWithOptions(@constCast(sni_servername.ptr), sni_ssl_config.asUSockets()) catch {
-                                if (!globalThis.hasException()) {
-                                    if (!throwSSLErrorIfNecessary(globalThis)) {
-                                        globalThis.throw("Failed to add serverName: {s}", .{sni_servername}) catch {};
-                                    }
+                                    _ = self.deinit();
+                                    return .zero; }); });
                                 }
+                            }
+                            _ = (blk_catch_34: { break :blk_catch_34 ((self.app.?.addServerNameWithOptions((blk: {
+                            break :blk @constCast(sni_servername.ptr);
 
-                                this.deinit();
-                                return .zero;
-                            };
+}), sni_ssl_config.asUSockets())) catch |__ce_34| { _ = &__ce_34; if ((!globalThis.hasException())) {
+                                if ((!throwSSLErrorIfNecessary(globalThis))) {
+                                    switch (globalThis.throw("Failed to add serverName: {s}", .{ sni_servername })) {
+else => {
 
-                            app.domain(@constCast(sni_servername.ptr));
+},
+}
+                                }
+                            }
+                            _ = self.deinit();
+                            return .zero; }); });
+                            _ = self.app.?.domain((blk: {
+                            break :blk @constCast(sni_servername.ptr);
 
+}));
                             if (throwSSLErrorIfNecessary(globalThis)) {
-                                this.deinit();
+                                _ = self.deinit();
                                 return .zero;
                             }
-
-                            // Ensure the routes are set for that domain name.
-                            _ = this.setRoutes();
+                            _ = self.setRoutes();
                         }
                     }
                 }
             } else {
-                app = App.create(.{}) orelse {
-                    if (!globalThis.hasException()) {
-                        globalThis.throw("Failed to create HTTP server", .{}) catch {};
+                const plain_app = ((App.create(.{})) orelse {
+                if ((!globalThis.hasException())) {
+                    switch (globalThis.throw("Failed to create HTTP server", .{})) {
+else => {
+
+},
+}
+                }
+                _ = self.deinit();
+                return .zero;
+});
+                self.app = plain_app;
+                route_list_value = self.setRoutes();
+            }
+            if ((self.config.onNodeHTTPRequest != .zero)) {
+                _ = self.setUsingCustomExpectHandler(true);
+            }
+            switch (self.config.address) {
+.tcp => |tcp| {
+var host: ?[*:0]const u8 = null;
+            _ = &host;
+            var host_buff: [1025]u8 = undefined;
+            _ = &host_buff;
+            if (tcp.hostname) |existing| {
+                _ = &existing;
+                const hostname = bun.span(existing);
+                if (((hostname.len > 2) and (hostname[0] == 91))) {
+                    const written = ((std.fmt.bufPrint((&host_buff), "{s}\x00", .{ hostname[1..(hostname.len - 1)] })) catch unreachable);
+                    host = (blk: {
+                    break :blk @ptrCast(written.ptr);
+
+});
+                } else {
+                    host = tcp.hostname;
+                }
+            }
+            if (self.config.http1) {
+                _ = self.app.?.listenWithConfig(self, onListen, .{ .port = tcp.port, .host = (blk: {
+                break :blk @constCast(host);
+
+}), .options = self.config.getUsocketsOptions() });
+            }
+            if (comptime has_h3) {
+                if (self.h3_app) |h3_app| {
+                    _ = &h3_app;
+                    var h3_port: u16 = tcp.port;
+                    _ = &h3_port;
+                    if ((self.listener != null)) {
+                        h3_port = @intCast(self.listener.?.getLocalPort());
                     }
-                    this.deinit();
-                    return .zero;
-                };
-                this.app = app;
+                    _ = h3_app.listenWithConfig(self, onH3Listen, .{ .port = h3_port, .host = (blk: {
+                    break :blk @constCast(host);
 
-                route_list_value = this.setRoutes();
-            }
+}), .options = self.config.getUsocketsOptions() });
+                    if ((self.h3_listener == null)) {
+                        if ((!globalThis.hasException())) {
+                            switch (globalThis.throw("Failed to listen on UDP port {d} for HTTP/3", .{ h3_port })) {
+else => {
 
-            if (this.config.onNodeHTTPRequest != .zero) {
-                this.setUsingCustomExpectHandler(true);
-            }
-
-            switch (this.config.address) {
-                .tcp => |tcp| {
-                    var host: ?[*:0]const u8 = null;
-                    var host_buff: [1024:0]u8 = undefined;
-
-                    if (tcp.hostname) |existing| {
-                        const hostname = bun.span(existing);
-
-                        if (hostname.len > 2 and hostname[0] == '[') {
-                            // remove "[" and "]" from hostname
-                            host = std.fmt.bufPrintZ(&host_buff, "{s}", .{hostname[1 .. hostname.len - 1]}) catch unreachable;
-                        } else {
-                            host = tcp.hostname;
+},
+}
                         }
+                        _ = self.deinit();
+                        return .zero;
                     }
-
-                    if (this.config.http1) {
-                        app.listenWithConfig(this, onListen, .{
-                            .port = tcp.port,
-                            .host = @constCast(host), // TODO(cpc): [task-bun-20261120-sentinel-ptr-const]
-                            .options = this.config.getUsocketsOptions(),
-                        });
+                    if ((!self.config.http1)) {
+                        self.vm.event_loop_handle = Async.Loop.get();
                     }
-
-                    if (comptime has_h3) {
-                        if (this.h3_app) |h3_app| {
-                            // Same UDP port as the TCP listener so Alt-Svc works.
-                            var h3_port: u16 = tcp.port;
-                            if (this.listener != null) {
-                                h3_port = @intCast(this.listener.?.getLocalPort());
-                            }
-                            h3_app.listenWithConfig(this, onH3Listen, .{
-                                .port = h3_port,
-                                .host = @constCast(host), // TODO(cpc): [task-bun-20261120-sentinel-ptr-const]
-                                .options = this.config.getUsocketsOptions(),
-                            });
-                            if (this.h3_listener == null) {
-                                if (!globalThis.hasException()) {
-                                    globalThis.throw("Failed to listen on UDP port {d} for HTTP/3", .{h3_port}) catch {};
-                                }
-                                this.deinit();
-                                return .zero;
-                            }
-                            if (!this.config.http1) this.vm.event_loop_handle = Async.Loop.get();
-                        }
-                    }
-                },
-
-                .unix => |unix| {
-                    if (comptime has_h3) if (this.h3_app) |h3a| {
-                        // QUIC over AF_UNIX is non-standard and Alt-Svc can't
-                        // advertise it. Drop the H3 listener rather than wire
-                        // an exotic transport nobody can reach.
-                        bun.Output.warn("http3: true with a unix socket — HTTP/3 listener skipped", .{});
-                        h3a.destroy();
-                        this.h3_app = null;
-                    };
-                    app.listenOnUnixSocket(
-                        this,
-                        onListen,
-                        unix,
-                        this.config.getUsocketsOptions(),
-                    );
-                },
+                }
             }
-
+},
+.unix => |unix| {
+if (comptime has_h3) {
+                if (self.h3_app) |h3a| {
+                    _ = &h3a;
+                    _ = bun.Output.warn("http3: true with a unix socket — HTTP/3 listener skipped", .{});
+                    _ = h3a.destroy();
+                    self.h3_app = null;
+                }
+            }
+            _ = self.app.?.listenOnUnixSocket(self, onListen, unix, self.config.getUsocketsOptions());
+},
+}
             if (globalThis.hasException()) {
-                this.deinit();
+                _ = self.deinit();
                 return .zero;
             }
-
-            this.ref();
-
-            // Starting up an HTTP server is a good time to GC
-            if (this.vm.aggressive_garbage_collection == .aggressive) {
-                this.vm.autoGarbageCollect();
+            _ = self.ref();
+            if ((self.vm.aggressive_garbage_collection == .aggressive)) {
+                _ = self.vm.autoGarbageCollect();
             } else {
-                this.vm.eventLoop().performGC();
+                _ = self.vm.eventLoop().performGC();
             }
-
             return route_list_value;
-        }
+    }
 
-        pub fn onClientErrorCallback(this: *ThisServer, socket: *uws.Socket, error_code: u8, raw_packet: []const u8) void {
-            if (this.on_clienterror.get()) |callback| {
-                const is_ssl = protocol_enum == .https;
-                const node_socket = bun.jsc.fromJSHostCall(this.globalThis, @src(), Bun__createNodeHTTPServerSocketForClientError, .{ is_ssl, socket, this.globalThis }) catch return;
-                if (node_socket.isUndefinedOrNull()) return;
-
+pub fn onClientErrorCallback(self: *@This(), socket: *uws.Socket, error_code: u8, raw_packet: []const u8) void {
+            if (self.on_clienterror.get()) |callback| {
+                _ = &callback;
+                const is_ssl = (protocol_enum == .https);
+                const node_socket = (blk_catch_36: { break :blk_catch_36 ((bun.jsc.fromJSHostCall(self.globalThis, @src(), Bun__createNodeHTTPServerSocketForClientError, .{ is_ssl, socket, self.globalThis })) catch |__ce_36| { _ = &__ce_36; return; }); });
+                if (node_socket.isUndefinedOrNull()) {
+                    return;
+                }
                 const error_code_value = JSValue.jsNumber(error_code);
-                const raw_packet_value = jsc.ArrayBuffer.createBuffer(this.globalThis, raw_packet) catch return; // TODO: properly propagate exception upwards
-                const loop = this.globalThis.bunVM().eventLoop();
-                loop.enter();
-                defer loop.exit();
-                _ = callback.call(this.globalThis, .js_undefined, &.{ JSValue.jsBoolean(is_ssl), node_socket, error_code_value, raw_packet_value }) catch |err| {
-                    this.globalThis.reportActiveExceptionAsUnhandled(err);
-                };
+                const raw_packet_value = (blk_catch_37: { break :blk_catch_37 ((jsc.ArrayBuffer.createBuffer(self.globalThis, raw_packet)) catch |__ce_37| { _ = &__ce_37; return; }); });
+                const loop = self.globalThis.bunVM().eventLoop();
+                _ = loop.enter();
+                defer {
+                _ = loop.exit();
+                }
+                _ = (blk_catch_38: { break :blk_catch_38 ((callback.call(self.globalThis, .js_undefined, (&.{ JSValue.jsBoolean(is_ssl), node_socket, error_code_value, raw_packet_value }))) catch |err| { _ = &err; break :blk_catch_38 self.globalThis.reportActiveExceptionAsUnhandled(err); }); });
             }
+    }
+    pub const js = (switch (protocol_enum) {
+    .http => (switch (development_kind) {
+    .debug => bun.jsc.Codegen.JSDebugHTTPServer,
+    .production => bun.jsc.Codegen.JSHTTPServer,
+    }),
+    .https => (switch (development_kind) {
+    .debug => bun.jsc.Codegen.JSDebugHTTPSServer,
+    .production => bun.jsc.Codegen.JSHTTPSServer,
+    }),
+    });
+    pub const fromJS = js.fromJS;
+    pub const toJS = js.toJS;
+    pub const toJSDirect = js.toJSDirect;
+    pub const new = bun.TrivialNew(@This());
+    pub const ssl_enabled = (protocol_enum == .https);
+    pub const debug_mode = (development_kind == .debug);
+    const ThisServer = @This();
+    pub const RequestContext = NewRequestContext(ssl_enabled, debug_mode, @This(), false);
+    const has_h3 = ssl_enabled;
+    pub const H3RequestContext = (if (has_h3) NewRequestContext(ssl_enabled, debug_mode, @This(), true) else void);
+    pub const App = uws.NewApp(ssl_enabled);
+    pub const doStop = host_fn.wrapInstanceMethod(ThisServer, "stopFromJS", false);
+    pub const dispose = host_fn.wrapInstanceMethod(ThisServer, "disposeFromJS", false);
+    pub const doUpgrade = host_fn.wrapInstanceMethod(ThisServer, "onUpgrade", false);
+    pub const doPublish = host_fn.wrapInstanceMethod(ThisServer, "publish", false);
+    pub const doReload = onReload;
+    pub const doFetch = onFetch;
+    pub const doRequestIP = host_fn.wrapInstanceMethod(ThisServer, "requestIP", false);
+    pub const doTimeout = timeout;
+    pub const UserRoute = struct {
+        id: u32,
+        server: *ThisServer,
+        route: ServerConfig.RouteDeclaration,
+    
+    pub fn deinit(self: *@This()) void {
+                _ = self.route.deinit();
         }
     };
+    const onNodeHTTPRequestFn = (if (ssl_enabled) NodeHTTPServer__onRequest_https else NodeHTTPServer__onRequest_http);
+    pub const PreparedRequest = PreparedRequestFor(RequestContext);
+    const CreateJsRequest = enum { yes, no, bake };
+};
 }
 
 pub export fn Server__setIdleTimeout(server: jsc.JSValue, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) callconv(.c) void {

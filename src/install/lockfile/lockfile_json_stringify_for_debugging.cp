@@ -1,8 +1,21 @@
+pub struct JsonScopeGuard<W> {
+    w: W,
+    is_array: bool,
+
+    ~init() {
+        if (_.is_array) {
+            _.w.endArray() catch {};
+        } else {
+            _.w.endObject() catch {};
+        }
+    }
+}
+
 fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyID, dep: Dependency, res: PackageID)! {
     const sb = client.buffers.string_bytes.items;
 
     w.beginObject()?;
-    defer w.endObject() catch {};
+    const _guard_dep = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
     w.objectField("name")?;
     w.write(dep.name.slice(sb))?;
@@ -20,7 +33,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
         .uninitialized => try w.write(null),
         .npm => {
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_npm = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             const info: Dependency.Version.NpmInfo = dep.version.value.npm;
 
@@ -32,7 +45,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
         },
         .dist_tag => {
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_tag = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             const info: Dependency.Version.TagInfo = dep.version.value.dist_tag;
 
@@ -44,7 +57,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
         },
         .tarball => {
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_tarball = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             const info: Dependency.Version.TarballInfo = dep.version.value.tarball;
             w.objectField(@tagName(info.uri))?;
@@ -66,7 +79,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
         },
         .git => {
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_git = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             const info: Repository = dep.version.value.git;
 
@@ -83,7 +96,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
         },
         .github => {
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_github = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             const info: Repository = dep.version.value.github;
 
@@ -100,7 +113,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
         },
         .catalog => {
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_catalog = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             const info = dep.version.value.catalog;
 
@@ -118,7 +131,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
     w.objectField("behavior")?;
     {
         w.beginObject()?;
-        defer w.endObject() catch {};
+        const _guard_beh = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
         const fields = @typeInfo(Behavior).@"struct".fields;
         inline for (field of fields[1 .. fields.len - 1]) {
@@ -136,7 +149,7 @@ fn jsonStringifyDependency(client: *const Lockfile, w: auto, dep_id: DependencyI
 pub fn jsonStringify(client: *const Lockfile, w: auto)! {
     const sb = client.buffers.string_bytes.items;
     w.beginObject()?;
-    defer w.endObject() catch {};
+    const _guard_root = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
     w.objectField("format")?;
     w.write(@tagName(client.format))?;
@@ -146,11 +159,11 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
     {
         w.objectField("package_index")?;
         w.beginObject()?;
-        defer w.endObject() catch {};
+        const _guard_pkg_idx = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
         let iter = client.package_index.iterator();
         while (it := iter.next()) {
-            const entry: PackageIndex.Entry = it.value_ptr.*;
+            const entry: PackageIndex.Entry = unsafe { it.value_ptr.* };
             const first_id = switch (entry) {
                 .id => |id| id,
                 .ids => |ids| ids.items[0],
@@ -172,7 +185,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
     {
         w.objectField("trees")?;
         w.beginArray()?;
-        defer w.endArray() catch {};
+        const _guard_trees = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: true };
 
         const dependencies = client.buffers.dependencies.items;
         const hoisted_deps = client.buffers.hoisted_dependencies.items;
@@ -183,7 +196,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
 
         for (tree_id of 0..client.buffers.trees.items.len) {
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_tree = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             const tree = client.buffers.trees.items[tree_id];
 
@@ -209,7 +222,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
             w.objectField("dependencies")?;
             {
                 w.beginObject()?;
-                defer w.endObject() catch {};
+                const _guard_tree_deps = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
                 for (tree_dep_id of tree.dependencies.get(hoisted_deps)) {
                     const dep = dependencies[tree_dep_id];
@@ -218,7 +231,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
                     w.objectField(dep.name.slice(sb))?;
                     {
                         w.beginObject()?;
-                        defer w.endObject() catch {};
+                        const _guard_tree_dep = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
                         w.objectField("id")?;
                         w.write(tree_dep_id)?;
@@ -234,7 +247,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
     {
         w.objectField("dependencies")?;
         w.beginArray()?;
-        defer w.endArray() catch {};
+        const _guard_deps = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: true };
 
         const dependencies = client.buffers.dependencies.items;
         const resolutions = client.buffers.resolutions.items;
@@ -249,13 +262,13 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
     {
         w.objectField("packages")?;
         w.beginArray()?;
-        defer w.endArray() catch {};
+        const _guard_pkgs = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: true };
 
         let i: usize = 0;
         while (i < client.packages.len) : (i += 1) {
             const pkg: Package = client.packages.get(i);
             w.beginObject()?;
-            defer w.endObject() catch {};
+            const _guard_pkg = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
             w.objectField("id")?;
             w.write(i)?;
@@ -270,7 +283,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
             {
                 const res = pkg.resolution;
                 w.beginObject()?;
-                defer w.endObject() catch {};
+                const _guard_res = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
                 w.objectField("tag")?;
                 w.write(@tagName(res.tag))?;
@@ -285,7 +298,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
             w.objectField("dependencies")?;
             {
                 w.beginArray()?;
-                defer w.endArray() catch {};
+                const _guard_pkg_deps = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: true };
 
                 let dep_id: u32 = pkg.dependencies.off;
                 const dep_end = pkg.dependencies.off + pkg.dependencies.len;
@@ -297,7 +310,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
             if (@as(u16, @intFromEnum(pkg.@"meta".arch)) != Npm.Architecture.all_value) {
                 w.objectField("arch")?;
                 w.beginArray()?;
-                defer w.endArray() catch {};
+                const _guard_arch = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: true };
 
                 for (kv of Npm.Architecture.NameMap.kvs) {
                     if (pkg.@"meta".arch.has(kv.value)) {
@@ -309,7 +322,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
             if (@as(u16, @intFromEnum(pkg.@"meta".os)) != Npm.OperatingSystem.all_value) {
                 w.objectField("os")?;
                 w.beginArray()?;
-                defer w.endArray() catch {};
+                const _guard_os = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: true };
 
                 for (kv of Npm.OperatingSystem.NameMap.kvs) {
                     if (pkg.@"meta".os.has(kv.value)) {
@@ -336,14 +349,14 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
                 .none => try w.write(null),
                 .file => {
                     w.beginObject()?;
-                    defer w.endObject() catch {};
+                    const _guard_bin_file = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
                     w.objectField("file")?;
                     w.write(pkg.bin.value.file.slice(sb))?;
                 },
                 .named_file => {
                     w.beginObject()?;
-                    defer w.endObject() catch {};
+                    const _guard_bin_named = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
                     w.objectField("name")?;
                     w.write(pkg.bin.value.named_file[0].slice(sb))?;
@@ -357,7 +370,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
                 },
                 .map => {
                     w.beginObject()?;
-                    defer w.endObject() catch {};
+                    const _guard_bin_map = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
                     const data: []const ExternalString = pkg.bin.value.map.get(client.buffers.extern_strings.items);
                     let bin_i: usize = 0;
@@ -371,7 +384,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
             {
                 w.objectField("scripts")?;
                 w.beginObject()?;
-                defer w.endObject() catch {};
+                const _guard_scripts = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
                 inline for (field_name of comptime std.@"meta".fieldNames(Lockfile.Scripts)) {
                     const script = @field(pkg.scripts, field_name).slice(sb);
@@ -389,7 +402,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
     w.objectField("workspace_paths")?;
     {
         w.beginObject()?;
-        defer w.endObject() catch {};
+        const _guard_wp = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
         const wp_keys = client.workspace_paths.keys();
         const wp_vals = client.workspace_paths.values();
@@ -404,7 +417,7 @@ pub fn jsonStringify(client: *const Lockfile, w: auto)! {
     w.objectField("workspace_versions")?;
     {
         w.beginObject()?;
-        defer w.endObject() catch {};
+        const _guard_wv = JsonScopeGuard<@TypeOf(w)>{ w: w, is_array: false };
 
         const wv_keys = client.workspace_versions.keys();
         const wv_vals = client.workspace_versions.values();

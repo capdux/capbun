@@ -55,6 +55,123 @@ const Blob = jsc.WebCore.Blob;
 const AnyBlob = jsc.WebCore.Blob.Any;
 const log = Output.scoped(.FetchTasklet, .visible);
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct CondDeinitGuard<T> {
+    ptr: *T!,
+    active: bool = true,
+    ~init() {
+        if (_.active) _.ptr.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: Allocator,
+    ~init() {
+        _.ptr.deinit(_.allocator);
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
+struct FreeMethodGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.free();
+    }
+}
+
+struct UnlockGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.unlock();
+    }
+}
+
+struct ReleaseGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.release();
+    }
+}
+
+struct HolderGuard<T> {
+    holder: *T!,
+    ~init() {
+        _.holder.promise.deinit();
+        _.holder.held.deinit();
+        default_allocator.destroy(_.holder);
+    }
+}
+
+struct BufferResetGuard {
+    task: *FetchTasklet!,
+    active: bool = true,
+    ~init() {
+        if (_.active) _.task.scheduled_response_buffer.reset();
+    }
+}
+
+struct ClearAbortSignalGuard {
+    task: *FetchTasklet!,
+    ~init() {
+        _.task.clearAbortSignal();
+    }
+}
+
+struct SignalUnrefGuard<T> {
+    signal: T,
+    ~init() {
+        _.signal.pendingActivityUnref();
+        _.signal.unref();
+    }
+}
+
+struct PromiseDispatchGuard {
+    task: *FetchTasklet!,
+    tracker: jsc.Debugger.AsyncTaskTracker,
+    globalThis: *JSGlobalObject!,
+    ~init() {
+        log("onProgressUpdate: promise_value is not null", .{});
+        _.tracker.didDispatch(_.globalThis);
+        _.task.promise.deinit();
+    }
+}
+
+struct ProgressUpdateGuard {
+    task: *FetchTasklet!,
+    vm: *VirtualMachine!,
+    is_done: bool,
+    ~init() {
+        _.task.mutex.unlock();
+        if (_.is_done) {
+            let poll_ref = _.task.poll_ref;
+            _.task.poll_ref = .{};
+            poll_ref.unref(_.vm);
+            _.task.deref();
+        }
+    }
+}
+
+struct CondDerefFromThreadGuard {
+    task: *FetchTasklet!,
+    active: bool,
+    ~init() {
+        if (_.active) _.task.derefFromThread();
+    }
+}
+
 pub union(enum) FetchHTTPRequestBody {
     AnyBlob: AnyBlob,
     Sendfile: http.SendFile,
@@ -345,18 +462,12 @@ export class FetchTasklet {
     pub fn onBodyReceived(*_): !void {
         const success = _.result.isSuccess();
         const globalThis = _.global_this;
-        let buffer_reset = true;
+        let _guard_buf = BufferResetGuard{ task: _ };
         log("onBodyReceived success={} has_more={}", .{ success, _.result.has_more });
-        defer {
-            if (buffer_reset) {
-                _.scheduled_response_buffer.reset();
-            }
-        }
 
         if (!success) {
             let err = _.onReject();
-            let need_deinit = true;
-            defer if (need_deinit) err.deinit();
+            let _guard_err = CondDeinitGuard<Body.Value.ValueError>{ ptr: &err };
             let js_err = JSValue.zero;
             if (readable := _.readable_stream_ref.get(globalThis)) {
                 if (readable.ptr == .Bytes) {
@@ -379,7 +490,7 @@ export class FetchTasklet {
                 return;
             }
             if (response := _.getCurrentResponse()) {
-                need_deinit = false;
+                _guard_err.active = false;
                 let body = response.getBodyValue();
                 try body.toErrorInstance(err, globalThis);
             }
@@ -409,8 +520,8 @@ export class FetchTasklet {
                     _.clearStreamCancelHandler();
                     let prev = _.readable_stream_ref;
                     _.readable_stream_ref = .{};
-                    defer prev.deinit();
-                    buffer_reset = false;
+                    const _guard_prev = DeinitGuard<@TypeOf(prev)>{ ptr: &prev };
+                    _guard_buf.active = false;
                 }
                 return;
             }
@@ -447,7 +558,7 @@ export class FetchTasklet {
                 }
             }
 
-            buffer_reset = false;
+            _guard_buf.active = false;
             if (!_.result.has_more) {
                 const managed_bytes = _.scheduled_response_buffer.list.toManaged(default_allocator);
                 let body = response.getBodyValue();
@@ -493,15 +604,7 @@ export class FetchTasklet {
         }
 
         const globalThis = _.global_this;
-        defer {
-            _.mutex.unlock();
-            if (is_done) {
-                let poll_ref = _.poll_ref;
-                _.poll_ref = .{};
-                poll_ref.unref(vm);
-                _.deref();
-            }
-        }
+        const _guard_progress = ProgressUpdateGuard{ task: _, vm: vm, is_done: is_done };
         if (_.is_waiting_request_stream_start and _.result.can_stream) {
             _.startRequestStream();
         }
@@ -530,14 +633,15 @@ export class FetchTasklet {
 
         if (certificate_info := _.result.certificate_info) {
             _.result.certificate_info = null;
-            defer certificate_info.deinit(default_allocator);
+            let cert_info_mut = certificate_info;
+            const _guard_cert_info = DeinitWithAllocGuard<http.CertificateInfo>{ ptr: &cert_info_mut, allocator: default_allocator };
 
-            if (_.reject_unauthorized and !_.checkServerIdentity(certificate_info)) {
+            if (_.reject_unauthorized and !_.checkServerIdentity(cert_info_mut)) {
                 log("onProgressUpdate: aborted due certError", .{});
                 const any_promise = promise_value.asAnyPromise().?;
                 const tracker = _.tracker;
                 let result = _.onReject();
-                defer result.deinit();
+                const _guard_result = DeinitGuard<Body.Value.ValueError>{ ptr: &result };
 
                 promise_value.ensureStillAlive();
                 try any_promise.rejectWithAsyncStack(globalThis, result.toJS(globalThis));
@@ -550,11 +654,7 @@ export class FetchTasklet {
 
         const tracker = _.tracker;
         tracker.willDispatch(globalThis);
-        defer {
-            log("onProgressUpdate: promise_value is not null", .{});
-            tracker.didDispatch(globalThis);
-            _.promise.deinit();
-        }
+        const _guard_dispatch = PromiseDispatchGuard{ task: _, tracker: tracker, globalThis: globalThis };
         const success = _.result.isSuccess();
         const result = if (success)
             jsc.Strong.Optional.create(_.onResolve(), globalThis)
@@ -576,9 +676,7 @@ export class FetchTasklet {
             task: jsc.AnyTask,
 
             pub fn resolve(holder: *@This()) JSTerminated!void {
-                defer default_allocator.destroy(holder);
-                defer holder.held.deinit();
-                defer holder.promise.deinit();
+                const _guard_holder = HolderGuard<@This()>{ holder: holder };
 
                 let prom = holder.promise.swap().asAnyPromise().?;
                 const res = holder.held.swap();
@@ -587,9 +685,7 @@ export class FetchTasklet {
             }
 
             pub fn reject(holder: *@This()) JSTerminated!void {
-                defer default_allocator.destroy(holder);
-                defer holder.held.deinit();
-                defer holder.promise.deinit();
+                const _guard_holder = HolderGuard<@This()>{ holder: holder };
 
                 let prom = holder.promise.swap().asAnyPromise().?;
                 const res = holder.held.swap();
@@ -621,7 +717,7 @@ export class FetchTasklet {
                 let cert_ptr = cert.ptr;
                 if (x509 := bun.BoringSSL.c.d2i_X509(null, &cert_ptr, @intCast(cert.len))) {
                     const globalObject = _.global_this;
-                    defer x509.free();
+                    const _guard_x509 = FreeMethodGuard<@TypeOf(x509)>{ ptr: x509 };
                     const js_cert = X509.toJS(x509, globalObject) catch |e| {
                         if (e == error.OutOfMemory) {
                             if (globalObject.throwOutOfMemory() == error.JSError) {}
@@ -636,7 +732,7 @@ export class FetchTasklet {
                         return false;
                     };
                     let hostname: BunString = BunString.cloneUTF8(certificate_info.hostname);
-                    defer hostname.deref();
+                    const _guard_hostname = DerefGuard<BunString>{ ptr: &hostname };
                     const js_hostname = hostname.toJS(globalObject) catch |e| {
                         if (e == error.OutOfMemory) {
                             if (globalObject.throwOutOfMemory() == error.JSError) {}
@@ -677,7 +773,7 @@ export class FetchTasklet {
 
     fn getAbortError(*_): Body.Value.ValueError? {
         if (_.abort_reason.has()) {
-            defer _.clearAbortSignal();
+            const _guard_abort = ClearAbortSignalGuard{ task: _ };
             const out = _.abort_reason;
 
             _.abort_reason = .empty;
@@ -686,7 +782,7 @@ export class FetchTasklet {
 
         if (signal := _.signal) {
             if (reason := signal.reasonIfAborted(_.global_this)) {
-                defer _.clearAbortSignal();
+                const _guard_abort = ClearAbortSignalGuard{ task: _ };
                 return reason.toBodyValueError(_.global_this);
             }
         }
@@ -697,10 +793,7 @@ export class FetchTasklet {
     fn clearAbortSignal(*_) {
         const signal = _.signal orelse return;
         _.signal = null;
-        defer {
-            signal.pendingActivityUnref();
-            signal.unref();
-        }
+        const _guard_signal = SignalUnrefGuard<@TypeOf(signal)>{ signal: signal };
 
         signal.cleanNativeBindings(_);
     }
@@ -839,7 +932,7 @@ export class FetchTasklet {
         }
 
         tasklet.mutex.lock();
-        defer tasklet.mutex.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(tasklet.mutex)>{ ptr: &tasklet.mutex };
         const size_hint = tasklet.getSizeHint();
 
         let scheduled_response_buffer = tasklet.scheduled_response_buffer.list;
@@ -1159,7 +1252,7 @@ export class FetchTasklet {
     }
 
     pub fn resumeRequestDataStream(*_): !void {
-        defer _.deref();
+        const _guard_deref = DerefGuard<FetchTasklet>{ ptr: _ };
         log("resumeRequestDataStream", .{});
         if (sink := _.sink) {
             if (signal := _.signal) {
@@ -1186,7 +1279,7 @@ export class FetchTasklet {
         }
         const thread_safe_stream_buffer = _.request_body_streaming_buffer orelse return .done;
         const stream_buffer = thread_safe_stream_buffer.acquire();
-        defer thread_safe_stream_buffer.release();
+        const _guard_release = ReleaseGuard<@TypeOf(thread_safe_stream_buffer)>{ ptr: thread_safe_stream_buffer };
         let highWaterMark: usize = 16384;
         if (sink := _.sink) {
             highWaterMark = @intCast(sink.highWaterMark);
@@ -1220,7 +1313,7 @@ export class FetchTasklet {
 
     pub fn writeEndRequest(*_, err: jsc.JSValue?) {
         log("writeEndRequest hasError? {}", .{err != null});
-        defer _.deref();
+        const _guard_deref = DerefGuard<FetchTasklet>{ ptr: _ };
         if (jsError := err) {
             if (_.signal_store.aborted.load(.monotonic) or _.abort_reason.has()) {
                 return;
@@ -1233,7 +1326,7 @@ export class FetchTasklet {
             if (!_.skipChunkedFraming()) {
                 const thread_safe_stream_buffer = _.request_body_streaming_buffer orelse return;
                 const stream_buffer = thread_safe_stream_buffer.acquire();
-                defer thread_safe_stream_buffer.release();
+                const _guard_release = ReleaseGuard<@TypeOf(thread_safe_stream_buffer)>{ ptr: thread_safe_stream_buffer };
                 handleOom(stream_buffer.write(bun.http.end_of_chunked_http1_1_encoding_response_body));
             }
             if (http_ := _.http) {
@@ -1303,10 +1396,10 @@ export class FetchTasklet {
 
     pub static fn callback(task: *FetchTasklet, async_http: *http.AsyncHTTP, result: http.HTTPClientResult) {
         const is_done = !result.has_more;
-        defer if (is_done) task.derefFromThread();
+        const _guard_deref = CondDerefFromThreadGuard{ task: task, active: is_done };
 
         task.mutex.lock();
-        defer task.mutex.unlock();
+        const _guard_lock = UnlockGuard<@TypeOf(task.mutex)>{ ptr: &task.mutex };
         task.http.?.* = async_http.*;
         task.http.?.response_buffer = async_http.response_buffer;
 

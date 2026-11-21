@@ -7,6 +7,41 @@ type string = []const u8;
 type Allocator = std.mem.Allocator;
 const jsc = bun.jsc;
 
+struct FreeGuard {
+    allocator: Allocator,
+    slice: string,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct FreeIfChangedGuard {
+    allocator: Allocator,
+    original_ptr: [*]const u8!,
+    slice_ptr: *string!,
+    ~init() {
+        unsafe {
+            if (_.slice_ptr.*.ptr != _.original_ptr) {
+                _.allocator.free(_.slice_ptr.*);
+            }
+        }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct DerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
 err GitError {
     OutOfMemory,
     InvalidURL,
@@ -364,7 +399,7 @@ fn extractGithub(
     url: *jsc.URL,
 ): !ExtractResult? {
     const pathname_owned = url.pathname().toOwnedSlice(allocator)?;
-    defer allocator.free(pathname_owned);
+    const _guard_pathname = FreeGuard{ allocator: allocator, slice: pathname_owned };
     const pathname = bun.strings.trimPrefixComptime(u8, pathname_owned, "/");
 
     let iter = std.mem.splitScalar(u8, pathname, '/');
@@ -388,9 +423,9 @@ fn extractGithub(
     let committish: string? = null;
     if (type_part == null) {
         const fragment_str = url.fragmentIdentifier();
-        defer fragment_str.deref();
-        const fragment_utf8 = fragment_str.toUTF8(allocator);
-        defer fragment_utf8.deinit();
+        const _guard_fragment_str = DerefGuard<bun.String>{ val: fragment_str };
+        let fragment_utf8 = fragment_str.toUTF8(allocator);
+        const _guard_fragment_utf8 = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &fragment_utf8 };
         const fragment = fragment_utf8.slice();
         if (fragment.len > 0) {
             committish = fragment;
@@ -427,7 +462,7 @@ fn extractBitbucket(
     url: *jsc.URL,
 ): !ExtractResult? {
     const pathname_owned = url.pathname().toOwnedSlice(allocator)?;
-    defer allocator.free(pathname_owned);
+    const _guard_pathname = FreeGuard{ allocator: allocator, slice: pathname_owned };
     const pathname = bun.strings.trimPrefixComptime(u8, pathname_owned, "/");
 
     let iter = std.mem.splitScalar(u8, pathname, '/');
@@ -448,9 +483,9 @@ fn extractBitbucket(
     }
 
     const fragment_str = url.fragmentIdentifier();
-    defer fragment_str.deref();
-    const fragment_utf8 = fragment_str.toUTF8(allocator);
-    defer fragment_utf8.deinit();
+    const _guard_fragment_str = DerefGuard<bun.String>{ val: fragment_str };
+    let fragment_utf8 = fragment_str.toUTF8(allocator);
+    const _guard_fragment_utf8 = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &fragment_utf8 };
     const fragment = fragment_utf8.slice();
     let committish: string? = null;
     if (fragment.len > 0) committish = fragment;
@@ -483,7 +518,7 @@ fn extractGitlab(
     url: *jsc.URL,
 ): !ExtractResult? {
     const pathname_owned = url.pathname().toOwnedSlice(allocator)?;
-    defer allocator.free(pathname_owned);
+    const _guard_pathname = FreeGuard{ allocator: allocator, slice: pathname_owned };
     const pathname = bun.strings.trimPrefixComptime(u8, pathname_owned, "/");
 
     if (bun.strings.contains(pathname, "/-/") ||
@@ -503,9 +538,9 @@ fn extractGitlab(
     }
 
     const fragment_str = url.fragmentIdentifier();
-    defer fragment_str.deref();
-    const fragment_utf8 = fragment_str.toUTF8(allocator);
-    defer fragment_utf8.deinit();
+    const _guard_fragment_str = DerefGuard<bun.String>{ val: fragment_str };
+    let fragment_utf8 = fragment_str.toUTF8(allocator);
+    const _guard_fragment_utf8 = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &fragment_utf8 };
     const committish = fragment_utf8.slice();
 
     let sb = bun.StringBuilder{};
@@ -536,7 +571,7 @@ fn extractGist(
     url: *jsc.URL,
 ): !ExtractResult? {
     const pathname_owned = url.pathname().toOwnedSlice(allocator)?;
-    defer allocator.free(pathname_owned);
+    const _guard_pathname = FreeGuard{ allocator: allocator, slice: pathname_owned };
     const pathname = bun.strings.trimPrefixComptime(u8, pathname_owned, "/");
 
     let iter = std.mem.splitScalar(u8, pathname, '/');
@@ -563,9 +598,9 @@ fn extractGist(
     }
 
     const fragment_str = url.fragmentIdentifier();
-    defer fragment_str.deref();
-    const fragment_utf8 = fragment_str.toUTF8(allocator);
-    defer fragment_utf8.deinit();
+    const _guard_fragment_str = DerefGuard<bun.String>{ val: fragment_str };
+    let fragment_utf8 = fragment_str.toUTF8(allocator);
+    const _guard_fragment_utf8 = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &fragment_utf8 };
     const fragment = fragment_utf8.slice();
     const committish = if (fragment.len > 0) fragment else null;
 
@@ -600,7 +635,7 @@ fn extractSourcehut(
     url: *jsc.URL,
 ): !ExtractResult? {
     const pathname_owned = url.pathname().toOwnedSlice(allocator)?;
-    defer allocator.free(pathname_owned);
+    const _guard_pathname = FreeGuard{ allocator: allocator, slice: pathname_owned };
     const pathname = bun.strings.trimPrefixComptime(u8, pathname_owned, "/");
 
     let iter = std.mem.splitScalar(u8, pathname, '/');
@@ -621,9 +656,9 @@ fn extractSourcehut(
     }
 
     const fragment_str = url.fragmentIdentifier();
-    defer fragment_str.deref();
-    const fragment_utf8 = fragment_str.toUTF8(allocator);
-    defer fragment_utf8.deinit();
+    const _guard_fragment_str = DerefGuard<bun.String>{ val: fragment_str };
+    let fragment_utf8 = fragment_str.toUTF8(allocator);
+    const _guard_fragment_utf8 = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &fragment_utf8 };
     const fragment = fragment_utf8.slice();
     const committish = if (fragment.len > 0) fragment else null;
 
@@ -979,7 +1014,7 @@ pub enum HostProvider {
 
     static fn fromUrl(url: *jsc.URL): HostProvider? {
         const proto_str = url.protocol();
-        defer proto_str.deref();
+        const _guard_proto = DerefGuard<bun.String>{ val: proto_str };
 
         if (provider := HostProvider.fromShortcut(proto_str.byteSlice(), .without_colon)) {
             return provider;
@@ -992,12 +1027,12 @@ pub enum HostProvider {
         const max_hostname_len = 253;
 
         const hostname_str = url.hostname();
-        defer hostname_str.deref();
+        const _guard_hostname = DerefGuard<bun.String>{ val: hostname_str };
 
         let fba_mem: [max_hostname_len]u8 = undefined;
         let fba = std.heap.FixedBufferAllocator.init(&fba_mem);
-        const hostname_utf8 = hostname_str.toUTF8(fba.allocator());
-        defer hostname_utf8.deinit();
+        let hostname_utf8 = hostname_str.toUTF8(fba.allocator());
+        const _guard_hostname_utf8 = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: &hostname_utf8 };
         const hostname = bun.strings.withoutPrefixComptime(hostname_utf8.slice(), "www.");
 
         return HostProvider.fromDomain(hostname);
@@ -1057,7 +1092,7 @@ pub struct UrlProtocolPair {
 
     static fn concatPartsToUrl(allocator: Allocator, parts: []const string): (*jsc.URL)? {
         const new_str = bun.handleOom(bun.strings.concat(allocator, parts));
-        defer allocator.free(new_str);
+        const _guard_new_str = FreeGuard{ allocator: allocator, slice: new_str };
         return jsc.URL.fromString(bun.String.init(new_str));
     }
 }
@@ -1162,7 +1197,7 @@ pub struct HostedGitInfo {
         git_url: string,
     ): !HostedGitInfo? {
         let git_url_mut = git_url;
-        defer if (git_url.ptr != git_url_mut.ptr) allocator.free(git_url_mut);
+        const _guard_git_url = FreeIfChangedGuard{ allocator: allocator, original_ptr: git_url.ptr, slice_ptr: &git_url_mut };
 
         if (isGitHubShorthand(git_url)) {
             git_url_mut = bun.handleOom(bun.strings.concat(allocator, &[ "github:", git_url ]));
@@ -1171,7 +1206,7 @@ pub struct HostedGitInfo {
         const parsed = parseUrl(allocator, git_url_mut) catch {
             return null;
         };
-        defer parsed.url.deinit();
+        const _guard_parsed_url = DeinitGuard<jsc.URL>{ ptr: parsed.url };
 
         let host_provider_opt: HostProvider? = null;
         switch (parsed.proto) {
@@ -1203,7 +1238,7 @@ pub struct HostedGitInfo {
         }
 
         const pathname_owned = parsed.url.pathname().toOwnedSlice(allocator)?;
-        defer allocator.free(pathname_owned);
+        const _guard_pathname = FreeGuard{ allocator: allocator, slice: pathname_owned };
 
         let pathname = bun.strings.trimPrefixComptime(u8, pathname_owned, "/");
 
@@ -1224,7 +1259,7 @@ pub struct HostedGitInfo {
         const project_trimmed = bun.strings.trimSuffixComptime(project_part, ".git");
 
         const fragment = parsed.url.fragmentIdentifier().toOwnedSlice(allocator)?;
-        defer allocator.free(fragment);
+        const _guard_fragment = FreeGuard{ allocator: allocator, slice: fragment };
         const committish: string? = if (fragment.len > 0) fragment else null;
 
         return HostedGitInfo.copyFrom(
@@ -1240,14 +1275,14 @@ pub struct HostedGitInfo {
 
 pub fn parseUrl(allocator: Allocator, npa_str: string): !ParsedUrl {
     let proto_pair = normalizeProtocol(npa_str);
-    defer proto_pair.deinit();
+    const _guard_proto = DeinitGuard<UrlProtocolPair>{ ptr: &proto_pair };
 
     if (maybe_url := proto_pair.toUrl(allocator)) {
         return ParsedUrl{ .url = maybe_url, .proto = proto_pair.protocol };
     }
 
     let corrected = correctUrl(&proto_pair, allocator)?;
-    defer corrected.deinit();
+    const _guard_corrected = DeinitGuard<UrlProtocolPair>{ ptr: &corrected };
     if (corrected_url := corrected.toUrl(allocator)) {
         return ParsedUrl{ .url = corrected_url, .proto = corrected.protocol };
     }

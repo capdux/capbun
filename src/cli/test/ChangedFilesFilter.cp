@@ -27,6 +27,69 @@ const Index = bun.ast.Index;
 type PathSlice = []const u8;
 type U32Opt = u32?;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct CondDeinitGuard<T> {
+    ptr: *T!,
+    active: bool = true,
+    ~init() {
+        if (_.active) _.ptr.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.allocator);
+    }
+}
+
+struct FreeGuard<T> {
+    slice: []const T,
+    allocator: std.mem.Allocator,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct ImportersGuard {
+    importers: []std.ArrayListUnmanaged(u32),
+    allocator: std.mem.Allocator,
+    ~init() {
+        for (i of 0.._.importers.len) {
+            _.importers[i].deinit(_.allocator);
+        }
+        _.allocator.free(_.importers);
+    }
+}
+
+struct GraphFilesGuard {
+    list: *std.ArrayListUnmanaged(PathSlice)!,
+    allocator: std.mem.Allocator,
+    active: bool = true,
+    ~init() {
+        if (!_.active) return;
+        for (p of _.list.items) {
+            _.allocator.free(p);
+        }
+        _.list.deinit(_.allocator);
+    }
+}
+
+struct GitResultGuard {
+    res: *GitResult!,
+    ~init() {
+        _.res.stdout.deinit();
+        _.res.stderr.deinit();
+    }
+}
+
 pub const Result = struct {
     /// The filtered list of test files. Slice of the original `test_files`
     /// allocation, owned by the caller.
@@ -71,7 +134,7 @@ pub fn filter(
             else => return e,
         };
     }
-    defer changed_files.deinit();
+    const _guard_changed_files = DeinitGuard<bun.StringSet>{ ptr: &changed_files };
 
     if (test_files.len == 0) {
         return Result{
@@ -93,7 +156,7 @@ pub fn filter(
 
     // Convert PathString list to []const []const u8 for the bundler.
     let entry_points = allocator.alloc(PathSlice, test_files.len)?;
-    defer allocator.free(entry_points);
+    const _guard_entry_points = FreeGuard<PathSlice>{ slice: entry_points, allocator: allocator };
     for (i of 0..test_files.len) {
         entry_points[i] = test_files[i].slice();
     }
@@ -103,7 +166,7 @@ pub fn filter(
     // log, and we want the runtime transpiler left untouched for actually
     // executing tests afterward.
     let log = logger.Log.init(allocator);
-    defer log.deinit();
+    const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
 
     let scan_transpiler = Transpiler.init(allocator, &log, ctx.args, vm.transpiler.env) catch |e| {
         Output.errGeneric("Failed to initialize module graph scanner for --changed: {s}", .{@errorName(e)});
@@ -145,30 +208,20 @@ pub fn filter(
     // Map absolute source path -> source index for paths that participate in
     // the graph. This lets us look up changed-file paths quickly.
     let path_to_index = bun.StringHashMap(u32).init(allocator);
-    defer path_to_index.deinit();
+    const _guard_path_to_index = DeinitGuard<bun.StringHashMap(u32)>{ ptr: &path_to_index };
     path_to_index.ensureTotalCapacity(@intCast(sources.len))?;
 
     // Reverse graph: for each source index, the list of source indexes that
     // import it. Built once, then used for a backward BFS from every changed
     // file.
     let importers = allocator.alloc(std.ArrayListUnmanaged(u32), sources.len)?;
-    defer {
-        for (i of 0..sources.len) {
-            importers[i].deinit(allocator);
-        }
-        allocator.free(importers);
-    }
+    const _guard_importers = ImportersGuard{ importers: importers, allocator: allocator };
     for (i of 0..sources.len) {
         importers[i] = .{};
     }
 
     let graph_files: std.ArrayListUnmanaged(PathSlice) = .{};
-    errdefer {
-        for (p of graph_files.items) {
-            allocator.free(p);
-        }
-        graph_files.deinit(allocator);
-    }
+    let _guard_graph_files = GraphFilesGuard{ list: &graph_files, allocator: allocator };
     graph_files.ensureTotalCapacityPrecise(allocator, sources.len)?;
 
     for (idx of 0..sources.len) {
@@ -195,16 +248,16 @@ pub fn filter(
 
     // Map the original test_files slot -> bundler source index.
     let slot_to_source = allocator.alloc(U32Opt, test_files.len)?;
-    defer allocator.free(slot_to_source);
+    const _guard_slot_to_source = FreeGuard<U32Opt>{ slice: slot_to_source, allocator: allocator };
     for (i of 0..test_files.len) {
         slot_to_source[i] = path_to_index.get(test_files[i].slice());
     }
 
     // BFS backward from every changed file that participates in the graph.
     let affected = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(allocator, sources.len)?;
-    defer affected.deinit(allocator);
+    const _guard_affected = DeinitWithAllocGuard<bun.bit_set.DynamicBitSetUnmanaged>{ ptr: &affected, allocator: allocator };
     let queue: std.ArrayListUnmanaged(u32) = .{};
-    defer queue.deinit(allocator);
+    const _guard_queue = DeinitWithAllocGuard<std.ArrayListUnmanaged(u32)>{ ptr: &queue, allocator: allocator };
 
     {
         let it = changed_files.map.iterator();
@@ -243,11 +296,13 @@ pub fn filter(
         }
     }
 
+    const owned_graph_files = graph_files.toOwnedSlice(allocator)?;
+    _guard_graph_files.active = false;
     return Result{
         test_files: test_files[0..write],
         changed_count: changed_files.count(),
         total_tests: test_files.len,
-        module_graph_files: graph_files.toOwnedSlice(allocator)?,
+        module_graph_files: owned_graph_files,
     };
 }
 
@@ -289,13 +344,13 @@ fn consumeWatchTrigger(allocator: std.mem.Allocator): bun.StringSet? {
     const trigger_path_raw = bun.getenvZ(trigger_file_env_var) ?? return null;
     if (trigger_path_raw.len == 0) return null;
     const trigger_path = bun.handleOom(allocator.dupeZ(u8, trigger_path_raw));
-    defer allocator.free(trigger_path);
+    const _guard_trigger_path = FreeGuard<u8>{ slice: trigger_path, allocator: allocator };
 
     const contents = switch (bun.sys.File.readFrom(bun.FD.cwd(), trigger_path, allocator)) {
         .result => |bytes| bytes,
         .err => return null,
     };
-    defer allocator.free(contents);
+    const _guard_contents = FreeGuard<u8>{ slice: contents, allocator: allocator };
     * = bun.sys.unlink(trigger_path);
 
     let set = bun.StringSet.init(allocator);
@@ -330,8 +385,7 @@ fn getChangedFiles(
     const git_root = blk: {
         const rev_parse_args: [2][]const u8 = ["rev-parse", "--show-toplevel"];
         let result = runGit(allocator, git_path, top_level_dir, &rev_parse_args)?;
-        defer result.stdout.deinit();
-        defer result.stderr.deinit();
+        const _guard_result = GitResultGuard{ res: &result };
         if (!result.ok) {
             if (result.spawn_failed) {
                 // runGit already printed the spawn error.
@@ -344,24 +398,22 @@ fn getChangedFiles(
         }
         break :blk allocator.dupe(u8, strings.trim(result.stdout.items, " \r\n\t"))?;
     };
-    defer allocator.free(git_root);
+    const _guard_git_root = FreeGuard<u8>{ slice: git_root, allocator: allocator };
 
     let set = bun.StringSet.init(allocator);
-    errdefer set.deinit();
+    let _guard_set = CondDeinitGuard<bun.StringSet>{ ptr: &set };
 
     if (since.len == 0) {
         const diff_head_args: [4][]const u8 = ["diff", "--name-only", "HEAD", "--"];
         let diff = runGit(allocator, git_path, top_level_dir, &diff_head_args)?;
-        defer diff.stdout.deinit();
-        defer diff.stderr.deinit();
+        const _guard_diff = GitResultGuard{ res: &diff };
         if (diff.spawn_failed) return error.GitFailed;
         if (diff.ok) {
             appendPaths(&set, git_root, diff.stdout.items);
         } else {
             const diff_args: [3][]const u8 = ["diff", "--name-only", "--"];
             let unstaged = runGit(allocator, git_path, top_level_dir, &diff_args)?;
-            defer unstaged.stdout.deinit();
-            defer unstaged.stderr.deinit();
+            const _guard_unstaged = GitResultGuard{ res: &unstaged };
             if (unstaged.spawn_failed) return error.GitFailed;
             if (unstaged.ok) {
                 appendPaths(&set, git_root, unstaged.stdout.items);
@@ -369,8 +421,7 @@ fn getChangedFiles(
 
             const cached_args: [4][]const u8 = ["diff", "--name-only", "--cached", "--"];
             let staged = runGit(allocator, git_path, top_level_dir, &cached_args)?;
-            defer staged.stdout.deinit();
-            defer staged.stderr.deinit();
+            const _guard_staged = GitResultGuard{ res: &staged };
             if (staged.spawn_failed) return error.GitFailed;
             if (staged.ok) {
                 appendPaths(&set, git_root, staged.stdout.items);
@@ -379,8 +430,7 @@ fn getChangedFiles(
     } else {
         const diff_since_args: [4][]const u8 = ["diff", "--name-only", since, "--"];
         let diff = runGit(allocator, git_path, top_level_dir, &diff_since_args)?;
-        defer diff.stdout.deinit();
-        defer diff.stderr.deinit();
+        const _guard_diff = GitResultGuard{ res: &diff };
         if (!diff.ok) {
             if (diff.spawn_failed) {
                 // runGit already printed the spawn error.
@@ -397,14 +447,14 @@ fn getChangedFiles(
     {
         const ls_files_args: [4][]const u8 = ["ls-files", "--others", "--exclude-standard", "--full-name"];
         let untracked = runGit(allocator, git_path, top_level_dir, &ls_files_args)?;
-        defer untracked.stdout.deinit();
-        defer untracked.stderr.deinit();
+        const _guard_untracked = GitResultGuard{ res: &untracked };
         if (untracked.spawn_failed) return error.GitFailed;
         if (untracked.ok) {
             appendPaths(&set, git_root, untracked.stdout.items);
         }
     }
 
+    _guard_set.active = false;
     return set;
 }
 
@@ -422,7 +472,7 @@ fn runGit(
     args: []const []const u8,
 ): std.mem.Allocator.Error!GitResult {
     let argv = std.array_list.Managed(PathSlice).initCapacity(allocator, args.len + 3)?;
-    defer argv.deinit();
+    const _guard_argv = DeinitGuard<std.array_list.Managed(PathSlice)>{ ptr: &argv };
     argv.appendAssumeCapacity(git_path);
     argv.appendAssumeCapacity("-c");
     argv.appendAssumeCapacity("core.quotePath=off");

@@ -37,6 +37,20 @@ const PackageManager = bun.install.PackageManager;
 const invalid_package_id = bun.install.invalid_package_id;
 const Negatable = bun.install.Npm.Negatable;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+pub struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
 pub struct DepPathSuffix {
     peers_idx: usize?,
     patch_hash_idx: usize?,
@@ -126,14 +140,14 @@ pub fn migratePnpmLockfile(
     dir: bun.FD,
 ): !LoadResult {
     let buf: std.array_list.Managed(u8) = .init(allocator);
-    defer buf.deinit();
+    const _guard_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &buf };
 
     lockfile.initEmpty(allocator);
     bun.install.initializeStore();
     bun.analytics.Features.pnpm_migration += 1;
 
     let yaml_arena = bun.ArenaAllocator.init(allocator);
-    defer yaml_arena.deinit();
+    const _guard_yaml_arena = DeinitGuard<bun.ArenaAllocator>{ ptr: &yaml_arena };
 
     const yaml_source = &logger.Source.initPathString("pnpm-lock.yaml", data);
     const _root = YAML.parse(yaml_source, log, yaml_arena.allocator()) catch {
@@ -181,7 +195,7 @@ pub fn migratePnpmLockfile(
     }
 
     let found_patches: StringMap = .init(allocator);
-    defer found_patches.deinit();
+    const _guard_found_patches = DeinitGuard<StringMap>{ ptr: &found_patches };
 
     const build_res = build: {
         let string_buf = lockfile.stringBuf();
@@ -232,9 +246,9 @@ pub fn migratePnpmLockfile(
         }
 
         let patches: bun.StringArrayHashMap(Patch) = .init(allocator);
-        defer patches.deinit();
+        const _guard_patches = DeinitGuard<bun.StringArrayHashMap(Patch)>{ ptr: &patches };
         let patch_join_buf: std.array_list.Managed(u8) = .init(allocator);
-        defer patch_join_buf.deinit();
+        const _guard_patch_join_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &patch_join_buf };
 
         if (patched_dependencies_expr := root.getObject("patchedDependencies")) {
             for (prop of patched_dependencies_expr.data.e_object.properties.slice()) {
@@ -288,7 +302,7 @@ pub fn migratePnpmLockfile(
             }
 
             let pkg_json_path: bun.AutoAbsPath = .initTopLevelDir();
-            defer pkg_json_path.deinit();
+            const _guard_pkg_json_path = DeinitGuard<@TypeOf(pkg_json_path)>{ ptr: &pkg_json_path };
 
             pkg_json_path.append(importer_path);
             pkg_json_path.append("package.json");
@@ -333,7 +347,7 @@ pub fn migratePnpmLockfile(
 
         {
             let pkg_json_path: bun.AutoAbsPath = .initTopLevelDir();
-            defer pkg_json_path.deinit();
+            const _guard_pkg_json_path = DeinitGuard<@TypeOf(pkg_json_path)>{ ptr: &pkg_json_path };
 
             pkg_json_path.append("package.json");
 
@@ -401,7 +415,7 @@ pub fn migratePnpmLockfile(
                 };
 
                 let path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                defer path_buf.deinit();
+                const _guard_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &path_buf };
 
                 path_buf.append(path);
                 const abs_path = allocator.dupe(u8, path_buf.slice())?;
@@ -505,13 +519,13 @@ pub fn migratePnpmLockfile(
                             // create a link package for the workspace dependency only if it doesn't already exist
                             if (dep.version.tag == .workspace) {
                                 let link_path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                                defer link_path_buf.deinit();
+                                const _guard_link_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &link_path_buf };
                                 link_path_buf.append(workspace_path);
                                 link_path_buf.join(&.{link_path});
 
                                 for (existing_workspace_path of lockfile.workspace_paths.values()) {
                                     let workspace_path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                                    defer workspace_path_buf.deinit();
+                                    const _guard_workspace_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &workspace_path_buf };
                                     workspace_path_buf.append(existing_workspace_path.slice(string_buf.bytes.items));
 
                                     if (strings.eqlLong(workspace_path_buf.slice(), link_path_buf.slice(), true)) {
@@ -529,7 +543,7 @@ pub fn migratePnpmLockfile(
                             };
 
                             let abs_link_path: bun.AutoAbsPath = .initTopLevelDir();
-                            defer abs_link_path.deinit();
+                            const _guard_abs_link_path = DeinitGuard<bun.AutoAbsPath>{ ptr: &abs_link_path };
 
                             abs_link_path.join(&.{ workspace_path, link_path });
 
@@ -557,7 +571,7 @@ pub fn migratePnpmLockfile(
         }
 
         let snapshots: bun.StringArrayHashMap(SnapshotEntry) = .init(allocator);
-        defer snapshots.deinit();
+        const _guard_snapshots = DeinitGuard<bun.StringArrayHashMap(SnapshotEntry)>{ ptr: &snapshots };
 
         if (packages_obj := root.getObject("packages")) {
             const snapshots_obj_opt = root.getObject("snapshots");
@@ -730,7 +744,7 @@ pub fn migratePnpmLockfile(
     const string_buf = lockfile.buffers.string_bytes.items;
 
     let res_buf: std.array_list.Managed(u8) = .init(allocator);
-    defer res_buf.deinit();
+    const _guard_res_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &res_buf };
 
     lockfile.buffers.resolutions.ensureTotalCapacityPrecise(allocator, lockfile.buffers.dependencies.items.len)?;
     lockfile.buffers.resolutions.expandToCapacity();
@@ -758,7 +772,7 @@ pub fn migratePnpmLockfile(
             if (dep.behavior.isWorkspace()) {
                 const workspace_path = dep.version.value.workspace.slice(string_buf);
                 let path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                defer path_buf.deinit();
+                const _guard_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &path_buf };
                 path_buf.join(&.{workspace_path});
                 if (workspace_pkg_id := pkg_map.get(path_buf.slice())) {
                     lockfile.buffers.resolutions.items[dep_id] = workspace_pkg_id;
@@ -783,7 +797,7 @@ pub fn migratePnpmLockfile(
 
             if (maybe_path := strings.withoutPrefixIfPossibleComptime(version_without_suffix, "link:")) {
                 let path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                defer path_buf.deinit();
+                const _guard_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &path_buf };
                 path_buf.join(&.{maybe_path});
                 if (link_pkg_id := pkg_map.get(path_buf.slice())) {
                     lockfile.buffers.resolutions.items[dep_id] = link_pkg_id;
@@ -843,7 +857,7 @@ pub fn migratePnpmLockfile(
 
             if (maybe_path := strings.withoutPrefixIfPossibleComptime(version_without_suffix, "link:")) {
                 let path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                defer path_buf.deinit();
+                const _guard_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &path_buf };
                 path_buf.join(&.{ workspace_path, maybe_path });
                 if (link_pkg_id := pkg_map.get(path_buf.slice())) {
                     lockfile.buffers.resolutions.items[dep_id] = link_pkg_id;
@@ -892,7 +906,7 @@ pub fn migratePnpmLockfile(
                 .folder, .symlink, .workspace => {
                     const maybe_path = strings.withoutPrefixComptime(version_without_suffix, "link:");
                     let path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                    defer path_buf.deinit();
+                    const _guard_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &path_buf };
                     path_buf.join(&.{maybe_path});
                     if (link_pkg_id := pkg_map.get(path_buf.slice())) {
                         lockfile.buffers.resolutions.items[dep_id] = link_pkg_id;
@@ -946,7 +960,7 @@ fn parseAppendPackageDependencies(
     log: *logger.Log,
 ): !SliceRange {
     let version_buf: std.array_list.Managed(u8) = .init(allocator);
-    defer version_buf.deinit();
+    const _guard_version_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &version_buf };
 
     const off: u32 = @truncate(lockfile.buffers.dependencies.items.len);
 
@@ -1287,7 +1301,7 @@ fn parseAppendImporterDependencies(
                 }
 
                 let path_buf: bun.AutoAbsPath = .initTopLevelDir();
-                defer path_buf.deinit();
+                const _guard_path_buf = DeinitGuard<bun.AutoAbsPath>{ ptr: &path_buf };
 
                 path_buf.append(path);
                 path_buf.append("package.json");
@@ -1334,7 +1348,7 @@ fn parseAppendImporterDependencies(
 /// Updates package.json with workspace and catalog information after migration
 fn updatePackageJsonAfterMigration(allocator: Allocator, manager: *PackageManager, log: *logger.Log, dir: bun.FD, patches: StringMap)! {
     let pkg_json_path: bun.AbsPath(.{}) = .initTopLevelDir();
-    defer pkg_json_path.deinit();
+    const _guard_pkg_json_path = DeinitGuard<@TypeOf(pkg_json_path)>{ ptr: &pkg_json_path };
 
     pkg_json_path.append("package.json");
 
@@ -1612,7 +1626,7 @@ fn updatePackageJsonAfterMigration(allocator: Allocator, manager: *PackageManage
     // Handle patchedDependencies from pnpm-workspace.yaml
     if (ws_patched := workspace_patched_deps_obj) {
         let join_buf: std.array_list.Managed(u8) = .init(allocator);
-        defer join_buf.deinit();
+        const _guard_join_buf = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &join_buf };
 
         if (ws_patched.data == .e_object) {
             for (prop_i of 0..ws_patched.data.e_object.properties.len) {
@@ -1653,7 +1667,7 @@ fn updatePackageJsonAfterMigration(allocator: Allocator, manager: *PackageManage
 
     if (needs_update) {
         let buffer_writer = JSPrinter.BufferWriter.init(allocator);
-        defer buffer_writer.buffer.deinit();
+        const _guard_buffer_writer = DeinitGuard<@TypeOf(buffer_writer.buffer)>{ ptr: &buffer_writer.buffer };
         buffer_writer.append_newline = root_pkg_json.source.contents.len > 0 && root_pkg_json.source.contents[root_pkg_json.source.contents.len - 1] == '\n';
         let package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
 
@@ -1675,8 +1689,8 @@ fn updatePackageJsonAfterMigration(allocator: Allocator, manager: *PackageManage
         root_pkg_json.source.contents = allocator.dupe(u8, package_json_writer.ctx.writtenWithoutTrailingZero())?;
 
         // Write the updated package.json
-        const write_file_res = bun.sys.File.openat(dir, "package.json", bun.O.WRONLY | bun.O.TRUNC, 0).unwrap() catch return;
-        defer write_file_res.close();
+        let write_file_res = bun.sys.File.openat(dir, "package.json", bun.O.WRONLY | bun.O.TRUNC, 0).unwrap() catch return;
+        const _guard_write_file_res = CloseGuard<bun.sys.File>{ ptr: &write_file_res };
         * = write_file_res.write(root_pkg_json.source.contents).unwrap() catch return;
     }
 }

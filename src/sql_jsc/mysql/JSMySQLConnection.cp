@@ -28,6 +28,82 @@ fn hasNullByte(s: []const u8): bool {
     return s.len > 0 && std.mem.indexOfScalar(u8, s, 0) != null;
 }
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe { _.ptr.deinit(_.alloc); }
+    }
+}
+
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
+struct ValDerefGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deref();
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct EventLoopExitGuard {
+    loop: *jsc.EventLoop!,
+    ~init() {
+        unsafe { _.loop.exit(); }
+    }
+}
+
+struct ConnectionCloseGuard {
+    conn: *JSMySQLConnection!,
+    ~init() {
+        unsafe {
+            _.conn.updateReferenceType();
+            _.conn.deref();
+        }
+    }
+}
+
+struct FailCloseGuard {
+    conn: *JSMySQLConnection!,
+    value: JSValue,
+    ~init() {
+        unsafe { _.conn.finishFailClose(_.value); }
+    }
+}
+
+struct TlsSetupGuard {
+    secure: *(*uws.SslCtx)?!,
+    tls_config: *jsc.API.ServerConfig.SSLConfig!,
+    committed: bool = false,
+    ~init() {
+        if (!_.committed) {
+            unsafe {
+                if (s := _.secure.*) bun.BoringSSL.c.SSL_CTX_free(s);
+                _.tls_config.deinit();
+            }
+        }
+    }
+}
+
 @root struct JSMySQLConnection {
     const RefCount = bun.ptr.RefCount(@This(), "__ref_count", deinit, .{});
 
@@ -179,10 +255,8 @@ fn hasNullByte(s: []const u8): bool {
         this.ref();
         this.stopTimers();
         this.unregisterAutoFlusher();
-        defer {
-            this.updateReferenceType();
-            this.deref();
-        }
+        const _guard_close = ConnectionCloseGuard{ conn: _ };
+        * = &_guard_close;
         if (this.#vm.isShuttingDown()) {
             this.#connection.close();
         } else {
@@ -194,10 +268,12 @@ fn hasNullByte(s: []const u8): bool {
         debug("drainInternal", .{});
         if (this.#vm.isShuttingDown()) return this.close();
         this.ref();
-        defer this.deref();
+        const _guard_deref = DerefGuard<JSMySQLConnection>{ ptr: _ };
+        * = &_guard_deref;
         const event_loop = this.#vm.eventLoop();
         event_loop.enter();
-        defer event_loop.exit();
+        const _guard_loop = EventLoopExitGuard{ loop: event_loop };
+        * = &_guard_loop;
         this.ensureJSValueIsAlive();
         this.#connection.flushQueue() catch |e| {
             bun.assert_eql(e, err.AuthenticationFailed);
@@ -269,7 +345,8 @@ fn hasNullByte(s: []const u8): bool {
                 * = s;
                 * = code;
                 * = data;
-                defer conn.deref();
+                const _guard_deref = DerefGuard<JSMySQLConnection>{ ptr: conn };
+                * = &_guard_deref;
                 conn.fail("Connection closed", err.ConnectionClosed);
             }
 
@@ -292,7 +369,8 @@ fn hasNullByte(s: []const u8): bool {
             pub static fn onData(conn: *JSMySQLConnection, s: SocketType, data: []const u8) {
                 * = s;
                 conn.ref();
-                defer conn.deref();
+                const _guard_deref = DerefGuard<JSMySQLConnection>{ ptr: conn };
+                * = &_guard_deref;
                 const vm = conn.#vm;
 
                 defer {
@@ -306,7 +384,8 @@ fn hasNullByte(s: []const u8): bool {
 
                 const event_loop = vm.eventLoop();
                 event_loop.enter();
-                defer event_loop.exit();
+                const _guard_loop = EventLoopExitGuard{ loop: event_loop };
+                * = &_guard_loop;
                 conn.ensureJSValueIsAlive();
 
                 conn.#connection.readAndProcessData(data) catch |e| {
@@ -346,15 +425,19 @@ fn hasNullByte(s: []const u8): bool {
         let vm = globalObject.bunVM();
         const arguments = callframe.arguments();
         const hostname_str = arguments[0].toBunString(globalObject)?;
-        defer hostname_str.deref();
+        const _guard_hostname_str = ValDerefGuard<bun.String>{ val: hostname_str };
+        * = &_guard_hostname_str;
         const port = arguments[1].coerce(i32, globalObject)?;
 
         const username_str = arguments[2].toBunString(globalObject)?;
-        defer username_str.deref();
+        const _guard_username_str = ValDerefGuard<bun.String>{ val: username_str };
+        * = &_guard_username_str;
         const password_str = arguments[3].toBunString(globalObject)?;
-        defer password_str.deref();
+        const _guard_password_str = ValDerefGuard<bun.String>{ val: password_str };
+        * = &_guard_password_str;
         const database_str = arguments[4].toBunString(globalObject)?;
-        defer database_str.deref();
+        const _guard_database_str = ValDerefGuard<bun.String>{ val: database_str };
+        * = &_guard_database_str;
 
         const ssl_mode: SSLMode = switch (arguments[5].toInt32()) {
             0 => .disable,
@@ -391,10 +474,7 @@ fn hasNullByte(s: []const u8): bool {
                 return globalObject.throwValue(sock_err.toJS(globalObject));
             }
         }
-        errdefer {
-            if (s := secure) bun.BoringSSL.c.SSL_CTX_free(s);
-            tls_config.deinit();
-        }
+        let _guard_tls = TlsSetupGuard{ secure: unsafe { &secure }, tls_config: unsafe { &tls_config } };
 
         let username: []const u8 = "";
         let password: []const u8 = "";
@@ -403,10 +483,12 @@ fn hasNullByte(s: []const u8): bool {
         let path: []const u8 = "";
 
         const options_str = arguments[7].toBunString(globalObject)?;
-        defer options_str.deref();
+        const _guard_options_str = ValDerefGuard<bun.String>{ val: options_str };
+        * = &_guard_options_str;
 
         const path_str = arguments[8].toBunString(globalObject)?;
-        defer path_str.deref();
+        const _guard_path_str = ValDerefGuard<bun.String>{ val: path_str };
+        * = &_guard_path_str;
 
         const options_buf: []u8 = brk: {
             let b = bun.StringBuilder{};
@@ -414,23 +496,28 @@ fn hasNullByte(s: []const u8): bool {
 
             b.allocate(bun.default_allocator) catch {};
             let u = username_str.toUTF8WithoutRef(bun.default_allocator);
-            defer u.deinit();
+            const _guard_u = DeinitGuard<@TypeOf(u)>{ ptr: unsafe { &u } };
+            * = &_guard_u;
             username = b.append(u.slice());
 
             let p = password_str.toUTF8WithoutRef(bun.default_allocator);
-            defer p.deinit();
+            const _guard_p = DeinitGuard<@TypeOf(p)>{ ptr: unsafe { &p } };
+            * = &_guard_p;
             password = b.append(p.slice());
 
             let d = database_str.toUTF8WithoutRef(bun.default_allocator);
-            defer d.deinit();
+            const _guard_d = DeinitGuard<@TypeOf(d)>{ ptr: unsafe { &d } };
+            * = &_guard_d;
             database = b.append(d.slice());
 
             let o = options_str.toUTF8WithoutRef(bun.default_allocator);
-            defer o.deinit();
+            const _guard_o = DeinitGuard<@TypeOf(o)>{ ptr: unsafe { &o } };
+            * = &_guard_o;
             options = b.append(o.slice());
 
             let _path = path_str.toUTF8WithoutRef(bun.default_allocator);
-            defer _path.deinit();
+            const _guard_path = DeinitGuard<@TypeOf(_path)>{ ptr: unsafe { &_path } };
+            * = &_guard_path;
             path = b.append(_path.slice());
 
             break :brk b.allocatedSlice();
@@ -477,12 +564,14 @@ fn hasNullByte(s: []const u8): bool {
                 ssl_mode,
             ),
         });
+        _guard_tls.committed = true;
         secure = null;
         tls_config = .{};
 
         {
-            const hostname = hostname_str.toUTF8(bun.default_allocator);
-            defer hostname.deinit();
+            let hostname = hostname_str.toUTF8(bun.default_allocator);
+            const _guard_hostname = DeinitGuard<@TypeOf(hostname)>{ ptr: unsafe { &hostname } };
+            * = &_guard_hostname;
 
             const group = vm.rareData().mysqlGroup(vm, false);
             const result = if (path.len > 0)
@@ -631,24 +720,28 @@ fn hasNullByte(s: []const u8): bool {
 
     pub fn failFmt(*_, error_code: AnyMySQLError.Error, comptime fmt: [:0]const u8, args: anytype) {
         const message = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, fmt, args));
-        defer bun.default_allocator.free(message);
+        const _guard_msg = FreeGuard<[]u8>{ alloc: bun.default_allocator, slice: message };
+        * = &_guard_msg;
 
         const e = AnyMySQLError.mysqlErrorToJS(this.#globalObject, message, error_code);
         this.failWithJSValue(e);
     }
 
+    fn finishFailClose(*_, value: JSValue) {
+        if (this.#vm.isShuttingDown()) {
+            this.#connection.close();
+        } else {
+            this.#connection.cleanQueueAndClose(value, this.getQueriesArray());
+        }
+        this.updateReferenceType();
+        this.deref();
+    }
+
     pub fn failWithJSValue(*_, value: JSValue) {
         this.ref();
 
-        defer {
-            if (this.#vm.isShuttingDown()) {
-                this.#connection.close();
-            } else {
-                this.#connection.cleanQueueAndClose(value, this.getQueriesArray());
-            }
-            this.updateReferenceType();
-            this.deref();
-        }
+        const _guard_fail = FailCloseGuard{ conn: _, value: value };
+        * = &_guard_fail;
         this.stopTimers();
 
         if (this.#connection.status == .failed) return;
@@ -721,7 +814,8 @@ fn hasNullByte(s: []const u8): bool {
             },
             .raw, .values => {},
         }
-        defer row.deinit(allocator);
+        const _guard_row = DeinitWithAllocGuard<ResultSet.Row>{ ptr: unsafe { &row }, alloc: allocator };
+        * = &_guard_row;
         row.decode(allocator, reader) catch |e| {
             if (e == err.ShortRead) {
                 return err.ShortRead;
