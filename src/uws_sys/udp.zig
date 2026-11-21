@@ -9,7 +9,7 @@ pub const bun = @import("bun");
 const Loop = @import("./Loop.zig").Loop;
 pub const Socket = opaque {
 
-pub fn create(loop: *Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: ?[*:0]const u8, port: u16, options: i32, err: ?*i32, user_data: ?*anyopaque) *?*Socket {
+pub fn create(loop: *Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: ?[*:0]const u8, port: u16, options: i32, err: ?*i32, user_data: ?*anyopaque) ?*Socket {
             return us_create_udp_socket(loop, data_cb, drain_cb, close_cb, recv_error_cb, host, port, options, err, user_data);
     }
 
@@ -115,7 +115,7 @@ pub const UdpDataCbFn = *const fn(*Socket, *PacketBuffer, i32) callconv(.c) void
 pub const UdpSimpleCbFn = *const fn(*Socket) callconv(.c) void;
 pub const UdpRecvErrCbFn = *const fn(*Socket, i32) callconv(.c) void;
 
-extern "c" fn us_create_udp_socket(loop: ?*Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: ?[*:0]const u8, port: u16, options: i32, err: ?*i32, user_data: ?*anyopaque) callconv(.c) *?*Socket;
+extern "c" fn us_create_udp_socket(loop: ?*Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: ?[*:0]const u8, port: u16, options: i32, err: ?*i32, user_data: ?*anyopaque) callconv(.c) ?*Socket;
 
 extern "c" fn us_udp_socket_connect(socket: *Socket, hostname: [*:0]const u8, port: u32) callconv(.c) i32;
 
@@ -149,10 +149,10 @@ extern "c" fn us_udp_socket_set_membership(socket: *Socket, address: *const std.
 
 extern "c" fn us_udp_socket_set_source_specific_membership(socket: *Socket, source: *const std.posix.sockaddr.storage, group: *const std.posix.sockaddr.storage, iface: ?*const std.posix.sockaddr.storage, drop: i32) callconv(.c) i32;
 
-extern "c" fn us_udp_packet_buffer_peer(buf: *?*PacketBuffer, index: i32) callconv(.c) *std.posix.sockaddr.storage;
+extern "c" fn us_udp_packet_buffer_peer(buf: *PacketBuffer, index: i32) callconv(.c) *std.posix.sockaddr.storage;
 
-extern "c" fn us_udp_packet_buffer_payload(buf: *?*PacketBuffer, index: i32) callconv(.c) [*]u8;
+extern "c" fn us_udp_packet_buffer_payload(buf: *PacketBuffer, index: i32) callconv(.c) [*]u8;
 
-extern "c" fn us_udp_packet_buffer_payload_length(buf: *?*PacketBuffer, index: i32) callconv(.c) i32;
+extern "c" fn us_udp_packet_buffer_payload_length(buf: *PacketBuffer, index: i32) callconv(.c) i32;
 
-extern "c" fn us_udp_packet_buffer_truncated(buf: *?*PacketBuffer, index: i32) callconv(.c) i32;
+extern "c" fn us_udp_packet_buffer_truncated(buf: *PacketBuffer, index: i32) callconv(.c) i32;

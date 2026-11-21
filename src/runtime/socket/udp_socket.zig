@@ -249,17 +249,20 @@ pub fn udpSocket(globalThis: *JSGlobalObject, options: JSValue) bun.JSError!JSVa
             defer {
             _ = bun.default_allocator.free(hostname_z);
             }
-            if (this_ptr.socket == null) { this_ptr.socket = ({
-            this_ptr.closed = true;
-            if ((err != 0)) {
-                const code = @tagName((bun.sys.SystemErrno.init(@as(c_int, @intCast(err)))).?);
-                const sys_err = jsc.SystemError{ .errno = err, .code = bun.String.static(code), .message = bun.handleOom(bun.String.createFormat("bind {s} {f}", .{ code, this_ptr.config.hostname })) };
-                const error_value = sys_err.toErrorInstance(globalThis);
-                _ = error_value.put(globalThis, "address", try this_ptr.config.hostname.toJS(globalThis));
-                return globalThis.throwValue(error_value);
+            if (uws.udp.Socket.create(this_ptr.loop, onData, onDrain, onClose, onRecvError, hostname_z, this_ptr.config.port, this_ptr.config.flags, (&err), this_ptr)) |sock| {
+                _ = &sock;
+                this_ptr.socket = sock;
+            } else {
+                this_ptr.closed = true;
+                if ((err != 0)) {
+                    const code = @tagName((bun.sys.SystemErrno.init(@as(c_int, @intCast(err)))).?);
+                    const sys_err = jsc.SystemError{ .errno = err, .code = bun.String.static(code), .message = bun.handleOom(bun.String.createFormat("bind {s} {f}", .{ code, this_ptr.config.hostname })) };
+                    const error_value = sys_err.toErrorInstance(globalThis);
+                    _ = error_value.put(globalThis, "address", try this_ptr.config.hostname.toJS(globalThis));
+                    return globalThis.throwValue(error_value);
+                }
+                return globalThis.throw("Failed to bind socket", .{});
             }
-            return globalThis.throw("Failed to bind socket", .{});
-}); }
             if (this_ptr.config.connect) |*connect| {
                 _ = &connect;
                 const address_slice = (connect.*).address.toUTF8(bun.default_allocator);

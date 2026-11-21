@@ -187,19 +187,19 @@ pub fn reset(self: *PropertyHandlerContext) void {
                 _ = (supp.*).deinit(self.allocator);
             }
             _ = self.supports.clearRetainingCapacity();
-            for (self.ltr.items) |*ltr| {
-                _ = &ltr;
-                _ = self.ltr.deinit(self.allocator);
+            for (self.ltr.items) |*item| {
+                _ = &item;
+                _ = (item.*).deinit(self.allocator);
             }
             _ = self.ltr.clearRetainingCapacity();
-            for (self.rtl.items) |*rtl| {
-                _ = &rtl;
-                _ = self.rtl.deinit(self.allocator);
+            for (self.rtl.items) |*item| {
+                _ = &item;
+                _ = (item.*).deinit(self.allocator);
             }
             _ = self.rtl.clearRetainingCapacity();
-            for (self.dark.items) |*dark| {
-                _ = &dark;
-                _ = self.dark.deinit(self.allocator);
+            for (self.dark.items) |*item| {
+                _ = &item;
+                _ = (item.*).deinit(self.allocator);
             }
             _ = self.dark.clearRetainingCapacity();
     }

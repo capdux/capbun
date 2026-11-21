@@ -367,7 +367,7 @@ pub fn init(cache: Resolver.LookupCacheHit(@This()), resolver: ?*Resolver, name:
             if ((cache == .@"new")) {
                 request.resolver_for_caching = resolver;
                 request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate(name.len)) };
-                cache.new.lookup = @ptrCast(request);
+                cache.@"new".lookup = @ptrCast(request);
             }
             return request;
     }
@@ -495,7 +495,7 @@ pub fn init(cache: Resolver.LookupCacheHit(@This()), resolver: ?*Resolver, name:
             if ((cache == .@"new")) {
                 request.resolver_for_caching = resolver;
                 request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate(name.len)) };
-                cache.new.lookup = @ptrCast(request);
+                cache.@"new".lookup = @ptrCast(request);
             }
             return request;
     }
@@ -640,7 +640,7 @@ pub fn init(cache: Resolver.CacheHit, backend: Backend, resolver: ?*Resolver, qu
             if ((cache == .@"new")) {
                 request.resolver_for_caching = resolver;
                 request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name).len)) };
-                cache.new.lookup = @ptrCast(request);
+                cache.@"new".lookup = @ptrCast(request);
             }
             return request;
     }
@@ -3012,8 +3012,6 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
     tail: *CAresLookup(cares_type,type_name) = undefined,
 
 pub fn init(cache: Resolver.LookupCacheHit(@This()), resolver: ?*Resolver, name: []const u8, globalThis: *jsc.JSGlobalObject, comptime cache_field: []const u8) !*@This() {
-        _ = cache;
-        _ = cache_field;
             var request = try globalThis.allocator().create(@This());
             _ = &request;
             var hasher = std.hash.Wyhash.init(0);
@@ -3029,6 +3027,11 @@ pub fn init(cache: Resolver.LookupCacheHit(@This()), resolver: ?*Resolver, name:
             }
             request.* = .{ .resolver_for_caching = resolver, .hash = hash, .head = .{ .resolver = resolver, .poll_ref = poll_ref, .globalThis = globalThis, .promise = jsc.JSPromise.Strong.init(globalThis), .allocated = false, .name = name } };
             request.tail = (&request.head);
+            if ((cache == .@"new")) {
+                request.resolver_for_caching = resolver;
+                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate(name.len)) };
+                cache.@"new".lookup = @ptrCast(request);
+            }
             return request;
     }
 

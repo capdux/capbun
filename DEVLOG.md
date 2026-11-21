@@ -1500,3 +1500,5 @@
 - **[2026-11-21] 全仓新语法收敛、`release()` 还原与 `fetch` `.Locked` 校验**：
   - 随新版 `cpc`（`syntax-raii-20261121-v2`）将 `release` 彻底退回普通方法后，全仓 28 个文件安全还原 `release` 命名；`migrate_cp_syntax.py --apply --no-release src` 迁移 96 个 `.cp` 后，修复嵌套透传结构体中的 `_ =` / `: void` / `this` 及 `linear_fifo` `const empty_arr` 后 `zig:check` 全绿；
   - `fetch.cp` 补全 `bodyValue.* == .Locked` 的 `isDisturbed` 校验与 `.ReadableStream` 构造。
+- **[2026-11-22] `.new` 关键字、`for` 字段同名遮蔽与 `orelse` 吞右值清零**：
+  - `dns.cp` 未转义 `.new` 导致 `if (cache == .new)` 被 `cpc` 丢弃引发空指针 `SEGV`；`css/context.cp` 循环变量名 `ltr`/`rtl`/`dark` 与 struct 字段同名导致误将 `ltr.deinit` 降级为 `self.ltr.deinit` 引发 `0xaa` 崩溃；`udp_socket.cp` / `PostgresSQLConnection.cp` / `JSMySQLConnection.cp` 为全仓最后 3 处 `orelse` 赋值吞右值；连同 `uws_sys/udp.cp` `*PacketBuffer?` 优先级修完后，`22712`/`25785`/`28083` 全部 100% 通关。

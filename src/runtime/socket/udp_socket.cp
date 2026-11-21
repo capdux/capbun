@@ -334,7 +334,7 @@ export class UDPSocket {
         const hostname_z = bun.handleOom(bun.default_allocator.dupeZ(u8, hostname_slice.slice()));
         defer bun.default_allocator.free(hostname_z);
 
-        this_ptr.socket = uws.udp.Socket.create(
+        if (sock := uws.udp.Socket.create(
             this_ptr.loop,
             onData,
             onDrain,
@@ -345,7 +345,9 @@ export class UDPSocket {
             this_ptr.config.flags,
             &err,
             this_ptr,
-        ) orelse {
+        )) {
+            this_ptr.socket = sock;
+        } else {
             this_ptr.closed = true;
             if (err != 0) {
                 const code = @tagName(bun.sys.SystemErrno.init(@as(c_int, @intCast(err))).?);
@@ -361,7 +363,7 @@ export class UDPSocket {
             }
 
             return globalThis.throw("Failed to bind socket", .{});
-        };
+        }
 
         if (*connect := this_ptr.config.connect) {
             const address_slice = connect.address.toUTF8(bun.default_allocator);

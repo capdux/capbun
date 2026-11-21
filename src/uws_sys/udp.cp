@@ -11,7 +11,7 @@ pub const UdpRecvErrCbFn = *const fn (*Socket, i32) callconv(.c) void;
 pub type OptUdpRecvErrCb = UdpRecvErrCbFn?;
 
 @c {
-    fn us_create_udp_socket(loop: *Loop?, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: cstr?, port: u16, options: i32, err: *i32?, user_data: *!?): *Socket?;
+    fn us_create_udp_socket(loop: (*Loop)?, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: cstr?, port: u16, options: i32, err: (*i32)?, user_data: *!?): (*Socket)?;
     fn us_udp_socket_connect(socket: *Socket, hostname: cstr, port: u32): i32;
     fn us_udp_socket_disconnect(socket: *Socket): i32;
     fn us_udp_socket_send(socket: *Socket, payloads: [*c]const [*c]const u8, lengths: [*c]const usize, addresses: [*c]const ConstRawPtr, count: i32): i32;
@@ -26,17 +26,17 @@ pub type OptUdpRecvErrCb = UdpRecvErrCbFn?;
     fn us_udp_socket_set_ttl_multicast(socket: *Socket, ttl: i32): i32;
     fn us_udp_socket_set_multicast_loopback(socket: *Socket, enabled: i32): i32;
     fn us_udp_socket_set_multicast_interface(socket: *Socket, iface: *const std.posix.sockaddr.storage): i32;
-    fn us_udp_socket_set_membership(socket: *Socket, address: *const std.posix.sockaddr.storage, iface: *const std.posix.sockaddr.storage?, drop: i32): i32;
-    fn us_udp_socket_set_source_specific_membership(socket: *Socket, source: *const std.posix.sockaddr.storage, group: *const std.posix.sockaddr.storage, iface: *const std.posix.sockaddr.storage?, drop: i32): i32;
+    fn us_udp_socket_set_membership(socket: *Socket, address: *const std.posix.sockaddr.storage, iface: (*const std.posix.sockaddr.storage)?, drop: i32): i32;
+    fn us_udp_socket_set_source_specific_membership(socket: *Socket, source: *const std.posix.sockaddr.storage, group: *const std.posix.sockaddr.storage, iface: (*const std.posix.sockaddr.storage)?, drop: i32): i32;
 
-    fn us_udp_packet_buffer_peer(buf: *PacketBuffer?, index: i32): *std.posix.sockaddr.storage;
-    fn us_udp_packet_buffer_payload(buf: *PacketBuffer?, index: i32): [*]u8!;
-    fn us_udp_packet_buffer_payload_length(buf: *PacketBuffer?, index: i32): i32;
-    fn us_udp_packet_buffer_truncated(buf: *PacketBuffer?, index: i32): i32;
+    fn us_udp_packet_buffer_peer(buf: *PacketBuffer, index: i32): *std.posix.sockaddr.storage;
+    fn us_udp_packet_buffer_payload(buf: *PacketBuffer, index: i32): [*]u8!;
+    fn us_udp_packet_buffer_payload_length(buf: *PacketBuffer, index: i32): i32;
+    fn us_udp_packet_buffer_truncated(buf: *PacketBuffer, index: i32): i32;
 }
 
 export @opaque class Socket {
-    pub static fn create(loop: *Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: cstr?, port: u16, options: i32, err: *i32?, user_data: *!?): *Socket? {
+    pub static fn create(loop: *Loop, data_cb: OptUdpDataCb, drain_cb: OptUdpSimpleCb, close_cb: OptUdpSimpleCb, recv_error_cb: OptUdpRecvErrCb, host: cstr?, port: u16, options: i32, err: (*i32)?, user_data: *!?): (*Socket)? {
         return us_create_udp_socket(loop, data_cb, drain_cb, close_cb, recv_error_cb, host, port, options, err, user_data);
     }
 
@@ -87,12 +87,12 @@ export @opaque class Socket {
         return us_udp_socket_set_multicast_interface(this, iface);
     }
 
-    pub fn setMembership(*_, address: *const std.posix.sockaddr.storage, iface: *const std.posix.sockaddr.storage?, drop: bool): i32 {
+    pub fn setMembership(*_, address: *const std.posix.sockaddr.storage, iface: (*const std.posix.sockaddr.storage)?, drop: bool): i32 {
         let d: i32 = if (drop) 1 else 0;
         return us_udp_socket_set_membership(this, address, iface, d);
     }
 
-    pub fn setSourceSpecificMembership(*_, source: *const std.posix.sockaddr.storage, group: *const std.posix.sockaddr.storage, iface: *const std.posix.sockaddr.storage?, drop: bool): i32 {
+    pub fn setSourceSpecificMembership(*_, source: *const std.posix.sockaddr.storage, group: *const std.posix.sockaddr.storage, iface: (*const std.posix.sockaddr.storage)?, drop: bool): i32 {
         let d: i32 = if (drop) 1 else 0;
         return us_udp_socket_set_source_specific_membership(this, source, group, iface, d);
     }

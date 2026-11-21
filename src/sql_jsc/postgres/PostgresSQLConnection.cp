@@ -863,10 +863,12 @@ export struct SocketHandlerSSL {
             }
 
             let sock_err: uws.create_bun_socket_error_t = .none;
-            secure = vm.rareData().sslCtxCache().getOrCreateOpts(tls_config.asUSocketsForClientVerification(), &sock_err) orelse {
+            if (s := vm.rareData().sslCtxCache().getOrCreateOpts(tls_config.asUSocketsForClientVerification(), &sock_err)) {
+                secure = s;
+            } else {
                 tls_config.deinit();
                 return globalObject.throwValue(sock_err.toJS(globalObject));
-            };
+            }
         }
         errdefer {
             if (s := secure) bun.BoringSSL.c.SSL_CTX_free(s);

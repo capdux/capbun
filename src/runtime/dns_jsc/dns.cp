@@ -323,15 +323,15 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
                 },
             };
             request.tail = &request.head;
-            if (cache == .new) {
+            if (cache == .@"new") {
                 request.resolver_for_caching = resolver;
-                request.cache = @This().CacheConfig{
+                request.cache = CacheConfig{
                     .pending_cache = true,
                     .entry_cache = false,
-                    .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.new))),
+                    .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                     .name_len = @as(u9, @truncate(name.len)),
                 };
-                cache.new.lookup = request;
+                cache.@"new".lookup = @ptrCast(request);
             }
             return request;
         }
@@ -435,7 +435,7 @@ pub struct GetHostByAddrInfoRequest {
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                 .name_len = @as(u9, @truncate(name.len)),
             };
-            cache.new.lookup = @ptrCast(request);
+            cache.@"new".lookup = @ptrCast(request);
         }
         return request;
     }
@@ -587,7 +587,7 @@ pub struct GetNameInfoRequest {
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                 .name_len = @as(u9, @truncate(name.len)),
             };
-            cache.new.lookup = @ptrCast(request);
+            cache.@"new".lookup = @ptrCast(request);
         }
         return request;
     }
@@ -764,7 +764,7 @@ pub struct GetAddrInfoRequest {
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
                 .name_len = @as(u9, @truncate(query.name.len)),
             };
-            cache.new.lookup = @ptrCast(request);
+            cache.@"new".lookup = @ptrCast(request);
         }
         return request;
     }

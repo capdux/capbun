@@ -431,10 +431,13 @@ else => .disable,
             }
             var sock_err: uws.create_bun_socket_error_t = .none;
             _ = &sock_err;
-            if (secure == null) { secure = ({
-            _ = tls_config.deinit();
-            return globalObject.throwValue(sock_err.toJS(globalObject));
-}); }
+            if (vm.rareData().sslCtxCache().getOrCreateOpts(tls_config.asUSocketsForClientVerification(), (&sock_err))) |s| {
+                _ = &s;
+                secure = s;
+            } else {
+                _ = tls_config.deinit();
+                return globalObject.throwValue(sock_err.toJS(globalObject));
+            }
         }
         errdefer {
         {

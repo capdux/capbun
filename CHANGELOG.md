@@ -1894,3 +1894,4 @@
 - **[2026-11-21] `ini` / `package_json` / `writeOutputFilesToDisk` 修复（15/15 全绿）**：更新 `src/ini/ini.{cp,zig}`、`src/resolver/package_json.{cp,zig}`、`src/bundler/linker_context/writeOutputFilesToDisk.{cp,zig}`。
 - **[2026-11-21] `build_command.cp` `define` 丢失修复 (`zig:check` 5/5)**：更新 `src/cli/build_command.{cp,zig}`。
 - **[2026-11-21] 全仓 `migrate_cp_syntax.py` 迁移、28 模块 `release()` 还原与 `fetch.cp` 修复 (`zig:check` 5/5)**：更新 `src/runtime/webcore/fetch.{cp,zig}`、还原 `release()` 的 28 个 `.cp/.zig` 模块，以及全仓 96 个 `migrate_cp_syntax.py` 迁移的 `.cp/.zig` 文件。
+- **[2026-11-22] `dns` / `css/context` / `udp_socket` / `uws_sys/udp` / `Postgres` / `MySQL` 修复（全绿）**：更新 `src/runtime/dns_jsc/dns.{cp,zig}`、`src/css/context.{cp,zig}`、`src/runtime/socket/udp_socket.{cp,zig}`、`src/uws_sys/udp.{cp,zig}`、`src/sql_jsc/postgres/PostgresSQLConnection.{cp,zig}`、`src/sql_jsc/mysql/JSMySQLConnection.{cp,zig}`。

@@ -245,18 +245,18 @@ pub struct PropertyHandlerContext {
         }
         _.supports.clearRetainingCapacity();
 
-        for (*ltr of _.ltr.items) {
-            ltr.deinit(_.allocator);
+        for (*item of _.ltr.items) {
+            item.deinit(_.allocator);
         }
         _.ltr.clearRetainingCapacity();
 
-        for (*rtl of _.rtl.items) {
-            rtl.deinit(_.allocator);
+        for (*item of _.rtl.items) {
+            item.deinit(_.allocator);
         }
         _.rtl.clearRetainingCapacity();
 
-        for (*dark of _.dark.items) {
-            dark.deinit(_.allocator);
+        for (*item of _.dark.items) {
+            item.deinit(_.allocator);
         }
         _.dark.clearRetainingCapacity();
     }

@@ -144,3 +144,9 @@
   - 将此前改名为 `releaseInternal`/`releaseLoop` 或合并进 `deinit()` 的全部 **28 个模块**（`FileResponseStream`, `PosixSignalHandle`, `Listener`, `TimerObjectInternals`, `ConcurrentTask`, `udp_socket`, `UpgradedDuplex`, `Image`, `PBKDF2`, `Loop`, `WindowsNamedPipeContext`, `WindowsNamedPipe`, `s3/simple_request`, `s3/download_stream`, `ssl_wrapper`, `S3Stat`, `ObjectURLRegistry`, `s3/error_jsc`, `SocketAddress`, `us_socket_t`, `PasswordObject`, `h2_client/{Stream,ClientSession,PendingConnect}`, `ServerConfig`, `SSLConfig`, `Handlers`, `socket`）还原回 `release` 名称并全部重编通过 `cpc_brief.py`；
   - 修复全仓重编后暴露的 45 个 `ast-check` 问题及 `linear_fifo`/`read_file`/`vtable` 3 个 `zig:check` 问题，`bun run zig:check` **5/5 steps succeeded**；
   - 还原 `src/runtime/webcore/fetch.cp:584-608` `bodyValue.* == .Locked` 的 `isDisturbed` 校验与 `.ReadableStream` 提取分支。
+- **[2026-11-22 00:10] `dns` / `css/context` / `udp_socket` / `uws_sys/udp` / `Postgres` / `MySQL` 6 模块修复里程碑（3 大测试集 100% 全绿）**：
+  - 修复 `src/runtime/dns_jsc/dns.cp` 4 处 `.new` 未转义关键字（`.@"new"`）恢复 `ResolveInfoRequest.init` `cache.@"new".lookup` 绑定，`22712.test.ts` **6/6 全绿**（消除 `PendingCacheKey.append` `SEGV`）；
+  - 修复 `src/css/context.cp:248-260` `for (*ltr/*rtl/*dark ...)` 与字段重名导致误调 `ArrayList.deinit` 填充 `0xaa` 崩溃，`25785.test.ts` **2/2 全绿**；
+  - 修复 `src/runtime/socket/udp_socket.cp:337-364` `this_ptr.socket = Socket.create(...) orelse` 吞右值及 `src/uws_sys/udp.cp` `*T?` 指针优先级问题，`28083.test.ts` (`dgram`) **6/6 全绿**；
+  - 同步清理全仓剩余 2 处 `secure = ... orelse { ... }` 吞右值（`PostgresSQLConnection.cp:866`、`JSMySQLConnection.cp:387`）；
+  - `test/regression/issue/` 第 3~5 批累计已测出 **533+ pass / 0 新崩溃**。
