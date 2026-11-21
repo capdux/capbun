@@ -133,7 +133,7 @@ pub type CStringSlice = []CString;
         return true;
     }
 
-    pub fn release(*_) {
+    pub fn deinit(*_) {
         GlobalRegistry.remove(_);
         freeString(&_.server_name);
         freeString(&_.key_file_name);
@@ -146,10 +146,6 @@ pub type CStringSlice = []CString;
         freeStrings(&_.ca);
         freeString(&_.ssl_ciphers);
         freeString(&_.protos);
-    }
-
-    pub fn deinit(*_) {
-        _.release();
     }
 
     pub fn clone(_: *const SSLConfig): SSLConfig {
