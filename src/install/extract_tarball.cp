@@ -156,7 +156,7 @@ const DirnameReader = struct {
         return !bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_STREAMING_INSTALL.get();
     }
 
-    pub fn nameAndBasename(): [string, string] {
+    pub fn nameAndBasename(_: *const ExtractTarball): [string, string] {
         const name = if (_.name.slice().len > 0) _.name.slice() else brk: {
             // Not sure where this case hits yet.
             // BUN-2WQ

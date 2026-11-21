@@ -1880,3 +1880,4 @@
 - **[2026-11-21] `unicode.cp` `...` 范围语法修复 (`css-fuzz` 崩溃清零)**：更新 `src/string/immutable/unicode.{cp,zig}`。
 - **[2026-11-21] `SSLConfig.cp` RAII 提前释放修复 (`bun-write.test.js` 0 崩溃)**：更新 `src/runtime/socket/SSLConfig.{cp,zig}`。
 - **[2026-11-21] 全仓 393 个旧版 `cp_iter_slice` 模块重编 (`zig:check` 5/5)**：更新 `src/bundler/options.{cp,zig}`、`src/perf/tracy.{cp,zig}`、`src/runtime/node/fs_events.{cp,zig}`、`src/string/immutable.{cp,zig}`、`src/sys/{libuv,coreutils}_error_map.{cp,zig}`、`src/which/which.{cp,zig}`、`src/http/{h2,h3}_client/encode.{cp,zig}`、`src/md/line_analysis.zig` 及全仓 380+ 重编 `.zig` 文件。
+- **[2026-11-21] `extract_tarball.cp` 悬垂栈切片修复**：更新 `src/install/extract_tarball.{cp,zig}`。

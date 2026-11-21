@@ -138,7 +138,7 @@ pub fn usesStreamingExtraction() bool {
         return (!bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_STREAMING_INSTALL.get());
 }
 
-pub fn nameAndBasename(self: ExtractTarball) struct { []const u8, []const u8 } {
+pub fn nameAndBasename(self: *const ExtractTarball) struct { []const u8, []const u8 } {
         const name = (if ((self.name.slice().len > 0)) self.name.slice() else brk: {
         _ = Output.warn("Extracting nameless packages is not supported yet. Please open an issue on GitHub with reproduction steps.", .{});
         _ = bun.debugAssert(false);
