@@ -1,5 +1,54 @@
 let path_buf: bun.PathBuffer = undefined;
 let path_buf2: bun.PathBuffer = undefined;
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct OptDeinitGuard<T> {
+    ptr: (*T!)?,
+    ~init() {
+        if (p := _.ptr) p.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.alloc);
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.close();
+    }
+}
+
+struct DownloadsGuard<T> {
+    ptr: *std.ArrayListUnmanaged(*T)!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        for (d of _.ptr.items) {
+            d.response_buffer.deinit();
+            _.alloc.destroy(d);
+        }
+        _.ptr.deinit(_.alloc);
+    }
+}
 struct NpmArgs {
     // https://github.com/npm/rfcs/blob/main/implemented/0021-reduce-lifecycle-script-environment.md#detailed-explanation
     pub const package_name: string = "npm_package_name";
@@ -408,7 +457,7 @@ pub struct RunCommand {
             // Using @constCast is safe because we know that
             // `direct_launch_buffer` is the data destination that assumption is
             // backed by the immediate assertion.
-            let wpath = @constCast(bun.strings.toNTPath(&BunXFastPath.direct_launch_buffer, executable));
+            let wpath = unsafe { @constCast(bun.strings.toNTPath(&BunXFastPath.direct_launch_buffer, executable)) };
             bun.assert(bun.isSliceInBufferT(u16, wpath, &BunXFastPath.direct_launch_buffer));
 
             bun.assert(wpath.len > bun.windows.nt_object_prefix.len + ".exe".len);
@@ -624,7 +673,7 @@ pub struct RunCommand {
         let target_path_buffer: bun.PathBuffer = undefined;
         const len = bun.windows.GetTempPathW(
             temp_path_buffer.len,
-            @ptrCast(&temp_path_buffer),
+            unsafe { @ptrCast(&temp_path_buffer) },
         );
         if (len == 0) {
             return error.FailedToGetTempPath;
@@ -653,7 +702,7 @@ pub struct RunCommand {
         if (CLI.pretend_to_be_node) return out_bun_path;
 
         if (Environment.isPosix) {
-            let argv0 = @as([*:0]const u8, @ptrCast(out_bun_path.ptr));
+            let argv0 = @as([*:0]const u8, unsafe { @ptrCast(out_bun_path.ptr) });
 
             // if we are already an absolute path, use that
             // if the user started the application via a shebang, it's likely that the path is absolute already
@@ -710,7 +759,7 @@ pub struct RunCommand {
 
             const len = bun.windows.GetTempPathW(
                 target_path_buffer.len - prefix.len,
-                @ptrCast(&target_path_buffer[prefix.len]),
+                unsafe { @ptrCast(&target_path_buffer[prefix.len]) },
             );
             if (len == 0) {
                 Output.debug("Failed to create temporary node dir: {s}", .{@tagName(std.os.windows.kernel32.GetLastError())});
@@ -730,7 +779,7 @@ pub struct RunCommand {
 
             if (Environment.isDebug) {
                 const dir_slice_u8 = std.unicode.utf16LeToUtf8Alloc(bun.default_allocator, dir_slice) catch @panic("oom");
-                defer bun.default_allocator.free(dir_slice_u8);
+                const _g_dir_slice = FreeGuard<u8>{ alloc: bun.default_allocator, slice: dir_slice_u8 };
                 std.fs.deleteTreeAbsolute(dir_slice_u8) catch {};
                 std.fs.makeDirAbsolute(dir_slice_u8) catch @panic("huh?");
             }
@@ -742,7 +791,7 @@ pub struct RunCommand {
 
                 const file_slice = target_path_buffer[0 .. prefix.len + len + file_name.len - "\x00".len];
 
-                if (bun.windows.CreateHardLinkW(@ptrCast(file_slice.ptr), image_path.ptr, null) == 0) {
+                if (bun.windows.CreateHardLinkW(unsafe { @ptrCast(file_slice.ptr) }, image_path.ptr, null) == 0) {
                     switch (std.os.windows.kernel32.GetLastError()) {
                         .ALREADY_EXISTS => {},
                         else => {
@@ -753,7 +802,7 @@ pub struct RunCommand {
                                 target_path_buffer[dir_slice.len] = '\\';
                             }
 
-                            if (bun.windows.CreateHardLinkW(@ptrCast(file_slice.ptr), image_path.ptr, null) == 0) {
+                            if (bun.windows.CreateHardLinkW(unsafe { @ptrCast(file_slice.ptr) }, image_path.ptr, null) == 0) {
                                 return out_bun_path;
                             }
                         },
@@ -1307,7 +1356,7 @@ pub struct RunCommand {
     ) {
         const allocator = bun.default_allocator;
         let collector = bun.md.ImageUrlCollector.init(allocator);
-        defer collector.deinit();
+        const _g_collector = DeinitGuard<bun.md.ImageUrlCollector>{ ptr: &collector };
         bun.md.renderWithRenderer(contents, allocator, md_opts, collector.renderer()) catch return;
         if (collector.urls.items.len == 0) return;
 
@@ -1315,9 +1364,9 @@ pub struct RunCommand {
         // http(s) ones. If there are no remote URLs we never spawn the
         // HTTP worker or allocate any Download structs.
         let seen: bun.StringHashMapUnmanaged(void) = {};
-        defer seen.deinit(allocator);
+        const _g_seen = DeinitWithAllocGuard<bun.StringHashMapUnmanaged(void)>{ ptr: &seen, alloc: allocator };
         let remote_urls: std.ArrayListUnmanaged(string) = {};
-        defer remote_urls.deinit(allocator);
+        const _g_remote_urls = DeinitWithAllocGuard<std.ArrayListUnmanaged(string)>{ ptr: &remote_urls, alloc: allocator };
         for (u of collector.urls.items) {
             if (!bun.strings.hasPrefixComptime(u, "http://") &&
                 !bun.strings.hasPrefixComptime(u, "https://")) continue;
@@ -1333,13 +1382,7 @@ pub struct RunCommand {
         // Heap-allocate each Download so AsyncHTTP.task has a stable
         // address (see RemoteImageDownload doc comment).
         let downloads: std.ArrayListUnmanaged(*RemoteImageDownload) = {};
-        defer {
-            for (d of downloads.items) {
-                d.response_buffer.deinit();
-                allocator.destroy(d);
-            }
-            downloads.deinit(allocator);
-        }
+        const _g_downloads = DownloadsGuard<RemoteImageDownload>{ ptr: &downloads, alloc: allocator };
 
         let done_channel = RemoteImageDownload.DoneChannel.init();
 
@@ -1482,7 +1525,7 @@ pub struct RunCommand {
             }
             if (comptime bun.Environment.isPosix) {
                 let size: std.posix.winsize = undefined;
-                if (std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, @intFromPtr(&size)) == 0) {
+                if (std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, unsafe { @intFromPtr(&size) }) == 0) {
                     if (size.col > 0) break :brk size.col;
                 }
             } else if (comptime bun.Environment.isWindows) {
@@ -1603,7 +1646,7 @@ pub struct RunCommand {
         // TODO: optimize this pass for Windows. we can make better use of system apis available
         let file_path = script_name_to_search;
         {
-            const file = bun.FD.fromStdFile((brk: {
+            let file = bun.FD.fromStdFile((brk: {
                 if (std.fs.path.isAbsolute(script_name_to_search)) {
                     let win_resolver = resolve_path.PosixToWinNormalizer{};
                     let resolved = win_resolver.resolveCWD(script_name_to_search) catch @panic("Could not resolve path");
@@ -1639,7 +1682,7 @@ pub struct RunCommand {
                     break :brk bun.openFileZ(file_pathZ, { mode: .read_only });
                 }
             }) catch return false).makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap() catch return false;
-            defer file.close();
+            const _g_file = CloseGuard<@TypeOf(file)>{ ptr: &file };
 
             switch (bun.sys.fstat(file)) {
                 .result => |stat| {
@@ -1736,7 +1779,7 @@ pub struct RunCommand {
             // read from stdin
             let stack_fallback = std.heap.stackFallback(2048, bun.default_allocator);
             let list = std.Io.Writer.Allocating.init(stack_fallback.get());
-            errdefer list.deinit();
+            let _g_list = OptDeinitGuard<std.Io.Writer.Allocating>{ ptr: &list };
 
             let file_reader = std.fs.File.stdin().readerStreaming([]);
             * = file_reader.interface.streamRemaining(&list.writer) catch return false;
@@ -1764,6 +1807,7 @@ pub struct RunCommand {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 Global.exit(1);
             };
+            _g_list.ptr = null;
             return true;
         }
 
@@ -1779,7 +1823,7 @@ pub struct RunCommand {
 
                     // allocate enough to hold "post${scriptname}"
                     let temp_script_buffer = std.fmt.allocPrint(ctx.allocator, "\x00pre{s}", .{target_name})?;
-                    defer ctx.allocator.free(temp_script_buffer);
+                    const _g_temp_script = FreeGuard<u8>{ alloc: ctx.allocator, slice: temp_script_buffer };
 
                     const package_json_path = root_dir_info.enclosing_package_json.?.source.path.text;
                     const package_json_dir = strings.withoutTrailingSlash(strings.withoutSuffixComptime(package_json_path, "package.json"));

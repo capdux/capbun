@@ -62,144 +62,213 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const production = @import("./production.zig");
 pub const DevServer = @import("./DevServer.zig");
 pub const FrameworkRouter = @import("./FrameworkRouter.zig");
-pub const api_name = "app";
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    if (self.ptr) |p| {
+                        _ = &p;
+                        _ = p.deinit();
+                    }
+                }
+        }
+    };
+}
+
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    if (self.ptr) |p| {
+                        _ = &p;
+                        _ = p.free();
+                    }
+                }
+        }
+    };
+}
+
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    if (self.ptr) |p| {
+                        _ = &p;
+                        _ = p.deref();
+                    }
+                }
+        }
+    };
+}
+
+pub fn FsrSliceDeinitGuard(comptime T: type) type {
+    return struct {
+        slice: []T = &.{},
+        count: usize = 0,
+        active: bool = true,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.active) {
+                    for (cp_mut_slice(&self.slice[0..self.count])) |*fsr| {
+                        _ = &fsr;
+                        _ = (fsr.*).style.deinit();
+                    }
+                }
+        }
+    };
+}
+
 pub const UserOptions = struct {
-    /// This arena contains some miscellaneous allocations at startup
     arena: std.heap.ArenaAllocator,
     allocations: StringRefList,
-
     root: [:0]const u8,
     framework: Framework,
     bundler_options: SplitBundlerOptions,
 
-    pub fn deinit(options: *UserOptions) void {
-        options.arena.deinit();
-        options.allocations.free();
-        if (options.bundler_options.plugin) |p| p.deinit();
+pub fn deinit(self: *UserOptions) void {
+            _ = self.arena.deinit();
+            _ = self.allocations.free();
+            if (self.bundler_options.plugin) |p| {
+                _ = &p;
+                _ = p.deinit();
+            }
     }
 
-    /// Currently, this function must run at the top of the event loop.
-    pub fn fromJS(config: JSValue, global: *jsc.JSGlobalObject) !UserOptions {
-        var arena = std.heap.ArenaAllocator.init(bun.default_allocator);
-        errdefer arena.deinit();
-        const alloc = arena.allocator();
+pub fn fromJS(config: JSValue, global: *jsc.JSGlobalObject) !UserOptions {
+            var arena = std.heap.ArenaAllocator.init(bun.default_allocator);
+            _ = &arena;
+            var _g_arena = DeinitGuard(@TypeOf(arena)){ .ptr = (blk: {
+            break :blk (&arena);
 
-        var allocations = StringRefList.empty;
-        errdefer allocations.free();
-        var bundler_options = SplitBundlerOptions.empty;
+}) };
+            _ = &_g_arena;
+            var ___g_arena_moved = false; _ = &___g_arena_moved;
+            defer if (!___g_arena_moved) { ___g_arena_moved = true; const __T = @TypeOf(_g_arena); if (@typeInfo(__T) == .optional) { if (_g_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_arena; _drop_val.__cp_deinit(); } };
+            const alloc = arena.allocator();
+            var allocations = StringRefList.empty;
+            _ = &allocations;
+            var _g_allocs = FreeGuard(@TypeOf(allocations)){ .ptr = (blk: {
+            break :blk (&allocations);
 
-        if (!config.isObject()) {
-            // Allow users to do `export default { app: 'react' }` for convenience
-            if (config.isString()) {
-                const bunstr = try config.toBunString(global);
-                defer bunstr.deref();
-                const utf8_string = bunstr.toUTF8(bun.default_allocator);
-                defer utf8_string.deinit();
+}) };
+            _ = &_g_allocs;
+            var ___g_allocs_moved = false; _ = &___g_allocs_moved;
+            defer if (!___g_allocs_moved) { ___g_allocs_moved = true; const __T = @TypeOf(_g_allocs); if (@typeInfo(__T) == .optional) { if (_g_allocs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_allocs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_allocs; _drop_val.__cp_deinit(); } };
+            var bundler_options = SplitBundlerOptions.empty;
+            _ = &bundler_options;
+            if ((!config.isObject())) {
+                if (config.isString()) {
+                    var bunstr = try config.toBunString(global);
+                    _ = &bunstr;
+                    var _g_bunstr = DerefGuard(@TypeOf(bunstr)){ .ptr = (blk: {
+                    break :blk (&bunstr);
 
-                if (bun.strings.eql(utf8_string.byteSlice(), "react")) {
-                    const root = bun.getcwdAlloc(alloc) catch |e| switch (e) {
-                        error.OutOfMemory => {
+}) };
+                    _ = &_g_bunstr;
+                    var ___g_bunstr_moved = false; _ = &___g_bunstr_moved;
+                    defer if (!___g_bunstr_moved) { ___g_bunstr_moved = true; const __T = @TypeOf(_g_bunstr); if (@typeInfo(__T) == .optional) { if (_g_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_bunstr; _drop_val.__cp_deinit(); } };
+                    var utf8_string = bunstr.toUTF8(bun.default_allocator);
+                    _ = &utf8_string;
+                    var _g_utf8 = DeinitGuard(@TypeOf(utf8_string)){ .ptr = (blk: {
+                    break :blk (&utf8_string);
+
+}) };
+                    _ = &_g_utf8;
+                    var ___g_utf8_moved = false; _ = &___g_utf8_moved;
+                    defer if (!___g_utf8_moved) { ___g_utf8_moved = true; const __T = @TypeOf(_g_utf8); if (@typeInfo(__T) == .optional) { if (_g_utf8) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_utf8.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_utf8; _drop_val.__cp_deinit(); } };
+                    if (bun.strings.eql(utf8_string.byteSlice(), "react")) {
+                        const root = (blk_catch_0: { break :blk_catch_0 ((bun.getcwdAlloc(alloc)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                             return global.throwOutOfMemory();
-                        },
-                        else => {
+                        } else {
                             return global.throwError(e, "while querying current working directory");
-                        },
-                    };
-
-                    const framework = try Framework.react(alloc);
-
-                    return UserOptions{
-                        .arena = arena,
-                        .allocations = allocations,
-                        .root = root,
-                        .framework = framework,
-                        .bundler_options = bundler_options,
-                    };
+                        } }); });
+                        const framework = try Framework.react(alloc);
+                        _g_allocs.ptr = null;
+                        _g_arena.ptr = null;
+                        return UserOptions{ .arena = arena, .allocations = allocations, .root = root, .framework = framework, .bundler_options = bundler_options };
+                    }
+                }
+                return global.throwInvalidArguments((("'" ++ api_name) ++ "' is not an object"), .{});
+            }
+            if (try config.getOptional(global, "bundlerOptions", JSValue)) |js_options| {
+                _ = &js_options;
+                if (try js_options.getOptional(global, "server", JSValue)) |server_options| {
+                    _ = &server_options;
+                    bundler_options.server = try BuildConfigSubset.fromJS(global, server_options);
+                }
+                if (try js_options.getOptional(global, "client", JSValue)) |client_options| {
+                    _ = &client_options;
+                    bundler_options.client = try BuildConfigSubset.fromJS(global, client_options);
+                }
+                if (try js_options.getOptional(global, "ssr", JSValue)) |ssr_options| {
+                    _ = &ssr_options;
+                    bundler_options.ssr = try BuildConfigSubset.fromJS(global, ssr_options);
                 }
             }
-            return global.throwInvalidArguments("'" ++ api_name ++ "' is not an object", .{});
-        }
-
-        if (try config.getOptional(global, "bundlerOptions", JSValue)) |js_options| {
-            if (try js_options.getOptional(global, "server", JSValue)) |server_options| {
-                bundler_options.server = try BuildConfigSubset.fromJS(global, server_options);
+            const fw_prop_opt = try config.get(global, "framework");
+            if ((fw_prop_opt == null)) {
+                return global.throwInvalidArguments((("'" ++ api_name) ++ "' is missing 'framework'"), .{});
             }
-            if (try js_options.getOptional(global, "client", JSValue)) |client_options| {
-                bundler_options.client = try BuildConfigSubset.fromJS(global, client_options);
+            const fw_prop = fw_prop_opt.?;
+            const framework = try Framework.fromJS(fw_prop, global, (&allocations), (&bundler_options), alloc);
+            const root = (if (try config.getOptional(global, "root", ZigString.Slice)) |slice| allocations.track(slice) else (blk_catch_1: { break :blk_catch_1 ((bun.getcwdAlloc(alloc)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return global.throwOutOfMemory();
+            } else {
+                return global.throwError(e, "while querying current working directory");
+            } }); }));
+            if (try config.get(global, "plugins")) |plugin_array| {
+                _ = &plugin_array;
+                _ = try bundler_options.parsePluginArray(plugin_array, global);
             }
-            if (try js_options.getOptional(global, "ssr", JSValue)) |ssr_options| {
-                bundler_options.ssr = try BuildConfigSubset.fromJS(global, ssr_options);
-            }
-        }
-
-        const framework = try Framework.fromJS(
-            try config.get(global, "framework") orelse {
-                return global.throwInvalidArguments("'" ++ api_name ++ "' is missing 'framework'", .{});
-            },
-            global,
-            &allocations,
-            &bundler_options,
-            alloc,
-        );
-
-        const root = if (try config.getOptional(global, "root", ZigString.Slice)) |slice|
-            allocations.track(slice)
-        else
-            bun.getcwdAlloc(alloc) catch |e| switch (e) {
-                error.OutOfMemory => {
-                    return global.throwOutOfMemory();
-                },
-                else => {
-                    return global.throwError(e, "while querying current working directory");
-                },
-            };
-
-        if (try config.get(global, "plugins")) |plugin_array| {
-            try bundler_options.parsePluginArray(plugin_array, global);
-        }
-
-        return .{
-            .arena = arena,
-            .allocations = allocations,
-            .root = try alloc.dupeZ(u8, root),
-            .framework = framework,
-            .bundler_options = bundler_options,
-        };
+            const duped_root = try alloc.dupeZ(u8, root);
+            _g_allocs.ptr = null;
+            _g_arena.ptr = null;
+            return UserOptions{ .arena = arena, .allocations = allocations, .root = duped_root, .framework = framework, .bundler_options = bundler_options };
     }
 };
-pub const StringRefList = struct {
-    strings: std.ArrayListUnmanaged(ZigString.Slice),
 
-pub fn track(al: *StringRefList, str: ZigString.Slice) []const u8 {
-            _ = bun.handleOom(al.strings.append(bun.default_allocator, str));
-            return str.slice();
-    }
-
-pub fn free(al: *StringRefList) void {
-            for (al.strings.items) |item| {
-                _ = &item;
-                _ = item.deinit();
-            }
-            _ = al.strings.clearAndFree(bun.default_allocator);
-    }
-    pub const empty: StringRefList = .{ .strings = .{} };
-};
 pub const SplitBundlerOptions = struct {
     plugin: ?*Plugin = null,
-    client: BuildConfigSubset = .{},
-    server: BuildConfigSubset = .{},
-    ssr: BuildConfigSubset = .{},
+    client: BuildConfigSubset = BuildConfigSubset{  },
+    server: BuildConfigSubset = BuildConfigSubset{  },
+    ssr: BuildConfigSubset = BuildConfigSubset{  },
 
-pub fn parsePluginArray(opts: *SplitBundlerOptions, plugin_array: JSValue, global: *jsc.JSGlobalObject) bun.JSError!void {
-            if ((opts.plugin == null)) {
-                opts.plugin = Plugin.create(global, .bun);
+pub fn parsePluginArray(self: *SplitBundlerOptions, plugin_array: JSValue, global: *jsc.JSGlobalObject) bun.JSError!void {
+            if ((self.plugin == null)) {
+                self.plugin = Plugin.create(global, .bun);
             }
-            const plugin: *Plugin = opts.plugin.?;
+            const plugin: *Plugin = self.plugin.?;
             const empty_object = JSValue.createEmptyObject(global, 0);
             var iter = try plugin_array.arrayIterator(global);
             _ = &iter;
@@ -207,11 +276,17 @@ pub fn parsePluginArray(opts: *SplitBundlerOptions, plugin_array: JSValue, globa
                 if ((!plugin_config.isObject())) {
                     return global.throwInvalidArguments("Expected plugin to be an object", .{});
                 }
-                if (try plugin_config.getOptional(global, "name", ZigString.Slice)) |slice| {
+                if (try plugin_config.getOptional(global, "name", ZigString.Slice)) |slice_| {
+                    _ = &slice_;
+                    var slice = slice_;
                     _ = &slice;
-                    defer {
-                    _ = slice.deinit();
-                    }
+                    var _g_slice = DeinitGuard(@TypeOf(slice)){ .ptr = (blk: {
+                    break :blk (&slice);
+
+}) };
+                    _ = &_g_slice;
+                    var ___g_slice_moved = false; _ = &___g_slice_moved;
+                    defer if (!___g_slice_moved) { ___g_slice_moved = true; const __T = @TypeOf(_g_slice); if (@typeInfo(__T) == .optional) { if (_g_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_slice; _drop_val.__cp_deinit(); } };
                     if ((slice.len == 0)) {
                         return global.throwInvalidArguments("Expected plugin to have a non-empty name", .{});
                     }
@@ -235,14 +310,62 @@ _ = unreachable;
 .fulfilled => |val| {
 _ = &val;
 },
-.rejected => |err| {
-return global.throwValue(err);
+.rejected => |e| {
+return global.throwValue(e);
 },
 }
                 }
             }
     }
-    pub const empty: SplitBundlerOptions = .{ .plugin = null, .client = .{}, .server = .{}, .ssr = .{} };
+    pub const empty: SplitBundlerOptions = SplitBundlerOptions{ .plugin = null, .client = BuildConfigSubset{  }, .server = BuildConfigSubset{  }, .ssr = BuildConfigSubset{  } };
+};
+
+pub const BakeFileSystemRouterType = struct {
+    root: []const u8,
+    prefix: []const u8,
+    entry_server: []const u8,
+    entry_client: ?[]const u8,
+    ignore_underscores: bool,
+    ignore_dirs: []const []const u8,
+    extensions: []const []const u8,
+    style: FrameworkRouter.Style,
+    allow_layouts: bool,
+};
+
+pub const BakeBuiltInModule = union(enum) {
+    import: []const u8,
+    code: []const u8,
+};
+
+pub const BakeServerComponents = struct {
+    separate_ssr_graph: bool = false,
+    server_runtime_import: []const u8,
+    server_register_client_reference: []const u8 = "registerClientReference",
+    server_register_server_reference: []const u8 = "registerServerReference",
+    client_register_server_reference: []const u8 = "registerServerReference",
+};
+
+pub const BakeReactFastRefresh = struct {
+    import_source: []const u8 = "react-refresh/runtime",
+};
+
+pub const api_name = "app";
+pub const StringRefList = struct {
+    strings: std.ArrayListUnmanaged(ZigString.Slice),
+
+pub fn track(al: *StringRefList, str: ZigString.Slice) []const u8 {
+            _ = bun.handleOom(al.strings.append(bun.default_allocator, str));
+            return str.slice();
+    }
+
+pub fn free(al: *StringRefList) void {
+            for (al.strings.items) |item| {
+                _ = &item;
+                _ = item.deinit();
+            }
+            _ = al.strings.clearAndFree(bun.default_allocator);
+    }
+    pub const empty: StringRefList = .{ .strings = .{} };
 };
 const BuildConfigSubset = struct {
     loader: ?bun.schema.api.LoaderMap = null,
@@ -300,580 +423,197 @@ pub fn fromJS(global: *jsc.JSGlobalObject, js_options: JSValue) bun.JSError!Buil
 pub const Framework = struct {
     is_built_in_react: bool,
     file_system_router_types: []FileSystemRouterType,
-    // static_routers: [][]const u8,
     server_components: ?ServerComponents = null,
     react_fast_refresh: ?ReactFastRefresh = null,
     built_in_modules: bun.StringArrayHashMapUnmanaged(BuiltInModule) = .{},
 
-    /// Bun provides built-in support for using React as a framework.
-    /// Depends on externally provided React
-    ///
-    /// $ bun i react@experimental react-dom@experimental react-refresh@experimental react-server-dom-bun
-    pub fn react(arena: std.mem.Allocator) !Framework {
-        return .{
-            .is_built_in_react = true,
-            .server_components = .{
-                .separate_ssr_graph = true,
-                .server_runtime_import = "react-server-dom-bun/server",
-            },
-            .react_fast_refresh = .{},
-            .file_system_router_types = try arena.dupe(FileSystemRouterType, &.{
-                .{
-                    .root = "pages",
-                    .prefix = "/",
-                    .entry_client = "bun-framework-react/client.tsx",
-                    .entry_server = "bun-framework-react/server.tsx",
-                    .ignore_underscores = true,
-                    .ignore_dirs = &.{ "node_modules", ".git" },
-                    .extensions = &.{ ".tsx", ".jsx" },
-                    .style = .nextjs_pages,
-                    .allow_layouts = true,
-                },
-            }),
-            // .static_routers = try arena.dupe([]const u8, &.{"public"}),
-            .built_in_modules = bun.StringArrayHashMapUnmanaged(BuiltInModule).init(arena, &.{
-                "bun-framework-react/client.tsx",
-                "bun-framework-react/server.tsx",
-                "bun-framework-react/ssr.tsx",
-            }, if (Environment.codegen_embed) &.{
-                .{ .code = @embedFile("./bun-framework-react/client.tsx") },
-                .{ .code = @embedFile("./bun-framework-react/server.tsx") },
-                .{ .code = @embedFile("./bun-framework-react/ssr.tsx") },
-            } else &.{
-                // Cannot use .import because resolution must happen from the user's POV
-                .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/client.tsx") },
-                .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/server.tsx") },
-                .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/ssr.tsx") },
-            }) catch |e| bun.handleOom(e),
-        };
+pub fn react(arena: std.mem.Allocator) !Framework {
+            return .{ .is_built_in_react = true, .server_components = .{ .separate_ssr_graph = true, .server_runtime_import = "react-server-dom-bun/server" }, .react_fast_refresh = .{}, .file_system_router_types = try arena.dupe(FileSystemRouterType, (&.{ .{ .root = "pages", .prefix = "/", .entry_client = "bun-framework-react/client.tsx", .entry_server = "bun-framework-react/server.tsx", .ignore_underscores = true, .ignore_dirs = (&.{ "node_modules", ".git" }), .extensions = (&.{ ".tsx", ".jsx" }), .style = .nextjs_pages, .allow_layouts = true } })), .built_in_modules = (blk_catch_0: { break :blk_catch_0 ((bun.StringArrayHashMapUnmanaged(BuiltInModule).init(arena, (&.{ "bun-framework-react/client.tsx", "bun-framework-react/server.tsx", "bun-framework-react/ssr.tsx" }), (if (Environment.codegen_embed) (&.{ .{ .code = @embedFile("./bun-framework-react/client.tsx") }, .{ .code = @embedFile("./bun-framework-react/server.tsx") }, .{ .code = @embedFile("./bun-framework-react/ssr.tsx") } }) else (&.{ .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/client.tsx") }, .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/server.tsx") }, .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/ssr.tsx") } })))) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); }) };
     }
 
-    /// Default that requires no packages or configuration.
-    /// - If `react-refresh` is installed, enable react fast refresh with it.
-    ///     - Otherwise, if `react` is installed, use a bundled copy of
-    ///     react-refresh so that it still works.
-    /// - If any file system router types are provided, configure using
-    ///   the above react configuration.
-    /// The provided allocator is not stored.
-    pub fn auto(
-        arena: std.mem.Allocator,
-        resolver: *bun.resolver.Resolver,
-        file_system_router_types: []FileSystemRouterType,
-    ) !Framework {
-        var fw: Framework = Framework.none;
-
-        if (file_system_router_types.len > 0) {
-            fw = try react(arena);
-            arena.free(fw.file_system_router_types);
-            fw.file_system_router_types = file_system_router_types;
-        }
-
-        if (resolveOrNull(resolver, "react-refresh/runtime")) |rfr| {
-            fw.react_fast_refresh = .{ .import_source = rfr };
-        } else if (resolveOrNull(resolver, "react")) |_| {
-            fw.react_fast_refresh = .{ .import_source = "react-refresh/runtime/index.js" };
-            try fw.built_in_modules.put(
-                arena,
-                "react-refresh/runtime/index.js",
-                if (Environment.codegen_embed)
-                    .{ .code = @embedFile("node-fallbacks/react-refresh.js") }
-                else
-                    .{ .code = bun.runtimeEmbedFile(.codegen, "node-fallbacks/react-refresh.js") },
-            );
-        }
-
-        return fw;
-    }
-
-    /// Unopiniated default.
-    pub const none: Framework = .{
-        .is_built_in_react = false,
-        .file_system_router_types = &.{},
-        .server_components = null,
-        .react_fast_refresh = null,
-        .built_in_modules = .empty,
-    };
-
-    pub const FileSystemRouterType = struct {
-        root: []const u8,
-        prefix: []const u8,
-        entry_server: []const u8,
-        entry_client: ?[]const u8,
-        ignore_underscores: bool,
-        ignore_dirs: []const []const u8,
-        extensions: []const []const u8,
-        style: FrameworkRouter.Style,
-        allow_layouts: bool,
-    };
-
-    pub const BuiltInModule = union(enum) {
-        import: []const u8,
-        code: []const u8,
-    };
-
-    pub const ServerComponents = struct {
-        separate_ssr_graph: bool = false,
-        server_runtime_import: []const u8,
-        // client_runtime_import: []const u8,
-        server_register_client_reference: []const u8 = "registerClientReference",
-        server_register_server_reference: []const u8 = "registerServerReference",
-        client_register_server_reference: []const u8 = "registerServerReference",
-    };
-
-    const ReactFastRefresh = struct {
-        import_source: []const u8 = "react-refresh/runtime",
-    };
-
-    pub const react_install_command = "bun i react@experimental react-dom@experimental react-server-dom-bun react-refresh@experimental";
-
-    pub fn addReactInstallCommandNote(log: *bun.logger.Log) !void {
-        try log.addMsg(.{
-            .kind = .note,
-            .data = try bun.logger.rangeData(null, bun.logger.Range.none, "Install the built in react integration with \"" ++ react_install_command ++ "\"")
-                .cloneLineText(log.clone_line_text, log.msgs.allocator),
-        });
-    }
-
-    /// Given a Framework configuration, this returns another one with all paths resolved.
-    /// New memory allocated into provided arena.
-    ///
-    /// All resolution errors will happen before returning error.ModuleNotFound
-    /// Errors written into `r.log`
-    pub fn resolve(f: Framework, server: *bun.resolver.Resolver, client: *bun.resolver.Resolver, arena: Allocator) !Framework {
-        var clone = f;
-        var had_errors: bool = false;
-
-        if (clone.react_fast_refresh) |*react_fast_refresh| {
-            f.resolveHelper(client, &react_fast_refresh.import_source, &had_errors, "react refresh runtime");
-        }
-
-        if (clone.server_components) |*sc| {
-            f.resolveHelper(server, &sc.server_runtime_import, &had_errors, "server components runtime");
-            // f.resolveHelper(client, &sc.client_runtime_import, &had_errors);
-        }
-
-        for (clone.file_system_router_types) |*fsr| {
-            fsr.root = try arena.dupe(u8, bun.path.joinAbs(server.fs.top_level_dir, .auto, fsr.root));
-            if (fsr.entry_client) |*entry_client| f.resolveHelper(client, entry_client, &had_errors, "client side entrypoint");
-            f.resolveHelper(client, &fsr.entry_server, &had_errors, "server side entrypoint");
-        }
-
-        if (had_errors) return error.ModuleNotFound;
-
-        return clone;
-    }
-
-    inline fn resolveHelper(f: *const Framework, r: *bun.resolver.Resolver, path: *[]const u8, had_errors: *bool, desc: []const u8) void {
-        if (f.built_in_modules.get(path.*)) |mod| {
-            switch (mod) {
-                .import => |p| path.* = p,
-                .code => {},
+pub fn auto(arena: std.mem.Allocator, resolver: *bun.resolver.Resolver, file_system_router_types: []FileSystemRouterType) !Framework {
+            var fw: Framework = Framework.none;
+            _ = &fw;
+            if ((file_system_router_types.len > 0)) {
+                fw = try react(arena);
+                _ = arena.free(fw.file_system_router_types);
+                fw.file_system_router_types = file_system_router_types;
             }
-            return;
-        }
+            if (resolveOrNull(resolver, "react-refresh/runtime")) |rfr| {
+                _ = &rfr;
+                fw.react_fast_refresh = .{ .import_source = rfr };
+            } else {
+                if (resolveOrNull(resolver, "react")) |_| {
+                    fw.react_fast_refresh = .{ .import_source = "react-refresh/runtime/index.js" };
+                    _ = try fw.built_in_modules.put(arena, "react-refresh/runtime/index.js", (if (Environment.codegen_embed) .{ .code = @embedFile("node-fallbacks/react-refresh.js") } else .{ .code = bun.runtimeEmbedFile(.codegen, "node-fallbacks/react-refresh.js") }));
+                }
+            }
+            return fw;
+    }
 
-        var result = r.resolve(r.fs.top_level_dir, path.*, .stmt) catch |e| {
-            bun.Output.err(e, "Failed to resolve '{s}' for framework ({s})", .{ path.*, desc });
+pub fn addReactInstallCommandNote(log: *bun.logger.Log) !void {
+            _ = try log.addMsg(.{ .kind = .note, .data = try bun.logger.rangeData(null, bun.logger.Range.none, (("Install the built in react integration with \"" ++ react_install_command) ++ "\"")).cloneLineText(log.clone_line_text, log.msgs.allocator) });
+    }
+
+pub fn resolve(f: Framework, server: *bun.resolver.Resolver, client: *bun.resolver.Resolver, arena: Allocator) !Framework {
+            var clone = f;
+            _ = &clone;
+            var had_errors: bool = false;
+            _ = &had_errors;
+            if (clone.react_fast_refresh) |*react_fast_refresh| {
+                _ = &react_fast_refresh;
+                _ = f.resolveHelper(client, (&(react_fast_refresh.*).import_source), (&had_errors), "react refresh runtime");
+            }
+            if (clone.server_components) |*sc| {
+                _ = &sc;
+                _ = f.resolveHelper(server, (&(sc.*).server_runtime_import), (&had_errors), "server components runtime");
+            }
+            for (clone.file_system_router_types) |*fsr| {
+                _ = &fsr;
+                fsr.root = try arena.dupe(u8, bun.path.joinAbs(server.fs.top_level_dir, .auto, fsr.root));
+                if ((fsr.entry_client != null)) {
+                    _ = f.resolveHelper(client, (&fsr.entry_client.?), (&had_errors), "client side entrypoint");
+                }
+                _ = f.resolveHelper(client, (&fsr.entry_server), (&had_errors), "server side entrypoint");
+            }
+            if (had_errors) {
+                return error.ModuleNotFound;
+            }
+            return clone;
+    }
+
+pub inline fn resolveHelper(f: *const Framework, r: *bun.resolver.Resolver, path: *[]const u8, had_errors: *bool, desc: []const u8) void {
+            if (f.built_in_modules.get(path.*)) |mod| {
+                _ = &mod;
+                switch (mod) {
+.import => |p| {
+path.* = p;
+},
+.code => {
+
+},
+}
+                return;
+            }
+            var result = (blk_catch_1: { break :blk_catch_1 ((r.resolve(r.fs.top_level_dir, path.*, .stmt)) catch |e| { _ = &e; _ = bun.Output.err(e, "Failed to resolve '{s}' for framework ({s})", .{ path.*, desc });
             had_errors.* = true;
-            return;
-        };
-        path.* = result.path().?.text;
+            return; }); });
+            _ = &result;
+            path.* = (result.path()).?.text;
     }
 
-    inline fn resolveOrNull(r: *bun.resolver.Resolver, path: []const u8) ?[]const u8 {
-        return (r.resolve(r.fs.top_level_dir, path, .stmt) catch {
-            r.log.reset();
-            return null;
-        }).pathConst().?.text;
+pub inline fn resolveOrNull(r: *bun.resolver.Resolver, path: []const u8) ?[]const u8 {
+            return ((blk_catch_2: { break :blk_catch_2 ((r.resolve(r.fs.top_level_dir, path, .stmt)) catch |__ce_2| { _ = &__ce_2; _ = r.log.reset();
+            return null; }); }).pathConst()).?.text;
     }
 
-    fn fromJS(
-        opts: JSValue,
-        global: *jsc.JSGlobalObject,
-        refs: *StringRefList,
-        bundler_options: *SplitBundlerOptions,
-        arena: Allocator,
-    ) bun.JSError!Framework {
-        if (opts.isString()) {
-            const str = try opts.toBunString(global);
-            defer str.deref();
+pub fn fromJS(opts: JSValue, global: *jsc.JSGlobalObject, refs: *StringRefList, bundler_options: *SplitBundlerOptions, arena: Allocator) bun.JSError!Framework {
+            return frameworkFromJS(opts, global, refs, bundler_options, arena);
+    }
 
-            // Deprecated
-            if (str.eqlComptime("react-server-components")) {
-                bun.Output.warn("deprecation notice: 'react-server-components' will be renamed to 'react'", .{});
-                return Framework.react(arena);
+pub fn initTranspiler(framework: *Framework, arena: std.mem.Allocator, log: *bun.logger.Log, mode: Mode, renderer: Graph, out: *bun.transpiler.Transpiler, bundler_options: *const BuildConfigSubset) !void {
+            const source_map: bun.options.SourceMapOption = (switch (mode) {
+.development => .external,
+else => .none,
+});
+            return initTranspilerWithOptions(framework, arena, log, mode, renderer, out, bundler_options, source_map, null, null, null);
+    }
+
+pub fn initTranspilerWithOptions(framework: *Framework, arena: std.mem.Allocator, log: *bun.logger.Log, mode: Mode, renderer: Graph, out: *bun.transpiler.Transpiler, bundler_options: *const BuildConfigSubset, source_map: bun.options.SourceMapOption, minify_whitespace: ?bool, minify_syntax: ?bool, minify_identifiers: ?bool) !void {
+            const JSAst = bun.ast;
+            var ast_memory_allocator: JSAst.ASTMemoryAllocator = undefined;
+            _ = &ast_memory_allocator;
+            _ = ast_memory_allocator.initWithoutStack(arena);
+            var ast_scope = JSAst.ASTMemoryAllocator.Scope{ .previous = JSAst.Stmt.Data.Store.memory_allocator, .current = (&ast_memory_allocator) };
+            _ = &ast_scope;
+            _ = ast_scope.enter();
+            defer {
+            _ = ast_scope.exit();
             }
-
-            if (str.eqlComptime("react")) {
-                return Framework.react(arena);
+            out.* = try bun.Transpiler.init(arena, log, std.mem.zeroInit(bun.schema.api.TransformOptions, .{}), null);
+            out.options.target = (switch (renderer) {
+.client => .browser,
+.server, .ssr => .bun,
+});
+            out.options.public_path = (switch (renderer) {
+.client => DevServer.client_prefix,
+.server, .ssr => "",
+});
+            out.options.entry_points = (&.{});
+            out.options.log = log;
+            out.options.output_format = (switch (mode) {
+.development => .internal_bake_dev,
+.production_dynamic, .production_static => .esm,
+});
+            out.options.out_extensions = bun.StringHashMap([]const u8).init(out.allocator);
+            out.options.hot_module_reloading = (mode == .development);
+            out.options.code_splitting = (mode != .development);
+            out.options.output_dir = "";
+            out.options.react_fast_refresh = (((mode == .development) and (renderer == .client)) and (framework.react_fast_refresh != null));
+            out.options.server_components = (framework.server_components != null);
+            out.options.conditions = try bun.options.ESMConditions.init(arena, out.options.target.defaultConditions(), out.options.target.isServerSide(), bundler_options.conditions.keys());
+            if (((renderer == .server) and (framework.server_components != null))) {
+                _ = try out.options.conditions.appendSlice((&.{ "react-server" }));
             }
-        }
-
-        if (!opts.isObject()) {
-            return global.throwInvalidArguments("Framework must be an object", .{});
-        }
-
-        if (try opts.get(global, "serverEntryPoint") != null) {
-            bun.Output.warn("deprecation notice: 'framework.serverEntryPoint' has been replaced with 'fileSystemRouterTypes[n].serverEntryPoint'", .{});
-        }
-        if (try opts.get(global, "clientEntryPoint") != null) {
-            bun.Output.warn("deprecation notice: 'framework.clientEntryPoint' has been replaced with 'fileSystemRouterTypes[n].clientEntryPoint'", .{});
-        }
-
-        const react_fast_refresh: ?ReactFastRefresh = brk: {
-            const rfr: JSValue = try opts.get(global, "reactFastRefresh") orelse
-                break :brk null;
-
-            if (rfr == .true) break :brk .{};
-            if (rfr == .false or rfr.isUndefinedOrNull()) break :brk null;
-
-            if (!rfr.isObject()) {
-                return global.throwInvalidArguments("'framework.reactFastRefresh' must be an object or 'true'", .{});
+            if ((mode == .development)) {
+                _ = try out.options.conditions.appendSlice((&.{ "development" }));
             }
-
-            const prop = try rfr.get(global, "importSource") orelse {
-                return global.throwInvalidArguments("'framework.reactFastRefresh' is missing 'importSource'", .{});
-            };
-
-            const str = try prop.toBunString(global);
-            defer str.deref();
-
-            break :brk .{
-                .import_source = refs.track(str.toUTF8(arena)),
-            };
-        };
-        const server_components: ?ServerComponents = sc: {
-            const sc: JSValue = try opts.get(global, "serverComponents") orelse
-                break :sc null;
-            if (sc == .false or sc.isUndefinedOrNull()) break :sc null;
-
-            if (!sc.isObject()) {
-                return global.throwInvalidArguments("'framework.serverComponents' must be an object or 'undefined'", .{});
+            if (((renderer == .server) or (renderer == .ssr))) {
+                _ = try out.options.conditions.appendSlice((&.{ "node" }));
             }
-
-            break :sc .{
-                .separate_ssr_graph = brk: {
-                    // Intentionally not using a truthiness check
-                    const prop = try sc.getOptional(global, "separateSSRGraph", JSValue) orelse {
-                        return global.throwInvalidArguments("Missing 'framework.serverComponents.separateSSRGraph'", .{});
-                    };
-                    if (prop == .true) break :brk true;
-                    if (prop == .false) break :brk false;
-                    return global.throwInvalidArguments("'framework.serverComponents.separateSSRGraph' must be a boolean", .{});
-                },
-                .server_runtime_import = refs.track(
-                    try sc.getOptional(global, "serverRuntimeImportSource", ZigString.Slice) orelse {
-                        return global.throwInvalidArguments("Missing 'framework.serverComponents.serverRuntimeImportSource'", .{});
-                    },
-                ),
-                .server_register_client_reference = if (try sc.getOptional(
-                    global,
-                    "serverRegisterClientReferenceExport",
-                    ZigString.Slice,
-                )) |slice|
-                    refs.track(slice)
-                else
-                    "registerClientReference",
-            };
-        };
-        const built_in_modules: bun.StringArrayHashMapUnmanaged(BuiltInModule) = built_in_modules: {
-            const array = try opts.getArray(global, "builtInModules") orelse
-                break :built_in_modules .{};
-
-            const len = try array.getLength(global);
-            var files: bun.StringArrayHashMapUnmanaged(BuiltInModule) = .{};
-            try files.ensureTotalCapacity(arena, len);
-
-            var it = try array.arrayIterator(global);
-            var i: usize = 0;
-            while (try it.next()) |file| : (i += 1) {
-                if (!file.isObject()) {
-                    return global.throwInvalidArguments("'builtInModules[{d}]' is not an object", .{i});
+            out.options.production = (mode != .development);
+            out.options.tree_shaking = (mode != .development);
+            out.options.minify_syntax = ((minify_syntax) orelse ((mode != .development)));
+            out.options.minify_identifiers = ((minify_identifiers) orelse ((mode != .development)));
+            out.options.minify_whitespace = ((minify_whitespace) orelse ((mode != .development)));
+            out.options.css_chunking = true;
+            out.options.framework = framework;
+            out.options.inline_entrypoint_import_meta_main = true;
+            if (bundler_options.ignoreDCEAnnotations) |ignore| {
+                _ = &ignore;
+                out.options.ignore_dce_annotations = ignore;
+            }
+            out.options.source_map = source_map;
+            if ((bundler_options.env != ._none)) {
+                out.options.env.behavior = bundler_options.env;
+                out.options.env.prefix = ((bundler_options.env_prefix) orelse (""));
+            }
+            out.resolver.opts = out.options;
+            _ = out.configureLinker();
+            _ = try out.configureDefines();
+            out.options.jsx.development = (mode == .development);
+            _ = try addImportMetaDefines(arena, out.options.define, mode, (switch (renderer) {
+.client => .client,
+.server, .ssr => .server,
+}));
+            if (((bundler_options.define.keys.len + bundler_options.drop.count()) > 0)) {
+                for (bundler_options.define.keys, bundler_options.define.values) |k, v| {
+                    _ = &k;
+                    _ = &v;
+                    const parsed = try bun.options.Define.Data.parse(k, v, false, false, log, arena);
+                    _ = try out.options.define.insert(arena, k, parsed);
                 }
-
-                const path = try getOptionalString(file, global, "import", refs, arena) orelse {
-                    return global.throwInvalidArguments("'builtInModules[{d}]' is missing 'import'", .{i});
-                };
-
-                const value: BuiltInModule = if (try getOptionalString(file, global, "path", refs, arena)) |str|
-                    .{ .import = str }
-                else if (try getOptionalString(file, global, "code", refs, arena)) |str|
-                    .{ .code = str }
-                else
-                    return global.throwInvalidArguments("'builtInModules[{d}]' needs either 'path' or 'code'", .{i});
-
-                files.putAssumeCapacity(path, value);
-            }
-
-            break :built_in_modules files;
-        };
-        const file_system_router_types: []FileSystemRouterType = brk: {
-            const array: JSValue = try opts.getArray(global, "fileSystemRouterTypes") orelse {
-                return global.throwInvalidArguments("Missing 'framework.fileSystemRouterTypes'", .{});
-            };
-            const len = try array.getLength(global);
-            if (len > 256) {
-                return global.throwInvalidArguments("Framework can only define up to 256 file-system router types", .{});
-            }
-            const file_system_router_types = try arena.alloc(FileSystemRouterType, len);
-
-            var it = try array.arrayIterator(global);
-            var i: usize = 0;
-            errdefer for (file_system_router_types[0..i]) |*fsr| fsr.style.deinit();
-            while (try it.next()) |fsr_opts| : (i += 1) {
-                const root = try getOptionalString(fsr_opts, global, "root", refs, arena) orelse {
-                    return global.throwInvalidArguments("'fileSystemRouterTypes[{d}]' is missing 'root'", .{i});
-                };
-                const server_entry_point = try getOptionalString(fsr_opts, global, "serverEntryPoint", refs, arena) orelse {
-                    return global.throwInvalidArguments("'fileSystemRouterTypes[{d}]' is missing 'serverEntryPoint'", .{i});
-                };
-                const client_entry_point = try getOptionalString(fsr_opts, global, "clientEntryPoint", refs, arena);
-                const prefix = try getOptionalString(fsr_opts, global, "prefix", refs, arena) orelse "/";
-                const ignore_underscores = try fsr_opts.getBooleanStrict(global, "ignoreUnderscores") orelse false;
-                const layouts = try fsr_opts.getBooleanStrict(global, "layouts") orelse false;
-
-                var style = try FrameworkRouter.Style.fromJS(try fsr_opts.get(global, "style") orelse {
-                    return global.throwInvalidArguments("'fileSystemRouterTypes[{d}]' is missing 'style'", .{i});
-                }, global);
-                errdefer style.deinit();
-
-                const extensions: []const []const u8 = if (try fsr_opts.get(global, "extensions")) |exts_js| exts: {
-                    if (exts_js.isString()) {
-                        const str = try exts_js.toSlice(global, arena);
-                        defer str.deinit();
-                        if (bun.strings.eqlComptime(str.slice(), "*")) {
-                            break :exts &.{};
-                        }
-                    } else if (exts_js.isArray()) {
-                        var it_2 = try exts_js.arrayIterator(global);
-                        var i_2: usize = 0;
-                        const extensions = try arena.alloc([]const u8, try exts_js.getLength(global));
-                        while (try it_2.next()) |array_item| : (i_2 += 1) {
-                            const slice = refs.track(try array_item.toSlice(global, arena));
-                            if (bun.strings.eqlComptime(slice, "*"))
-                                return global.throwInvalidArguments("'extensions' cannot include \"*\" as an extension. Pass \"*\" instead of the array.", .{});
-
-                            if (slice.len == 0) {
-                                return global.throwInvalidArguments("'extensions' cannot include \"\" as an extension.", .{});
-                            }
-
-                            extensions[i_2] = if (slice[0] == '.')
-                                slice
-                            else
-                                try std.mem.concat(arena, u8, &.{ ".", slice });
-                        }
-                        break :exts extensions;
+                for (bundler_options.drop.keys()) |drop_item| {
+                    _ = &drop_item;
+                    if ((drop_item.len > 0)) {
+                        const parsed = try bun.options.Define.Data.parse(drop_item, "", true, true, log, arena);
+                        _ = try out.options.define.insert(arena, drop_item, parsed);
                     }
-
-                    return global.throwInvalidArguments("'extensions' must be an array of strings or \"*\" for all extensions", .{});
-                } else &.{ ".jsx", ".tsx", ".js", ".ts", ".cjs", ".cts", ".mjs", ".mts" };
-
-                const ignore_dirs: []const []const u8 = if (try fsr_opts.get(global, "ignoreDirs")) |exts_js| exts: {
-                    if (exts_js.isArray()) {
-                        var it_2 = try array.arrayIterator(global);
-                        var i_2: usize = 0;
-                        const dirs = try arena.alloc([]const u8, len);
-                        while (try it_2.next()) |array_item| : (i_2 += 1) {
-                            dirs[i_2] = refs.track(try array_item.toSlice(global, arena));
-                        }
-                        break :exts dirs;
-                    }
-
-                    return global.throwInvalidArguments("'ignoreDirs' must be an array of strings or \"*\" for all extensions", .{});
-                } else &.{ ".git", "node_modules" };
-
-                file_system_router_types[i] = .{
-                    .root = root,
-                    .prefix = prefix,
-                    .style = style,
-                    .entry_server = server_entry_point,
-                    .entry_client = client_entry_point,
-                    .ignore_underscores = ignore_underscores,
-                    .extensions = extensions,
-                    .ignore_dirs = ignore_dirs,
-                    .allow_layouts = layouts,
-                };
-            }
-
-            break :brk file_system_router_types;
-        };
-        errdefer for (file_system_router_types) |*fsr| fsr.style.deinit();
-
-        const framework: Framework = .{
-            .is_built_in_react = false,
-            .file_system_router_types = file_system_router_types,
-            .react_fast_refresh = react_fast_refresh,
-            .server_components = server_components,
-            .built_in_modules = built_in_modules,
-        };
-
-        if (try opts.getOptional(global, "plugins", JSValue)) |plugin_array| {
-            try bundler_options.parsePluginArray(plugin_array, global);
-        }
-
-        return framework;
-    }
-
-    pub fn initTranspiler(
-        framework: *Framework,
-        arena: std.mem.Allocator,
-        log: *bun.logger.Log,
-        mode: Mode,
-        renderer: Graph,
-        out: *bun.transpiler.Transpiler,
-        bundler_options: *const BuildConfigSubset,
-    ) !void {
-        const source_map: bun.options.SourceMapOption = switch (mode) {
-            // Source maps must always be external, as DevServer special cases
-            // the linking and part of the generation of these. It also relies
-            // on source maps always being enabled.
-            .development => .external,
-            // TODO: follow user configuration
-            else => .none,
-        };
-
-        return initTranspilerWithOptions(
-            framework,
-            arena,
-            log,
-            mode,
-            renderer,
-            out,
-            bundler_options,
-            source_map,
-            null,
-            null,
-            null,
-        );
-    }
-
-    pub fn initTranspilerWithOptions(
-        framework: *Framework,
-        arena: std.mem.Allocator,
-        log: *bun.logger.Log,
-        mode: Mode,
-        renderer: Graph,
-        out: *bun.transpiler.Transpiler,
-        bundler_options: *const BuildConfigSubset,
-        source_map: bun.options.SourceMapOption,
-        minify_whitespace: ?bool,
-        minify_syntax: ?bool,
-        minify_identifiers: ?bool,
-    ) !void {
-        const JSAst = bun.ast;
-
-        var ast_memory_allocator: JSAst.ASTMemoryAllocator = undefined;
-        ast_memory_allocator.initWithoutStack(arena);
-        var ast_scope = JSAst.ASTMemoryAllocator.Scope{
-            .previous = JSAst.Stmt.Data.Store.memory_allocator,
-            .current = &ast_memory_allocator,
-        };
-        ast_scope.enter();
-        defer ast_scope.exit();
-
-        out.* = try bun.Transpiler.init(
-            arena,
-            log,
-            std.mem.zeroInit(bun.schema.api.TransformOptions, .{}),
-            null,
-        );
-
-        out.options.target = switch (renderer) {
-            .client => .browser,
-            .server, .ssr => .bun,
-        };
-        out.options.public_path = switch (renderer) {
-            .client => DevServer.client_prefix,
-            .server, .ssr => "",
-        };
-        out.options.entry_points = &.{};
-        out.options.log = log;
-        out.options.output_format = switch (mode) {
-            .development => .internal_bake_dev,
-            .production_dynamic, .production_static => .esm,
-        };
-        out.options.out_extensions = bun.StringHashMap([]const u8).init(out.allocator);
-        out.options.hot_module_reloading = mode == .development;
-        out.options.code_splitting = mode != .development;
-
-        // force disable filesystem output, even though bundle_v2
-        // is special cased to return before that code is reached.
-        out.options.output_dir = "";
-
-        // framework configuration
-        out.options.react_fast_refresh = mode == .development and renderer == .client and framework.react_fast_refresh != null;
-        out.options.server_components = framework.server_components != null;
-
-        out.options.conditions = try bun.options.ESMConditions.init(
-            arena,
-            out.options.target.defaultConditions(),
-            out.options.target.isServerSide(),
-            bundler_options.conditions.keys(),
-        );
-        if (renderer == .server and framework.server_components != null) {
-            try out.options.conditions.appendSlice(&.{"react-server"});
-        }
-        if (mode == .development) {
-            // Support `esm-env` package using this condition.
-            try out.options.conditions.appendSlice(&.{"development"});
-        }
-        // Ensure "node" condition is included for server-side rendering
-        // This helps with package.json imports field resolution
-        if (renderer == .server or renderer == .ssr) {
-            try out.options.conditions.appendSlice(&.{"node"});
-        }
-
-        out.options.production = mode != .development;
-        out.options.tree_shaking = mode != .development;
-        out.options.minify_syntax = minify_syntax orelse (mode != .development);
-        out.options.minify_identifiers = minify_identifiers orelse (mode != .development);
-        out.options.minify_whitespace = minify_whitespace orelse (mode != .development);
-        out.options.css_chunking = true;
-        out.options.framework = framework;
-        out.options.inline_entrypoint_import_meta_main = true;
-        if (bundler_options.ignoreDCEAnnotations) |ignore|
-            out.options.ignore_dce_annotations = ignore;
-
-        out.options.source_map = source_map;
-        if (bundler_options.env != ._none) {
-            out.options.env.behavior = bundler_options.env;
-            out.options.env.prefix = bundler_options.env_prefix orelse "";
-        }
-        out.resolver.opts = out.options;
-
-        out.configureLinker();
-        try out.configureDefines();
-
-        out.options.jsx.development = mode == .development;
-
-        try addImportMetaDefines(arena, out.options.define, mode, switch (renderer) {
-            .client => .client,
-            .server, .ssr => .server,
-        });
-
-        if ((bundler_options.define.keys.len + bundler_options.drop.count()) > 0) {
-            for (bundler_options.define.keys, bundler_options.define.values) |k, v| {
-                const parsed = try bun.options.Define.Data.parse(k, v, false, false, log, arena);
-                try out.options.define.insert(arena, k, parsed);
-            }
-
-            for (bundler_options.drop.keys()) |drop_item| {
-                if (drop_item.len > 0) {
-                    const parsed = try bun.options.Define.Data.parse(drop_item, "", true, true, log, arena);
-                    try out.options.define.insert(arena, drop_item, parsed);
                 }
             }
-        }
-
-        if (mode != .development) {
-            // Hide information about the source repository, at the cost of debugging quality.
-            out.options.entry_naming = "_bun/[hash].[ext]";
-            out.options.chunk_naming = "_bun/[hash].[ext]";
-            out.options.asset_naming = "_bun/[hash].[ext]";
-        }
-
-        out.resolver.opts = out.options;
+            if ((mode != .development)) {
+                out.options.entry_naming = "_bun/[hash].[ext]";
+                out.options.chunk_naming = "_bun/[hash].[ext]";
+                out.options.asset_naming = "_bun/[hash].[ext]";
+            }
+            out.resolver.opts = out.options;
     }
+    pub const none: Framework = .{ .is_built_in_react = false, .file_system_router_types = (&.{}), .server_components = null, .react_fast_refresh = null, .built_in_modules = .empty };
+    pub const FileSystemRouterType = BakeFileSystemRouterType;
+    pub const BuiltInModule = BakeBuiltInModule;
+    pub const ServerComponents = BakeServerComponents;
+    const ReactFastRefresh = BakeReactFastRefresh;
+    pub const react_install_command = "bun i react@experimental react-dom@experimental react-server-dom-bun react-refresh@experimental";
 };
 pub const HmrRuntime = struct {
     code: [:0]const u8,
@@ -909,7 +649,7 @@ pub const server_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.init
 pub const client_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.initForKitBuiltIn("bun", "bake/client"), .contents = "", .index = bun.ast.Index.bake_client_data };
 pub const PatternBuffer = struct {
     bytes: bun.PathBuffer,
-    i: std.math.IntFittingRange(0,@sizeOf(bun.PathBuffer)),
+    i: std.math.IntFittingRange(0, @sizeOf(bun.PathBuffer)),
 
 pub fn prepend(pb: *PatternBuffer, chunk: []const u8) void {
             _ = bun.assert((pb.i >= chunk.len));
@@ -947,8 +687,271 @@ const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const Plugin = jsc.API.JSBundler.Plugin;
 
+pub fn frameworkFromJS(opts: JSValue, global: *jsc.JSGlobalObject, refs: *StringRefList, bundler_options: *SplitBundlerOptions, arena: Allocator) bun.JSError!Framework {
+        if (opts.isString()) {
+            var str = try opts.toBunString(global);
+            _ = &str;
+            var _g_str = DerefGuard(@TypeOf(str)){ .ptr = (blk: {
+            break :blk (&str);
+
+}) };
+            _ = &_g_str;
+            var ___g_str_moved = false; _ = &___g_str_moved;
+            defer if (!___g_str_moved) { ___g_str_moved = true; const __T = @TypeOf(_g_str); if (@typeInfo(__T) == .optional) { if (_g_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_str; _drop_val.__cp_deinit(); } };
+            if (str.eqlComptime("react-server-components")) {
+                _ = bun.Output.warn("deprecation notice: 'react-server-components' will be renamed to 'react'", .{});
+                return Framework.react(arena);
+            }
+            if (str.eqlComptime("react")) {
+                return Framework.react(arena);
+            }
+        }
+        if ((!opts.isObject())) {
+            return global.throwInvalidArguments("Framework must be an object", .{});
+        }
+        if ((try opts.get(global, "serverEntryPoint") != null)) {
+            _ = bun.Output.warn("deprecation notice: 'framework.serverEntryPoint' has been replaced with 'fileSystemRouterTypes[n].serverEntryPoint'", .{});
+        }
+        if ((try opts.get(global, "clientEntryPoint") != null)) {
+            _ = bun.Output.warn("deprecation notice: 'framework.clientEntryPoint' has been replaced with 'fileSystemRouterTypes[n].clientEntryPoint'", .{});
+        }
+        var react_fast_refresh: ?BakeReactFastRefresh = null;
+        _ = &react_fast_refresh;
+        _ = brk: {
+        const rfr_opt = try opts.get(global, "reactFastRefresh");
+        if ((rfr_opt == null)) {
+            break :brk;
+        }
+        const rfr: JSValue = rfr_opt.?;
+        if ((rfr == .true)) {
+            react_fast_refresh = BakeReactFastRefresh{  };
+            break :brk;
+        }
+        if (((rfr == .false) or rfr.isUndefinedOrNull())) {
+            break :brk;
+        }
+        if ((!rfr.isObject())) {
+            return global.throwInvalidArguments("'framework.reactFastRefresh' must be an object or 'true'", .{});
+        }
+        const prop_opt = try rfr.get(global, "importSource");
+        if ((prop_opt == null)) {
+            return global.throwInvalidArguments("'framework.reactFastRefresh' is missing 'importSource'", .{});
+        }
+        const prop = prop_opt.?;
+        var str = try prop.toBunString(global);
+        _ = &str;
+        var _g_str = DerefGuard(@TypeOf(str)){ .ptr = (blk: {
+        break :blk (&str);
+
+}) };
+        _ = &_g_str;
+        var ___g_str_moved = false; _ = &___g_str_moved;
+        defer if (!___g_str_moved) { ___g_str_moved = true; const __T = @TypeOf(_g_str); if (@typeInfo(__T) == .optional) { if (_g_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_str; _drop_val.__cp_deinit(); } };
+        react_fast_refresh = BakeReactFastRefresh{ .import_source = refs.track(str.toUTF8(arena)) };
+};
+        var server_components: ?BakeServerComponents = null;
+        _ = &server_components;
+        _ = sc: {
+        const sc_opt = try opts.get(global, "serverComponents");
+        if ((sc_opt == null)) {
+            break :sc;
+        }
+        const sc: JSValue = sc_opt.?;
+        if (((sc == .false) or sc.isUndefinedOrNull())) {
+            break :sc;
+        }
+        if ((!sc.isObject())) {
+            return global.throwInvalidArguments("'framework.serverComponents' must be an object or 'undefined'", .{});
+        }
+        const ssr_prop_opt = try sc.getOptional(global, "separateSSRGraph", JSValue);
+        if ((ssr_prop_opt == null)) {
+            return global.throwInvalidArguments("Missing 'framework.serverComponents.separateSSRGraph'", .{});
+        }
+        const ssr_prop = ssr_prop_opt.?;
+        var separate_ssr: bool = false;
+        _ = &separate_ssr;
+        if ((ssr_prop == .true)) {
+            separate_ssr = true;
+        } else {
+            if ((ssr_prop == .false)) {
+                separate_ssr = false;
+            } else {
+                return global.throwInvalidArguments("'framework.serverComponents.separateSSRGraph' must be a boolean", .{});
+            }
+        }
+        const runtime_opt = try sc.getOptional(global, "serverRuntimeImportSource", ZigString.Slice);
+        if ((runtime_opt == null)) {
+            return global.throwInvalidArguments("Missing 'framework.serverComponents.serverRuntimeImportSource'", .{});
+        }
+        const runtime_slice = runtime_opt.?;
+        var register_ref: []const u8 = "registerClientReference";
+        _ = &register_ref;
+        if (try sc.getOptional(global, "serverRegisterClientReferenceExport", ZigString.Slice)) |slice| {
+            _ = &slice;
+            register_ref = refs.track(slice);
+        }
+        server_components = BakeServerComponents{ .separate_ssr_graph = separate_ssr, .server_runtime_import = refs.track(runtime_slice), .server_register_client_reference = register_ref };
+};
+        var built_in_modules: bun.StringArrayHashMapUnmanaged(BakeBuiltInModule) = .empty;
+        _ = &built_in_modules;
+        if (try opts.getArray(global, "builtInModules")) |array| {
+            _ = &array;
+            const len = try array.getLength(global);
+            _ = try built_in_modules.ensureTotalCapacity(arena, len);
+            var it = try array.arrayIterator(global);
+            _ = &it;
+            var i: usize = 0;
+            _ = &i;
+            while (try it.next()) |file| : (i = (i + 1)) {
+                if ((!file.isObject())) {
+                    return global.throwInvalidArguments("'builtInModules[{d}]' is not an object", .{ i });
+                }
+                const path_opt = try getOptionalString(file, global, "import", refs, arena);
+                if ((path_opt == null)) {
+                    return global.throwInvalidArguments("'builtInModules[{d}]' is missing 'import'", .{ i });
+                }
+                const path = path_opt.?;
+                if (try getOptionalString(file, global, "path", refs, arena)) |str| {
+                    _ = &str;
+                    _ = built_in_modules.putAssumeCapacity(path, .{ .import = str });
+                } else {
+                    if (try getOptionalString(file, global, "code", refs, arena)) |str| {
+                        _ = &str;
+                        _ = built_in_modules.putAssumeCapacity(path, .{ .code = str });
+                    } else {
+                        return global.throwInvalidArguments("'builtInModules[{d}]' needs either 'path' or 'code'", .{ i });
+                    }
+                }
+            }
+        }
+        var _g_fsr_slice = FsrSliceDeinitGuard(BakeFileSystemRouterType){  };
+        _ = &_g_fsr_slice;
+        var ___g_fsr_slice_moved = false; _ = &___g_fsr_slice_moved;
+        defer if (!___g_fsr_slice_moved) { ___g_fsr_slice_moved = true; const __T = @TypeOf(_g_fsr_slice); if (@typeInfo(__T) == .optional) { if (_g_fsr_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_fsr_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_fsr_slice; _drop_val.__cp_deinit(); } };
+        const fsr_array_opt = try opts.getArray(global, "fileSystemRouterTypes");
+        if ((fsr_array_opt == null)) {
+            return global.throwInvalidArguments("Missing 'framework.fileSystemRouterTypes'", .{});
+        }
+        const fsr_array: JSValue = fsr_array_opt.?;
+        const fsr_len = try fsr_array.getLength(global);
+        if ((fsr_len > 256)) {
+            return global.throwInvalidArguments("Framework can only define up to 256 file-system router types", .{});
+        }
+        var file_system_router_types = try arena.alloc(BakeFileSystemRouterType, fsr_len);
+        _ = &file_system_router_types;
+        _g_fsr_slice.slice = file_system_router_types;
+        {
+            var it = try fsr_array.arrayIterator(global);
+            _ = &it;
+            var i: usize = 0;
+            _ = &i;
+            while (try it.next()) |fsr_opts| : (i = (i + 1)) {
+                const root_opt = try getOptionalString(fsr_opts, global, "root", refs, arena);
+                if ((root_opt == null)) {
+                    return global.throwInvalidArguments("'fileSystemRouterTypes[{d}]' is missing 'root'", .{ i });
+                }
+                const root = root_opt.?;
+                const server_opt = try getOptionalString(fsr_opts, global, "serverEntryPoint", refs, arena);
+                if ((server_opt == null)) {
+                    return global.throwInvalidArguments("'fileSystemRouterTypes[{d}]' is missing 'serverEntryPoint'", .{ i });
+                }
+                const server_entry_point = server_opt.?;
+                const client_entry_point = try getOptionalString(fsr_opts, global, "clientEntryPoint", refs, arena);
+                const prefix = ((try getOptionalString(fsr_opts, global, "prefix", refs, arena)) orelse ("/"));
+                const ignore_underscores = ((try fsr_opts.getBooleanStrict(global, "ignoreUnderscores")) orelse (false));
+                const layouts = ((try fsr_opts.getBooleanStrict(global, "layouts")) orelse (false));
+                const style_js_opt = try fsr_opts.get(global, "style");
+                if ((style_js_opt == null)) {
+                    return global.throwInvalidArguments("'fileSystemRouterTypes[{d}]' is missing 'style'", .{ i });
+                }
+                const style_js = style_js_opt.?;
+                var style = try FrameworkRouter.Style.fromJS(style_js, global);
+                _ = &style;
+                var _g_style = DeinitGuard(@TypeOf(style)){ .ptr = (blk: {
+                break :blk (&style);
+
+}) };
+                _ = &_g_style;
+                var ___g_style_moved = false; _ = &___g_style_moved;
+                defer if (!___g_style_moved) { ___g_style_moved = true; const __T = @TypeOf(_g_style); if (@typeInfo(__T) == .optional) { if (_g_style) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_style.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_style; _drop_val.__cp_deinit(); } };
+                const default_exts: [8][]const u8 = .{ ".jsx", ".tsx", ".js", ".ts", ".cjs", ".cts", ".mjs", ".mts" };
+                const extensions: []const []const u8 = (if (try fsr_opts.get(global, "extensions")) |exts_js| exts: {
+                if (exts_js.isString()) {
+                    var str = try exts_js.toSlice(global, arena);
+                    _ = &str;
+                    var _g_str = DeinitGuard(@TypeOf(str)){ .ptr = (blk: {
+                    break :blk (&str);
+
+}) };
+                    _ = &_g_str;
+                    var ___g_str_moved = false; _ = &___g_str_moved;
+                    defer if (!___g_str_moved) { ___g_str_moved = true; const __T = @TypeOf(_g_str); if (@typeInfo(__T) == .optional) { if (_g_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_str; _drop_val.__cp_deinit(); } };
+                    if (bun.strings.eqlComptime(str.slice(), "*")) {
+                        break :exts &.{};
+                    }
+                } else {
+                    if (exts_js.isArray()) {
+                        var it_2 = try exts_js.arrayIterator(global);
+                        _ = &it_2;
+                        var i_2: usize = 0;
+                        _ = &i_2;
+                        var exts_arr = try arena.alloc([]const u8, try exts_js.getLength(global));
+                        _ = &exts_arr;
+                        while (try it_2.next()) |array_item| : (i_2 = (i_2 + 1)) {
+                            const slice = refs.track(try array_item.toSlice(global, arena));
+                            if (bun.strings.eqlComptime(slice, "*")) {
+                                return global.throwInvalidArguments("'extensions' cannot include \"*\" as an extension. Pass \"*\" instead of the array.", .{});
+                            }
+                            if ((slice.len == 0)) {
+                                return global.throwInvalidArguments("'extensions' cannot include \"\" as an extension.", .{});
+                            }
+                            if ((slice[0] == 46)) {
+                                exts_arr[cp_cast_int(usize, i_2)] = slice;
+                            } else {
+                                exts_arr[cp_cast_int(usize, i_2)] = try std.mem.concat(arena, u8, (&.{ ".", slice }));
+                            }
+                        }
+                        break :exts exts_arr;
+                    }
+                }
+                return global.throwInvalidArguments("'extensions' must be an array of strings or \"*\" for all extensions", .{});
+} else (&default_exts));
+                const default_ignore: [2][]const u8 = .{ ".git", "node_modules" };
+                const ignore_dirs: []const []const u8 = (if (try fsr_opts.get(global, "ignoreDirs")) |exts_js| dirs_blk: {
+                if (exts_js.isArray()) {
+                    var it_2 = try fsr_array.arrayIterator(global);
+                    _ = &it_2;
+                    var i_2: usize = 0;
+                    _ = &i_2;
+                    var dirs = try arena.alloc([]const u8, fsr_len);
+                    _ = &dirs;
+                    while (try it_2.next()) |array_item| : (i_2 = (i_2 + 1)) {
+                        dirs[cp_cast_int(usize, i_2)] = refs.track(try array_item.toSlice(global, arena));
+                    }
+                    break :dirs_blk dirs;
+                }
+                return global.throwInvalidArguments("'ignoreDirs' must be an array of strings or \"*\" for all extensions", .{});
+} else (&default_ignore));
+                file_system_router_types[cp_cast_int(usize, i)] = BakeFileSystemRouterType{ .root = root, .prefix = prefix, .style = style, .entry_server = server_entry_point, .entry_client = client_entry_point, .ignore_underscores = ignore_underscores, .extensions = extensions, .ignore_dirs = ignore_dirs, .allow_layouts = layouts };
+                _g_style.ptr = null;
+                _g_fsr_slice.count = (i + 1);
+            }
+        }
+        const framework: Framework = Framework{ .is_built_in_react = false, .file_system_router_types = file_system_router_types, .react_fast_refresh = react_fast_refresh, .server_components = server_components, .built_in_modules = built_in_modules };
+        if (try opts.getOptional(global, "plugins", JSValue)) |plugin_array| {
+            _ = &plugin_array;
+            _ = try bundler_options.parsePluginArray(plugin_array, global);
+        }
+        _g_fsr_slice.active = false;
+        return framework;
+}
+
 pub fn getOptionalString(target: JSValue, global: *jsc.JSGlobalObject, property: []const u8, allocations: *StringRefList, arena_alloc: Allocator) !?[]const u8 {
-        const value = ((try target.get(global, property)) orelse { return null; });
+        const maybe_value = try target.get(global, property);
+        if ((maybe_value == null)) {
+            return null;
+        }
+        const value = maybe_value.?;
         if (value.isUndefinedOrNull()) {
             return null;
         }

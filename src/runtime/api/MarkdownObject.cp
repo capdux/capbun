@@ -4,6 +4,21 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct DeinitWithAllocGuard<T> {
+    ptr: *T!,
+    alloc: std.mem.Allocator,
+    ~init() {
+        _.ptr.deinit(_.alloc);
+    }
+}
+
 @c {
     fn JSReactElement__createFragment(
         globalObject: *jsc.JSGlobalObject,
@@ -67,7 +82,7 @@ pub fn renderToAnsi(
     }
 
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    const _g_arena = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_ };
 
     const buffer_opt = (jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), input_value))?;
     if (buffer_opt == null) {
@@ -122,7 +137,7 @@ pub fn renderToHTML(
     }
 
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    const _g_arena = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_ };
 
     const buffer_opt = (jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), input_value))?;
     if (buffer_opt == null) {
@@ -236,7 +251,7 @@ pub fn render(
     }
 
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    const _g_arena = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_ };
 
     const buffer_opt = (jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), input_value))?;
     if (buffer_opt == null) {
@@ -253,7 +268,7 @@ pub fn render(
     let js_renderer = JsCallbackRenderer.init(globalThis, input, options.heading_ids) catch {
         return globalThis.throwOutOfMemory();
     };
-    defer js_renderer.deinit();
+    const _g_js_renderer = DeinitGuard<JsCallbackRenderer>{ ptr: &js_renderer };
 
     // Extract callbacks from 2nd argument
     js_renderer.extractCallbacks(if (callbacks_value.isObject()) callbacks_value else .js_undefined)?;
@@ -315,7 +330,7 @@ fn renderAST(
     }
 
     let arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-    defer arena_.deinit();
+    const _g_arena = DeinitGuard<bun.ArenaAllocator>{ ptr: &arena_ };
 
     const buffer_opt = (jsc.Node.StringOrBuffer.fromJS(globalThis, arena_.allocator(), input_value))?;
     if (buffer_opt == null) {
@@ -331,7 +346,7 @@ fn renderAST(
     let renderer = ParseRenderer.init(globalThis, input, marked_args, options.heading_ids, react_version) catch {
         return globalThis.throwOutOfMemory();
     };
-    defer renderer.deinit();
+    const _g_renderer = DeinitGuard<ParseRenderer>{ ptr: &renderer };
 
     // Extract component overrides from 2nd argument
     renderer.extractComponents(if (components_value.isObject()) components_value else .js_undefined)?;
@@ -534,7 +549,7 @@ struct ParseRenderer {
     // ========================================
 
     static fn enterBlockImpl(ptr: *!, block_type: md.BlockType, data: u32, flags: u32): bun.JSError!void {
-        const self: *ParseRenderer = @ptrCast(@alignCast(ptr));
+        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
 
@@ -553,7 +568,7 @@ struct ParseRenderer {
     }
 
     static fn leaveBlockImpl(ptr: *!, block_type: md.BlockType, unused_data: u32): bun.JSError!void {
-        const self: *ParseRenderer = @ptrCast(@alignCast(ptr));
+        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
 
@@ -657,7 +672,7 @@ struct ParseRenderer {
     // ========================================
 
     static fn enterSpanImpl(ptr: *!, unused_span: md.SpanType, detail: md.SpanDetail): bun.JSError!void {
-        const self: *ParseRenderer = @ptrCast(@alignCast(ptr));
+        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
 
         const array = JSValue.createEmptyArray(self.#globalObject, 0)?;
@@ -666,7 +681,7 @@ struct ParseRenderer {
     }
 
     static fn leaveSpanImpl(ptr: *!, span_type: md.SpanType): bun.JSError!void {
-        const self: *ParseRenderer = @ptrCast(@alignCast(ptr));
+        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
 
         if (self.#stack.items.len <= 1) return;
@@ -732,12 +747,12 @@ struct ParseRenderer {
             } else if (len > 1) {
                 // Multiple children — concatenate string parts
                 let alt_buf: std.ArrayListUnmanaged(u8) = {};
-                defer alt_buf.deinit(bun.default_allocator);
+                const _g_alt_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: &alt_buf, alloc: bun.default_allocator };
                 for (i of 0..len) {
                     const child = entry.children.getIndex(g, @as(u32, @intCast(i)))?;
                     if (child.isString()) {
-                        const str = child.toSlice(g, bun.default_allocator)?;
-                        defer str.deinit();
+                        let str = child.toSlice(g, bun.default_allocator)?;
+                        const _g_str = DeinitGuard<@TypeOf(str)>{ ptr: &str };
                         alt_buf.appendSlice(bun.default_allocator, str.slice()) catch {};
                     }
                 }
@@ -762,7 +777,7 @@ struct ParseRenderer {
     // ========================================
 
     static fn textImpl(ptr: *!, text_type: md.TextType, content: []const u8): bun.JSError!void {
-        const self: *ParseRenderer = @ptrCast(@alignCast(ptr));
+        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
 
         const g = self.#globalObject;
@@ -914,7 +929,7 @@ struct JsCallbackRenderer {
     fn popAndCallback(*_, callback: JSValue, meta_val: JSValue?): bun.JSError!void {
         if (_.#stack.items.len <= 1) return; // don't pop root
         let entry = _.#stack.pop().?;
-        defer entry.buffer.deinit(_.#allocator);
+        const _g_entry_buf = DeinitWithAllocGuard<@TypeOf(entry.buffer)>{ ptr: &entry.buffer, alloc: _.#allocator };
 
         const children = entry.buffer.items;
 
@@ -942,8 +957,8 @@ struct JsCallbackRenderer {
         }
 
         if (result.isUndefinedOrNull()) return; // callback returned null/undefined → omit element
-        const slice = result.toSlice(_.#globalObject, _.#allocator)?;
-        defer slice.deinit();
+        let slice = result.toSlice(_.#globalObject, _.#allocator)?;
+        const _g_slice = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
         _.appendToTop(slice.slice())?;
     }
 
@@ -957,7 +972,7 @@ struct JsCallbackRenderer {
     // ========================================
 
     static fn enterBlockImpl(ptr: *!, block_type: md.BlockType, data: u32, flags: u32): bun.JSError!void {
-        const self: *JsCallbackRenderer = @ptrCast(@alignCast(ptr));
+        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
         if (block_type == .h) {
@@ -982,7 +997,7 @@ struct JsCallbackRenderer {
     }
 
     static fn leaveBlockImpl(ptr: *!, block_type: md.BlockType, unused_data: u32): bun.JSError!void {
-        const self: *JsCallbackRenderer = @ptrCast(@alignCast(ptr));
+        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
 
@@ -1000,13 +1015,13 @@ struct JsCallbackRenderer {
     }
 
     static fn enterSpanImpl(ptr: *!, unused_span: md.SpanType, detail: md.SpanDetail): bun.JSError!void {
-        const self: *JsCallbackRenderer = @ptrCast(@alignCast(ptr));
+        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
         self.#stack.append(self.#allocator, { detail: detail })?;
     }
 
     static fn leaveSpanImpl(ptr: *!, span_type: md.SpanType): bun.JSError!void {
-        const self: *JsCallbackRenderer = @ptrCast(@alignCast(ptr));
+        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
 
         const callback = self.getSpanCallback(span_type);
@@ -1019,7 +1034,7 @@ struct JsCallbackRenderer {
     }
 
     static fn textImpl(ptr: *!, text_type: md.TextType, content: []const u8): bun.JSError!void {
-        const self: *JsCallbackRenderer = @ptrCast(@alignCast(ptr));
+        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
 
         // Track plain text for slug generation when inside a heading
@@ -1052,8 +1067,8 @@ struct JsCallbackRenderer {
         const args: [1]JSValue = [text_js];
         const result = _.#callbacks.text.call(_.#globalObject, .js_undefined, &args)?;
         if (!result.isUndefinedOrNull()) {
-            const slice = result.toSlice(_.#globalObject, _.#allocator)?;
-            defer slice.deinit();
+            let slice = result.toSlice(_.#globalObject, _.#allocator)?;
+            const _g_slice = DeinitGuard<@TypeOf(slice)>{ ptr: &slice };
             _.appendToTop(slice.slice())?;
         }
     }

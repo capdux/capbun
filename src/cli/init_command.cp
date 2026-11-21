@@ -1,6 +1,26 @@
 type string = []const u8;
 type stringZ = [:0]const u8;
 
+pub struct CloseGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.close(); }
+            _.ptr = null;
+        }
+    }
+};
+
+pub struct PathBufferGuard<T> {
+    buf: T?,
+    ~init() {
+        if (b := _.buf) {
+            bun.path_buffer_pool.put(b);
+            _.buf = null;
+        }
+    }
+};
+
 pub struct InitCommand {
     static fn prompt(
         alloc: std.mem.Allocator,
@@ -247,8 +267,8 @@ pub struct InitCommand {
         }
 
         static fn createNew(filename: [:0]const u8, contents: []const u8)! {
-            const file = bun.sys.File.makeOpen(filename, bun.O.CREAT | bun.O.EXCL | bun.O.WRONLY, 0o666).unwrap()?;
-            defer file.close();
+            let file = bun.sys.File.makeOpen(filename, bun.O.CREAT | bun.O.EXCL | bun.O.WRONLY, 0o666).unwrap()?;
+            let file_guard = CloseGuard<bun.sys.File>{ ptr: unsafe { &file } };
 
             file.writeAll(contents).unwrap()?;
 
@@ -269,7 +289,7 @@ pub struct InitCommand {
             args: auto,
         )! {
             let file = std.fs.cwd().createFile(filename, { truncate: true })?;
-            defer file.close();
+            let file_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &file } };
             let file_w = file.writerStreaming([]);
             const file_i = &file_w.interface;
 
@@ -300,7 +320,7 @@ pub struct InitCommand {
             args: auto,
         )! {
             let file = std.fs.cwd().createFile(filename, { truncate: true })?;
-            defer file.close();
+            let file_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &file } };
             let file_w = file.writerStreaming([]);
             let file_i = &file_w.interface;
 
@@ -525,7 +545,7 @@ pub struct InitCommand {
 
             // Find any source file
             let dir = std.fs.cwd().openDir(".", .{ iterate: true }) catch break :infer;
-            defer dir.close();
+            let dir_guard = CloseGuard<std.fs.Dir>{ ptr: unsafe { &dir } };
             let it = bun.DirIterator.iterate(bun.FD.fromStdDir(dir), bun.DirIterator.PathType.u8);
             while (file := it.next().unwrap()?) {
                 if (file.kind != .file) continue;
@@ -743,7 +763,7 @@ pub struct InitCommand {
 
         write_package_json: {
             let fd = bun.FD.fromStdFile(package_json_file ?? try std.fs.cwd().createFileZ("package.json", {}));
-            defer fd.close();
+            let fd_guard = CloseGuard<bun.FD>{ ptr: unsafe { &fd } };
             let buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);
             buffer_writer.append_newline = true;
             let package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
@@ -1065,7 +1085,7 @@ enum Template {
         }
 
         const pathbuffer = bun.path_buffer_pool.get();
-        defer bun.path_buffer_pool.put(pathbuffer);
+        let pathbuffer_guard = PathBufferGuard<@TypeOf(pathbuffer)>{ buf: pathbuffer };
 
         return bun.which(pathbuffer, bun.env_var.PATH.get() ?? return false, bun.fs.FileSystem.instance.top_level_dir, "claude") != null;
     }
@@ -1140,7 +1160,7 @@ enum Template {
         if (Environment.isWindows) {
             if (user := bun.getenvZAnyCase("USER")) {
                 const pathbuf = bun.path_buffer_pool.get();
-                defer bun.path_buffer_pool.put(pathbuf);
+                let pathbuf_guard = PathBufferGuard<@TypeOf(pathbuf)>{ buf: pathbuf };
                 const path = std.fmt.bufPrintZ(pathbuf, "C:\\Users\\{s}\\AppData\\Local\\Programs\\Cursor\\Cursor.exe", { user}) catch {
                     return false;
                 };

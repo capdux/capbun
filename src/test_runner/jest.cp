@@ -28,6 +28,32 @@ pub import bun_test from "./bun_test.zig";
 
 type string = []const u8;
 
+pub struct DeinitGuard<T> {
+    ptr: *T!? = null,
+    ~init() {
+        unsafe {
+            if (p := _.ptr) p.deinit();
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: *T!? = null,
+    ~init() {
+        unsafe {
+            if (p := _.ptr) p.deref();
+        }
+    }
+}
+
+pub struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []const T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
 pub struct RepeatInfo {
     count: u32 = 0,
     index: u32 = 0,
@@ -73,8 +99,8 @@ pub struct CurrentFile {
     }
 
     static fn print(title: string, prefix: string, repeat_count: u32, repeat_index: u32) {
-        const enable_buffering = Output.enableBufferingScope();
-        defer enable_buffering.deinit();
+        let enable_buffering = Output.enableBufferingScope();
+        let _g_buf = DeinitGuard<@TypeOf(enable_buffering)>{ ptr: unsafe { &enable_buffering } };
 
         Output.prettyError("<r>\n", .{});
 
@@ -304,7 +330,7 @@ pub struct Jest {
                 return globalObject.throw("Bun.jest() expects a string filename", .{});
             }
             let str = arguments[0].toSlice(globalObject, bun.default_allocator)?;
-            defer str.deinit();
+            let _g_str = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
             const slice = str.slice();
 
             if (!std.fs.path.isAbsolute(slice)) {
@@ -339,7 +365,7 @@ pub struct on_unhandled_rejection {
     pub static fn onUnhandledRejection(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject, rejection: JSValue) {
         if (buntest_strong_ := bun.jsc.Jest.bun_test.cloneActiveStrong()) {
             let buntest_strong = buntest_strong_;
-            defer buntest_strong.deinit();
+            let _g_buntest = DeinitGuard<@TypeOf(buntest_strong)>{ ptr: unsafe { &buntest_strong } };
 
             const buntest = buntest_strong.get();
             let current_state_data = buntest.getCurrentStateData();
@@ -372,8 +398,8 @@ fn consumeArg(
     fallback: []const u8,
 ): !void {
     if (should_write) {
-        const owned_slice = arg.toSliceOrNull(globalThis)?;
-        defer owned_slice.deinit();
+        let owned_slice = arg.toSliceOrNull(globalThis)?;
+        let _g_owned = DeinitGuard<@TypeOf(owned_slice)>{ ptr: unsafe { &owned_slice } };
         bun.handleOom(array_list.appendSlice(owned_slice.slice()));
     } else {
         bun.handleOom(array_list.appendSlice(fallback));
@@ -386,7 +412,7 @@ pub fn formatLabel(globalThis: *JSGlobalObject, label: string, function_args: []
     let idx: usize = 0;
     let args_idx: usize = 0;
     let list = bun.handleOom(std.array_list.Managed(u8).initCapacity(allocator, label.len));
-    defer list.deinit();
+    let _g_list = DeinitGuard<@TypeOf(list)>{ ptr: unsafe { &list } };
 
     while (idx < label.len) {
         const char = label[idx];
@@ -417,12 +443,12 @@ pub fn formatLabel(globalThis: *JSGlobalObject, label: string, function_args: []
                 const value = function_args[0].getIfPropertyExistsFromPath(globalThis, bun.String.init(var_path).toJS(globalThis)?)?;
                 if (!value.isEmptyOrUndefinedOrNull()) {
                     if (value.isString()) {
-                        const owned_slice = value.toSliceOrNull(globalThis)?;
-                        defer owned_slice.deinit();
+                        let owned_slice = value.toSliceOrNull(globalThis)?;
+                        let _g_owned = DeinitGuard<@TypeOf(owned_slice)>{ ptr: unsafe { &owned_slice } };
                         bun.handleOom(list.appendSlice(owned_slice.slice()));
                     } else {
                         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-                        defer formatter.deinit();
+                        let _g_fmt = DeinitGuard<@TypeOf(formatter)>{ ptr: unsafe { &formatter } };
                         bun.handleOom(list.writer().print("{f}", .{ value.toFmt(&formatter) }));
                     }
                     idx = var_end;
@@ -455,17 +481,17 @@ pub fn formatLabel(globalThis: *JSGlobalObject, label: string, function_args: []
                 },
                 'j', 'o' => {
                     let str = bun.String.empty;
-                    defer str.deref();
+                    let _g_str = DerefGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
                     current_arg.jsonStringifyFast(globalThis, &str)?;
                     const owned_slice = bun.handleOom(str.toOwnedSlice(allocator));
-                    defer allocator.free(owned_slice);
+                    let _g_free = FreeGuard<u8>{ allocator: allocator, slice: owned_slice };
                     bun.handleOom(list.appendSlice(owned_slice));
                     idx += 1;
                     args_idx += 1;
                 },
                 'p' => {
                     let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true };
-                    defer formatter.deinit();
+                    let _g_fmt = DeinitGuard<@TypeOf(formatter)>{ ptr: unsafe { &formatter } };
                     const value_fmt = current_arg.toFmt(&formatter);
                     bun.handleOom(list.writer().print("{f}", .{ value_fmt }));
                     idx += 1;
@@ -473,7 +499,7 @@ pub fn formatLabel(globalThis: *JSGlobalObject, label: string, function_args: []
                 },
                 '#' => {
                     const test_index_str = bun.handleOom(std.fmt.allocPrint(allocator, "{d}", .{ test_idx }));
-                    defer allocator.free(test_index_str);
+                    let _g_free_idx = FreeGuard<u8>{ allocator: allocator, slice: test_index_str };
                     bun.handleOom(list.appendSlice(test_index_str));
                     idx += 1;
                 },

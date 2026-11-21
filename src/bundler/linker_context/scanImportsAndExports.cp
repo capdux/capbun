@@ -1,3 +1,23 @@
+pub struct DeinitGuard<T> {
+    ptr: *T!?,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+            _.ptr = null;
+        }
+    }
+}
+
+pub struct ExportStarCtxDeinitGuard {
+    ptr: (*ExportStarContext!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.source_index_stack.deinit(); }
+            _.ptr = null;
+        }
+    }
+}
+
 pub const ScanImportsAndExportsError = bun.OOM || error{ImportResolutionFailed};
 
 pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError!void {
@@ -206,7 +226,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
                 export_star_records: export_star_import_records,
                 output_format: output_format,
             };
-            defer dependency_wrapper.export_star_map.deinit();
+            let export_star_map_guard = DeinitGuard<std.AutoHashMap(u32, void)>{ ptr: unsafe { &dependency_wrapper.export_star_map } };
 
             for (source_index_ of reachable) {
                 const source_index = source_index_.get();
@@ -245,13 +265,9 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
         // are ignored for those modules.
         {
             let export_star_ctx: ExportStarContext? = null;
+            let export_star_ctx_guard = ExportStarCtxDeinitGuard{};
             let trace = bun.perf.trace("Bundler.ResolveExportStarStatements");
             defer trace.end();
-            defer {
-                if (*export_ctx := export_star_ctx) {
-                    export_ctx.source_index_stack.deinit();
-                }
-            }
             let resolved_exports: []ResolvedExports = client.graph.@"meta".items(.resolved_exports);
             let resolved_export_stars: []ExportData = client.graph.@"meta".items(.resolved_export_star);
 
@@ -282,6 +298,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
                             exports_kind: exports_kind,
                             named_exports: client.graph.ast.items(.named_exports),
                         };
+                        export_star_ctx_guard.ptr = unsafe { &export_star_ctx.? };
                     }
                     export_star_ctx.?.addExports(&resolved_exports[id], source_index);
                 }
@@ -1235,7 +1252,7 @@ fn validateComposesFromProperties(
         allocator: client.graph.allocator,
         log: client.log,
     };
-    defer visitor.deinit();
+    let visitor_guard = DeinitGuard<Visitor>{ ptr: unsafe { &visitor } };
     for (local of root_css_ast.local_scope.values()) {
         visitor.clearRetainingCapacity();
         visitor.visit(index, root_css_ast, local.@"ref".toRealRef(index));

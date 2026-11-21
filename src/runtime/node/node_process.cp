@@ -14,6 +14,31 @@ comptime {
 
 let title_mutex = bun.Mutex{};
 
+struct DerefGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deref(); }
+    }
+}
+
+struct StringListGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe {
+            for (*arg of p.items) arg.deref();
+            p.deinit();
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: ([]T)? = null,
+    ~init() {
+        if (s := _.slice) _.alloc.free(s);
+    }
+}
+
 @callconv("c") pub fn getTitle(_: *JSGlobalObject, title: *bun.String) {
     title_mutex.lock();
     defer title_mutex.unlock();
@@ -23,7 +48,7 @@ let title_mutex = bun.Mutex{};
 
 // TODO: https://github.com/nodejs/node/blob/master/deps/uv/src/unix/darwin-proctitle.c
 @callconv("c") pub fn setTitle(globalObject: *JSGlobalObject, newvalue: *bun.String) {
-    defer newvalue.deref();
+    const _newvalue_guard = DerefGuard<bun.String>{ ptr: unsafe { @ptrCast(newvalue) } };
     title_mutex.lock();
     defer title_mutex.unlock();
 
@@ -71,8 +96,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     if (graph := vm.standalone_module_graph) {
         if (graph.compile_exec_argv.len > 0 || bun.bun_options_argc > 0) {
             let args = std.array_list.Managed(bun.String).init(temp_alloc);
-            defer args.deinit();
-            defer for (*arg of args.items) arg.deref();
+            const _args_guard = StringListGuard<@TypeOf(args)>{ ptr: unsafe { &args } };
 
             // Process BUN_OPTIONS first using appendOptionsEnv for proper quote handling.
             // appendOptionsEnv inserts starting at index 1, so we need a placeholder.
@@ -101,8 +125,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     }
 
     let args = std.array_list.Managed(bun.String).initCapacity(temp_alloc, bun.argv.len - 1)?;
-    defer args.deinit();
-    defer for (*arg of args.items) arg.deref();
+    const _args_guard = StringListGuard<@TypeOf(args)>{ ptr: unsafe { &args } };
 
     let seen_run = false;
     let prev: ([]const u8)? = null;
@@ -182,7 +205,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         // argv also omits the script name
         args_count + 2,
     ) catch |e| bun.handleOom(e);
-    defer allocator.free(args);
+    const _args_guard = FreeGuard<bun.String>{ alloc: allocator, slice: args };
 
     let args_list: std.ArrayListUnmanaged(bun.String) = .initBuffer(args);
 
@@ -324,9 +347,9 @@ const empty_u16_buf: [1]u16 = [0];
     let fixed_stack_allocator = std.heap.stackFallback(1025, bun.default_allocator);
     const allocator = fixed_stack_allocator.get();
     let buf1 = bun.handleOom(allocator.alloc(u16, k.utf16ByteLength() + 1));
-    defer allocator.free(buf1);
+    const _buf1_guard = FreeGuard<u16>{ alloc: allocator, slice: buf1 };
     let buf2 = bun.handleOom(allocator.alloc(u16, v.utf16ByteLength() + 1));
-    defer allocator.free(buf2);
+    const _buf2_guard = FreeGuard<u16>{ alloc: allocator, slice: buf2 };
     const U16Slice = []u16;
     const len1: usize = switch (wtf1.is8Bit()) {
         true => bun.strings.copyLatin1IntoUTF16(U16Slice, buf1, wtf1.latin1Slice()).written,

@@ -23,6 +23,37 @@ const strings = bun.strings;
 const debug = bun.Output.scoped(.SourceMap, .visible);
 let empty_sources: [0][]const u8 = undefined;
 
+pub struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(); }
+            _.ptr = null;
+        }
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    ptr: (*T!)? = null,
+    alloc: std.mem.Allocator,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deinit(_.alloc); }
+            _.ptr = null;
+        }
+    }
+}
+
+pub struct DerefGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) {
+            unsafe { p.deref(); }
+            _.ptr = null;
+        }
+    }
+}
+
 pub struct SourceMapState {
     generated_line: i32 = 0,
     generated_column: i32 = 0,
@@ -414,7 +445,7 @@ export @root struct SourceMap {
     ): ParseUrl! {
         let json_src: bun.logger.Source = bun.logger.Source.initPathString("sourcemap.json", source);
         let log: bun.logger.Log = bun.logger.Log.init(arena_alloc);
-        defer log.deinit();
+        let _log_guard = DeinitGuard<bun.logger.Log>{ ptr: unsafe { &log } };
 
         bun.ast.Expr.Data.Store.reset();
         bun.ast.Stmt.Data.Store.reset();
@@ -499,10 +530,16 @@ export @root struct SourceMap {
                 if (names := json.get("names")) {
                     if (names.data == .e_array) {
                         let names_list = std.ArrayListUnmanaged(bun.Semver.String).initCapacity(alloc, names.data.e_array.items.len)?;
-                        errdefer names_list.deinit(alloc);
+                        let _names_list_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(bun.Semver.String)>{
+                            ptr: unsafe { &names_list },
+                            alloc: alloc,
+                        };
 
                         let names_buffer: std.ArrayListUnmanaged(u8) = {};
-                        errdefer names_buffer.deinit(alloc);
+                        let _names_buffer_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{
+                            ptr: unsafe { &names_buffer },
+                            alloc: alloc,
+                        };
 
                         for (*item of names.data.e_array.items.slice()) {
                             if (item.data != .e_string) {
@@ -515,6 +552,8 @@ export @root struct SourceMap {
 
                         map_data.mappings.names = names_list.items;
                         map_data.mappings.names_buffer = bun.ByteList.moveFromList(&names_buffer);
+                        _names_list_guard.ptr = null;
+                        _names_buffer_guard.ptr = null;
                     }
                 }
             }
@@ -523,7 +562,7 @@ export @root struct SourceMap {
             ptr.external_source_names = source_paths_slice.?;
             map = ptr;
         }
-        errdefer if (m := map) m.deref();
+        let _map_guard = DerefGuard<ParsedSourceMap>{ ptr: map };
 
         let mapping: Mapping? = null;
         let source_index: u32? = null;
@@ -557,6 +596,7 @@ export @root struct SourceMap {
             break :content alloc.dupe(u8, str)?;
         } else null;
 
+        _map_guard.ptr = null;
         return ParseUrl{
             map: map,
             mapping: mapping,
@@ -590,7 +630,7 @@ export @root struct SourceMap {
         const STACK_SPACE_TO_USE = 1024;
         let sfb = std.heap.stackFallback(STACK_SPACE_TO_USE, bun.default_allocator);
         let arena_inst = bun.ArenaAllocator.init(sfb.get());
-        defer arena_inst.deinit();
+        let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_inst } };
         const allocator = arena_inst.allocator();
 
         let new_load_hint: SourceMapLoadHint = .none;
@@ -599,8 +639,8 @@ export @root struct SourceMap {
 
             if (load_hint != .is_external_map) {
                 try_inline: {
-                    const source = unsafe { SourceProviderKind.getSourceSlice(provider) };
-                    defer source.deref();
+                    let source = unsafe { SourceProviderKind.getSourceSlice(provider) };
+                    let _source_guard = DerefGuard<@TypeOf(source)>{ ptr: unsafe { &source } };
                     bun.assert(source.tag == .ZigString);
 
                     const maybe_found_url = found_url: {
@@ -610,8 +650,8 @@ export @root struct SourceMap {
                         break :found_url findSourceMappingURL(u16, source.utf16(), allocator);
                     };
 
-                    const found_url = maybe_found_url orelse break :try_inline;
-                    defer found_url.deinit();
+                    let found_url = maybe_found_url orelse break :try_inline;
+                    let _found_url_guard = DeinitGuard<bun.jsc.ZigString.Slice>{ ptr: unsafe { &found_url } };
 
                     const p = parseUrl(
                         bun.default_allocator,

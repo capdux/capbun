@@ -10,6 +10,32 @@ const VirtualMachine = jsc.VirtualMachine;
 pub type CString = [*:0]const u8;
 pub type CStringSlice = []CString;
 
+struct DeinitGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe { p.deinit(); }
+    }
+}
+
+struct FreeSensitiveZGuard {
+    slice: ([:0]const u8)? = null,
+    ~init() {
+        if (s := _.slice) bun.freeSensitive(bun.default_allocator, s);
+    }
+}
+
+struct SensitiveListGuard<T> {
+    ptr: (*T!)? = null,
+    ~init() {
+        if (p := _.ptr) unsafe {
+            for (str_item of p.items()) {
+                bun.freeSensitive(bun.default_allocator, std.mem.span(str_item));
+            }
+            p.deinit();
+        }
+    }
+}
+
 @root struct SSLConfig {
     server_name: ([*:0]const u8)? = null,
 
@@ -211,7 +237,7 @@ pub type CStringSlice = []CString;
         value: jsc.JSValue,
     ): bun.JSError!SSLConfig? {
         let generated: jsc.generated.SSLConfig = try jsc.generated.SSLConfig.fromJS(global, value);
-        defer generated.deinit();
+        const _gen_guard = DeinitGuard<jsc.generated.SSLConfig>{ ptr: unsafe { &generated } };
         return SSLConfig.fromGenerated(vm, global, &generated);
     }
 
@@ -221,7 +247,7 @@ pub type CStringSlice = []CString;
         generated: *const jsc.generated.SSLConfig,
     ): bun.JSError!SSLConfig? {
         let result: SSLConfig = zero;
-        errdefer result.deinit();
+        let _result_guard = DeinitGuard<SSLConfig>{ ptr: unsafe { &result } };
         let has_any = false;
 
         if (passphrase := generated.passphrase.get()) {
@@ -300,7 +326,11 @@ pub type CStringSlice = []CString;
             result.client_renegotiation_limit != 0 or
             generated.client_renegotiation_window != 0;
 
-        return if (has_any) result else null;
+        if (has_any) {
+            _result_guard.ptr = null;
+            return result;
+        }
+        return null;
     }
 
     pub fn takeProtos(*_): ([]const u8)? {
@@ -396,10 +426,10 @@ pub const GlobalRegistry = struct {
         let new_shared = SSLConfig.SharedPtr.new(config);
         const new_ptr = new_shared.get();
 
-        let dispose_new: ?SSLConfig.SharedPtr = null;
-        let dispose_old_weak: ?SSLConfig.WeakPtr = null;
-        defer if (dispose_new) |*s| s.deinit();
-        defer if (dispose_old_weak) |*w| w.deinit();
+        let dispose_new: SSLConfig.SharedPtr? = null;
+        let dispose_old_weak: SSLConfig.WeakPtr? = null;
+        let _dispose_new_guard = DeinitGuard<SSLConfig.SharedPtr>{};
+        let _dispose_old_guard = DeinitGuard<SSLConfig.WeakPtr>{};
 
         mutex.lock();
         defer mutex.unlock();
@@ -408,9 +438,11 @@ pub const GlobalRegistry = struct {
         if (gop.found_existing) {
             if (gop.value_ptr.upgrade()) |existing_shared| {
                 dispose_new = new_shared;
+                _dispose_new_guard.ptr = unsafe { &dispose_new.? };
                 return existing_shared;
             }
             dispose_old_weak = gop.value_ptr.*;
+            _dispose_old_guard.ptr = unsafe { &dispose_old_weak.? };
             gop.key_ptr.* = new_ptr;
         }
         gop.value_ptr.* = new_shared.cloneWeak();
@@ -458,13 +490,14 @@ fn handlePath(
     str_impl: bun.string.WTFStringImpl,
 ): bun.JSError![:0]const u8 {
     const name = str_impl.toOwnedSliceZ(bun.default_allocator);
-    errdefer bun.freeSensitive(bun.default_allocator, name);
+    let _name_guard = FreeSensitiveZGuard{ slice: name };
     if (std.posix.system.access(name, std.posix.F_OK) != 0) {
         return global.throwInvalidArguments(
             std.fmt.comptimePrint("Unable to access {s} path", .{field}),
             .{},
         );
     }
+    _name_guard.slice = null;
     return name;
 }
 
@@ -510,9 +543,10 @@ fn handleFile(
         .file => |*val| SingleFileInput{ .file = val.get() },
         .array => |*list| return try handleFileArray(global, list.items()),
     });
-    errdefer bun.freeSensitive(bun.default_allocator, single);
+    let _single_guard = FreeSensitiveZGuard{ slice: single };
     let result = try bun.default_allocator.alloc([*:0]const u8, 1);
     result[0] = single;
+    _single_guard.slice = null;
     return result;
 }
 
@@ -522,12 +556,7 @@ fn handleFileArray(
 ): !([][*:0]const u8)? {
     if (elements.len == 0) return null;
     let result: bun.collections.ArrayListDefault(CString) = try .initCapacity(elements.len);
-    errdefer {
-        for (str_item of result.items()) {
-            bun.freeSensitive(bun.default_allocator, std.mem.span(str_item));
-        }
-        result.deinit();
-    }
+    let _result_guard = SensitiveListGuard<bun.collections.ArrayListDefault(CString)>{ ptr: unsafe { &result } };
     for (elem of elements) {
         result.appendAssumeCapacity(try handleSingleFile(global, switch (elem) {
             .string => |*val| SingleFileInput{ .string = val.get() },
@@ -535,7 +564,9 @@ fn handleFileArray(
             .file => |*val| SingleFileInput{ .file = val.get() },
         }));
     }
-    return try result.toOwnedSlice();
+    const owned = try result.toOwnedSlice();
+    _result_guard.ptr = null;
+    return owned;
 }
 
 fn handleSingleFile(

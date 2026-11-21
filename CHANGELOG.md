@@ -1959,3 +1959,15 @@
 - `src/install/lockfile.{cp,zig}` (`12 -> 4` 校验与 clamp, ratio `1.069`)
 - `src/http/http.{cp,zig}` (`12 -> 2` 进度与状态刷新, ratio `0.878`)
 - `src/cli/pm_trusted_command.{cp,zig}` (`12 -> 4` 状态恢复, ratio `1.08`)
+
+## [2026-11-22 Wave #13] RAII `~init()` 与 `unsafe {}` 改造（10 模块）
+- `src/cli/init_command.{cp,zig}` (`12 -> 5` 控制台/终端状态恢复, ratio `1.045`)
+- `src/bundler/linker_context/scanImportsAndExports.{cp,zig}` (`11 -> 8` trace/状态恢复, ratio `1.021`)
+- `src/sourcemap/sourcemap.{cp,zig}` (`11 -> 4` 状态恢复/分段清理, ratio `0.937`)
+- `src/runtime/socket/tls_socket_functions.{cp,zig}` (`11 -> 0`, ratio `1.064`)
+- `src/runtime/socket/SSLConfig.{cp,zig}` (`11 -> 4` 互斥锁/置空, ratio `1.012`)
+- `src/runtime/node/node_process.{cp,zig}` (`11 -> 3` 互斥锁/状态, ratio `1.092`)
+- `src/bake/bake.{cp,zig}` (`12 -> 1` ast_scope, ratio `1.084`)
+- `src/test_runner/jest.{cp,zig}` (`11 -> 0`, ratio `1.025`)
+- `src/runtime/api/MarkdownObject.{cp,zig}` (`11 -> 0`, ratio `1.033`)
+- `src/cli/run_command.{cp,zig}` (`9 -> 2` 状态恢复, ratio `1.033`)

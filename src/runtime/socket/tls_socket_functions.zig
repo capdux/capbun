@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,9 +60,80 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.deinit();
+                    }
+                    self.ptr = null;
+                }
+        }
+    };
+}
+
+pub fn FreeSliceGuard(comptime T: type) type {
+    return struct {
+        slice: ?[]const T = null,
+        alloc: std.mem.Allocator = default_allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.slice) |s| {
+                    _ = &s;
+                    _ = self.alloc.free(s);
+                    self.slice = null;
+                }
+        }
+    };
+}
+
+pub fn FreeObjGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T = null,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.ptr) |p| {
+                    _ = &p;
+                    {
+                        _ = p.free();
+                    }
+                    self.ptr = null;
+                }
+        }
+    };
+}
+
+pub const SSLSessionGuard = struct {
+    ptr: ?*BoringSSL.SSL_SESSION = null,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SSLSessionGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.ptr) |p| {
+                _ = &p;
+                _ = BoringSSL.SSL_SESSION_free(p);
+                self.ptr = null;
+            }
+    }
+};
+
 const OpaquePtr = *anyopaque;
 const default_allocator = bun.default_allocator;
 const strings = bun.strings;
@@ -85,7 +156,10 @@ pub fn getServername(self: *This, globalObject: *jsc.JSGlobalObject, callframe: 
         if ((servername == null)) {
             return JSValue.js_undefined;
         }
-        return ZigString.fromUTF8(servername[0..bun.len(servername)]).toJS(globalObject);
+        return ZigString.fromUTF8((blk: {
+        break :blk servername[0..bun.len(servername)];
+
+})).toJS(globalObject);
 }
 
 pub fn setServername(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
@@ -121,9 +195,10 @@ pub fn setServername(self: *This, globalObject: *jsc.JSGlobalObject, callframe: 
                 return globalObject.throw("Already started.", .{});
             }
             const host__ = bun.handleOom(default_allocator.dupeZ(u8, host));
-            defer {
-            _ = default_allocator.free(host__);
-            }
+            var _host_guard = FreeSliceGuard(u8){ .slice = host__ };
+            _ = &_host_guard;
+            var ___host_guard_moved = false; _ = &___host_guard_moved;
+            defer if (!___host_guard_moved) { ___host_guard_moved = true; const __T = @TypeOf(_host_guard); if (@typeInfo(__T) == .optional) { if (_host_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _host_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _host_guard; _drop_val.__cp_deinit(); } };
             _ = ssl_ptr.setHostname(host__);
         }
         return JSValue.js_undefined;
@@ -175,7 +250,10 @@ pub fn getTLSVersion(self: *This, globalObject: *jsc.JSGlobalObject, callframe: 
         if ((version_len == 0)) {
             return JSValue.jsNull();
         }
-        const slice = version[0..version_len];
+        const slice = (blk: {
+        break :blk version[0..version_len];
+
+});
         return ZigString.fromUTF8(slice).toJS(globalObject);
 }
 
@@ -226,9 +304,10 @@ pub fn getPeerCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callfr
                 const cert = BoringSSL.SSL_get_peer_certificate(ssl_ptr);
                 if (cert) |x509| {
                     _ = &x509;
-                    defer {
-                    _ = x509.free();
-                    }
+                    var _x509_guard = FreeObjGuard(BoringSSL.X509){ .ptr = x509 };
+                    _ = &_x509_guard;
+                    var ___x509_guard_moved = false; _ = &___x509_guard_moved;
+                    defer if (!___x509_guard_moved) { ___x509_guard_moved = true; const __T = @TypeOf(_x509_guard); if (@typeInfo(__T) == .optional) { if (_x509_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _x509_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _x509_guard; _drop_val.__cp_deinit(); } };
                     return X509.toJS(x509, globalObject);
                 }
             }
@@ -246,12 +325,10 @@ pub fn getPeerCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callfr
         }
         var cert = (if (self.isServer()) BoringSSL.SSL_get_peer_certificate(ssl_ptr) else null);
         _ = &cert;
-        defer {
-        if (cert) |c| {
-            _ = &c;
-            _ = c.free();
-        }
-        }
+        var _cert_guard = FreeObjGuard(BoringSSL.X509){ .ptr = cert };
+        _ = &_cert_guard;
+        var ___cert_guard_moved = false; _ = &___cert_guard_moved;
+        defer if (!___cert_guard_moved) { ___cert_guard_moved = true; const __T = @TypeOf(_cert_guard); if (@typeInfo(__T) == .optional) { if (_cert_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _cert_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _cert_guard; _drop_val.__cp_deinit(); } };
         const cert_chain = BoringSSL.SSL_get_peer_cert_chain(ssl_ptr);
         var first_cert = (if ((cert != null)) (cert.?) else (if ((cert_chain != null)) BoringSSL.sk_X509_value(cert_chain.?, 0) else null));
         _ = &first_cert;
@@ -358,14 +435,21 @@ const sn_str = BoringSSL.OBJ_nid2sn(sign_nid);
 },
 }
                 const hash_str = BoringSSL.OBJ_nid2sn(hash_nid);
-                if ((@intFromPtr(hash_str) != 0)) {
+                if (((blk: {
+                break :blk @intFromPtr(hash_str);
+
+}) != 0)) {
                     const hash_str_len = bun.len(hash_str);
-                    const hash_slice = hash_str[0..hash_str_len];
+                    const hash_slice = (blk: {
+                    break :blk hash_str[0..hash_str_len];
+
+});
                     var buffer = bun.handleOom(bun.default_allocator.alloc(u8, ((sig_with_md.len + hash_str_len) + 1)));
                     _ = &buffer;
-                    defer {
-                    _ = bun.default_allocator.free(buffer);
-                    }
+                    var _buf_guard = FreeSliceGuard(u8){ .slice = buffer, .alloc = bun.default_allocator };
+                    _ = &_buf_guard;
+                    var ___buf_guard_moved = false; _ = &___buf_guard_moved;
+                    defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
                     _ = bun.copy(u8, buffer, sig_with_md);
                     buffer[cp_cast_int(usize, sig_with_md.len)] = 43;
                     _ = bun.copy(u8, buffer[(sig_with_md.len + 1)..], hash_slice);
@@ -373,9 +457,10 @@ const sn_str = BoringSSL.OBJ_nid2sn(sign_nid);
                 } else {
                     var buffer = bun.handleOom(bun.default_allocator.alloc(u8, (sig_with_md.len + 6)));
                     _ = &buffer;
-                    defer {
-                    _ = bun.default_allocator.free(buffer);
-                    }
+                    var _buf_guard = FreeSliceGuard(u8){ .slice = buffer, .alloc = bun.default_allocator };
+                    _ = &_buf_guard;
+                    var ___buf_guard_moved = false; _ = &___buf_guard_moved;
+                    defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
                     _ = bun.copy(u8, buffer, sig_with_md);
                     _ = bun.copy(u8, buffer[sig_with_md.len..], "+UNDEF");
                     _ = try array.putIndex(globalObject, @as(u32, @intCast(i)), jsc.ZigString.fromUTF8(buffer).toJS(globalObject));
@@ -402,22 +487,40 @@ pub fn getCipher(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc
             return result;
         }
         const name = BoringSSL.SSL_CIPHER_get_name(cipher);
-        if ((@intFromPtr(name) == 0)) {
+        if (((blk: {
+        break :blk @intFromPtr(name);
+
+}) == 0)) {
             _ = result.put(globalObject, ZigString.static("name"), JSValue.jsNull());
         } else {
-            _ = result.put(globalObject, ZigString.static("name"), ZigString.fromUTF8(name[0..bun.len(name)]).toJS(globalObject));
+            _ = result.put(globalObject, ZigString.static("name"), ZigString.fromUTF8((blk: {
+            break :blk name[0..bun.len(name)];
+
+})).toJS(globalObject));
         }
         const standard_name = BoringSSL.SSL_CIPHER_standard_name(cipher);
-        if ((@intFromPtr(standard_name) == 0)) {
+        if (((blk: {
+        break :blk @intFromPtr(standard_name);
+
+}) == 0)) {
             _ = result.put(globalObject, ZigString.static("standardName"), JSValue.jsNull());
         } else {
-            _ = result.put(globalObject, ZigString.static("standardName"), ZigString.fromUTF8(standard_name[0..bun.len(standard_name)]).toJS(globalObject));
+            _ = result.put(globalObject, ZigString.static("standardName"), ZigString.fromUTF8((blk: {
+            break :blk standard_name[0..bun.len(standard_name)];
+
+})).toJS(globalObject));
         }
         const version = BoringSSL.SSL_CIPHER_get_version(cipher);
-        if ((@intFromPtr(version) == 0)) {
+        if (((blk: {
+        break :blk @intFromPtr(version);
+
+}) == 0)) {
             _ = result.put(globalObject, ZigString.static("version"), JSValue.jsNull());
         } else {
-            _ = result.put(globalObject, ZigString.static("version"), ZigString.fromUTF8(version[0..bun.len(version)]).toJS(globalObject));
+            _ = result.put(globalObject, ZigString.static("version"), ZigString.fromUTF8((blk: {
+            break :blk version[0..bun.len(version)];
+
+})).toJS(globalObject));
         }
         return result;
 }
@@ -466,9 +569,13 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
         }
         var label = try label_arg.toSliceOrNull(globalObject);
         _ = &label;
-        defer {
-        _ = label.deinit();
-        }
+        var _label_guard = DeinitGuard(@TypeOf(label)){ .ptr = (blk: {
+        break :blk (&label);
+
+}) };
+        _ = &_label_guard;
+        var ___label_guard_moved = false; _ = &___label_guard_moved;
+        defer if (!___label_guard_moved) { ___label_guard_moved = true; const __T = @TypeOf(_label_guard); if (@typeInfo(__T) == .optional) { if (_label_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _label_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _label_guard; _drop_val.__cp_deinit(); } };
         const label_slice = label.slice();
         const ssl_ptr_opt = self.socket.ssl();
         if ((ssl_ptr_opt == null)) {
@@ -479,20 +586,36 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
             const context_arg = args.ptr[2];
             var arena_alloc: bun.ArenaAllocator = bun.ArenaAllocator.init(bun.default_allocator);
             _ = &arena_alloc;
-            defer {
-            _ = arena_alloc.deinit();
-            }
+            var _arena_guard = DeinitGuard(bun.ArenaAllocator){ .ptr = (blk: {
+            break :blk (&arena_alloc);
+
+}) };
+            _ = &_arena_guard;
+            var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+            defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
             if (try jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), context_arg)) |sb| {
                 _ = &sb;
-                defer {
-                _ = sb.deinit();
-                }
-                const context_slice = sb.slice();
+                var mut_sb = sb;
+                _ = &mut_sb;
+                var _sb_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (blk: {
+                break :blk (&mut_sb);
+
+}) };
+                _ = &_sb_guard;
+                var ___sb_guard_moved = false; _ = &___sb_guard_moved;
+                defer if (!___sb_guard_moved) { ___sb_guard_moved = true; const __T = @TypeOf(_sb_guard); if (@typeInfo(__T) == .optional) { if (_sb_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sb_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sb_guard; _drop_val.__cp_deinit(); } };
+                const context_slice = mut_sb.slice();
                 const buffer_size = @as(usize, @intCast(length));
                 var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
                 _ = &buffer;
-                const buffer_ptr = @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
-                const result = BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, @as([*c]const u8, @ptrCast(context_slice.ptr)), context_slice.len, 1);
+                const buffer_ptr = (blk: {
+                break :blk @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
+
+});
+                const result = (blk: {
+                break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, @as([*c]const u8, @ptrCast(context_slice.ptr)), context_slice.len, 1);
+
+});
                 if ((result != 1)) {
                     return globalObject.throwValue(getSSLException(globalObject, "Failed to export keying material"));
                 }
@@ -504,8 +627,14 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
             const buffer_size = @as(usize, @intCast(length));
             var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
             _ = &buffer;
-            const buffer_ptr = @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
-            const result = BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, null, 0, 0);
+            const buffer_ptr = (blk: {
+            break :blk @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
+
+});
+            const result = (blk: {
+            break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, null, 0, 0);
+
+});
             if ((result != 1)) {
                 return globalObject.throwValue(getSSLException(globalObject, "Failed to export keying material"));
             }
@@ -574,10 +703,16 @@ pub fn getALPNProtocol(self: *This, globalObject: *jsc.JSGlobalObject) bun.JSErr
         }
         const ssl_ptr = ssl_ptr_opt.?;
         _ = BoringSSL.SSL_get0_alpn_selected(ssl_ptr, (&alpn_proto), (&alpn_proto_len));
-        if (((@intFromPtr(alpn_proto) == 0) or (alpn_proto_len == 0))) {
+        if ((((blk: {
+        break :blk @intFromPtr(alpn_proto);
+
+}) == 0) or (alpn_proto_len == 0))) {
             return JSValue.false;
         }
-        const slice = alpn_proto[0..alpn_proto_len];
+        const slice = (blk: {
+        break :blk alpn_proto[0..alpn_proto_len];
+
+});
         if (strings.eql(slice, "h2")) {
             return bun.String.static("h2").toJS(globalObject);
         }
@@ -606,7 +741,10 @@ pub fn getSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
         const buffer_size = @as(usize, @intCast(size));
         var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
         _ = &buffer;
-        var buffer_ptr = @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
+        var buffer_ptr = (blk: {
+        break :blk @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
+
+});
         _ = &buffer_ptr;
         const result_size = BoringSSL.i2d_SSL_SESSION(session, (&buffer_ptr));
         _ = bun.assert((result_size == size));
@@ -624,26 +762,40 @@ pub fn setSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
         const session_arg = args.ptr[0];
         var arena_alloc: bun.ArenaAllocator = bun.ArenaAllocator.init(bun.default_allocator);
         _ = &arena_alloc;
-        defer {
-        _ = arena_alloc.deinit();
-        }
+        var _arena_guard = DeinitGuard(bun.ArenaAllocator){ .ptr = (blk: {
+        break :blk (&arena_alloc);
+
+}) };
+        _ = &_arena_guard;
+        var ___arena_guard_moved = false; _ = &___arena_guard_moved;
+        defer if (!___arena_guard_moved) { ___arena_guard_moved = true; const __T = @TypeOf(_arena_guard); if (@typeInfo(__T) == .optional) { if (_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _arena_guard; _drop_val.__cp_deinit(); } };
         if (try jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), session_arg)) |sb| {
             _ = &sb;
-            defer {
-            _ = sb.deinit();
-            }
-            const session_slice = sb.slice();
+            var mut_sb = sb;
+            _ = &mut_sb;
+            var _sb_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (blk: {
+            break :blk (&mut_sb);
+
+}) };
+            _ = &_sb_guard;
+            var ___sb_guard_moved = false; _ = &___sb_guard_moved;
+            defer if (!___sb_guard_moved) { ___sb_guard_moved = true; const __T = @TypeOf(_sb_guard); if (@typeInfo(__T) == .optional) { if (_sb_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sb_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sb_guard; _drop_val.__cp_deinit(); } };
+            const session_slice = mut_sb.slice();
             const ssl_ptr = self.socket.ssl();
-            var tmp = @as([*c]const u8, @ptrCast(session_slice.ptr));
+            var tmp = (blk: {
+            break :blk @as([*c]const u8, @ptrCast(session_slice.ptr));
+
+});
             _ = &tmp;
             const session_opt = BoringSSL.d2i_SSL_SESSION(null, (&tmp), @as(c_long, @intCast(session_slice.len)));
             if ((session_opt == null)) {
                 return JSValue.js_undefined;
             }
             const session = session_opt.?;
-            defer {
-            _ = BoringSSL.SSL_SESSION_free(session);
-            }
+            var _session_guard = SSLSessionGuard{ .ptr = session };
+            _ = &_session_guard;
+            var ___session_guard_moved = false; _ = &___session_guard_moved;
+            defer if (!___session_guard_moved) { ___session_guard_moved = true; const __T = @TypeOf(_session_guard); if (@typeInfo(__T) == .optional) { if (_session_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _session_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _session_guard; _drop_val.__cp_deinit(); } };
             if ((BoringSSL.SSL_set_session(ssl_ptr, session) != 1)) {
                 return globalObject.throwValue(getSSLException(globalObject, "SSL_set_session error"));
             }
@@ -669,11 +821,17 @@ pub fn getTLSTicket(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *
         _ = &ticket;
         var length: usize = 0;
         _ = &length;
-        _ = BoringSSL.SSL_SESSION_get0_ticket(session, @as([*c][*c]const u8, @ptrCast((&ticket))), (&length));
+        _ = BoringSSL.SSL_SESSION_get0_ticket(session, (blk: {
+        break :blk @as([*c][*c]const u8, @ptrCast((&ticket)));
+
+}), (&length));
         if (((ticket == null) or (length == 0))) {
             return JSValue.js_undefined;
         }
-        return jsc.ArrayBuffer.createBuffer(globalObject, ticket[0..length]);
+        return jsc.ArrayBuffer.createBuffer(globalObject, (blk: {
+        break :blk ticket[0..length];
+
+}));
 }
 
 pub fn renegotiate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {

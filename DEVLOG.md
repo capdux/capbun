@@ -1543,3 +1543,7 @@
 ## [2026-11-22 Wave #12] RAII 改造与 `unsafe {}` 经验
 - `http.cp`：`OptFreeZGuard`、`TerminateSocketGuard<Ctx, Sock>` 与 `DerefGuard<T>`/`DeinitGuard<T>` 统一接管连接与缓冲析构，裸指针下标与 `@ptrCast`/`@constCast` 全部收窄入 `unsafe {}`。
 - `lockfile.cp`：`LogDeinitGuard` 统一处理 `log` 与 `msgs` 析构，保留 `clamp()`/`assert` 控制流 `defer`。
+
+## [2026-11-22 Wave #13] RAII 改造与 `unsafe {}` 经验
+- `bake.cp`：补全 `BakeServerComponents` 全部字段、`parsePluginArray: void!bun.JSError`、`react/auto/resolve: !Framework`、定长 `[8][]const u8` 数组字面量，以及 `if (fsr.entry_client != null)` 直接取址避开 `*entry_client :=` 二次解引用。
+- `scanImportsAndExports.cp`：`ExportStarCtxDeinitGuard` 仅在 `export_star_ctx` 初始化后挂载非空指针 `&export_star_ctx.?`，避开 `*ExportStarContext?` 双重可选指针校验差异。
